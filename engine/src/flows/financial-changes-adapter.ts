@@ -1,4 +1,6 @@
+import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
@@ -28,7 +30,7 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
       key: "domain",
       label: "Accounting domain",
       type: "enum",
-      options: ["lease", "revenue", "asset", "consolidation"].map((value) => ({
+      options: ["lease", "revenue", "asset", "consolidation", "manufacturing"].map((value) => ({
         value,
         label: value,
       })),
@@ -138,6 +140,35 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     if (row.status !== "pending") return;
     if (!ctx.userId || row.submitted_by === ctx.userId)
       throw new Error("an independent signed-in approver is required");
+    if (row.domain === "manufacturing") {
+      // Defense in depth: the restatement service rechecks actor, feature,
+      // and legal-entity scope in the same transaction that applies the
+      // change. The approval gate independently refuses here first.
+      if (
+        !(await actorHasPermission(
+          db,
+          ctx.orgId,
+          ctx.userId,
+          "manufacturing.manage",
+        ))
+      )
+        throw new Error(
+          "this change requires manufacturing.manage; ask a manufacturing manager to approve it",
+        );
+      if (!(await orgFeatureEnabled(ctx.orgId, "manufacturing", db)))
+        throw new Error(
+          "turn on Manufacturing in Company Settings → Features before approving this change",
+        );
+      const bound = row.payload.requiredSubsidiaryIds;
+      if (
+        !Array.isArray(bound) ||
+        bound.length === 0 ||
+        bound.some((entry) => typeof entry !== "string")
+      )
+        throw new Error(
+          "this manufacturing restatement carries no legal-entity binding; submit a new proposal",
+        );
+    }
     const allowed = await actorAllowedSubsidiaryIds(db, ctx.orgId, ctx.userId);
     const required = Array.isArray(row.payload.requiredSubsidiaryIds)
       ? row.payload.requiredSubsidiaryIds
