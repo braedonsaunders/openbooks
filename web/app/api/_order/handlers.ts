@@ -1,4 +1,4 @@
-import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts"
+import { documentRevisionCounterSql } from "@openbooks/engine/src/records/revision.ts"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -7,29 +7,35 @@ import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiar
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { can, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
-import { assignOrderLineWarehouse, convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
+import { assignOrderLineWarehouse, convertOrder, ConversionError } from '../../../lib/order-cycle'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
+import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
+import { unexpectedServerError } from '../../../lib/api/unexpected'
+import { notFound } from "@/lib/api/responses";
+import { applyOrderEdit, OrderEditError, STALE_REVISION, staleRevision, type OrderEditServices, type OrderPatchBody, type OrderHandlerConfig } from '../../../lib/order-draft-edit'
 import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from './lib'
-import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from './line-selection'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { persistLineTaxComponents } from "../../../lib/bills.ts";
+import { persistLineTaxComponents } from '../../../lib/bills.ts'
 import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import {
-  issueSalesOrder,
-  SalesOrderIssueError,
-} from '@openbooks/engine/src/sales/sales-orders.ts'
-import {
-  DocumentVoidError,
-  requestDocumentVoid,
-} from '@openbooks/engine/src/ledger/document-void.ts'
-import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
-import { unexpectedServerError } from '../../../lib/api/unexpected'
-import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from '../../../lib/scoped-options'
-import { notFound } from "@/lib/api/responses";
+import { issueSalesOrder, SalesOrderIssueError } from '@openbooks/engine/src/sales/sales-orders.ts'
+import { DocumentVoidError, requestDocumentVoid } from '@openbooks/engine/src/ledger/document-void.ts'
+export type { OrderHandlerConfig } from '../../../lib/order-draft-edit'
+
+export const orderEditServices: OrderEditServices = {
+  platform: { db, withOrgTransaction, sql, documentRevisionCounterSql },
+  authz: { guardSubsidiaryScope },
+  order: { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap },
+  bills: { persistLineTaxComponents },
+  stockLocations: { activeStockLocations, profiledItemIds, resolveLineStockLocation },
+  segments: { segmentRegistry, validateExtraDims },
+  crm: { promoteCrmAccount },
+  features: { isFeatureEnabled, subsidiaryFeatureEnabled },
+  flows: { submitAndReleaseIfUngated },
+  sales: { issueSalesOrder, SalesOrderIssueError },
+  documentVoid: { DocumentVoidError, requestDocumentVoid },
+}
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -39,49 +45,6 @@ import { notFound } from "@/lib/api/responses";
  *   sales_order    → ar.read / ar.create
  *   purchase_order → ap.read / ap.create
  */
-
-export interface OrderHandlerConfig {
-  kind: OrderKind
-  readPerm: string
-  createPerm: string
-}
-
-/**
- * Approval routing refused AFTER the submission wrote its before_submit
- * script effects. Thrown inside the issuance transaction so the whole
- * issuance rolls back; the PATCH mapper below answers the same 422 the
- * operator needs, with none of the refused effects committed.
- */
-class OrderApprovalRoutingError extends Error {
-  constructor(readonly flowError: string) {
-    super(`approval could not be routed: ${flowError}`)
-  }
-}
-
-const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
-
-const STALE_REVISION = 'this order changed after you opened it; reload and review the latest revision'
-
-/** Compare the opaque counter revision returned by the order reader. */
-function staleRevision(expected: unknown, actual: unknown): boolean {
-  return !isDocumentRevisionToken(expected) || expected !== actual
-}
-
-/**
- * Which subsidiary predicate failed, diagnosed on the failure path only: a
- * missing row, an inactive subsidiary, and an elimination entity refuse
- * separately, each naming the id (and the name when the row exists) — never
- * one sentence for all three.
- */
-async function subsidiaryProblem(orgId: string, subsidiaryId: string): Promise<string> {
-  const row = (await db.execute<{ name: string; isActive: boolean; isElimination: boolean }>(sql`
-    select name, is_active as "isActive", is_elimination as "isElimination"
-      from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0]
-  if (!row) return `no subsidiary "${subsidiaryId}" in this organization — check the id and try again`
-  if (!row.isActive) return `subsidiary "${row.name}" is inactive — reactivate it or choose an active subsidiary`
-  return `subsidiary "${row.name}" is an elimination entity — choose an operating subsidiary`
-}
 
 /** GET: full order payload (header + lines + links) scoped to the org. */
 export function makeGET(cfg: OrderHandlerConfig) {
@@ -107,577 +70,33 @@ export function makeGET(cfg: OrderHandlerConfig) {
   }
 }
 
-interface OrderPatchBody {
-  /** Optimistic-concurrency token from documents.revision_seq. Required for
-   * every mutation (autosave, issue, void) so a stale view can never win. */
-  expectedUpdatedAt?: string
-  partyId?: string | null
-  documentDate?: string
-  dueDate?: string | null
-  memo?: string | null
-  departmentId?: string | null
-  projectId?: string | null
-  subsidiaryId?: string | null
-  extraDims?: Record<string, string | null>
-  lines?: OrderLineInput[]
-  status?: 'approved' | 'voided'
-  reason?: string
-  /** Reasoned, AR-approver-only exception when issuance exceeds customer credit. */
-  creditOverrideReason?: string
-  reversalDate?: string | null
-}
-
-/**
- * PATCH: draft autosave (header + full line replacement, totals recomputed) and
- * the draft→approved / →voided status transitions. Only draft orders are
- * editable; issuing requires a party + ≥1 line with a positive amount.
- */
+/** Shared PATCH boundary for order edits. */
 export function makePATCH(cfg: OrderHandlerConfig) {
   return async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
     if (gate instanceof NextResponse) return gate
-    const { user } = gate
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
 
-    const existing = (await db.execute<{ status: string; document_date: string; currency: string; party_id: string | null; subsidiaryId: string | null; updated_at: string }>(
-      sql`select status, document_date, currency, party_id, subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
-    ))
-    if (!existing.rows[0]) return notFound("record")
-    const recordDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
-    if (recordDenied) return recordDenied
-    const status = existing.rows[0].status
-
     const parsedBody = await parseJsonBody(req, jsonObject)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as OrderPatchBody
-
-    // Header dates land in DATE columns: an impossible calendar date
-    // (2026-02-30) trips a raw storage 22008 failure instead of a domain
-    // error, so refuse it here with the shared ISO calendar policy before
-    // any further read or write. A null due date clears the field.
-    if (body.documentDate !== undefined && !isIsoCalendarDate(body.documentDate)) {
-      return NextResponse.json(
-        { error: 'Document date must be a valid calendar date (YYYY-MM-DD)' },
-        { status: 422 },
-      )
-    }
-    if (body.dueDate !== undefined && body.dueDate !== null && !isIsoCalendarDate(body.dueDate)) {
-      return NextResponse.json(
-        { error: 'Due date must be a valid calendar date (YYYY-MM-DD)' },
-        { status: 422 },
-      )
-    }
-
-    // --- body shapes ------------------------------------------------------
-    // OrderPatchBody is cast, never schema-parsed: reject malformed shapes
-    // before they reach the totals math or storage as raw 500s — or worse, a
-    // truthy non-array `lines` that iterates characters, drops every line,
-    // and zeroes the order totals with a 200.
-    if (body.status !== undefined && body.status !== 'approved' && body.status !== 'voided') {
-      return NextResponse.json({ error: 'Invalid order status' }, { status: 422 })
-    }
-    for (const [label, value] of [
-      ['party', body.partyId],
-      ['department', body.departmentId],
-      ['project', body.projectId],
-    ] as const) {
-      if (value !== undefined && value !== null && (typeof value !== 'string' || !isUuid(value))) {
-        return NextResponse.json({ error: `Invalid order ${label}` }, { status: 422 })
-      }
-    }
-    if (body.subsidiaryId !== undefined && body.subsidiaryId !== null && typeof body.subsidiaryId !== 'string') {
-      return NextResponse.json(
-        { error: `order subsidiary must be a subsidiary id string — received ${typeof body.subsidiaryId}` },
-        { status: 422 },
-      )
-    }
-    if (body.memo !== undefined && body.memo !== null && typeof body.memo !== 'string') {
-      return NextResponse.json({ error: 'Invalid order memo' }, { status: 422 })
-    }
-    if (body.lines !== undefined) {
-      if (!Array.isArray(body.lines)) {
-        return NextResponse.json({ error: 'Order lines must be an array' }, { status: 422 })
-      }
-      for (let index = 0; index < body.lines.length; index++) {
-        const line = body.lines[index]! as Record<string, unknown>
-        if (typeof line !== 'object' || line === null || Array.isArray(line)) {
-          return NextResponse.json({ error: `Order line ${index + 1} is invalid` }, { status: 422 })
-        }
-        for (const [label, value] of [
-          ['item', line.itemId],
-          ['account', line.accountId],
-          ['tax code', line.taxCodeId],
-          ['tax group', line.taxGroupId],
-          ['department', line.departmentId],
-          ['project', line.projectId],
-        ] as const) {
-          if (value !== undefined && value !== null && (typeof value !== 'string' || !isUuid(value as string))) {
-            return NextResponse.json({ error: `Order line ${index + 1} has an invalid ${label}` }, { status: 422 })
-          }
-        }
-        for (const [label, value] of [['description', line.description], ['unit', line.unit]] as const) {
-          if (value !== undefined && value !== null && typeof value !== 'string') {
-            return NextResponse.json({ error: `Order line ${index + 1} has an invalid ${label}` }, { status: 422 })
-          }
-        }
-      }
-    }
-
-    const suppliedLineRefs = body.lines ?? []
-    const [partyOptions, departmentOptions, projectOptions, accountOptions] = await Promise.all([
-      body.partyId ? listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true }) : Promise.resolve([]),
-      body.departmentId || suppliedLineRefs.some((line) => line.departmentId)
-        ? listScopedDepartmentOptions(user.orgId, gate.allowedSubsidiaryIds)
-        : Promise.resolve([]),
-      body.projectId || suppliedLineRefs.some((line) => line.projectId)
-        ? listScopedProjectOptions(user.orgId, gate.allowedSubsidiaryIds)
-        : Promise.resolve([]),
-      suppliedLineRefs.some((line) => line.accountId)
-        ? listScopedAccountOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true })
-        : Promise.resolve([]),
-    ])
-    const visibleParties = new Set(partyOptions.map((row) => row.id))
-    const visibleDepartments = new Set(departmentOptions.map((row) => row.id))
-    const visibleProjects = new Set(projectOptions.map((row) => row.id))
-    const visibleAccounts = new Set(accountOptions.map((row) => row.id))
-    if (body.partyId && !visibleParties.has(body.partyId)) {
-      return NextResponse.json({ error: `order party "${body.partyId}" is not visible in your subsidiary scope` }, { status: 422 })
-    }
-    if (body.departmentId && !visibleDepartments.has(body.departmentId)) {
-      return NextResponse.json({ error: `order department "${body.departmentId}" is not visible in your subsidiary scope` }, { status: 422 })
-    }
-    if (body.projectId && !visibleProjects.has(body.projectId)) {
-      return NextResponse.json({ error: `order project "${body.projectId}" is not visible in your subsidiary scope` }, { status: 422 })
-    }
-    for (let index = 0; index < suppliedLineRefs.length; index++) {
-      const line = suppliedLineRefs[index]!
-      if (line.accountId && !visibleAccounts.has(line.accountId)) {
-        return NextResponse.json({ error: `Order line ${index + 1}: account is not visible in your subsidiary scope` }, { status: 422 })
-      }
-      if (line.departmentId && !visibleDepartments.has(line.departmentId)) {
-        return NextResponse.json({ error: `Order line ${index + 1}: department is not visible in your subsidiary scope` }, { status: 422 })
-      }
-      if (line.projectId && !visibleProjects.has(line.projectId)) {
-        return NextResponse.json({ error: `Order line ${index + 1}: project is not visible in your subsidiary scope` }, { status: 422 })
-      }
-    }
-
-    // A restricted caller may re-home a draft only within their visible
-    // subsidiaries; clearing the header subsidiary entirely is also denied
-    // (the resolved root would sit outside their scope just as often).
-    if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
-      if (!(await subsidiaryFeatureEnabled(user.orgId))) {
-        return NextResponse.json({ error: 'Subsidiaries are not enabled' }, { status: 422 })
-      }
-      if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(body.subsidiaryId)) {
-        return NextResponse.json(
-          { error: `subsidiary "${body.subsidiaryId}" is outside your visible subsidiaries — choose a subsidiary in scope or ask an administrator for access` },
-          { status: 422 },
-        )
-      }
-      const subsidiary = (await db.execute(sql`
-        select 1 from subsidiaries
-         where id = ${body.subsidiaryId} and org_id = ${user.orgId}
-           and is_active and not is_elimination
-      `))
-      if (!subsidiary.rows[0]) {
-        return NextResponse.json(
-          { error: await subsidiaryProblem(user.orgId, body.subsidiaryId) },
-          { status: 422 },
-        )
-      }
-    } else if (body.subsidiaryId === null && gate.allowedSubsidiaryIds) {
-      return NextResponse.json(
-        { error: 'clearing the order subsidiary is not available with restricted subsidiary scope — choose a visible subsidiary instead' },
-        { status: 422 },
-      )
-    }
-
-    // --- status transitions ------------------------------------------------
-    if (body.status) {
-      if (body.status === 'voided') {
-        if (status === 'voided') {
-          return NextResponse.json({ error: 'already voided' }, { status: 422 })
-        }
-        if (status !== 'approved') {
-          return NextResponse.json(
-            { error: 'only an issued order can be voided; discard a draft instead' },
-            { status: 422 },
-          )
-        }
-        // Fence before the engine's claim: a stale view must not even enter
-        // the void pipeline. requestDocumentVoid re-checks the same token
-        // inside its claim transaction, so a row that changes after this
-        // probe still cannot be voided from the stale view.
-        if (staleRevision(body.expectedUpdatedAt, existing.rows[0].updated_at)) {
-          return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
-        }
-        try {
-          const result = await requestDocumentVoid({
-            documentId: id,
-            orgId: user.orgId,
-            actorId: user.id,
-            reason: body.reason ?? '',
-            reversalDate: body.reversalDate,
-            source: 'ui',
-            expectedUpdatedAt: body.expectedUpdatedAt,
-            // Recheck scope on the engine's locked source row — the
-            // route pre-check above ran unlocked, so a rehome landing
-            // between the two must deny inside the claim transaction.
-            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-          })
-          if (result.status === 'pending_approval') {
-            const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-            return NextResponse.json(
-              { ...order, voidPending: true, requestId: result.runId },
-              { status: 202 },
-            )
-          }
-          const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-          return NextResponse.json(order)
-        } catch (error) {
-          if (error instanceof ScopeNotFoundError) {
-            return notFound("record")
-          }
-          if (error instanceof DocumentVoidError) {
-            return NextResponse.json({ error: error.message }, { status: error.status })
-          }
-          throw error
-        }
-      }
-
-      // A refused routing throws: the submission already wrote its
-      // before_submit script effects, and answering 422 from inside the
-      // transaction would commit them alongside the refusal. The mapper
-      // below answers the same 422 after the rollback.
-      const issuance = withOrgTransaction(user.orgId, async () => {
-        // Serialize issuing with draft replacement at the aggregate root. A
-        // late draft PATCH must not rewrite an order after issuance commits.
-        // Void owns its transaction internally so it can reserve the aggregate
-        // before before_void effects. Script queries use the separate governed
-        // READ ONLY pool while script writes join that atomic reservation.
-        const locked = (await db.execute<{
-          status: string
-          party_id: string | null
-          subsidiaryId: string | null
-          total: string
-          updated_at: string
-        }>(sql`
-          select status, party_id, subsidiary_id as "subsidiaryId", total, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
-            from documents
-           where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
-           for update
-        `))
-        const current = locked.rows[0]
-        if (!current) return notFound("record")
-        // The aggregate lock is held: recheck scope against the locked row —
-        // the route pre-check ran unlocked, so a rehome landing between the
-        // two must deny here rather than issue into the new subsidiary.
-        const issuanceDenied = guardSubsidiaryScope(gate, current.subsidiaryId)
-        if (issuanceDenied) return issuanceDenied
-
-        // The aggregate lock is held: an exact token mismatch here is a stale
-        // caller, refused before the issuance side effects.
-        if (staleRevision(body.expectedUpdatedAt, current.updated_at)) {
-          return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
-        }
-
-        if (body.status === 'approved') {
-          if (current.status !== 'draft') {
-            return NextResponse.json({ error: 'only a draft can be issued' }, { status: 422 })
-          }
-          if (!current.party_id || cmp(current.total, '0') <= 0) {
-            return NextResponse.json(
-              { error: 'Add a party and at least one line before issuing' },
-              { status: 422 },
-            )
-          }
-          let submission: Awaited<ReturnType<typeof submitAndReleaseIfUngated>>
-          if (cfg.kind === 'sales_order') {
-            try {
-              const issued = await issueSalesOrder({
-                orgId: user.orgId,
-                salesOrderId: id,
-                actorId: user.id,
-                expectedUpdatedAt: body.expectedUpdatedAt!,
-                creditOverrideReason: body.creditOverrideReason,
-              })
-              submission = issued.submission
-            } catch (error) {
-              if (error instanceof SalesOrderIssueError) {
-                return NextResponse.json(
-                  { error: error.message, code: error.code, credit: error.details },
-                  { status: error.status },
-                )
-              }
-              throw error
-            }
-          } else {
-            submission = await submitAndReleaseIfUngated(cfg.kind, id, user.id)
-          }
-          if (submission.flowError) {
-            throw new OrderApprovalRoutingError(submission.flowError)
-          }
-          if (submission.gated) {
-            const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-            return NextResponse.json(
-              { ...order, approvalPending: true, requestId: submission.runId },
-              { status: 202 },
-            )
-          }
-        }
-        const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-        return NextResponse.json(order)
-      })
-      return issuance.catch((error: unknown) => {
-        if (error instanceof OrderApprovalRoutingError) {
-          return NextResponse.json({ error: error.message }, { status: 422 })
-        }
-        throw error
-      })
-    }
-
-    // --- draft autosave ----------------------------------------------------
-    if (status !== 'draft') {
-      return NextResponse.json({ error: 'only draft orders can be edited' }, { status: 422 })
-    }
-
-    const segments = await segmentRegistry(user.orgId)
-    const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
-    if (headerDims && !headerDims.ok) {
-      return NextResponse.json({ error: headerDims.error }, { status: 422 })
-    }
-
-    let totals: { subtotal: string; taxTotal: string; total: string } | null = null
-    let preparedLines: (ReturnType<typeof computeOrderTotals>['lines'][number] & { extraDims: Record<string, string> })[] | null = null
-    if (body.lines) {
-      // Same save shape as create: blank grid rows never persist, while any
-      // populated row that cannot post refuses by line number.
-      const selected = selectPostableOrderLines(body.lines)
-      if ('error' in selected) {
-        return NextResponse.json({ error: selected.error }, { status: 422 })
-      }
-      const valid: OrderLineInput[] = selected.valid
-      // Line warehouses resolve here, before totals: an explicit choice must
-      // name an active warehouse of this org, while a blank stocked line
-      // silently takes the org's only active location.
-      if (valid.length > 0) {
-        const scope = {
-          active: await activeStockLocations(user.orgId),
-          profiled: await profiledItemIds(
-            user.orgId,
-            valid.map((line) => line.itemId).filter((id): id is string => typeof id === 'string' && id.length > 0),
-          ),
-        }
-        for (let i = 0; i < valid.length; i++) {
-          const line = valid[i]!
-          const resolved = resolveLineStockLocation(i + 1, line.itemId ?? null, line.stockLocationId, scope)
-          if ('error' in resolved) {
-            return NextResponse.json({ error: resolved.error }, { status: 422 })
-          }
-          line.stockLocationId = resolved.locationId
-        }
-      }
-      const computed = computeOrderTotals(
-        valid,
-        await orderTaxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
-      )
-      const subtotal = exactOrderMoney(computed.subtotal)
-      if (subtotal === 'invalid') {
-        return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
-      }
-      const taxTotal = exactOrderMoney(computed.taxTotal)
-      if (taxTotal === 'invalid') {
-        return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
-      }
-      const total = exactOrderMoney(computed.total)
-      if (total === 'invalid') {
-        return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
-      }
-      totals = {
-        subtotal,
-        taxTotal,
-        total,
-      }
-      preparedLines = []
-      const itemQuantities = overallItemQuantities(valid)
-      for (let i = 0; i < computed.lines.length; i++) {
-        const l = computed.lines[i]!
-        const lineDims = validateExtraDims(l.extraDims, segments)
-        if (!lineDims.ok) {
-          return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
-        }
-        const amount = exactOrderMoney(l.amount)
-        if (amount === 'invalid') {
-          return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
-        }
-        const taxInputAmount = exactOrderMoney(l.taxInputAmount)
-        if (taxInputAmount === 'invalid') {
-          return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
-        }
-        const taxAmount = exactOrderMoney(l.taxAmount)
-        if (taxAmount === 'invalid') {
-          return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
-        }
-        // The client basis is only a signal; the server resolves and stores
-        // its own provenance against the effective draft header and lines.
-        const priceBasis = await resolveLinePriceBasis({
-          lineNumber: i + 1,
-          orgId: user.orgId,
-          customerId: body.partyId !== undefined ? body.partyId : existing.rows[0].party_id,
-          currency: existing.rows[0].currency,
-          documentDate: body.documentDate ?? existing.rows[0].document_date,
-          line: l,
-          overallItemQuantity: itemQuantities.get(l.itemId ?? '') ?? (l.quantity ?? '0'),
-        })
-        if (priceBasis !== null && 'error' in priceBasis) {
-          return NextResponse.json({ error: priceBasis.error }, { status: 400 })
-        }
-        preparedLines.push({
-          ...l,
-          quantity: l.quantity ?? '0',
-          unitPrice: l.unitPrice ?? '0',
-          amount,
-          taxInputAmount,
-          taxAmount,
-          extraDims: lineDims.cleaned,
-          priceBasis,
-        })
-      }
-      // Stored inventory / assembly / kit lines stay. Turning Inventory off
-      // must 404 a write that would persist a new one of those kinds.
-      if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
-        const stored = (await db.execute<{ item_id: string }>(sql`
-          select item_id from document_lines
-           where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`))
-        const storedIds = new Set(stored.rows.map((row) => row.item_id))
-        for (const l of preparedLines) {
-          if (!l.itemId || storedIds.has(l.itemId)) continue
-          const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`))
-          if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-            return notFound("record")
-          }
-        }
-      }
-    }
-
-    // Composite org-scoped storage keys make cross-tenant references
-    // unrepresentable; map their FK refusal to a domain 422 instead of a
-    // raw 500. The whole autosave (lines + header + totals) rolls back.
-    const isTenantReferenceViolation = (error: unknown): boolean => {
-      let cursor: unknown = error;
-      for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === 'object'; depth++) {
-        if ((cursor as { code?: unknown }).code === '23503') return true;
-        cursor = (cursor as { cause?: unknown }).cause;
-      }
-      return false;
-    };
-    let mutation: 'not_found' | 'stale' | 'not_editable' | 'saved' | NextResponse;
     try {
-      mutation = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<{ status: string; subsidiaryId: string | null; updated_at: string }>(sql`
-        select status, subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
-          from documents
-         where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
-         for update
-      `))
-      if (!locked.rows[0]) return 'not_found' as const
-      // The aggregate lock is held: recheck scope against the locked row —
-      // the pre-check above ran unlocked, so a rehome landing between the
-      // two must deny here rather than save into the new subsidiary.
-      const lockedDenied = guardSubsidiaryScope(gate, locked.rows[0].subsidiaryId)
-      if (lockedDenied) return lockedDenied
-      if (staleRevision(body.expectedUpdatedAt, locked.rows[0].updated_at)) return 'stale' as const
-      if (locked.rows[0].status !== 'draft') return 'not_editable' as const
-
-      if (preparedLines) {
-        await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
-        for (let i = 0; i < preparedLines.length; i++) {
-          const l = preparedLines[i]!
-          const inserted = (await tx.execute<{ id: string }>(sql`
-            insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-                                        quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
-                                        tax_input_amount, tax_amount,
-                                        department_id, project_id, stock_location_id, extra_dims, price_basis)
-            values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
-                    ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
-                    ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
-                    ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb,
-                    ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb)
-            returning id
-          `))
-          await persistLineTaxComponents(tx, {
-            orgId: user.orgId,
-            documentLineId: inserted.rows[0]!.id,
-            components: l.taxComponents,
-            actorId: user.id,
-          })
-        }
-      }
-
-      await tx.execute(sql`
-        update documents set
-          party_id = ${body.partyId !== undefined ? body.partyId : sql`party_id`},
-          document_date = coalesce(${body.documentDate ?? null}, document_date),
-          due_date = ${body.dueDate !== undefined ? body.dueDate : sql`due_date`},
-          memo = ${body.memo !== undefined ? body.memo : sql`memo`},
-          department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},
-          project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
-          subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
-          extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
-          subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
-          tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
-          total = coalesce(${totals?.total ?? null}, total),
-          updated_at = now(), updated_by = ${user.id}
-        where id = ${id} and org_id = ${user.orgId}
-      `)
-      const nextPartyId = body.partyId !== undefined ? body.partyId : null
-      if (nextPartyId && (cfg.kind === 'quote' || cfg.kind === 'sales_order')) {
-        const promotion = await promoteCrmAccount(tx, {
-          orgId: user.orgId,
-          partyId: nextPartyId,
-          actorId: user.id,
-          toStage: cfg.kind === 'quote' ? 'prospect' : 'customer',
-          sourceKind: cfg.kind,
-          sourceId: id,
-        })
-        // A sales order makes the party a customer: core AR state the credit
-        // checks downstream depend on. A quote only touches CRM lifecycle,
-        // which is legitimately absent with CRM off.
-        if (cfg.kind === 'sales_order' && !promotion.customerRoleActive) {
-          throw new Error('customer role was not established while saving the sales order')
-        }
-      }
-      return 'saved' as const
-    })
+      return await applyOrderEdit({
+        orgId: gate.user.orgId,
+        userId: gate.user.id,
+        user: gate.user,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        permissions: gate.permissions,
+        services: orderEditServices,
+      }, cfg, id, parsedBody.data as OrderPatchBody)
     } catch (error) {
-      if (isTenantReferenceViolation(error)) {
-        return NextResponse.json(
-          { error: 'Referenced party, account, tax profile, or dimension must belong to this organization' },
-          { status: 422 },
-        )
+      if (error instanceof OrderEditError) {
+        return NextResponse.json(error.body, { status: error.status })
       }
       throw error
     }
-
-    if (mutation instanceof NextResponse) return mutation
-    if (mutation === 'not_found') {
-      return notFound("record")
-    }
-    if (mutation === 'stale') {
-      return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
-    }
-    if (mutation === 'not_editable') {
-      return NextResponse.json({ error: 'only draft orders can be edited' }, { status: 422 })
-    }
-
-    const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-    return NextResponse.json(order)
   }
 }
-
 /**
  * DELETE: remove a non-posting order (doc/lines/links). deleteDocument throws
  * DeleteError → 422 if the order was converted downstream (has a document_link
