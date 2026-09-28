@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  char,
   check,
   date,
   foreignKey,
@@ -13,8 +14,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { auditColumns, id, money, orgRef } from "./helpers";
+import { auditColumns, fxRate, id, money, orgRef } from "./helpers";
 import { items } from "./documents";
+import { laborCostRates } from "./labor-costing";
 
 export const mfgWorkCenters = pgTable(
   "mfg_work_centers",
@@ -302,6 +304,35 @@ export const mfgWoOperations = pgTable(
     measuredQty: money("measured_qty"),
     qualityGate: text("quality_gate", { enum: ["none", "measure"] }).notNull(),
     backflushAt: text("backflush_at", { enum: ["none", "start", "finish"] }).notNull(),
+    // Release-frozen standard-labor group: the resolved wage row and its
+    // effective date, the raw source rate with denomination, basis, and
+    // year-basis divisor, the burden-inclusive functional hourly rate with
+    // denomination, and the burden document with its hash. Null until
+    // release; the database refuses any later change to a written value.
+    standardLaborWageId: uuid("standard_labor_wage_id"),
+    standardLaborEffectiveFrom: date("standard_labor_effective_from"),
+    standardLaborRate: money("standard_labor_rate"),
+    standardLaborCurrency: char("standard_labor_currency", { length: 3 }),
+    standardLaborBasis: text("standard_labor_basis"),
+    standardLaborAnnualHours: money("standard_labor_annual_hours"),
+    standardLaborFinalRate: money("standard_labor_final_rate"),
+    standardLaborFunctionalCurrency: char("standard_labor_functional_currency", { length: 3 }),
+    standardLaborBurden: jsonb("standard_labor_burden"),
+    standardLaborBurdenHash: text("standard_labor_burden_hash"),
+    // Release-frozen FX group: explicit frozen evidence. Same-currency
+    // operations freeze class 'par' with rate 1 and no quote evidence;
+    // foreign operations freeze class 'quoted' with row, date, source, and
+    // direction. A null group never means "no conversion".
+    standardLaborFxClass: text("standard_labor_fx_class"),
+    standardLaborFxRate: fxRate("standard_labor_fx_rate"),
+    standardLaborFxRowId: uuid("standard_labor_fx_row_id"),
+    standardLaborFxDate: date("standard_labor_fx_date"),
+    standardLaborFxSource: text("standard_labor_fx_source"),
+    standardLaborFxDirection: text("standard_labor_fx_direction"),
+    // Release-frozen overhead group: the canonical selected-card evidence
+    // document plus its tamper hash, recomputed from the stored JSON only.
+    overheadSnapshot: jsonb("overhead_snapshot"),
+    overheadSnapshotHash: text("overhead_snapshot_hash"),
     ...auditColumns,
   },
   (t) => [
@@ -318,7 +349,31 @@ export const mfgWoOperations = pgTable(
       columns: [t.orgId, t.workCenterId],
       foreignColumns: [mfgWorkCenters.orgId, mfgWorkCenters.id],
     }),
+    foreignKey({
+      name: "mfg_wo_operations_standard_labor_wage_fk",
+      columns: [t.orgId, t.standardLaborWageId],
+      foreignColumns: [laborCostRates.orgId, laborCostRates.id],
+    }),
     index("mfg_wo_operations_org_center").on(t.orgId, t.workCenterId, t.workOrderId),
+    index("mfg_wo_operations_org_std_labor_rate").on(t.orgId, t.standardLaborWageId),
+    check(
+      "mfg_woop_std_labor_coherent",
+      sql`num_nonnulls(${t.standardLaborWageId}, ${t.standardLaborEffectiveFrom}, ${t.standardLaborRate}, ${t.standardLaborCurrency}, ${t.standardLaborBasis}, ${t.standardLaborAnnualHours}, ${t.standardLaborFinalRate}, ${t.standardLaborFunctionalCurrency}, ${t.standardLaborBurden}, ${t.standardLaborBurdenHash}) in (0, 10)`,
+    ),
+    check(
+      "mfg_woop_std_fx_coherent",
+      sql`num_nonnulls(${t.standardLaborFxClass}, ${t.standardLaborFxRate}, ${t.standardLaborFxRowId}, ${t.standardLaborFxDate}, ${t.standardLaborFxSource}, ${t.standardLaborFxDirection}) = 0
+          or (${t.standardLaborFxClass} = 'par' and ${t.standardLaborFxRate} = 1
+              and ${t.standardLaborFxRowId} is null and ${t.standardLaborFxDate} is null
+              and ${t.standardLaborFxSource} is null and ${t.standardLaborFxDirection} is null)
+          or (${t.standardLaborFxClass} = 'quoted' and ${t.standardLaborFxRate} is not null
+              and ${t.standardLaborFxRowId} is not null and ${t.standardLaborFxDate} is not null
+              and ${t.standardLaborFxSource} is not null and ${t.standardLaborFxDirection} is not null)`,
+    ),
+    check(
+      "mfg_woop_ovhd_coherent",
+      sql`num_nonnulls(${t.overheadSnapshot}, ${t.overheadSnapshotHash}) in (0, 2)`,
+    ),
     check("mfg_wo_operations_status_check", sql`${t.status} in ('pending', 'running', 'paused', 'done')`),
     check("mfg_wo_operations_quality_gate_check", sql`${t.qualityGate} in ('none', 'measure')`),
     check("mfg_wo_operations_backflush_check", sql`${t.backflushAt} in ('none', 'start', 'finish')`),
