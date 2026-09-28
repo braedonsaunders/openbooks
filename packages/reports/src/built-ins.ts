@@ -67,7 +67,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'mrr-movements',
     name: 'MRR movements',
-    description: 'Monthly new, expansion, contraction, churned and reactivated MRR with opening and closing MRR and the quick ratio. A paused subscription counts as churn and resuming as reactivation; revenue is on the recognised basis, or billed when revenue recognition is off.',
+    description: 'Shows monthly MRR changes, opening and closing balances, and quick ratio.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
       breakouts: [{ column: 'month', bin: 'month' }],
@@ -99,7 +99,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'arr-summary',
     name: 'ARR summary',
-    description: 'Monthly annual recurring revenue is twelve times closing MRR. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    description: 'Shows monthly ARR as twelve times closing MRR.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
       breakouts: [{ column: 'month', bin: 'month' }],
@@ -116,7 +116,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'revenue-churn',
     name: 'Revenue and logo churn',
-    description: 'Monthly revenue and logo churn compare churned MRR and billing-account losses with opening balances. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    description: 'Compares monthly lost MRR and billing accounts with opening balances.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
       breakouts: [{ column: 'month', bin: 'month' }],
@@ -142,7 +142,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'nrr-grr',
     name: 'Net and gross revenue retention',
-    description: 'Monthly net and gross revenue retention compare expansion, contraction and churn with opening MRR. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    description: 'Shows monthly net and gross revenue retention against opening MRR.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
       breakouts: [{ column: 'month', bin: 'month' }],
@@ -184,7 +184,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'cohort-retention',
     name: 'Cohort retention',
-    description: 'Retention by signup cohort month and elapsed month shows retained MRR and billing accounts. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    description: 'Shows retained MRR and billing accounts by cohort and elapsed month.',
     query: {
       entity: 'saas_metrics_cohorts', mode: 'summarize', columns: [],
       breakouts: [{ column: 'cohort_month', bin: 'month' }, { column: 'months_since_start' }],
@@ -210,7 +210,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'arpa-ltv',
     name: 'ARPA and lifetime value',
-    description: 'Trailing twelve-month average revenue per billing account, monthly revenue churn, gross margin and lifetime value. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    description: 'Shows 12-month average revenue, churn, gross margin, and lifetime value per account.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [], breakouts: [],
       measures: [
@@ -261,7 +261,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'gross-margin',
     name: 'Gross margin',
-    description: 'Monthly gross margin compares revenue on the recognised basis, or billed when revenue recognition is off, with cost of revenue from the general ledger.',
+    description: 'Compares monthly revenue and cost of revenue to show gross margin.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
       breakouts: [{ column: 'month', bin: 'month' }],
@@ -285,7 +285,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'deferred-waterfall',
     name: 'Deferred revenue waterfall',
-    description: 'Future recognition scheduled for live deferred revenue obligations by month, deferred account and currency, on the recognised basis.',
+    description: 'Shows future recognition of active deferred revenue by month, account, and currency.',
     query: {
       entity: 'deferred_revenue_runoff', mode: 'summarize', columns: [],
       breakouts: [
@@ -300,7 +300,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   {
     slug: 'bookings-billings-revenue',
     name: 'Bookings, billings and revenue',
-    description: 'Monthly bookings, billings and revenue on the recognised basis, or billed when revenue recognition is off. A paused subscription counts as churn and resuming as reactivation.',
+    description: 'Shows monthly bookings, billings, and revenue.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
       breakouts: [{ column: 'month', bin: 'month' }],

@@ -2403,39 +2403,39 @@
     },
     "mrr-movements": {
       "name": "Mouvements du MRR",
-      "description": "MRR nouvelle, en expansion, en contraction, résiliée et réactivée par mois, avec la MRR d’ouverture et de clôture ainsi que le ratio rapide. Un abonnement suspendu compte comme résilié et sa reprise comme une réactivation ; les revenus suivent la base constatée ou, si la reconnaissance des revenus est désactivée, la base facturée."
+      "description": "Présente les mouvements mensuels du MRR, les soldes d’ouverture et de clôture et le ratio rapide."
     },
     "arr-summary": {
       "name": "Synthèse ARR",
-      "description": "Le revenu annuel récurrent de chaque mois correspond à douze fois la MRR de clôture. Un abonnement suspendu compte comme résilié et sa reprise comme une réactivation ; les revenus suivent la base constatée ou, si la reconnaissance des revenus est désactivée, la base facturée."
+      "description": "L’ARR mensuel correspond à douze fois le MRR de clôture."
     },
     "revenue-churn": {
       "name": "Attrition des revenus et clients",
-      "description": "La résiliation des revenus et des comptes compare chaque mois la MRR perdue et les comptes de facturation perdus aux soldes d’ouverture. Un abonnement suspendu compte comme résilié et sa reprise comme une réactivation ; les revenus suivent la base constatée ou, si la reconnaissance des revenus est désactivée, la base facturée."
+      "description": "Compare chaque mois le MRR et les comptes de facturation perdus aux soldes d’ouverture."
     },
     "nrr-grr": {
       "name": "Rétention nette et brute",
-      "description": "La rétention nette et brute des revenus compare chaque mois l’expansion, la contraction et les résiliations à la MRR d’ouverture. Un abonnement suspendu compte comme résilié et sa reprise comme une réactivation ; les revenus suivent la base constatée ou, si la reconnaissance des revenus est désactivée, la base facturée."
+      "description": "Présente la rétention nette et brute des revenus par rapport au MRR d’ouverture chaque mois."
     },
     "cohort-retention": {
       "name": "Rétention par cohorte",
-      "description": "La rétention par mois de cohorte et mois écoulés présente la MRR conservée et les comptes de facturation. Un abonnement suspendu compte comme résilié et sa reprise comme une réactivation ; les revenus suivent la base constatée ou, si la reconnaissance des revenus est désactivée, la base facturée."
+      "description": "Présente le MRR conservé et les comptes de facturation par cohorte et mois écoulé."
     },
     "arpa-ltv": {
       "name": "ARPA et valeur vie",
-      "description": "Revenu moyen par compte de facturation sur les douze derniers mois, résiliation mensuelle des revenus, marge brute et valeur vie client. Un abonnement suspendu compte comme résilié et sa reprise comme une réactivation ; les revenus suivent la base constatée ou, si la reconnaissance des revenus est désactivée, la base facturée."
+      "description": "Présente le revenu moyen sur 12 mois, l’attrition mensuelle, la marge brute et la valeur vie par compte."
     },
     "gross-margin": {
       "name": "Marge brute",
-      "description": "La marge brute mensuelle compare les revenus constatés ou, si la reconnaissance des revenus est désactivée, facturés, au coût des ventes du grand livre."
+      "description": "Compare chaque mois les revenus et les coûts des ventes pour calculer la marge brute."
     },
     "deferred-waterfall": {
       "name": "Échéancier du revenu différé",
-      "description": "Reconnaissance future prévue des obligations actives de produits différés, par mois, compte de produits différés et devise, sur la base constatée."
+      "description": "Présente les produits différés actifs à reconnaître, par mois, compte et devise."
     },
     "bookings-billings-revenue": {
       "name": "Réservations, facturation et revenus",
-      "description": "Commandes, facturation et revenus mensuels sur la base constatée ou, si la reconnaissance des revenus est désactivée, sur la base facturée. Un abonnement suspendu compte comme résilié et sa reprise comme une réactivation."
+      "description": "Présente les commandes, la facturation et les revenus par mois."
     },
     "backorders": {
       "name": "Reliquats de commande",

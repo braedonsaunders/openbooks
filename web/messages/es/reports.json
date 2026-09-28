@@ -2403,39 +2403,39 @@
     },
     "mrr-movements": {
       "name": "Movimientos de MRR",
-      "description": "MRR nueva, de expansión, contracción, cancelada y reactivada por mes, con MRR inicial y final y el índice de cobertura rápida. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+      "description": "Muestra los cambios mensuales de MRR, los saldos inicial y final y el índice de cobertura rápida."
     },
     "arr-summary": {
       "name": "Resumen de ARR",
-      "description": "Los ingresos recurrentes anuales de cada mes equivalen a doce veces la MRR final. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+      "description": "El ARR mensual equivale a doce veces la MRR final."
     },
     "revenue-churn": {
       "name": "Churn de ingresos y clientes",
-      "description": "La cancelación de ingresos y de cuentas compara por mes la MRR perdida y las cuentas de facturación perdidas con los saldos iniciales. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+      "description": "Compara la MRR y las cuentas de facturación perdidas con los saldos iniciales de cada mes."
     },
     "nrr-grr": {
       "name": "Retención neta y bruta",
-      "description": "La retención neta y bruta de ingresos compara por mes la expansión, la contracción y las cancelaciones con la MRR inicial. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+      "description": "Muestra la retención neta y bruta de ingresos frente a la MRR inicial de cada mes."
     },
     "cohort-retention": {
       "name": "Retención por cohortes",
-      "description": "La retención por mes de cohorte y meses transcurridos muestra la MRR retenida y las cuentas de facturación. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+      "description": "Muestra la MRR retenida y las cuentas de facturación por cohorte y mes transcurrido."
     },
     "arpa-ltv": {
       "name": "ARPA y valor de vida",
-      "description": "Promedio de ingresos por cuenta de facturación de los últimos doce meses, cancelación mensual de ingresos, margen bruto y valor de vida del cliente. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+      "description": "Muestra ingresos medios a 12 meses, cancelación mensual, margen bruto y valor de vida por cuenta."
     },
     "gross-margin": {
       "name": "Margen bruto",
-      "description": "El margen bruto mensual compara los ingresos reconocidos o, si se desactiva el reconocimiento de ingresos, los facturados, con el costo de ingresos del libro mayor."
+      "description": "Compara los ingresos y costos mensuales para mostrar el margen bruto."
     },
     "deferred-waterfall": {
       "name": "Calendario de ingresos diferidos",
-      "description": "Reconocimiento futuro previsto de obligaciones activas de ingresos diferidos, por mes, cuenta de diferimiento y moneda, sobre la base reconocida."
+      "description": "Muestra el reconocimiento futuro previsto de ingresos diferidos activos por mes, cuenta y moneda."
     },
     "bookings-billings-revenue": {
       "name": "Reservas, facturación e ingresos",
-      "description": "Reservas, facturación e ingresos mensuales sobre la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación."
+      "description": "Muestra las reservas, la facturación y los ingresos de cada mes."
     },
     "backorders": {
       "name": "Pedidos pendientes",

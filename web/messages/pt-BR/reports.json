@@ -2423,39 +2423,39 @@
     },
     "mrr-movements": {
       "name": "Movimentações de MRR",
-      "description": "MRR nova, expandida, contraída, cancelada e reativada por mês, com MRR inicial e final e o índice de cobertura rápida. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+      "description": "Mostra as movimentações mensais de MRR, os saldos inicial e final e o índice de cobertura rápida."
     },
     "arr-summary": {
       "name": "Resumo de ARR",
-      "description": "A receita recorrente anual de cada mês equivale a doze vezes a MRR final. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+      "description": "O ARR mensal equivale a doze vezes a MRR final."
     },
     "revenue-churn": {
       "name": "Churn de receita e clientes",
-      "description": "O cancelamento de receita e de contas compara mensalmente a MRR perdida e as contas de faturamento perdidas com os saldos iniciais. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+      "description": "Compara mensalmente a MRR e as contas de faturamento perdidas com os saldos iniciais."
     },
     "nrr-grr": {
       "name": "Retenção líquida e bruta",
-      "description": "A retenção líquida e bruta de receita compara mensalmente expansão, contração e cancelamentos com a MRR inicial. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+      "description": "Mostra a retenção líquida e bruta da receita em comparação com a MRR inicial mensal."
     },
     "cohort-retention": {
       "name": "Retenção por coorte",
-      "description": "A retenção por mês da coorte e meses decorridos mostra a MRR mantida e as contas de faturamento. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+      "description": "Mostra a MRR mantida e as contas de faturamento por coorte e mês decorrido."
     },
     "arpa-ltv": {
       "name": "ARPA e valor vitalício",
-      "description": "Receita média por conta de faturamento nos últimos doze meses, cancelamento mensal de receita, margem bruta e valor do ciclo de vida do cliente. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+      "description": "Mostra a receita média em 12 meses, cancelamentos mensais, margem bruta e valor vitalício por conta."
     },
     "gross-margin": {
       "name": "Margem bruta",
-      "description": "A margem bruta mensal compara a receita reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada, com o custo da receita no razão geral."
+      "description": "Compara mensalmente a receita e seu custo para mostrar a margem bruta."
     },
     "deferred-waterfall": {
       "name": "Projeção de receita diferida",
-      "description": "Reconhecimento futuro previsto de obrigações ativas de receita diferida por mês, conta de diferimento e moeda, na base reconhecida."
+      "description": "Mostra o reconhecimento futuro previsto da receita diferida ativa por mês, conta e moeda."
     },
     "bookings-billings-revenue": {
       "name": "Contratações, cobranças e receita",
-      "description": "Reservas, faturamento e receita mensais na base reconhecida ou, se o reconhecimento de receita estiver desativado, na base faturada. Uma assinatura pausada conta como cancelamento e a retomada como reativação."
+      "description": "Mostra as contratações, o faturamento e a receita de cada mês."
     },
     "backorders": {
       "name": "Pedidos em atraso",
