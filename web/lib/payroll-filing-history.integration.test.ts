@@ -11,33 +11,64 @@ import {
   calculatedRun,
   markLegacy,
 } from "@openbooks/engine/src/payroll/filing-test-fixtures.ts";
-const stateKey = Symbol.for("openbooks.payroll-filing-history-test");
-interface RouteState {
-  authz: {
-    user: { orgId: string; id: string };
-    permissions: Set<string>;
-    allowedSubsidiaryIds: Set<string> | null;
+// Session-boundary fixture for the remittance route's real authorization
+// chain. The route resolves its caller through defineRoute →
+// guardFeaturePermission → guardPermission → getAuthz → currentUser, which
+// normally reaches Next's request cookies; those do not exist in this plain
+// Node route harness, so only that cookie→identity step is scripted. Every
+// downstream decision — role assignments, overrides, subsidiary scope,
+// feature state — executes for real against the scratch org.
+const sessionKey = Symbol.for("openbooks.payroll-filing-history-session");
+interface FilingSession {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    roles: ReadonlyArray<{ key: string; name: string }>;
+    orgId: string;
+    envKind: "sandbox";
+    productionOrgId: string;
+    isSuperAdmin: false;
+    homeUserId: string;
+    homeOrgId: string;
   } | null;
 }
-const routeState: RouteState = { authz: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+const filingSession: FilingSession = { user: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[sessionKey] =
+  filingSession;
 
-const mockFeatureGates = `
-  function currentGate() {
-    let current = null
-    for (const symbol of Object.getOwnPropertySymbols(globalThis)) {
-      const state = globalThis[symbol]
-      const gate = state && (state.authz || state.gate)
-      if (gate && gate.user && gate.permissions) current = gate
+// Real authorization scaffolding for route calls: the session seam above
+// supplies only the cookie→identity step. Permission grants, the payroll
+// feature flag, and the actor's subsidiary restriction are ordinary
+// production rows, so every refusal below is computed by the real chain.
+async function establishFilingSession(
+  fx: { orgId: string; actorId: string },
+  grants: string[],
+  subsidiaryIds: string[] | null,
+): Promise<void> {
+  await withBypassContext(async () => {
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
+    for (const permission of grants) {
+      await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
+        values(${fx.orgId},${fx.actorId},${permission},'grant')`);
     }
-    if (current) return current
-    throw new Error('The payroll route test must establish its authorization fixture before the request')
-  }
-  export async function guardFeaturePermission() {
-    return currentGate()
-  }
-`;
+    const restriction = subsidiaryIds === null ? { mode: "all" } : { mode: "list", subsidiaryIds };
+    await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
+      where org_id=${fx.orgId} and key='admin'`);
+  });
+  filingSession.user = {
+    id: fx.actorId,
+    email: `u-${fx.actorId.slice(0, 8)}@scratch.test`,
+    name: "Admin",
+    roles: [{ key: "admin", name: "admin" }],
+    orgId: fx.orgId,
+    envKind: "sandbox",
+    productionOrgId: fx.orgId,
+    isSuperAdmin: false,
+    homeUserId: fx.actorId,
+    homeOrgId: fx.orgId,
+  };
+}
 
 // This file lives in web/lib; route aliases resolve against web/.
 const webRoot = new URL("../", import.meta.url);
@@ -58,42 +89,32 @@ registerHooks({
         : `packages/${rest}/src/index.ts`;
       return nextResolve(new URL(`../${workspacePath}`, webRoot).href, context);
     }
-    // The route factory loads this module from its own lazy gate path. Its
-    // permission reader normally reaches Next's request cookies, which do not
-    // exist in this plain Node route harness; preserve the real feature gate
-    // while supplying the test's live authorization fixture.
-    if (specifier === "./authz" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
+    // Only the cookie→identity step is scripted: the real permission reader,
+    // feature gate, and scope resolver run against the fixture below.
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
       return {
         url: "data:text/javascript," + encodeURIComponent(`
-          function currentGate() {
-            for (const symbol of Object.getOwnPropertySymbols(globalThis)) {
-              const state = globalThis[symbol];
-              const gate = state && (state.authz || state.gate);
-              if (gate && gate.user && gate.permissions) return gate;
-            }
-            throw new Error('The payroll route test must establish its authorization fixture before the request');
-          }
-          export async function guardPermission() { return currentGate(); }
+          export async function currentUser() { return globalThis[Symbol.for('openbooks.payroll-filing-history-session')].user; }
         `),
         shortCircuit: true,
       };
     }
-    if (specifier === "./features" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
-      return { url: "data:text/javascript,export async function isFeatureEnabled(){return true}", shortCircuit: true };
-    }
     // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
-    // Forward Next.js-style aliases to the real modules they point at.
-    if (specifier.endsWith("/lib/feature-gates")) {
-      return { url: "mock:feature-gates", shortCircuit: true };
+    // next/navigation only redirects disabled features elsewhere; the payroll
+    // feature stays enabled here, so the target never runs in this harness.
+    if (specifier === "server-only") {
+      return { url: "data:text/javascript,export default {}", shortCircuit: true };
+    }
+    if (specifier === "next/navigation") {
+      return {
+        url: "data:text/javascript," + encodeURIComponent(`
+          export function redirect() { throw new Error('redirect is unavailable in the route harness'); }
+        `),
+        shortCircuit: true,
+      };
     }
     return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    if (url === "mock:feature-gates") {
-      return { format: "module", source: mockFeatureGates, shortCircuit: true };
-    }
-    return nextLoad(url, context);
   },
 });
 
@@ -141,11 +162,10 @@ for (const change of [
         });
         const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));
         await withOrgContext(fx.orgId, () => commitPayRun(input));
-        routeState.authz = {
-          user: { orgId: fx.orgId, id: fx.actorId },
-          permissions: new Set(["payroll.read"]),
-          allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
-        };
+        // The hidden employer's run is genuinely invisible to this caller:
+        // payroll.read, the payroll flag, and the visible-entity restriction
+        // all resolve through production reads under the session seam above.
+        await establishFilingSession(fx, ["payroll.read"], [fx.subsidiaryId]);
         if (change === "hidden-original") {
           await withBypassContext(() =>
             db.execute(
@@ -179,7 +199,7 @@ for (const change of [
           );
         }
       } finally {
-        routeState.authz = null;
+        filingSession.user = null;
         await dropScratchOrgReporting(fx.orgId);
       }
     },
@@ -959,6 +979,10 @@ const payrollFilingScopeCases = [
                 allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
               } as Authz;
               routeState.gate = gate;
+              // Both transports below run the real authorization chain under
+              // the file's session seam: read/run grants, the payroll flag,
+              // and the visible-entity restriction are production rows.
+              await establishFilingSession(fx, ["payroll.read", "payroll.run"], [fx.subsidiaryId]);
               const loaded = await withOrgContext(fx.orgId, () => scopedRemittanceSummary(gate, range));
               const response = await withOrgContext(fx.orgId, () =>
                 remittanceGet(
@@ -1025,6 +1049,10 @@ const payrollFilingScopeCases = [
                 "a hidden overlap still prevents another liability bill",
               );
               routeState.gate = { ...gate, allowedSubsidiaryIds: null };
+              await withBypassContext(() =>
+                db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb
+                  where org_id=${fx.orgId} and key='admin'`),
+              );
               const unrestricted = await withOrgContext(fx.orgId, () =>
                 remittanceGet(
                   new Request(
@@ -1038,6 +1066,7 @@ const payrollFilingScopeCases = [
                   .some((b) => b.documentId === invoice),
               );
             } finally {
+              filingSession.user = null;
               await dropScratchOrgReporting(fx.orgId);
             }
           },
@@ -1171,6 +1200,11 @@ const payrollFilingScopeCases = [
                 404,
               );
               state.gate = moved;
+              // The selected-file POST runs the real chain under the file's
+              // session seam: the run grant, payroll flag, and moved-entity
+              // restriction are production rows, so the 404 below is the
+              // source boundary refusing — not a missing fixture.
+              await establishFilingSession(fx, ["payroll.run"], [movedId]);
               const response = await withOrgContext(fx.orgId, () =>
                 POST(
                   new Request("http://localhost/api/payroll/year-end/file", {
@@ -1281,6 +1315,7 @@ const payrollFilingScopeCases = [
                 null,
               );
             } finally {
+              filingSession.user = null;
               await dropScratchOrgReporting(fx.orgId);
             }
           },

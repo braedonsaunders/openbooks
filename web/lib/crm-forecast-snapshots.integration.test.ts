@@ -142,6 +142,7 @@ const crmForecastCases = [
         const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const { calculateForecast } = await import('./crm');
+        const { voidReportDocument } = await import('../testing/document-void.ts')
 
         const DB = !!process.env.OPENBOOKS_DB_URL;
         const PERIOD = { periodStart: '2026-07-01', periodEnd: '2026-07-31' } as const;
@@ -177,14 +178,14 @@ const crmForecastCases = [
             await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":true}'::jsonb) where id=${org.orgId}`);
             await db.execute(sql`insert into crm_account_profiles (org_id, party_id, owner_user_id) values (${org.orgId}, ${org.customerId}, ${actor})`);
           });
-          await postDocument(org, { kind: 'customer_invoice', number: 'INV-C6', date: '2026-07-15', partyId: org.customerId, subtotal: '100.0000', taxTotal: '13.0000', total: '113.0000' });
-          return { org, actor };
+          const invoiceId = await postDocument(org, { kind: 'customer_invoice', number: 'INV-C6', date: '2026-07-15', partyId: org.customerId, subtotal: '100.0000', taxTotal: '13.0000', total: '113.0000' });
+          return { org, actor, invoiceId };
         }
         async function postCredit(org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; accounts: { revenue: string; ar: string } }, partyId: string, number: string, subtotal: string) {
           await postDocument(org, { kind: 'customer_credit', number, date: '2026-07-20', partyId, subtotal, taxTotal: '0.0000', total: subtotal });
         }
-        async function closed(orgId: string, ownerUserId?: string) {
-          const rows = await calculateForecast({ orgId, ...PERIOD, ownerUserId }) as { currency: string; closed_amount: string }[];
+        async function closed(orgId: string, ownerUserId?: string, period: { periodStart: string; periodEnd: string } = PERIOD) {
+          const rows = await calculateForecast({ orgId, ...period, ownerUserId }) as { currency: string; closed_amount: string }[];
           return rows.find((row) => row.currency === 'CAD')?.closed_amount;
         }
 
@@ -192,6 +193,18 @@ const crmForecastCases = [
           const { org } = await fixture();
           try {
             assert.equal(await closed(org.orgId), '100.0000');
+          } finally {
+            await dropScratchOrg(org.orgId);
+          }
+        });
+
+        test('a voided invoice remains in its posting period and offsets its void period', { skip: !DB }, async () => {
+          const { org, invoiceId } = await fixture();
+          try {
+            assert.equal(await closed(org.orgId), '100.0000', 'closed revenue uses the invoice subtotal, not tax')
+            await voidReportDocument(org.orgId, invoiceId, '2026-08-05')
+            assert.equal(await closed(org.orgId), '100.0000');
+            assert.equal(await closed(org.orgId, undefined, { periodStart: '2026-08-01', periodEnd: '2026-08-31' }), '-100.0000')
           } finally {
             await dropScratchOrg(org.orgId);
           }
