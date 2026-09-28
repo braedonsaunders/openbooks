@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
@@ -727,6 +727,78 @@ test("a sandbox holding posted documents can be deleted without stranding its or
              (select count(*)::int from documents where org_id = ${org.orgId}) as documents
     `)).rows[0]!;
     assert.deepEqual(prod, { orgs: 1, documents: 0 });
+  } finally {
+    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
+    else {
+      const failed = (await db.execute<{ id: string }>(sql`
+        select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
+      for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("deleteSandbox records delete_completed in the production org when the deleter runs under the sandbox org scope", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `DeleteAuditScope ${randomUUID()}`;
+  const systemReason = "delete-completed audit scope test";
+  let sandboxId: string | null = null;
+  try {
+    const created = await createSandbox({
+      productionOrgId: org.orgId,
+      name: sandboxName,
+      tier: "full",
+      masked: false,
+      lifecycleAuthority: { systemReason },
+    });
+    sandboxId = created.sandboxId;
+
+    // Mirror the sample-company compensation path: the deleter holds the
+    // doomed sandbox org's tenant scope, so an unscoped completion audit
+    // would be refused by RLS after the org row is gone.
+    await withOrgContext(created.sandboxOrgId, () =>
+      deleteSandbox(sandboxId!, { systemReason }),
+    );
+    sandboxId = null;
+
+    const residue = (await db.execute<{ orgs: number }>(sql`
+      select (select count(*)::int from orgs where id = ${created.sandboxOrgId}) as orgs
+    `)).rows[0]!;
+    assert.deepEqual(residue, { orgs: 0 });
+
+    const completions = (await db.execute<{
+      actor_id: string | null; reason: string | null; before_status: string | null; after_status: string | null;
+    }>(sql`
+      select actor_id::text as actor_id,
+             changes->'initiator'->>'reason' as reason,
+             changes->'before'->>'status' as before_status,
+             changes->'after'->>'status' as after_status
+        from audit_log
+       where org_id = ${org.orgId}
+         and table_name = 'sandbox_lifecycle'
+         and row_id = ${created.sandboxId}
+         and changes->>'operation' = 'delete_completed'
+    `)).rows;
+    assert.equal(completions.length, 1, "exactly one delete_completed audit row must exist in the production org");
+    assert.deepEqual(completions[0], {
+      actor_id: null,
+      reason: systemReason,
+      before_status: "deleting",
+      after_status: "deleted",
+    });
+
+    // A retry must refuse (the sandbox is gone) instead of recording a
+    // second completion event.
+    await assert.rejects(deleteSandbox(created.sandboxId), /sandbox not found/);
+    const again = (await db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from audit_log
+       where org_id = ${org.orgId}
+         and table_name = 'sandbox_lifecycle'
+         and row_id = ${created.sandboxId}
+         and changes->>'operation' = 'delete_completed'
+    `)).rows[0]!;
+    assert.deepEqual(again, { count: 1 });
   } finally {
     if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
     else {
