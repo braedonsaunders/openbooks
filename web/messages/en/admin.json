@@ -789,6 +789,32 @@
       },
       "customerCreditsReduceBillings": {
         "label": "Reduce billings by customer credits"
+      },
+      "normalization": {
+        "title": "Normalization requests",
+        "description": "Months stored with legacy definitions are corrected through an audited request with a distinct approver. Nothing changes until a request is approved and executed.",
+        "states": {
+          "legacy": "Legacy",
+          "ready": "Ready",
+          "pending": "Pending approval",
+          "running": "Running",
+          "failed": "Failed",
+          "refused": "Needs attention"
+        },
+        "monthColumn": "Month",
+        "statusColumn": "Status",
+        "countsColumn": "Rows (monthly / facts / cohorts)",
+        "requestTitle": "Request normalization",
+        "requestMonth": "Month",
+        "requestMonthPlaceholder": "YYYY-MM-01",
+        "requestReason": "Reason",
+        "requestReasonHint": "Describe why the month needs correction. At least 8 characters.",
+        "requestSubmit": "Submit request",
+        "approveSubmit": "Approve and execute",
+        "failureLabel": "Failure",
+        "remedyLabel": "Remedy",
+        "empty": "No months recorded yet.",
+        "loadFailed": "Could not load normalization states."
       }
     },
     "approvals": {

@@ -789,6 +789,32 @@
       },
       "customerCreditsReduceBillings": {
         "label": "Kunden-Gutschriften von den Abrechnungen abziehen"
+      },
+      "normalization": {
+        "title": "Normalisierungsanfragen",
+        "description": "Monate mit veralteten Definitionen werden über eine protokollierte Anfrage mit einem anderen Genehmiger korrigiert. Bis zur Genehmigung und Ausführung ändert sich nichts.",
+        "states": {
+          "legacy": "Veraltet",
+          "ready": "Bereit",
+          "pending": "Zur Genehmigung",
+          "running": "Läuft",
+          "failed": "Fehlgeschlagen",
+          "refused": "Prüfung erforderlich"
+        },
+        "monthColumn": "Monat",
+        "statusColumn": "Status",
+        "countsColumn": "Zeilen (monatlich / Fakten / Kohorten)",
+        "requestTitle": "Normalisierung anfragen",
+        "requestMonth": "Monat",
+        "requestMonthPlaceholder": "JJJJ-MM-01",
+        "requestReason": "Begründung",
+        "requestReasonHint": "Beschreiben Sie, warum der Monat korrigiert werden muss. Mindestens 8 Zeichen.",
+        "requestSubmit": "Anfrage senden",
+        "approveSubmit": "Genehmigen und ausführen",
+        "failureLabel": "Fehler",
+        "remedyLabel": "Abhilfe",
+        "empty": "Noch keine Monate erfasst.",
+        "loadFailed": "Normalisierungsstatus konnten nicht geladen werden."
       }
     },
     "approvals": {

@@ -789,6 +789,32 @@
       },
       "customerCreditsReduceBillings": {
         "label": "从账单金额中扣除客户贷项"
+      },
+      "normalization": {
+        "title": "规范化请求",
+        "description": "以旧定义保存的月份通过经审计的请求由不同的审批人进行修正。在请求获得批准并执行之前，不会有任何更改。",
+        "states": {
+          "legacy": "旧定义",
+          "ready": "就绪",
+          "pending": "待审批",
+          "running": "运行中",
+          "failed": "失败",
+          "refused": "需要注意"
+        },
+        "monthColumn": "月份",
+        "statusColumn": "状态",
+        "countsColumn": "行（月度 / 事实 / 同期群）",
+        "requestTitle": "请求规范化",
+        "requestMonth": "月份",
+        "requestMonthPlaceholder": "YYYY-MM-01",
+        "requestReason": "原因",
+        "requestReasonHint": "请说明该月份需要修正的原因，至少 8 个字符。",
+        "requestSubmit": "提交请求",
+        "approveSubmit": "批准并执行",
+        "failureLabel": "失败原因",
+        "remedyLabel": "补救措施",
+        "empty": "尚无已记录的月份。",
+        "loadFailed": "无法加载规范化状态。"
       }
     },
     "approvals": {

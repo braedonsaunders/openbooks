@@ -789,6 +789,32 @@
       },
       "customerCreditsReduceBillings": {
         "label": "Déduire les avoirs clients des facturations"
+      },
+      "normalization": {
+        "title": "Demandes de normalisation",
+        "description": "Les mois enregistrés avec des définitions héritées sont corrigés par une demande auditée avec un approbateur distinct. Rien ne change avant approbation et exécution de la demande.",
+        "states": {
+          "legacy": "Hérité",
+          "ready": "Prêt",
+          "pending": "En attente de validation",
+          "running": "En cours",
+          "failed": "Échoué",
+          "refused": "À vérifier"
+        },
+        "monthColumn": "Mois",
+        "statusColumn": "Statut",
+        "countsColumn": "Lignes (mensuelles / faits / cohortes)",
+        "requestTitle": "Demander une normalisation",
+        "requestMonth": "Mois",
+        "requestMonthPlaceholder": "AAAA-MM-01",
+        "requestReason": "Motif",
+        "requestReasonHint": "Décrivez pourquoi le mois doit être corrigé. 8 caractères minimum.",
+        "requestSubmit": "Envoyer la demande",
+        "approveSubmit": "Approuver et exécuter",
+        "failureLabel": "Échec",
+        "remedyLabel": "Correctif",
+        "empty": "Aucun mois enregistré pour le moment.",
+        "loadFailed": "Impossible de charger les états de normalisation."
       }
     },
     "approvals": {

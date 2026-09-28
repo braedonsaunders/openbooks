@@ -789,6 +789,32 @@
       },
       "customerCreditsReduceBillings": {
         "label": "顧客クレジットを請求額から差し引く"
+      },
+      "normalization": {
+        "title": "正規化リクエスト",
+        "description": "旧定義で保存された月は、別の承認者による監査付きリクエストで修正されます。リクエストが承認・実行されるまで何も変更されません。",
+        "states": {
+          "legacy": "旧定義",
+          "ready": "準備完了",
+          "pending": "承認待ち",
+          "running": "実行中",
+          "failed": "失敗",
+          "refused": "要確認"
+        },
+        "monthColumn": "月",
+        "statusColumn": "状態",
+        "countsColumn": "行 (月次 / ファクト / コホート)",
+        "requestTitle": "正規化をリクエスト",
+        "requestMonth": "月",
+        "requestMonthPlaceholder": "YYYY-MM-01",
+        "requestReason": "理由",
+        "requestReasonHint": "その月を修正する必要がある理由を8文字以上で記入してください。",
+        "requestSubmit": "リクエストを送信",
+        "approveSubmit": "承認して実行",
+        "failureLabel": "失敗内容",
+        "remedyLabel": "対処方法",
+        "empty": "記録された月はまだありません。",
+        "loadFailed": "正規化の状態を読み込めませんでした。"
       }
     },
     "approvals": {
