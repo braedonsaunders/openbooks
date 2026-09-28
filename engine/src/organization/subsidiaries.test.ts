@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { db } from "../platform/db.ts";
-import { add, mulRate } from "../money/money.ts";
+import { add, mulRate, toUnits } from "../money/money.ts";
 import {
   absorbFxRoundingResidual,
   intercompanyBalancingLegs,
@@ -346,4 +346,29 @@ test("FX absorber is a no-op on an already balanced group", () => {
   ];
   absorbFxRoundingResidual(lines);
   assert.deepEqual(lines.map((l) => l.amount), ["10.0000", "-10.0000"]);
+});
+
+test("absorbed residual meets the storage group bound through its bucket", () => {
+  // Five transaction-balanced lines translate to a 0.0002 functional
+  // residual. The bucket's stored deviation exceeds any per-line tenth, yet
+  // the group holds two ledger units against the five-line bound — the exact
+  // shape the storage check admits.
+  const lines = [
+    { ...line(originSubId, "135.1236", "100.0000", "1.351236"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "-54.0494", "-40.0000", "1.351235"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "-81.0741", "-60.0000", "1.351235"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "55.0001", "50.0000", "1.100002"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "-55.0000", "-50.0000", "1.1"), taxCodeId: null, isOpenItem: false },
+  ];
+  absorbFxRoundingResidual(lines);
+  assert.equal(lines[0]!.amount, "135.1234");
+  // The storage formula evaluated with the kernel's own rounding: only the
+  // bucket stands off its translation, by the whole residual.
+  let deviation = 0n;
+  for (const l of lines) {
+    const d = toUnits(l.amount) - toUnits(mulRate(l.txnAmount!, l.fxRate!));
+    deviation += d < 0n ? -d : d;
+  }
+  assert.equal(deviation, 2n);
+  assert.ok(2n * deviation <= BigInt(lines.length));
 });
