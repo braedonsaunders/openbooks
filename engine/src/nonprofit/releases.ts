@@ -325,7 +325,7 @@ async function assertEndowmentAppropriation(
     select je.id
       from journal_entries je
      where je.org_id = ${orgId}
-       -- Keep this posted-only: a reversed board appropriation must not authorize a spend.
+       -- Live entries only: a reversed board appropriation must not authorize a release.
        and je.status = 'posted'
        and je.origin = 'journal'
        and strpos(lower(coalesce(je.memo, '')), lower(${reference})) > 0

@@ -358,6 +358,7 @@ export async function linkEncumbranceDocumentLine(input: {
         join document_lines dl on dl.org_id = l.org_id and dl.id = l.document_line_id
         join documents d on d.org_id = dl.org_id and d.id = dl.document_id
        where l.org_id = ${input.orgId} and l.encumbrance_id = ${input.encumbranceId}
+         -- Live entries only: voided documents cannot reserve an encumbrance balance.
          and d.status in ('draft', 'pending_approval', 'approved', 'posted')
     `)).rows[0]?.amount ?? "0";
     if (!balance || cmpMoney(addMoney(linked, line.amount), balance.openBalance) > 0) {
@@ -616,6 +617,7 @@ async function cellFiguresForScenario(input: {
             from encumbrance_links l
             join document_lines dl on dl.org_id = l.org_id and dl.id = l.document_line_id
             join documents d on d.org_id = dl.org_id and d.id = dl.document_id
+           -- Live entries only: only posted, non-voided actuals consume the open balance; the current unposted source is subtracted separately below.
            where l.org_id = e.org_id and l.encumbrance_id = e.id and d.status = 'posted'
         ), 0)
       - coalesce((
