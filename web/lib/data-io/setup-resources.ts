@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
-import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
+import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
 import { buildRow, coerceBoolean, idColumn, type Coerced } from '../setup/coerce'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
@@ -254,7 +254,11 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
         // entire transaction, including the import job's audit evidence.
         await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
         const features = await resolvedFeatureState(orgId)
-        if (entity.featureKey && !featureEnabled(features, entity.featureKey)) return refuse('resource is not available')
+        // One authoritative gate refuses the import before preview or commit.
+        // A closed single-key gate keeps the existing refusal; a closed
+        // any-of gate names the shared remedy instead of inventing its own.
+        const gate = resolveSetupEntityGate(entity, features)
+        if (!gate.enabled) return refuse(gate.remedy ?? 'resource is not available')
         const gated = await gatedSetupEntity(entity, orgId)
         const available = new Set(gated.fields.map((field) => field.key))
         const unavailable = entity.fields.filter((field) => !available.has(field.key)).map((field) => field.key)

@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, type SetupEntity } from '../setup/registry'
+import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, type SetupEntity } from '../setup/registry'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { DOC_KINDS, docKindConfig } from '../document-kinds'
 import { isDocKindEnabled } from "../documents.ts";
@@ -76,9 +76,9 @@ export { RefResolver } from './resource-core'
 
 // --- Feature-gated setup entity lookup ----------------------------------------
 
+// One authoritative gate admits setup resources — never a local featureKey check.
 async function setupEntityEnabled(entity: SetupEntity, orgId: string): Promise<boolean> {
-  if (!entity.featureKey) return true
-  return orgFeatureEnabled(orgId, entity.featureKey)
+  return resolveSetupEntityGate(entity, await resolvedFeatureState(orgId)).enabled
 }
 
 type SubsidiaryScope = ReadonlySet<string> | null
@@ -200,7 +200,7 @@ function bindReadScope(resource: DataResource, orgId: string, scope?: Subsidiary
 export async function listResources(orgId: string): Promise<ResourceDescriptor[]> {
   const features = await resolvedFeatureState(orgId)
   const setup = SETUP_ENTITIES
-    .filter((entity) => !entity.featureKey || featureEnabled(features, entity.featureKey))
+    .filter((entity) => resolveSetupEntityGate(entity, features).enabled)
     .map(setupDescriptor)
   const master = MASTER_ENTITIES.map(masterDescriptor)
   const recordTypes = (await db.execute(sql`

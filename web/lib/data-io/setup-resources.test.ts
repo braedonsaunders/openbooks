@@ -5,7 +5,8 @@ import { sql } from 'drizzle-orm'
 
 // Server-only shim so this DB test can import the resource under node.
 const { setupResource } = (await import('./setup-resources.ts')) as typeof import('./setup-resources.ts')
-const { SETUP_ENTITY_BY_KEY } = await import('../setup/registry.ts')
+const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY } = await import('../setup/registry.ts')
+const { resolvedFeatureState } = await import('../features.ts')
 
 const { db, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -147,6 +148,118 @@ test(
     }
   },
 )
+
+/** Pin the org's feature flags, then read the state back so a zero-row write
+ *  fails loudly here instead of silently testing the defaults. */
+async function setImportFeatures(orgId: string, flags: Record<string, boolean>): Promise<void> {
+  await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(flags)}::jsonb, true) where id = ${orgId}`)
+  const state = await resolvedFeatureState(orgId)
+  for (const [key, value] of Object.entries(flags)) {
+    assert.equal(state[key], value, `feature flag ${key} did not persist`)
+  }
+}
+
+/** A test-local any-of descriptor. Its table does not exist, so any storage
+ *  touch would throw a database error — a per-row refusal proves the gate
+ *  lands before preview, columns, locks, or writes. */
+function registerImportProbe(key: string, featureKeysAny: string[]): void {
+  SETUP_ENTITY_BY_KEY.set(key, {
+    key,
+    table: 'c7a_consumer_probe_missing_table',
+    groupKey: 'projects',
+    iconKey: 'briefcase',
+    orgScoped: true,
+    hasActive: false,
+    featureKeysAny,
+    columns: [],
+    fields: [],
+  })
+}
+
+test('setup imports refuse a both-off any-of entity with the shared exact remedy', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  const actorId = await createScratchUser(org.orgId, 'Setup Import Gate Admin', 'admin')
+  const probeKey = 'c7a-import-any-of-probe'
+  registerImportProbe(probeKey, ['projects', 'manufacturing'])
+  try {
+    await setImportFeatures(org.orgId, { projects: false, manufacturing: false })
+    const entity = SETUP_ENTITY_BY_KEY.get(probeKey)
+    assert.ok(entity)
+    // Commit and preview refuse alike, naming the single exported remedy —
+    // never a rewritten copy, and with no observable storage effect.
+    for (const dryRun of [false, true]) {
+      const outcome = await setupResource(entity, org.orgId).write(
+        [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],
+        'insert',
+        { orgId: org.orgId, actorId, dryRun },
+      )
+      assert.deepEqual([outcome.created, outcome.updated, outcome.failed], [0, 0, 1])
+      assert.equal(outcome.errors[0]?.message, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY)
+    }
+    // Either member on admits through the same gate. The missing table then
+    // throws past the gate — a refusal would have returned a per-row outcome
+    // instead, so any throw here is itself the admission signal.
+    await setImportFeatures(org.orgId, { projects: false, manufacturing: true })
+    await assert.rejects(
+      setupResource(entity, org.orgId).write(
+        [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],
+        'insert',
+        { orgId: org.orgId, actorId, dryRun: false },
+      ),
+      (error: unknown) => error instanceof Error && error.message !== SETUP_PROJECTS_OR_MANUFACTURING_REMEDY,
+    )
+  } finally {
+    SETUP_ENTITY_BY_KEY.delete(probeKey)
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
+
+test('setup imports fail closed on unknown any-of keys', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  const actorId = await createScratchUser(org.orgId, 'Setup Import Unknown Admin', 'admin')
+  const probeKey = 'c7a-import-unknown-probe'
+  registerImportProbe(probeKey, ['no-such-feature'])
+  try {
+    await setImportFeatures(org.orgId, { projects: true, manufacturing: true, inventory: true })
+    const entity = SETUP_ENTITY_BY_KEY.get(probeKey)
+    assert.ok(entity)
+    const outcome = await setupResource(entity, org.orgId).write(
+      [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],
+      'insert',
+      { orgId: org.orgId, actorId, dryRun: false },
+    )
+    assert.deepEqual([outcome.created, outcome.updated, outcome.failed], [0, 0, 1])
+    assert.match(outcome.errors[0]?.message ?? '', /Company Settings → Features/)
+  } finally {
+    SETUP_ENTITY_BY_KEY.delete(probeKey)
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
+
+test('setup imports keep single-key refusal and admit when the feature is on', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  const actorId = await createScratchUser(org.orgId, 'Setup Import Single Admin', 'admin')
+  const entity = SETUP_ENTITY_BY_KEY.get('overhead-rates')
+  assert.ok(entity)
+  try {
+    await setImportFeatures(org.orgId, { projects: false })
+    const refused = await setupResource(entity, org.orgId).write(
+      [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],
+      'insert',
+      { orgId: org.orgId, actorId, dryRun: false },
+    )
+    assert.deepEqual([refused.created, refused.failed, refused.errors[0]?.message], [0, 1, 'resource is not available'])
+    await setImportFeatures(org.orgId, { projects: true })
+    const admitted = await setupResource(entity, org.orgId).write(
+      [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],
+      'insert',
+      { orgId: org.orgId, actorId, dryRun: false },
+    )
+    assert.deepEqual([admitted.created, admitted.failed], [1, 0])
+  } finally {
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
 
 test('setup imports refuse tax codes that violate domain invariants', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()

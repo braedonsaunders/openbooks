@@ -11,6 +11,7 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { ASSISTANT_TOOLS, executeAssistantTool } = await import("./registry");
 const { MAX_ROW_STRING } = await import("./tools-shared");
+const { SETUP_ENTITY_BY_KEY } = await import("../setup/registry");
 
 /**
  * Tool contract harness. Every READ/SEARCH assistant tool is
@@ -419,6 +420,107 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         console.log(`[contract] ${rows.length} tools measured, ${widest.length} above ${MAX_ROW_STRING * 10} bytes`);
       });
     });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/** A test-local any-of descriptor. Its table does not exist, so any storage
+ *  touch would throw a database error — a documented refusal proves the gate
+ *  lands first, and the tools never throw. */
+function registerAssistantProbe(key: string, featureKeysAny: string[]): void {
+  SETUP_ENTITY_BY_KEY.set(key, {
+    key,
+    table: "c7a_consumer_probe_missing_table",
+    groupKey: "projects",
+    iconKey: "briefcase",
+    orgScoped: true,
+    hasActive: false,
+    featureKeysAny,
+    columns: [],
+    fields: [],
+  });
+}
+
+async function setAssistantFeatures(orgId: string, flags: Record<string, boolean>): Promise<void> {
+  await withBypassContext(() => db.execute(sql`
+    update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(flags)}::jsonb)
+    where id = ${orgId}
+  `));
+}
+
+interface SetupEntityItem {
+  key: string;
+  enabled: boolean;
+}
+
+async function listSetupEntityItems(authz: Authz, orgId: string): Promise<SetupEntityItem[]> {
+  const result = await withOrgContext(orgId, () => executeAssistantTool(authz, "list_setup_entities", {}));
+  if (!result.ok) assert.fail(`list_setup_entities refused: ${JSON.stringify(result)}`);
+  const data = result.data as { truncated: boolean; items: SetupEntityItem[] };
+  // The probe registers last: a truncated listing could drop it silently, so
+  // the tests below only read the probe from a complete listing.
+  assert.equal(data.truncated, false, "setup entity listing truncated; the probe below would be unreadable");
+  return data.items;
+}
+
+test("setup assistant tools honor an any-of descriptor through the shared gate", DB_ONLY, async () => {
+  const org = await withBypassContext(() => (createScratchOrg()));
+  const probeKey = "c7a-assistant-any-of-probe";
+  registerAssistantProbe(probeKey, ["projects", "manufacturing"]);
+  try {
+    await setAssistantFeatures(org.orgId, { projects: false, manufacturing: false });
+    const authz = readerAuthz(org.orgId);
+    const closed = await listSetupEntityItems(authz, org.orgId);
+    assert.equal(closed.find((item) => item.key === probeKey)?.enabled, false);
+    const refused = await withOrgContext(org.orgId, () =>
+      executeAssistantTool(authz, "list_setup_records", { entityKey: probeKey }));
+    assert.deepEqual(refused, { ok: false, error: "feature_disabled" });
+    // Either member on admits through the same helper.
+    await setAssistantFeatures(org.orgId, { projects: false, manufacturing: true });
+    const admitted = await listSetupEntityItems(authz, org.orgId);
+    assert.equal(admitted.find((item) => item.key === probeKey)?.enabled, true);
+  } finally {
+    SETUP_ENTITY_BY_KEY.delete(probeKey);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("setup assistant tools fail closed on unknown keys", DB_ONLY, async () => {
+  const org = await withBypassContext(() => (createScratchOrg()));
+  const probeKey = "c7a-assistant-unknown-probe";
+  registerAssistantProbe(probeKey, ["no-such-feature"]);
+  try {
+    await setAssistantFeatures(org.orgId, { projects: true, manufacturing: true, inventory: true });
+    const authz = readerAuthz(org.orgId);
+    const listed = await listSetupEntityItems(authz, org.orgId);
+    assert.equal(listed.find((item) => item.key === probeKey)?.enabled, false);
+    const refused = await withOrgContext(org.orgId, () =>
+      executeAssistantTool(authz, "list_setup_records", { entityKey: probeKey }));
+    assert.deepEqual(refused, { ok: false, error: "feature_disabled" });
+  } finally {
+    SETUP_ENTITY_BY_KEY.delete(probeKey);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("setup assistant tools keep single-key behavior", DB_ONLY, async () => {
+  const org = await withBypassContext(() => (createScratchOrg()));
+  try {
+    const authz = readerAuthz(org.orgId);
+    await setAssistantFeatures(org.orgId, { projects: false });
+    const closed = await listSetupEntityItems(authz, org.orgId);
+    assert.equal(closed.find((item) => item.key === "overhead-rates")?.enabled, false);
+    const refused = await withOrgContext(org.orgId, () =>
+      executeAssistantTool(authz, "list_setup_records", { entityKey: "overhead-rates" }));
+    assert.deepEqual(refused, { ok: false, error: "feature_disabled" });
+    await setAssistantFeatures(org.orgId, { projects: true });
+    const admitted = await listSetupEntityItems(authz, org.orgId);
+    assert.equal(admitted.find((item) => item.key === "overhead-rates")?.enabled, true);
+    const records = await withOrgContext(org.orgId, () =>
+      executeAssistantTool(authz, "list_setup_records", { entityKey: "overhead-rates" }));
+    if (!records.ok) assert.fail(`list_setup_records refused an enabled entity: ${JSON.stringify(records)}`);
+    assert.equal((records.data as { entityKey: string }).entityKey, "overhead-rates");
   } finally {
     await dropScratchOrg(org.orgId);
   }
