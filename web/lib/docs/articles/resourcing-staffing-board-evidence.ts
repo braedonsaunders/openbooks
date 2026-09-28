@@ -59,10 +59,9 @@ all.
 ## A note on migrations
 
 There is no connector import behind this board. Teams arriving from other
-systems should know the mapping gap up front: ERPNext has no capacity object
-that corresponds to a staffing board cell, so ERPNext capacity history cannot
-be carried over row for row. Staffing plans arrive as assignment imports
-through the assignment plan resource, and capacity is rebuilt from work
+systems should check whether their capacity history corresponds to a staffing
+board cell before attempting a row-for-row mapping. Staffing plans arrive as
+assignment imports through the assignment plan resource, and capacity is rebuilt from work
 schedules in OpenBooks — the evidence chain starts clean on day one rather
 than inheriting numbers nobody can audit.
 `,

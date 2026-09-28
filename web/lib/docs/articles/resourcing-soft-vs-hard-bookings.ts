@@ -49,14 +49,11 @@ booking row.
 ## How other systems name the same idea
 
 Teams arriving with history elsewhere will recognize the pattern under
-different names. OpenAir distinguishes booking types along the same
-tentative-to-committed axis, so OpenAir bookings map onto soft and hard by
-intent, not by label — confirm what each legacy type promised before
-mapping it. Odoo carries tentative staffing in planning slots, which enter
-as soft bookings, while confirmed schedule lines enter as hard ones.
-Dynamics 365 Business Central job planning lines describe committed project
-work and map to hard bookings; pipeline coverage held anywhere else in
-Business Central has no planning-line counterpart and enters as soft.
+different names. Map legacy booking types onto soft and hard by intent,
+not by label: confirm what each legacy type promised before mapping it.
+Tentative staffing slots enter as soft bookings, while confirmed schedule
+lines and committed project work enter as hard bookings. Pipeline coverage
+that has not been committed enters as soft.
 Nothing in this mapping is a connector: these are operator migration
 readings, applied row by row through the assignment plan import, so every
 mapped booking carries its evidence from the first day.

@@ -248,7 +248,7 @@ export function resourceRequestsSpec(data: ResourceRequestsData): PageSpec {
     props: { href: "/resourcing/requests?request=new", label: data.newRequestLabel },
   };
   return page({
-    route: "/resourcing/requests",
+    route: '/resourcing/requests',
     layout: "list",
     header: [pageHeader({ title: f("title"), description: f("description"), actions: [widget(newRequest.widget, newRequest.props, f("canManage"))] })],
     body: [widgetBlock("entity-list-view", {

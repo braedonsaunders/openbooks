@@ -185,6 +185,7 @@ export function demandSpec(data: DemandPageData): PageSpec {
     variant: 'default',
   })
   return page({
+    route: '/resourcing/demand',
     layout: 'list',
     header: [pageHeader({
       title: data.title,

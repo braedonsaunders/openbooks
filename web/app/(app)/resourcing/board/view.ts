@@ -233,7 +233,7 @@ const f = ref<ResourcingBoardPageData>();
 
 export function resourcingBoardSpec(data: ResourcingBoardPageData): PageSpec {
   return page({
-    route: "/resourcing/board",
+    route: '/resourcing/board',
     layout: "list",
     header: [pageHeader({ title: f("title"), description: f("description") })],
     body: [grid("grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]", [

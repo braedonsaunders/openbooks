@@ -1864,6 +1864,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/nonprofit/encumbrances': {
+    route: '/nonprofit/encumbrances',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/nonprofit/encumbrances/view')
+      return {
+        load: (input) => m.loadEncumbrances(input.searchParams ?? {}),
+        spec: (data) => m.encumbrancesSpec(data as never),
+      }
+    },
+  },
   '/nonprofit/funds': {
     route: '/nonprofit/funds',
     segments: [],
@@ -1885,18 +1897,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadGrants(input.searchParams ?? {}),
         spec: (data) => m.grantsSpec(data as never),
-      }
-    },
-  },
-  '/nonprofit/encumbrances': {
-    route: '/nonprofit/encumbrances',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/nonprofit/encumbrances/view')
-      return {
-        load: (input) => m.loadEncumbrances(input.searchParams ?? {}),
-        spec: (data) => m.encumbrancesSpec(data as never),
       }
     },
   },
@@ -2440,6 +2440,54 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/resourcing/bench': {
+    route: '/reports/resourcing/bench',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/resourcing/bench/view')
+      return {
+        load: (input) => m.loadBenchReport(input.searchParams ?? {}),
+        spec: (data) => m.benchReportSpec(data as never),
+      }
+    },
+  },
+  '/reports/resourcing/capacity-demand': {
+    route: '/reports/resourcing/capacity-demand',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/resourcing/capacity-demand/view')
+      return {
+        load: (input) => m.loadCapacityDemandReport(input.searchParams ?? {}),
+        spec: (data) => m.capacityDemandReportSpec(data as never),
+      }
+    },
+  },
+  '/reports/resourcing/engagement': {
+    route: '/reports/resourcing/engagement',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/resourcing/engagement/view')
+      return {
+        load: (input) => m.loadEngagementReport(input.searchParams ?? {}),
+        spec: (data) => m.engagementReportSpec(data as never),
+      }
+    },
+  },
+  '/reports/resourcing/utilization': {
+    route: '/reports/resourcing/utilization',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/resourcing/utilization/view')
+      return {
+        load: (input) => m.loadUtilizationReport(input.searchParams ?? {}),
+        spec: (data) => m.utilizationReportSpec(data as never),
+      }
+    },
+  },
   '/reports/statements/[partyId]': {
     route: '/reports/statements/[partyId]',
     segments: ['partyId'],
@@ -2473,6 +2521,78 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadTrueCost(input.searchParams ?? {}),
         spec: (data) => m.trueCostSpec(data as never),
+      }
+    },
+  },
+  '/resourcing': {
+    route: '/resourcing',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/resourcing/view')
+      return {
+        load: (input) => m.loadResourcing(input.searchParams ?? {}),
+        spec: (data) => m.resourcingSpec(data as never),
+      }
+    },
+  },
+  '/resourcing/assignments': {
+    route: '/resourcing/assignments',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/resourcing/assignments/view')
+      return {
+        load: (input) => m.loadResourcingAssignmentsPage(input.searchParams ?? {}),
+        spec: (data) => m.resourcingAssignmentsSpec(data as never),
+      }
+    },
+  },
+  '/resourcing/board': {
+    route: '/resourcing/board',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/resourcing/board/view')
+      return {
+        load: (input) => m.loadResourcingBoardPage(input.searchParams ?? {}),
+        spec: (data) => m.resourcingBoardSpec(data as never),
+      }
+    },
+  },
+  '/resourcing/demand': {
+    route: '/resourcing/demand',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/resourcing/demand/view')
+      return {
+        load: (input) => m.loadDemandPage(input.searchParams ?? {}),
+        spec: (data) => m.demandSpec(data as never),
+      }
+    },
+  },
+  '/resourcing/requests': {
+    route: '/resourcing/requests',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/resourcing/requests/view')
+      return {
+        load: (input) => m.loadResourceRequestsPage(input.searchParams ?? {}),
+        spec: (data) => m.resourceRequestsSpec(data as never),
+      }
+    },
+  },
+  '/resourcing/retainers': {
+    route: '/resourcing/retainers',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/resourcing/retainers/view')
+      return {
+        load: (input) => m.loadRetainersPage(input.searchParams ?? {}),
+        spec: (data) => m.retainersSpec(data as never),
       }
     },
   },
