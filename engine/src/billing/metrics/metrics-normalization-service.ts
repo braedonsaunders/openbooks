@@ -1467,9 +1467,10 @@ export async function executeNormalizationRequest(args: {
   try {
     return await runCorrectionAttempt(orgId, requestId, leaseToken, peek.month.slice(0, 10), ttlMinutes);
   } catch (error) {
-    // Fence and state refusals fire before any metric work starts, so there
-    // is no failed outcome to record; drift, source, rate, and write
-    // refusals after the live claim record one under the live lease.
+    // Pre-claim fence and state refusals fire before any metric work starts,
+    // so there is no failed outcome to record; everything after the live
+    // claim — including a post-claim feature-off — records one under the
+    // live lease.
     if (
       error instanceof UsageBillingError
       && [
@@ -1480,7 +1481,6 @@ export async function executeNormalizationRequest(args: {
         "saas_normalization_lease_state",
         "saas_normalization_lease_live",
         "saas_normalization_month_mismatch",
-        "feature_off",
       ].includes(error.code)
     ) {
       throw error;
@@ -1607,9 +1607,10 @@ export async function approveAndExecuteNormalizationRequest(args: {
     });
     return { request: record, result };
   } catch (error) {
-    // Fence and state refusals fire before any metric work starts, so there
-    // is no failed outcome to record; drift, source, rate, and write
-    // refusals after the live claim record one under the live lease.
+    // Pre-claim fence and state refusals fire before any metric work starts,
+    // so there is no failed outcome to record; everything after the live
+    // claim — including a post-claim feature-off — records one under the
+    // live lease.
     if (
       error instanceof UsageBillingError
       && [
@@ -1620,7 +1621,6 @@ export async function approveAndExecuteNormalizationRequest(args: {
         "saas_normalization_lease_state",
         "saas_normalization_lease_live",
         "saas_normalization_month_mismatch",
-        "feature_off",
       ].includes(error.code)
     ) {
       throw error;
