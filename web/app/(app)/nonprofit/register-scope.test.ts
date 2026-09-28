@@ -30,7 +30,7 @@ registerHooks({
 // authz, feature flags, and the database stay real.
 stubModules({ intl: true })
 const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { createEncumbrance } = await import(root + 'engine/src/nonprofit/encumbrances.ts')
 const { getAuthz } = await import(root + 'web/lib/authz.ts')
 const { nonprofitGroupTabs } = await import(root + 'web/components/module-home/group-tabs.ts')
@@ -44,11 +44,11 @@ async function withScopedReader(permission: string, fn: (ctx: { org: ScratchOrg;
   const outside = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${randomUUID()}, ${org.orgId}, 'Uptown', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb) returning id`))).rows[0]!.id
-  await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify([permission])}::jsonb,
-    subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [outside] })}::jsonb where org_id = ${org.orgId} and key = 'scope-reader'`))
-  await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
+  assert.equal((await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify([permission])}::jsonb,
+    subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [outside] })}::jsonb where org_id = ${org.orgId} and key = 'scope-reader' returning key`))).rows.length, 1, 'register scope fixture permission and subsidiary setup updates scope-reader role')
+  assert.equal((await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
     coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"budgets":true,"grantManagement":true,"encumbrances":true}'::jsonb, true)
-    where id = ${org.orgId}`))
+    where id = ${org.orgId} returning id`))).rows.length, 1, 'register scope fixture feature setup updates one organization')
   const encId = await withOrgContext(org.orgId, async () => (await createEncumbrance({ orgId: org.orgId, amount: '40.00',
     accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, extraDims: {} })).id)
   state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'Scope reader', email: 'scope-reader@scratch.test', roles: ['scope-reader'], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
@@ -79,8 +79,8 @@ test('an out-of-scope commitment loads no detail, links, figures, or candidates'
 })
 test('lifting the restriction loads the commitment detail exactly once', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await withScopedReader('encumbrances.read', async ({ org, encId }) => {
-    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb
-      where org_id = ${org.orgId} and key = 'scope-reader'`))
+    assert.equal((await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb
+      where org_id = ${org.orgId} and key = 'scope-reader' returning key`))).rows.length, 1, 'register scope unrestricted setup updates scope-reader role')
     ;(globalThis as Record<string, unknown>).__encDetailCalls = 0
     const data = await withOrgContext(org.orgId, () => loadEncumbrances({ encumbrance: encId }))
     assert.equal(data.drawer?.mode, 'record')
