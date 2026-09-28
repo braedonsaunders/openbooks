@@ -25,7 +25,7 @@ import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
 import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
 import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
 // HR-18 end
-import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, toSnake, type SetupEntity } from './registry'
+import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, toSnake, type SetupEntity } from './registry'
 import { permissionSetCovers } from '../permissions'
 import { UNRESTRICTED_SCOPE_REQUIRED } from '../subsidiaries'
 import {
@@ -65,7 +65,7 @@ import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts
 import { setupEntityWithValidationHook } from './entities/customer-item-refs'
 
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
-import { featureEnabled, featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
+import { featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
 // Drizzle expands bare JS arrays inside sql templates into SQL expressions.
@@ -387,9 +387,15 @@ function hasDynamicOptions(entity: SetupEntity): boolean {
   return (entity.fields ?? []).some((field) => field.optionsSource != null)
 }
 
+/**
+ * Shared CRUD feature fence: unknown/disabled entities refuse before any row
+ * or book lock. The verdict comes from the one authoritative gate — the
+ * preflight, every command, and the fenced write-transaction recheck all meet
+ * here, so the any-of rule cannot drift between verbs. Call sites and their
+ * order are unchanged: this stays the first refusal after the advisory locks.
+ */
 async function setupEntityEnabled(entity: SetupEntity, orgId: string, executor: Pick<typeof db, 'execute'> = db): Promise<boolean> {
-  if (!entity.featureKey) return true
-  return featureEnabled(await resolvedFeatureState(orgId, executor), entity.featureKey)
+  return resolveSetupEntityGate(entity, await resolvedFeatureState(orgId, executor)).enabled
 }
 
 /** Hide Equipment-gated controls for writes, but keep an existing

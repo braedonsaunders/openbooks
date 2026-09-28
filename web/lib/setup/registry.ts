@@ -32,8 +32,8 @@ import { CURRENCY_ENTITIES } from './entities/currency'
 import { MANUFACTURING_ENTITIES } from './entities/manufacturing'
 import { USAGE_ENTITIES } from './entities/usage'
 
-export type { SetupFieldKind, SetupColumnKind, SetupRefSource, SetupOption, SetupDynamicOptionsSource, SetupField, SetupColumn, SetupFilter, SetupEntity, SetupGroup } from './types'
-export { setupOptionLabel, setupFieldVisible, setupFieldOptions, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, setupEntityForFeatureState } from './types'
+export type { SetupFieldKind, SetupColumnKind, SetupRefSource, SetupOption, SetupDynamicOptionsSource, SetupField, SetupColumn, SetupFilter, SetupEntity, SetupEntityGate, SetupGroup } from './types'
+export { setupOptionLabel, setupFieldVisible, setupFieldOptions, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, setupEntityForFeatureState, resolveSetupEntityGate, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY } from './types'
 export { SETUP_GROUPS }
 export { OVERHEAD_RATE_KINDS, LIEN_WAIVER_TYPES } from './options'
 
