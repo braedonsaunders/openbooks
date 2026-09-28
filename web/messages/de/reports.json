@@ -2423,39 +2423,39 @@
     },
     "mrr-movements": {
       "name": "MRR-Bewegungen",
-      "description": "Monatliche neue, ausgeweitete, reduzierte, verlorene und reaktivierte MRR mit Anfangs- und End-MRR sowie Quick Ratio. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+      "description": "Zeigt monatliche MRR-Bewegungen mit Anfangs- und Endbestand sowie Quick Ratio."
     },
     "arr-summary": {
       "name": "ARR-Übersicht",
-      "description": "Der monatliche annualisierte wiederkehrende Umsatz entspricht dem Zwölffachen der End-MRR. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+      "description": "Der monatliche ARR entspricht dem Zwölffachen der End-MRR."
     },
     "revenue-churn": {
       "name": "Umsatz- und Kundenabwanderung",
-      "description": "Monatliche Umsatz- und Kundenabwanderung vergleicht verlorene MRR und verlorene Abrechnungskonten mit den Anfangssalden. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+      "description": "Vergleicht monatliche MRR- und Abrechnungskontoverluste mit den Anfangssalden."
     },
     "nrr-grr": {
       "name": "Netto- und Brutto-Umsatzbindung",
-      "description": "Die monatliche Netto- und Bruttoumsatzbindung vergleicht Expansion, Kontraktion und Abwanderung mit der Anfangs-MRR. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+      "description": "Zeigt die monatliche Netto- und Bruttoumsatzbindung im Vergleich zur Anfangs-MRR."
     },
     "cohort-retention": {
       "name": "Kohortenbindung",
-      "description": "Die Bindung nach Startmonat und verstrichenen Monaten zeigt die erhaltene MRR und Abrechnungskonten. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+      "description": "Zeigt erhaltene MRR und Abrechnungskonten nach Kohorte und verstrichenen Monaten."
     },
     "arpa-ltv": {
       "name": "ARPA und Kundenlebenszeitwert",
-      "description": "Durchschnittlicher Umsatz je Abrechnungskonto der letzten zwölf Monate, monatliche Umsatzabwanderung, Bruttomarge und Kundenlebenszeitwert. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+      "description": "Zeigt 12-Monatsumsatz, monatliche Abwanderung, Bruttomarge und Kundenlebenszeitwert je Konto."
     },
     "gross-margin": {
       "name": "Bruttomarge",
-      "description": "Die monatliche Bruttomarge vergleicht den realisierten oder bei deaktivierter Umsatzrealisierung fakturierten Umsatz mit den Umsatzkosten aus dem Hauptbuch."
+      "description": "Vergleicht monatlich Umsatz und Umsatzkosten zur Berechnung der Bruttomarge."
     },
     "deferred-waterfall": {
       "name": "Verlauf abgegrenzter Umsätze",
-      "description": "Geplante künftige Realisierung aus aktiven abgegrenzten Umsatzverpflichtungen, nach Monat, Abgrenzungskonto und Währung, auf realisierter Basis."
+      "description": "Zeigt geplante künftige Realisierung aktiver abgegrenzter Umsätze nach Monat, Konto und Währung."
     },
     "bookings-billings-revenue": {
       "name": "Buchungen, Rechnungen und Umsatz",
-      "description": "Monatliche Auftragseingänge, Abrechnungen und Umsätze auf realisierter Basis oder bei deaktivierter Umsatzrealisierung auf fakturierter Basis. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung."
+      "description": "Zeigt monatliche Auftragseingänge, Abrechnungen und Umsätze."
     },
     "backorders": {
       "name": "Rückstände",
