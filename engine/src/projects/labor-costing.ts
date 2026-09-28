@@ -1,5 +1,6 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, inDbTransaction, type SqlExecutor } from "../platform/db.ts";
+import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import {
@@ -226,6 +227,30 @@ export async function laborCostingSettings(
   };
 }
 
+/**
+ * Transaction-bound labor-costing settings read: the same row through the
+ * same strict parsers as laborCostingSettings, but on the caller's executor
+ * so release-time resolution joins the release unit instead of opening a
+ * second connection outside it. The ambient reader above stays byte-identical
+ * for its existing callers; both validate through the shared parsers.
+ */
+export async function laborCostingSettingsInTx(
+  executor: SqlExecutor,
+  orgId: string,
+): Promise<LaborCostingSettings> {
+  const r = (await executor.execute<{ c: Partial<LaborCostingSettings> | null }>(
+    sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`,
+  ));
+  const c = (r.rows[0]?.c ?? {}) as Record<string, unknown>;
+  return {
+    mode: c.mode === "post" ? "post" : "off",
+    hoursPerDay: parseLaborHoursSetting(c.hoursPerDay, 8, 24, "hoursPerDay"),
+    annualHours: parseLaborHoursSetting(c.annualHours, 2080, 8784, "annualHours"),
+    components: parseLaborCostComponents(c.components),
+    allowUnratedTime: c.allowUnratedTime === true,
+  };
+}
+
 export interface ResolvedWage {
   /** Hourly wage (annual rates already divided by annualHours). */
   wage: string;
@@ -332,6 +357,113 @@ export async function resolveWage(
   return { wage, currency: row.currency, scope: row.scope, rateId: row.id };
 }
 
+export interface StandardLaborRate {
+  /** The winning labor_cost_rates row (evidence, not a re-query key). */
+  rateId: string;
+  /** The winning row's effective_from (YYYY-MM-DD). */
+  effectiveFrom: string;
+  /** The stored rate, raw: annual when basis is "year" (the caller divides
+   * by annualHours), hourly otherwise. Never pre-converted here. */
+  rate: string;
+  currency: string;
+  basis: "hour" | "year";
+  annualHours: string;
+  scope: "department" | "subsidiary" | "org";
+}
+
+/**
+ * Resolve the STANDARD rate for a cost object on the caller's org-business
+ * release date — the employee-blind counterpart to resolveWage.
+ *
+ * Every branch is scope-pure: the department branch matches the requested
+ * department with every employee/job/trade/subsidiary discriminator null;
+ * the subsidiary branch matches the requested subsidiary with every
+ * employee/job/trade/department discriminator null; the org branch matches
+ * only rows with every discriminator null. Employee/job/trade rows can
+ * never price standard work, no matter which narrower scope they also
+ * name. A null department or subsidiary omits its branch instead of
+ * null-matching (a null-bound `is not distinct from` would adopt org rows
+ * under the wrong scope). Priority is department → subsidiary → org, then
+ * latest effective_from on or before the release date, then stable row id.
+ * Returns null when no standard row covers the date.
+ *
+ * The release date is caller-supplied (frozen at release) — this function
+ * never reads the business clock itself. A malformed date refuses by name
+ * rather than selecting under string comparison.
+ */
+export async function resolveStandardLaborRateInTx(
+  executor: SqlExecutor,
+  orgId: string,
+  args: {
+    departmentId: string | null;
+    subsidiaryId: string | null;
+    releaseDate: string;
+  },
+): Promise<StandardLaborRate | null> {
+  if (!isIsoCalendarDate(args.releaseDate)) {
+    throw new LaborCostingSettingsError(
+      `standard labor rate release date ${JSON.stringify(args.releaseDate) ?? "missing"} ` +
+        `is not a YYYY-MM-DD calendar date; pass the org-business release date`,
+    );
+  }
+  // One scope-pure branch per standard scope; null inputs omit their
+  // branch (never null-match). Each branch positively selects its own
+  // scope and requires every other discriminator null.
+  const scopeTerms: SQL[] = [];
+  if (args.departmentId != null) {
+    scopeTerms.push(sql`(
+      department_id = ${args.departmentId}
+      and employee_party_id is null and job_title is null
+      and trade_id is null and subsidiary_id is null
+    )`);
+  }
+  if (args.subsidiaryId != null) {
+    scopeTerms.push(sql`(
+      subsidiary_id = ${args.subsidiaryId}
+      and employee_party_id is null and job_title is null
+      and trade_id is null and department_id is null
+    )`);
+  }
+  scopeTerms.push(
+    sql`num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0`,
+  );
+  const r = (await executor.execute<{
+      id: string;
+      rate: string;
+      basis: string;
+      annual_hours: string;
+      currency: string;
+      effective_from: string;
+      scope: StandardLaborRate["scope"];
+    }>(sql`
+    select id, rate::text as rate, basis, annual_hours::text as annual_hours,
+           currency, effective_from::text as effective_from,
+           case when department_id is not null then 'department'
+                when subsidiary_id is not null then 'subsidiary'
+                else 'org' end as scope
+      from labor_cost_rates
+     where org_id = ${orgId} and is_active
+       and effective_from <= ${args.releaseDate}
+       and (effective_to is null or effective_to >= ${args.releaseDate})
+       and (${sql.join(scopeTerms, sql` or `)})
+     order by case when department_id is not null then 0
+                   when subsidiary_id is not null then 1 else 2 end,
+              effective_from desc,
+              id asc
+     limit 1`));
+  const row = r.rows[0];
+  if (!row) return null;
+  return {
+    rateId: row.id,
+    effectiveFrom: String(row.effective_from).slice(0, 10),
+    rate: String(row.rate),
+    currency: row.currency,
+    basis: row.basis === "year" ? "year" : "hour",
+    annualHours: String(row.annual_hours),
+    scope: row.scope,
+  };
+}
+
 /** Convert a wage to functional currency using an exact decimal FX rate. */
 export function convertLaborWage(wage: string, fxRate: string): Money {
   // mulRate emits fromUnits-fixed 4dp: the converted wage is canonical Money.
@@ -392,6 +524,42 @@ export async function laborFxQuote(
   const row = result.rows[0];
   if (!row) return null;
   return { rate: String(row.rate), asOf: String(row.as_of).slice(0, 10), source: String(row.source), inverse: row.inverse === "true" };
+}
+
+export interface LaborFxQuoteEvidence extends LaborFxQuote {
+  /** The winning fx_rates row (evidence, not a re-query key). */
+  readonly id: string;
+}
+
+/**
+ * Transaction-bound FX quote: the same latest-spot direct-or-inverted
+ * selection as laborFxQuote, but on the caller's executor and carrying the
+ * winning row's id for frozen evidence. Same-currency pairs return null —
+ * the caller posts par itself (rate 1, no row, no date) instead of
+ * inventing a quote row. The ambient reader above stays byte-identical for
+ * its existing callers.
+ */
+export async function laborFxQuoteInTx(
+  executor: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
+  workedOn: string,
+): Promise<LaborFxQuoteEvidence | null> {
+  if (from === to) return null;
+  const result = (await executor.execute<{ id: string; rate: string; as_of: string; source: string; inverse: string }>(sql`
+    select id::text as id, rate::text as rate, as_of::text as as_of, source, inverse::text as inverse from (
+      select id, rate, as_of, source, false as inverse from fx_rates
+       where org_id = ${orgId} and from_currency = ${from} and to_currency = ${to}
+         and rate_type = 'spot' and as_of <= ${workedOn}
+      union all
+      select id, (1 / rate)::numeric(19,10) as rate, as_of, source, true as inverse from fx_rates
+       where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
+         and rate_type = 'spot' and as_of <= ${workedOn}
+    ) candidates order by as_of desc, inverse asc limit 1`));
+  const row = result.rows[0];
+  if (!row) return null;
+  return { id: String(row.id), rate: String(row.rate), asOf: String(row.as_of).slice(0, 10), source: String(row.source), inverse: row.inverse === "true" };
 }
 
 /**
