@@ -551,6 +551,13 @@ export function resolveNormalization(entity: ReportEntity, counts: Normalization
       `Cannot report SaaS metrics: rows are stored in the legacy unnormalized denomination with no ${breakout.toLowerCase()} — ${NORMALIZATION_REMEDY}`,
     )
   }
+  // Any legacy remnant in a live scope refuses, even when every other row is
+  // a complete triple: legacy+v1===total would otherwise read as coherent.
+  if (counts.legacy > 0) {
+    throw new Error(
+      `Cannot report SaaS metrics: rows mix legacy and normalized denominations — ${NORMALIZATION_REMEDY}`,
+    )
+  }
   if (counts.legacy + counts.v1 !== counts.total) {
     throw new Error(
       `Cannot report SaaS metrics: rows mix legacy and normalized denominations or carry an incomplete denomination — ${NORMALIZATION_REMEDY}`,
