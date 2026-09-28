@@ -340,9 +340,9 @@ test('governed rows repeat the requested sort after the final join', () => {
   }), ORG, {})
   assert.match(
     compiled.text,
-    /RIGHT JOIN __denom ON TRUE ORDER BY "month" DESC NULLS LAST, "subsidiary" ASC NULLS LAST$/,
+    /RIGHT JOIN __denom ON TRUE ORDER BY "month" DESC NULLS LAST, "__sort_0" ASC NULLS LAST$/,
   )
-  assert.match(compiled.text, /__page AS \(SELECT \*, 1 AS "__page_present" FROM __scope ORDER BY "month" DESC NULLS LAST, "subsidiary" ASC NULLS LAST/)
+  assert.match(compiled.text, /__page AS \(SELECT \*, 1 AS "__page_present" FROM __scope ORDER BY "month" DESC NULLS LAST, "__sort_0" ASC NULLS LAST/)
 })
 
 test('governed rows carry unselected sort columns hidden and stripped', () => {
