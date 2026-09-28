@@ -444,6 +444,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'resource-cell': { props: ['fileName', 'label'] },
   'resourcing-assignment-drawer': { props: ['canManage', 'drawer'] },
   'resourcing-board': { props: [], open: true },
+  'resourcing-busy-season': { props: ['canCreateDraft', 'gaps', 'labels', 'projects'] },
   'resourcing-demand-drawer': { props: ['drawer'] },
   'resourcing-demand-rail': { props: [], open: true },
   'resourcing-request-drawer': { props: ['drawer'] },
