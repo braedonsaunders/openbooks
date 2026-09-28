@@ -767,11 +767,16 @@ function compileGovernedRows(
     norm.supportedVersions,
   )
   const denomRefs = NORMALIZATION_PROBE_ALIASES.map((a) => `__denom."${a}" AS "${a}"`).join(', ')
+  // The outer result repeats the requested sort: SQL does not guarantee the
+  // join preserves __page order, so the final SELECT carries the same terms
+  // over __page output (hidden carriers included). The sentinel's NULL sort
+  // keys place it last under NULLS LAST, and it is stripped before shaping.
+  const outerOrder = orderTerms.length ? ` ORDER BY ${orderTerms.join(', ')}` : ''
   const text = [
     `WITH __scope AS (${scopeText})`,
     `__page AS (SELECT *, 1 AS "${NORMALIZATION_PRESENT_COLUMN}" FROM __scope${orderTerms.length ? ` ORDER BY ${orderTerms.join(', ')}` : ''} LIMIT ${args.limit} OFFSET ${offset})`,
     `__denom AS (SELECT ${probes.inner.join(', ')} FROM __scope)`,
-    `SELECT __page.*, ${denomRefs} FROM __page RIGHT JOIN __denom ON TRUE`,
+    `SELECT __page.*, ${denomRefs} FROM __page RIGHT JOIN __denom ON TRUE${outerOrder}`,
   ].join(' ')
   return {
     text,
