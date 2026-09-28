@@ -1,5 +1,6 @@
 /** Setup-registry descriptor types and pure helpers (split from registry.ts; pure moves only). */
 import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 
 export type SetupFieldKind =
   | 'text'
@@ -265,6 +266,12 @@ export interface SetupEntity {
   /** Optional-feature gate (web/lib/features.ts key). When the feature is off,
    *  this entity is hidden from the setup rail and 404s as a standalone page. */
   featureKey?: string
+  /** Any-of feature gate: the entity is available while ANY listed feature is
+   *  on (e.g. labor costing serves Projects and Manufacturing alike).
+   *  Exactly one of `featureKey` / `featureKeysAny` may be declared — never
+   *  both. A descriptor declaring both, or naming an unknown key, fails
+   *  closed through `resolveSetupEntityGate`. */
+  featureKeysAny?: string[]
   /** Command ownership: when present, generic CRUD refuses this entity and
    *  writes go through the entity-addressed command endpoint instead. */
   command?: SetupCommandDescriptor
@@ -276,6 +283,59 @@ export interface SetupEntity {
   fields: SetupField[]
   /** Enum dropdown filters rendered beside search. */
   filters?: SetupFilter[]
+}
+
+/**
+ * The verdict of a setup entity's feature gate. `remedy` is the exact
+ * operator instruction for a closed gate; null while the gate is open (and
+ * for single-key gates, which keep their existing hide/redirect semantics).
+ */
+export interface SetupEntityGate {
+  enabled: boolean
+  remedy: string | null
+}
+
+/**
+ * Operator remedy when neither Projects nor Manufacturing is enabled.
+ * Turning features off preserves rows and history — this names the
+ * switchboard that turns them back on.
+ */
+export const SETUP_PROJECTS_OR_MANUFACTURING_REMEDY =
+  'Turn on Projects or Manufacturing in Company Settings → Features'
+
+/** Fallback remedy for a closed any-of gate over any other key set. */
+const SETUP_GENERIC_FEATURE_REMEDY = 'Turn on the required feature in Company Settings → Features'
+
+function setupAnyOfRemedy(keys: string[]): string {
+  const members = new Set(keys)
+  if (members.size === 2 && members.has('projects') && members.has('manufacturing')) {
+    return SETUP_PROJECTS_OR_MANUFACTURING_REMEDY
+  }
+  return SETUP_GENERIC_FEATURE_REMEDY
+}
+
+/**
+ * One authoritative feature-gate verdict for every setup consumer — the rail,
+ * the standalone loader, the drawer slot, and the shared CRUD read/write
+ * path. No caller reimplements the OR: a single-key gate follows its key, an
+ * any-of gate passes while any member is on, and an ungated entity is always
+ * on. Both keys declared, an empty member list, or an unknown key fails
+ * closed (`featureEnabled` already refuses unknown keys; the descriptor
+ * conflict is refused here so no caller can read it as open).
+ */
+export function resolveSetupEntityGate(
+  entity: Pick<SetupEntity, 'featureKey' | 'featureKeysAny'>,
+  features: FeatureState,
+): SetupEntityGate {
+  const single = entity.featureKey
+  const anyOf = entity.featureKeysAny
+  if (single && anyOf) return { enabled: false, remedy: SETUP_GENERIC_FEATURE_REMEDY }
+  if (anyOf) {
+    const enabled = anyOf.some((key) => featureEnabled(features, key))
+    return enabled ? { enabled: true, remedy: null } : { enabled: false, remedy: setupAnyOfRemedy(anyOf) }
+  }
+  if (single) return { enabled: featureEnabled(features, single), remedy: null }
+  return { enabled: true, remedy: null }
 }
 
 export interface SetupEntityValidationContext {

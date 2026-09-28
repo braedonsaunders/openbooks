@@ -31,6 +31,7 @@ import { resolvedFeatureState, featureEnabled } from '../../../../../lib/feature
 import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import {
   SETUP_ENTITY_BY_KEY,
+  resolveSetupEntityGate,
   setupEntityForFeatureState,
   setupOptionLabel,
   toSnake,
@@ -200,7 +201,14 @@ export async function loadSetupEntity(
     notFound()
   }
   const features = await resolvedFeatureState(orgId)
-  if (baseEntity?.featureKey) await requireFeatureEnabled(orgId, baseEntity.featureKey)
+  // One authoritative gate stands between the loader and its rows. A
+  // single-key entity keeps the feature-required redirect naming its key; an
+  // any-of gate with every member off has no single feature to name, so the
+  // page 404s — turning features off preserves rows and history either way.
+  if (baseEntity && !resolveSetupEntityGate(baseEntity, features).enabled) {
+    if (baseEntity.featureKey) await requireFeatureEnabled(orgId, baseEntity.featureKey)
+    notFound()
+  }
   const entity = baseEntity
     ? resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
         multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),

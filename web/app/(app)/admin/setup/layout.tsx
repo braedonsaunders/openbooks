@@ -5,7 +5,7 @@ import { PageHeader } from '@openbooks/ui'
 import { can, getAuthz } from '../../../../lib/authz'
 import { accessDeniedHref } from '../../../../lib/gate-targets'
 import { resolvedFeatureState, featureEnabled } from '../../../../lib/features'
-import { SETUP_ENTITIES } from '../../../../lib/setup/registry'
+import { SETUP_ENTITIES, resolveSetupEntityGate } from '../../../../lib/setup/registry'
 import { SetupNav } from './SetupNav'
 
 export const dynamic = 'force-dynamic'
@@ -31,8 +31,9 @@ export default async function SetupLayout({ children }: { children: ReactNode })
   const canExport = can(authz, 'data.export')
   const canImport = can(authz, 'data.import')
   const features = await resolvedFeatureState(authz.user.orgId)
+  // One authoritative gate hides rail tabs — never a local OR over featureKey.
   const hiddenEntityKeys = SETUP_ENTITIES.filter(
-    (entity) => entity.featureKey && !featureEnabled(features, entity.featureKey),
+    (entity) => !resolveSetupEntityGate(entity, features).enabled,
   ).map((entity) => entity.key)
 
   return (

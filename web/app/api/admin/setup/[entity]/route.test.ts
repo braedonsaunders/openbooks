@@ -54,7 +54,12 @@ const routeUrl = "./route.ts?tax-rate-domain-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { loadEntityOptions } = await import("../../../../../lib/setup/ref-options.ts");
 const { setupEntitySubsidiaryFilter } = await import("../../../../../lib/setup/subsidiary-scope.ts");
-const { SETUP_ENTITY_BY_KEY } = await import("../../../../../lib/setup/registry.ts");
+const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY, resolveSetupEntityGate } = await import(
+  "../../../../../lib/setup/registry.ts"
+);
+const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } = await import(
+  "../../../../../lib/setup/write.ts"
+);
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
@@ -733,6 +738,90 @@ test("payment cards name an active employee and a liability account (0171)", { s
     assert.equal(notLiability.status, 400);
     assert.match(((await notLiability.json()) as { error: string }).error, /must be a liability account/);
   } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("generic setup verbs refuse feature-gated entities through the shared gate", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Gate Admin", "admin");
+  try {
+    authenticate({ orgId: org.orgId, actorId });
+    const actor = {
+      orgId: org.orgId,
+      id: actorId,
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    // Projects explicitly off: the helper verdict, the direct commands, and
+    // every HTTP verb refuse alike — the verdict below is behavior, not an
+    // import assertion: each call underneath goes through the real gate.
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":false}'::jsonb, true) where id = ${org.orgId}`);
+    const rates = SETUP_ENTITY_BY_KEY.get("overhead-rates")!;
+    assert.equal(resolveSetupEntityGate(rates, { projects: false }).enabled, false);
+    assert.deepEqual(await preflightSetupWrite(actor, "overhead-rates", "create"), {
+      status: 404,
+      body: { error: "unknown setup entity" },
+    });
+    assert.equal((await createSetupRecord(actor, "overhead-rates", {})).status, 404);
+    assert.equal((await updateSetupRecord(actor, "overhead-rates", { id: randomUUID() })).status, 404);
+    assert.equal((await deleteSetupRecord(actor, "overhead-rates", randomUUID())).status, 404);
+    const valid = { ratePercent: "12.5", effectiveFrom: "2026-01-01" };
+    assert.equal((await POST(postRequest("overhead-rates", valid), call("overhead-rates"))).status, 404);
+    assert.equal((await PATCH(patchRequest("overhead-rates", { id: randomUUID(), ...valid }), call("overhead-rates"))).status, 404);
+    assert.equal((await DELETE(deleteRequest("overhead-rates", randomUUID()), call("overhead-rates"))).status, 404);
+    // A malformed body on a gated entity still answers the gate refusal: the
+    // preflight runs before body parsing, so no parse error escapes instead.
+    const malformed = new Request("http://localhost/api/admin/setup/overhead-rates", {
+      method: "POST",
+      headers: { "Idempotency-Key": randomUUID() },
+      body: "{not json",
+    });
+    assert.equal((await POST(malformed, call("overhead-rates"))).status, 404);
+    // Projects on: the same helper admits and a valid row persists.
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true}'::jsonb, true) where id = ${org.orgId}`);
+    assert.equal(resolveSetupEntityGate(rates, { projects: true }).enabled, true);
+    const created = await POST(postRequest("overhead-rates", valid), call("overhead-rates"));
+    assert.equal(created.status, 200);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("the generic route enforces an any-of gate with no observable storage effect", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Any Gate Admin", "admin");
+  // A test-local descriptor carrying the any-of gate: entity files are owned
+  // elsewhere, so the probe registers directly and is removed afterwards.
+  // Its table does not exist — any storage touch would 500, so three 404s
+  // prove the refusal lands before columns, locks, or writes.
+  const probeKey = "c7a-any-of-probe";
+  SETUP_ENTITY_BY_KEY.set(probeKey, {
+    key: probeKey,
+    table: "c7a_probe_missing_table",
+    groupKey: "projects",
+    iconKey: "briefcase",
+    orgScoped: true,
+    hasActive: false,
+    featureKeysAny: ["projects", "manufacturing"],
+    columns: [],
+    fields: [],
+  });
+  try {
+    authenticate({ orgId: org.orgId, actorId });
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":false,"manufacturing":false}'::jsonb, true) where id = ${org.orgId}`);
+    const probe = SETUP_ENTITY_BY_KEY.get(probeKey)!;
+    const verdict = resolveSetupEntityGate(probe, { projects: false, manufacturing: false, inventory: true });
+    assert.equal(verdict.enabled, false);
+    assert.equal(verdict.remedy, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY);
+    assert.equal(verdict.remedy, "Turn on Projects or Manufacturing in Company Settings → Features");
+    assert.equal((await POST(postRequest(probeKey, {}), call(probeKey))).status, 404);
+    assert.equal((await PATCH(patchRequest(probeKey, { id: randomUUID() }), call(probeKey))).status, 404);
+    assert.equal((await DELETE(deleteRequest(probeKey, randomUUID()), call(probeKey))).status, 404);
+  } finally {
+    SETUP_ENTITY_BY_KEY.delete(probeKey);
     routeState.authz = null;
     await dropScratchOrgReporting(org.orgId);
   }

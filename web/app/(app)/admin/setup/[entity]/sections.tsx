@@ -12,6 +12,7 @@ import { requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import {
   SETUP_ENTITY_BY_KEY,
+  resolveSetupEntityGate,
   setupEntityForFeatureState,
 } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
@@ -141,7 +142,8 @@ export async function SetupDrawerSlot({
   const baseEntity = SETUP_ENTITY_BY_KEY.get(entityKey)
   if (!baseEntity || baseEntity.nestedUnder || baseEntity.rehomed) return null
   const features = await resolvedFeatureState(orgId)
-  if (baseEntity.featureKey && !featureEnabled(features, baseEntity.featureKey)) return null
+  // One authoritative gate admits the drawer — never a local OR over featureKey.
+  if (!resolveSetupEntityGate(baseEntity, features).enabled) return null
   const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
     equipment: featureEnabled(features, 'equipment'),

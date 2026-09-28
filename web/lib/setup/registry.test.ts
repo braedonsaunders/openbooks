@@ -6,9 +6,12 @@ import {
   SETUP_ENTITIES,
   SETUP_ENTITY_BY_KEY,
   SETUP_GROUPS,
+  SETUP_PROJECTS_OR_MANUFACTURING_REMEDY,
+  resolveSetupEntityGate,
   setupEntitiesByGroup,
   setupEntityForFeatureState,
   setupFieldVisible,
+  type SetupEntity,
   type SetupField,
 } from './registry.ts'
 
@@ -325,3 +328,109 @@ test('qualification setup entities are gated and rehomed', () => {
   assert.equal(settings.allowDelete, false, 'the settings singleton is never deleted here')
 })
 // HR-14 end
+
+// C7a: one authoritative setup feature gate. A descriptor carries exactly one
+// of featureKey / featureKeysAny, never both; every consumer (rail, loader,
+// drawer, shared CRUD) resolves through resolveSetupEntityGate.
+// Manufacturing rides inventory (requiresAll), so every state names it.
+const PROJECTS_MANUFACTURING_STATES: { projects: boolean; manufacturing: boolean; inventory: boolean }[] = [
+  { projects: false, manufacturing: false, inventory: true },
+  { projects: true, manufacturing: false, inventory: true },
+  { projects: false, manufacturing: true, inventory: true },
+  { projects: true, manufacturing: true, inventory: true },
+]
+
+/** A realistic any-of descriptor: overhead rates serving Projects or Manufacturing. */
+function projectsOrManufacturingRates(): Pick<SetupEntity, 'featureKey' | 'featureKeysAny'> {
+  const rates = SETUP_ENTITY_BY_KEY.get('overhead-rates')
+  assert.ok(rates, 'overhead-rates must be registered')
+  return { ...rates, featureKey: undefined, featureKeysAny: ['projects', 'manufacturing'] }
+}
+
+test('no setup entity declares both featureKey and featureKeysAny', () => {
+  const offending = SETUP_ENTITIES.filter((entity) => entity.featureKey && entity.featureKeysAny)
+  assert.deepEqual(
+    offending.map((entity) => entity.key),
+    [],
+    'a descriptor with both gates has no defined verdict and fails closed',
+  )
+  for (const entity of SETUP_ENTITIES) {
+    for (const key of entity.featureKeysAny ?? []) {
+      assert.equal(typeof key, 'string', `${entity.key}: every any-of member names a feature`)
+      assert.ok(key.length > 0, `${entity.key}: any-of members are never blank`)
+    }
+  }
+})
+
+test('the projects/manufacturing any-of gate resolves the four-state truth table', () => {
+  const entity = projectsOrManufacturingRates()
+  const verdicts = PROJECTS_MANUFACTURING_STATES.map((features) => resolveSetupEntityGate(entity, features))
+  assert.deepEqual(
+    verdicts.map((verdict) => verdict.enabled),
+    [false, true, true, true],
+    'any one member on admits; both off refuses',
+  )
+  assert.equal(
+    verdicts[0]!.remedy,
+    'Turn on Projects or Manufacturing in Company Settings → Features',
+    'the both-off refusal names the exact operator remedy',
+  )
+  assert.equal(
+    verdicts[0]!.remedy,
+    SETUP_PROJECTS_OR_MANUFACTURING_REMEDY,
+    'the remedy is the single exported constant, never a rewritten copy',
+  )
+  for (const verdict of verdicts.slice(1)) {
+    assert.equal(verdict.remedy, null, 'an open gate carries no remedy')
+  }
+})
+
+test('the setup gate fails closed on unknown feature keys', () => {
+  assert.deepEqual(
+    resolveSetupEntityGate({ featureKey: 'no-such-feature' }, { projects: true }),
+    { enabled: false, remedy: null },
+    'an unknown single key hides rather than admits',
+  )
+  const entity = projectsOrManufacturingRates()
+  assert.equal(
+    resolveSetupEntityGate(
+      { ...entity, featureKeysAny: ['projects', 'no-such-feature'] },
+      { projects: false, manufacturing: true, inventory: true },
+    ).enabled,
+    false,
+    'an unknown member is off, never a pass-through admit',
+  )
+  assert.equal(
+    resolveSetupEntityGate(
+      { ...entity, featureKeysAny: ['no-such-feature'] },
+      { projects: true, manufacturing: true, inventory: true },
+    ).enabled,
+    false,
+    'an all-unknown member list stays closed even beside enabled features',
+  )
+})
+
+test('a descriptor declaring both gates fails closed', () => {
+  const entity = projectsOrManufacturingRates()
+  assert.equal(
+    resolveSetupEntityGate(
+      { ...entity, featureKey: 'projects' },
+      { projects: true, manufacturing: true, inventory: true },
+    ).enabled,
+    false,
+    'both gates declared refuses even when every member is on',
+  )
+})
+
+test('single-key and ungated entities keep their existing verdicts', () => {
+  assert.deepEqual(
+    resolveSetupEntityGate({ featureKey: 'projects' }, { projects: true }),
+    { enabled: true, remedy: null },
+  )
+  assert.deepEqual(
+    resolveSetupEntityGate({ featureKey: 'projects' }, { projects: false }),
+    { enabled: false, remedy: null },
+    'a closed single-key gate keeps its hide/redirect semantics with no remedy copy',
+  )
+  assert.deepEqual(resolveSetupEntityGate({}, {}), { enabled: true, remedy: null })
+})
