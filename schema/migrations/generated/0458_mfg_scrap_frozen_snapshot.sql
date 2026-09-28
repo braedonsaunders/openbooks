@@ -19,8 +19,10 @@
 -- keys added here. The financial_changes evidence ledger gains the
 -- manufacturing domain (discovered by shape, never assumed by name) with a
 -- same-organization subject/payload binding for the controlled scrap
--- restatement, including the engine-derived approval_required, plus one
--- live proposal per event. Clone replay admission is preserved.
+-- restatement — exact four-way subsidiary equality plus posted-entry
+-- subsidiary equality, or no journal evidence when unposted — including the
+-- engine-derived approval_required, plus one live proposal per event.
+-- Clone replay admission is preserved.
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -41,9 +43,9 @@ ALTER TABLE ONLY public.serials
   ADD CONSTRAINT serials_org_id_id_uniq UNIQUE (org_id, id);
 
 -- Frozen valuation snapshot (7): treatment, frozen value and unit cost in
--- minor money, frozen lot/serial lineage, plan fingerprint, and the
--- engine-derived approval flag. Null until staged; legacy rows keep all
--- seven null and are refused by name downstream, never priced as zero.
+-- precise numeric(19,4) money, frozen lot/serial lineage, plan fingerprint,
+-- and the engine-derived approval flag. Null until staged; legacy rows keep
+-- all seven null and are refused by name downstream, never priced as zero.
 ALTER TABLE public.mfg_scrap_events
   ADD COLUMN treatment text,
   ADD COLUMN frozen_value numeric(19,4),
@@ -139,12 +141,15 @@ ALTER TABLE ONLY public.mfg_scrap_events
       AND serial_id IS NULL
       AND approval_required IS NOT NULL));
 
--- Immutability: the snapshot group moves only as the single legacy-to-
--- complete normalization written by the controlled restatement apply; the
--- coherence checks above admit only the complete end state. Lineage and
--- classification are never re-pointed, and posting linkage is made once and
--- never rewritten or cleared. No INSERT trigger, so migrated all-null legacy
--- rows stay constructible. Any refusal rolls the whole transaction back.
+-- Immutability: the snapshot group admits one structural transition, the
+-- legacy all-null state to a complete snapshot; the coherence checks above
+-- admit only the complete end state. This trigger does not authenticate the
+-- writer — any session can present that transition — so the controlled
+-- restatement service owns performing it, and only through an approved
+-- restatement proposal. Lineage and classification are never re-pointed,
+-- and posting linkage is made once and never rewritten or cleared. No
+-- INSERT trigger, so migrated all-null legacy rows stay constructible. Any
+-- refusal rolls the whole transaction back.
 CREATE FUNCTION public.mfg_scrap_snapshot_immutable_guard() RETURNS trigger
 LANGUAGE plpgsql AS
 $fn$
@@ -215,8 +220,14 @@ $do$;
 -- Manufacturing restatement binding on the evidence guard. The clone replay
 -- admission below is preserved verbatim: the sandbox/sample-company clone
 -- replays immutable terminal history under the clone authority while every
--- ordinary session keeps the born-draft and binding refusals.
+-- ordinary session keeps the born-draft and binding refusals. The
+-- manufacturing binding is one shared block executed on ordinary INSERT
+-- and, on UPDATE, on every allowed transition before transition acceptance.
 CREATE OR REPLACE FUNCTION financial_change_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  scrap_work_order_subsidiary_id uuid;
+  scrap_posted_entry_id uuid;
+  scrap_posted_journal_subsidiary_id uuid;
 BEGIN
   IF TG_OP='DELETE' THEN
     IF coalesce(current_setting('openbooks.amend',true),'off')='on' THEN RETURN OLD; END IF;
@@ -235,49 +246,94 @@ BEGIN
     -- blocked: this admission returns only on the INSERT path.
     IF public.openbooks_clone_authority() THEN RETURN NEW; END IF;
     IF NEW.status <> 'draft' THEN RAISE EXCEPTION 'financial changes must start as draft'; END IF;
-    -- MF-06c frozen scrap snapshots: a manufacturing change is admitted only
-    -- for the controlled scrap restatement, bound by value to the staged
-    -- event, its work order, and the booking subsidiary. The payload carries
-    -- the engine-derived approval_required as immutable proposal evidence;
-    -- no request, UI, or API surface supplies it, and the proposal payload
-    -- is frozen after insert by the immutability check below.
-    IF NEW.domain = 'manufacturing' THEN
-      IF NEW.operation <> 'scrap_snapshot_restatement' THEN
-        RAISE EXCEPTION 'manufacturing financial changes admit only the scrap_snapshot_restatement operation, not %', NEW.operation;
+  END IF;
+  -- MF-06c frozen scrap snapshots: one shared manufacturing binding block. A
+  -- manufacturing change is admitted only for the controlled scrap
+  -- restatement, bound by value to the staged event, its work order, and
+  -- the booking subsidiary. This block executes on the ordinary INSERT path
+  -- above and, on UPDATE, on every allowed transition before the transition
+  -- acceptance below, so an approved or applied restatement always carries
+  -- the binding it was proposed with. The payload carries the
+  -- engine-derived approval_required as immutable proposal evidence; no
+  -- request, UI, or API surface supplies it, and the proposal payload is
+  -- frozen after insert by the immutability check below.
+  IF NEW.domain = 'manufacturing' AND (
+       TG_OP = 'INSERT'
+       OR (OLD.status = 'draft' AND NEW.status = 'pending')
+       OR (OLD.status = 'pending' AND NEW.status IN ('approved', 'rejected'))
+       OR (OLD.status = 'approved' AND NEW.status = 'applied')) THEN
+    IF NEW.operation <> 'scrap_snapshot_restatement' THEN
+      RAISE EXCEPTION 'manufacturing financial changes admit only the scrap_snapshot_restatement operation, not %', NEW.operation;
+    END IF;
+    IF NEW.payload IS NULL OR jsonb_typeof(NEW.payload) <> 'object' THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement proposals must carry an object payload binding the event, work order, subsidiary, and approval flag';
+    END IF;
+    IF NOT (NEW.payload ? 'event_id')
+      OR NOT (NEW.payload ? 'work_order_id')
+      OR NOT (NEW.payload ? 'subsidiary_id')
+      OR NOT (NEW.payload ? 'requiredSubsidiaryIds') THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement proposals must bind event_id, work_order_id, subsidiary_id, and requiredSubsidiaryIds in the payload';
+    END IF;
+    IF jsonb_typeof(NEW.payload -> 'requiredSubsidiaryIds') <> 'array'
+      OR jsonb_typeof(NEW.payload -> 'approval_required') <> 'boolean' THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement proposals must bind requiredSubsidiaryIds as an array and the engine-derived approval_required as a boolean';
+    END IF;
+    IF (NEW.payload ->> 'event_id') <> NEW.subject_id::text THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement subject must be the bound event';
+    END IF;
+    SELECT work_order.subsidiary_id, scrap_event.posted_entry_id
+      INTO scrap_work_order_subsidiary_id, scrap_posted_entry_id
+      FROM public.mfg_scrap_events scrap_event
+      JOIN public.mfg_work_orders work_order
+        ON work_order.org_id = scrap_event.org_id
+       AND work_order.id = scrap_event.work_order_id
+     WHERE scrap_event.org_id = NEW.org_id
+       AND scrap_event.id = NEW.subject_id
+       AND scrap_event.work_order_id::text = (NEW.payload ->> 'work_order_id');
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement must bind the same-organization event, its work order, and that work order''s subsidiary';
+    END IF;
+    -- Subsidiary equality: the restatement books exactly the work order's
+    -- subsidiary — work order, change row, payload, and the sole
+    -- requiredSubsidiaryIds element are one value. A null work-order
+    -- subsidiary authorizes nothing and is refused by name.
+    IF scrap_work_order_subsidiary_id IS NULL THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement for event % is refused: work order % carries no subsidiary, and a restatement requires a non-null authoritative work-order subsidiary', NEW.subject_id, (NEW.payload ->> 'work_order_id');
+    END IF;
+    IF scrap_work_order_subsidiary_id IS DISTINCT FROM NEW.subsidiary_id THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement for event % must book the work order''s subsidiary %, not %', NEW.subject_id, scrap_work_order_subsidiary_id, NEW.subsidiary_id;
+    END IF;
+    IF (NEW.payload ->> 'subsidiary_id') IS DISTINCT FROM NEW.subsidiary_id::text THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement for event % payload subsidiary % must equal the booking subsidiary %', NEW.subject_id, (NEW.payload ->> 'subsidiary_id'), NEW.subsidiary_id;
+    END IF;
+    IF (NEW.payload -> 'requiredSubsidiaryIds') <> jsonb_build_array(NEW.subsidiary_id::text) THEN
+      RAISE EXCEPTION 'manufacturing scrap restatement requiredSubsidiaryIds must be exactly the booking subsidiary';
+    END IF;
+    -- Posted/unposted binding on the staged event. A posted event must
+    -- point at a same-organization journal entry booked to the exact bound
+    -- subsidiary; an unposted event carries no journal evidence at all, so
+    -- any fabricated journal key in its payload is refused by name.
+    IF scrap_posted_entry_id IS NOT NULL THEN
+      SELECT journal_entry.subsidiary_id
+        INTO scrap_posted_journal_subsidiary_id
+        FROM public.journal_entries journal_entry
+       WHERE journal_entry.org_id = NEW.org_id
+         AND journal_entry.id = scrap_posted_entry_id;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'manufacturing scrap restatement for event % references posted entry % which has no same-organization journal entry; post the entry first', NEW.subject_id, scrap_posted_entry_id;
       END IF;
-      IF NEW.payload IS NULL OR jsonb_typeof(NEW.payload) <> 'object' THEN
-        RAISE EXCEPTION 'manufacturing scrap restatement proposals must carry an object payload binding the event, work order, subsidiary, and approval flag';
+      IF scrap_posted_journal_subsidiary_id IS DISTINCT FROM NEW.subsidiary_id THEN
+        RAISE EXCEPTION 'manufacturing scrap restatement for event % posted entry % books subsidiary %, not the bound booking subsidiary %', NEW.subject_id, scrap_posted_entry_id, scrap_posted_journal_subsidiary_id, NEW.subsidiary_id;
       END IF;
-      IF NOT (NEW.payload ? 'event_id')
-        OR NOT (NEW.payload ? 'work_order_id')
-        OR NOT (NEW.payload ? 'subsidiary_id')
-        OR NOT (NEW.payload ? 'requiredSubsidiaryIds') THEN
-        RAISE EXCEPTION 'manufacturing scrap restatement proposals must bind event_id, work_order_id, subsidiary_id, and requiredSubsidiaryIds in the payload';
-      END IF;
-      IF jsonb_typeof(NEW.payload -> 'requiredSubsidiaryIds') <> 'array'
-        OR jsonb_typeof(NEW.payload -> 'approval_required') <> 'boolean' THEN
-        RAISE EXCEPTION 'manufacturing scrap restatement proposals must bind requiredSubsidiaryIds as an array and the engine-derived approval_required as a boolean';
-      END IF;
-      IF (NEW.payload ->> 'event_id') <> NEW.subject_id::text THEN
-        RAISE EXCEPTION 'manufacturing scrap restatement subject must be the bound event';
-      END IF;
-      IF NOT EXISTS (
-        SELECT 1
-          FROM public.mfg_scrap_events scrap_event
-          JOIN public.mfg_work_orders work_order
-            ON work_order.org_id = scrap_event.org_id
-           AND work_order.id = scrap_event.work_order_id
-         WHERE scrap_event.org_id = NEW.org_id
-           AND scrap_event.id = NEW.subject_id
-           AND scrap_event.work_order_id::text = (NEW.payload ->> 'work_order_id')
-           AND (NEW.payload ->> 'subsidiary_id') IS NOT DISTINCT FROM work_order.subsidiary_id::text
-      ) THEN
-        RAISE EXCEPTION 'manufacturing scrap restatement must bind the same-organization event, its work order, and that work order''s subsidiary';
-      END IF;
-      IF (NEW.payload -> 'requiredSubsidiaryIds') <> jsonb_build_array(NEW.subsidiary_id::text) THEN
-        RAISE EXCEPTION 'manufacturing scrap restatement requiredSubsidiaryIds must be exactly the booking subsidiary';
+    ELSE
+      IF (NEW.payload ? 'posted_entry_id')
+        OR (NEW.payload ? 'journal_entry_id')
+        OR (NEW.payload ? 'entry_id') THEN
+        RAISE EXCEPTION 'manufacturing scrap restatement for unposted event % must not carry journal evidence; payload keys posted_entry_id, journal_entry_id, and entry_id are refused', NEW.subject_id;
       END IF;
     END IF;
+  END IF;
+  IF TG_OP='INSERT' THEN
     RETURN NEW;
   END IF;
   IF (to_jsonb(NEW) - ARRAY['status','approved_by','approved_at','result','applied_by','applied_at','updated_at','updated_by'])
