@@ -24,7 +24,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
+import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
 
 /**
  * The grant register, split into a loader and a spec.
@@ -76,7 +76,7 @@ export interface GrantsData {
   title: string
   description: string
   currentParams: Record<string, string | string[] | undefined>
-  tabs: Awaited<ReturnType<typeof groupTabs>>
+  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
   scopeDenied: boolean
   scopeDeniedMessage: string
   drawer: GrantDrawerData | null
@@ -89,7 +89,7 @@ export async function loadGrants(
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'grantManagement')
   const t = await getTranslations('nonprofit')
-  const tabs = await groupTabs('nonprofit', '/nonprofit/grants', { orgId })
+  const tabs = await nonprofitGroupTabs(authz, '/nonprofit/grants')
 
   const base: GrantsData = {
     title: t('grants.title'),

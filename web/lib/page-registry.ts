@@ -1876,6 +1876,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/nonprofit/grants': {
+    route: '/nonprofit/grants',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/nonprofit/grants/view')
+      return {
+        load: (input) => m.loadGrants(input.searchParams ?? {}),
+        spec: (data) => m.grantsSpec(data as never),
+      }
+    },
+  },
+  '/nonprofit/encumbrances': {
+    route: '/nonprofit/encumbrances',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/nonprofit/encumbrances/view')
+      return {
+        load: (input) => m.loadEncumbrances(input.searchParams ?? {}),
+        spec: (data) => m.encumbrancesSpec(data as never),
+      }
+    },
+  },
   '/nonprofit/releases': {
     route: '/nonprofit/releases',
     segments: [],

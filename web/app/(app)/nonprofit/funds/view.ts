@@ -16,7 +16,7 @@ import {
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
+import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
 
 /**
  * The fund register, split into a loader and a spec.
@@ -75,7 +75,7 @@ export interface FundsData {
   title: string
   description: string
   currentParams: Record<string, string | string[] | undefined>
-  tabs: Awaited<ReturnType<typeof groupTabs>>
+  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
   drawer: FundDrawerData | null
 }
 
@@ -97,7 +97,7 @@ export async function loadFunds(
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'fundAccounting')
   const t = await getTranslations('nonprofit')
-  const tabs = await groupTabs('nonprofit', '/nonprofit/funds', { orgId })
+  const tabs = await nonprofitGroupTabs(authz, '/nonprofit/funds')
 
   const base: FundsData = {
     title: t('funds.title'),

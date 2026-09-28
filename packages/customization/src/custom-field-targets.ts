@@ -40,6 +40,8 @@ export const CUSTOM_FIELD_TARGETS: CustomFieldTarget[] = [
     }).map(record => ({ value: record.key, labelKey: record.labelKey })),
   })),
   ...([['item_rate_versions', 'labor_rate_card'], ['fixed_assets', 'fixed_asset'], ['time_entries', 'timesheet_week'],
+    ['grants', 'grant'],
+    ['encumbrances', 'encumbrance'],
     ['res_assignments', 'resourcing_assignment'], ['res_requests', 'resourcing_request'],
     ['res_demand_lines', 'resourcing_demand'], ['res_retainers', 'retainer']] as const)
     .map(([table, record]) => ({ table, labelKey: RECORD_TYPE_BY_KEY[record]!.labelKey, kinds: [] })),

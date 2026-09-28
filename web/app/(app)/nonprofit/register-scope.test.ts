@@ -32,6 +32,8 @@ stubModules({ intl: true })
 const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts')
 const { createEncumbrance } = await import(root + 'engine/src/nonprofit/encumbrances.ts')
+const { getAuthz } = await import(root + 'web/lib/authz.ts')
+const { nonprofitGroupTabs } = await import(root + 'web/components/module-home/group-tabs.ts')
 const { loadGrants, grantsSpec } = await import(root + 'web/app/(app)/nonprofit/grants/view.ts')
 const { loadEncumbrances, encumbrancesSpec } = await import(root + 'web/app/(app)/nonprofit/encumbrances/view.ts')
 // One shared restricted reader: Uptown is the only subsidiary outside Main Co,
@@ -45,7 +47,7 @@ async function withScopedReader(permission: string, fn: (ctx: { org: ScratchOrg;
   await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify([permission])}::jsonb,
     subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [outside] })}::jsonb where org_id = ${org.orgId} and key = 'scope-reader'`))
   await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
-    coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"grantManagement":true,"encumbrances":true}'::jsonb, true)
+    coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"budgets":true,"grantManagement":true,"encumbrances":true}'::jsonb, true)
     where id = ${org.orgId}`))
   const encId = await withOrgContext(org.orgId, async () => (await createEncumbrance({ orgId: org.orgId, amount: '40.00',
     accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, extraDims: {} })).id)
@@ -92,5 +94,31 @@ test('commitment creation offers only subsidiaries in scope', { skip: !process.e
     const options = data.drawer?.mode === 'create' ? data.drawer.subsidiaryOptions : []
     assert.deepEqual(options.map((option) => option.id), [outside])
     assert.ok(!options.some((option) => option.name === 'Main Co'), 'hidden subsidiary names stay absent')
+  })
+})
+test('production nonprofit tabs enforce permissions and effective feature dependencies', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  await withScopedReader('funds.read', async ({ org }) => {
+    const enabled = { nonprofit: true, fundAccounting: true, budgets: true, grantManagement: true, encumbrances: true }
+    for (const [permissions, features, expected, label] of [
+      [['funds.read'], enabled, ['/nonprofit', '/nonprofit/funds', '/nonprofit/releases', '/nonprofit/setup'], 'funds reader'],
+      [['grants.read'], enabled, ['/nonprofit/grants'], 'grant reader'],
+      [['encumbrances.read'], enabled, ['/nonprofit/encumbrances'], 'encumbrance reader'],
+      [['funds.read', 'grants.read', 'encumbrances.read'], { ...enabled, grantManagement: false }, ['/nonprofit', '/nonprofit/funds', '/nonprofit/releases', '/nonprofit/encumbrances', '/nonprofit/setup'], 'grants off'],
+      [['funds.read', 'grants.read', 'encumbrances.read'], { ...enabled, encumbrances: false }, ['/nonprofit', '/nonprofit/funds', '/nonprofit/releases', '/nonprofit/grants', '/nonprofit/setup'], 'encumbrances off'],
+      [['funds.read', 'grants.read', 'encumbrances.read'], { ...enabled, nonprofit: false }, [], 'nonprofit off'],
+    ] as const) {
+      assert.equal((await withBypassContext(() => db.execute(sql`
+        update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
+        where org_id = ${org.orgId} and key = 'scope-reader' returning key`))).rows.length, 1, `${label} role update`)
+      assert.equal((await withBypassContext(() => db.execute(sql`
+        update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
+          ${JSON.stringify(features)}::jsonb, true) where id = ${org.orgId} returning id`))).rows.length, 1, `${label} feature update`)
+      const hrefs = await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz()
+        assert.ok(authz, `${label} authz`)
+        return (await nonprofitGroupTabs(authz, '/nonprofit')).map((tab) => tab.href)
+      })
+      assert.deepEqual(hrefs, expected, label)
+    }
   })
 })

@@ -23,6 +23,11 @@ test('unknown and non-form profiles cannot create orphan form fields', () => {
     assert.equal(customFieldCreationTargetFor(record, 'header'), null);
     assert.equal(customFieldCreationTargetFor(record, 'line'), null);
   }
+  for (const [record, table] of [['grant','grants'],['encumbrance','encumbrances']] as const) {
+    const target = CUSTOM_FIELD_TARGETS.find(candidate => candidate.table === table);
+    assert.deepEqual([target?.labelKey, target?.kinds], [record === 'grant' ? 'nonprofit.grants.title' : 'nonprofit.encumbrances.title', []]);
+    assert.deepEqual([customFieldCreationTargetFor(record, 'header'), customFieldCreationTargetFor(record, 'line')], [null, null]);
+  }
   assert.ok(CUSTOM_FIELD_TARGETS.some(target => target.table === 'time_entries'), 'time-entry fields remain available through the settings editor');
   const tables = CUSTOM_FIELD_TARGETS.map(target => target.table);
   assert.equal(new Set(tables).size, tables.length);

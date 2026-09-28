@@ -14,7 +14,7 @@ import { getAuthz, assertCan } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
+import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
 
 /**
  * Nonprofit setup — the re-homed restriction framework, interfund pairs, and
@@ -30,7 +30,7 @@ import { groupTabs } from '../../../../components/module-home/group-tabs'
 export interface NonprofitSetupData {
   title: string
   description: string
-  tabs: Awaited<ReturnType<typeof groupTabs>>
+  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
   showFramework: boolean
   showPairs: boolean
   showMappings: boolean
@@ -50,7 +50,7 @@ export async function loadNonprofitSetup(): Promise<NonprofitSetupData> {
   // descriptor's command marker by the shared command route.
   assertCan(authz, 'funds.read')
   const t = await getTranslations('nonprofit')
-  const tabs = await groupTabs('nonprofit', '/nonprofit/setup', { orgId })
+  const tabs = await nonprofitGroupTabs(authz, '/nonprofit/setup')
 
   // Registry lookups happen in the loader: a section renders only when its
   // entry is registered and its governing feature is on, otherwise the spec
