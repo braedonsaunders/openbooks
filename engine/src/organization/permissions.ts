@@ -77,6 +77,13 @@ export const PERMISSION_CATALOGUE = [
   // the accountant keeps day-to-day books but does not reclassify funds.
   "funds.read",
   "funds.manage",
+  // Grants track restricted awards and their spending rules; encumbrances
+  // reserve budget before the spend. Reading either is widely shared, but
+  // authoring grant terms stays with the controller.
+  "grants.read",
+  "grants.manage",
+  "encumbrances.read",
+  "encumbrances.manage",
   // Insights — native BI (cards, dashboards, library)
   "insights.read",
   "insights.create",
@@ -441,6 +448,10 @@ export const PERMISSION_GROUPS: {
       { key: "nonprofit.report", labelKey: permissionLabelKey("nonprofit.report") },
       { key: "funds.read", labelKey: permissionLabelKey("funds.read") },
       { key: "funds.manage", labelKey: permissionLabelKey("funds.manage") },
+      { key: "grants.read", labelKey: permissionLabelKey("grants.read") },
+      { key: "grants.manage", labelKey: permissionLabelKey("grants.manage") },
+      { key: "encumbrances.read", labelKey: permissionLabelKey("encumbrances.read") },
+      { key: "encumbrances.manage", labelKey: permissionLabelKey("encumbrances.manage") },
     ],
   },
   {
@@ -792,6 +803,10 @@ export const BUILT_IN_ROLES: Record<
       "nonprofit.report",
       "funds.read",
       "funds.manage",
+      "grants.read",
+      "grants.manage",
+      "encumbrances.read",
+      "encumbrances.manage",
       "insights.read",
       "insights.create",
       "insights.publish",
@@ -892,6 +907,9 @@ export const BUILT_IN_ROLES: Record<
       "allocations.run",
       "nonprofit.report",
       "funds.read",
+      "grants.read",
+      "encumbrances.read",
+      "encumbrances.manage",
       "insights.read",
       "records.read",
       "records.create",
@@ -960,6 +978,8 @@ export const BUILT_IN_ROLES: Record<
       "allocations.approve",
       "nonprofit.report",
       "funds.read",
+      "grants.read",
+      "encumbrances.read",
       "insights.read",
       "records.read",
       "compliance.read",
@@ -983,7 +1003,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",
