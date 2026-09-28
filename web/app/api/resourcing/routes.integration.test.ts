@@ -236,6 +236,9 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     assert.equal(unknownPatch.status, 422);
     assert.equal(unknownPatch.json.error, "invalid_custom_fields");
     assert.deepEqual(unknownPatch.json.fieldErrors, { no_such_field: ["unknown custom field: no_such_field"] });
+    const emptyPatch = await callPatch({});
+    assert.equal(emptyPatch.status, 422);
+    assert.match(String(emptyPatch.json.error), /Supply at least one retainer field/);
 
     await withBypassContext(async () => written(await db.execute(sql`
       update res_retainers set custom = '{"required_scope":"Defined","retired_note":"keep me"}'::jsonb

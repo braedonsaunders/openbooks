@@ -10,10 +10,14 @@ import { orderEditServices } from "../../../../../_order/handlers";
 import { manufacturingTransaction } from "../../../../_transaction";
 
 const Params = z.object({ id: z.string().uuid() });
-const Body = z.object({
-  fromLocationId: z.string().uuid().optional(), toLocationId: z.string().uuid().optional(),
-  vendorId: z.string().uuid().optional(),
-}).strict();
+// Make suggestions derive their work order from the saved plan. Buy and
+// transfer suggestions still require their vendor or locations in the service.
+const Body = z.union([
+  z.object({}).strict().transform(() => ({ fromLocationId: undefined, toLocationId: undefined, vendorId: undefined })),
+  z.object({ vendorId: z.string().uuid(), fromLocationId: z.string().uuid().optional(), toLocationId: z.string().uuid().optional() }).strict(),
+  z.object({ fromLocationId: z.string().uuid(), toLocationId: z.string().uuid().optional(), vendorId: z.string().uuid().optional() }).strict(),
+  z.object({ toLocationId: z.string().uuid(), fromLocationId: z.string().uuid().optional(), vendorId: z.string().uuid().optional() }).strict(),
+], { error: "Send an empty object for the saved plan, or valid location/vendor identifiers." });
 
 export const POST = defineRoute({
   permission: "manufacturing.manage", feature: "manufacturingMrp", params: Params, body: Body,
