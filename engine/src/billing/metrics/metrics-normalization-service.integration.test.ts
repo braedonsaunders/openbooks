@@ -943,7 +943,7 @@ test("a closed month corrects only through the approved request without reopenin
   });
 });
 
-test("a crashed worker supersedes cleanly: old tokens die, the new attempt re-proves", { skip: !DB }, async () => {
+test("a crashed worker supersedes cleanly: old tokens die, the new attempt re-proves", { skip: !DB, timeout: 180_000 }, async () => {
   await withFixture(async (ctx) => {
     await seedCustomerAndSubscription(ctx);
     await seedV0Month(ctx);
@@ -1006,7 +1006,7 @@ test("a crashed worker supersedes cleanly: old tokens die, the new attempt re-pr
     assert.ok(kinds.includes("saas_normalization_reacquired"), "the revival is claimed in audit");
     assert.ok(kinds.includes("saas_normalization_succeeded"), "the revived attempt finalizes");
   });
-}, { timeout: 180_000 });
+});
 
 test("retry after failure re-proves and succeeds without resuming payload", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {

@@ -1487,7 +1487,7 @@ export async function executeNormalizationRequest(args: {
     }
     const month = peek.month.slice(0, 10);
     const { failure, remedy, error: original } = toFailure(error, month);
-    await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
+    return await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
   }
 }
 
@@ -1626,7 +1626,7 @@ export async function approveAndExecuteNormalizationRequest(args: {
       throw error;
     }
     const { failure, remedy, error: original } = toFailure(error, month);
-    await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
+    return await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
   }
 }
 

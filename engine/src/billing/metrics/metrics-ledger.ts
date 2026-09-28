@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
   add,
@@ -1582,7 +1583,7 @@ export async function writeNormalizedMetricsMonth(
  * compares the exact recorded decimal strings, never a float or a
  * reformatted value.
  */
-export interface StoredMonthlyRow {
+export type StoredMonthlyRow = {
   id: string;
   subsidiaryId: string;
   customerId: string;
@@ -1605,7 +1606,7 @@ export interface StoredMonthlyRow {
   normalizationEvidence: unknown;
 }
 
-export interface StoredFactsRow {
+export type StoredFactsRow = {
   id: string;
   subsidiaryId: string;
   month: string;
@@ -1636,7 +1637,7 @@ export interface StoredFactsRow {
   normalizationEvidence: unknown;
 }
 
-export interface StoredCohortRow {
+export type StoredCohortRow = {
   id: string;
   subsidiaryId: string;
   cohortMonth: string;
@@ -1919,7 +1920,7 @@ export function validateProvenanceEvent(
   if (event.table !== expectedTable) fail();
   if (event.event !== "saas_normalization_corrected" || event.change !== "corrected") fail();
   if (event.month !== expectedMonth) fail();
-  if (request.status !== "succeeded" || !request.result) fail();
+  if (request.status !== "succeeded" || !request.result) return fail();
   if (request.month !== expectedMonth || request.result.month !== expectedMonth) fail();
   if (event.requestId !== request.id) fail();
   if (event.columnRequestKey !== request.idempotencyKey) fail();
