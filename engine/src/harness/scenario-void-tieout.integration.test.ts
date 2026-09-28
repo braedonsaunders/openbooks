@@ -32,7 +32,12 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  *    from every bucket together);
  *  - bill B posted inside the window but voided after it (the bill must
  *    read as still open as-of the cutoff — the same rule as the product's
- *    own open-items projection in web/lib/cash/open-items.ts).
+ *    own open-items projection in web/lib/cash/open-items.ts);
+ *  - invoice C, the receivable twin of bill B, which the as-of AR aging
+ *    bench must still show open;
+ *  - invoice A, posted and voided inside the window for a second customer,
+ *    which the as-of AR aging bench must hide (its reversal posts on/before
+ *    the cutoff).
  * An October decoy pins the harness cutoff to 2026-09-30 (no closed period:
  * cutoff falls back to the end of the month before the latest posting).
  */
@@ -43,16 +48,20 @@ async function seedPostedBill(
   documentNumber: string,
   documentDate: string,
   amount: string,
+  kind: "vendor_bill" | "customer_invoice" = "vendor_bill",
+  partyIdOverride: string | null = null,
 ): Promise<string> {
   const documentId = randomUUID();
+  const partyId = partyIdOverride ?? (kind === "vendor_bill" ? org.vendorId : org.customerId);
+  const accountId = kind === "vendor_bill" ? org.accounts.cogs : org.accounts.revenue;
   await db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, party_id, subsidiary_id,
        document_date, posting_date, currency, fx_rate, status,
        subtotal, tax_total, total, created_by)
     values (
-      ${documentId}, ${org.orgId}, 'vendor_bill', ${documentNumber},
-      ${org.vendorId}, ${org.subsidiaryId}, ${documentDate}, ${documentDate},
+      ${documentId}, ${org.orgId}, ${kind}, ${documentNumber},
+      ${partyId}, ${org.subsidiaryId}, ${documentDate}, ${documentDate},
       'CAD', '1', 'draft', ${amount}, '0', ${amount}, ${actorId}
     )
   `);
@@ -61,7 +70,7 @@ async function seedPostedBill(
       (org_id, document_id, line_number, account_id, quantity,
        unit_price, amount, tax_amount, created_by)
     values (
-      ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '1',
+      ${org.orgId}, ${documentId}, 1, ${accountId}, '1',
       ${amount}, ${amount}, '0', ${actorId}
     )
   `);
@@ -150,6 +159,34 @@ test("subledger-gl-tieout holds across governed voids on both sides of the cutof
     assert.equal(voidB.status, "voided");
     assert.ok(voidB.reversalEntryId, "bill B void must post its mirror entry");
 
+    // Invoice A: posted and voided inside the window for a second customer.
+    const customer2 = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${customer2}, ${org.orgId}, 'customer', 'Void Tieout Second Customer', true, '{}'::jsonb)`);
+    const invoiceA = await seedPostedBill(org, actorId, "INV-VOID-TIE-A", "2026-07-15", "444.44", "customer_invoice", customer2);
+    const voidInvA = await requestDocumentVoid({
+      documentId: invoiceA,
+      orgId: org.orgId,
+      actorId,
+      reason: "As-of aging regression: invoice A",
+      reversalDate: "2026-07-20",
+      source: "api",
+    });
+    assert.equal(voidInvA.status, "voided");
+
+    // Invoice C: receivable twin of bill B for the as-of AR aging bench.
+    const invoiceC = await seedPostedBill(org, actorId, "INV-VOID-TIE-C", "2026-07-15", "333.33", "customer_invoice");
+    const voidC = await requestDocumentVoid({
+      documentId: invoiceC,
+      orgId: org.orgId,
+      actorId,
+      reason: "As-of aging regression: invoice C",
+      reversalDate: "2026-10-03",
+      source: "api",
+    });
+    assert.equal(voidC.status, "voided");
+
     // October decoy pins the cutoff to 2026-09-30.
     await seedDecoy(org, octPeriodId, "2026-10-20");
 
@@ -158,6 +195,8 @@ test("subledger-gl-tieout holds across governed voids on both sides of the cutof
     const tie = check(cp, "subledger-gl-tieout");
     assert.equal(tie.ok, true, `void mirrors must not break the tie: ${tie.detail}`);
     assert.match(tie.detail, /worst \|GL − subledger − directJE\| = 0\.0000/, "residual must be exactly zero");
+    assert.equal(cp.timings.find((t) => t.report === "ar_aging")?.rows, 1,
+      "the as-of AR aging must retain invoice C (reversal posts 2026-10-03, after the 2026-09-30 cutoff) and hide invoice A (reversal posts 2026-07-20, on/before it)");
     for (const other of cp.checks.filter((c) => c.name !== "subledger-gl-tieout")) {
       assert.equal(other.ok, true, `${other.name} must stay green here — only the tie-out is under test`);
     }

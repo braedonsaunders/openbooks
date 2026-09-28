@@ -520,6 +520,7 @@ export async function runScenario(
 
   // -- counts -----------------------------------------------------------------
   const docCount = await one<{ n: string }>(sql`select count(*) n from documents where org_id = ${orgId}`);
+  // Live entries only: the checkpoint counts documents that stand posted today.
   const postedDocs = await one<{ n: string }>(sql`select count(*) n from documents where org_id = ${orgId} and status = 'posted'`);
   const entryCount = await one<{ n: string }>(sql`select count(*) n from journal_entries where org_id = ${orgId} and status in ('posted','reversed')`);
   const lineCount = await one<{ n: string }>(sql`select count(*) n from journal_lines l join journal_entries e on e.id = l.entry_id where l.org_id = ${orgId} and e.status in ('posted','reversed')`);
@@ -622,6 +623,7 @@ export async function runScenario(
     with scoped as (
       select d.id, d.document_number, d.currency, d.open_balance as stored, d.posted_entry_id
         from documents d
+       -- Live entries only: only a document that stands posted carries a live open balance to recompute.
        where d.org_id=${orgId} and d.status='posted' and d.posted_entry_id is not null
          and exists (select 1 from journal_entries e2 where e2.id = d.posted_entry_id and e2.posting_date <= ${cutoff})),
     calc as (
@@ -762,6 +764,7 @@ export async function runScenario(
       select d.id, abs(d.total * d.fx_rate) as ht,
              (select count(*) from document_lines dl where dl.document_id = d.id) as nlines
         from documents d
+       -- Live entries only: the header tie is asserted on documents that stand posted today.
        where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
     ),
     legs as (
@@ -809,6 +812,7 @@ export async function runScenario(
         select d.id, d.document_number, d.kind, abs(d.total * d.fx_rate) as ht,
                (select count(*) from document_lines dl where dl.document_id = d.id) as nlines
           from documents d
+         -- Live entries only: the worst-offender list reads the same documents the tie count above reads.
          where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
       ),
       legs as (
@@ -982,6 +986,7 @@ export async function runScenario(
         join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
         join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
         join accounts acc on acc.id = l.account_id and acc.type in ('asset_receivable','liability_payable')
+       -- Live entries only: as of the cutoff; documents voided after it rejoin through void_live.
        where d.org_id = ${orgId} and (d.status = 'posted' or d.id in (select id from void_live))
        group by acc.id),
     direct as (
@@ -1268,7 +1273,10 @@ export async function runScenario(
       from documents d
       join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
       join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
-     where d.org_id=${orgId} and d.status='posted' and d.kind in ('customer_invoice','customer_credit')
+     where d.org_id=${orgId} and d.status in ('posted','voided') and d.kind in ('customer_invoice','customer_credit')
+       and not exists (select 1 from journal_entries r
+                        where r.id = d.reversal_entry_id and r.org_id = d.org_id and r.status in ('posted','reversed')
+                          and r.posting_date <= ${cutoff})
      group by d.party_id`);
 
   // -- trial-balance totals (for the checkpoint), as-of cutoff ----------------
