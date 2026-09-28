@@ -145,6 +145,7 @@ async function materialUsageVariance(
     select custom->'material_usage_variance_delta_by_component' as deltas
       from journal_entries where org_id=${orgId} and origin='manufacturing'
         and custom->>'work_order_number'=${order.number}
+        -- Live entries only: only unreversed posted material-usage variance deltas contribute to cumulative variance.
         and custom ? 'material_usage_variance_delta_by_component' and status='posted'`)).rows;
   for (const row of priorRows) {
     if (!row.deltas || typeof row.deltas !== "object" || Array.isArray(row.deltas)) continue;
