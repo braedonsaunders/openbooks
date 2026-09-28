@@ -662,23 +662,31 @@ export const items = pgTable(
  * record driving hand-built payroll JEs). Drives overhead absorption on jobs:
  * DR project WIP/COGS, CR overhead applied.
  */
-export const overheadRates = pgTable("overhead_rates", {
-  id: id(),
-  orgId: orgRef(),
-  departmentId: uuid("department_id"),
-  category: text("category"), // Equipment / Indirect Labour / Consumables…
-  method: text("method", { enum: ["three_year_average", "live", "standard"] }).notNull().default("live"),
-  /** How to read `rate`: per_hour = $/labor-hour,
-   *  percent = % of labor cost. */
-  rateKind: text("rate_kind", { enum: ["per_hour", "percent"] }).notNull().default("per_hour"),
-  /** The rate value — $/hour when rateKind=per_hour, a percentage when percent. */
-  ratePercent: money("rate_percent").notNull(),
-  /** Inclusive validity window. Windows may not overlap within one
-   *  department/category/method/rate-kind identity (storage constraint 0051). */
-  effectiveFrom: date("effective_from").notNull(),
-  effectiveTo: date("effective_to"),
-  ...auditColumns,
-});
+export const overheadRates = pgTable(
+  "overhead_rates",
+  {
+    id: id(),
+    orgId: orgRef(),
+    departmentId: uuid("department_id"),
+    category: text("category"), // Equipment / Indirect Labour / Consumables…
+    method: text("method", { enum: ["three_year_average", "live", "standard"] }).notNull().default("live"),
+    /** How to read `rate`: per_hour = $/labor-hour, percent = % of labor
+     *  cost, per_unit = $/unit, per_machine_hour = $/machine-hour. */
+    rateKind: text("rate_kind", { enum: ["per_hour", "percent", "per_unit", "per_machine_hour"] }).notNull().default("per_hour"),
+    /** The rate value — $/hour when rateKind=per_hour, a percentage when percent. */
+    ratePercent: money("rate_percent").notNull(),
+    /** Inclusive validity window. Windows may not overlap within one
+     *  department/category/method/rate-kind identity (storage constraint 0051). */
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    ...auditColumns,
+  },
+  (t) => [
+    // The stored job-costing bases: the two historical kinds plus the two
+    // manufacturing kinds. Any other kind is refused by the 0456 preflight.
+    check("overhead_rates_rate_kind_allowed", sql`${t.rateKind} in ('per_hour', 'percent', 'per_unit', 'per_machine_hour')`),
+  ],
+);
 
 export const timeTypes = pgTable(
   "time_types",

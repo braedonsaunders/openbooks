@@ -43,6 +43,8 @@ export const laborCostRates = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Tenant-safe parent anchor for the manufacturing frozen-wage reference.
+    uniqueIndex("labor_cost_rates_org_id_id_unique").on(t.orgId, t.id),
     index("labor_cost_rates_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
     index("labor_cost_rates_job_title").on(t.orgId, t.jobTitle, t.effectiveFrom),
     index("labor_cost_rates_trade").on(t.orgId, t.tradeId, t.effectiveFrom),
