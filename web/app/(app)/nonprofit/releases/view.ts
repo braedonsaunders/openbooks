@@ -14,7 +14,7 @@ import {
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
+import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
 
 /**
  * The fund-release register, split into a loader and a spec.
@@ -60,7 +60,7 @@ export interface ReleasesData {
   title: string
   description: string
   currentParams: Record<string, string | string[] | undefined>
-  tabs: Awaited<ReturnType<typeof groupTabs>>
+  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
   drawer: ReleaseDrawerData | null
 }
 
@@ -71,7 +71,7 @@ export async function loadReleases(
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'fundAccounting')
   const t = await getTranslations('nonprofit')
-  const tabs = await groupTabs('nonprofit', '/nonprofit/releases', { orgId })
+  const tabs = await nonprofitGroupTabs(authz, '/nonprofit/releases')
 
   const base: ReleasesData = {
     title: t('releases.title'),

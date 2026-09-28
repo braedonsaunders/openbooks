@@ -65,14 +65,16 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/banking/cash', ns: 'nav', key: 'modules.banking-cash' },
     { href: '/banking/psp-settlements', ns: 'nav', key: 'modules.banking-psp-settlements' },
   ],
-  // The nonprofit cockpit beside the fund and release registers it watches,
-  // then the restriction setup the cockpit links onward to. Every tab keeps
-  // its own page-level permission and feature gate; the strip only hides
-  // tabs whose governing feature is off.
+  // The nonprofit cockpit beside its native registers and setup. Each tab
+  // keeps its page-level permission and feature gate; nonprofitGroupTabs
+  // applies those same permissions centrally so the strip never offers a
+  // destination the actor cannot open.
   nonprofit: [
     { href: '/nonprofit', ns: 'nonprofit', key: 'home.title' },
     { href: '/nonprofit/funds', ns: 'nonprofit', key: 'funds.title' },
     { href: '/nonprofit/releases', ns: 'nonprofit', key: 'releases.title' },
+    { href: '/nonprofit/grants', ns: 'nonprofit', key: 'grants.title' },
+    { href: '/nonprofit/encumbrances', ns: 'nonprofit', key: 'encumbrances.title' },
     { href: '/nonprofit/setup', ns: 'nonprofit', key: 'setup.title' },
   ],
   accounting: [
@@ -163,6 +165,8 @@ const TAB_FEATURE: Record<string, string> = {
   '/nonprofit': 'nonprofit',
   '/nonprofit/funds': 'fundAccounting',
   '/nonprofit/releases': 'fundAccounting',
+  '/nonprofit/grants': 'grantManagement',
+  '/nonprofit/encumbrances': 'encumbrances',
   '/nonprofit/setup': 'nonprofit',
   '/warehouse': 'warehousing',
   '/inventory': 'inventory',
@@ -206,6 +210,26 @@ export async function groupTabs(
     label: (ts.get(d.ns) as (key: string) => string)(d.key),
     active: d.href === activeHref,
   }))
+}
+
+const NONPROFIT_TAB_PERMISSION: Record<string, string> = {
+  '/nonprofit': 'funds.read',
+  '/nonprofit/funds': 'funds.read',
+  '/nonprofit/releases': 'funds.read',
+  '/nonprofit/grants': 'grants.read',
+  '/nonprofit/encumbrances': 'encumbrances.read',
+  '/nonprofit/setup': 'funds.read',
+}
+/**
+ * The Nonprofit strip applies the same destination permissions as its pages.
+ */
+export async function nonprofitGroupTabs(
+  authz: Authz, activeHref: string, opts: { subQs?: string } = {},
+): Promise<ModuleHomeTab[]> {
+  const exclude = Object.entries(NONPROFIT_TAB_PERMISSION)
+    .filter(([, permission]) => !can(authz, permission))
+    .map(([href]) => href)
+  return groupTabs('nonprofit', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
 }
 
 /** The permission each Customers-group tab's destination enforces. */

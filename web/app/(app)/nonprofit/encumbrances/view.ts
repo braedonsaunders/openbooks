@@ -19,7 +19,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
+import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
 
 /**
  * The encumbrance register, split into a loader and a spec.
@@ -66,7 +66,7 @@ export interface EncumbrancesData {
   title: string
   description: string
   currentParams: Record<string, string | string[] | undefined>
-  tabs: Awaited<ReturnType<typeof groupTabs>>
+  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
   drawer: EncumbranceDrawerData | null
 }
 
@@ -77,7 +77,7 @@ export async function loadEncumbrances(
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'encumbrances')
   const t = await getTranslations('nonprofit')
-  const tabs = await groupTabs('nonprofit', '/nonprofit/encumbrances', { orgId })
+  const tabs = await nonprofitGroupTabs(authz, '/nonprofit/encumbrances')
 
   const base: EncumbrancesData = {
     title: t('encumbrances.title'),

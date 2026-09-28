@@ -28,7 +28,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { loadFundCoverageTieout, fundLedgerDrillScope } from '@openbooks/engine/src/nonprofit/statements.ts'
 import { NonprofitError } from '@openbooks/engine/src/nonprofit/errors.ts'
 import { getMoneyFormatter } from '../../../lib/money-server'
-import { groupTabs } from '../../../components/module-home/group-tabs'
+import { nonprofitGroupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
 
 /**
@@ -60,7 +60,7 @@ export interface AttentionEntry {
 export interface NonprofitData {
   title: string
   description: string
-  tabs: Awaited<ReturnType<typeof groupTabs>>
+  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
   fundsLabel: string
   fundsValue: string
   fundsSub: string
@@ -143,7 +143,7 @@ export async function loadNonprofit(): Promise<NonprofitData> {
   const { money } = await getMoneyFormatter()
 
   const grants = { read: true, manage: can(authz, 'funds.manage') }
-  const tabs = await groupTabs('nonprofit', '/nonprofit', { orgId })
+  const tabs = await nonprofitGroupTabs(authz, '/nonprofit')
 
   const [fundCounts, pairCounts, pending, framework] = await Promise.all([
     db.execute<FundCountRow>(sql`
