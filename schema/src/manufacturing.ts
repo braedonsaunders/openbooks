@@ -355,7 +355,7 @@ export const mfgWoOperations = pgTable(
       foreignColumns: [laborCostRates.orgId, laborCostRates.id],
     }),
     index("mfg_wo_operations_org_center").on(t.orgId, t.workCenterId, t.workOrderId),
-    index("mfg_wo_operations_org_std_labor_rate").on(t.orgId, t.standardLaborWageId),
+    index("mfg_wo_operations_standard_labor_wage_idx").on(t.orgId, t.standardLaborWageId),
     check(
       "mfg_woop_std_labor_coherent",
       sql`num_nonnulls(${t.standardLaborWageId}, ${t.standardLaborEffectiveFrom}, ${t.standardLaborRate}, ${t.standardLaborCurrency}, ${t.standardLaborBasis}, ${t.standardLaborAnnualHours}, ${t.standardLaborFinalRate}, ${t.standardLaborFunctionalCurrency}, ${t.standardLaborBurden}, ${t.standardLaborBurdenHash}) in (0, 10)`,
