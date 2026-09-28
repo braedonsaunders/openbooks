@@ -220,6 +220,32 @@ test('legacy rows refuse before any row is shaped', async () => {
   await assert.rejects(runCustomQuery(probe.client, rowsPlan(), opts()), /legacy unnormalized denomination/)
 })
 
+test('mixed legacy and normalized rows refuse on the rows path with the real remedy', async () => {
+  // Realistic backfill gap: March was never normalized (all-null triple)
+  // while April carries a complete v1 USD triple with agreeing evidence.
+  // The scope sums exactly to total, so only an explicit legacy-remnant
+  // check refuses it.
+  const probe = countingClient([
+    { month: '2026-03-01', new_mrr: '100.0000', __page_present: 1 },
+    { month: '2026-04-01', new_mrr: '150.0000', __page_present: 1 },
+  ].map((row) => ({
+    ...row,
+    ...norm({ __norm_total: '2', __norm_legacy_n: '1', __norm_v1_n: '1' }),
+  })))
+  await assert.rejects(
+    runCustomQuery(probe.client, rowsPlan(), opts()),
+    /mix legacy and normalized denominations/,
+  )
+  const remedyProbe = countingClient([
+    { month: '2026-03-01', new_mrr: '100.0000', __page_present: 1 },
+    { month: '2026-04-01', new_mrr: '150.0000', __page_present: 1 },
+  ].map((row) => ({
+    ...row,
+    ...norm({ __norm_total: '2', __norm_legacy_n: '1', __norm_v1_n: '1' }),
+  })))
+  await assert.rejects(runCustomQuery(remedyProbe.client, rowsPlan(), opts()), REMEDY)
+})
+
 test('partial, unsupported, and evidence-mismatched rows refuse', async () => {
   const cynosure = (n: Record<string, unknown>) => countingClient([{
     month: '2026-01-01', new_mrr: '100.0000', __page_present: 1, ...n,
