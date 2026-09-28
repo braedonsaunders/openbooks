@@ -317,7 +317,8 @@ test("month evidence carries the canonical ordered set and a reproducible digest
     await seedQuote(org.orgId, "USD", "CAD", "2026-07-10", "1.0000000000");
     await seedQuote(org.orgId, "CAD", "USD", "2026-07-15", "0.5000000000");
     const first = await averageSpotRateForMonthWithEvidence(db, org.orgId, "USD", "CAD", 2026, 7);
-    assert.equal(first.rate, "1.5000000000");
+    // (1.0 + 2.0 + 2.0) / 3 = exact 5/3, normalized to numeric(19,10).
+    assert.equal(first.rate, "1.6666666667");
     assert.deepEqual(first.observations.map((o) => o.asOf), ["2026-07-10", "2026-07-15", "2026-07-20"]);
     assert.deepEqual(first.observations.map((o) => o.direction), ["direct", "inverse", "direct"]);
     assert.deepEqual(first.observations.map((o) => o.derivedRate), ["1.0000000000", "2.0000000000", "2.0000000000"]);
@@ -329,7 +330,7 @@ test("month evidence carries the canonical ordered set and a reproducible digest
       scope: { year: 2026, month: 7, monthStart: "2026-07-01", monthEnd: "2026-07-31" },
       policy: "direct-or-inverse-spot",
       table: "fx_rates",
-      rate: "1.5000000000",
+      rate: "1.6666666667",
       observations: first.observations.map((o) => ({
         id: o.id,
         asOf: o.asOf,

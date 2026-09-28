@@ -109,7 +109,10 @@ function spotEvidenceCandidates(orgId: string, from: string, to: string, dateCon
        and ${dateCond}`;
 }
 
-interface EvidenceRow {
+// Object-literal row shape (not an interface): it satisfies drizzle's
+// `Record<string, unknown>` generic constraint on execute while keeping
+// every selected column strongly typed — no casts, no any.
+type EvidenceRow = {
   id: string;
   as_of: string;
   source: string;
@@ -117,7 +120,7 @@ interface EvidenceRow {
   updated_at: string;
   priority: number;
   derived_rate: string;
-}
+};
 
 function toObservation(row: EvidenceRow): FxObservationEvidence {
   return {
