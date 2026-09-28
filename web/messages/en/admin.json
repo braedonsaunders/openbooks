@@ -963,6 +963,8 @@
     "allocations_run": "Preview, post, reverse, and re-run allocations",
     "allocations_approve": "Approve allocation runs awaiting approval",
     "nonprofit_report": "Run nonprofit reports",
+    "funds_read": "View fund accounting",
+    "funds_manage": "Manage funds and functional mappings",
     "insights_read": "View insights and the library",
     "insights_create": "Build cards and dashboards",
     "insights_publish": "Publish to the shared library",

@@ -87,4 +87,5 @@ test("every gatable subject kind links to a page that exists", () => {
     return pageExists(path) ? [] : [`${kind}: ${path} is not a page`];
   });
   assert.deepEqual(defects, [], `approval record links:\n  ${defects.join("\n  ")}`);
+  assert.equal(approvalRecordHref("fund_release", PROBE_ID), `/nonprofit/releases?release=${PROBE_ID}`);
 });

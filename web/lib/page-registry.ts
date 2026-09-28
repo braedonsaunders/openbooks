@@ -1852,6 +1852,54 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/nonprofit': {
+    route: '/nonprofit',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/nonprofit/view')
+      return {
+        load: () => m.loadNonprofit(),
+        spec: (data) => m.nonprofitSpec(data as never),
+      }
+    },
+  },
+  '/nonprofit/funds': {
+    route: '/nonprofit/funds',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/nonprofit/funds/view')
+      return {
+        load: (input) => m.loadFunds(input.searchParams ?? {}),
+        spec: (data) => m.fundsSpec(data as never),
+      }
+    },
+  },
+  '/nonprofit/releases': {
+    route: '/nonprofit/releases',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/nonprofit/releases/view')
+      return {
+        load: (input) => m.loadReleases(input.searchParams ?? {}),
+        spec: (data) => m.releasesSpec(data as never),
+      }
+    },
+  },
+  '/nonprofit/setup': {
+    route: '/nonprofit/setup',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/nonprofit/setup/view')
+      return {
+        load: () => m.loadNonprofitSetup(),
+        spec: (data) => m.nonprofitSetupSpec(data as never),
+      }
+    },
+  },
   '/notifications': {
     route: '/notifications',
     segments: [],

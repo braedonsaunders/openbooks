@@ -46,7 +46,9 @@
     "field_ticket": "作業日報",
     "pick_list": "ピッキングリスト",
     "shipment": "出荷",
-    "rma": "返品承認"
+    "rma": "返品承認",
+    "fund": "資金",
+    "fund_release": "資金リリース"
   },
   "resourcing": {
     "fields": {

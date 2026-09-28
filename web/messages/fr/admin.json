@@ -1047,6 +1047,8 @@
     "admin_sandboxes_manage": "Créer et gérer les environnements sandbox",
     "allocations_approve": "Approuver les répartitions en attente d’approbation",
     "nonprofit_report": "Exécuter les rapports des organismes sans but lucratif",
+    "funds_read": "Voir la comptabilité des fonds",
+    "funds_manage": "Gérer les fonds et les affectations fonctionnelles",
     "allocations_manage": "Créer et modifier les règles et inducteurs de répartition",
     "allocations_read": "Consulter les règles, les exécutions et la traçabilité des répartitions",
     "allocations_run": "Prévisualiser, comptabiliser, contre-passer et réexécuter les répartitions",

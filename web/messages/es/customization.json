@@ -46,7 +46,9 @@
     "pay_run": "Ciclo de nómina",
     "pick_list": "Lista de preparación",
     "shipment": "Envío",
-    "rma": "Autorización de devolución"
+    "rma": "Autorización de devolución",
+    "fund": "Fondo",
+    "fund_release": "Liberación de fondos"
   },
   "resourcing": {
     "fields": {

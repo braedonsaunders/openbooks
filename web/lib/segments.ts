@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { featureEnabled, resolvedFeatureState } from './features'
 import { loadSubsidiaryContext, restrictionAdmits, uuidArray } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
@@ -40,6 +41,7 @@ interface SegmentRegistryRow extends Record<string, unknown> {
   key: string
   name: string
   plural_name: string
+  feature_key: string | null
   source_kind: 'builtin' | 'custom'
   storage_column: string | null
   is_hierarchical: boolean
@@ -64,7 +66,7 @@ export async function segmentRegistry(
         { orgWideNull: true },
       )
   const result = (await db.execute<SegmentRegistryRow>(sql`
-    select sd.id, sd.key, sd.name, sd.plural_name, sd.source_kind,
+    select sd.id, sd.key, sd.name, sd.plural_name, sd.feature_key, sd.source_kind,
            sd.storage_column, sd.is_hierarchical, sd.show_on_header,
            sd.show_on_lines, sd.show_in_reports,
            sd.allow_account_requirement, sd.sort_order,
@@ -84,7 +86,19 @@ export async function segmentRegistry(
      group by sd.id
      order by sd.sort_order, sd.name
   `))
-  return result.rows.map((row) => ({
+  // A segment carrying a feature_key belongs to an optional module: while
+  // that feature is off — or names nothing declared — the segment stays out
+  // of editors, rules, and report controls, so no surface offers values the
+  // module's own gates refuse. Turning the feature off preserves the stored
+  // rows; it only hides the segment until it is back on.
+  const gated = new Set<string>()
+  if (orgId) {
+    const state = await resolvedFeatureState(orgId)
+    for (const row of result.rows) {
+      if (row.feature_key && !featureEnabled(state, row.feature_key)) gated.add(row.id)
+    }
+  }
+  return result.rows.filter((row) => !gated.has(row.id)).map((row) => ({
     id: row.id,
     key: row.key,
     name: row.name,

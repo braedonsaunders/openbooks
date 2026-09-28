@@ -974,6 +974,8 @@
     "allocations_run": "Visualizar, lançar, estornar e reexecutar rateios",
     "allocations_approve": "Aprovar execuções de rateio aguardando aprovação",
     "nonprofit_report": "Executar relatórios de organizações sem fins lucrativos",
+    "funds_read": "Ver a contabilidade de fundos",
+    "funds_manage": "Gerenciar fundos e mapeamentos funcionais",
     "insights_read": "Ver insights e a biblioteca",
     "insights_create": "Criar cartões e painéis",
     "insights_publish": "Publicar na biblioteca compartilhada",

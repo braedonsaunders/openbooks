@@ -31,6 +31,7 @@ import { ASSET_ENTITIES } from './entities/assets'
 import { CURRENCY_ENTITIES } from './entities/currency'
 import { MANUFACTURING_ENTITIES } from './entities/manufacturing'
 import { USAGE_ENTITIES } from './entities/usage'
+import { NONPROFIT_SETUP_ENTITIES } from './entities/nonprofit'
 
 export type { SetupFieldKind, SetupColumnKind, SetupRefSource, SetupOption, SetupDynamicOptionsSource, SetupField, SetupColumn, SetupFilter, SetupEntity, SetupEntityGate, SetupGroup } from './types'
 export { setupOptionLabel, setupFieldVisible, setupFieldOptions, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, setupEntityForFeatureState, resolveSetupEntityGate, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY } from './types'
@@ -52,6 +53,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...CURRENCY_ENTITIES,
   ...MANUFACTURING_ENTITIES,
   ...USAGE_ENTITIES,
+  ...NONPROFIT_SETUP_ENTITIES,
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))

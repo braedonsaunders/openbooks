@@ -1129,6 +1129,96 @@ const SOURCES: Record<string, EntityListSource> = {
     basePath: '/banking/rules',
     statusVariant: (row) => row.status === 'active' ? 'success' : 'secondary',
   },
+  // Funds read the fund segment's classified values, never a standalone
+  // roster: the join to the org's fund segment definition is the query half
+  // of the no-parallel-roster rule, and it fails closed — a fund row whose
+  // segment value left the fund segment (or the org) never lists.
+  fund: {
+    recordType: 'fund',
+    table: 'funds',
+    alias: 'f',
+    customFieldTable: 'funds',
+    baseJoins: sql`join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+      join segment_definitions sd on sd.org_id = f.org_id and sd.id = sv.segment_id and sd.key = 'fund' and sd.source_kind = 'custom'`,
+    builtInExpr: {
+      code: sql`sv.code`,
+      name: sql`sv.name`,
+      restriction_class: sql`f.restriction_class`,
+      status: sql`case when sv.is_active then 'active' else 'inactive' end`,
+    },
+    sorts: { code: sql`sv.code`, name: sql`sv.name`, class: sql`f.restriction_class`, status: sql`sv.is_active` },
+    defaultSort: sql`sv.name`,
+    statusExpr: sql`case when sv.is_active then 'active' else 'inactive' end`,
+    quickFilters: [],
+    where: (view, adhoc, orgId) => {
+      const parts = [sql`f.org_id = ${orgId}`];
+      if (adhoc.q) parts.push(sql`and (sv.code ilike ${`%${adhoc.q}%`} or sv.name ilike ${`%${adhoc.q}%`})`);
+      for (const filter of view.filters) {
+        if (pushCustomFieldFilter(parts, filter, 'f')) continue;
+        if (filter.key === 'name' && (filter.operator === 'contains' || filter.operator === 'eq')) {
+          parts.push(filter.operator === 'eq' ? sql`and sv.name = ${String(filter.value)}` : sql`and sv.name ilike ${`%${String(filter.value)}%`}`);
+          continue;
+        }
+        parts.push(sql`and false`);
+      }
+      return sql.join(parts, sql` `);
+    },
+    drawerParam: 'fund',
+    basePath: '/nonprofit/funds',
+    hasInactive: true,
+    statusVariant: (row) => row.status === 'active' ? 'success' : 'secondary',
+  },
+  // Releases join both legs' fund names in the same row scan the approval
+  // adapter reads: the list can never show a release whose funds left the
+  // org, because the joins — not a later check — exclude it.
+  fund_release: {
+    recordType: 'fund_release',
+    table: 'fund_releases',
+    alias: 'fr',
+    customFieldTable: 'fund_releases',
+    baseJoins: sql`join funds ff on ff.org_id = fr.org_id and ff.id = fr.from_fund_id
+      join segment_values fsv on fsv.org_id = fr.org_id and fsv.id = fr.from_fund_id
+      join funds tf on tf.org_id = fr.org_id and tf.id = fr.to_fund_id
+      join segment_values tsv on tsv.org_id = fr.org_id and tsv.id = fr.to_fund_id`,
+    builtInExpr: {
+      release_number: sql`fr.release_number`,
+      release_date: sql`fr.release_date::text`,
+      from_fund: sql`case when coalesce(fsv.code, '') <> '' then fsv.code || ' · ' || fsv.name else fsv.name end`,
+      to_fund: sql`case when coalesce(tsv.code, '') <> '' then tsv.code || ' · ' || tsv.name else tsv.name end`,
+      amount: sql`fr.amount`,
+      status: sql`fr.status`,
+    },
+    sorts: {
+      number: sql`fr.release_number`,
+      date: sql`fr.release_date`,
+      from_fund: sql`fsv.code`,
+      to_fund: sql`tsv.code`,
+      amount: sql`fr.amount`,
+      status: sql`fr.status`,
+    },
+    defaultSort: sql`fr.release_date desc`,
+    quickFilters: [],
+    where: (view, adhoc, orgId) => {
+      const parts = [sql`fr.org_id = ${orgId}`];
+      if (adhoc.q) parts.push(sql`and fr.release_number ilike ${`%${adhoc.q}%`}`);
+      for (const filter of view.filters) {
+        if (pushCustomFieldFilter(parts, filter, 'fr')) continue;
+        if (filter.key === 'release_number' && (filter.operator === 'contains' || filter.operator === 'eq')) {
+          parts.push(filter.operator === 'eq' ? sql`and fr.release_number = ${String(filter.value)}` : sql`and fr.release_number ilike ${`%${String(filter.value)}%`}`);
+          continue;
+        }
+        parts.push(sql`and false`);
+      }
+      return sql.join(parts, sql` `);
+    },
+    drawerParam: 'release',
+    basePath: '/nonprofit/releases',
+    statusVariant: (_row, value) =>
+      value === 'posted' ? 'success'
+      : value === 'pending_approval' ? 'warning'
+      : value === 'draft' ? 'secondary'
+      : 'outline',
+  },
 }
 
 export function entityListSource(recordType: string): EntityListSource | undefined {

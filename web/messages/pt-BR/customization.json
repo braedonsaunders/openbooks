@@ -46,7 +46,9 @@
     "field_ticket": "Boletim de campo",
     "pick_list": "Lista de separação",
     "shipment": "Remessa",
-    "rma": "Autorização de devolução"
+    "rma": "Autorização de devolução",
+    "fund": "Fundo",
+    "fund_release": "Liberação de fundos"
   },
   "resourcing": {
     "fields": {

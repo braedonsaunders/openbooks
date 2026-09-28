@@ -71,6 +71,12 @@ export const PERMISSION_CATALOGUE = [
   "allocations.approve",
   // Nonprofit accounting: run fund, grant, and functional-expense reports.
   "nonprofit.report",
+  // Fund accounting: read fund surfaces; manage authors framework, fund
+  // pairs, and functional mappings through the setup commands. Read rides
+  // every role holding nonprofit.report; manage stays with the controller —
+  // the accountant keeps day-to-day books but does not reclassify funds.
+  "funds.read",
+  "funds.manage",
   // Insights — native BI (cards, dashboards, library)
   "insights.read",
   "insights.create",
@@ -431,7 +437,11 @@ export const PERMISSION_GROUPS: {
   {
     key: "nonprofit",
     labelKey: "permissions.groups.nonprofit",
-    permissions: [{ key: "nonprofit.report", labelKey: permissionLabelKey("nonprofit.report") }],
+    permissions: [
+      { key: "nonprofit.report", labelKey: permissionLabelKey("nonprofit.report") },
+      { key: "funds.read", labelKey: permissionLabelKey("funds.read") },
+      { key: "funds.manage", labelKey: permissionLabelKey("funds.manage") },
+    ],
   },
   {
     key: "insights",
@@ -780,6 +790,8 @@ export const BUILT_IN_ROLES: Record<
       "allocations.run",
       "allocations.approve",
       "nonprofit.report",
+      "funds.read",
+      "funds.manage",
       "insights.read",
       "insights.create",
       "insights.publish",
@@ -879,6 +891,7 @@ export const BUILT_IN_ROLES: Record<
       "allocations.manage",
       "allocations.run",
       "nonprofit.report",
+      "funds.read",
       "insights.read",
       "records.read",
       "records.create",
@@ -946,6 +959,7 @@ export const BUILT_IN_ROLES: Record<
       "allocations.read",
       "allocations.approve",
       "nonprofit.report",
+      "funds.read",
       "insights.read",
       "records.read",
       "compliance.read",
@@ -969,7 +983,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",

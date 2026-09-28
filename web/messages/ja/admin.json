@@ -1042,6 +1042,8 @@
     "crm_setup_manage": "CRMセットアップを管理",
     "allocations_approve": "承認待ちの配賦実行を承認します",
     "nonprofit_report": "非営利組織レポートを実行",
+    "funds_read": "資金会計を表示",
+    "funds_manage": "資金と機能マッピングを管理",
     "allocations_manage": "配賦ルールとドライバーを作成・編集します",
     "allocations_read": "配賦ルール・実行・由来を表示します",
     "allocations_run": "配賦のプレビュー・記帳・取消・再実行をします",

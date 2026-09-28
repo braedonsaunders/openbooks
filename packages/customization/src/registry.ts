@@ -2134,6 +2134,68 @@ const PAY_RUN: RecordTypeMeta = {
   ],
 };
 
+/**
+ * Funds — the fund segment's classified values. Editing rides the setup
+ * commands (framework, fund pairs), never a generic form, so the editor is a
+ * bespoke drawer and only the list view is customizable. Restriction classes
+ * are framework-owned vocabulary, so the class column carries no static
+ * filter options — the list filters free text, never a closed list one
+ * framework would render wrong.
+ */
+const FUND: RecordTypeMeta = {
+  key: "fund",
+  labelKey: "customization.recordTypes.fund",
+  category: "entity",
+  featureKey: "fundAccounting",
+  supportsForms: false,
+  customFieldTable: "funds",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "code", labelKey: "projects.labels.code", kind: "text", sortable: true, sortKey: "code" },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "restriction_class", labelKey: "common.labels.class", kind: "text", sortable: true, sortKey: "class" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    { key: "name", labelKey: "common.labels.name", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+  defaultSort: { sortKey: "name", dir: "asc" },
+};
+
+/**
+ * Fund releases — interfund movements awaiting or under approval. Status
+ * changes ride the release approval lifecycle, so the editor is the bespoke
+ * release drawer and only the list view is customizable. A dated ledger
+ * opens newest-first.
+ */
+const FUND_RELEASE: RecordTypeMeta = {
+  key: "fund_release",
+  labelKey: "customization.recordTypes.fund_release",
+  category: "entity",
+  featureKey: "fundAccounting",
+  supportsForms: false,
+  customFieldTable: "fund_releases",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "release_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "release_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date", defaultWidth: 120 },
+    { key: "from_fund", labelKey: "common.labels.from", kind: "text", sortable: true, sortKey: "from_fund" },
+    { key: "to_fund", labelKey: "common.labels.to", kind: "text", sortable: true, sortKey: "to_fund" },
+    { key: "amount", labelKey: "common.labels.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    { key: "release_number", labelKey: "common.labels.number", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+  defaultSort: { sortKey: "date", dir: "desc" },
+};
+
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -2185,6 +2247,8 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   FIXED_ASSET,
   PROPERTY,
   LABOR_RATE_CARD,
+  FUND,
+  FUND_RELEASE,
 ];
 
 export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = RECORD_TYPES.reduce(

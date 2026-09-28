@@ -1042,6 +1042,8 @@
     "crm_setup_manage": "CRM-Einrichtung verwalten",
     "allocations_approve": "Umlagelläufe mit ausstehender Genehmigung freigeben",
     "nonprofit_report": "Berichte für gemeinnützige Organisationen ausführen",
+    "funds_read": "Fondsbuchhaltung ansehen",
+    "funds_manage": "Fonds und funktionale Zuordnungen verwalten",
     "allocations_manage": "Umlageregeln und Treiber erstellen und bearbeiten",
     "allocations_read": "Umlageregeln, Läufe und Herkunft anzeigen",
     "allocations_run": "Umlagen in Vorschau ansehen, buchen, stornieren und erneut laufen lassen",
