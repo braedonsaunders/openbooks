@@ -52,6 +52,35 @@ async function line(
   return id;
 }
 
+// A line carrying explicit transaction evidence: the stored amount may stand
+// off its exact translation, which is what the 0457 group bound constrains.
+async function fxLine(
+  runner: Pick<typeof db, "execute">,
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  entryId: string,
+  lineNumber: number,
+  accountId: string,
+  amount: string,
+  txnAmount: string,
+  subsidiaryId?: string,
+): Promise<string> {
+  const id = randomUUID();
+  await withBypassContext(() => runner.execute(sql`
+    insert into journal_lines
+      (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+    values (${id}, ${org.orgId}, ${entryId}, ${lineNumber}, ${accountId}, ${subsidiaryId ?? org.subsidiaryId},
+            ${amount}, 'CAD', ${txnAmount}, 1)`));
+  return id;
+}
+
+async function secondSubsidiary(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<string> {
+  const id = randomUUID();
+  await withBypassContext(() => db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, is_elimination, is_active)
+    values (${id}, ${org.orgId}, ${org.subsidiaryId}, 'FX Counter', 'CAD', 'CA', false, true)`));
+  return id;
+}
+
 test(
   "document lines keep financial references inside their owning tenant",
   { skip: !DB },
@@ -811,6 +840,116 @@ test("api key scope sets must be non-empty at the storage boundary", { skip: !DB
         from api_keys
        where org_id = ${org.orgId}`));
     assert.deepEqual(state.rows[0], { rows: 1, min_scopes: 1 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("posted status refuses an FX residual one unit beyond the group bound", { skip: !DB }, async () => {
+  // Balanced everywhere and lawful per line: only the group bound fails
+  // (0.0004 over five lines against 0.00025), so the refusal names the
+  // entry, the subsidiary, and the remedy — and the draft stands as built.
+  const org = await createScratchOrg();
+  try {
+    const entryId = await draftEntry(org, "FX-RESIDUAL-OVER");
+    await withBypassContext(() => db.transaction(async (tx) => {
+      await fxLine(tx, org, entryId, 1, org.accounts.bank, "10.0003", "10.0000");
+      await fxLine(tx, org, entryId, 2, org.accounts.cogs, "20.0000", "20.0000");
+      await fxLine(tx, org, entryId, 3, org.accounts.bank, "-15.0000", "-15.0000");
+      await fxLine(tx, org, entryId, 4, org.accounts.cogs, "-15.0000", "-15.0000");
+      await fxLine(tx, org, entryId, 5, org.accounts.bank, "-0.0003", "-0.0002");
+    }));
+    await assert.rejects(
+      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+        await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+        await tx.execute(sql`set constraints all immediate`);
+      })),
+      // Lookaheads: the refusal names the entry before the bound phrase and
+      // the subsidiary after it, so order-dependent matching would lie.
+      (error: unknown) => errorChainMatches(error, new RegExp(
+        `(?=.*${entryId})(?=.*${org.subsidiaryId})(?=.*exceeds the per-entry FX rounding bound)`,
+      )),
+    );
+    const state = await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number }>(sql`
+      select e.status, count(l.id)::int as lines
+        from journal_entries e left join journal_lines l on l.entry_id = e.id
+       where e.id = ${entryId} group by e.status`));
+    assert.deepEqual(state.rows[0], { status: "draft", lines: 5 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("draft UPDATEs and DELETEs cannot evade the FX group bound", { skip: !DB }, async () => {
+  // Both drafts stay balanced with lawful per-line evidence throughout: the
+  // update pushes one entry's deviation to 0.0006 against 0.00025, and the
+  // delete shrinks the other entry until its unchanged 0.0002 residual
+  // exceeds the three-line 0.00015 bound. The flip refuses both.
+  const org = await createScratchOrg();
+  try {
+    const updated = await draftEntry(org, "FX-EVADE-UPDATE");
+    const shrunk = await draftEntry(org, "FX-EVADE-DELETE");
+    let first = "";
+    let last = "";
+    let dropA = "";
+    let dropB = "";
+    await withBypassContext(() => db.transaction(async (tx) => {
+      first = await fxLine(tx, org, updated, 1, org.accounts.bank, "10.0002", "10.0000");
+      await fxLine(tx, org, updated, 2, org.accounts.cogs, "20.0000", "20.0000");
+      await fxLine(tx, org, updated, 3, org.accounts.bank, "-15.0000", "-15.0000");
+      await fxLine(tx, org, updated, 4, org.accounts.cogs, "-15.0000", "-15.0000");
+      last = await fxLine(tx, org, updated, 5, org.accounts.bank, "-0.0002", "-0.0002");
+      await fxLine(tx, org, shrunk, 1, org.accounts.bank, "10.0002", "10.0000");
+      dropA = await fxLine(tx, org, shrunk, 2, org.accounts.cogs, "5.0000", "5.0000");
+      dropB = await fxLine(tx, org, shrunk, 3, org.accounts.bank, "-5.0000", "-5.0000");
+      await fxLine(tx, org, shrunk, 4, org.accounts.cogs, "-10.0000", "-10.0000");
+      await fxLine(tx, org, shrunk, 5, org.accounts.bank, "-0.0002", "-0.0002");
+      await tx.execute(sql`update journal_lines set amount = '10.0004' where id = ${first}`);
+      await tx.execute(sql`update journal_lines set amount = '-0.0004' where id = ${last}`);
+      await tx.execute(sql`delete from journal_lines where id in (${dropA}, ${dropB})`);
+    }));
+    // Both flips refuse; both rollbacks leave drafts standing.
+    for (const entryId of [updated, shrunk]) {
+      await assert.rejects(
+        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+          await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+          await tx.execute(sql`set constraints all immediate`);
+        })),
+        (error: unknown) => errorChainMatches(error, /exceeds the per-entry FX rounding bound/),
+      );
+    }
+    const state = await withOrgContext(org.orgId, () => db.execute<{ drafts: number }>(sql`
+      select count(*)::int as drafts from journal_entries
+       where id in (${updated}, ${shrunk}) and status = 'draft'`));
+    assert.deepEqual(state.rows, [{ drafts: 2 }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the FX group bound never blends subsidiaries", { skip: !DB }, async () => {
+  // A violates alone (0.0002 over two lines against 0.0001) while B is
+  // exact; blended, all four lines would sit exactly on 0.0002. The refusal
+  // must name A, never the entry-wide aggregate.
+  const org = await createScratchOrg();
+  try {
+    const counter = await secondSubsidiary(org);
+    const entryId = await draftEntry(org, "FX-RESIDUAL-PART");
+    await withBypassContext(() => db.transaction(async (tx) => {
+      await fxLine(tx, org, entryId, 1, org.accounts.bank, "10.0001", "10.0000", org.subsidiaryId);
+      await fxLine(tx, org, entryId, 2, org.accounts.cogs, "-10.0001", "-10.0000", org.subsidiaryId);
+      await fxLine(tx, org, entryId, 3, org.accounts.bank, "5.0000", "5.0000", counter);
+      await fxLine(tx, org, entryId, 4, org.accounts.cogs, "-5.0000", "-5.0000", counter);
+    }));
+    await assert.rejects(
+      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+        await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+        await tx.execute(sql`set constraints all immediate`);
+      })),
+      (error: unknown) => errorChainMatches(error, new RegExp(
+        `exceeds the per-entry FX rounding bound for subsidiary ${org.subsidiaryId}`,
+      )),
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
