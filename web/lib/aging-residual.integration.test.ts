@@ -169,7 +169,7 @@ const consolidatedRows = [
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
         const { agingByParty, agingDetail } = await import('./reports/aging')
-        
+
         /**
          * The AR/AP aging rebuilds opens from posted open-item journal lines — it
          * never reads the documents.open_balance cache. That is safe for imported
@@ -211,7 +211,7 @@ const consolidatedRows = [
             await withBypass(() => dropScratchOrg(scratch.orgId))
           }
         })
-        
+
         test('a kernel-posted cutover-shape invoice is aged from its posted lines', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           try {

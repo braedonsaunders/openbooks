@@ -96,7 +96,7 @@ const consolidatedRows = [
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { cashFlow, cashFlowIndirect } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
-        
+
         test('direct cash flow presents cash disposal gains as investing proceeds', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -174,7 +174,7 @@ const consolidatedRows = [
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { runRevaluation } = (await import(root + 'engine/src/close/fx-revaluation.ts')) as typeof import('@openbooks/engine/src/close/fx-revaluation.ts')
         const { cashFlow, cashFlowIndirect } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
-        
+
         test('direct cash flow routes unrealized FX revaluation of cash to the FX-effect line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -251,7 +251,7 @@ const consolidatedRows = [
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { runRevaluation } = (await import(root + 'engine/src/close/fx-revaluation.ts')) as typeof import('@openbooks/engine/src/close/fx-revaluation.ts')
         const { cashFlowIndirect } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
-        
+
         test('indirect cash flow adds back unrealized FX revaluation and reports foreign-cash remeasurement as the FX effect', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -306,7 +306,7 @@ const consolidatedRows = [
               assert.equal(toUnits(cf.netChange), toUnits('137.0000'))
               assert.equal(toUnits(cf.closingCash), toUnits('137.0000'))
               assert.equal(toUnits(cf.reconciliationGap), 0n, `statement must tie: gap ${cf.reconciliationGap}`)
-        
+
               // The August mirror reverses the classification symmetrically.
               const august = await cashFlowIndirect('2026-08-01', '2026-08-31', undefined, org.orgId)
               assert.equal(toUnits(august.netIncome), toUnits('-1.0000'), `reversal posts the mirror loss, got ${august.netIncome}`)
@@ -338,7 +338,7 @@ const consolidatedRows = [
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
         const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { cashFlow, cashFlowIndirect, generalLedger } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
-        
+
         test('cash flow statements answer for one book and fail closed on an empty subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           const taxBookId = randomUUID()
@@ -367,7 +367,7 @@ const consolidatedRows = [
             })
             await withOrgContext(org.orgId, async () => {
               const from = '2026-07-01', to = '2026-07-31'
-        
+
               // RP4 — primary book by default: the mirror never reaches the sections.
               const primary = await cashFlow(from, to, undefined, org.orgId)
               const income = primary.sections.find((s) => s.section === 'operating')!.lines.find((l) => l.type === 'income')
@@ -384,7 +384,7 @@ const consolidatedRows = [
               const indirectTax = await cashFlowIndirect(from, to, undefined, org.orgId, taxBookId)
               assert.equal(toUnits(indirectTax.netIncome), toUnits('100.0000'))
               assert.equal(toUnits(indirectTax.reconciliationGap), 0n)
-        
+
               // RP3 — an empty allowlist reads NOTHING on every leg (summary path).
               const none = await cashFlowIndirect(from, to, { subsidiaryIds: [] }, org.orgId)
               assert.equal(toUnits(none.netIncome), 0n, `empty scope reported org-wide net income ${none.netIncome}`)
@@ -480,7 +480,7 @@ const cashLedgerRows = [
             });
           }
         }
-        
+
         for (const method of ['gl_history_average', 'credit_card_cycle', 'bank_register_history'] as const) {
           for (const mode of ['all', 'restricted', 'empty'] as const) {
             test(`Cash history ${method}: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

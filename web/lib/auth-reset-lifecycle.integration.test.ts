@@ -91,7 +91,7 @@ const consolidatedRows = [
         const deliveries: string[] = [];
         const key = Symbol.for("openbooks.reset-concurrency-test");
         (globalThis as typeof globalThis & Record<symbol, unknown>)[key] = deliveries;
-        
+
         // Substitute only delivery: identity resolution, transaction scopes, locks,
         // reset-token persistence and password changes use the real implementation.
         registerHooks({
@@ -122,7 +122,7 @@ const consolidatedRows = [
             return nextResolve(specifier, context);
           },
         });
-        
+
         test("concurrent password reset requests honor the hourly cap and leave one usable link", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           // Fixture seeds under explicit bypass: the lazy ./auth-reset import below
           // pulls in the web request-org resolver, which denies every unscoped query
@@ -171,7 +171,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("concurrent completion of legacy reset links changes the password only once", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
@@ -199,7 +199,7 @@ const consolidatedRows = [
             });
           } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
         });
-        
+
         test("the invite issuance gate shares the mint transaction", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           // The admin invite gate must re-verify the caller's ceiling in the SAME
           // transaction that mints the token: the gate's row lock then serializes a
@@ -264,7 +264,7 @@ const consolidatedRows = [
         const enteredKey = Symbol.for("openbooks.reset-delivery-order-entered");
         type Shared = Record<symbol, unknown>;
         const shared = globalThis as typeof globalThis & Shared;
-        
+
         // Substitute only delivery: identity resolution, transaction scopes, locks,
         // reset-token persistence and password changes use the real implementation.
         registerHooks({
@@ -300,7 +300,7 @@ const consolidatedRows = [
             return nextResolve(specifier, context);
           },
         });
-        
+
         async function seedUser(orgId: string) {
           return withBypassContext(async () => {
             const userId = (await seedFlowActors(orgId)).adminId;
@@ -309,11 +309,11 @@ const consolidatedRows = [
             return { userId, email };
           });
         }
-        
+
         function tokenOf(delivery: string): string {
           return new URL(delivery).searchParams.get("token")!;
         }
-        
+
         test("a stalled first reset delivery lands before the superseding link", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -372,7 +372,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("delivering a superseded reset token sends nothing", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -423,7 +423,7 @@ const consolidatedRows = [
           },
         };
         (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.reset-kdf-test")] = state;
-        
+
         // Observe the real KDF boundary; all token reads, locks and writes use PostgreSQL.
         registerHooks({
           resolve(specifier, context, nextResolve) {
@@ -438,7 +438,7 @@ const consolidatedRows = [
             return nextResolve(specifier, context);
           },
         });
-        
+
         for (const scenario of ["unknown", "expired", "used", "inactive", "valid", "consumed during KDF", "deactivated during KDF"] as const) {
           test(`reset KDF admission and locked recheck: ${scenario}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
             const org = await createScratchOrg();
@@ -1136,8 +1136,8 @@ const consolidatedRows = [
             }
           });
         }
-        
-        
+
+
         test("concurrent MFA setup requests for one session reuse the same pending secret", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1158,7 +1158,7 @@ const consolidatedRows = [
             assert.equal(login.kind, "success");
             assert.ok(login.kind === "success");
             const sessionId = (await auth.validateSessionToken(login.token))!.sessionId;
-        
+
             const [first, second] = await Promise.all([
               auth.beginMfaSetup(userId, sessionId, password, requestContext),
               auth.beginMfaSetup(userId, sessionId, password, requestContext),
@@ -1189,7 +1189,7 @@ const consolidatedRows = [
         const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const CONTEXT = { networkAddress: "127.0.0.1", userAgent: "mfa reauth refusal regression" };
-        
+
         async function seedMfaUser(orgId: string, password: string) {
           const auth = await import("./auth");
           const { sealSecret } = await import("./secrets");
@@ -1210,7 +1210,7 @@ const consolidatedRows = [
           });
           return { ...setup, codes };
         }
-        
+
         test("wrong password and wrong MFA code share one generic refusal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1236,7 +1236,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("repeated failures report a lockout with a retry delay, not bad credentials", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1264,7 +1264,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("a spent network attempt window reports rate-limited with a retry delay", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1306,7 +1306,7 @@ const consolidatedRows = [
         const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const CONTEXT = { networkAddress: "127.0.0.1", userAgent: "mfa session liveness regression" };
-        
+
         async function seedMfaUser(orgId: string, password: string) {
           const auth = await import("./auth");
           const { sealSecret } = await import("./secrets");
@@ -1328,7 +1328,7 @@ const consolidatedRows = [
           });
           return { ...setup, codes };
         }
-        
+
         async function sessionState(orgId: string, userId: string) {
           return withOrgContext(orgId, async () => ({
             factor: (await db.execute(sql`select enabled_at from auth_mfa_factors where user_id=${userId}`)).rows[0] as
@@ -1337,7 +1337,7 @@ const consolidatedRows = [
               select id, (revoked_at is not null) as revoked from auth_sessions where user_id=${userId} order by id`)).rows,
           }));
         }
-        
+
         test("disableMfa refuses when the caller session was revoked first", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1360,7 +1360,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("disableMfa succeeds with a live caller session and revokes the others", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1381,7 +1381,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("disableMfa refuses a session revoked while reauthentication held its transaction", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1436,7 +1436,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("rotateRecoveryCodes refuses a revoked caller session and rotates for a live one", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1472,17 +1472,17 @@ const consolidatedRows = [
         const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const CONTEXT = { networkAddress: "127.0.0.1", userAgent: "mfa tamper regression" };
-        
+
         /**
          * A tampered MFA factor must read as a wrong code at every site — the same
          * audit row, the same refusal — never a 500, and never a hint that the
          * factor (rather than the code) is at fault.
          */
-        
+
         function tamperSeal(sealed: string): string {
           return sealed.slice(0, -4) + (sealed.endsWith("AAAA") ? "BBBB" : "AAAA");
         }
-        
+
         async function seedUser(password: string, orgId: string, enabled: boolean) {
           const auth = await import("./auth");
           const { sealSecret } = await import("./secrets");
@@ -1507,7 +1507,7 @@ const consolidatedRows = [
             return { auth, userId, sessionId, codes };
           });
         }
-        
+
         async function tamperFactor(userId: string): Promise<void> {
           await withBypassContext(async () => {
             const row = (await db.execute<{ sealed: string }>(sql`
@@ -1515,12 +1515,12 @@ const consolidatedRows = [
             await db.execute(sql`update auth_mfa_factors set secret_encrypted=${tamperSeal(row.sealed)} where user_id=${userId}`);
           });
         }
-        
+
         async function mfaFailures(userId: string): Promise<number> {
           return withBypassContext(async () => (await db.execute<{ n: number }>(sql`
             select count(*)::int as n from auth_login_events where user_id=${userId} and outcome='mfa_failure'`)).rows[0]!.n);
         }
-        
+
         test("confirming setup against a tampered factor reads as an invalid code and consumes an attempt", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1538,7 +1538,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("disabling MFA against a tampered factor audits mfa_failure and refuses invalid credentials", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;
@@ -1560,7 +1560,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("completing login against a tampered factor audits mfa_failure and refuses invalid credentials", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const priorSecret = process.env.SESSION_SECRET;

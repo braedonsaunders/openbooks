@@ -39,9 +39,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { addTicketLine, createFieldTicket, saveCrewGrid, loadFieldTicket, updateTicketHeader, FieldTicketError } = await import('./field-tickets')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * Crew hours have an independent timesheet approval lifecycle: an entry can be
          * approved while its ticket is still a draft. The grid must fail loudly when a
@@ -69,7 +69,7 @@ const consolidatedRows = [
                 (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
                 values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'CREW-APP', 'Approved crew job',
                         ${org.customerId}, 'active', true, '{}'::jsonb)`)
-        
+
               const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
               const loaded = await loadFieldTicket(org.orgId, created.id)
               const day = loaded.fieldTicket.periodStart
@@ -77,12 +77,12 @@ const consolidatedRows = [
                 { employeePartyId: employeeId, itemId: null, timeTypeId, hours },
               ], revision, null)
               await grid(loaded.revision, { [day]: '8' })
-        
+
               // The timesheet lifecycle approves the entry while the ticket is draft.
               await db.execute(sql`update time_entries set status = 'approved'
                where org_id = ${org.orgId} and field_ticket_id = ${created.id}`)
               const revision = (await loadFieldTicket(org.orgId, created.id)).revision
-        
+
               // A changed cell must fail instead of reporting a save that did nothing.
               await assert.rejects(
                 grid(revision, { [day]: '6' }),
@@ -92,7 +92,7 @@ const consolidatedRows = [
                 select hours::text as hours from time_entries
                  where org_id = ${org.orgId} and field_ticket_id = ${created.id}`)).rows[0]!.hours
               assert.equal(Number(hours), 8)
-        
+
               // A cleared cell must fail too — the approved entry is not deleted.
               await assert.rejects(
                 grid((await loadFieldTicket(org.orgId, created.id)).revision, {}),
@@ -107,7 +107,7 @@ const consolidatedRows = [
             }
           })
         })
-        
+
         /**
          * Crew hours land as draft time entries carrying the ticket's project, and
          * item lines feed project billing — both new Projects disable-blockers. A
@@ -139,7 +139,7 @@ const consolidatedRows = [
               // day before disabling.
               const loaded = await loadFieldTicket(org.orgId, created.id)
               await db.execute(sql`update orgs set settings = jsonb_set(settings,'{features,projects}','false'::jsonb) where id = ${org.orgId}`)
-        
+
               const day = loaded.fieldTicket.periodStart
               await assert.rejects(
                 saveCrewGrid(org.orgId, actor, created.id, [
@@ -153,7 +153,7 @@ const consolidatedRows = [
                 0,
                 'the refused grid stores no crew hours',
               )
-        
+
               await assert.rejects(
                 addTicketLine(org.orgId, actor, created.id, { itemId: org.items.service, quantity: '1' }, loaded.revision, null),
                 (e) => e instanceof FieldTicketError && e.message === 'Projects feature is disabled',
@@ -169,7 +169,7 @@ const consolidatedRows = [
             }
           })
         })
-        
+
         test('re-homing a ticket onto a project refuses while Projects is disabled', enabled, async () => {
           await withBypassContext(async () => {
             const org = await createScratchOrg()
@@ -206,9 +206,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { createFieldTicket, loadFieldTicket, updateTicketHeader, FieldTicketError } = await import('./field-tickets')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * The header form forwards any shape-valid documentDate to the ticket update.
          * An impossible calendar day (2026-02-30) must fail closed as a domain error
@@ -226,10 +226,10 @@ const consolidatedRows = [
                 (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
                 values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'HDR-DATE', 'Header date job',
                         ${org.customerId}, 'active', true, '{}'::jsonb)`)
-        
+
               const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
               const loaded = await loadFieldTicket(org.orgId, created.id)
-        
+
               await assert.rejects(
                 updateTicketHeader(org.orgId, actor, created.id, { documentDate: '2026-02-30' }, loaded.revision, null),
                 (e) => e instanceof FieldTicketError && /Invalid ticket date/.test(e.message),
@@ -237,7 +237,7 @@ const consolidatedRows = [
               const after = await loadFieldTicket(org.orgId, created.id)
               assert.equal(after.documentDate, loaded.documentDate)
               assert.equal(after.revision, loaded.revision)
-        
+
               // A real calendar day still saves.
               await updateTicketHeader(org.orgId, actor, created.id, { documentDate: '2026-02-27' }, after.revision, null)
               assert.equal((await loadFieldTicket(org.orgId, created.id)).documentDate, '2026-02-27')
@@ -250,7 +250,7 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { createFieldTicket, saveCrewGrid, loadFieldTicket, FieldTicketError } = await import('./field-tickets')
-        
+
         /**
          * The crew grid pins its references exactly like the drawer pickers: a new
          * crew member must hold an active employee role in this org and sit in the
@@ -283,14 +283,14 @@ const consolidatedRows = [
                 (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
                 values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'CREW-OWN', 'Crew ownership job',
                         ${org.customerId}, 'active', true, '{}'::jsonb)`)
-        
+
               const day = (await loadFieldTicket(org.orgId, (await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})).id)).fieldTicket.periodStart
               const ticketFor = async () => {
                 const created = await createFieldTicket(org.orgId, actor, { projectId, allowedSubsidiaryIds: null})
                 const loaded = await loadFieldTicket(org.orgId, created.id)
                 return { id: created.id, revision: loaded.revision, start: loaded.fieldTicket.periodStart, end: loaded.fieldTicket.periodEnd }
               }
-        
+
               // A customer with no employee role is not crew.
               {
                 const ticket = await ticketFor()
@@ -305,7 +305,7 @@ const consolidatedRows = [
                    where org_id = ${org.orgId} and field_ticket_id = ${ticket.id}`)).rows[0]!.n
                 assert.equal(rows, 0, 'the refused grid writes nothing')
               }
-        
+
               // An employee of another legal entity is not this ticket's crew.
               {
                 const otherSub = randomUUID()
@@ -326,7 +326,7 @@ const consolidatedRows = [
                   (e) => e instanceof FieldTicketError && /legal entity/.test(e.message),
                 )
               }
-        
+
               // An item from another org cannot ride on this ticket's hours.
               {
                 const ticket = await ticketFor()
@@ -337,7 +337,7 @@ const consolidatedRows = [
                   (e) => e instanceof FieldTicketError && /active item/.test(e.message),
                 )
               }
-        
+
               // Real hours outside the ticket window fail loudly instead of vanishing;
               // blank cells stay ignorable so a wider grid never blocks a save.
               {
@@ -362,7 +362,7 @@ const consolidatedRows = [
                   { employeePartyId: employeeId, itemId: null, timeTypeId, hours: { [outsideIso]: '', 'not-a-day': '' } },
                 ], reloaded.revision, null)
               }
-        
+
               // The service owns the scope boundary too; route preflight cannot be
               // the authority after a concurrent project rehome.
               const beforeTickets = (await db.execute<{n:number}>(sql`select count(*)::int n from field_tickets where org_id=${org.orgId}`)).rows[0]!.n
@@ -376,7 +376,7 @@ const consolidatedRows = [
               await assert.rejects(saveCrewGrid(org.orgId,actor,feb.id,[{
                 employeePartyId:employeeId,itemId:null,timeTypeId,hours:{'2027-02-30':'8'},
               }],febLoaded.revision,null),e=>e instanceof FieldTicketError)
-        
+
               // The control: a valid crew row still lands.
               {
                 const ticket = await ticketFor()

@@ -505,7 +505,7 @@ const consolidatedRows = [
             import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
             import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
             import { generalLedger, partyRegister } from "./web/lib/reports.ts";
-        
+
             const scratch = await withBypass(() => createScratchOrg());
             const amounts = ["100.0000", "50.0000", "25.0000"];
             try {
@@ -538,7 +538,7 @@ const consolidatedRows = [
                   \`);
                 }
               });
-        
+
               await withOrg(scratch.orgId, async () => {
                 const ledger = await generalLedger(scratch.date, scratch.date.replace("15", "31"), { maxLines: 1 });
                 assert.equal(ledger.truncated, true);
@@ -547,7 +547,7 @@ const consolidatedRows = [
                 assert.equal(bank.lines.length, 1);
                 assert.equal(bank.lines[0]?.balance, "25.0000");
                 assert.equal(bank.closing, "175.0000");
-        
+
                 const register = await partyRegister("ap", {
                   from: scratch.date,
                   to: scratch.date.replace("15", "31"),
@@ -570,7 +570,7 @@ const consolidatedRows = [
           );
           assert.equal(result.status, 0, result.stderr || result.stdout);
         });
-        
+
         /**
          * The line cap is presentation-only: parties whose detail lines are capped
          * out must still get their section with the exact closing — an AP register
@@ -585,7 +585,7 @@ const consolidatedRows = [
             import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
             import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
             import { partyRegister } from "./web/lib/reports.ts";
-        
+
             const scratch = await withBypass(() => createScratchOrg());
             try {
               await withBypass(async () => {
@@ -627,7 +627,7 @@ const consolidatedRows = [
                   \`);
                 }
               });
-        
+
               await withOrg(scratch.orgId, async () => {
                 const register = await partyRegister("ap", {
                   from: scratch.date,

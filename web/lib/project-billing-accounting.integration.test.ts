@@ -438,7 +438,7 @@ const consolidatedRows = [
           )
           assert.equal(result.status, 0, result.stderr || result.stdout)
         }
-        
+
         test(
           'a post-commit project-charge failure exposes its durable identity for repair',
           { skip: !env.OPENBOOKS_DB_URL },
@@ -452,7 +452,7 @@ const consolidatedRows = [
               import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/testing/fixtures.ts';
               import { ChargeCommittedError, createProjectCharge } from './web/lib/project-charges.ts';
               import { priceCappedLadder } from './engine/src/sales/item-rate-pricing.ts';
-        
+
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
               try {
@@ -476,12 +476,12 @@ const consolidatedRows = [
                      '10.0000', '15.0000', \${org.accounts.cogs}, \${org.accounts.adjustment},
                      \${org.accounts.revenue}, true, '{}'::jsonb)
                 \`);
-        
+
                 // The charge writer has already committed by the time posting resolves
                 // its accounting period. Removing the period forces that post-commit
                 // failure while leaving the newly-created document durable.
                 await db.execute(sql\`delete from accounting_periods where org_id = \${org.orgId}\`);
-        
+
                 let failure;
                 await assert.rejects(
                   createProjectCharge(org.orgId, actorId, {
@@ -498,7 +498,7 @@ const consolidatedRows = [
                       && String(error.cause).includes('no accounting period covers');
                   },
                 );
-        
+
                 const persisted = (await db.execute(sql\`
                   select id, document_number, status
                     from documents
@@ -509,7 +509,7 @@ const consolidatedRows = [
                   document_number: failure.documentNumber,
                   status: 'approved',
                 });
-        
+
                 const draft = await createProjectCharge(org.orgId, actorId, {
                   projectId,
                   documentDate: org.date,
@@ -518,7 +518,7 @@ const consolidatedRows = [
                 assert.ok(draft.id);
                 assert.match(draft.documentNumber, /^CHG-/);
                 assert.equal(draft.approvalPending, false);
-        
+
                 const tier = { unitCode: 'pack', unitName: 'Package', baseQuantity: '3', costRate: '100', billRate: '300' };
                 const fractional = await createProjectCharge(org.orgId, actorId, {
                   projectId, documentDate: org.date,
@@ -542,7 +542,7 @@ const consolidatedRows = [
             runIntegrationSource(source);
           },
         );
-        
+
         test(
           'project charges reject inactive target accounts before creating a draft',
           { skip: !env.OPENBOOKS_DB_URL },
@@ -555,7 +555,7 @@ const consolidatedRows = [
               import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
               import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/testing/fixtures.ts';
               import { ChargeError, createProjectCharge } from './web/lib/project-charges.ts';
-        
+
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
               try {
@@ -580,7 +580,7 @@ const consolidatedRows = [
                      \${org.accounts.revenue}, true, '{}'::jsonb)
                 \`);
                 await db.execute(sql\`update accounts set is_active = false where org_id = \${org.orgId} and id = \${org.accounts.cogs}\`);
-        
+
                 await assert.rejects(
                   createProjectCharge(org.orgId, actorId, {
                     projectId,
@@ -599,7 +599,7 @@ const consolidatedRows = [
             runIntegrationSource(source);
           },
         );
-        
+
         test(
           'project charges reject active non-expense target accounts before creating a draft',
           { skip: !env.OPENBOOKS_DB_URL },
@@ -612,7 +612,7 @@ const consolidatedRows = [
               import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
               import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/testing/fixtures.ts';
               import { ChargeError, createProjectCharge } from './web/lib/project-charges.ts';
-        
+
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
               try {
@@ -636,7 +636,7 @@ const consolidatedRows = [
                      '10.0000', '15.0000', \${org.accounts.cogs}, \${org.accounts.adjustment},
                      \${org.accounts.revenue}, true, '{}'::jsonb)
                 \`);
-        
+
                 await assert.rejects(
                   createProjectCharge(org.orgId, actorId, {
                     projectId,

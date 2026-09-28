@@ -480,7 +480,7 @@ const consolidatedRows = [
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
         const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { trueCostData } = (await import(root + 'web/lib/analytics/true-cost-data.ts')) as typeof import('./analytics/true-cost-data')
-        
+
         test('true cost labour bases count approved time only', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {

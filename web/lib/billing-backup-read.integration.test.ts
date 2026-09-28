@@ -160,7 +160,7 @@ const consolidatedRows = [
         const { advanceDocumentLifecycle } = await import('./application/documents')
         const { applicationContextFromSession } = await import('./application/context')
         const DB = !!process.env.OPENBOOKS_DB_URL
-        
+
         test('a backup-required request is downloadable the moment it is invoiced', { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -194,7 +194,7 @@ const consolidatedRows = [
             await dropScratchOrg(org.orgId)
           }
         })
-        
+
         test('a failed assembly is reported, Generate succeeds, and submit then passes', { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -315,9 +315,9 @@ const consolidatedRows = [
           Object.assign(globalThis, { __billingBackupStubPdf: Buffer.from(await onePage.save()) })
         }
         const DB = !!process.env.OPENBOOKS_DB_URL
-        
+
         type Org = Awaited<ReturnType<typeof createScratchOrg>>
-        
+
         async function setup() {
           const org = await withBypassContext(() => createScratchOrg())
           const actor = await withBypassContext(async () => {
@@ -334,13 +334,13 @@ const consolidatedRows = [
           await withBypassContext(() => db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'BACKUP', 'Backup probe', ${org.customerId}, 'active', true)`))
           return { org, actor, project }
         }
-        
+
         async function backupRowCount(org: Org, documentId: string): Promise<number> {
           const r = await withBypassContext(() => db.execute<{ n: string }>(sql`
             select count(*)::text as n from invoice_backups where org_id = ${org.orgId} and document_id = ${documentId}`))
           return Number(r.rows[0]?.n ?? 0)
         }
-        
+
         test('backup POST generates for a draft and GET then streams it', { skip: !DB }, async () => {
           const { org, actor, project } = await setup()
           try {
@@ -362,7 +362,7 @@ const consolidatedRows = [
             await dropScratchOrg(org.orgId)
           }
         })
-        
+
         test('backup POST refuses to regenerate an issued invoice packet', { skip: !DB }, async () => {
           const { org, actor, project } = await setup()
           try {
@@ -389,7 +389,7 @@ const consolidatedRows = [
             await dropScratchOrg(org.orgId)
           }
         })
-        
+
         test('backup POST still generates a first packet for an issued invoice', { skip: !DB }, async () => {
           const { org, actor, project } = await setup()
           try {
@@ -460,7 +460,7 @@ const consolidatedRows = [
           Object.assign(globalThis, { __billingBackupStubPdf: Buffer.from(await onePage.save()) })
         }
         const DB = !!process.env.OPENBOOKS_DB_URL
-        
+
         async function setup() {
           const org = await withBypassContext(() => createScratchOrg())
           const actor = await withBypassContext(async () => {
@@ -477,13 +477,13 @@ const consolidatedRows = [
           await withBypassContext(() => db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'BACKUP', 'Backup probe', ${org.customerId}, 'active', true)`))
           return { org, actor, project }
         }
-        
+
         test('the documents action mapper keeps the backup refusal as a 422', () => {
           const mapped = toActionFailure(new InvoiceBackupRequiredError())
           assert.equal(mapped.status, 422)
           assert.match(String(mapped.body.error), /backup packet/)
         })
-        
+
         test('lifecycle submit refuses a backup-required invoice with no packet', { skip: !DB }, async () => {
           const { org, actor, project } = await setup()
           try {
@@ -523,7 +523,7 @@ const consolidatedRows = [
             await dropScratchOrg(org.orgId)
           }
         })
-        
+
         test('requireInvoiceBackup fails closed only when a required packet is missing', { skip: !DB }, async () => {
           const { org, actor, project } = await setup()
           try {

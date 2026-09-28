@@ -115,7 +115,7 @@ const consolidatedRows = [
         const { cashFlow } = await import('./reports/cash-flow')
         const { cashFlowIndirect } = await import('./reports/cash-flow-indirect')
         const { projectProfitability } = await import('./reports/projects')
-        
+
         test('raw report readers refuse mixed functional currencies and preserve native single-currency scopes', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           const child = randomUUID()

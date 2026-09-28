@@ -171,7 +171,7 @@ const consolidatedRows = [
         const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { entityListSource } = await import('./list/entity-sources.ts')
-        
+
         test('banking account filter options honor the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           try {
@@ -203,7 +203,7 @@ const consolidatedRows = [
                   (${randomUUID()}, ${scratch.orgId}, ${hiddenAccount}, 'manual', ${scratch.date}, 'audit-log:hidden')
               `)
             })
-        
+
             for (const recordType of ['bank_reconciliation', 'bank_statement'] as const) {
               const source = entityListSource(recordType)
               assert.ok(source)
@@ -240,7 +240,7 @@ const consolidatedRows = [
           );
           assert.equal(result.status, 0, result.stderr || result.stdout);
         }
-        
+
         test(
           "concurrent bank-rule applications claim a statement line before creating a journal",
           { skip: !env.OPENBOOKS_DB_URL },
@@ -261,7 +261,7 @@ const consolidatedRows = [
                 startReconciliation,
               } from "./engine/src/banking/banking.ts";
               import { applyRuleToLine } from "./web/lib/banking-rules.ts";
-        
+
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
               try {
@@ -275,7 +275,7 @@ const consolidatedRows = [
                      set reconcilable = true, currency_restriction = 'CAD'
                    where id = \${org.accounts.bank} and org_id = \${org.orgId}
                 \`);
-        
+
                 const imported = await importStatement({
                   accountId: org.accounts.bank,
                   source: "manual",
@@ -298,13 +298,13 @@ const consolidatedRows = [
                      and bank_transaction_id = 'bank-rule-concurrent-1'
                 \`)).rows[0]?.id;
                 assert.ok(statementLineId);
-        
+
                 const reconciliationId = (await startReconciliation({
                   accountId: org.accounts.bank,
                   throughDate: org.date,
                   statementBalance: "125.2500",
                 }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null })).id;
-        
+
                 const ruleId = randomUUID();
                 await db.execute(sql\`
                   insert into bank_match_rules
@@ -327,7 +327,7 @@ const consolidatedRows = [
                      })}::jsonb,
                      1, true, \${actorId})
                 \`);
-        
+
                 const attempts = await Promise.allSettled([
                   applyRuleToLine(org.orgId, actorId, {
                     statementLineId,
@@ -348,7 +348,7 @@ const consolidatedRows = [
                 const rejected = attempts.find((result) => result.status === "rejected");
                 assert.ok(rejected && rejected.reason instanceof Error);
                 assert.match(rejected.reason.message, /Statement line is unavailable/);
-        
+
                 const state = await db.execute(sql\`
                   select
                     (select count(*)::int
@@ -379,7 +379,7 @@ const consolidatedRows = [
             `);
           },
         );
-        
+
         test(
           "applyRuleToLine refuses an inactive rule without posting",
           { skip: !env.OPENBOOKS_DB_URL },
@@ -400,7 +400,7 @@ const consolidatedRows = [
                 startReconciliation,
               } from "./engine/src/banking/banking.ts";
               import { applyRuleToLine } from "./web/lib/banking-rules.ts";
-        
+
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
               try {
@@ -414,7 +414,7 @@ const consolidatedRows = [
                      set reconcilable = true, currency_restriction = 'CAD'
                    where id = \${org.accounts.bank} and org_id = \${org.orgId}
                 \`);
-        
+
                 const imported = await importStatement({
                   accountId: org.accounts.bank,
                   source: "manual",
@@ -437,13 +437,13 @@ const consolidatedRows = [
                      and bank_transaction_id = 'bank-rule-inactive-1'
                 \`)).rows[0]?.id;
                 assert.ok(statementLineId);
-        
+
                 const reconciliationId = (await startReconciliation({
                   accountId: org.accounts.bank,
                   throughDate: org.date,
                   statementBalance: "75.0000",
                 }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null })).id;
-        
+
                 const ruleId = randomUUID();
                 await db.execute(sql\`
                   insert into bank_match_rules
@@ -466,7 +466,7 @@ const consolidatedRows = [
                      })}::jsonb,
                      1, false, \${actorId})
                 \`);
-        
+
                 await assert.rejects(
                   applyRuleToLine(org.orgId, actorId, {
                     statementLineId,
@@ -475,7 +475,7 @@ const consolidatedRows = [
                   }, null),
                   /not active|disabled|inactive/,
                 );
-        
+
                 const state = await db.execute(sql\`
                   select
                     (select count(*)::int
@@ -500,7 +500,7 @@ const consolidatedRows = [
             `);
           },
         );
-        
+
         test(
           "bulk apply does not use a rule snapshot for lines after deactivation commits",
           { skip: !env.OPENBOOKS_DB_URL },
@@ -514,7 +514,7 @@ const consolidatedRows = [
               import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./engine/src/testing/fixtures.ts";
               import { importStatement } from "./engine/src/banking/banking.ts";
               import { applyRulesToAccount } from "./web/lib/banking-rules.ts";
-        
+
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
               let unlockLine;
@@ -553,7 +553,7 @@ const consolidatedRows = [
                     })}::jsonb,
                     '{"action":"exclude"}'::jsonb, 1, true, \${actorId})
                 \`);
-        
+
                 let signalLineLocked;
                 const lineLocked = new Promise((resolve) => { signalLineLocked = resolve; });
                 const lineLockReleased = new Promise((resolve) => { unlockLine = resolve; });
@@ -563,7 +563,7 @@ const consolidatedRows = [
                   await lineLockReleased;
                 });
                 await lineLocked;
-        
+
                 const applying = applyRulesToAccount(org.orgId, actorId, org.accounts.bank, null);
                 const waitForBlockedLine = async () => {
                   for (let attempt = 0; attempt < 200; attempt++) {
@@ -578,7 +578,7 @@ const consolidatedRows = [
                   throw new Error("bulk apply never reached the locked first line");
                 };
                 await waitForBlockedLine();
-        
+
                 let deactivationFinished = false;
                 const deactivation = withOrgTransaction(org.orgId, async () => {
                   await db.execute(sql\`update bank_match_rules set is_active = false where id = \${ruleId} and org_id = \${org.orgId}\`);
@@ -593,7 +593,7 @@ const consolidatedRows = [
                 unlockLine();
                 unlockLine = null;
                 await Promise.all([applying, deactivation]);
-        
+
                 const statuses = (await db.execute(sql\`
                   select match_status from bank_statement_lines
                    where org_id = \${org.orgId} and bank_transaction_id = any(ARRAY['bulk-disable-1','bulk-disable-2'])
@@ -608,7 +608,7 @@ const consolidatedRows = [
             `);
           },
         );
-        
+
         test(
           "rule preview flags an equal-priority saved rule as the winner",
           { skip: !env.OPENBOOKS_DB_URL },
@@ -626,7 +626,7 @@ const consolidatedRows = [
               } from "./engine/src/testing/fixtures.ts";
               import { importStatement } from "./engine/src/banking/banking.ts";
               import { previewRules } from "./web/lib/banking-rules.ts";
-        
+
               installTrustedTestDatabaseBypass();
               const org = await createScratchOrg();
               try {
@@ -640,7 +640,7 @@ const consolidatedRows = [
                      set reconcilable = true, currency_restriction = 'CAD'
                    where id = \${org.accounts.bank} and org_id = \${org.orgId}
                 \`);
-        
+
                 const imported = await importStatement({
                   accountId: org.accounts.bank,
                   source: "manual",
@@ -656,7 +656,7 @@ const consolidatedRows = [
                   }],
                 }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null });
                 assert.equal(imported.imported, 1);
-        
+
                 await db.execute(sql\`
                   insert into bank_match_rules
                     (id, org_id, name, criteria, outcome, priority, is_active, created_by)
@@ -672,7 +672,7 @@ const consolidatedRows = [
                      '{"action": "exclude"}'::jsonb,
                      100, true, \${actorId})
                 \`);
-        
+
                 const preview = await previewRules(org.orgId, org.accounts.bank, {
                   draftRule: {
                     criteria: {

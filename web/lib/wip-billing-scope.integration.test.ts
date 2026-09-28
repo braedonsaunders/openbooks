@@ -241,9 +241,9 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const wip = await import('./wip-billing')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * The NTE capacity query binds the profile's doc/credit kinds as a text[]
          * literal. A kind containing a comma must stay ONE array element: if the
@@ -267,7 +267,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit_price,amount,is_billable,project_id)
                 values (${line},${org.orgId},${doc},1,${org.items.service},${org.accounts.cogs},'Billed service',1,'1000','1000',true,${project})`)
               await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${doc}`)
-        
+
               // Control: the plain kind counts the posted invoice.
               assert.equal(
                 await wip.projectContractCapacityUsed(db, org.orgId, project, { docKinds: ['customer_invoice'], creditKinds: [] }),
@@ -289,9 +289,9 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const wip = await import('./wip-billing')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * Two tabs editing the same draft prebill line: the second save carries the
          * revision token it read before the first save committed, so it must fail
@@ -316,11 +316,11 @@ const consolidatedRows = [
               await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Revision worker',${org.subsidiaryId})`)
               await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
                 values (${randomUUID()},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
-        
+
               const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, null)
               const first = (await wip.loadPrebill(org.orgId, prebill.id, null))!.lines[0]!
               const staleToken = first.updatedAt
-        
+
               // Tab A saves with the fresh token.
               const tabA = await wip.updatePrebillLine(org.orgId, preparer, prebill.id, first.id, {
                 proposedBillAmount: '250',
@@ -328,7 +328,7 @@ const consolidatedRows = [
                 adjustmentEvidence: ['client email'],
               }, null, { expectedRevision: staleToken })
               assert.equal(tabA.proposedBillAmount, '250.0000')
-        
+
               // Tab B still holds the pre-A token: it must lose loudly, and the live
               // amount must stay exactly what tab A wrote.
               await assert.rejects(
@@ -351,9 +351,9 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const wip = await import('./wip-billing')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * A credit is not prebillable: prebill lines carry a non-negative CHECK, so a
          * credit-only worksheet can never persist. Creation must fail closed with a
@@ -383,7 +383,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit_price,amount,is_billable)
                 values (${line},${org.orgId},${doc},1,${org.items.service},${org.accounts.cogs},'Refunded service',1,'100','100',true)`)
               await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${doc}`)
-        
+
               await assert.rejects(
                 wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, null),
                 (error: unknown) => error instanceof wip.WipBillingError,
@@ -399,7 +399,7 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const wip = await import('./wip-billing')
-        
+
         /**
          * Worksheet numbers are unique per ORGANIZATION (wip_prebills_org_number)
          * but createPrebill serialised only per PROJECT
@@ -421,7 +421,7 @@ const consolidatedRows = [
                 values (${typeId},${org.orgId},'time_and_materials','Time & Materials','time_and_materials',${JSON.stringify(tm.invoicingProfile)}::jsonb,${JSON.stringify(tm.backupProfile)}::jsonb)`)
               await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
                 values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'scratch fixture baseline')`)
-        
+
               // Eight projects, each with its own independent billable hours, so
               // every create has disjoint source work and the ONLY shared state is
               // the org-wide worksheet counter. Each worksheet carries enough lines
@@ -442,7 +442,7 @@ const consolidatedRows = [
                 }
                 projectIds.push(project)
               }
-        
+
               const created = await Promise.all(projectIds.map((projectId) =>
                 wip.createPrebill(org.orgId, preparer, { projectId, periodEnd: org.date }),
               ))
@@ -464,7 +464,7 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const wip = await import('./wip-billing')
-        
+
         /**
          * WIP conversion settles whole minor units by largest remainder: two
          * approved 0.0050 draws must invoice as 0.01 + 0.00 (total 0.01), not as
@@ -509,7 +509,7 @@ const consolidatedRows = [
               assert.equal(approved?.proposedBillAmount, '0.0100')
               await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, null)
               await wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, null)
-        
+
               const converted = await wip.convertPrebill(org.orgId, preparer, prebill.id, null)
               assert.equal(converted.idempotent, false)
               const invoice = (await db.execute<{ subtotal: string; tax_total: string; total: string }>(sql`
@@ -533,10 +533,10 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const wip = await import('./wip-billing')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
         type Fixture = { org: Awaited<ReturnType<typeof createScratchOrg>>; actor: string; approver: string; project: string; prebill: string; entry: string }
-        
+
         async function fixture(account: 'missing' | 'revenue' | 'invAsset', run: (f: Fixture) => Promise<void>) {
           await withBypassContext(async () => {
             const org = await createScratchOrg()
@@ -565,7 +565,7 @@ const consolidatedRows = [
             } finally { await dropScratchOrg(org.orgId) }
           })
         }
-        
+
         async function snapshot(f: Fixture) {
           return (await db.execute(sql`select
             (select jsonb_agg(to_jsonb(w) order by w.id) from wip_prebills w where w.org_id=${f.org.orgId}) as worksheets,
@@ -579,14 +579,14 @@ const consolidatedRows = [
             (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where a.org_id=${f.org.orgId}) as audit
           `)).rows[0]
         }
-        
+
         async function refused(f: Fixture, message: RegExp) {
           const before = await snapshot(f)
           await assert.rejects(wip.convertPrebill(f.org.orgId, f.actor, f.prebill), (error: unknown) =>
             error instanceof wip.WipBillingError && message.test(error.message) && /void this prebill.*new prebill for approval/.test(error.message))
           assert.deepEqual(await snapshot(f), before, 'refusal preserves source, numbering, invoice, requests, and audit evidence')
         }
-        
+
         async function convertedWith(f: Fixture, accountId: string) {
           const converted = await wip.convertPrebill(f.org.orgId, f.actor, f.prebill)
           assert.equal(converted.idempotent, false)
@@ -602,7 +602,7 @@ const consolidatedRows = [
           assert.deepEqual(await wip.convertPrebill(f.org.orgId, f.actor, f.prebill), { id: converted.id, documentNumber: converted.documentNumber, idempotent: true })
           assert.deepEqual(await snapshot(f), beforeRetry)
         }
-        
+
         test('WIP conversion refuses missing frozen account despite available chart revenue without writes', enabled, async () => fixture('missing', async (f) => {
           await refused(f, /line 1 has no configured income account/)
           await withBypassContext(() => (db.execute(sql`update items set income_account_id=${f.org.accounts.revenue} where org_id=${f.org.orgId} and id=${f.org.items.service}`)))
@@ -612,7 +612,7 @@ const consolidatedRows = [
           await wip.transitionPrebill(f.org.orgId, f.approver, replacement.id, 'approve')
           await convertedWith({ ...f, prebill: replacement.id }, f.org.accounts.revenue)
         }))
-        
+
         for (const kind of ['inactive', 'summary'] as const) {
           test(`WIP conversion refuses ${kind} frozen account without writes`, enabled, async () => fixture('revenue', async (f) => {
             if (kind === 'inactive') await withBypassContext(() => (db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)))
@@ -620,7 +620,7 @@ const consolidatedRows = [
             await refused(f, /line 1 requires an active, non-summary account in this organization/)
           }))
         }
-        
+
         test('WIP conversion refuses a foreign organization account snapshot without writes', enabled, async () => fixture('revenue', async (f) => {
           const other = await withBypassContext(() => (createScratchOrg()))
           try {
@@ -634,12 +634,12 @@ const consolidatedRows = [
             })
           } finally { await dropScratchOrg(other.orgId) }
         }))
-        
+
         test('WIP conversion preserves approved account when source item policy changes and retries idempotently', enabled, async () => fixture('revenue', async (f) => {
           await withBypassContext(() => (db.execute(sql`update items set income_account_id=${f.org.accounts.recognized} where org_id=${f.org.orgId} and id=${f.org.items.service}`)))
           await convertedWith(f, f.org.accounts.revenue)
         }))
-        
+
         test('WIP conversion preserves explicit non-income account policy', enabled, async () => fixture('invAsset', async (f) => {
           await convertedWith(f, f.org.accounts.invAsset)
         }))
@@ -650,7 +650,7 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { createPrebill, WipBillingError } = await import('./wip-billing')
-        
+
         test('WIP service refuses direct creation when WIP Billing is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           await withBypassContext(async () => {
             const org = await createScratchOrg()
@@ -684,7 +684,7 @@ const consolidatedRows = [
                 values (${timeEntryId}, ${org.orgId}, ${employeeId}, ${org.date}, '2.0000', ${projectId}, ${org.items.service},
                         true, 'approved', '100.0000', 'CAD')
               `)
-        
+
               await assert.rejects(
                 createPrebill(org.orgId, actor, { projectId, periodEnd: org.date }),
                 (error: unknown) => error instanceof WipBillingError && error.status === 404 && /wip billing feature is disabled/i.test(error.message),
@@ -796,9 +796,9 @@ const consolidatedRows = [
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const wip = await import('./wip-billing')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * An NTE job whose contract ceiling was never entered has an UNKNOWN cap, not
          * a zero cap. Billing-request invoicing and Financials both read it that way
@@ -829,13 +829,13 @@ const consolidatedRows = [
                   values (${entry},${org.orgId},${employee},${org.date},'8','approved',true,'unbilled','100',${project})`)
                 return project
               }
-        
+
               // No ceiling entered: the unbilled time prebills like any uncapped job.
               const open = await setup('NTE-OPEN', null)
               const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: open, periodEnd: org.date }, null)
               assert.ok(prebill.id)
               assert.equal(prebill.sourceCount, 1)
-        
+
               // A consumed ceiling still blocks: 100 of contract, 100 already invoiced.
               const capped = await setup('NTE-CAPPED', '100.0000')
               const doc = randomUUID(), line = randomUUID()

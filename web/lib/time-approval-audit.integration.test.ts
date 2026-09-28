@@ -195,7 +195,7 @@ const consolidatedRows = [
         const { pinTimesheetEntryEmployee, weekStart } = await import('../app/api/timesheets/_lib.ts')
         const { amendLockedWeek, amendTimeEntry } = await import('./time-amendment')
         const { approveSubmittedTimeEntries } = await import('./time-approval')
-        
+
         /**
          * An amendment is the exact financial negation of the consumed original. It
          * must carry the original's approval-time snapshots (bill rate, cost rate,
@@ -234,7 +234,7 @@ const consolidatedRows = [
                         '100.0000', 'CAD', '30.0000', 'CAD', ${org.subsidiaryId}, 'estimated', 'PAY-2026-07', '{}'::jsonb, ${actor}, ${actor})`)
               await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, approved_by, approved_at, created_by, updated_by)
                 values (${randomUUID()}, ${org.orgId}, ${employee}, ${week}, 'approved', ${actor}, now(), ${actor}, ${actor})`)
-        
+
               const { id: amendment } = await amendTimeEntry(org.orgId, actor, original, null)
               const snapshot = async () => (await db.execute<Record<string, unknown>>(sql`
                 select hours::text as hours, bill_rate::text as bill_rate, cost_rate::text as cost_rate, costing_basis,
@@ -244,13 +244,13 @@ const consolidatedRows = [
                 hours: '-4.0000', bill_rate: '100.0000', cost_rate: '30.0000', costing_basis: 'estimated',
                 project_task_id: task, memo_is_private: true, field_ticket_id: null, status: 'draft', overhead_journal_entry_id: null,
               })
-        
+
               // Approve the amendment through the real approval path (snapshots + overhead pair).
               await db.execute(sql`update time_entries set status = 'submitted' where org_id = ${org.orgId} and id = ${amendment}`)
               await db.execute(sql`update timesheet_weeks set status = 'submitted' where org_id = ${org.orgId} and employee_party_id = ${employee} and week_start = ${week}`)
               const approved = await approveSubmittedTimeEntries({ orgId: org.orgId, actorId: actor, employeePartyId: employee, weekStart: week, allowedSubsidiaryIds: null })
               assert.deepEqual(approved, [amendment])
-        
+
               const after = await snapshot()
               assert.equal(after.status, 'approved')
               assert.equal(after.bill_rate, '100.0000', 'approval must not re-price the amendment from today\'s rate book')
@@ -269,7 +269,7 @@ const consolidatedRows = [
             }
           })
         })
-        
+
         /**
          * Only approved history may be amended. A contra against a still-editable
          * entry points at a row the weekly save can delete or replace, orphaning the
@@ -312,7 +312,7 @@ const consolidatedRows = [
             }
           })
         })
-        
+
         test('amending a project-linked entry refuses while Projects is disabled', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
           await withBypassContext(async () => {
             const org = await createScratchOrg()
@@ -345,7 +345,7 @@ const consolidatedRows = [
             }
           })
         })
-        
+
         test('an amendment rechecks employee scope under the transaction lock', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
           await withBypassContext(async () => {
             const org = await createScratchOrg()
@@ -364,7 +364,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into timesheet_weeks
                 (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
                 values (${randomUUID()}, ${org.orgId}, ${employee}, ${weekStart(org.date)}, 'approved', ${actor}, ${actor})`)
-        
+
               const allowed = new Set([org.subsidiaryId])
               assert.equal(await pinTimesheetEntryEmployee(org.orgId, original, allowed), employee)
               await db.execute(sql`update parties set subsidiary_id = ${subsidiaryB} where org_id = ${org.orgId} and id = ${employee}`)
