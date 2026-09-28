@@ -2197,6 +2197,62 @@ const FUND_RELEASE: RecordTypeMeta = {
   defaultSort: { sortKey: "date", dir: "desc" },
 };
 
+/**
+ * Grants are versioned awards. The universal list shows only the current
+ * version per code; lifecycle editing remains in the bespoke grant drawer.
+ */
+const GRANT: RecordTypeMeta = {
+  key: "grant",
+  labelKey: "nonprofit.grants.title",
+  category: "entity",
+  featureKey: "grantManagement",
+  supportsForms: false,
+  customFieldTable: "grants",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "code", labelKey: "nonprofit.grants.code", kind: "reference", sortable: true, sortKey: "code", locked: true },
+    { key: "name", labelKey: "nonprofit.grants.name", kind: "text", sortable: true, sortKey: "name" },
+    { key: "sponsor", labelKey: "nonprofit.grants.sponsor", kind: "text", sortable: true, sortKey: "sponsor" },
+    { key: "determination", labelKey: "nonprofit.grants.determination", kind: "text", sortable: true, sortKey: "determination" },
+    { key: "award_amount", labelKey: "nonprofit.grants.awardAmount", kind: "amount", sortable: true, sortKey: "award_amount", defaultWidth: 130 },
+    { key: "period_from", labelKey: "nonprofit.grants.periodFrom", kind: "date", sortable: true, sortKey: "period_from", defaultWidth: 120 },
+    { key: "period_to", labelKey: "nonprofit.grants.periodTo", kind: "date", sortable: true, sortKey: "period_to", defaultWidth: 120 },
+    { key: "fund", labelKey: "nonprofit.grants.fund", kind: "text", sortable: true, sortKey: "fund" },
+    { key: "status", labelKey: "nonprofit.grants.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [{ key: "status", labelKey: "nonprofit.grants.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["draft", "awarded", "active", "closed_out", "closed", "void"].map((value) => ({ value })) }],
+  defaultSort: { sortKey: "code", dir: "asc" },
+};
+
+/**
+ * Encumbrances are stored-subsidiary commitments. The universal list keeps
+ * that authority in its source; lifecycle editing stays in the bespoke drawer.
+ */
+const ENCUMBRANCE: RecordTypeMeta = {
+  key: "encumbrance",
+  labelKey: "nonprofit.encumbrances.title",
+  category: "entity",
+  featureKey: "encumbrances",
+  supportsForms: false,
+  customFieldTable: "encumbrances",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "source_kind", labelKey: "nonprofit.encumbrances.sourceKind", kind: "text", sortable: true, sortKey: "source_kind" },
+    { key: "account", labelKey: "nonprofit.encumbrances.account", kind: "text", sortable: true, sortKey: "account" },
+    { key: "subsidiary", labelKey: "nonprofit.encumbrances.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary" },
+    { key: "amount", labelKey: "nonprofit.encumbrances.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
+    { key: "status", labelKey: "nonprofit.encumbrances.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [{ key: "status", labelKey: "nonprofit.encumbrances.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["open", "closed", "void"].map((value) => ({ value })) }],
+  defaultSort: { sortKey: "number", dir: "asc" },
+};
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -2250,6 +2306,8 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   LABOR_RATE_CARD,
   FUND,
   FUND_RELEASE,
+  GRANT,
+  ENCUMBRANCE,
 ];
 
 export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = RECORD_TYPES.reduce(
