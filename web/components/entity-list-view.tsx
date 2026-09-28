@@ -19,19 +19,16 @@ import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
 import { displayListViewName } from '../lib/customization/display'
-import { columnDescriptors, type ListColDesc } from '../lib/customization/list-query'
+import { type ListColDesc } from '../lib/customization/list-query'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
   customerBaseJoins,
-  customerBuiltInExpr,
-  customerSorts,
   customerStatusExpr,
   employeeBaseJoins,
-  employeeBuiltInExpr,
-  employeeSorts,
   EMPLOYEE_HRM_FILTER_KEYS,
 } from '../lib/customization/entity-list-query'
-import { entityListSource, entityOrderClause, plannedPageClauses } from '../lib/list/entity-sources'
+import { entityListSource } from '../lib/list/entity-sources'
+import { readResolvedEntityListPageForView } from '../lib/list/entity-reader'
 import { ReportDrillLink } from '../app/(app)/reports/ReportDrillLink'
 import { resolvePeriod } from '../lib/periods'
 import { DRILL_LINK_CLASS } from './viewspec/tone'
@@ -138,12 +135,6 @@ export async function EntityListView({
     : catalog
   if (!source || !meta) throw new Error(`no entity list source registered for record type "${recordType}"`)
   const basePath = source.basePath
-  const builtInExpr = recordType === 'customer'
-    ? customerBuiltInExpr(crmOn)
-    : recordType === 'employee' ? employeeBuiltInExpr(hrmOn) : source.builtInExpr
-  const sorts = recordType === 'customer'
-    ? customerSorts(crmOn)
-    : recordType === 'employee' ? employeeSorts(hrmOn) : source.sorts
 
   const t = await getTranslations()
   const tCommon = await getTranslations('common')
@@ -238,11 +229,6 @@ export async function EntityListView({
   const labels: Record<string, string> = { actions: tCommon('labels.actions') }
   for (const c of meta.listColumns) labels[c.key] = label(c.labelKey)
 
-  const cols = columnDescriptors(recordType, view, showInListDefs, builtInExpr, labels, source.customFieldAlias ?? source.alias)
-  const selectCols = sql.join(
-    cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
-    sql`, `,
-  )
   const [allowedSubs, today] = await Promise.all([
     allowedSubsidiaryIds(userId, orgId),
     businessToday(orgId),
@@ -250,15 +236,57 @@ export async function EntityListView({
   const currentPeriod = source.columnDrill
     ? await resolvePeriod('this_period', { today, orgId })
     : null
-  const adhoc = {
-    q: params.q,
-    filters: quickValues,
-    showInactive,
-    crmEnabled: recordType === 'customer' ? crmOn : undefined,
-    hrmEnabled: recordType === 'employee' ? hrmOn : undefined,
+  // Static+tenant accepted sets load once here for both the picker and the
+  // reader: the same values render as options and validate the selection,
+  // so the reader never reloads them on this path.
+  const loadedQuickOptions = await Promise.all(quickFilterDefs.map(async (quick) => {
+    const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
+    const statics = (filterMeta?.options ?? []).map((option) => ({
+      value: option.value,
+      label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
+    }))
+    if (!quick.loadOptions) return statics
+    const seen = new Set(statics.map((option) => option.value))
+    const loaded = await quick.loadOptions(orgId, allowedSubs)
+    return [...statics, ...loaded.filter((option) => !seen.has(option.value))]
+  }))
+  const acceptedFilterValues = new Map<string, readonly string[]>(
+    quickFilterDefs.map((quick, index) => {
+      const statics = (meta.listFilters.find((filter) => filter.key === quick.filterKey)?.options ?? [])
+        .map((option) => option.value)
+      if (statics.length > 0) return [quick.filterKey, statics] as const
+      return [quick.filterKey, (loadedQuickOptions[index] ?? []).map((option) => option.value)] as const
+    }),
+  )
+  // Rows and the filtered total come from the shared entity reader — the one
+  // row+total path every list consumer uses. Facet counts below keep their
+  // own status-grouped query; nothing else queries rows here.
+  const readResult = await readResolvedEntityListPageForView(
+    {
+      recordType,
+      orgId,
+      allowedSubsidiaryIds: allowedSubs,
+      view,
+      adhoc: { q: params.q, filters: quickValues, showInactive },
+      sort: params.sort,
+      dir: params.dir,
+      page: params.page,
+      perPage: params.perPage,
+      labels,
+    },
+    { inventory: inventoryOn, crm: crmOn, hrm: hrmOn },
+    scopePredicate,
+    acceptedFilterValues,
+  )
+  if (!readResult.ok) {
+    return (
+      <>
+        <PageHeader title={viewName} description={`${readResult.error}: ${readResult.remedy}`} />
+        <EmptyState description={`${readResult.error}: ${readResult.remedy}`} />
+      </>
+    )
   }
   const narrow = (predicate: SQL) => scopePredicate ? sql`(${predicate}) and (${scopePredicate})` : predicate
-  const where = narrow(source.where(view, adhoc, orgId, allowedSubs))
   // Counts ignore the ad-hoc status selection so every status remains visible
   // in the picker, while retaining saved-view scope and entity de-duplication.
   const countFilterKey = source.countFilterKey ?? 'status'
@@ -270,13 +298,16 @@ export async function EntityListView({
   // emits a predicate over joins the CRM-off FROM never made.
   const countWhere = narrow(source.where(
     countView,
-    { showInactive, filters: {}, crmEnabled: adhoc.crmEnabled, hrmEnabled: adhoc.hrmEnabled },
+    {
+      showInactive,
+      filters: {},
+      crmEnabled: recordType === 'customer' ? crmOn : undefined,
+      hrmEnabled: recordType === 'employee' ? hrmOn : undefined,
+    },
     orgId,
     allowedSubs,
   ))
-  const orderExpr = sorts[params.sort] ?? source.defaultSort
   const aliasSql = sql.raw(source.alias)
-  const idExpr = source.idExpr ?? sql`${aliasSql}.id`
   const tableSql = typeof source.table === 'function'
     ? sql`${source.table(orgId)} ${sql.raw(source.alias)}`
     : sql.raw(`${source.table} ${source.alias}`)
@@ -295,66 +326,25 @@ export async function EntityListView({
       ? employeeBaseJoins(hrmOn, today, allowedSubs)
       : (typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource)
 
-  // Planned page ids for sorts SQL cannot serve without a per-row scan (see
-  // `orderedPageIds`): the page reads by id membership ordered by array
-  // position, so no query on this path touches journal lines per row.
-  const plannedIds = source.orderedPageIds
-    ? await source.orderedPageIds({ orgId, sort: params.sort, dir: params.dir, tableSql, baseJoins, where })
-    : null
-  const planned = plannedIds ? plannedPageClauses(plannedIds, idExpr) : null
-  const pageWhere = planned ? planned.where : where
-  const pageOrder = planned ? planned.order : entityOrderClause(source, orderExpr, params.dir)
-  const [rowsRes, statusCounts, totalRow, loadedQuickOptions] = await Promise.all([
-    (db.execute(sql`
-      select ${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
-        from ${tableSql}
-        ${baseJoins}
-       where ${pageWhere}
-       order by ${pageOrder}
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `)),
-    source.statusCounts === false
-      ? Promise.resolve({ rows: [] })
-      // A CRM-off customer list has one constant status bucket ('customer'):
-      // grouping by a constant is a Postgres 42601, so count it ungrouped
-      // instead of skipping the facet.
-      : recordType === 'customer' && !crmOn
-        ? (db.execute(sql`
-            select ${statusExpr} as status, count(*) as n from ${tableSql}
-              ${countJoins}
-             where ${countWhere}`))
-        : (db.execute(sql`
-            select ${statusExpr} as status, count(*) as n from ${tableSql}
-              ${countJoins}
-             where ${countWhere}
-             group by ${statusExpr}`)),
-    db.execute<{ n: string }>(sql`
-      select count(*) as n from ${tableSql}
-        ${countJoins}
-       where ${where}`),
-    // Static registry options come first; a loader appends tenant-defined
-    // values (custom project types) that no static set can name. No filter
-    // mixes both today except billing/project_type, so merging is a no-op
-    // everywhere else.
-    Promise.all(quickFilterDefs.map(async (quick) => {
-      const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
-      const statics = (filterMeta?.options ?? []).map((option) => ({
-        value: option.value,
-        label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
-      }))
-      if (!quick.loadOptions) return statics
-      const seen = new Set(statics.map((option) => option.value))
-      const loaded = await quick.loadOptions(orgId, allowedSubs)
-      return [...statics, ...loaded.filter((option) => !seen.has(option.value))]
-    })),
-  ])
-  const rows = rowsRes.rows as Record<string, unknown>[]
-  // Server-computed display values (project actual cost reads the same
-  // profile-driven reader as the cockpit). Runs after the page fetch so it
-  // touches only displayed rows; SQL serves counts, and sort-by-actual pages
-  // arrive pre-ordered from `orderedPageIds` (same reader, so order ties).
-  if (source.enrichRows) await source.enrichRows(orgId, rows)
-  const filteredTotal = Number(totalRow.rows[0]?.n ?? 0)
+  const statusCounts = source.statusCounts === false
+    ? await Promise.resolve({ rows: [] })
+    // A CRM-off customer list has one constant status bucket ('customer'):
+    // grouping by a constant is a Postgres 42601, so count it ungrouped
+    // instead of skipping the facet.
+    : recordType === 'customer' && !crmOn
+      ? await (db.execute(sql`
+          select ${statusExpr} as status, count(*) as n from ${tableSql}
+            ${countJoins}
+           where ${countWhere}`))
+      : await (db.execute(sql`
+          select ${statusExpr} as status, count(*) as n from ${tableSql}
+            ${countJoins}
+           where ${countWhere}
+           group by ${statusExpr}`))
+  // Rows, enrichment, and the filtered total arrive from the shared reader;
+  // the facet counts above keep their own status-grouped query.
+  const rows = readResult.rows
+  const filteredTotal = readResult.filteredTotal
   const total = filteredTotal
   // "Nothing here yet" vs "filters match nothing" need different copy AND
   // different actions; the distinction is whether the shell narrows the list.

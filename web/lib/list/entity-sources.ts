@@ -148,6 +148,12 @@ export interface EntityListSource {
   drawerParam: string
   /** Base path for row links / drawer. */
   basePath: string
+  /**
+   * Canonical read grant for this list, enforced by the shared entity reader
+   * before any compiler work (in addition to the page's own gate). Sources
+   * without a declaration stay caller-gated.
+   */
+  readPermission?: string
   /** Where the reference column links (default: the edit drawer). Projects link
    *  to the full cockpit page instead. */
   /** The list has an `is_active` flag → show a "show inactive" toggle. */
@@ -524,6 +530,7 @@ const SOURCES: Record<string, EntityListSource> = {
     ],
     drawerParam: 'project',
     basePath: '/projects',
+    readPermission: 'projects.read',
     hasInactive: true,
     extraSelect: sql`p.is_active`,
     enrichRows: async (orgId, rows) => {
@@ -916,6 +923,7 @@ const SOURCES: Record<string, EntityListSource> = {
     }, view, adhoc, orgId),
     drawerParam: 'assignment',
     basePath: '/resourcing/assignments',
+    readPermission: 'resourcing.read',
   },
   resourcing_request: {
     recordType: 'resourcing_request',
@@ -947,6 +955,7 @@ const SOURCES: Record<string, EntityListSource> = {
     }, view, adhoc, orgId),
     drawerParam: 'request',
     basePath: '/resourcing/requests',
+    readPermission: 'resourcing.read',
   },
   resourcing_demand: {
     recordType: 'resourcing_demand',
@@ -1008,6 +1017,7 @@ const SOURCES: Record<string, EntityListSource> = {
     }, view, adhoc, orgId),
     drawerParam: 'retainer',
     basePath: '/resourcing/retainers',
+    readPermission: 'retainers.read',
   },
   timesheet_week: {
     recordType: 'timesheet_week',

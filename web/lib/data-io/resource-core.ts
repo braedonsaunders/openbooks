@@ -44,6 +44,11 @@ export interface ReadResult {
  */
 export interface ReadCtx {
   allowedSubsidiaryIds: ReadonlySet<string> | null
+  /**
+   * Acting user, threaded by the export route. Existing resources ignore it;
+   * new actor-bound reads require it and fail closed when it is absent.
+   */
+  actorId?: string
 }
 
 export interface WriteCtx {
