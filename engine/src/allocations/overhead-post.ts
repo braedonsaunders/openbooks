@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sql, type SQL } from "drizzle-orm";
-import { db, inDbTransaction } from "../platform/db.ts";
+import { db, inDbTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import {
   postProjectGlEntryWithinTransaction,
@@ -452,7 +452,7 @@ export interface StandardOverheadCard {
  * card.
  */
 export async function resolveStandardOverheadCardsInTx(
-  executor: OverheadExecutor,
+  executor: SqlExecutor,
   orgId: string,
   args: { departmentId: string | null; basis: StandardOverheadBasis; onDate: string },
 ): Promise<StandardOverheadCard[]> {
