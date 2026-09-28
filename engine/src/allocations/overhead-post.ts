@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { db, inDbTransaction } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
@@ -16,7 +16,7 @@ import {
   type OverheadExecutor,
 } from "./overhead-sync.ts";
 import type { RuleInEffect } from "./types.ts";
-import { add, isZero, normalizeMoney } from "../money/money.ts";
+import { add, isZero, mul, normalizeMoney } from "../money/money.ts";
 
 /**
  * Overhead posting — the time-approval event of the system-owned
@@ -45,34 +45,63 @@ import { add, isZero, normalizeMoney } from "../money/money.ts";
  */
 
 /**
- * THE rule for which published `overhead_rates` rows apply to a time entry —
- * one SQL fragment shared by the posting engine (applyOverheadForTime, the
- * backfill and its counter) and the statistical project-financials measure,
- * so the number a cockpit reports can never differ from the pair the ledger
- * carries. Given the table aliases of the rate row and the entry:
- *   - same org, and the rate's effective window covers the worked day;
- *   - an org-wide row (null department) applies to every entry — including
- *     department-less time; a department row only to that department;
- *   - most specific wins: when the entry's department has its own row of the
- *     same rate kind in force that day, org-wide rows of that kind step aside;
+ * The driver coordinates a rate card resolves against: raw column
+ * expressions, never a source table. Any driver with an org, a day, and an
+ * (optionally null) department qualifies — approved time today, other
+ * event sources tomorrow.
+ */
+export interface OverheadDriverColumns {
+  orgId: SQL;
+  workedOn: SQL;
+  departmentId: SQL;
+}
+
+/**
+ * THE overhead-card selection kernel, source-independent: given the rate
+ * row's alias and the driver's column expressions, one SQL fragment both
+ * the postings below and the statistical measures share, so a reported
+ * number can never differ from the pair the ledger carries.
+ *
+ * It never names a source table — coupling it to time_entries (or any
+ * driver table) would fork selection the moment a second source posts.
+ * Semantics, unchanged from the time-entry rule it generalizes:
+ *   - same org, and the rate's effective window covers the driver's day;
+ *   - an org-wide row (null department) applies to every driver — including
+ *     department-less ones; a department row only to that department;
+ *   - most specific wins: when the driver's department has its own row of
+ *     the same rate kind in force that day, org-wide rows of that kind
+ *     step aside;
  *   - rows of one scope may stack (category rows) — each match is one term.
  */
-export function overheadRateAppliesToTimeEntry(rateAlias: string, entryAlias: string): SQL {
+export function overheadRateAppliesToDriver(rateAlias: string, driver: OverheadDriverColumns): SQL {
   const r = sql.raw(rateAlias);
-  const te = sql.raw(entryAlias);
-  return sql`${r}.org_id = ${te}.org_id
-         and (${r}.department_id is null or ${r}.department_id = ${te}.department_id)
-         and ${r}.effective_from <= ${te}.worked_on
-         and (${r}.effective_to is null or ${r}.effective_to >= ${te}.worked_on)
+  return sql`${r}.org_id = ${driver.orgId}
+         and (${r}.department_id is null or ${r}.department_id = ${driver.departmentId})
+         and ${r}.effective_from <= ${driver.workedOn}
+         and (${r}.effective_to is null or ${r}.effective_to >= ${driver.workedOn})
          and not exists (
            select 1 from overhead_rates specific_rate
-            where specific_rate.org_id = ${te}.org_id
+            where specific_rate.org_id = ${driver.orgId}
               and specific_rate.rate_kind = ${r}.rate_kind
-              and specific_rate.department_id = ${te}.department_id
+              and specific_rate.department_id = ${driver.departmentId}
               and ${r}.department_id is null
-              and specific_rate.effective_from <= ${te}.worked_on
-              and (specific_rate.effective_to is null or specific_rate.effective_to >= ${te}.worked_on)
+              and specific_rate.effective_from <= ${driver.workedOn}
+              and (specific_rate.effective_to is null or specific_rate.effective_to >= ${driver.workedOn})
          )`;
+}
+
+/**
+ * The time-entry binding of the kernel above: the same fragment the
+ * project-financials measure shares, so a reported number can never differ
+ * from the pair the ledger carries.
+ */
+export function overheadRateAppliesToTimeEntry(rateAlias: string, entryAlias: string): SQL {
+  const te = sql.raw(entryAlias);
+  return overheadRateAppliesToDriver(rateAlias, {
+    orgId: sql`${te}.org_id`,
+    workedOn: sql`${te}.worked_on`,
+    departmentId: sql`${te}.department_id`,
+  });
 }
 
 export interface OverheadApplyResult {
@@ -203,7 +232,11 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
         from locked entry
         join overhead_rates r
           on r.rate_kind = 'per_hour'
-         and ${overheadRateAppliesToTimeEntry("r", "entry")}
+         and ${overheadRateAppliesToDriver("r", {
+          orgId: sql`entry.org_id`,
+          workedOn: sql`entry.worked_on`,
+          departmentId: sql`entry.department_id`,
+        })}
        group by entry.id, entry.project_id, entry.worked_on
        order by entry.id`));
     if (rows.rows.length === 0) return none;
@@ -339,6 +372,170 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Standard overhead selection and measurement                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The driver bases a standard overhead card can price, and the exact
+ * overhead_rates kind each one maps to. The mapping is total: every basis
+ * names exactly one kind, so a basis can never silently fall back to
+ * another kind's card.
+ */
+export type StandardOverheadBasis = "labor_hours" | "machine_hours" | "units";
+export type StandardOverheadRateKind = "per_hour" | "per_machine_hour" | "per_unit";
+
+/** Exact basis → rate-kind mapping: labor_hours→per_hour, machine_hours→per_machine_hour, units→per_unit. */
+export function standardOverheadRateKind(basis: StandardOverheadBasis): StandardOverheadRateKind {
+  switch (basis) {
+    case "labor_hours":
+      return "per_hour";
+    case "machine_hours":
+      return "per_machine_hour";
+    case "units":
+      return "per_unit";
+    default:
+      throw new Error(
+        `standard overhead basis ${JSON.stringify(basis) ?? "missing"} ` +
+          `is not labor_hours, machine_hours, or units; pass the driver's overhead basis`,
+      );
+  }
+}
+
+/**
+ * One standard overhead_rates row as resolved for freezing: the exact
+ * evidence the release snapshot hashes and the later operation application
+ * prices from. Amounts are exact decimal strings at ledger scale.
+ */
+export interface StandardOverheadCard {
+  /** The overhead_rates row (evidence, not a re-query key). */
+  id: string;
+  orgId: string;
+  departmentId: string | null;
+  category: string | null;
+  method: "standard";
+  rateKind: StandardOverheadRateKind;
+  ratePercent: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+/**
+ * Resolve the standard overhead cards covering a driver day — the
+ * executor-bound selection kernel behind release freezing. Reads
+ * overhead_rates through the passed executor (never ambiently):
+ * method='standard', the basis-mapped kind, same org, effective window
+ * covering the day, department-specific rows before the org fallback for
+ * the mapped kind, category stacks retained. Rows return in a deterministic
+ * frozen order (department-specific first, then effective_from, category,
+ * row id) so the release snapshot hash is stable. An unknown basis or a
+ * malformed date refuses by name; no covering card resolves to an empty
+ * set (inert), never to another kind's card.
+ */
+export async function resolveStandardOverheadCardsInTx(
+  executor: OverheadExecutor,
+  orgId: string,
+  args: { departmentId: string | null; basis: StandardOverheadBasis; onDate: string },
+): Promise<StandardOverheadCard[]> {
+  if (args.basis !== "labor_hours" && args.basis !== "machine_hours" && args.basis !== "units") {
+    throw new Error(
+      `standard overhead basis ${JSON.stringify(args.basis) ?? "missing"} ` +
+        `is not labor_hours, machine_hours, or units; pass the driver's overhead basis`,
+    );
+  }
+  if (!isIsoCalendarDate(args.onDate)) {
+    throw new Error(
+      `standard overhead selection date ${JSON.stringify(args.onDate) ?? "missing"} ` +
+        `is not a YYYY-MM-DD calendar date; pass the frozen release date`,
+    );
+  }
+  const rateKind = standardOverheadRateKind(args.basis);
+  const departmentId = args.departmentId ?? null;
+  // A null department binds nothing: `= null` never matches, so only
+  // org-wide rows survive — the same department-less rule the live kernel
+  // applies, without a null-matching branch.
+  const rows = (await executor.execute<{
+      id: string;
+      department_id: string | null;
+      category: string | null;
+      rate_percent: string;
+      effective_from: string;
+      effective_to: string | null;
+    }>(sql`
+    select id, department_id, category, rate_percent::text as rate_percent,
+           effective_from::text as effective_from, effective_to::text as effective_to
+      from overhead_rates
+     where org_id = ${orgId}
+       and rate_kind = ${rateKind}
+       and method = 'standard'
+       and effective_from <= ${args.onDate}
+       and (effective_to is null or effective_to >= ${args.onDate})
+       and (department_id is null or department_id = ${departmentId})
+     order by case when department_id is null then 1 else 0 end,
+              effective_from, category asc nulls first, id asc`)).rows;
+  const cards = rows.map((row) => ({
+    id: row.id,
+    orgId,
+    departmentId: row.department_id ?? null,
+    category: row.category ?? null,
+    method: "standard" as const,
+    rateKind,
+    ratePercent: String(row.rate_percent),
+    effectiveFrom: String(row.effective_from).slice(0, 10),
+    effectiveTo: row.effective_to == null ? null : String(row.effective_to).slice(0, 10),
+  }));
+  // Department-before-org for the mapped kind: when the driver's department
+  // has its own standard card covering the day, org-wide cards step aside.
+  // Category rows stack: every survivor is one term, in frozen order.
+  if (departmentId !== null && cards.some((card) => card.departmentId === departmentId)) {
+    return cards.filter((card) => card.departmentId !== null);
+  }
+  return cards;
+}
+
+export interface StandardOverheadTerm {
+  cardId: string;
+  amount: string;
+}
+
+/**
+ * Price a driver quantity against frozen standard cards — the pure
+ * calculation kernel the later operation application reuses. One exact
+ * 4dp halves-away term per stacked card (the same product the postings
+ * round in SQL), summed to an exact total. A malformed quantity or card
+ * rate refuses naming its source instead of pricing without it.
+ */
+export function calculateStandardOverheadAmounts(
+  cards: readonly StandardOverheadCard[],
+  driverQuantity: string,
+): { terms: StandardOverheadTerm[]; total: string } {
+  let quantity: string;
+  try {
+    quantity = normalizeMoney(String(driverQuantity));
+  } catch {
+    throw new Error(
+      `standard overhead driver quantity ${JSON.stringify(driverQuantity) ?? "missing"} ` +
+        `is not an exact decimal amount; pass the measured driver quantity`,
+    );
+  }
+  const terms: StandardOverheadTerm[] = [];
+  let total = "0";
+  for (const card of cards) {
+    let term: string;
+    try {
+      term = mul(quantity, String(card.ratePercent));
+    } catch {
+      throw new Error(
+        `frozen standard overhead card ${card.id} has rate ${JSON.stringify(card.ratePercent) ?? "missing"} ` +
+          `that is not an exact decimal amount; refreeze the release snapshot`,
+      );
+    }
+    terms.push({ cardId: card.id, amount: term });
+    total = add(total, term);
+  }
+  return { terms, total };
+}
+
 /** How many approved project hours aren't carrying overhead yet (for the
  * workspace's backfill affordance). Counts only entries a backfill could
  * actually carry — a published rate must cover the worked day, and dust
@@ -353,7 +550,11 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
        and ${dustExclusion("te")}
        and exists (
          select 1 from overhead_rates r
-          where r.rate_kind = 'per_hour' and ${overheadRateAppliesToTimeEntry("r", "te")}
+          where r.rate_kind = 'per_hour' and ${overheadRateAppliesToDriver("r", {
+            orgId: sql`te.org_id`,
+            workedOn: sql`te.worked_on`,
+            departmentId: sql`te.department_id`,
+          })}
        )
        and not exists (
          select 1 from projects p
@@ -395,7 +596,11 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
          and ${dustExclusion("te")}
          and exists (
            select 1 from overhead_rates r
-            where r.rate_kind = 'per_hour' and ${overheadRateAppliesToTimeEntry("r", "te")}
+            where r.rate_kind = 'per_hour' and ${overheadRateAppliesToDriver("r", {
+              orgId: sql`te.org_id`,
+              workedOn: sql`te.worked_on`,
+              departmentId: sql`te.department_id`,
+            })}
          )
          and not exists (
            select 1 from projects p
