@@ -696,6 +696,7 @@ async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow
   return (await tx.execute<{ entry_number: string }>(sql`
     select entry.entry_number from journal_entries entry
      where entry.org_id=${orgId} and entry.origin='manufacturing'
+       -- Live entries only: cancellation is blocked only by unreversed original manufacturing entries.
        and entry.status='posted' and entry.reverses_entry_id is null
        and entry.custom->>'work_order_number'=${order.number}
        and not exists (
