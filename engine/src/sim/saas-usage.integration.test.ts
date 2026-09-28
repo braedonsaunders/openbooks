@@ -27,7 +27,9 @@ async function simulate(root: string) {
       const probe = await createSubscriptionInvoice({
         orgId: run.orgId, actorId: world.actors.controller, customerId: world.customers[0]!.id,
         subsidiaryId: world.subsidiaryId, currency: world.currency, incomeAccountId: world.accounts.servicesRevenue!,
-        itemId: null, taxCodeId: null, description: "Collections timing probe", quantity: "1", unitPrice: "25",
+        // Total 50 clears the sim org's Standard Dunning min_balance ("25" is
+        // strict), so the probe is actually dunnable and the ladder can fire.
+        itemId: null, taxCodeId: null, description: "Collections timing probe", quantity: "2", unitPrice: "25",
         memo: "Collections timing probe", invoiceDate: "2026-12-01", dueDate, autoPost: false,
       });
       probes.push(probe.invoiceId); await withOrgContext(run.orgId, () => issueInvoice(world, probe.invoiceId));
