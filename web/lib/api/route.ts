@@ -38,6 +38,12 @@ interface CommonOptions<
   body?: B;
   /** Top-level JSON body columns that intentionally remain uninterpreted. */
   opaque?: Record<string, string>;
+  /**
+   * Refusal status for a well-formed body that fails the route schema.
+   * Defaults to 422; a route with an established 400 contract for invalid
+   * bodies keeps it here instead of weakening its tests.
+   */
+  invalidBodyStatus?: number;
   handler: (ctx: {
     request: Request;
     authz: A;
@@ -115,6 +121,7 @@ interface LooseOptions {
   params?: z.ZodType;
   body?: z.ZodType;
   opaque?: Record<string, string>;
+  invalidBodyStatus?: number;
   handler: LooseHandler;
 }
 
@@ -235,7 +242,9 @@ export function defineRoute(options: LooseOptions) {
 
       let body: unknown;
       if (options.body) {
-        const parsedBody = await parseJsonBody(request, options.body as z.ZodType);
+        const parsedBody = await parseJsonBody(request, options.body as z.ZodType, {
+          status: options.invalidBodyStatus,
+        });
         if (!parsedBody.ok) return parsedBody.response;
         body = parsedBody.data;
       }
