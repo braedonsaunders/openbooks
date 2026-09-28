@@ -877,17 +877,8 @@ async function markProgress(
   }
 }
 
-/**
- * The v0 proof: reproduce the legacy row sets byte-for-byte from the
- * current sources through the read-only v0 compatibility projection, then
- * compare every stored legacy field against the reproduction before any
- * metric write. Natural keys, row counts, every numeric, count, movement,
- * and basis field, and the one canonical legacy inputs hash must all agree.
- * Any drift fails closed: source changes refuse as drift, altered stored
- * rows refuse as tamper, and missing or extra keys refuse as key drift —
- * each with the controlled Company Setup remedy and zero metric writes.
- */
-function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month, month: string): string[] {
+/** Classify the stored month before reading legacy dependencies for its proof. */
+function assertLegacyMonth(before: StoredMetricsMonth, month: string): void {
   const all = [...before.monthly, ...before.facts, ...before.cohorts];
   if (all.length === 0) {
     throw refusal(
@@ -917,6 +908,15 @@ function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month,
       { field: "month", status: 409 },
     );
   }
+}
+
+/**
+ * Natural keys, row counts, every stored value and one common historical
+ * writer hash must agree with the read-only reproduction. Source changes,
+ * altered values and missing keys all refuse before any correction write.
+ */
+function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month, month: string): string[] {
+  const all = [...before.monthly, ...before.facts, ...before.cohorts];
   // Natural-key grain first: the proved sets must match the reproduced
   // sets exactly, in both directions, before any value is compared.
   const storedMonthlyKeys = new Set(before.monthly.map((row) => row.subscriptionId));
@@ -941,9 +941,10 @@ function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month,
       { field: "month", status: 409 },
     );
   }
-  // One common stored hash, then exact equality with the recomputed v0 hash.
+  // One common stored hash must match an exact historical writer payload:
+  // either the initial computation or the repeat with its cohort opening.
   const storedHashes = [...new Set(all.map((row) => row.inputsHash))];
-  if (storedHashes.length !== 1 || storedHashes[0] !== reproduced.legacyHash) {
+  if (storedHashes.length !== 1 || (storedHashes[0] !== reproduced.legacyHash && storedHashes[0] !== reproduced.initialLegacyHash)) {
     const valuesMatch = compareV0Values(before, reproduced).length === 0;
     if (valuesMatch) {
       throw refusal(
@@ -1267,6 +1268,7 @@ async function runCorrectionAttempt(
       );
     }
     const before = await readStoredMetricsMonth(db, orgId, claim.month);
+    assertLegacyMonth(before, claim.month);
     const reproduced = await computeLegacyV0Month(db, orgId, claim.month);
     const sourceV0Hashes = proveLegacyMonth(before, reproduced, claim.month);
     await markProgress(db, orgId, requestId, leaseToken, {

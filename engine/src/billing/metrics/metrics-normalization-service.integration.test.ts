@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -131,7 +132,7 @@ async function seedCustomerAndSubscription(ctx: Fixture, currency = "CAD"): Prom
  * hash. The proof accepts these rows because v0 recomputation reproduces
  * them byte-for-byte — never because a marker was trusted.
  */
-async function seedV0Month(ctx: Fixture, month: string = MONTH): Promise<LegacyV0Month> {
+async function seedV0Month(ctx: Fixture, month: string = MONTH, repeated = false): Promise<LegacyV0Month> {
   const v0 = await withOrgTransaction(ctx.org.orgId, async () =>
     computeLegacyV0Month(db, ctx.org.orgId, month));
   await withOrgTransaction(ctx.org.orgId, async () => {
@@ -182,7 +183,22 @@ async function seedV0Month(ctx: Fixture, month: string = MONTH): Promise<LegacyV
       assert.equal(stored.rows.length, 1, "the legacy cohort row must be stored");
     }
   });
-  return v0;
+  const replay = await withOrgTransaction(ctx.org.orgId, async () => computeLegacyV0Month(db, ctx.org.orgId, month));
+  assert.equal(replay.initialLegacyHash, v0.legacyHash, "writing the cohort output must preserve the first computation's reproducible digest");
+  assert.deepEqual(replay.monthly, v0.monthly);
+  assert.deepEqual(replay.facts, v0.facts);
+  assert.deepEqual(replay.cohorts, v0.cohorts);
+  if (!repeated) return v0;
+  await withOrgTransaction(ctx.org.orgId, async () => {
+    for (const table of ["saas_metrics_monthly", "saas_metrics_facts_monthly", "saas_metrics_cohort_monthly"]) {
+      const stored = await db.execute(sql`
+        update ${sql.identifier(table)} set inputs_hash = ${replay.legacyHash}
+         where org_id = ${ctx.org.orgId} and month = ${month}::date returning id
+      `);
+      assert.equal(stored.rows.length, 1, `${table} must record the repeated historical computation`);
+    }
+  });
+  return replay;
 }
 
 async function setSaaSMetricsFeature(ctx: Fixture, enabled: boolean): Promise<void> {
@@ -211,7 +227,7 @@ async function seedFxRate(ctx: Fixture, from: string, to: string, asOf: string, 
 
 async function seedNormalizedMonth(ctx: Fixture, customerId: string, subscriptionId: string): Promise<void> {
   await withOrgTransaction(ctx.org.orgId, async () => {
-    await db.execute(sql`
+    const monthly = await db.execute(sql`
       insert into saas_metrics_monthly
         (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
          mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
@@ -222,8 +238,10 @@ async function seedNormalizedMonth(ctx: Fixture, customerId: string, subscriptio
               '0', 'new', '0', '0',
               'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
               'CAD', 'v1', ${V1_EVIDENCE}::jsonb)
+      returning id
     `);
-    await db.execute(sql`
+    assert.equal(monthly.rows.length, 1, "the normalized subscription month must be stored");
+    const facts = await db.execute(sql`
       insert into saas_metrics_facts_monthly
         (org_id, subsidiary_id, month, mrr_start, mrr_end, new_mrr, expansion_mrr,
          contraction_mrr, churned_mrr, reactivation_mrr, recognized_revenue, deferred_delta,
@@ -234,8 +252,10 @@ async function seedNormalizedMonth(ctx: Fixture, customerId: string, subscriptio
               '0', '0', '0', '0', '0', '0', 0, 1, 1, 0, 0, '0', '0', '1200.0000', '0', '0',
               'recognised', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
               'CAD', 'v1', ${V1_EVIDENCE}::jsonb)
+      returning id
     `);
-    await db.execute(sql`
+    assert.equal(facts.rows.length, 1, "the normalized subsidiary facts must be stored");
+    const cohort = await db.execute(sql`
       insert into saas_metrics_cohort_monthly
         (org_id, subsidiary_id, cohort_month, month, months_since_start, start_mrr, mrr,
          start_customers, customers, inputs_hash,
@@ -244,7 +264,9 @@ async function seedNormalizedMonth(ctx: Fixture, customerId: string, subscriptio
               0, '100.0000', '100.0000', 1, 1,
               'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
               'CAD', 'v1', ${V1_EVIDENCE}::jsonb)
+      returning id
     `);
+    assert.equal(cohort.rows.length, 1, "the normalized cohort month must be stored");
   });
 }
 
@@ -253,7 +275,7 @@ async function requestAuditEvents(orgId: string, requestId: string): Promise<Arr
     (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
       select action, changes from audit_log
        where org_id = ${orgId} and table_name = 'saas_metrics_normalization_requests' and row_id = ${requestId}
-       order by at, id
+       order by at, cmin::text::bigint, id
     `)).rows);
 }
 
@@ -554,7 +576,7 @@ test("request creation validates month, reason, and identities before any write"
     "YYYY-MM-01",
   );
   await expectRefusal(
-    createNormalizationRequest({ orgId, month: MONTH, reason: "too short", requestedBy: actor, idempotencyKey: key }),
+    createNormalizationRequest({ orgId, month: MONTH, reason: "short", requestedBy: actor, idempotencyKey: key }),
     "saas_normalization_reason_invalid",
     "Company Setup",
   );
@@ -650,7 +672,7 @@ test("a concurrent second claim matches zero rows and names the live request", {
     const first = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
     assert.equal(first.request.status, "running");
     assert.equal(first.request.attemptCount, 1);
-    assert.match(first.leaseToken, /^[0-9a-f-]{36}$/);
+    assert.ok(isUuid(first.leaseToken), `normalization lease token must be a UUID; received ${JSON.stringify(first.leaseToken)}`);
     await expectRefusal(
       claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id }),
       "saas_normalization_already_claimed",
@@ -795,12 +817,14 @@ test("a mixed legacy and normalized month refuses as unsupported partial", { ski
     await seedCustomerAndSubscription(ctx);
     await seedV0Month(ctx);
     await withOrgTransaction(ctx.org.orgId, async () => {
-      await db.execute(sql`
+      const changed = await db.execute(sql`
         update saas_metrics_facts_monthly
            set reporting_currency = 'CAD', denomination_version = 'v1',
                normalization_evidence = ${V1_EVIDENCE}::jsonb
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
       `);
+      assert.equal(changed.rows.length, 1, "the subsidiary facts must become normalized to stage a mixed month");
     });
     const { request, leaseToken } = await approvedClaim(ctx);
     await expectRefusal(
@@ -1045,11 +1069,12 @@ test("retry after failure re-proves and succeeds without resuming payload", { sk
 test("cancellation honors requester, approver, and terminal immutability", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
     const filed = await fileRequest(ctx);
-    await expectRefusal(
+    const refusal = await expectRefusal(
       cancelNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, actorId: ctx.approver }),
       "saas_normalization_cancel_forbidden",
-      "Only the requester",
+      "Have the requester cancel it in Company Setup",
     );
+    assert.match(refusal.message, /Only the requester/);
     const cancelled = await cancelNormalizationRequest({
       orgId: ctx.org.orgId,
       requestId: filed.request.id,
@@ -1098,7 +1123,7 @@ test("a tampered stored value refuses with zero writes and administrator escalat
     const v0 = await seedV0Month(ctx);
     await withOrgTransaction(ctx.org.orgId, async () => {
       const tampered = await db.execute(sql`
-        update saas_metrics_monthly set mrr_end = mrr_end + 1
+        update saas_metrics_monthly set mrr_end = mrr_end + 1, expansion_mrr = expansion_mrr + 1
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
       `);
@@ -1204,7 +1229,7 @@ test("an extra source key refuses as key drift with zero writes", { skip: !DB },
 test("the E-facing action approves, claims, and executes with no token returned", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
     await seedCustomerAndSubscription(ctx);
-    const v0 = await seedV0Month(ctx);
+    const v0 = await seedV0Month(ctx, MONTH, true);
     const filed = await fileRequest(ctx);
     const done = await approveAndExecuteNormalizationRequest({
       orgId: ctx.org.orgId,
@@ -1404,7 +1429,8 @@ test("a prior ordinary v1 rewrite with no preserved provenance refuses", { skip:
       "saas_normalization_v0_provenance_missing",
       "audited normalization workflow",
     );
-    assert.match(error.message, /saas_metrics_monthly:/, "the refusal names the unprovenanced dependency");
+    assert.ok(error.message.includes(`Month ${NEXT_MONTH} depends on prior month ${MONTH}`),
+      `the refusal must name the affected month and its unprovenanced dependency; received ${error.message}`);
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
     assert.equal(status.status, "failed");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
@@ -1430,7 +1456,7 @@ test("a tampered prior v1 row does not poison the next month's proof", { skip: !
     });
     await withOrgTransaction(ctx.org.orgId, async () => {
       const tampered = await db.execute(sql`
-        update saas_metrics_monthly set mrr_end = mrr_end + 1
+        update saas_metrics_monthly set mrr_end = mrr_end + 1, expansion_mrr = expansion_mrr + 1
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
       `);

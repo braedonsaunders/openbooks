@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -165,7 +166,7 @@ test("as-of evidence names the direct observation with exact decimals", { skip: 
     assert.equal(evidence.table, "fx_rates");
     assert.equal(evidence.observations.length, 1);
     const [observation] = evidence.observations;
-    assert.match(observation!.id, /^[0-9a-f-]{36}$/);
+    assert.ok(isUuid(observation!.id), `spot-rate observation ID must be a UUID; received ${JSON.stringify(observation!.id)}`);
     assert.equal(observation!.asOf, "2026-07-15");
     assert.equal(observation!.source, "manual");
     assert.equal(observation!.storedRate, "1.0820000000");

@@ -826,16 +826,13 @@ const subcontractTransitionCases = [{ label: "subcontract transition validation"
   (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
   const { registerHooks } = await import("node:module");
   const mockSources = new Map<string, string>([
-    ["mock:authz", "export async function guardPermission(){return {user:{orgId:'org-1',id:'user-1'},permissions:new Set(['*']),allowedSubsidiaryIds:null}};export function guardSubsidiaryScope(){return null}"],
-    ["mock:subsidiaries", "export function subsidiaryVisibleFilter(){return ''}"],
-    ["mock:feature-gate", "export async function guardSubcontractsFeature(){return null}"],
-    ["mock:features", "export async function isFeatureEnabled(){return true}"],
-    ["mock:db", "export const db={async execute(){throw Error('database work should not run for invalid transitions')},async transaction(){throw Error('transaction work should not run for invalid transitions')}}"],
-    ["mock:subcontracts", `const state=globalThis[Symbol.for('openbooks.subcontract-transition-route-test')];export {parseSubcontractTransitionAction,SubcontractConflictError,SubcontractError} from ${JSON.stringify(new URL('../../engine/src/projects/subcontracts.ts',import.meta.url).href)};export async function transitionSubcontract(){state.transitionCalls++};export function addSubcontractSovLine(){};export function approveSubcontract(){};export function approveSubcontractChangeOrder(){};export function approveVendorPayApplication(){};export function createSubcontract(){};export function createSubcontractChangeOrder(){};export function createSubcontractPaymentControl(){};export function createVendorPayApplication(){};export function generateVendorPayApplicationBill(){};export function releaseSubcontractPaymentControl(){};export function releaseVendorRetainage(){};export function removeSubcontractSovLine(){};export function submitSubcontract(){};export function submitVendorPayApplication(){};export function updateDraftSubcontract(){};export function updateVendorPayApplicationLines(){};export function voidSubcontractChangeOrder(){};export function voidVendorPayApplication(){}`],
+    ["mock:authz", `export * from ${JSON.stringify(new URL('./authz.ts', import.meta.url).href)};export async function guardPermission(permission){if(permission!=='ap.create')throw Error('unexpected subcontract permission: '+permission);return {user:{orgId:'org-1',id:'user-1'},permissions:new Set(['ap.create']),allowedSubsidiaryIds:null}}`],
+    ["mock:db", `export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))};export const db={async execute(){throw Error('database work should not run for invalid transitions')},async transaction(){throw Error('transaction work should not run for invalid transitions')}}`],
+    ["mock:subcontracts", `const state=globalThis[Symbol.for('openbooks.subcontract-transition-route-test')];export * from ${JSON.stringify(new URL('../../engine/src/projects/subcontracts.ts',import.meta.url).href)};export async function transitionSubcontract(){state.transitionCalls++;throw Error('invalid input must not reach the transition engine')}`],
   ]);
   const mockUrls = new Map<string, string>([
-    ["../../../lib/authz", "mock:authz"], ["../../../lib/subcontracts-gate", "mock:feature-gate"], ["../../../lib/subsidiaries", "mock:subsidiaries"],
-    ["../../../lib/features", "mock:features"], ["@openbooks/engine/src/platform/db.ts", "mock:db"], ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
+    ["../../../lib/authz", "mock:authz"],
+    ["@openbooks/engine/src/platform/db.ts", "mock:db"], ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
   ]);
   const hooks = registerHooks({
     resolve(specifier, context, next) { const mock = mockUrls.get(specifier); return mock ? { url: mock, shortCircuit: true } : next(specifier, context) },
@@ -848,8 +845,10 @@ const subcontractTransitionCases = [{ label: "subcontract transition validation"
     state.transitionCalls = 0;
             const response = await POST(new Request("http://openbooks.test/api/subcontracts", { method: "POST", headers: { "content-type": "application/json" },
               body: JSON.stringify({ action: "transitionSubcontract", id: "00000000-0000-4000-8000-000000000001", transition: "approve" }) }));
-            assert.equal(response.status, 400);
-            assert.match((await response.json()).error, /expected one of.*substantially_complete.*close.*void/);
+            assert.equal(response.status, 422);
+            const refusal = await response.json();
+            assert.match(refusal.error, /expected one of.*substantially_complete.*close.*void/);
+            assert.deepEqual(refusal.issues, [{ path: "transition", message: refusal.error }]);
     assert.equal(state.transitionCalls, 0, "invalid input must not reach the transition engine");
   });
 }}] as const;

@@ -29,12 +29,6 @@ const executionContextUrl = new URL('./report-execution-context.ts', import.meta
 
 const mockSources = new Map<string, string>([
   [
-    'mock:features',
-    `const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
-     export async function isFeatureEnabled(orgId, key) { return state.featuresOn.includes(key) }
-     export async function subsidiaryFeatureEnabled() { return false }`,
-  ],
-  [
     'mock:execution-context',
     `
       export * from '${executionContextUrl}'
@@ -101,7 +95,15 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `export * from '${dbUrl}'
+     import { FEATURES } from '${new URL('../../engine/src/organization/feature-registry.ts', import.meta.url).href}'
+     import { PgDialect } from 'drizzle-orm/pg-core'
+     const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
      export const db = { async execute(query) {
+       const compiled = new PgDialect().sqlToQuery(query);
+       if (compiled.sql.includes("settings->'features' as f from orgs")) {
+         if (compiled.params.length !== 1 || compiled.params[0] !== 'org-1') throw new Error('unexpected feature organization');
+         return { rows: [{ f: Object.fromEntries(FEATURES.map(feature => [feature.key, state.featuresOn.includes(feature.key)])) }] };
+       }
        const chunks = query?.queryChunks ?? [];
        const text = chunks.map((c) => typeof c === 'string' ? c : (Array.isArray(c?.value) ? c.value.join('') : '')).join(' ').slice(0, 200);
        if (text.includes('from accounting_books')) {
@@ -118,7 +120,6 @@ const mockSources = new Map<string, string>([
 const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
-  ['./features', mockUrl('features')],
   ['./report-execution-context', mockUrl('execution-context')],
   ['./consolidation', mockUrl('consolidation')],
   ['./periods', mockUrl('periods')],
@@ -176,6 +177,15 @@ test('aging exports use the same validated currency selection as the screen', as
   await resolveReport('aging', new URLSearchParams('currencyBasis=transaction&currency=EUR'), ctx)
 
   assert.deepEqual(agingState.agingOptions, [{ basis: 'transaction', reportingCurrency: 'EUR' }])
+})
+
+test('project profitability refuses a disabled Projects feature before reading balances', async () => {
+  agingState.featuresOn = []
+  agingState.bookThreading = []
+  await assert.rejects(resolveReport('project-profitability', new URLSearchParams(), ctx), {
+    message: 'projects feature is disabled',
+  })
+  assert.deepEqual(agingState.bookThreading, [])
 })
 
 // A secondary-book statement export must not silently mix primary-book
