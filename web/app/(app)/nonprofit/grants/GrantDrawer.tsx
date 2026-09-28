@@ -21,9 +21,9 @@ import {
   Textarea,
   UrlDrawer,
 } from '@openbooks/ui'
-import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
-import { confirmDialog } from '../../../lib/confirm'
-import { useAppAction } from '../../../lib/use-app-action'
+import { DrawerTabStrip } from '@/components/drawer-tab-strip'
+import { confirmDialog } from '@/lib/confirm'
+import { useAppAction } from '@/lib/use-app-action'
 import type { GrantDrawerData } from './view'
 
 type GrantTab = 'terms' | 'budget' | 'drawdowns' | 'reports' | 'activity'

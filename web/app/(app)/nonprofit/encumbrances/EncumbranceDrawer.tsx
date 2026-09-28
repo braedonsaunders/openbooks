@@ -20,9 +20,9 @@ import {
   TableRow,
   UrlDrawer,
 } from '@openbooks/ui'
-import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
-import { confirmDialog } from '../../../lib/confirm'
-import { useAppAction } from '../../../lib/use-app-action'
+import { DrawerTabStrip } from '@/components/drawer-tab-strip'
+import { confirmDialog } from '@/lib/confirm'
+import { useAppAction } from '@/lib/use-app-action'
 import type { EncumbranceDrawerData } from './view'
 
 type EncumbranceTab = 'details' | 'links' | 'appropriation'

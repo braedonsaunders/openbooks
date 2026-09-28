@@ -6,6 +6,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { resolveProjectActualCosts } from '@openbooks/engine/src/projects/financials.ts'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { assertUnrestrictedScope } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { isCustomFieldKey, type FilterClause, type ListViewConfig } from '@openbooks/customization'
 import { displayOpportunityStatusName } from '../crm-status-display'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -227,6 +228,21 @@ const inventoryMovementScopedWhere: EntityListSource['where'] = (
   allowedSubsidiaryIds,
 ) => sql`${inventoryMovementWhere(view, adhoc, orgId)}${subsidiaryVisibleFilter(sql`m.subsidiary_id`, allowedSubsidiaryIds ?? null)}`
 
+function pushNonprofitStatusFilter(
+  parts: SQL[],
+  filter: FilterClause,
+  statusExpr: SQL, statuses: readonly string[],
+): boolean {
+  if (filter.key !== 'status') return false
+  const values = (Array.isArray(filter.value) ? filter.value : [filter.value]).map(String)
+  if (values.some((value) => !statuses.includes(value))) { parts.push(sql`and false`); return true }
+  const list = sql.join(values.map((value) => sql`${value}`), sql`, `)
+  if ((filter.operator === 'eq' || filter.operator === 'ne') && values.length === 1) parts.push(filter.operator === 'eq' ? sql`and ${statusExpr} = ${values[0]}` : sql`and ${statusExpr} <> ${values[0]}`)
+  else if (filter.operator === 'in' || filter.operator === 'not_in') parts.push(values.length ? sql`and ${statusExpr} ${filter.operator === 'in' ? sql`in` : sql`not in`} (${list})`
+    : filter.operator === 'in' ? sql`and false` : sql`and true`)
+  else parts.push(sql`and false`)
+  return true
+}
 type ResourcingSourceWhere = {
   alias: string
   columns: Record<string, SQL>
@@ -1218,6 +1234,79 @@ const SOURCES: Record<string, EntityListSource> = {
       : value === 'pending_approval' ? 'warning'
       : value === 'draft' ? 'secondary'
       : 'outline',
+  },
+  grant: {
+    recordType: 'grant',
+    table: (orgId) => sql`(
+      select distinct on (g0.code) g0.*
+        from grants g0
+       where g0.org_id = ${orgId}
+       order by g0.code, g0.version desc, g0.id desc
+    )`,
+    alias: 'g',
+    customFieldTable: 'grants',
+    baseJoins: sql`join parties p on p.org_id = g.org_id and p.id = g.sponsor_party_id
+      join segment_values sv on sv.org_id = g.org_id and sv.id = g.fund_id`,
+    builtInExpr: {
+      code: sql`g.code`,
+      name: sql`g.name`,
+      sponsor: sql`p.display_name`,
+      determination: sql`g.determination`,
+      award_amount: sql`g.award_amount`,
+      period_from: sql`g.period_from`,
+      period_to: sql`g.period_to`,
+      fund: sql`sv.code`,
+      status: sql`g.status`,
+    },
+    sorts: { code: sql`g.code`, name: sql`g.name`, sponsor: sql`p.display_name`, determination: sql`g.determination`, award_amount: sql`g.award_amount`, period_from: sql`g.period_from`, period_to: sql`g.period_to`, fund: sql`sv.code`, status: sql`g.status` },
+    defaultSort: sql`g.code`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => {
+      assertUnrestrictedScope(allowedSubsidiaryIds)
+      const parts = [sql`g.org_id = ${orgId}`]
+      if (adhoc.q) parts.push(sql`and (g.code ilike ${`%${adhoc.q}%`} or g.name ilike ${`%${adhoc.q}%`} or p.display_name ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.filters.status) parts.push(sql`and g.status = ${adhoc.filters.status}`)
+      for (const filter of view.filters) {
+        if (pushCustomFieldFilter(parts, filter, 'g') || pushNonprofitStatusFilter(parts, filter, sql`g.status`, ['draft', 'awarded', 'active', 'closed_out', 'closed', 'void'])) continue
+        parts.push(sql`and false`)
+      }
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'grant',
+    basePath: '/nonprofit/grants',
+    statusVariant: (row) => row.status === 'active' ? 'success' : row.status === 'awarded' ? 'warning' : row.status === 'void' ? 'outline' : 'secondary',
+  },
+  encumbrance: {
+    recordType: 'encumbrance',
+    table: 'encumbrances',
+    alias: 'e',
+    customFieldTable: 'encumbrances',
+    baseJoins: sql`join accounts a on a.org_id = e.org_id and a.id = e.account_id
+      join subsidiaries s on s.org_id = e.org_id and s.id = e.subsidiary_id`,
+    builtInExpr: {
+      number: sql`e.encumbrance_number`,
+      source_kind: sql`e.source_kind`,
+      account: sql`case when coalesce(a.number, '') <> '' then a.number || ' · ' || a.name else a.name end`,
+      subsidiary: sql`s.name`,
+      amount: sql`e.amount`,
+      status: sql`e.status`,
+    },
+    sorts: { number: sql`e.encumbrance_number`, source_kind: sql`e.source_kind`, account: sql`a.number`, subsidiary: sql`s.name`, amount: sql`e.amount`, status: sql`e.status` },
+    defaultSort: sql`e.encumbrance_number`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => {
+      const resolvedScope = allowedSubsidiaryIds === undefined ? new Set<string>() : allowedSubsidiaryIds, parts = [sql`e.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`e.subsidiary_id`, resolvedScope)]
+      if (adhoc.q) parts.push(sql`and (e.encumbrance_number ilike ${`%${adhoc.q}%`} or a.number ilike ${`%${adhoc.q}%`} or a.name ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.filters.status) parts.push(sql`and e.status = ${adhoc.filters.status}`)
+      for (const filter of view.filters) {
+        if (pushCustomFieldFilter(parts, filter, 'e') || pushNonprofitStatusFilter(parts, filter, sql`e.status`, ['open', 'closed', 'void'])) continue
+        parts.push(sql`and false`)
+      }
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'encumbrance',
+    basePath: '/nonprofit/encumbrances',
+    statusVariant: (row) => row.status === 'open' ? 'success' : 'secondary',
   },
 }
 
