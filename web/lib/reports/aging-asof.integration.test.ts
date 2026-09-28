@@ -17,11 +17,12 @@ import { randomUUID } from 'node:crypto'
 const root = pathToFileURL(process.cwd() + '/').href
 const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
-const { agingByParty, agingDetail } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { agingByParty, agingDetail, bucketOf } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
 const { voidReportDocument } = await import('../../testing/document-void.ts')
 const { partnerBalances } = (await import(root + 'web/lib/reports/statements.ts')) as typeof import('./statements')
 const { partyRegister, partnerStatement } = (await import(root + 'web/lib/reports/registers.ts')) as typeof import('./registers')
+const { postDocument } = (await import(root + 'engine/src/ledger/posting-document.ts')) as typeof import('@openbooks/engine/src/ledger/posting-document.ts')
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
 
@@ -167,5 +168,46 @@ test('aging on the void date still matches the live open balances', { skip: !pro
     })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * Every label calls the last bucket "90+" (code comment, all locales), so an
+ * invoice exactly 90 days past due belongs in b4 — not in "61–90".
+ */
+test('aging puts a 90-day-old invoice in the 90+ bucket', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypassContext(() => createScratchOrg())
+  try {
+    const actor = await withBypassContext(() => createScratchUser(scratch.orgId, 'Aging Controller', 'admin'))
+    await withBypassContext(async () => {
+      const id = randomUUID()
+      await db.execute(sql`insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
+         currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${id}, ${scratch.orgId}, 'customer_invoice', 'draft', ${id}, ${scratch.subsidiaryId},
+          ${scratch.customerId}, ${scratch.date}, 'CAD', '1', 100, 0, 100, ${actor})`)
+      await db.execute(sql`insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+        values (${scratch.orgId}, ${id}, 1, ${scratch.accounts.revenue}, 1, 100, 100, 0, 100)`)
+      await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
+      await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
+      // 2026-06-02 is exactly 90 days before the 2026-08-31 as-of.
+      await db.execute(sql`update documents set due_date = '2026-06-02' where id = ${id}`)
+    })
+    assert.equal(bucketOf(90), 'b4')
+    assert.equal(bucketOf(89), 'b3')
+    // Reads run in the scratch org's scope: importing the aging reader pulls
+    // in the web request-org resolver, which denies every query outside an
+    // explicit scope (pooled RLS), so a bare read sees zero rows.
+    await withOrgContext(scratch.orgId, async () => {
+      const aging = await agingByParty('ar', '2026-08-31', undefined, scratch.orgId)
+      assert.equal(aging.rows.length, 1)
+      assert.equal(aging.totals.b4, '100.0000')
+      assert.equal(aging.totals.b3, '0.0000')
+      const detail = await agingDetail('ar', '2026-08-31', undefined, scratch.orgId)
+      assert.equal(detail.rows[0]?.bucket, 'b4')
+    })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(scratch.orgId))
   }
 })
