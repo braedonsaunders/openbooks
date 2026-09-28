@@ -78,6 +78,8 @@
     "columns": {
       "debit": "Debit",
       "credit": "Credit"
-    }
+    },
+    "budgetaryControlWarning": "Budget {scenario} is over appropriation for {account}, fund {fund}, {subsidiary}{dimensions}: available {available}, over by {amountOver}.",
+    "budgetaryControlRemedy": "Revise the budget through its approval flow, or link this actual to the named encumbrance."
   }
 }

@@ -78,6 +78,8 @@
     "columns": {
       "debit": "Soll",
       "credit": "Haben"
-    }
+    },
+    "budgetaryControlWarning": "Budget {scenario} überschreitet die Zuweisung für {account}, Fonds {fund}, {subsidiary}{dimensions}: verfügbar {available}, überschritten um {amountOver}.",
+    "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen oder den Ist-Betrag mit der genannten Verpflichtung verknüpfen."
   }
 }

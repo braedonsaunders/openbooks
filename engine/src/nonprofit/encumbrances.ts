@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { addMoney, cmpMoney, negMoney, parseMoney, subMoney, type Money } from "../money/brands.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { db, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
+import { db, type SqlExecutor, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { fundPostingRefusal, NonprofitError, type NonprofitStatus } from "./errors.ts";
 import type { BalancingContext, BalancingLeg, BalancingLegProvider, BalancingLineView } from "../journal/balancing-hooks.ts";
@@ -52,6 +52,15 @@ export interface BudgetCellFigures {
   fundName: string;
   subsidiaryId: string;
   subsidiaryName: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  classId: string | null;
+  className: string | null;
+  extraDims: Record<string, unknown>;
   appropriation: Money;
   actuals: Money;
   openEncumbrances: Money;
@@ -292,6 +301,18 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
     });
     return { id: inserted.id, encumbranceNumber, status: "open" };
   });
+}
+
+/**
+ * Stored subsidiary for route-level scope enforcement. Null when the record
+ * is missing or outside the organization — the command boundary answers 404
+ * without distinguishing the two.
+ */
+export async function encumbranceSubsidiaryId(orgId: string, id: string): Promise<string | null> {
+  const row = (await db.execute<{ subsidiary_id: string }>(sql`
+    select subsidiary_id from encumbrances where org_id = ${orgId} and id = ${id}
+  `)).rows[0];
+  return row?.subsidiary_id ?? null;
 }
 
 export async function encumbranceOpenBalance(runner: SqlExecutor, orgId: string, id: string): Promise<EncumbranceBalance> {
@@ -568,13 +589,23 @@ async function cellFiguresForScenario(input: {
     fundCode: string;
     fundName: string;
     subsidiaryName: string;
+    departmentName: string | null;
+    projectName: string | null;
+    locationName: string | null;
+    className: string | null;
   }>(sql`
     select a.number as "accountNumber", a.name as "accountName",
-           sv.code as "fundCode", sv.name as "fundName", s.name as "subsidiaryName"
+           sv.code as "fundCode", sv.name as "fundName", s.name as "subsidiaryName",
+           d.name as "departmentName", p.name as "projectName",
+           l.name as "locationName", c.name as "className"
       from accounts a
       join funds f on f.org_id = a.org_id and f.id = ${cell.fundId}
       join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
       join subsidiaries s on s.org_id = a.org_id and s.id = ${cell.subsidiaryId}
+      left join departments d on d.org_id = a.org_id and d.id = ${cell.departmentId}
+      left join projects p on p.org_id = a.org_id and p.id = ${cell.projectId}
+      left join locations l on l.org_id = a.org_id and l.id = ${cell.locationId}
+      left join classes c on c.org_id = a.org_id and c.id = ${cell.classId}
      where a.org_id = ${orgId} and a.id = ${cell.accountId}
   `)).rows[0];
   if (!labels) return null;
@@ -656,6 +687,15 @@ async function cellFiguresForScenario(input: {
     fundName: labels.fundName,
     subsidiaryId: cell.subsidiaryId,
     subsidiaryName: labels.subsidiaryName,
+    departmentId: cell.departmentId,
+    departmentName: labels.departmentName,
+    projectId: cell.projectId,
+    projectName: labels.projectName,
+    locationId: cell.locationId,
+    locationName: labels.locationName,
+    classId: cell.classId,
+    className: labels.className,
+    extraDims: cell.extraDims,
     appropriation,
     actuals,
     openEncumbrances,
@@ -804,4 +844,218 @@ export async function budgetaryControlWarnings(
     });
   }
   return warnings;
+}
+
+export interface EncumbranceLinkItem {
+  documentLineId: string;
+  documentId: string;
+  documentNumber: string;
+  documentStatus: string;
+  amount: string;
+}
+
+export interface EncumbranceDetail {
+  id: string;
+  encumbranceNumber: string;
+  sourceKind: EncumbranceSourceKind;
+  sourceId: string | null;
+  accountId: string;
+  accountNumber: string | null;
+  accountName: string;
+  subsidiaryId: string;
+  subsidiaryName: string;
+  departmentId: string | null;
+  projectId: string | null;
+  locationId: string | null;
+  classId: string | null;
+  fundId: string;
+  extraDims: Record<string, unknown>;
+  amount: string;
+  appliedActuals: string;
+  openBalance: string;
+  status: EncumbranceStatus;
+  links: EncumbranceLinkItem[];
+  figures: BudgetCellFigures | null;
+}
+
+/**
+ * Drawer reader: the stored commitment, its open balance, linked actuals,
+ * and the appropriation comparison for its cell. Null when the record is
+ * missing or outside the organization — the page boundary renders no drawer
+ * and the command boundary answers 404.
+ */
+export async function getEncumbranceDetail(orgId: string, id: string, asOf: string): Promise<EncumbranceDetail | null> {
+  return withOrgContext(orgId, async () => {
+    await requireEnabledForRead(db, orgId);
+    const row = (await db.execute<{
+      id: string; encumbrance_number: string; source_kind: EncumbranceSourceKind; source_id: string | null;
+      account_id: string; account_number: string | null; account_name: string;
+      subsidiary_id: string; subsidiary_name: string;
+      department_id: string | null; project_id: string | null; location_id: string | null; class_id: string | null;
+      extra_dims: Record<string, unknown>; amount: string; status: EncumbranceStatus;
+    }>(sql`
+      select e.id, e.encumbrance_number, e.source_kind, e.source_id,
+             e.account_id, a.number as account_number, a.name as account_name,
+             e.subsidiary_id, s.name as subsidiary_name,
+             e.department_id::text as department_id, e.project_id::text as project_id,
+             e.location_id::text as location_id, e.class_id::text as class_id,
+             e.extra_dims, e.amount::text as amount, e.status
+        from encumbrances e
+        join accounts a on a.org_id = e.org_id and a.id = e.account_id
+        join subsidiaries s on s.org_id = e.org_id and s.id = e.subsidiary_id
+       where e.org_id = ${orgId} and e.id = ${id}
+    `)).rows[0];
+    if (!row) return null;
+    const balance = await balanceWithRunner(db, orgId, id);
+    if (!balance) return null;
+    const links = (await db.execute<{
+      document_line_id: string; document_id: string; document_number: string; document_status: string; amount: string;
+    }>(sql`
+      select l.document_line_id, dl.document_id, d.document_number, d.status as document_status,
+             dl.amount::text as amount
+        from encumbrance_links l
+        join document_lines dl on dl.org_id = l.org_id and dl.id = l.document_line_id
+        join documents d on d.org_id = dl.org_id and d.id = dl.document_id
+       where l.org_id = ${orgId} and l.encumbrance_id = ${id}
+       order by d.document_number, l.document_line_id
+    `)).rows;
+    const fundId = typeof row.extra_dims.fund === "string" ? row.extra_dims.fund : "";
+    const figures = fundId
+      ? await readBudgetCellFigures(db, {
+          orgId, bookId: null, postingDate: asOf,
+          cell: {
+            accountId: row.account_id, subsidiaryId: row.subsidiary_id,
+            departmentId: row.department_id, projectId: row.project_id,
+            locationId: row.location_id, classId: row.class_id,
+            fundId, extraDims: row.extra_dims,
+          },
+        })
+      : null;
+    return {
+      id: row.id, encumbranceNumber: row.encumbrance_number, sourceKind: row.source_kind, sourceId: row.source_id,
+      accountId: row.account_id, accountNumber: row.account_number, accountName: row.account_name,
+      subsidiaryId: row.subsidiary_id, subsidiaryName: row.subsidiary_name,
+      departmentId: row.department_id, projectId: row.project_id,
+      locationId: row.location_id, classId: row.class_id, fundId,
+      extraDims: row.extra_dims,
+      amount: row.amount, appliedActuals: balance.appliedActuals, openBalance: balance.openBalance,
+      status: row.status,
+      links: links.rows.map((link) => ({
+        documentLineId: link.document_line_id, documentId: link.document_id,
+        documentNumber: link.document_number, documentStatus: link.document_status, amount: link.amount,
+      })),
+      figures,
+    };
+  });
+}
+
+const ENCUMBRANCE_STATUSES: EncumbranceStatus[] = ["open", "closed", "void"];
+
+export interface EncumbranceListItem {
+  id: string;
+  encumbranceNumber: string;
+  sourceKind: EncumbranceSourceKind;
+  accountId: string;
+  accountNumber: string | null;
+  accountName: string;
+  subsidiaryId: string;
+  subsidiaryName: string;
+  amount: string;
+  status: EncumbranceStatus;
+}
+
+export interface ListEncumbrancesInput {
+  orgId: string;
+  status?: EncumbranceStatus | EncumbranceStatus[];
+  subsidiaryId?: string;
+  accountId?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+  /**
+   * Server-owned caller scope. Null reads unrestricted; an empty list reads
+   * nothing; otherwise only rows whose stored subsidiary is listed are
+   * returned, with the same-scope total. The stored subsidiary stays the
+   * authority — this reader performs no post-filtering.
+   */
+  allowedSubsidiaryIds: readonly string[] | null;
+}
+
+/**
+ * Collection reader for the encumbrance register. Rows carry their stored
+ * subsidiary, and the caller allowlist scopes both rows and total to it, so
+ * route and page boundaries consume this reader directly — never a
+ * post-filter or a parallel query.
+ */
+export async function listEncumbrances(input: ListEncumbrancesInput): Promise<{ items: EncumbranceListItem[]; total: number }> {
+  const statuses = input.status === undefined ? [] : Array.isArray(input.status) ? input.status : [input.status];
+  for (const status of statuses) {
+    if (!ENCUMBRANCE_STATUSES.includes(status)) {
+      throw refuse("The commitment status filter is not supported.", "encumbrance_status_invalid", "Filter by an open, closed, or void commitment state.", 422, "status");
+    }
+  }
+  if (input.subsidiaryId !== undefined && !isUuid(input.subsidiaryId)) {
+    throw refuse("The subsidiary filter must identify a valid record.", "encumbrance_subsidiary_invalid", "Choose a subsidiary from this organization.", 422, "subsidiaryId");
+  }
+  if (input.accountId !== undefined && !isUuid(input.accountId)) {
+    throw refuse("The account filter must identify a valid record.", "encumbrance_account_filter_invalid", "Choose an expense account from this organization.", 422, "accountId");
+  }
+  if (!Object.hasOwn(input, 'allowedSubsidiaryIds') || (input.allowedSubsidiaryIds !== null && !Array.isArray(input.allowedSubsidiaryIds))) {
+    throw refuse("Subsidiary scope is required.", "encumbrance_scope_required", "Call with null for unrestricted scope, an empty list for no access, or the caller's allowed subsidiaries.", 422, "allowedSubsidiaryIds");
+  }
+  const allowlist = input.allowedSubsidiaryIds;
+  if (allowlist !== null) {
+    for (const id of allowlist) {
+      if (!isUuid(id)) {
+        throw refuse("The subsidiary scope must identify valid records.", "encumbrance_scope_invalid", "Call with the caller's allowed subsidiaries, null for unrestricted scope, or an empty list for no access.", 422, "allowedSubsidiaryIds");
+      }
+    }
+  }
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 200);
+  const offset = Math.max(Math.trunc(input.offset ?? 0), 0);
+  const q = input.q?.trim() ? `%${input.q.trim()}%` : null;
+  return withOrgContext(input.orgId, async () => {
+    await requireEnabledForRead(db, input.orgId);
+    const rows = await db.execute<{
+      id: string; encumbrance_number: string; source_kind: EncumbranceSourceKind;
+      account_id: string; account_number: string | null; account_name: string;
+      subsidiary_id: string; subsidiary_name: string;
+      amount: string; status: EncumbranceStatus; total: number;
+    }>(sql`
+      with filtered as (
+        select e.id, e.encumbrance_number, e.source_kind,
+               e.account_id, a.number as account_number, a.name as account_name,
+               e.subsidiary_id, s.name as subsidiary_name,
+               e.amount::text as amount, e.status
+          from encumbrances e
+          join accounts a on a.org_id = e.org_id and a.id = e.account_id
+          join subsidiaries s on s.org_id = e.org_id and s.id = e.subsidiary_id
+         where e.org_id = ${input.orgId}
+           and (${statuses.length === 0 ? sql`true` : sql`e.status = any(${`{${statuses.join(",")}}`}::text[])`})
+           and (${input.subsidiaryId ?? null}::uuid is null or e.subsidiary_id = ${input.subsidiaryId ?? null}::uuid)
+           and (${input.accountId ?? null}::uuid is null or e.account_id = ${input.accountId ?? null}::uuid)
+           and (${allowlist === null ? sql`true` : sql`e.subsidiary_id = any(${uuidArray(allowlist)}::uuid[])`})
+           and (${q ?? null}::text is null or e.encumbrance_number ilike ${q ?? null}::text)
+      ),
+      page as (
+        select * from filtered order by encumbrance_number limit ${limit} offset ${offset}
+      ),
+      scope_total as (
+        select count(*)::int as total from filtered
+      )
+      select page.*, (select total from scope_total) as total from page
+      union all
+      select null, null, null, null, null, null, null, null, null, null, (select total from scope_total)
+       where not exists (select 1 from page)
+    `);
+    return {
+      items: rows.rows.filter((row) => row.id !== null).map((row) => ({
+        id: row.id, encumbranceNumber: row.encumbrance_number, sourceKind: row.source_kind,
+        accountId: row.account_id, accountNumber: row.account_number, accountName: row.account_name,
+        subsidiaryId: row.subsidiary_id, subsidiaryName: row.subsidiary_name,
+        amount: row.amount, status: row.status,
+      })),
+      total: rows.rows[0]?.total ?? 0,
+    };
+  });
 }

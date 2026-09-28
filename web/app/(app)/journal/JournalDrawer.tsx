@@ -366,7 +366,7 @@ export function JournalDrawer({
   // A posted-with-warnings post pins here: the entry IS posted,
   // but its party-less control legs sit outside every subledger, so the
   // drawer keeps saying so until the next action (same rule as refusals).
-  const [postWarning, setPostWarning] = useState<string | null>(null)
+  const [postWarnings, setPostWarnings] = useState<string[]>([])
 
   // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
   // The header subsidiary is the journal's home entity; the OPTIONAL per-line
@@ -720,7 +720,7 @@ export function JournalDrawer({
   }
 
   async function post() {
-    setPostWarning(null)
+    setPostWarnings([])
     const ok = await execute(
       () =>
         fetchAction('/api/journals/actions', {
@@ -733,7 +733,28 @@ export function JournalDrawer({
         onOk: async (data) => {
           const posted = data as {
             pendingApproval?: boolean
-            warnings?: { code: string; accounts: { number: string | null; name: string }[] }[]
+            warnings?: (
+              | { code: 'partyless_control_lines'; accounts: { number: string | null; name: string }[] }
+              | {
+                  code: 'budgetary_control_advisory'
+                  overages: {
+                    scenarioName: string
+                    accountNumber: string
+                    accountName: string
+                    fundCode: string
+                    fundName: string
+                    subsidiaryName: string
+                    departmentName: string | null
+                    projectName: string | null
+                    locationName: string | null
+                    className: string | null
+                    extraDims: Record<string, unknown>
+                    available: string
+                    amountOver: string
+                  }[]
+                }
+              | { code: string }
+            )[]
           }
           // Posting commits a new documents.revision_seq (migration 0167 bumps it
           // on EVERY update): re-pin the canonical token now, or the next fenced
@@ -741,14 +762,48 @@ export function JournalDrawer({
           await refreshFromServer(false).catch(() => {})
           if (posted.pendingApproval) toast.success(tc('actions.submitForApproval'))
           else toast.success(t('postedToast'))
+          const pinned: string[] = []
           const partyless = (posted.warnings ?? []).find((w) => w.code === 'partyless_control_lines')
-          if (partyless && partyless.accounts.length > 0) {
-            setPostWarning(
+          if (partyless && 'accounts' in partyless && partyless.accounts.length > 0) {
+            pinned.push(
               t('partylessControlWarning', {
                 accounts: partyless.accounts.map((a) => `${a.number ?? ''} ${a.name}`.trim()).join(', '),
               }),
             )
           }
+          // Advisory budgetary-control overages post legitimately: the entry
+          // IS posted, and each overage pins here with its remedy instead of
+          // accepting the journal silently. Hard control still refuses
+          // pre-commit and never reaches this response.
+          const advisory = (posted.warnings ?? []).find((w) => w.code === 'budgetary_control_advisory')
+          if (advisory && 'overages' in advisory) {
+            for (const overage of advisory.overages) {
+              // Every applicable named dimension stays visible: names that
+              // do not apply are omitted rather than rendered blank.
+              const dimensionNames = [
+                overage.departmentName,
+                overage.projectName,
+                overage.locationName,
+                overage.className,
+                ...Object.keys(overage.extraDims ?? {})
+                  .filter((key) => key !== 'fund' && ['string', 'number', 'boolean'].includes(typeof (overage.extraDims as Record<string, unknown>)[key]))
+                  .sort()
+                  .map((key) => `${key}: ${String((overage.extraDims as Record<string, unknown>)[key])}`),
+              ].filter((name): name is string => !!name)
+              pinned.push(
+                `${t('budgetaryControlWarning', {
+                  scenario: overage.scenarioName,
+                  account: `${overage.accountNumber} ${overage.accountName}`.trim(),
+                  fund: `${overage.fundCode} ${overage.fundName}`.trim(),
+                  subsidiary: overage.subsidiaryName,
+                  dimensions: dimensionNames.length > 0 ? ` (${dimensionNames.join(' · ')})` : '',
+                  available: overage.available,
+                  amountOver: overage.amountOver,
+                })} ${t('budgetaryControlRemedy')}`,
+              )
+            }
+          }
+          setPostWarnings(pinned)
         },
       },
     )
@@ -1046,11 +1101,11 @@ export function JournalDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('postFailed')} />
-        {postWarning ? (
-          <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-            {postWarning}
+        {postWarnings.map((warning, index) => (
+          <p key={index} role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            {warning}
           </p>
-        ) : null}
+        ))}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>

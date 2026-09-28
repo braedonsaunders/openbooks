@@ -1611,4 +1611,91 @@ export async function listGrantActivity(orgId: string, grantId: string): Promise
   });
 }
 
+const GRANT_STATUSES: GrantStatus[] = ["draft", "awarded", "active", "closed_out", "closed", "void"];
+
+export interface GrantListItem {
+  id: string;
+  code: string;
+  name: string;
+  sponsorName: string | null;
+  determination: GrantDetermination;
+  status: GrantStatus;
+  awardAmount: string;
+  periodFrom: string;
+  periodTo: string;
+  fundCode: string;
+  version: number;
+}
+
+export interface ListGrantsInput {
+  orgId: string;
+  status?: GrantStatus | GrantStatus[];
+  fundId?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Collection reader for the grant register. One row per award code at its
+ * current version; org-wide, so subsidiary-restricted callers are refused at
+ * the route and page boundaries, never filtered here.
+ */
+export async function listGrants(input: ListGrantsInput): Promise<{ items: GrantListItem[]; total: number }> {
+  const statuses = input.status === undefined ? [] : Array.isArray(input.status) ? input.status : [input.status];
+  for (const status of statuses) {
+    if (!GRANT_STATUSES.includes(status)) {
+      throw refusal({ message: "The grant status filter is not supported.", code: "grant_status_invalid", remedy: "Filter by a supported grant lifecycle state.", field: "status" });
+    }
+  }
+  if (input.fundId !== undefined) requireUuid(input.fundId, "fundId");
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 200);
+  const offset = Math.max(Math.trunc(input.offset ?? 0), 0);
+  const q = input.q?.trim() ? `%${input.q.trim()}%` : null;
+  return withGrantRead(input.orgId, async (runner) => {
+    const rows = await runner.execute<{
+      id: string; code: string; name: string; sponsor_name: string | null;
+      determination: GrantDetermination; status: GrantStatus;
+      award_amount: string; period_from: string; period_to: string;
+      fund_code: string; version: number; total: number;
+    }>(sql`
+      with scoped as (
+        select distinct on (g.code)
+               g.id, g.code, g.name, p.display_name as sponsor_name, g.determination, g.status,
+               g.award_amount::text as award_amount, g.period_from::text as period_from,
+               g.period_to::text as period_to, sv.code as fund_code, g.version, g.fund_id
+          from grants g
+          left join parties p on p.org_id = g.org_id and p.id = g.sponsor_party_id
+          join segment_values sv on sv.org_id = g.org_id and sv.id = g.fund_id
+         where g.org_id = ${input.orgId}
+         order by g.code, g.version desc
+      ),
+      filtered as (
+        select * from scoped s
+         where (${statuses.length === 0 ? sql`true` : sql`s.status = any(${`{${statuses.join(",")}}`}::text[])`})
+           and (${input.fundId ?? null}::uuid is null or s.fund_id = ${input.fundId ?? null}::uuid)
+           and (${q ?? null}::text is null or s.code ilike ${q ?? null}::text or s.name ilike ${q ?? null}::text)
+      ),
+      page as (
+        select * from filtered order by code limit ${limit} offset ${offset}
+      ),
+      scope_total as (
+        select count(*)::int as total from filtered
+      )
+      select page.*, (select total from scope_total) as total from page
+      union all
+      select null, null, null, null, null, null, null, null, null, null, null, (select total from scope_total)
+       where not exists (select 1 from page)
+    `);
+    return {
+      items: rows.rows.filter((row) => row.id !== null).map((row) => ({
+        id: row.id, code: row.code, name: row.name, sponsorName: row.sponsor_name,
+        determination: row.determination, status: row.status, awardAmount: row.award_amount,
+        periodFrom: row.period_from, periodTo: row.period_to, fundCode: row.fund_code, version: row.version,
+      })),
+      total: rows.rows[0]?.total ?? 0,
+    };
+  });
+}
+
 export { grantReportStatus };
