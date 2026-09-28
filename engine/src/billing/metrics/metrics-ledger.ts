@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
   add,
@@ -7,6 +6,12 @@ import {
   mulDecimal,
   neg,
 } from "../../money/money.ts";
+import {
+  averageSpotRateForMonthWithEvidence,
+  lookupSpotRateWithEvidence,
+  type FxAsOfEvidence,
+  type FxMonthAverageEvidence,
+} from "../../fx/spot-rate.ts";
 import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
@@ -26,6 +31,10 @@ import {
   type Interval,
 } from "../subscription-billing.ts";
 import { UsageBillingError } from "../usage/errors.ts";
+import {
+  normalizationInputsHash,
+  SAAS_METRICS_DENOMINATION_VERSION,
+} from "./metrics-normalization.ts";
 
 const FEATURES_REMEDY = "Enable SaaS metrics in Company Settings → Features.";
 const CLOSED_PERIOD_REMEDY =
@@ -156,11 +165,33 @@ type MonthlySubscriptionFact = {
   booking: string;
 };
 
-type RevenueRow = { subscription_id: string; revenue: string };
-type DeferredRow = { subscription_id: string; deferred_delta: string; deferred_balance: string };
-type LedgerFactRow = { subsidiary_id: string; revenue: string; cogs: string };
-type BillingRow = { subsidiary_id: string; billings: string };
-type SubsidiaryRow = { id: string };
+type RevenueBucket = {
+  subscription_id: string;
+  subsidiary_id: string;
+  functional_currency: string;
+  entry_ids: string[];
+  revenue: string;
+};
+type DeferredBucket = {
+  subscription_id: string;
+  subsidiary_id: string;
+  functional_currency: string;
+  entry_ids: string[];
+  deferred_delta: string;
+  deferred_balance: string;
+};
+type LedgerBucket = { subsidiary_id: string; functional_currency: string; revenue: string; cogs: string };
+type BillingLeg = {
+  document_id: string;
+  subsidiary_id: string;
+  functional_currency: string;
+  txn_currency: string;
+  txn_amount: string;
+  stored_fx_rate: string;
+  leg: string;
+  effective_date: string;
+};
+type SubsidiaryRow = { id: string; base_currency: string };
 type PeriodBookRow = { period_id: string; book_id: string };
 
 function refusal(
@@ -170,10 +201,6 @@ function refusal(
   options?: { field?: string | null; status?: 422 | 409 },
 ): UsageBillingError {
   return new UsageBillingError(code, message, remedy, options);
-}
-
-function hash(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 function moneySum(values: readonly string[]): string {
@@ -268,35 +295,102 @@ function movementAmounts(
   }
 }
 
-async function spotRate(
+/**
+ * Normalization doctrine shared by every translator below. All FX evidence
+ * comes from the direct-or-inverse `fx_rates` spot readers: the authoritative
+ * table is `fx_rates`, and a manual consolidated override changes
+ * consolidation output, never the evidence here. `consolidated_fx_rates` is
+ * never imported or read by this module.
+ */
+type FxEvidenceCache = {
+  asOf: Map<string, FxAsOfEvidence>;
+  monthAverage: Map<string, FxMonthAverageEvidence>;
+};
+
+function fxRemedy(fromCurrency: string, toCurrency: string, scope: string): string {
+  return `Add the dated spot rate ${fromCurrency}→${toCurrency} ${scope} under Company Settings → Setup → FX rates, then recompute the month.`;
+}
+
+/** Current (as-of) spot with evidence; refuses by name when the pair is uncovered. */
+async function asOfEvidence(
   executor: SqlExecutor,
   orgId: string,
-  fromCurrency: string,
-  toCurrency: string,
-  onDate: string,
-): Promise<string> {
-  if (fromCurrency === toCurrency) return "1.0000000000";
-  const result = await executor.execute<{ rate: string; as_of: string }>(sql`
-    select rate::text, as_of::text from (
-      select rate, as_of, 0 as priority from fx_rates
-       where org_id = ${orgId} and from_currency = ${fromCurrency}
-         and to_currency = ${toCurrency} and rate_type = 'spot' and as_of <= ${onDate}
-      union all
-      select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
-       where org_id = ${orgId} and from_currency = ${toCurrency}
-         and to_currency = ${fromCurrency} and rate_type = 'spot' and as_of <= ${onDate}
-    ) rates order by as_of desc, priority asc limit 1
-  `);
-  const rate = result.rows[0]?.rate;
-  if (!rate) {
+  cache: FxEvidenceCache,
+  args: { measure: string; from: string; to: string; onDate: string; field: string; context: string },
+): Promise<FxAsOfEvidence> {
+  const key = `${args.from}→${args.to}:${args.onDate}`;
+  let evidence = cache.asOf.get(key);
+  if (!evidence) {
+    evidence = await lookupSpotRateWithEvidence(executor, orgId, args.from, args.to, args.onDate);
+    cache.asOf.set(key, evidence);
+  }
+  if (evidence.rate === null) {
     throw refusal(
       "saas_metrics_fx_rate_missing",
-      `No spot FX rate is available for subscription MRR ${fromCurrency}→${toCurrency} on or before ${onDate}.`,
-      `Enable Multi-currency in Company Settings → Features if needed, add the dated spot rate ${fromCurrency}→${toCurrency} on or before ${onDate} under Company Settings → Setup → FX rates, then recompute the month.`,
-      { field: "plan_currency" },
+      `No spot FX rate is available for ${args.measure} ${args.from}→${args.to} on or before ${args.onDate} (${args.context}).`,
+      fxRemedy(args.from, args.to, `on or before ${args.onDate}`),
+      { field: args.field },
     );
   }
-  return rate;
+  return evidence;
+}
+
+/**
+ * Exact calendar-month average with evidence. The window is always the
+ * calendar month the helper derives — an accounting period that starts or
+ * ends mid-month never narrows or widens it. Refuses by name when the month
+ * holds no dated observation; there is no closing/current fallback.
+ */
+async function monthAverageEvidence(
+  executor: SqlExecutor,
+  orgId: string,
+  cache: FxEvidenceCache,
+  args: { measure: string; from: string; to: string; year: number; month: number; field: string; context: string },
+): Promise<FxMonthAverageEvidence> {
+  const month = `${args.year}-${String(args.month).padStart(2, "0")}`;
+  const key = `${args.from}→${args.to}:${month}`;
+  let evidence = cache.monthAverage.get(key);
+  if (!evidence) {
+    evidence = await averageSpotRateForMonthWithEvidence(executor, orgId, args.from, args.to, args.year, args.month);
+    cache.monthAverage.set(key, evidence);
+  }
+  if (evidence.rate === null) {
+    throw refusal(
+      "saas_metrics_fx_rate_missing",
+      `No calendar-month-average FX rate is available for ${args.measure} ${args.from}→${args.to} for ${month} (${args.context}).`,
+      fxRemedy(args.from, args.to, `quoted in ${month}`),
+      { field: args.field },
+    );
+  }
+  return evidence;
+}
+
+/**
+ * Before any sum or write, every subscription journal source must resolve to
+ * exactly one subsidiary, and that subsidiary must be the subscription's
+ * trusted billing subsidiary. A source with no rows is genuinely nil and
+ * stays zero; a source spread across subsidiaries, or posted under another
+ * legal entity, refuses before aggregation — the grain is never redesigned
+ * around a mis-attributed entry.
+ */
+function attributedBucket<Bucket extends { subsidiary_id: string; entry_ids: string[] }>(args: {
+  measure: string;
+  subscriptionId: string;
+  trustedSubsidiaryId: string;
+  buckets: Bucket[];
+}): Bucket | null {
+  if (args.buckets.length === 0) return null;
+  const distinct = [...new Set(args.buckets.map((bucket) => bucket.subsidiary_id))];
+  if (distinct.length !== 1 || distinct[0] !== args.trustedSubsidiaryId) {
+    const entryIds = [...new Set(args.buckets.flatMap((bucket) => bucket.entry_ids))].sort();
+    throw refusal(
+      "saas_metrics_subscription_attribution_mismatch",
+      `Subscription ${args.subscriptionId} has ${args.measure} journal lines attributed to subsidiary ${distinct.join(", ")} (entries ${entryIds.join(", ") || "none"}), but the subscription bills under subsidiary ${args.trustedSubsidiaryId}.`,
+      `Reverse the mis-attributed entry and repost it under subsidiary ${args.trustedSubsidiaryId}, or reassign the subscription's billing subsidiary, then recompute the month.`,
+      { field: "subsidiary_id" },
+    );
+  }
+  return args.buckets[0]!;
 }
 
 async function monthCloseState(
@@ -345,10 +439,10 @@ async function readSources(
   subscriptions: SubscriptionSource[];
   history: HistoryRow[];
   revenueRecognitionEnabled: boolean;
-  revenueRows: RevenueRow[];
-  deferredRows: DeferredRow[];
-  ledgerRows: LedgerFactRow[];
-  billingRows: BillingRow[];
+  revenueBuckets: RevenueBucket[];
+  deferredBuckets: DeferredBucket[];
+  ledgerBuckets: LedgerBucket[];
+  billingLegs: BillingLeg[];
   cohortStartRows: Array<{ subsidiary_id: string; cohort_month: string; start_mrr: string; start_customers: number }>;
 }> {
   const bounds = await executor.execute<{ month_end: string; previous_month: string }>(sql`
@@ -363,7 +457,7 @@ async function readSources(
   if (!org) throw refusal("saas_metrics_org_missing", "The organization no longer exists.", "Select an active organization and run the metrics recompute again.");
   const definitions = saasMetricsDefinitions(orgId, org.settings);
   const subsidiaries = (await executor.execute<SubsidiaryRow>(sql`
-    select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
+    select id, base_currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
   `)).rows;
   const subscriptions = (await executor.execute<SubscriptionSource>(sql`
     select s.id, s.customer_id,
@@ -398,7 +492,10 @@ async function readSources(
     `)).rows;
   }
   const revenueRecognitionEnabled = await orgFeatureEnabled(orgId, "revenueRecognition", executor);
-  const revenueRows = (await executor.execute<RevenueRow>(sql`
+  // Journal amounts below are subsidiary-functional, never org-base: each
+  // bucket keeps its functional currency so translation happens per legal
+  // entity against month evidence, before any sum.
+  const revenueBuckets = (await executor.execute<RevenueBucket>(sql`
     with source_documents as (
       select d.id, d.posted_entry_id, d.reversal_entry_id, s.id as subscription_id
         from documents d
@@ -424,17 +521,21 @@ async function readSources(
        where s.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
          and d.status in ('posted', 'voided') and posted.entry_id is not null` : sql``}
     )
-    select e.subscription_id, coalesce(sum(-l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as revenue
+    select e.subscription_id, l.subsidiary_id, sub.base_currency as functional_currency,
+           array_agg(distinct e.entry_id::text order by e.entry_id::text) as entry_ids,
+           coalesce(sum(-l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as revenue
       from entries e
       join journal_entries je on je.org_id = ${orgId} and je.id = e.entry_id and je.status in ('posted', 'reversed')
       join accounting_books b on b.org_id = je.org_id and b.id = je.book_id and b.is_primary and b.is_active and b.posts_gl
       join journal_lines l on l.org_id = je.org_id and l.entry_id = je.id
       join accounts a on a.org_id = l.org_id and a.id = l.account_id
+      join subsidiaries sub on sub.org_id = je.org_id and sub.id = l.subsidiary_id
      where je.posting_date >= ${month}::date
        and je.posting_date < (${month}::date + interval '1 month')
-     group by e.subscription_id
+     group by e.subscription_id, l.subsidiary_id, sub.base_currency
+     order by e.subscription_id, l.subsidiary_id
   `)).rows;
-  const deferredRows = (await executor.execute<DeferredRow>(sql`
+  const deferredBuckets = (await executor.execute<DeferredBucket>(sql`
     with subscription_obligations as (
       select distinct s.id as subscription_id, po.id as obligation_id,
              coalesce(po.deferred_account_id, rr.deferred_account_id) as deferred_account_id
@@ -471,53 +572,73 @@ async function readSources(
         cross join lateral (values (rsl.journal_entry_id), (rsl.reversal_journal_entry_id)) posted(entry_id)
        where posted.entry_id is not null
     )
-    select e.subscription_id,
+    select e.subscription_id, l.subsidiary_id, sub.base_currency as functional_currency,
+           array_agg(distinct e.entry_id::text order by e.entry_id::text) as entry_ids,
            coalesce(sum(-l.amount) filter (where je.posting_date >= ${month}::date and je.posting_date < (${month}::date + interval '1 month')), 0)::text as deferred_delta,
            coalesce(sum(-l.amount) filter (where je.posting_date < (${month}::date + interval '1 month')), 0)::text as deferred_balance
       from entries e
       join journal_entries je on je.org_id = ${orgId} and je.id = e.entry_id and je.status in ('posted', 'reversed')
       join accounting_books b on b.org_id = je.org_id and b.id = je.book_id and b.is_primary and b.is_active and b.posts_gl
       join journal_lines l on l.org_id = je.org_id and l.entry_id = je.id and l.account_id = e.deferred_account_id
+      join subsidiaries sub on sub.org_id = je.org_id and sub.id = l.subsidiary_id
      where je.posting_date < (${month}::date + interval '1 month')
-     group by e.subscription_id
+     group by e.subscription_id, l.subsidiary_id, sub.base_currency
+     order by e.subscription_id, l.subsidiary_id
   `)).rows;
-  const ledgerRows = (await executor.execute<LedgerFactRow>(sql`
-    select l.subsidiary_id,
+  const ledgerBuckets = (await executor.execute<LedgerBucket>(sql`
+    select l.subsidiary_id, sub.base_currency as functional_currency,
            coalesce(sum(-l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as revenue,
            coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs
       from journal_entries e
       join accounting_books b on b.org_id = e.org_id and b.id = e.book_id and b.is_primary and b.is_active and b.posts_gl
       join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
       join accounts a on a.org_id = l.org_id and a.id = l.account_id
+      join subsidiaries sub on sub.org_id = e.org_id and sub.id = l.subsidiary_id
      where e.org_id = ${orgId} and e.status in ('posted', 'reversed')
        and e.posting_date >= ${month}::date and e.posting_date < (${month}::date + interval '1 month')
-     group by l.subsidiary_id
+     group by l.subsidiary_id, sub.base_currency
+     order by l.subsidiary_id
   `)).rows;
   const billingsBaseAmount = definitions.billingsUsePreTaxSubtotal ? sql`d.subtotal` : sql`d.total`;
   const billingsAmount = definitions.customerCreditsReduceBillings
     ? sql`case when d.kind = 'customer_credit' then -${billingsBaseAmount} else ${billingsBaseAmount} end`
     : billingsBaseAmount;
-  const billingRows = (await executor.execute<BillingRow>(sql`
-    with billing_entries as (
-      select d.org_id, d.subsidiary_id, d.document_date as effective_date, ${billingsAmount} as amount
+  // Billings stay at per-leg grain: one row per posted/reversal document leg,
+  // carrying the document's stored posting FX. Translation multiplies each
+  // leg through its own stored rate first, so distinct document rates are
+  // never grouped away before conversion.
+  const billingLegs = (await executor.execute<BillingLeg>(sql`
+    with billing_legs as (
+      select d.id as document_id, d.org_id, d.subsidiary_id, d.currency as txn_currency,
+             d.fx_rate::text as stored_fx_rate, ${billingsAmount} as txn_amount,
+             d.document_date as effective_date, 'posted' as leg
         from documents d
        where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
          and d.status in ('posted', 'voided') and d.posted_entry_id is not null
       union all
-      select d.org_id, d.subsidiary_id, reversal.posting_date as effective_date, -(${billingsAmount}) as amount
+      select d.id as document_id, d.org_id, d.subsidiary_id, d.currency as txn_currency,
+             d.fx_rate::text as stored_fx_rate, -(${billingsAmount}) as txn_amount,
+             reversal.posting_date as effective_date, 'reversal' as leg
         from documents d
         join journal_entries reversal
           on reversal.org_id = d.org_id and reversal.id = d.reversal_entry_id
          and reversal.status in ('posted', 'reversed')
        where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
          and d.status = 'voided' and d.posted_entry_id is not null
+    ), scoped_legs as (
+      select document_id, org_id, leg, txn_currency, stored_fx_rate, txn_amount, effective_date,
+             coalesce(subsidiary_id, (select id from subsidiaries where org_id = billing_legs.org_id and parent_id is null)) as subsidiary_id
+        from billing_legs
     )
-    select coalesce(billing.subsidiary_id, (select id from subsidiaries where org_id = billing.org_id and parent_id is null)) as subsidiary_id,
-           coalesce(sum(billing.amount), 0)::text as billings
-      from billing_entries billing
-     where billing.effective_date >= ${month}::date
-       and billing.effective_date < (${month}::date + interval '1 month')
-     group by 1
+    select scoped.document_id, scoped.leg, scoped.subsidiary_id,
+           sub.base_currency as functional_currency,
+           scoped.txn_currency, scoped.txn_amount::text as txn_amount,
+           scoped.stored_fx_rate, scoped.effective_date::text as effective_date
+      from scoped_legs scoped
+      join subsidiaries sub on sub.org_id = scoped.org_id and sub.id = scoped.subsidiary_id
+     where scoped.effective_date >= ${month}::date
+       and scoped.effective_date < (${month}::date + interval '1 month')
+     order by scoped.document_id, scoped.leg
   `)).rows;
   const cohortStartRows = (await executor.execute<{
     subsidiary_id: string;
@@ -528,6 +649,7 @@ async function readSources(
     select subsidiary_id, cohort_month::text, start_mrr::text, start_customers
       from saas_metrics_cohort_monthly
      where org_id = ${orgId} and month = cohort_month and cohort_month <= ${month}::date
+     order by subsidiary_id, cohort_month
   `)).rows;
   return {
     monthEnd,
@@ -538,10 +660,10 @@ async function readSources(
     subscriptions,
     history,
     revenueRecognitionEnabled,
-    revenueRows,
-    deferredRows,
-    ledgerRows,
-    billingRows,
+    revenueBuckets,
+    deferredBuckets,
+    ledgerBuckets,
+    billingLegs,
     cohortStartRows,
   };
 }
@@ -552,23 +674,36 @@ function mapHistory(history: HistoryRow[]) {
   return bySubscription;
 }
 
+type MonthlyNormalization = {
+  rows: MonthlySubscriptionFact[];
+  monthlyEvidence: Record<string, Record<string, unknown>>;
+  glBySubsidiary: Map<string, { functionalCurrency: string; revenue: string; cogs: string }>;
+  billingsBySubsidiary: Map<string, string>;
+  deferredBalanceBySubscription: Map<string, string>;
+  glEvidence: Record<string, Record<string, unknown>>;
+  billingsEvidence: Record<string, Record<string, unknown>>;
+};
+
 async function computeRows(
   executor: SqlExecutor,
   orgId: string,
   month: string,
   sources: Awaited<ReturnType<typeof readSources>>,
-): Promise<{ rows: MonthlySubscriptionFact[]; rates: Record<string, string> }> {
+): Promise<MonthlyNormalization> {
   const historyBySubscription = mapHistory(sources.history);
-  const revenueBySubscription = new Map(sources.revenueRows.map((row) => [row.subscription_id, row.revenue]));
-  const deferredBySubscription = new Map(sources.deferredRows.map((row) => [row.subscription_id, row]));
-  const rates: Record<string, string> = {};
+  const baseCurrency = sources.baseCurrency;
+  const fx: FxEvidenceCache = { asOf: new Map(), monthAverage: new Map() };
   const monthEnd = sources.monthEnd;
+  const targetYear = Number(month.slice(0, 4));
+  const targetMonth = Number(month.slice(5, 7));
   const previousMonthStart = sources.previousMonth;
   const previousBounds = await executor.execute<{ previous_month_end: string }>(sql`
     select (${previousMonthStart}::date + interval '1 month - 1 day')::date::text as previous_month_end
   `);
   const previousMonthEnd = previousBounds.rows[0]!.previous_month_end;
   const rows: MonthlySubscriptionFact[] = [];
+  const monthlyEvidence: MonthlyNormalization["monthlyEvidence"] = {};
+  const deferredBalanceBySubscription = new Map<string, string>();
   for (const source of sources.subscriptions) {
     if (source.customer_subsidiary_id !== null && source.trusted_subsidiary_id === null) {
       throw refusal(
@@ -587,7 +722,7 @@ async function computeRows(
         { field: "customer.subsidiary_id" },
       );
     }
-    const sourceCurrency = (source.plan_currency ?? sources.baseCurrency).trim().toUpperCase();
+    const sourceCurrency = (source.plan_currency ?? baseCurrency).trim().toUpperCase();
     const monthStatus = statusAtMonthEnd(source, monthEnd);
     const normalized = () => monthlyRecurringRevenue(
       source.price_override ?? source.plan_amount,
@@ -595,20 +730,34 @@ async function computeRows(
       source.interval_count,
       source.quantity,
     );
-    const rateOn = async (date: string): Promise<string> => {
-      const key = `${sourceCurrency}:${date}`;
-      if (!rates[key]) rates[key] = await spotRate(executor, orgId, sourceCurrency, sources.baseCurrency, date);
-      return rates[key]!;
-    };
+    // MRR keeps its shipped convention: plan currency to org base at the
+    // target month end, with the as-of evidence attached.
+    const mrrEvidence = await asOfEvidence(executor, orgId, fx, {
+      measure: "subscription MRR",
+      from: sourceCurrency,
+      to: baseCurrency,
+      onDate: monthEnd,
+      field: "plan_currency",
+      context: `subscription ${source.id}`,
+    });
     const mrrEnd = monthStatus === "active"
-      ? mulDecimal(normalized(), await rateOn(monthEnd))
+      ? mulDecimal(normalized(), mrrEvidence.rate!)
       : "0.0000";
     const history = historyBySubscription.get(source.id) ?? [];
     const priorMonth = history.find((row) => row.month.slice(0, 10) === previousMonthStart);
     const previousStatus = statusAtMonthEnd(source, previousMonthEnd);
     let mrrStart = priorMonth?.mrr_end ?? "0.0000";
+    let previousEvidence: FxAsOfEvidence | null = null;
     if (!priorMonth && source.start_on <= previousMonthEnd && previousStatus === "active") {
-      mrrStart = mulDecimal(normalized(), await rateOn(previousMonthEnd));
+      previousEvidence = await asOfEvidence(executor, orgId, fx, {
+        measure: "subscription MRR",
+        from: sourceCurrency,
+        to: baseCurrency,
+        onDate: previousMonthEnd,
+        field: "plan_currency",
+        context: `subscription ${source.id}`,
+      });
+      mrrStart = mulDecimal(normalized(), previousEvidence.rate!);
     }
     const movement = chooseMovement({
       mrrStart,
@@ -639,6 +788,69 @@ async function computeRows(
       : movement === "expansion"
         ? amounts.expansionMrr
         : "0.0000";
+    // Recognized revenue translates every subsidiary-functional journal line
+    // to org base with the target calendar-month average — after the
+    // single-subsidiary attribution check above, before any sum.
+    const revenueBucket = attributedBucket({
+      measure: "recognized revenue",
+      subscriptionId: source.id,
+      trustedSubsidiaryId: subsidiaryId,
+      buckets: sources.revenueBuckets.filter((bucket) => bucket.subscription_id === source.id),
+    });
+    let recognizedRevenue = "0.0000";
+    let revenueTranslation: Record<string, unknown> | null = null;
+    if (revenueBucket) {
+      const average = await monthAverageEvidence(executor, orgId, fx, {
+        measure: "recognized revenue",
+        from: revenueBucket.functional_currency,
+        to: baseCurrency,
+        year: targetYear,
+        month: targetMonth,
+        field: "recognized_revenue",
+        context: `subscription ${source.id} in subsidiary ${revenueBucket.subsidiary_id}`,
+      });
+      recognizedRevenue = mulDecimal(revenueBucket.revenue, average.rate!);
+      revenueTranslation = {
+        subsidiary_id: revenueBucket.subsidiary_id,
+        functional_currency: revenueBucket.functional_currency,
+        functional_amount: revenueBucket.revenue,
+        calendar_month_average: average,
+        amount: recognizedRevenue,
+      };
+    }
+    // Deferred stock and flow both translate at the target month end —
+    // never entry-period current, never a future date.
+    const deferredBucket = attributedBucket({
+      measure: "deferred revenue",
+      subscriptionId: source.id,
+      trustedSubsidiaryId: subsidiaryId,
+      buckets: sources.deferredBuckets.filter((bucket) => bucket.subscription_id === source.id),
+    });
+    let deferredDelta = "0.0000";
+    let deferredBalance = "0.0000";
+    let deferredTranslation: Record<string, unknown> | null = null;
+    if (deferredBucket) {
+      const closing = await asOfEvidence(executor, orgId, fx, {
+        measure: "deferred revenue",
+        from: deferredBucket.functional_currency,
+        to: baseCurrency,
+        onDate: monthEnd,
+        field: "deferred_delta",
+        context: `subscription ${source.id} in subsidiary ${deferredBucket.subsidiary_id}`,
+      });
+      deferredDelta = mulDecimal(deferredBucket.deferred_delta, closing.rate!);
+      deferredBalance = mulDecimal(deferredBucket.deferred_balance, closing.rate!);
+      deferredTranslation = {
+        subsidiary_id: deferredBucket.subsidiary_id,
+        functional_currency: deferredBucket.functional_currency,
+        functional_delta: deferredBucket.deferred_delta,
+        functional_balance: deferredBucket.deferred_balance,
+        target_month_end: closing,
+        deferred_delta: deferredDelta,
+        deferred_balance: deferredBalance,
+      };
+    }
+    deferredBalanceBySubscription.set(source.id, deferredBalance);
     rows.push({
       orgId,
       subsidiaryId,
@@ -650,12 +862,116 @@ async function computeRows(
       mrrEnd,
       ...amounts,
       movement,
-      recognizedRevenue: revenueBySubscription.get(source.id) ?? "0.0000",
-      deferredDelta: deferredBySubscription.get(source.id)?.deferred_delta ?? "0.0000",
+      recognizedRevenue,
+      deferredDelta,
       booking: mul(bookedRecurring, rawTermMonths),
     });
+    monthlyEvidence[source.id] = {
+      denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
+      reporting_currency: baseCurrency,
+      billing_subsidiary: subsidiaryId,
+      mrr: {
+        plan_currency: sourceCurrency,
+        target_month_end: monthEnd,
+        month_end_rate: mrrEvidence,
+        previous_month_end_rate: previousEvidence,
+        mrr_start: mrrStart,
+        mrr_end: mrrEnd,
+      },
+      recognized_revenue: revenueTranslation,
+      deferred: deferredTranslation,
+      booking: { term_months: rawTermMonths, booked_recurring: bookedRecurring },
+    };
   }
-  return { rows, rates };
+  // GL revenue and COGS translate per legal entity at the target
+  // calendar-month average of dated spots for that entity's functional
+  // currency to org base.
+  const glBySubsidiary: MonthlyNormalization["glBySubsidiary"] = new Map();
+  const glEvidence: MonthlyNormalization["glEvidence"] = {};
+  for (const bucket of sources.ledgerBuckets) {
+    const average = await monthAverageEvidence(executor, orgId, fx, {
+      measure: "GL revenue and COGS",
+      from: bucket.functional_currency,
+      to: baseCurrency,
+      year: targetYear,
+      month: targetMonth,
+      field: "gl_revenue",
+      context: `subsidiary ${bucket.subsidiary_id}`,
+    });
+    const revenue = mulDecimal(bucket.revenue, average.rate!);
+    const cogs = mulDecimal(bucket.cogs, average.rate!);
+    glBySubsidiary.set(bucket.subsidiary_id, { functionalCurrency: bucket.functional_currency, revenue, cogs });
+    glEvidence[bucket.subsidiary_id] = {
+      denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
+      reporting_currency: baseCurrency,
+      functional_currency: bucket.functional_currency,
+      functional_revenue: bucket.revenue,
+      functional_cogs: bucket.cogs,
+      calendar_month_average: average,
+      gl_revenue: revenue,
+      gl_cogs: cogs,
+    };
+  }
+  // Billings convert strictly two-leg per document leg: the transaction
+  // amount through the document's stored posting FX into the owning
+  // subsidiary's functional currency, then that functional amount through
+  // the metric month average into org base. Reversal legs reuse the original
+  // stored first-leg rate with the reversal month's second-leg evidence.
+  // The transaction currency is never averaged directly to org base.
+  const billingsBySubsidiary = new Map<string, string>();
+  const billingsEvidence: MonthlyNormalization["billingsEvidence"] = {};
+  const legEvidenceBySubsidiary = new Map<string, Record<string, unknown>[]>();
+  for (const leg of sources.billingLegs) {
+    const functionalAmount = mulDecimal(leg.txn_amount, leg.stored_fx_rate);
+    const legYear = Number(leg.effective_date.slice(0, 4));
+    const legMonth = Number(leg.effective_date.slice(5, 7));
+    const average = await monthAverageEvidence(executor, orgId, fx, {
+      measure: "billings",
+      from: leg.functional_currency,
+      to: baseCurrency,
+      year: legYear,
+      month: legMonth,
+      field: "billings",
+      context: `document ${leg.document_id} (${leg.leg} leg) in subsidiary ${leg.subsidiary_id}`,
+    });
+    const baseAmount = mulDecimal(functionalAmount, average.rate!);
+    billingsBySubsidiary.set(
+      leg.subsidiary_id,
+      add(billingsBySubsidiary.get(leg.subsidiary_id) ?? "0.0000", baseAmount),
+    );
+    legEvidenceBySubsidiary.set(leg.subsidiary_id, [
+      ...(legEvidenceBySubsidiary.get(leg.subsidiary_id) ?? []),
+      {
+        document_id: leg.document_id,
+        leg: leg.leg,
+        effective_date: leg.effective_date,
+        txn_currency: leg.txn_currency,
+        txn_amount: leg.txn_amount,
+        stored_posting_fx_rate: leg.stored_fx_rate,
+        functional_currency: leg.functional_currency,
+        functional_amount: functionalAmount,
+        calendar_month_average: average,
+        amount: baseAmount,
+      },
+    ]);
+  }
+  for (const [subsidiaryId, legs] of legEvidenceBySubsidiary) {
+    billingsEvidence[subsidiaryId] = {
+      denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
+      reporting_currency: baseCurrency,
+      legs,
+      billings: billingsBySubsidiary.get(subsidiaryId) ?? "0.0000",
+    };
+  }
+  return {
+    rows,
+    monthlyEvidence,
+    glBySubsidiary,
+    billingsBySubsidiary,
+    deferredBalanceBySubscription,
+    glEvidence,
+    billingsEvidence,
+  };
 }
 
 type FactsRow = {
@@ -689,9 +1005,9 @@ function aggregateFacts(
   subsidiaryIds: string[],
   rows: MonthlySubscriptionFact[],
   history: HistoryRow[],
-  ledgerRows: LedgerFactRow[],
-  billingRows: BillingRow[],
-  deferredRows: DeferredRow[],
+  glBySubsidiary: Map<string, { functionalCurrency: string; revenue: string; cogs: string }>,
+  billingsBySubsidiary: Map<string, string>,
+  deferredBalanceBySubscription: Map<string, string>,
   basis: FactsRow["basis"],
 ): FactsRow[] {
   const historyLive = new Set(history.filter((row) => cmp(row.mrr_end, "0") > 0).map((row) => `${row.subsidiary_id}:${row.customer_id}`));
@@ -730,11 +1046,11 @@ function aggregateFacts(
       customersNew,
       customersChurned,
       customersReactivated,
-      glRevenue: ledgerRows.find((row) => row.subsidiary_id === subsidiaryId)?.revenue ?? "0.0000",
-      glCogs: ledgerRows.find((row) => row.subsidiary_id === subsidiaryId)?.cogs ?? "0.0000",
+      glRevenue: glBySubsidiary.get(subsidiaryId)?.revenue ?? "0.0000",
+      glCogs: glBySubsidiary.get(subsidiaryId)?.cogs ?? "0.0000",
       bookings: moneySum(scoped.map((row) => row.booking)),
-      billings: billingRows.find((row) => row.subsidiary_id === subsidiaryId)?.billings ?? "0.0000",
-      deferredBalance: moneySum(scoped.map((row) => deferredRows.find((r) => r.subscription_id === row.subscriptionId)?.deferred_balance ?? "0.0000")),
+      billings: billingsBySubsidiary.get(subsidiaryId) ?? "0.0000",
+      deferredBalance: moneySum(scoped.map((row) => deferredBalanceBySubscription.get(row.subscriptionId) ?? "0.0000")),
       basis,
     });
   }
@@ -802,18 +1118,22 @@ function aggregateCohorts(
 async function writeMonthlyRow(
   executor: SqlExecutor,
   row: MonthlySubscriptionFact,
+  reportingCurrency: string,
+  evidence: Record<string, unknown>,
   inputsHash: string,
 ): Promise<void> {
   const result = await executor.execute<{ id: string }>(sql`
     insert into saas_metrics_monthly
       (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
        mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
-       reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash, computed_at)
+       reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash,
+       reporting_currency, denomination_version, normalization_evidence, computed_at)
     values
       (${row.orgId}, ${row.subsidiaryId}, ${row.customerId}, ${row.subscriptionId}, ${row.month}::date,
        ${row.cohortMonth}::date, ${row.mrrStart}, ${row.mrrEnd}, ${row.newMrr}, ${row.expansionMrr},
        ${row.contractionMrr}, ${row.churnedMrr}, ${row.reactivationMrr}, ${row.movement},
-       ${row.recognizedRevenue}, ${row.deferredDelta}, ${inputsHash}, now())
+       ${row.recognizedRevenue}, ${row.deferredDelta}, ${inputsHash},
+       ${reportingCurrency}, ${SAAS_METRICS_DENOMINATION_VERSION}, ${JSON.stringify(evidence)}::jsonb, now())
     on conflict (org_id, month, subscription_id) do update set
       subsidiary_id = excluded.subsidiary_id, customer_id = excluded.customer_id,
       cohort_month = excluded.cohort_month, mrr_start = excluded.mrr_start, mrr_end = excluded.mrr_end,
@@ -821,7 +1141,11 @@ async function writeMonthlyRow(
       contraction_mrr = excluded.contraction_mrr, churned_mrr = excluded.churned_mrr,
       reactivation_mrr = excluded.reactivation_mrr, movement = excluded.movement,
       recognized_revenue = excluded.recognized_revenue, deferred_delta = excluded.deferred_delta,
-      inputs_hash = excluded.inputs_hash, computed_at = excluded.computed_at
+      inputs_hash = excluded.inputs_hash,
+      reporting_currency = excluded.reporting_currency,
+      denomination_version = excluded.denomination_version,
+      normalization_evidence = excluded.normalization_evidence,
+      computed_at = excluded.computed_at
     returning id
   `);
   if (result.rows.length !== 1) throw refusal("saas_metrics_subscription_write_missing", `Metrics for subscription ${row.subscriptionId} were not stored.`, "Retry the recompute after confirming that the subscription remains in the organization.");
@@ -831,6 +1155,8 @@ async function writeFactsRow(
   executor: SqlExecutor,
   orgId: string,
   row: FactsRow,
+  reportingCurrency: string,
+  evidence: Record<string, unknown>,
   inputsHash: string,
 ): Promise<void> {
   const result = await executor.execute<{ id: string }>(sql`
@@ -839,7 +1165,8 @@ async function writeFactsRow(
        contraction_mrr, churned_mrr, reactivation_mrr, recognized_revenue, deferred_delta,
        mrr_at_risk, customers_start,
        customers_end, customers_new, customers_churned, customers_reactivated,
-       gl_revenue, gl_cogs, bookings, billings, deferred_balance, basis, inputs_hash, computed_at)
+       gl_revenue, gl_cogs, bookings, billings, deferred_balance, basis, inputs_hash,
+       reporting_currency, denomination_version, normalization_evidence, computed_at)
     values
       (${orgId}, ${row.subsidiaryId}, ${row.month}::date, ${row.mrrStart}, ${row.mrrEnd},
        ${row.newMrr}, ${row.expansionMrr}, ${row.contractionMrr}, ${row.churnedMrr},
@@ -847,7 +1174,8 @@ async function writeFactsRow(
        ${row.customersStart}, ${row.customersEnd},
        ${row.customersNew}, ${row.customersChurned}, ${row.customersReactivated},
        ${row.glRevenue}, ${row.glCogs}, ${row.bookings}, ${row.billings}, ${row.deferredBalance},
-       ${row.basis}, ${inputsHash}, now())
+       ${row.basis}, ${inputsHash},
+       ${reportingCurrency}, ${SAAS_METRICS_DENOMINATION_VERSION}, ${JSON.stringify(evidence)}::jsonb, now())
     on conflict (org_id, subsidiary_id, month) do update set
       mrr_start = excluded.mrr_start, mrr_end = excluded.mrr_end, new_mrr = excluded.new_mrr,
       expansion_mrr = excluded.expansion_mrr, contraction_mrr = excluded.contraction_mrr,
@@ -858,7 +1186,11 @@ async function writeFactsRow(
       customers_churned = excluded.customers_churned, customers_reactivated = excluded.customers_reactivated,
       gl_revenue = excluded.gl_revenue, gl_cogs = excluded.gl_cogs, bookings = excluded.bookings,
       billings = excluded.billings, deferred_balance = excluded.deferred_balance, basis = excluded.basis,
-      inputs_hash = excluded.inputs_hash, computed_at = excluded.computed_at
+      inputs_hash = excluded.inputs_hash,
+      reporting_currency = excluded.reporting_currency,
+      denomination_version = excluded.denomination_version,
+      normalization_evidence = excluded.normalization_evidence,
+      computed_at = excluded.computed_at
     returning id
   `);
   if (result.rows.length !== 1) throw refusal("saas_metrics_facts_write_missing", `Monthly facts for subsidiary ${row.subsidiaryId} were not stored.`, "Retry the recompute after confirming that the subsidiary remains active.");
@@ -868,19 +1200,27 @@ async function writeCohortRow(
   executor: SqlExecutor,
   orgId: string,
   row: ReturnType<typeof aggregateCohorts>[number],
+  reportingCurrency: string,
+  evidence: Record<string, unknown>,
   inputsHash: string,
 ): Promise<void> {
   const result = await executor.execute<{ id: string }>(sql`
     insert into saas_metrics_cohort_monthly
       (org_id, subsidiary_id, cohort_month, month, months_since_start, start_mrr, mrr,
-       start_customers, customers, inputs_hash, computed_at)
+       start_customers, customers, inputs_hash,
+       reporting_currency, denomination_version, normalization_evidence, computed_at)
     values (${orgId}, ${row.subsidiaryId}, ${row.cohortMonth}::date, ${row.month}::date,
             ${row.monthsSinceStart}, ${row.startMrr}, ${row.mrr}, ${row.startCustomers},
-            ${row.customers}, ${inputsHash}, now())
+            ${row.customers}, ${inputsHash},
+            ${reportingCurrency}, ${SAAS_METRICS_DENOMINATION_VERSION}, ${JSON.stringify(evidence)}::jsonb, now())
     on conflict (org_id, subsidiary_id, cohort_month, month) do update set
       months_since_start = excluded.months_since_start, start_mrr = excluded.start_mrr,
       mrr = excluded.mrr, start_customers = excluded.start_customers, customers = excluded.customers,
-      inputs_hash = excluded.inputs_hash, computed_at = excluded.computed_at
+      inputs_hash = excluded.inputs_hash,
+      reporting_currency = excluded.reporting_currency,
+      denomination_version = excluded.denomination_version,
+      normalization_evidence = excluded.normalization_evidence,
+      computed_at = excluded.computed_at
     returning id
   `);
   if (result.rows.length !== 1) throw refusal("saas_metrics_cohort_write_missing", `Cohort facts for subsidiary ${row.subsidiaryId} and cohort ${row.cohortMonth} were not stored.`, "Retry the recompute after confirming that the cohort remains in the organization.");
@@ -899,37 +1239,74 @@ export async function recomputeSaasMetrics(
       throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
     }
     const sources = await readSources(db, orgId, month);
+    const reportingCurrency = sources.baseCurrency;
     const computed = await computeRows(db, orgId, month, sources);
     const basis: FactsRow["basis"] = sources.revenueRecognitionEnabled ? "recognised" : "billed";
-    const revenueBySubscription = new Map(sources.revenueRows.map((row) => [row.subscription_id, row.revenue]));
-    for (const row of computed.rows) {
-      row.recognizedRevenue = revenueBySubscription.get(row.subscriptionId) ?? "0.0000";
-    }
     const facts = aggregateFacts(
       month,
       sources.subsidiaries.map((row) => row.id),
       computed.rows,
       sources.history,
-      sources.ledgerRows,
-      sources.billingRows,
-      sources.deferredRows,
+      computed.glBySubsidiary,
+      computed.billingsBySubsidiary,
+      computed.deferredBalanceBySubscription,
       basis,
     );
     const cohorts = aggregateCohorts(month, computed.rows, sources.history, sources.cohortStartRows);
-    const monthHash = hash({
-      orgId,
-      month,
-      baseCurrency: sources.baseCurrency,
+    // Per-row evidence bodies first (without their digest), then one
+    // canonical versioned hash over the exact inputs-plus-evidence payload.
+    // Every stored row carries the same digest in its evidence and its
+    // inputs_hash column, so any later recompute either reproduces it or
+    // reports changed inputs for the closed-month freeze to refuse.
+    const factsEvidence: Record<string, Record<string, unknown>> = {};
+    for (const fact of facts) {
+      factsEvidence[fact.subsidiaryId] = {
+        denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
+        reporting_currency: reportingCurrency,
+        gl: computed.glEvidence[fact.subsidiaryId] ?? null,
+        billings: computed.billingsEvidence[fact.subsidiaryId] ?? null,
+        subscriptions: computed.rows
+          .filter((row) => row.subsidiaryId === fact.subsidiaryId)
+          .map((row) => computed.monthlyEvidence[row.subscriptionId]),
+      };
+    }
+    const cohortsEvidence = cohorts.map((cohort) => ({
+      denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
+      reporting_currency: reportingCurrency,
+      subsidiary_id: cohort.subsidiaryId,
+      cohort_month: cohort.cohortMonth,
+      months_since_start: cohort.monthsSinceStart,
+      start_mrr: cohort.startMrr,
+      mrr: cohort.mrr,
+      member_subscriptions: computed.rows
+        .filter((row) => row.subsidiaryId === cohort.subsidiaryId && row.cohortMonth === cohort.cohortMonth)
+        .map((row) => row.subscriptionId)
+        .sort(),
+    }));
+    const inputs = {
+      baseCurrency: reportingCurrency,
       revenueRecognitionEnabled: sources.revenueRecognitionEnabled,
       subscriptions: computed.rows,
       cohortStarts: sources.cohortStartRows,
       definitions: sources.definitions,
-      rates: computed.rates,
-      revenue: sources.revenueRows,
-      deferred: sources.deferredRows,
-      ledger: sources.ledgerRows,
-      billings: sources.billingRows,
+      revenueBuckets: sources.revenueBuckets,
+      deferredBuckets: sources.deferredBuckets,
+      ledgerBuckets: sources.ledgerBuckets,
+      billingLegs: sources.billingLegs,
       subsidiaries: sources.subsidiaries,
+    };
+    const evidence = {
+      monthly: computed.monthlyEvidence,
+      facts: factsEvidence,
+      cohorts: cohortsEvidence,
+    };
+    const monthHash = normalizationInputsHash({
+      denominationVersion: SAAS_METRICS_DENOMINATION_VERSION,
+      orgId,
+      month,
+      reportingCurrency,
+      inputs,
+      evidence,
     });
     const closeState = await monthCloseState(db, orgId, month, sources.subsidiaries.map((row) => row.id));
     const storedState = (await db.execute<{ row_count: number; changed: boolean }>(sql`
@@ -953,9 +1330,24 @@ export async function recomputeSaasMetrics(
     if (!closeState.open && storedState.row_count > 0) {
       return { orgId, month, subscriptionRows: computed.rows.length, subsidiaryRows: facts.length, frozen: true };
     }
-    for (const row of computed.rows) await writeMonthlyRow(db, row, monthHash);
-    for (const row of facts) await writeFactsRow(db, orgId, row, monthHash);
-    for (const row of cohorts) await writeCohortRow(db, orgId, row, monthHash);
+    for (const row of computed.rows) {
+      await writeMonthlyRow(db, row, reportingCurrency, {
+        ...computed.monthlyEvidence[row.subscriptionId]!,
+        inputs_hash: monthHash,
+      }, monthHash);
+    }
+    for (const row of facts) {
+      await writeFactsRow(db, orgId, row, reportingCurrency, {
+        ...factsEvidence[row.subsidiaryId]!,
+        inputs_hash: monthHash,
+      }, monthHash);
+    }
+    for (const [index, row] of cohorts.entries()) {
+      await writeCohortRow(db, orgId, row, reportingCurrency, {
+        ...cohortsEvidence[index]!,
+        inputs_hash: monthHash,
+      }, monthHash);
+    }
     return { orgId, month, subscriptionRows: computed.rows.length, subsidiaryRows: facts.length, frozen: !closeState.open };
   });
 }
@@ -983,7 +1375,7 @@ export async function listSaasMetricsMonths(orgId: string): Promise<SaasMetricsM
         ) facts
        group by month order by month desc`)).rows;
     const subsidiaries = (await db.execute<SubsidiaryRow>(sql`
-      select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`)).rows;
+      select id, base_currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`)).rows;
     const result: SaasMetricsMonth[] = [];
     for (const row of rows) {
       const close = await monthCloseState(db, orgId, row.month, subsidiaries.map((subsidiary) => subsidiary.id));
@@ -1009,7 +1401,7 @@ export async function saasMetricsScanTargets(): Promise<SaasMetricsScanTargets> 
 async function monthIsOpenForAr(orgId: string, month: string): Promise<boolean> {
   return withOrgTransaction(orgId, async () => {
     const subsidiaries = (await db.execute<SubsidiaryRow>(sql`
-      select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
+      select id, base_currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
     `)).rows;
     return (await monthCloseState(db, orgId, month, subsidiaries.map((row) => row.id))).open;
   });

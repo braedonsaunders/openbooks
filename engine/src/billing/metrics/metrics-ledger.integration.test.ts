@@ -38,11 +38,12 @@ async function seedSubscription(args: {
   status?: "active" | "paused" | "canceled";
   startOn: string;
   canceledOn?: string | null;
+  currency?: string;
 }): Promise<void> {
   const plan = await db.execute<{ id: string }>(sql`
     insert into subscription_plans
       (id, org_id, name, amount, currency_code, interval, interval_count, income_account_id, created_by)
-    values (${args.planId}, ${args.orgId}, ${`Metrics plan ${args.planId.slice(0, 8)}`}, ${args.amount}, 'CAD', 'monthly', 1, null, ${args.actorId})
+    values (${args.planId}, ${args.orgId}, ${`Metrics plan ${args.planId.slice(0, 8)}`}, ${args.amount}, ${args.currency ?? "CAD"}, 'monthly', 1, null, ${args.actorId})
     returning id
   `);
   assert.equal(plan.rows.length, 1, "the subscription plan must be stored");
@@ -290,6 +291,263 @@ test("voided subscription invoices preserve closed-month metrics and reverse in 
     assert.equal(rows.length, 2); assert.ok([rows[0]!.revenue, rows[0]!.billings, rows[0]!.deferredDelta].every((value) => value !== "0.0000"));
     assert.deepEqual([rows[1]!.revenue, rows[1]!.billings, rows[1]!.deferredDelta, rows[1]!.deferredBalance], [neg(rows[0]!.revenue), neg(rows[0]!.billings), neg(rows[0]!.deferredDelta), "0.0000"]); assert.equal((await runScenario(org.orgId, { at: "2026-08-15" })).checks.find((item) => item.name === "saas-metrics-tieout")?.ok, true);
   } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("normalized SaaS metrics translate every measure to org base with v1 evidence", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withOrgTransaction(org.orgId, () => createScratchUser(org.orgId, "Metrics normalization controller", "admin"));
+  const eurSubId = org.subsidiaryId;
+  const gbpSubId = randomUUID();
+  const gbpCustomerId = randomUUID();
+  const sub1 = randomUUID(), plan1 = randomUUID();
+  const sub2 = randomUUID(), plan2 = randomUUID();
+  try {
+    await withOrgTransaction(org.orgId, async () => {
+      await enableMetrics(org.orgId);
+      const base = await db.execute(sql`update orgs set base_currency = 'USD' where id = ${org.orgId} returning id`);
+      assert.equal(base.rows.length, 1, "the organization must report in USD");
+      const functional = await db.execute(sql`update subsidiaries set base_currency = 'EUR' where id = ${eurSubId} and org_id = ${org.orgId} returning id`);
+      assert.equal(functional.rows.length, 1, "the root legal entity must keep EUR books");
+      const second = await db.execute<{ id: string }>(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${gbpSubId}, ${org.orgId}, ${eurSubId}, 'Metrics GBP Entity', 'GBP', 'GB')
+        returning id
+      `);
+      assert.equal(second.rows.length, 1, "the second legal entity must be stored");
+      const customer = await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id)
+        values (${gbpCustomerId}, ${org.orgId}, 'company', 'Metrics GBP Customer', ${gbpSubId})
+        returning id
+      `);
+      assert.equal(customer.rows.length, 1, "the second billing account must be stored");
+      await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId: sub1, planId: plan1, amount: "100", currency: "EUR", startOn: "2026-07-15" });
+      await seedSubscription({ orgId: org.orgId, customerId: gbpCustomerId, actorId, subscriptionId: sub2, planId: plan2, amount: "200", currency: "GBP", startOn: "2026-07-01" });
+      for (const [from, to, asOf, rate] of [
+        ["EUR", "USD", "2026-06-30", "9.0000000000"],
+        ["EUR", "USD", "2026-07-05", "1.1000000000"],
+        ["EUR", "USD", "2026-07-15", "5.0000000000"],
+        ["EUR", "USD", "2026-07-20", "1.3000000000"],
+        ["EUR", "USD", "2026-08-01", "9.0000000000"],
+        ["EUR", "USD", "2026-08-10", "2.0000000000"],
+        ["GBP", "USD", "2026-07-10", "1.5000000000"],
+        ["USD", "EUR", "2026-06-15", "0.8000000000"],
+      ] as const) {
+        const seeded = await db.execute(sql`
+          insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+          values (${org.orgId}, ${from}, ${to}, ${asOf}::date, 'spot', ${rate}, 'manual')
+          returning id
+        `);
+        assert.equal(seeded.rows.length, 1, `the ${from}→${to} observation for ${asOf} must be stored`);
+      }
+      const calendar = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!;
+      const august = await db.execute(sql`insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar.id}) returning id`);
+      assert.equal(august.rows.length, 1, "the August period must exist for the reversal month");
+    });
+    const invoice1 = await createSubscriptionInvoice({ orgId: org.orgId, actorId, customerId: org.customerId, subsidiaryId: eurSubId,
+      currency: "EUR", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "EUR subscription",
+      quantity: "1", unitPrice: "100", memo: "EUR invoice", invoiceDate: "2026-07-15", autoPost: true, custom: { subscriptionId: sub1 } });
+    const invoice2 = await createSubscriptionInvoice({ orgId: org.orgId, actorId, customerId: gbpCustomerId, subsidiaryId: gbpSubId,
+      currency: "GBP", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "GBP subscription",
+      quantity: "1", unitPrice: "200", memo: "GBP invoice", invoiceDate: "2026-07-10", autoPost: true, custom: { subscriptionId: sub2 } });
+    const invoice3 = await createSubscriptionInvoice({ orgId: org.orgId, actorId, customerId: org.customerId, subsidiaryId: eurSubId,
+      currency: "USD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "USD top-up",
+      quantity: "1", unitPrice: "50", memo: "USD invoice", invoiceDate: "2026-07-15", autoPost: true, custom: { subscriptionId: sub1 } });
+    assert.ok(invoice2.invoiceId && invoice3.invoiceId, "all three invoices must post");
+
+    // Before recognition the invoice sits in deferred stock: the July delta
+    // translates at the target month end (1.30), never at the entry-date
+    // spot (5.00) or a future August observation.
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    const deferred = (await db.execute<{ delta: string; balance: string }>(sql`
+      select m.deferred_delta::text as delta, f.deferred_balance::text as balance
+        from saas_metrics_monthly m
+        join saas_metrics_facts_monthly f on f.org_id = m.org_id and f.subsidiary_id = m.subsidiary_id and f.month = m.month
+       where m.org_id = ${org.orgId} and m.subscription_id = ${sub1} and m.month = ${MONTH}::date
+    `)).rows[0]!;
+    assert.equal(deferred.delta, "182.0000", "deferred flow prices at the July month-end rate, not the entry-date 5.00");
+    assert.equal(deferred.balance, "182.0000", "deferred stock prices at the target month end");
+
+    assert.equal((await runRevenueRecognition(org.orgId, "2026-07-31", actorId)).posted, 3);
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    const stored = (await db.execute<{
+      reporting_currency: string | null;
+      denomination_version: string | null;
+      inputs_hash: string;
+      evidence_hash: string | null;
+      evidence: string;
+    }>(sql`
+      select reporting_currency, denomination_version, inputs_hash,
+             normalization_evidence->>'inputs_hash' as evidence_hash,
+             normalization_evidence::text as evidence
+        from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = ${MONTH}::date order by subsidiary_id
+    `)).rows;
+    assert.equal(stored.length, 2);
+    for (const row of stored) {
+      assert.equal(row.reporting_currency, "USD", "every stored fact reports in org base");
+      assert.equal(row.denomination_version, "v1");
+      assert.equal(row.evidence_hash, row.inputs_hash, "evidence names the exact digest it was hashed with");
+    }
+    // July EUR average covers only July observations (1.10, 5.00, 1.30):
+    // the June/August 9.00 quotes and the June USD→EUR kernel rate never leak in.
+    const eur = stored.find((row) => row.evidence.includes(eurSubId))!;
+    assert.ok(eur.evidence.includes('"kind":"calendar-month-average"'));
+    assert.ok(!eur.evidence.includes("2026-06-30") && !eur.evidence.includes("2026-08-01"), "out-of-month observations are excluded");
+    assert.ok(eur.evidence.includes("0.8000000000") && eur.evidence.includes("1.0000000000"), "both stored document posting rates survive to evidence");
+    const amounts = (await db.execute<{ mrr: string; revenue: string; billings: string; gl: string; bookings: string }>(sql`
+      select m.mrr_end::text as mrr, m.recognized_revenue::text as revenue,
+             f.billings::text as billings, f.gl_revenue::text as gl, f.bookings::text as bookings
+        from saas_metrics_monthly m
+        join saas_metrics_facts_monthly f on f.org_id = m.org_id and f.subsidiary_id = m.subsidiary_id and f.month = m.month
+       where m.org_id = ${org.orgId} and m.subscription_id = ${sub1} and m.month = ${MONTH}::date
+    `)).rows[0]!;
+    assert.equal(amounts.mrr, "130.0000", "MRR keeps its plan-to-base month-end convention");
+    assert.equal(amounts.revenue, "345.3333", "recognized revenue averages the July functional books");
+    assert.equal(amounts.gl, "345.3333", "GL revenue translates the same functional lines");
+    assert.equal(amounts.billings, "645.3334", "billings convert two-leg per document leg before grouping");
+    assert.equal(amounts.bookings, "1560.0000", "bookings stay in org base");
+    const gbp = (await db.execute<{ mrr: string; revenue: string }>(sql`
+      select mrr_end::text as mrr, recognized_revenue::text as revenue
+        from saas_metrics_monthly where org_id = ${org.orgId} and subscription_id = ${sub2} and month = ${MONTH}::date
+    `)).rows[0]!;
+    assert.equal(gbp.mrr, "300.0000");
+    assert.equal(gbp.revenue, "300.0000");
+
+    // The stored digest reproduces exactly until inputs change.
+    const eurOldHash = eur.inputs_hash;
+    const before = stored.map((row) => row.inputs_hash).join(",");
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    const replayed = (await db.execute<{ inputs_hash: string }>(sql`
+      select inputs_hash from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = ${MONTH}::date order by subsidiary_id
+    `)).rows.map((row) => row.inputs_hash).join(",");
+    assert.equal(replayed, before, "identical inputs reproduce the stored hash");
+
+    // A consolidated override has no effect on metrics evidence.
+    await withOrgTransaction(org.orgId, async () => {
+      const override = await db.execute(sql`
+        insert into consolidated_fx_rates (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
+        values (${org.orgId}, ${org.periodId}, 'EUR', 'USD', '99', '99', '99', 'manual')
+        returning id
+      `);
+      assert.equal(override.rows.length, 1, "the consolidated override must be stored");
+    });
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    const consolidated = (await db.execute<{ inputs_hash: string }>(sql`
+      select inputs_hash from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = ${MONTH}::date order by subsidiary_id
+    `)).rows.map((row) => row.inputs_hash).join(",");
+    assert.equal(consolidated, before, "consolidated overrides never reprice metrics");
+
+    // A dated manual spot override changes results and is evidenced.
+    await withOrgTransaction(org.orgId, async () => {
+      const spot = await db.execute(sql`
+        insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+        values (${org.orgId}, 'EUR', 'USD', '2026-07-25', 'spot', '1.70', 'manual')
+        returning id
+      `);
+      assert.equal(spot.rows.length, 1, "the manual spot override must be stored");
+    });
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    const overridden = (await db.execute<{ revenue: string; inputs_hash: string; evidence: string }>(sql`
+      select m.recognized_revenue::text as revenue, f.inputs_hash,
+             f.normalization_evidence::text as evidence
+        from saas_metrics_monthly m
+        join saas_metrics_facts_monthly f on f.org_id = m.org_id and f.subsidiary_id = m.subsidiary_id and f.month = m.month
+       where m.org_id = ${org.orgId} and m.subscription_id = ${sub1} and m.month = ${MONTH}::date
+    `)).rows[0]!;
+    assert.equal(overridden.revenue, "318.5000", "the manual override reprices the July average");
+    assert.notEqual(overridden.inputs_hash, eurOldHash);
+    assert.ok(overridden.evidence.includes("2026-07-25"), "the override observation is evidenced");
+
+    // Closing July freezes it; the void reverses in August with the original
+    // stored first-leg rate and the reversal month's second-leg evidence.
+    await withOrgTransaction(org.orgId, async () => {
+      const closed = await db.execute(sql`insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state) values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'ar', 'closed') returning period_id`);
+      assert.equal(closed.rows.length, 1, "July AR must be closed before the void");
+    });
+    const voided = await cancelRevenueRecognitionForInvoice({ documentId: invoice1.invoiceId, orgId: org.orgId, actorId, reason: "Customer cancelled", reversalDate: "2026-08-15", allowedSubsidiaryIds: null });
+    assert.equal(voided.status, "cancelled");
+    assert.equal((await recomputeSaasMetrics(org.orgId, MONTH)).frozen, true);
+    await recomputeSaasMetrics(org.orgId, "2026-08-01");
+    const august = (await db.execute<{ billings: string; revenue: string; evidence: string }>(sql`
+      select billings::text as billings,
+             (select sum(m.recognized_revenue)::text from saas_metrics_monthly m where m.org_id = f.org_id and m.month = f.month and m.subsidiary_id = f.subsidiary_id) as revenue,
+             normalization_evidence::text as evidence
+        from saas_metrics_facts_monthly f where org_id = ${org.orgId} and subsidiary_id = ${eurSubId} and month = '2026-08-01'::date
+    `)).rows[0]!;
+    // August's own average covers the 08-01 and 08-10 observations (5.50):
+    // the 08-01 quote belongs to August, never to July.
+    assert.equal(august.billings, "-550.0000", "the reversal leg reuses the original stored rate with August evidence");
+    assert.equal(august.revenue, "-550.0000", "August recognized revenue reverses at the August average");
+    assert.ok(august.evidence.includes('"leg":"reversal"'), "the reversal leg is evidenced as a reversal");
+    assert.ok(august.evidence.includes('"month":8'), "the second leg is evidenced in the reversal month");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("normalized SaaS metrics refuse cross-subsidiary attribution before aggregation", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withOrgTransaction(org.orgId, () => createScratchUser(org.orgId, "Metrics attribution controller", "admin"));
+  try {
+    const subscriptionId = randomUUID(), planId = randomUUID();
+    const secondSubsidiaryId = randomUUID(), secondCustomerId = randomUUID();
+    await withOrgTransaction(org.orgId, async () => {
+      await enableMetrics(org.orgId);
+      const subsidiary = await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${secondSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Metrics Entity Two', 'CAD', 'CA')
+        returning id
+      `);
+      assert.equal(subsidiary.rows.length, 1, "the second legal entity must be stored");
+      const customer = await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id)
+        values (${secondCustomerId}, ${org.orgId}, 'company', 'Metrics Customer Two', ${secondSubsidiaryId})
+        returning id
+      `);
+      assert.equal(customer.rows.length, 1, "the second billing account must be stored");
+      await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId, planId, amount: "100", startOn: "2026-07-01" });
+    });
+    await createSubscriptionInvoice({ orgId: org.orgId, actorId, customerId: org.customerId, subsidiaryId: org.subsidiaryId,
+      currency: "CAD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "Home invoice",
+      quantity: "1", unitPrice: "100", memo: "home", invoiceDate: "2026-07-15", autoPost: true, custom: { subscriptionId } });
+    await createSubscriptionInvoice({ orgId: org.orgId, actorId, customerId: secondCustomerId, subsidiaryId: secondSubsidiaryId,
+      currency: "CAD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "Foreign invoice",
+      quantity: "1", unitPrice: "100", memo: "foreign", invoiceDate: "2026-07-15", autoPost: true, custom: { subscriptionId } });
+    await assert.rejects(
+      recomputeSaasMetrics(org.orgId, MONTH),
+      (error: unknown) => error instanceof UsageBillingError
+        && error.code === "saas_metrics_subscription_attribution_mismatch"
+        && (error.message as string).includes(subscriptionId)
+        && (error.message as string).includes(secondSubsidiaryId)
+        && /Reverse the mis-attributed entry/.test(error.remedy),
+      "journal lines under two legal entities refuse with the subscription, both subsidiaries and the reversal remedy",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("normalized SaaS metrics refuse an uncovered currency by named measure", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = randomUUID();
+  try {
+    const subscriptionId = randomUUID(), planId = randomUUID();
+    await withOrgTransaction(org.orgId, async () => {
+      await enableMetrics(org.orgId);
+      await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId, planId, amount: "10000", currency: "JPY", startOn: "2026-07-01" });
+    });
+    await assert.rejects(
+      recomputeSaasMetrics(org.orgId, MONTH),
+      (error: unknown) => error instanceof UsageBillingError
+        && error.code === "saas_metrics_fx_rate_missing"
+        && /subscription MRR/.test(error.message)
+        && /JPY→CAD/.test(error.message)
+        && /Company Settings → Setup → FX rates/.test(error.remedy),
+      "an uncovered plan currency refuses with measure, pair and the FX rates remedy instead of accruing zero",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
 
 test("SaaS metrics refuse by name when their feature is off", { skip: !DB }, async () => {
