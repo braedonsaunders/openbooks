@@ -11,6 +11,7 @@ import {
 } from "../../testing/fixtures.ts";
 import { UsageBillingError } from "../usage/errors.ts";
 import {
+  approveAndExecuteNormalizationRequest,
   approveNormalizationRequest,
   cancelNormalizationRequest,
   claimNormalizationRequest,
@@ -23,6 +24,10 @@ import {
   reacquireNormalizationRequest,
   retryNormalizationRequest,
 } from "./metrics-normalization-service.ts";
+import {
+  computeLegacyV0Month,
+  type LegacyV0Month,
+} from "./metrics-ledger.ts";
 
 /**
  * Slice D properties, authored with the Slice D change and executed by the
@@ -112,41 +117,74 @@ async function seedCustomerAndSubscription(ctx: Fixture, currency = "CAD"): Prom
   return { customerId, subscriptionId };
 }
 
-/** Seed one legacy month: all three row sets with the reporting triple absent. */
-async function seedLegacyMonth(ctx: Fixture, customerId: string, subscriptionId: string): Promise<void> {
+/**
+ * Seed one realistic legacy month: the exact v0 reproduction of the seeded
+ * sources, stored with the reporting triple absent and the one canonical v0
+ * hash. The proof accepts these rows because v0 recomputation reproduces
+ * them byte-for-byte — never because a marker was trusted.
+ */
+async function seedV0Month(ctx: Fixture): Promise<LegacyV0Month> {
+  const v0 = await withOrgTransaction(ctx.org.orgId, async () =>
+    computeLegacyV0Month(db, ctx.org.orgId, MONTH));
   await withOrgTransaction(ctx.org.orgId, async () => {
-    const monthly = await db.execute<{ id: string }>(sql`
-      insert into saas_metrics_monthly
-        (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
-         mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
-         reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash)
-      values (${ctx.org.orgId}, ${ctx.org.subsidiaryId}, ${customerId}, ${subscriptionId},
-              ${MONTH}::date, ${MONTH}::date, '0', '100.0000', '100.0000', '0', '0', '0',
-              '0', 'new', '0', '0', 'legacy-seed')
+    for (const row of v0.monthly) {
+      const stored = await db.execute<{ id: string }>(sql`
+        insert into saas_metrics_monthly
+          (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
+           mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
+           reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash)
+        values (${ctx.org.orgId}, ${row.subsidiaryId}, ${row.customerId}, ${row.subscriptionId},
+                ${row.month}::date, ${row.cohortMonth}::date,
+                ${row.mrrStart}, ${row.mrrEnd}, ${row.newMrr}, ${row.expansionMrr},
+                ${row.contractionMrr}, ${row.churnedMrr}, ${row.reactivationMrr}, ${row.movement},
+                ${row.recognizedRevenue}, ${row.deferredDelta}, ${v0.legacyHash})
+        returning id
+      `);
+      assert.equal(stored.rows.length, 1, "the legacy monthly row must be stored");
+    }
+    for (const row of v0.facts) {
+      const stored = await db.execute<{ id: string }>(sql`
+        insert into saas_metrics_facts_monthly
+          (org_id, subsidiary_id, month, mrr_start, mrr_end, new_mrr, expansion_mrr,
+           contraction_mrr, churned_mrr, reactivation_mrr, recognized_revenue, deferred_delta,
+           mrr_at_risk, customers_start, customers_end, customers_new, customers_churned,
+           customers_reactivated, gl_revenue, gl_cogs, bookings, billings, deferred_balance, basis, inputs_hash)
+        values (${ctx.org.orgId}, ${row.subsidiaryId}, ${row.month}::date,
+                ${row.mrrStart}, ${row.mrrEnd}, ${row.newMrr}, ${row.expansionMrr},
+                ${row.contractionMrr}, ${row.churnedMrr}, ${row.reactivationMrr},
+                ${row.recognizedRevenue}, ${row.deferredDelta}, ${row.mrrAtRisk},
+                ${row.customersStart}, ${row.customersEnd},
+                ${row.customersNew}, ${row.customersChurned}, ${row.customersReactivated},
+                ${row.glRevenue}, ${row.glCogs}, ${row.bookings}, ${row.billings}, ${row.deferredBalance},
+                ${row.basis}, ${v0.legacyHash})
+        returning id
+      `);
+      assert.equal(stored.rows.length, 1, "the legacy facts row must be stored");
+    }
+    for (const row of v0.cohorts) {
+      const stored = await db.execute<{ id: string }>(sql`
+        insert into saas_metrics_cohort_monthly
+          (org_id, subsidiary_id, cohort_month, month, months_since_start, start_mrr, mrr,
+           start_customers, customers, inputs_hash)
+        values (${ctx.org.orgId}, ${row.subsidiaryId}, ${row.cohortMonth}::date, ${row.month}::date,
+                ${row.monthsSinceStart}, ${row.startMrr}, ${row.mrr},
+                ${row.startCustomers}, ${row.customers}, ${v0.legacyHash})
+        returning id
+      `);
+      assert.equal(stored.rows.length, 1, "the legacy cohort row must be stored");
+    }
+  });
+  return v0;
+}
+
+async function seedFxRate(ctx: Fixture, from: string, to: string, asOf: string, rate: string): Promise<void> {
+  await withOrgTransaction(ctx.org.orgId, async () => {
+    const stored = await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${ctx.org.orgId}, ${from}, ${to}, ${asOf}, 'spot', ${rate}, 'manual')
       returning id
     `);
-    assert.equal(monthly.rows.length, 1, "the legacy monthly row must be stored");
-    const facts = await db.execute<{ id: string }>(sql`
-      insert into saas_metrics_facts_monthly
-        (org_id, subsidiary_id, month, mrr_start, mrr_end, new_mrr, expansion_mrr,
-         contraction_mrr, churned_mrr, reactivation_mrr, recognized_revenue, deferred_delta,
-         mrr_at_risk, customers_start, customers_end, customers_new, customers_churned,
-         customers_reactivated, gl_revenue, gl_cogs, bookings, billings, deferred_balance, basis, inputs_hash)
-      values (${ctx.org.orgId}, ${ctx.org.subsidiaryId}, ${MONTH}::date, '0', '100.0000', '100.0000', '0',
-              '0', '0', '0', '0', '0', '0', 0, 1, 1, 0, 0, '0', '0', '1200.0000', '0', '0',
-              'recognised', 'legacy-seed')
-      returning id
-    `);
-    assert.equal(facts.rows.length, 1, "the legacy facts row must be stored");
-    const cohorts = await db.execute<{ id: string }>(sql`
-      insert into saas_metrics_cohort_monthly
-        (org_id, subsidiary_id, cohort_month, month, months_since_start, start_mrr, mrr,
-         start_customers, customers, inputs_hash)
-      values (${ctx.org.orgId}, ${ctx.org.subsidiaryId}, ${MONTH}::date, ${MONTH}::date,
-              0, '100.0000', '100.0000', 1, 1, 'legacy-seed')
-      returning id
-    `);
-    assert.equal(cohorts.rows.length, 1, "the legacy cohort row must be stored");
+    assert.equal(stored.rows.length, 1, "the covering spot rate must be stored");
   });
 }
 
@@ -194,7 +232,7 @@ async function requestAuditEvents(orgId: string, requestId: string): Promise<Arr
     (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
       select action, changes from audit_log
        where org_id = ${orgId} and table_name = 'saas_metrics_normalization_requests' and row_id = ${requestId}
-       order by at
+       order by at, id
     `)).rows);
 }
 
@@ -469,7 +507,7 @@ test("a fully normalized month refuses as already done and keeps its rows", { sk
     await expectRefusal(
       executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
       "saas_normalization_already_normalized",
-      "recorded result",
+      "stored month",
     );
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ hash: string }>(sql`
@@ -487,8 +525,8 @@ test("a fully normalized month refuses as already done and keeps its rows", { sk
 
 test("a mixed legacy and normalized month refuses as unsupported partial", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
-    const seeded = await seedCustomerAndSubscription(ctx);
-    await seedLegacyMonth(ctx, seeded.customerId, seeded.subscriptionId);
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
     await withOrgTransaction(ctx.org.orgId, async () => {
       await db.execute(sql`
         update saas_metrics_facts_monthly
@@ -501,7 +539,7 @@ test("a mixed legacy and normalized month refuses as unsupported partial", { ski
     await expectRefusal(
       executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
       "saas_normalization_partial_denominations",
-      "uniform row set",
+      "never edited by hand",
     );
     const monthly = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ currency: string | null }>(sql`
@@ -514,8 +552,17 @@ test("a mixed legacy and normalized month refuses as unsupported partial", { ski
 
 test("missing FX evidence fails the batch with its setup remedy and no writes", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
-    const seeded = await seedCustomerAndSubscription(ctx, "EUR");
-    await seedLegacyMonth(ctx, seeded.customerId, seeded.subscriptionId);
+    await seedCustomerAndSubscription(ctx, "EUR");
+    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
+    const v0 = await seedV0Month(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const removed = await db.execute(sql`
+        delete from fx_rates
+         where org_id = ${ctx.org.orgId} and from_currency = 'EUR' and to_currency = 'CAD'
+        returning id
+      `);
+      assert.equal(removed.rows.length, 1, "the covering rate must be withdrawn to stage the drift");
+    });
     const { request, leaseToken } = await approvedClaim(ctx);
     const error = await expectRefusal(
       executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
@@ -532,16 +579,16 @@ test("missing FX evidence fails the batch with its setup remedy and no writes", 
       `)).rows);
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.currency, null, "the legacy row is untouched by the failed batch");
-    assert.equal(rows[0]?.hash, "legacy-seed");
+    assert.equal(rows[0]?.hash, v0.legacyHash, "the recorded v0 hash is untouched by the failed batch");
     const corrections = await correctionAuditEvents(ctx.org.orgId);
     assert.equal(corrections.length, 0, "a failed batch records no per-row correction evidence");
   });
 });
 
-test("a legacy open month corrects atomically with per-row before and after evidence", { skip: !DB }, async () => {
+test("a reproduced legacy month corrects atomically with per-row before and after evidence", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
-    const seeded = await seedCustomerAndSubscription(ctx);
-    await seedLegacyMonth(ctx, seeded.customerId, seeded.subscriptionId);
+    await seedCustomerAndSubscription(ctx);
+    const v0 = await seedV0Month(ctx);
     const journalBefore = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from journal_entries where org_id = ${ctx.org.orgId}
@@ -552,8 +599,10 @@ test("a legacy open month corrects atomically with per-row before and after evid
     assert.equal(result.reportingCurrency, "CAD");
     assert.equal(result.denominationVersion, "v1");
     assert.match(result.monthHash, /^[0-9a-f]{64}$/);
-    assert.deepEqual(result.sourceV0Hashes, ["legacy-seed"]);
-    assert.equal(result.replacedMonthly, 1);
+    assert.deepEqual(result.sourceV0Hashes, [v0.legacyHash], "the proof pins the one common reproduced v0 hash");
+    assert.equal(result.replacedMonthly, v0.monthly.length);
+    assert.equal(result.replacedFacts, v0.facts.length);
+    assert.equal(result.replacedCohorts, v0.cohorts.length);
     const stored = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ hash: string; currency: string; version: string }>(sql`
         select inputs_hash as hash, reporting_currency as currency, denomination_version as version
@@ -565,21 +614,26 @@ test("a legacy open month corrects atomically with per-row before and after evid
         select inputs_hash as hash, reporting_currency as currency, denomination_version as version
           from saas_metrics_cohort_monthly where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
       `)).rows);
-    assert.equal(stored.length, 3, "exactly the month's three row sets are replaced");
+    assert.equal(
+      stored.length,
+      v0.monthly.length + v0.facts.length + v0.cohorts.length,
+      "exactly the month's three row sets are replaced",
+    );
     for (const row of stored) {
       assert.equal(row.hash, result.monthHash, "every replaced row carries the canonical v1 hash");
       assert.equal(row.currency, "CAD");
       assert.equal(row.version, "v1");
     }
     const corrections = await correctionAuditEvents(ctx.org.orgId);
-    assert.equal(corrections.length, 3, "each replaced row carries before and after evidence");
+    assert.equal(corrections.length, stored.length, "each replaced row carries before and after evidence");
     for (const event of corrections) {
       const changes = event.changes as Record<string, unknown>;
       assert.equal(changes.requestId, request.id);
       assert.equal(changes.attempt, 1);
       assert.equal(changes.actor, ctx.approver);
       assert.equal(changes.reason, REASON);
-      assert.equal(changes.sourceV0Hash, "legacy-seed");
+      assert.equal(changes.change, "corrected", "grain-preserving corrections never add or remove rows");
+      assert.equal(changes.sourceV0Hash, v0.legacyHash);
       assert.equal(changes.v1Hash, result.monthHash);
       assert.ok(changes.before, "the legacy before-image is recorded");
       assert.ok(changes.after, "the normalized after-image is recorded");
@@ -600,8 +654,8 @@ test("a legacy open month corrects atomically with per-row before and after evid
 
 test("a closed month corrects only through the approved request without reopening", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
-    const seeded = await seedCustomerAndSubscription(ctx);
-    await seedLegacyMonth(ctx, seeded.customerId, seeded.subscriptionId);
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
     await withOrgTransaction(ctx.org.orgId, async () => {
       const closed = await db.execute(sql`
         insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state)
@@ -624,8 +678,8 @@ test("a closed month corrects only through the approved request without reopenin
 
 test("a crashed worker supersedes cleanly: old tokens die, the new attempt re-proves", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
-    const seeded = await seedCustomerAndSubscription(ctx);
-    await seedLegacyMonth(ctx, seeded.customerId, seeded.subscriptionId);
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
     const filed = await fileRequest(ctx);
     await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
     const crashed = await claimNormalizationRequest({
@@ -689,8 +743,17 @@ test("a crashed worker supersedes cleanly: old tokens die, the new attempt re-pr
 
 test("retry after failure re-proves and succeeds without resuming payload", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
-    const seeded = await seedCustomerAndSubscription(ctx, "EUR");
-    await seedLegacyMonth(ctx, seeded.customerId, seeded.subscriptionId);
+    await seedCustomerAndSubscription(ctx, "EUR");
+    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
+    await seedV0Month(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const removed = await db.execute(sql`
+        delete from fx_rates
+         where org_id = ${ctx.org.orgId} and from_currency = 'EUR' and to_currency = 'CAD'
+        returning id
+      `);
+      assert.equal(removed.rows.length, 1, "the covering rate must be withdrawn to stage the drift");
+    });
     const filed = await fileRequest(ctx);
     await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
     const first = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
@@ -699,14 +762,7 @@ test("retry after failure re-proves and succeeds without resuming payload", { sk
       "saas_metrics_fx_rate_missing",
       "FX rates",
     );
-    await withOrgTransaction(ctx.org.orgId, async () => {
-      const rate = await db.execute(sql`
-        insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
-        values (${ctx.org.orgId}, 'EUR', 'CAD', '2026-07-31', 'spot', '1.5000000000', 'manual')
-        returning id
-      `);
-      assert.equal(rate.rows.length, 1, "the covering EUR rate must be stored");
-    });
+    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
     const retried = await retryNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
     assert.equal(retried.request.attemptCount, 2);
     const result = await executeNormalizationRequest({
@@ -738,5 +794,287 @@ test("cancellation honors requester, approver, and terminal immutability", { ski
       "saas_normalization_approval_state",
       "Company Setup",
     );
+  });
+});
+
+test("a changed source refuses as drift with zero writes and the chained remedy", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    const seeded = await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const changed = await db.execute(sql`
+        update subscriptions set price_override = '200.0000'
+         where org_id = ${ctx.org.orgId} and id = ${seeded.subscriptionId}
+        returning id
+      `);
+      assert.equal(changed.rows.length, 1, "the subscription price must move to stage source drift");
+    });
+    const { request, leaseToken } = await approvedClaim(ctx);
+    await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      "saas_normalization_source_drift",
+      "earlier months first",
+    );
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null }>(sql`
+        select reporting_currency as currency from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `)).rows);
+    assert.equal(rows.length, 1, "the drifted batch writes no v1 row");
+    assert.equal(rows[0]?.currency, null, "the legacy row stays legacy after source drift");
+  });
+});
+
+test("a tampered stored value refuses with zero writes and administrator escalation", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    const v0 = await seedV0Month(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const tampered = await db.execute(sql`
+        update saas_metrics_monthly set mrr_end = mrr_end + 1
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(tampered.rows.length, 1, "the stored value must move to stage tamper");
+    });
+    const { request, leaseToken } = await approvedClaim(ctx);
+    await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      "saas_normalization_stored_tamper",
+      "never edited by hand",
+    );
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null; hash: string }>(sql`
+        select reporting_currency as currency, inputs_hash as hash from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `)).rows);
+    assert.equal(rows.length, 1, "the tampered batch writes no v1 row");
+    assert.equal(rows[0]?.currency, null);
+    assert.equal(rows[0]?.hash, v0.legacyHash, "the recorded hash still stands");
+  });
+});
+
+test("a tampered stored hash refuses with zero writes and administrator escalation", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const tampered = await db.execute(sql`
+        update saas_metrics_monthly
+           set inputs_hash = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(tampered.rows.length, 1, "the stored hash must move to stage tamper");
+    });
+    const { request, leaseToken } = await approvedClaim(ctx);
+    const error = await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      "saas_normalization_hash_tamper",
+      "never edited by hand",
+    );
+    assert.match(error.remedy, /escalate with the request id/);
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null }>(sql`
+        select reporting_currency as currency from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `)).rows);
+    assert.equal(rows.length, 1, "the tampered batch writes no v1 row");
+    assert.equal(rows[0]?.currency, null);
+  });
+});
+
+test("a missing stored row refuses as key drift with zero writes", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const removed = await db.execute(sql`
+        delete from saas_metrics_facts_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(removed.rows.length, 1, "the facts row must leave to stage a missing key");
+    });
+    const { request, leaseToken } = await approvedClaim(ctx);
+    await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      "saas_normalization_v0_key_drift",
+      "new request",
+    );
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null }>(sql`
+        select reporting_currency as currency from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `)).rows);
+    assert.equal(rows.length, 1, "the key-drifted batch writes no v1 row");
+    assert.equal(rows[0]?.currency, null);
+  });
+});
+
+test("an extra source key refuses as key drift with zero writes", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
+    await seedCustomerAndSubscription(ctx);
+    const { request, leaseToken } = await approvedClaim(ctx);
+    const error = await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      "saas_normalization_v0_key_drift",
+      "new request",
+    );
+    assert.match(error.message, /saas_metrics_monthly:/, "the refusal names the drifted natural key");
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null }>(sql`
+        select reporting_currency as currency from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `)).rows);
+    assert.equal(rows.length, 1, "the key-drifted batch writes no v1 row");
+    assert.equal(rows[0]?.currency, null);
+  });
+});
+
+test("the E-facing action approves, claims, and executes with no token returned", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    const v0 = await seedV0Month(ctx);
+    const filed = await fileRequest(ctx);
+    const done = await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filed.request.id,
+      approverId: ctx.approver,
+    });
+    assert.equal(done.request.status, "succeeded");
+    assert.equal(done.request.approvedBy, ctx.approver);
+    assert.equal(done.request.attemptCount, 1, "one atomic action opens exactly one attempt");
+    assert.ok(!("leaseToken" in done) && !("leaseToken" in done.request), "the raw token never leaves the server");
+    assert.deepEqual(done.result.sourceV0Hashes, [v0.legacyHash]);
+    const events = await requestAuditEvents(ctx.org.orgId, filed.request.id);
+    const kinds = events.map((event) => event.action);
+    assert.deepEqual(
+      kinds,
+      ["saas_normalization_requested", "saas_normalization_approved", "saas_normalization_claimed", "saas_normalization_succeeded"],
+      "one action records approval, first claim, and finalization with no approved-pending gap",
+    );
+    const replay = await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filed.request.id,
+      approverId: ctx.approver,
+    });
+    assert.deepEqual(replay.result, done.result, "the E-facing replay returns the recorded result");
+  });
+});
+
+test("the E-facing action refuses self-approval and concurrent losers with zero gaps", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx);
+    const filed = await fileRequest(ctx);
+    await expectRefusal(
+      approveAndExecuteNormalizationRequest({
+        orgId: ctx.org.orgId,
+        requestId: filed.request.id,
+        approverId: ctx.requester,
+      }),
+      "saas_normalization_self_approval",
+      "different authorized approver",
+    );
+    const secondApprover = await createScratchUser(ctx.org.orgId, "Normalization Rival", "admin");
+    const [first, second] = await Promise.allSettled([
+      approveAndExecuteNormalizationRequest({
+        orgId: ctx.org.orgId,
+        requestId: filed.request.id,
+        approverId: ctx.approver,
+      }),
+      approveAndExecuteNormalizationRequest({
+        orgId: ctx.org.orgId,
+        requestId: filed.request.id,
+        approverId: secondApprover,
+      }),
+    ]);
+    const wins = [first, second].filter((outcome) => outcome.status === "fulfilled");
+    const losses = [first, second].filter((outcome) => outcome.status === "rejected");
+    assert.equal(wins.length, 1, "exactly one concurrent approval claims the request");
+    assert.equal(losses.length, 1, "the concurrent loser refuses on zero rows");
+    const loss = (losses[0] as PromiseRejectedResult).reason as unknown;
+    assert.ok(loss instanceof UsageBillingError, "the loser refuses with a named refusal");
+    assert.ok(
+      ["saas_normalization_approver_recorded", "saas_normalization_already_claimed", "saas_normalization_approval_state"].includes(loss.code),
+      `the loser names the race it lost, saw ${loss.code}`,
+    );
+    const events = await requestAuditEvents(ctx.org.orgId, filed.request.id);
+    assert.equal(
+      events.filter((event) => event.action === "saas_normalization_approved").length,
+      1,
+      "concurrent losers record no second approval",
+    );
+    assert.equal(
+      events.filter((event) => event.action === "saas_normalization_claimed").length,
+      1,
+      "concurrent losers record no second claim",
+    );
+  });
+});
+
+test("a running request cancels only by the approver under the live lease", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    const { request, leaseToken } = await approvedClaim(ctx);
+    await expectRefusal(
+      cancelNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, actorId: ctx.requester, leaseToken }),
+      "saas_normalization_cancel_forbidden",
+      "recorded approver",
+    );
+    await expectRefusal(
+      cancelNormalizationRequest({
+        orgId: ctx.org.orgId,
+        requestId: request.id,
+        actorId: ctx.approver,
+        leaseToken: randomUUID(),
+      }),
+      "saas_normalization_lease_mismatch",
+      "live token",
+    );
+    const cancelled = await cancelNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: request.id,
+      actorId: ctx.approver,
+      leaseToken,
+    });
+    assert.equal(cancelled.status, "cancelled");
+    assert.equal(cancelled.failure, null);
+    assert.equal(cancelled.remedy, null);
+    assert.equal(cancelled.result, null);
+  });
+});
+
+test("a failed request records failure then cancels cleanly by the approver", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    const { request, leaseToken } = await approvedClaim(ctx);
+    await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      "saas_normalization_nothing_to_correct",
+      "ordinary SaaS metrics recompute",
+    );
+    const failed = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id });
+    assert.equal(failed.status, "failed");
+    assert.ok(failed.failure && failed.remedy, "the failed outcome is recorded");
+    await expectRefusal(
+      cancelNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, actorId: ctx.requester }),
+      "saas_normalization_cancel_forbidden",
+      "recorded approver",
+    );
+    const cancelled = await cancelNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: request.id,
+      actorId: ctx.approver,
+    });
+    assert.equal(cancelled.status, "cancelled");
+    assert.equal(cancelled.failure, null, "the failed failure clears atomically with the cancel");
+    assert.equal(cancelled.remedy, null, "the failed remedy clears atomically with the cancel");
+    assert.equal(cancelled.result, null);
+    const events = await requestAuditEvents(ctx.org.orgId, request.id);
+    const last = events[events.length - 1]!;
+    assert.equal(last.action, "saas_normalization_cancelled", "the cancel records its canonical event");
+    assert.equal(last.changes.actor, ctx.approver, "the cancelled event carries the truthful approver actor");
   });
 });
