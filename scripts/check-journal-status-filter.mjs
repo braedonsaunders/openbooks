@@ -5,10 +5,17 @@
  * Journal entries retain their original lines when reversed, so a journal
  * status set containing `posted` must also contain `reversed`. Documents use
  * `voided_at` for the reversal date; an aggregate that reads document or line
- * amounts must include `voided` (or use the as-of void-date predicate). A
- * current-state read may explicitly exclude reversals on the predicate
- * line with this exact intent comment:
- * `-- Live entries only: <why voided documents are excluded>`
+ * amounts must include `voided` (or use the as-of void-date predicate).
+ *
+ * A current-state or authorization read (an entry already reversed cannot be
+ * reversed again; a voided record authorizes nothing) may exclude reversals
+ * when it states why with a comment whose text starts with exactly
+ * `Live entries only: ` followed by the reason. The marker is accepted for
+ * journal and document predicates alike, in either placement:
+ * - trailing the predicate line: `and je.status = 'posted' -- Live entries only: <why>`
+ * - alone on the line immediately above the predicate, as a SQL `--` or
+ *   TypeScript `//` comment: `-- Live entries only: <why>`
+ * Any other wording or placement leaves the predicate a violation.
  *
  * The scan uses TypeScript's AST to isolate SQL template literals, then ties
  * status predicates to aliases whose `FROM`/`JOIN` relation is in that same
@@ -137,15 +144,17 @@ function hasDocumentAmountAggregate(text, aliases) {
     (new RegExp(`\\bcount\\s*\\(\\s*(?:distinct\\s+)?${alias}\\s*\\.\\s*id\\s*\\)`, "i").test(text) || /\bcount\s*\(\s*\*\s*\)/i.test(text)));
 }
 
-function hasLiveEntriesOnlyIntent(raw, condition) {
-  const lineStart = raw.lastIndexOf("\n", condition.offset) + 1;
-  const lineEnd = raw.indexOf("\n", condition.end);
-  const predicateLine = raw.slice(lineStart, lineEnd < 0 ? raw.length : lineEnd);
-  return /--\s*Live entries only: [^\r\n]+\s*$/.test(predicateLine);
+const LIVE_ENTRIES_ONLY_TRAILING = /(?:--|\/\/)\s*Live entries only: \S/;
+const LIVE_ENTRIES_ONLY_ABOVE = /^\s*(?:--|\/\/)\s*Live entries only: \S/;
+
+function hasLiveEntriesOnlyIntent(sourceLines, line) {
+  return LIVE_ENTRIES_ONLY_TRAILING.test(sourceLines[line - 1] ?? "") ||
+    LIVE_ENTRIES_ONLY_ABOVE.test(sourceLines[line - 2] ?? "");
 }
 
 export function scanSource(path, content) {
   const sourceFile = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true);
+  const sourceLines = content.split(/\r?\n/);
   const findings = [];
   const visit = (node) => {
     if (isSqlTemplateNode(node)) {
@@ -157,11 +166,13 @@ export function scanSource(path, content) {
         const conditions = statusConditions(sqlText, alias);
         for (const condition of conditions) {
           const values = new Set(condition.values);
-          const liveEntriesOnly = hasLiveEntriesOnlyIntent(raw, condition);
+          const templateLine = sourceFile.getLineAndCharacterOfPosition(template.getStart(sourceFile) + 1).line;
+          const line = templateLine + (raw.slice(0, condition.offset).match(/\n/g) ?? []).length + 1;
+          const liveEntriesOnly = hasLiveEntriesOnlyIntent(sourceLines, line);
           let reason = null;
           if (relation === "journal_entries" && values.has("posted") && !values.has("reversed") &&
               !hasOrStatus(sqlText, alias, "posted", "reversed") && !liveEntriesOnly) {
-            reason = "journal-entry filters that include posted must also include reversed";
+            reason = "journal-entry filters that include posted must also include reversed; authorization checks need the documented intent comment";
           }
           if (relation === "documents" && values.has("posted") && !values.has("voided") &&
               !hasOrStatus(sqlText, alias, "posted", "voided") &&
@@ -169,8 +180,6 @@ export function scanSource(path, content) {
             reason = "document amount aggregates must include voided history or an as-of void-date predicate; current-state exclusions need the documented intent comment";
           }
           if (reason) {
-            const templateLine = sourceFile.getLineAndCharacterOfPosition(template.getStart(sourceFile) + 1).line;
-            const line = templateLine + (raw.slice(0, condition.offset).match(/\n/g) ?? []).length + 1;
             findings.push({ path, line, alias, relation, reason });
           }
         }

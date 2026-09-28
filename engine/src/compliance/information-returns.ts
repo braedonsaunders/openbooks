@@ -629,6 +629,7 @@ export async function loadPaymentTraces(args: {
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
       join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
+     -- Live entries only: a voided vendor payment is not a reportable payment to the payee.
      where d.org_id = ${args.orgId} and d.kind = 'vendor_payment' and d.status = 'posted'
        and d.document_date between ${from} and ${to}
        and d.party_id is not null

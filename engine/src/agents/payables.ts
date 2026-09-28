@@ -201,6 +201,7 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
         from documents d
        where d.org_id = ${orgId} and d.voided_at is null
          and d.kind in ('vendor_bill', 'expense_report')
+         -- Live entries only: the beyond-horizon total counts bills still payable; a voided bill is never paid.
          and d.status = 'posted' and d.open_balance <> 0
          and (d.due_date is null or d.due_date > ${horizonEnd})
     `),

@@ -181,6 +181,7 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.org_id = ${orgId}
        and d.kind in ('customer_invoice', 'customer_credit')
+       -- Live entries only: a voided invoice is no longer owed, so it is never dunned.
        and d.status = 'posted'
        and d.open_balance <> 0
      group by d.party_id, p.display_name

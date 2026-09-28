@@ -49,6 +49,7 @@ export async function openBalancesByParty(
       from documents d
       join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted', 'reversed')
       join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
+     -- Live entries only: a voided document is not owed today, so it carries no open balance.
      where d.org_id = ${orgId} and d.status = 'posted'
      group by d.party_id, d.kind`));
   const out: Record<string, { ar?: string; ap?: string }> = {};

@@ -76,10 +76,12 @@ export async function periodFingerprint(
          and d.posting_period_id = ${periodId} and ${documentScope}) as document_changed,
       (select count(*) from documents d
         where d.org_id = ${orgId}
+          -- Live entries only: a voided document needs no posting period before close.
           and d.status in ('draft','pending_approval','approved','posted')
           and d.posting_period_id is null and ${documentScope}) as unassigned_documents,
       (select coalesce(max(d.updated_at)::text, '') from documents d
         where d.org_id = ${orgId}
+          -- Live entries only: the change marker watches the same unassigned set the count above reads.
           and d.status in ('draft','pending_approval','approved','posted')
           and d.posting_period_id is null and ${documentScope}) as unassigned_document_changed,
       (select count(*) from reconciliations r join accounts a on a.org_id=r.org_id and a.id=r.account_id join accounting_periods p on p.id = ${periodId} and p.org_id = r.org_id
@@ -172,6 +174,7 @@ export async function readinessChecks(
       select count(*) as count
         from documents d
        where d.org_id = ${orgId}
+         -- Live entries only: a voided document dated in the period needs no posting period assigned.
          and d.status in ('draft','pending_approval','approved','posted')
          and d.kind not in (${nonPostingKindList()})
          and d.posting_period_id is null

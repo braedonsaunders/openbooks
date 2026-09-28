@@ -52,6 +52,7 @@ export async function taxFindings(
         select count(distinct d.id)::int as documents, coalesce(sum(dl.amount), 0)::text as untaxed_amount
           from documents d
           join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
+         -- Live entries only: a voided document needs no tax-code correction, so it adds no materiality.
          where d.org_id = ${orgId} and d.kind = ${kind} and d.status = 'posted'
            and d.document_date between ${from} and ${today}
            and dl.tax_code_id is null and dl.amount <> 0
@@ -74,6 +75,7 @@ export async function taxFindings(
           from documents d
           join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
+         -- Live entries only: the sample lists the same standing documents the materiality total counted.
          where d.org_id = ${orgId} and d.kind = ${kind} and d.status = 'posted'
            and d.document_date between ${from} and ${today}
            and dl.tax_code_id is null and dl.amount <> 0

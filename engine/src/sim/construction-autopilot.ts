@@ -46,6 +46,7 @@ async function stampCollectible(world: SimOrg, invoiceId: string, today: string)
 async function billedToDate(world: SimOrg, projectId: string): Promise<number> {
   const r = (await db.execute<{ billed: string }>(sql`
     select coalesce(sum(d.total), 0)::text as billed from documents d
+     -- Live entries only: a voided invoice no longer bills the job.
      where d.org_id = ${world.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
        and (d.custom->'sim'->>'projectId' = ${projectId}
             or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = ${projectId}))`));
