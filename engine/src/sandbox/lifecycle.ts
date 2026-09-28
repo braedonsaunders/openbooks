@@ -952,8 +952,8 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
     await withOrg(null, async () => {
       await db.execute(sql`delete from orgs where id = ${orgId}`);
     });
-    await auditSandboxLifecycle(productionOrgId, sandboxId, "delete_completed", authority,
-      { status: "deleting" }, { status: "deleted" });
+    await withOrg(productionOrgId, () => auditSandboxLifecycle(productionOrgId, sandboxId, "delete_completed", authority,
+      { status: "deleting" }, { status: "deleted" }));
   } catch (err) {
     const failed = await db.execute<{ id: string }>(sql`
       update sandboxes
