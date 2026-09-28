@@ -1629,3 +1629,237 @@ export async function approveAndExecuteNormalizationRequest(args: {
     await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
   }
 }
+
+/**
+ * Read-only per-month normalization state for the Company Setup → SaaS
+ * Metrics workflow. This is the single classifier the workflow reads: one
+ * engine query source unions the months from all three metric tables with
+ * the request months, counts every row set, and maps each month to exactly
+ * one of legacy, ready, pending, running, failed, or refused.
+ *
+ * The returned DTO is exhaustively whitelisted for the settings surface:
+ * month, state, the three row counts, the denomination version and
+ * reporting currency only when the stored rows coherently carry them, the
+ * current request id and status, and operator-safe failure/remedy text.
+ * Lease tokens and digests, request hashes, free-form reasons, progress
+ * payloads, source hashes, and raw results or audit rows never leave this
+ * function.
+ *
+ * Classification fails closed. Ready needs every stored row on the v1
+ * denomination with one reporting currency, plus full agreement with the
+ * succeeded result when a request selected the month. Legacy needs every
+ * stored row on the all-null legacy triple. Empty months, mixed legacy/v1
+ * sets, partial triples, unsupported versions, multiple currencies, and
+ * malformed or mismatched results are refused by name with the request and
+ * distinct-approval remedy — never silently labelled ready. A cancelled
+ * request falls back to the stored-row classification while its token-free
+ * identity stays visible. Terminal precedence is deterministic: the latest
+ * non-cancelled request by creation time, id breaking ties, so an older
+ * row can never shadow a later outcome.
+ */
+export type NormalizationMonthState =
+  | "legacy"
+  | "ready"
+  | "pending"
+  | "running"
+  | "failed"
+  | "refused";
+
+export interface NormalizationMonthRequest {
+  id: string;
+  status: NormalizationRequestStatus;
+}
+
+export interface NormalizationMonthStates {
+  month: string;
+  state: NormalizationMonthState;
+  counts: { monthly: number; facts: number; cohorts: number };
+  denominationVersion: string | null;
+  reportingCurrency: string | null;
+  request: NormalizationMonthRequest | null;
+  failure: string | null;
+  remedy: string | null;
+}
+
+type MonthShapeRow = {
+  month: string;
+  monthly: number;
+  facts: number;
+  cohorts: number;
+  total: number;
+  legacy: number;
+  v1: number;
+  currencies: string[];
+  versions: string[];
+};
+
+type MonthRequestRow = {
+  id: string;
+  month: string;
+  status: NormalizationRequestStatus;
+  createdAt: string;
+  failure: string | null;
+  remedy: string | null;
+  result: unknown;
+};
+
+const MONTH_REQUEST_REMEDY =
+  "File a normalization request for the month in Company Setup → SaaS Metrics and have a different authorized approver approve it; the approved correction re-proves the stored rows before any write.";
+
+function monthRequestState(
+  month: string,
+  shape: MonthShapeRow,
+  terminal: MonthRequestRow | null,
+  fallback: MonthRequestRow | null,
+): NormalizationMonthStates {
+  const base = {
+    month,
+    counts: { monthly: shape.monthly, facts: shape.facts, cohorts: shape.cohorts },
+    denominationVersion: null as string | null,
+    reportingCurrency: null as string | null,
+    request: terminal
+      ? { id: terminal.id, status: terminal.status }
+      : fallback
+        ? { id: fallback.id, status: fallback.status }
+        : null,
+    failure: null as string | null,
+    remedy: null as string | null,
+  };
+  if (terminal && (terminal.status === "pending" || terminal.status === "running")) {
+    return { ...base, state: terminal.status };
+  }
+  if (terminal && terminal.status === "failed") {
+    return { ...base, state: "failed", failure: terminal.failure, remedy: terminal.remedy };
+  }
+  const coherentLegacy = shape.total > 0 && shape.legacy === shape.total;
+  const coherentV1 =
+    shape.total > 0
+    && shape.v1 === shape.total
+    && shape.currencies.length === 1
+    && shape.currencies[0] !== undefined;
+  const describeShape = (): string => {
+    if (shape.total === 0) return `Month ${month} has no stored metric rows.`;
+    if (shape.currencies.length > 1) {
+      return `Month ${month} mixes reporting currencies (${shape.currencies.join(", ")}).`;
+    }
+    const unsupported = shape.versions.filter((version) => version !== "v1");
+    if (unsupported.length > 0) {
+      return `Month ${month} carries an unsupported denomination version (${unsupported.join(", ")}).`;
+    }
+    if (!coherentLegacy && !coherentV1) {
+      return `Month ${month} mixes legacy and normalized rows or carries an incomplete denomination.`;
+    }
+    return `Month ${month} cannot be classified from its stored rows.`;
+  };
+  if (terminal && terminal.status === "succeeded") {
+    const result = terminal.result as Partial<NormalizationExecutionResult> | null;
+    const agrees =
+      coherentV1
+      && typeof result === "object" && result !== null
+      && result.month === month
+      && result.denominationVersion === SAAS_METRICS_DENOMINATION_VERSION
+      && result.reportingCurrency === shape.currencies[0]
+      && result.subscriptionRows === shape.monthly
+      && result.replacedMonthly === shape.monthly
+      && result.replacedFacts === shape.facts
+      && result.replacedCohorts === shape.cohorts;
+    if (agrees) {
+      return {
+        ...base,
+        state: "ready",
+        denominationVersion: SAAS_METRICS_DENOMINATION_VERSION,
+        reportingCurrency: shape.currencies[0]!,
+      };
+    }
+    return {
+      ...base,
+      state: "refused",
+      failure:
+        `Request ${terminal.id} succeeded for ${month}, but the stored rows no longer match its recorded result. `
+        + describeShape(),
+      remedy: MONTH_REQUEST_REMEDY,
+    };
+  }
+  if (coherentLegacy) return { ...base, state: "legacy" };
+  if (coherentV1 && !terminal) {
+    // Normalized by the shared pipeline with no request on record: there is
+    // nothing to correct, so the month is ready. Refusing here would name a
+    // remedy that can never succeed, because a request for v1 rows cannot
+    // prove a legacy set.
+    return {
+      ...base,
+      state: "ready",
+      denominationVersion: SAAS_METRICS_DENOMINATION_VERSION,
+      reportingCurrency: shape.currencies[0]!,
+    };
+  }
+  return { ...base, state: "refused", failure: describeShape(), remedy: MONTH_REQUEST_REMEDY };
+}
+
+export async function listNormalizationMonthStates(orgId: string): Promise<NormalizationMonthStates[]> {
+  const resolvedOrgId = requireUuid(orgId, "org_id");
+  return withOrgTransaction(resolvedOrgId, async () => {
+    await acquireOrgFeatureGateLock(db, resolvedOrgId);
+    if (!(await lockAndCheckOrgFeature(db, resolvedOrgId, "saasMetrics"))) {
+      throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
+    }
+    const shapes = (await db.execute<MonthShapeRow>(sql`
+      with rows as (
+        select month::text as month, reporting_currency, denomination_version, normalization_evidence,
+               'monthly' as source
+          from saas_metrics_monthly where org_id = ${resolvedOrgId}
+        union all
+        select month::text as month, reporting_currency, denomination_version, normalization_evidence,
+               'facts' as source
+          from saas_metrics_facts_monthly where org_id = ${resolvedOrgId}
+        union all
+        select month::text as month, reporting_currency, denomination_version, normalization_evidence,
+               'cohorts' as source
+          from saas_metrics_cohort_monthly where org_id = ${resolvedOrgId}
+      ),
+      months as (
+        select month from rows group by month
+        union
+        select month::text as month from saas_metrics_normalization_requests where org_id = ${resolvedOrgId}
+      )
+      select m.month as month,
+             coalesce(sum(case when r.source = 'monthly' then 1 else 0 end), 0)::int as monthly,
+             coalesce(sum(case when r.source = 'facts' then 1 else 0 end), 0)::int as facts,
+             coalesce(sum(case when r.source = 'cohorts' then 1 else 0 end), 0)::int as cohorts,
+             count(r.source)::int as total,
+             coalesce(sum(case when r.reporting_currency is null
+                                and r.denomination_version is null
+                                and r.normalization_evidence is null then 1 else 0 end), 0)::int as legacy,
+             coalesce(sum(case when r.reporting_currency is not null
+                                and r.denomination_version = ${SAAS_METRICS_DENOMINATION_VERSION}
+                                then 1 else 0 end), 0)::int as v1,
+             coalesce(array_remove(array_agg(distinct r.reporting_currency), null), '{}') as currencies,
+             coalesce(array_remove(array_agg(distinct r.denomination_version), null), '{}') as versions
+        from months m left join rows r on r.month = m.month
+       group by m.month order by m.month desc
+    `)).rows;
+    const requests = (await db.execute<MonthRequestRow>(sql`
+      select id::text as id, month::text as month, status,
+             created_at::text as "createdAt", failure, remedy, result
+        from saas_metrics_normalization_requests
+       where org_id = ${resolvedOrgId}
+       order by month desc, created_at desc, id desc
+    `)).rows;
+    const byMonth = new Map<string, MonthRequestRow[]>();
+    for (const row of requests) {
+      const key = row.month.slice(0, 10);
+      const list = byMonth.get(key);
+      if (list) list.push(row);
+      else byMonth.set(key, [row]);
+    }
+    const later = (a: MonthRequestRow, b: MonthRequestRow): boolean =>
+      a.createdAt > b.createdAt || (a.createdAt === b.createdAt && a.id > b.id);
+    return shapes.map((shape) => {
+      const month = shape.month.slice(0, 10);
+      const history = (byMonth.get(month) ?? []).slice().sort((a, b) => (later(a, b) ? -1 : 1));
+      const terminal = history.find((row) => row.status !== "cancelled") ?? null;
+      const fallback = terminal ? null : (history[0] ?? null);
+      return monthRequestState(month, shape, terminal, fallback);
+    });
+  });
+}
