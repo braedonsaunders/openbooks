@@ -174,5 +174,132 @@
       "deleteFailed": "No se pudo eliminar la línea de demanda. Inténtelo de nuevo.",
       "customFields": "Corrija los campos personalizados marcados."
     }
+  },
+  "reports": {
+    "utilization": {
+      "title": "Previsión de utilización",
+      "description": "Utilización facturable prevista frente a la capacidad neta semanal.",
+      "periodPhrase": "Semanas desde {from} hasta {to}",
+      "jobTitleSearch": "Buscar puestos",
+      "breakout": "Desglose",
+      "breakouts": {
+        "person": "Persona",
+        "department": "Departamento",
+        "job_title": "Puesto"
+      },
+      "measures": {
+        "utilization": "Utilización",
+        "booked": "Reservado",
+        "gap": "Brecha de demanda",
+        "fill": "Cobertura de capacidad",
+        "margin": "Margen",
+        "marginPercent": "Porcentaje de margen",
+        "personCount": "Personas",
+        "unknownCapacity": "Semanas con capacidad desconocida",
+        "unpricedCount": "Asignaciones sin precio",
+        "uncostedCount": "Asignaciones sin coste",
+        "pricedCount": "Asignaciones con precio",
+        "costedCount": "Asignaciones con coste calculado"
+      },
+      "guards": {
+        "noCapacity": "No hay capacidad registrada",
+        "noRevenue": "No hay ingresos registrados",
+        "undefined": "No está definido para este grupo.",
+        "noCost": "No se han registrado costes laborales"
+      }
+    },
+    "bench": {
+      "title": "Capacidad disponible",
+      "description": "Capacidad semanal sin reservas firmes.",
+      "periodPhrase": "Semanas desde {from} hasta {to}",
+      "jobTitleSearch": "Buscar puestos",
+      "breakout": "Desglose",
+      "breakouts": {
+        "department": "Departamento",
+        "job_title": "Puesto"
+      },
+      "measures": {
+        "utilization": "Utilización",
+        "booked": "Reservado",
+        "gap": "Brecha de demanda",
+        "fill": "Cobertura de capacidad",
+        "margin": "Margen",
+        "marginPercent": "Porcentaje de margen",
+        "personCount": "Personas",
+        "unknownCapacity": "Semanas con capacidad desconocida",
+        "unpricedCount": "Asignaciones sin precio",
+        "uncostedCount": "Asignaciones sin coste",
+        "pricedCount": "Asignaciones con precio",
+        "costedCount": "Asignaciones con coste calculado"
+      },
+      "guards": {
+        "noCapacity": "No hay capacidad registrada",
+        "noRevenue": "No hay ingresos registrados",
+        "undefined": "No está definido para este grupo.",
+        "noCost": "No se han registrado costes laborales"
+      }
+    },
+    "capacity-demand": {
+      "title": "Capacidad y demanda",
+      "description": "Compara la capacidad neta con la demanda asignada, genérica y ponderada del embudo.",
+      "periodPhrase": "Semanas desde {from} hasta {to}",
+      "jobTitleSearch": "Buscar puestos",
+      "breakout": "Desglose",
+      "breakouts": {
+        "department": "Departamento",
+        "job_title": "Puesto"
+      },
+      "measures": {
+        "utilization": "Utilización",
+        "booked": "Reservado",
+        "gap": "Brecha de demanda",
+        "fill": "Cobertura de capacidad",
+        "margin": "Margen",
+        "marginPercent": "Porcentaje de margen",
+        "personCount": "Personas",
+        "unknownCapacity": "Semanas con capacidad desconocida",
+        "unpricedCount": "Asignaciones sin precio",
+        "uncostedCount": "Asignaciones sin coste",
+        "pricedCount": "Asignaciones con precio",
+        "costedCount": "Asignaciones con coste calculado"
+      },
+      "guards": {
+        "noCapacity": "No hay capacidad registrada",
+        "noRevenue": "No hay ingresos registrados",
+        "undefined": "No está definido para este grupo.",
+        "noCost": "No se han registrado costes laborales"
+      }
+    },
+    "engagement": {
+      "title": "Previsión de proyectos",
+      "description": "Horas, ingresos, costes laborales y margen previstos por mes y moneda.",
+      "periodPhrase": "Meses que contienen semanas desde {from} hasta {to}",
+      "jobTitleSearch": "Buscar puestos",
+      "breakout": "Desglose",
+      "breakouts": {
+        "customer": "Cliente",
+        "project": "Proyecto"
+      },
+      "measures": {
+        "utilization": "Utilización",
+        "booked": "Reservado",
+        "gap": "Brecha de demanda",
+        "fill": "Cobertura de capacidad",
+        "margin": "Margen",
+        "marginPercent": "Porcentaje de margen",
+        "personCount": "Personas",
+        "unknownCapacity": "Semanas con capacidad desconocida",
+        "unpricedCount": "Asignaciones sin precio",
+        "uncostedCount": "Asignaciones sin coste",
+        "pricedCount": "Asignaciones con precio",
+        "costedCount": "Asignaciones con coste calculado"
+      },
+      "guards": {
+        "noCapacity": "No hay capacidad registrada",
+        "noRevenue": "No hay ingresos registrados",
+        "undefined": "No está definido para este grupo.",
+        "noCost": "No se han registrado costes laborales"
+      }
+    }
   }
 }

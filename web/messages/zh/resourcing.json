@@ -174,5 +174,132 @@
       "deleteFailed": "无法删除需求明细，请重试。",
       "customFields": "请更正标记的自定义字段。"
     }
+  },
+  "reports": {
+    "utilization": {
+      "title": "利用率预测",
+      "description": "预测可计费利用率与每周净产能的关系。",
+      "periodPhrase": "{from} 至 {to} 的周",
+      "jobTitleSearch": "搜索职务",
+      "breakout": "分组",
+      "breakouts": {
+        "person": "人员",
+        "department": "部门",
+        "job_title": "职务"
+      },
+      "measures": {
+        "utilization": "利用率",
+        "booked": "已预订",
+        "gap": "需求缺口",
+        "fill": "产能满足率",
+        "margin": "利润",
+        "marginPercent": "利润率",
+        "personCount": "人员数",
+        "unknownCapacity": "产能未知的周数",
+        "unpricedCount": "未定价分配",
+        "uncostedCount": "未核算成本分配",
+        "pricedCount": "已定价分配",
+        "costedCount": "已核算成本分配"
+      },
+      "guards": {
+        "noCapacity": "未记录产能",
+        "noRevenue": "未记录收入",
+        "undefined": "此分组未定义。",
+        "noCost": "未记录人工成本"
+      }
+    },
+    "bench": {
+      "title": "闲置产能",
+      "description": "没有硬性预订的每周产能。",
+      "periodPhrase": "{from} 至 {to} 的周",
+      "jobTitleSearch": "搜索职务",
+      "breakout": "分组",
+      "breakouts": {
+        "department": "部门",
+        "job_title": "职务"
+      },
+      "measures": {
+        "utilization": "利用率",
+        "booked": "已预订",
+        "gap": "需求缺口",
+        "fill": "产能满足率",
+        "margin": "利润",
+        "marginPercent": "利润率",
+        "personCount": "人员数",
+        "unknownCapacity": "产能未知的周数",
+        "unpricedCount": "未定价分配",
+        "uncostedCount": "未核算成本分配",
+        "pricedCount": "已定价分配",
+        "costedCount": "已核算成本分配"
+      },
+      "guards": {
+        "noCapacity": "未记录产能",
+        "noRevenue": "未记录收入",
+        "undefined": "此分组未定义。",
+        "noCost": "未记录人工成本"
+      }
+    },
+    "capacity-demand": {
+      "title": "产能与需求",
+      "description": "比较净产能与指定人员、通用及加权销售管道需求。",
+      "periodPhrase": "{from} 至 {to} 的周",
+      "jobTitleSearch": "搜索职务",
+      "breakout": "分组",
+      "breakouts": {
+        "department": "部门",
+        "job_title": "职务"
+      },
+      "measures": {
+        "utilization": "利用率",
+        "booked": "已预订",
+        "gap": "需求缺口",
+        "fill": "产能满足率",
+        "margin": "利润",
+        "marginPercent": "利润率",
+        "personCount": "人员数",
+        "unknownCapacity": "产能未知的周数",
+        "unpricedCount": "未定价分配",
+        "uncostedCount": "未核算成本分配",
+        "pricedCount": "已定价分配",
+        "costedCount": "已核算成本分配"
+      },
+      "guards": {
+        "noCapacity": "未记录产能",
+        "noRevenue": "未记录收入",
+        "undefined": "此分组未定义。",
+        "noCost": "未记录人工成本"
+      }
+    },
+    "engagement": {
+      "title": "项目预测",
+      "description": "按月份和币种预测工时、收入、人工成本和利润。",
+      "periodPhrase": "包含 {from} 至 {to} 周的月份",
+      "jobTitleSearch": "搜索职务",
+      "breakout": "分组",
+      "breakouts": {
+        "customer": "客户",
+        "project": "项目"
+      },
+      "measures": {
+        "utilization": "利用率",
+        "booked": "已预订",
+        "gap": "需求缺口",
+        "fill": "产能满足率",
+        "margin": "利润",
+        "marginPercent": "利润率",
+        "personCount": "人员数",
+        "unknownCapacity": "产能未知的周数",
+        "unpricedCount": "未定价分配",
+        "uncostedCount": "未核算成本分配",
+        "pricedCount": "已定价分配",
+        "costedCount": "已核算成本分配"
+      },
+      "guards": {
+        "noCapacity": "未记录产能",
+        "noRevenue": "未记录收入",
+        "undefined": "此分组未定义。",
+        "noCost": "未记录人工成本"
+      }
+    }
   }
 }

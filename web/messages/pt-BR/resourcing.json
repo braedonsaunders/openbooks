@@ -174,5 +174,132 @@
       "deleteFailed": "Não foi possível excluir a linha de demanda. Tente novamente.",
       "customFields": "Corrija os campos personalizados destacados."
     }
+  },
+  "reports": {
+    "utilization": {
+      "title": "Previsão de utilização",
+      "description": "Utilização faturável prevista em relação à capacidade líquida semanal.",
+      "periodPhrase": "Semanas de {from} a {to}",
+      "jobTitleSearch": "Buscar cargos",
+      "breakout": "Detalhamento",
+      "breakouts": {
+        "person": "Pessoa",
+        "department": "Departamento",
+        "job_title": "Cargo"
+      },
+      "measures": {
+        "utilization": "Utilização",
+        "booked": "Reservado",
+        "gap": "Lacuna de demanda",
+        "fill": "Cobertura de capacidade",
+        "margin": "Margem",
+        "marginPercent": "Percentual de margem",
+        "personCount": "Pessoas",
+        "unknownCapacity": "Semanas com capacidade desconhecida",
+        "unpricedCount": "Alocações sem preço",
+        "uncostedCount": "Alocações sem custo",
+        "pricedCount": "Alocações com preço",
+        "costedCount": "Alocações com custo calculado"
+      },
+      "guards": {
+        "noCapacity": "Capacidade não registrada",
+        "noRevenue": "Receita não registrada",
+        "undefined": "Indefinido para este grupo.",
+        "noCost": "Nenhum custo de mão de obra registrado"
+      }
+    },
+    "bench": {
+      "title": "Capacidade ociosa",
+      "description": "Capacidade semanal sem alocações firmes.",
+      "periodPhrase": "Semanas de {from} a {to}",
+      "jobTitleSearch": "Buscar cargos",
+      "breakout": "Detalhamento",
+      "breakouts": {
+        "department": "Departamento",
+        "job_title": "Cargo"
+      },
+      "measures": {
+        "utilization": "Utilização",
+        "booked": "Reservado",
+        "gap": "Lacuna de demanda",
+        "fill": "Cobertura de capacidade",
+        "margin": "Margem",
+        "marginPercent": "Percentual de margem",
+        "personCount": "Pessoas",
+        "unknownCapacity": "Semanas com capacidade desconhecida",
+        "unpricedCount": "Alocações sem preço",
+        "uncostedCount": "Alocações sem custo",
+        "pricedCount": "Alocações com preço",
+        "costedCount": "Alocações com custo calculado"
+      },
+      "guards": {
+        "noCapacity": "Capacidade não registrada",
+        "noRevenue": "Receita não registrada",
+        "undefined": "Indefinido para este grupo.",
+        "noCost": "Nenhum custo de mão de obra registrado"
+      }
+    },
+    "capacity-demand": {
+      "title": "Capacidade e demanda",
+      "description": "Compara a capacidade líquida com a demanda nominal, genérica e ponderada do pipeline.",
+      "periodPhrase": "Semanas de {from} a {to}",
+      "jobTitleSearch": "Buscar cargos",
+      "breakout": "Detalhamento",
+      "breakouts": {
+        "department": "Departamento",
+        "job_title": "Cargo"
+      },
+      "measures": {
+        "utilization": "Utilização",
+        "booked": "Reservado",
+        "gap": "Lacuna de demanda",
+        "fill": "Cobertura de capacidade",
+        "margin": "Margem",
+        "marginPercent": "Percentual de margem",
+        "personCount": "Pessoas",
+        "unknownCapacity": "Semanas com capacidade desconhecida",
+        "unpricedCount": "Alocações sem preço",
+        "uncostedCount": "Alocações sem custo",
+        "pricedCount": "Alocações com preço",
+        "costedCount": "Alocações com custo calculado"
+      },
+      "guards": {
+        "noCapacity": "Capacidade não registrada",
+        "noRevenue": "Receita não registrada",
+        "undefined": "Indefinido para este grupo.",
+        "noCost": "Nenhum custo de mão de obra registrado"
+      }
+    },
+    "engagement": {
+      "title": "Previsão de projetos",
+      "description": "Prevê horas, receita, custo de mão de obra e margem por mês e moeda.",
+      "periodPhrase": "Meses com semanas de {from} a {to}",
+      "jobTitleSearch": "Buscar cargos",
+      "breakout": "Detalhamento",
+      "breakouts": {
+        "customer": "Cliente",
+        "project": "Projeto"
+      },
+      "measures": {
+        "utilization": "Utilização",
+        "booked": "Reservado",
+        "gap": "Lacuna de demanda",
+        "fill": "Cobertura de capacidade",
+        "margin": "Margem",
+        "marginPercent": "Percentual de margem",
+        "personCount": "Pessoas",
+        "unknownCapacity": "Semanas com capacidade desconhecida",
+        "unpricedCount": "Alocações sem preço",
+        "uncostedCount": "Alocações sem custo",
+        "pricedCount": "Alocações com preço",
+        "costedCount": "Alocações com custo calculado"
+      },
+      "guards": {
+        "noCapacity": "Capacidade não registrada",
+        "noRevenue": "Receita não registrada",
+        "undefined": "Indefinido para este grupo.",
+        "noCost": "Nenhum custo de mão de obra registrado"
+      }
+    }
   }
 }

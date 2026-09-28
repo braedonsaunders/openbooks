@@ -174,5 +174,132 @@
       "deleteFailed": "Impossible de supprimer la ligne de besoin. Réessayez.",
       "customFields": "Corrigez les champs personnalisés signalés."
     }
+  },
+  "reports": {
+    "utilization": {
+      "title": "Prévision d’utilisation",
+      "description": "Utilisation facturable prévue par rapport à la capacité nette hebdomadaire.",
+      "periodPhrase": "Semaines du {from} au {to}",
+      "jobTitleSearch": "Rechercher des intitulés de poste",
+      "breakout": "Ventilation",
+      "breakouts": {
+        "person": "Personne",
+        "department": "Service",
+        "job_title": "Intitulé de poste"
+      },
+      "measures": {
+        "utilization": "Utilisation",
+        "booked": "Planifié",
+        "gap": "Écart de demande",
+        "fill": "Couverture de capacité",
+        "margin": "Marge",
+        "marginPercent": "Pourcentage de marge",
+        "personCount": "Personnes",
+        "unknownCapacity": "Semaines sans capacité connue",
+        "unpricedCount": "Missions sans prix",
+        "uncostedCount": "Missions sans coût",
+        "pricedCount": "Missions tarifées",
+        "costedCount": "Missions avec coût calculé"
+      },
+      "guards": {
+        "noCapacity": "Aucune capacité enregistrée",
+        "noRevenue": "Aucun revenu enregistré",
+        "undefined": "Non défini pour ce groupe.",
+        "noCost": "Aucun coût de main-d’œuvre enregistré"
+      }
+    },
+    "bench": {
+      "title": "Capacité disponible",
+      "description": "Capacité hebdomadaire sans réservation ferme.",
+      "periodPhrase": "Semaines du {from} au {to}",
+      "jobTitleSearch": "Rechercher des intitulés de poste",
+      "breakout": "Ventilation",
+      "breakouts": {
+        "department": "Service",
+        "job_title": "Intitulé de poste"
+      },
+      "measures": {
+        "utilization": "Utilisation",
+        "booked": "Planifié",
+        "gap": "Écart de demande",
+        "fill": "Couverture de capacité",
+        "margin": "Marge",
+        "marginPercent": "Pourcentage de marge",
+        "personCount": "Personnes",
+        "unknownCapacity": "Semaines sans capacité connue",
+        "unpricedCount": "Missions sans prix",
+        "uncostedCount": "Missions sans coût",
+        "pricedCount": "Missions tarifées",
+        "costedCount": "Missions avec coût calculé"
+      },
+      "guards": {
+        "noCapacity": "Aucune capacité enregistrée",
+        "noRevenue": "Aucun revenu enregistré",
+        "undefined": "Non défini pour ce groupe.",
+        "noCost": "Aucun coût de main-d’œuvre enregistré"
+      }
+    },
+    "capacity-demand": {
+      "title": "Capacité et demande",
+      "description": "Compare la capacité nette à la demande nominative, générique et pondérée du pipeline.",
+      "periodPhrase": "Semaines du {from} au {to}",
+      "jobTitleSearch": "Rechercher des intitulés de poste",
+      "breakout": "Ventilation",
+      "breakouts": {
+        "department": "Service",
+        "job_title": "Intitulé de poste"
+      },
+      "measures": {
+        "utilization": "Utilisation",
+        "booked": "Planifié",
+        "gap": "Écart de demande",
+        "fill": "Couverture de capacité",
+        "margin": "Marge",
+        "marginPercent": "Pourcentage de marge",
+        "personCount": "Personnes",
+        "unknownCapacity": "Semaines sans capacité connue",
+        "unpricedCount": "Missions sans prix",
+        "uncostedCount": "Missions sans coût",
+        "pricedCount": "Missions tarifées",
+        "costedCount": "Missions avec coût calculé"
+      },
+      "guards": {
+        "noCapacity": "Aucune capacité enregistrée",
+        "noRevenue": "Aucun revenu enregistré",
+        "undefined": "Non défini pour ce groupe.",
+        "noCost": "Aucun coût de main-d’œuvre enregistré"
+      }
+    },
+    "engagement": {
+      "title": "Prévision des missions",
+      "description": "Prévision des heures, revenus, coûts de main-d’œuvre et marges par mois et devise.",
+      "periodPhrase": "Mois contenant les semaines du {from} au {to}",
+      "jobTitleSearch": "Rechercher des intitulés de poste",
+      "breakout": "Ventilation",
+      "breakouts": {
+        "customer": "Client",
+        "project": "Projet"
+      },
+      "measures": {
+        "utilization": "Utilisation",
+        "booked": "Planifié",
+        "gap": "Écart de demande",
+        "fill": "Couverture de capacité",
+        "margin": "Marge",
+        "marginPercent": "Pourcentage de marge",
+        "personCount": "Personnes",
+        "unknownCapacity": "Semaines sans capacité connue",
+        "unpricedCount": "Missions sans prix",
+        "uncostedCount": "Missions sans coût",
+        "pricedCount": "Missions tarifées",
+        "costedCount": "Missions avec coût calculé"
+      },
+      "guards": {
+        "noCapacity": "Aucune capacité enregistrée",
+        "noRevenue": "Aucun revenu enregistré",
+        "undefined": "Non défini pour ce groupe.",
+        "noCost": "Aucun coût de main-d’œuvre enregistré"
+      }
+    }
   }
 }
