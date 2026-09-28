@@ -1782,37 +1782,56 @@ async function legacySpotRate(
  * Preserved v0 provenance: the canonical `saas_normalization_corrected`
  * audit before-images are the only authoritative v0 dependency for prior
  * months already corrected to v1. Current v1 rows are never treated as v0,
- * and no second store exists. Each candidate event is validated by org,
- * natural key, request identity, attempt, and hash shape; missing,
- * ambiguous, or tampered provenance refuses by name with zero writes.
+ * and no second store exists. Every substituted month is validated as a
+ * complete set joined to its actual same-org succeeded normalization
+ * request: audit row idempotency key and actor, request month and attempt
+ * and result, event month/table/change, sourceV0Hash against the recorded
+ * before hash, v1 and result hashes against the rewritten row identity,
+ * and exact per-table correction-event counts from the recorded result.
+ * Missing, incomplete, ambiguous, or tampered provenance refuses by name
+ * with zero writes.
  */
-type ProvenanceCandidate = {
-  before: unknown;
-  requestId: unknown;
-  attempt: unknown;
-  event: unknown;
-};
-
-async function legacyProvenanceImages(
-  executor: SqlExecutor,
-  orgId: string,
-  table: "saas_metrics_monthly" | "saas_metrics_cohort_monthly",
-): Promise<Array<{ naturalKey: Record<string, unknown>; candidate: ProvenanceCandidate }>> {
-  const rows = (await executor.execute<{ natural_key: Record<string, unknown> | null; before: unknown; request_id: unknown; attempt: unknown; event: unknown }>(sql`
-    select changes->'naturalKey' as natural_key, changes->'before' as before,
-           changes->>'requestId' as request_id, changes->'attempt' as attempt,
-           changes->>'event' as event
-      from audit_log
-     where org_id = ${orgId} and table_name = ${table} and action = 'saas_normalization_corrected'
-     order by at
-  `)).rows;
-  return rows.map((row) => ({
-    naturalKey: row.natural_key ?? {},
-    candidate: { before: row.before, requestId: row.request_id, attempt: row.attempt, event: row.event },
-  }));
+export interface ProvenanceRequestResult {
+  month: string;
+  monthHash: string;
+  replacedMonthly: number;
+  replacedFacts: number;
+  replacedCohorts: number;
+  sourceV0Hashes: string[];
 }
 
-function provenanceRefusal(code: "missing" | "ambiguous" | "tampered", label: string, month: string): UsageBillingError {
+export interface ProvenanceRequest {
+  id: string;
+  month: string;
+  idempotencyKey: string;
+  approvedBy: string | null;
+  status: string;
+  attemptCount: number;
+  result: ProvenanceRequestResult | null;
+}
+
+export interface ProvenanceEvent {
+  table: string;
+  rowId: string;
+  month: string;
+  naturalKey: Record<string, unknown>;
+  event: unknown;
+  change: unknown;
+  actor: unknown;
+  requestId: unknown;
+  requestKey: unknown;
+  attempt: unknown;
+  sourceV0Hash: unknown;
+  v1Hash: unknown;
+  before: unknown;
+  after: unknown;
+}
+
+function provenanceRefusal(
+  code: "missing" | "incomplete" | "ambiguous" | "tampered",
+  label: string,
+  month: string,
+): UsageBillingError {
   if (code === "missing") {
     return refusal(
       "saas_normalization_v0_provenance_missing",
@@ -1821,55 +1840,109 @@ function provenanceRefusal(code: "missing" | "ambiguous" | "tampered", label: st
       { field: "month", status: 409 },
     );
   }
+  if (code === "incomplete") {
+    return refusal(
+      "saas_normalization_provenance_incomplete",
+      `Month ${month} depends on ${label}, whose preserved correction evidence is incomplete.`,
+      "Have an administrator investigate the month's recorded evidence in Company Setup → SaaS Metrics and escalate with the request id; derived metrics rows are never edited by hand.",
+      { field: "month", status: 409 },
+    );
+  }
   if (code === "ambiguous") {
     return refusal(
       "saas_normalization_provenance_ambiguous",
-      `Month ${month} depends on ${label}, which has more than one preserved legacy evidence record.`,
+      `Month ${month} depends on ${label}, which has more than one preserved correction record.`,
       "Have an administrator investigate the month's recorded evidence in Company Setup → SaaS Metrics and escalate with the request id; derived metrics rows are never edited by hand.",
       { field: "month", status: 409 },
     );
   }
   return refusal(
     "saas_normalization_provenance_tampered",
-    `Month ${month} depends on ${label}, whose preserved legacy evidence fails its identity check.`,
+    `Month ${month} depends on ${label}, whose preserved correction evidence fails its identity check.`,
     "Have an administrator investigate the month's recorded evidence in Company Setup → SaaS Metrics and escalate with the request id; derived metrics rows are never edited by hand.",
     { field: "month", status: 409 },
   );
 }
 
-function validatedProvenanceBefore(
-  candidates: ProvenanceCandidate[],
-  label: string,
+/**
+ * Exact per-table correction-event counts from the recorded result. Short
+ * sets are partial audit evidence; over-counts are duplicates that cannot
+ * come from one atomic correction.
+ */
+export function validateProvenanceCounts(
+  counts: Record<string, number>,
+  result: ProvenanceRequestResult,
   month: string,
-): Record<string, unknown> {
-  if (candidates.length === 0) throw provenanceRefusal("missing", label, month);
-  if (candidates.length > 1) throw provenanceRefusal("ambiguous", label, month);
-  const { before, requestId, attempt, event } = candidates[0]!;
-  const shapeFailed =
-    event !== "saas_normalization_corrected"
-    || typeof requestId !== "string"
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)
-    || typeof attempt !== "number"
-    || !Number.isInteger(attempt)
-    || attempt < 1
-    || before === null
-    || typeof before !== "object"
-    || Array.isArray(before);
-  if (shapeFailed) throw provenanceRefusal("tampered", label, month);
-  return before as Record<string, unknown>;
+): void {
+  const expected: Record<string, number> = {
+    saas_metrics_monthly: result.replacedMonthly,
+    saas_metrics_facts_monthly: result.replacedFacts,
+    saas_metrics_cohort_monthly: result.replacedCohorts,
+  };
+  for (const [table, want] of Object.entries(expected)) {
+    const got = counts[table] ?? 0;
+    if (got < want) throw provenanceRefusal("incomplete", `${table} for ${month}`, month);
+    if (got > want) throw provenanceRefusal("tampered", `${table} for ${month}`, month);
+  }
 }
 
-function validatedLegacyHistoryBefore(
-  candidates: ProvenanceCandidate[],
+/**
+ * One correction event joined to its request: table, event, change, month,
+ * natural key, idempotency key, actor, attempt, source hash against the
+ * recorded before hash, and v1/result hashes against the rewritten row
+ * identity must all agree. Returns the validated legacy before-image.
+ */
+export function validateProvenanceEvent(
+  event: ProvenanceEvent,
+  request: ProvenanceRequest,
+  expectedTable: "saas_metrics_monthly" | "saas_metrics_cohort_monthly",
+  expectedMonth: string,
+): Record<string, unknown> {
+  const keySummary =
+    expectedTable === "saas_metrics_monthly"
+      ? String(event.naturalKey.subscriptionId ?? "?")
+      : `${String(event.naturalKey.subsidiaryId ?? "?")}:${String(event.naturalKey.cohortMonth ?? "?")}`;
+  const label = `${expectedTable}:${keySummary}:${expectedMonth}`;
+  const fail = (): never => {
+    throw provenanceRefusal("tampered", label, expectedMonth);
+  };
+  if (event.table !== expectedTable) fail();
+  if (event.event !== "saas_normalization_corrected" || event.change !== "corrected") fail();
+  if (event.month !== expectedMonth) fail();
+  if (request.status !== "succeeded" || !request.result) fail();
+  if (request.month !== expectedMonth || request.result.month !== expectedMonth) fail();
+  if (event.requestId !== request.id || event.requestKey !== request.idempotencyKey) fail();
+  if (event.actor !== request.approvedBy) fail();
+  if (event.attempt !== request.attemptCount) fail();
+  const before =
+    event.before !== null && typeof event.before === "object" && !Array.isArray(event.before)
+      ? (event.before as Record<string, unknown>)
+      : null;
+  const after =
+    event.after !== null && typeof event.after === "object" && !Array.isArray(event.after)
+      ? (event.after as Record<string, unknown>)
+      : null;
+  if (!before || !after) fail();
+  if (typeof event.sourceV0Hash !== "string" || event.sourceV0Hash !== before!.inputsHash) fail();
+  if (!/^[0-9a-f]{64}$/.test(event.sourceV0Hash as string)) fail();
+  if (!request.result!.sourceV0Hashes.includes(event.sourceV0Hash as string)) fail();
+  if (event.v1Hash !== request.result!.monthHash || !/^[0-9a-f]{64}$/.test(request.result!.monthHash)) fail();
+  if (typeof after!.inputsHash !== "string" || after!.inputsHash !== request.result!.monthHash) fail();
+  if (typeof after!.id !== "string" || after!.id !== event.rowId) fail();
+  if (event.naturalKey.month !== expectedMonth) fail();
+  return before!;
+}
+
+/** Legacy history fields extracted from a validated before-image. */
+export function historyRowFromProvenance(
+  before: Record<string, unknown>,
   subscriptionId: string,
   priorMonth: string,
   month: string,
 ): LegacyHistoryRow {
   const label = `saas_metrics_monthly:${subscriptionId}:${priorMonth}`;
-  const before = validatedProvenanceBefore(candidates, label, month);
   const text = (field: string): string | null =>
     typeof before[field] === "string" ? (before[field] as string) : null;
-  const hash = text("inputsHash");
   if (
     text("subscriptionId") !== subscriptionId
     || text("month") !== priorMonth
@@ -1879,8 +1952,6 @@ function validatedLegacyHistoryBefore(
     || text("mrrEnd") === null
     || before.reportingCurrency !== null
     || before.denominationVersion !== null
-    || hash === null
-    || !/^[0-9a-f]{64}$/.test(hash)
   ) {
     throw provenanceRefusal("tampered", label, month);
   }
@@ -1895,17 +1966,16 @@ function validatedLegacyHistoryBefore(
   };
 }
 
-function validatedLegacyStartBefore(
-  candidates: ProvenanceCandidate[],
+/** Legacy cohort-start fields extracted from a validated before-image. */
+export function startRowFromProvenance(
+  before: Record<string, unknown>,
   subsidiaryId: string,
   cohortMonth: string,
   month: string,
 ): LegacyCohortStartRow {
   const label = `saas_metrics_cohort_monthly:${subsidiaryId}:${cohortMonth}`;
-  const before = validatedProvenanceBefore(candidates, label, month);
   const startMrr = typeof before.startMrr === "string" ? before.startMrr : null;
   const startCustomers = typeof before.startCustomers === "number" ? before.startCustomers : null;
-  const hash = typeof before.inputsHash === "string" ? before.inputsHash : null;
   if (
     before.subsidiaryId !== subsidiaryId
     || before.cohortMonth !== cohortMonth
@@ -1915,8 +1985,6 @@ function validatedLegacyStartBefore(
     || startCustomers < 0
     || before.reportingCurrency !== null
     || before.denominationVersion !== null
-    || hash === null
-    || !/^[0-9a-f]{64}$/.test(hash)
   ) {
     throw provenanceRefusal("tampered", label, month);
   }
@@ -1927,6 +1995,134 @@ function validatedLegacyStartBefore(
     start_customers: startCustomers,
     reporting_currency: null,
   };
+}
+
+type ValidatedPriorMonth = {
+  monthly: Map<string, LegacyHistoryRow>;
+  starts: Map<string, LegacyCohortStartRow>;
+};
+
+/**
+ * Validate one prior month's complete correction set joined to its
+ * succeeded request, then index its legacy before-images for substitution.
+ * Every event of the month's correction — monthly, facts, and cohort —
+ * must be present with exact recorded counts; the substituted maps carry
+ * only the history and start rows the v0 reproduction consumes.
+ */
+async function legacyPriorProvenance(
+  executor: SqlExecutor,
+  orgId: string,
+  priorMonth: string,
+  month: string,
+): Promise<ValidatedPriorMonth> {
+  const rows = (await executor.execute<{ table: string; row_id: string; changes: Record<string, unknown> }>(sql`
+    select table_name as table, row_id::text as row_id, changes
+      from audit_log
+     where org_id = ${orgId} and action = 'saas_normalization_corrected'
+       and table_name in ('saas_metrics_monthly', 'saas_metrics_facts_monthly', 'saas_metrics_cohort_monthly')
+       and changes->>'month' = ${priorMonth}
+     order by at
+  `)).rows;
+  const label = `prior month ${priorMonth}`;
+  if (rows.length === 0) throw provenanceRefusal("missing", label, month);
+  const requestIds = [...new Set(rows.map((row) => row.changes.requestId).filter((id) => typeof id === "string"))] as string[];
+  if (requestIds.length === 0) throw provenanceRefusal("missing", label, month);
+  if (requestIds.length > 1) throw provenanceRefusal("ambiguous", label, month);
+  const requestUuid = requestIds[0]!;
+  const stored = (await executor.execute<{
+    id: string;
+    month: string;
+    idempotency_key: string;
+    approved_by: string | null;
+    status: string;
+    attempt_count: number;
+    result: ProvenanceRequestResult | null;
+  }>(sql`
+    select id::text as id, month::text as month, idempotency_key::text as idempotency_key,
+           approved_by::text as approved_by, status, attempt_count,
+           result as result
+      from saas_metrics_normalization_requests
+     where org_id = ${orgId} and id = ${requestUuid}
+  `)).rows[0];
+  if (!stored) throw provenanceRefusal("tampered", `${label} request ${requestUuid}`, month);
+  const request: ProvenanceRequest = {
+    id: stored.id,
+    month: stored.month.slice(0, 10),
+    idempotencyKey: stored.idempotency_key,
+    approvedBy: stored.approved_by,
+    status: stored.status,
+    attemptCount: stored.attempt_count,
+    result: stored.result,
+  };
+  if (request.status !== "succeeded" || !request.result || request.month !== priorMonth) {
+    throw provenanceRefusal("tampered", `${label} request ${request.id}`, month);
+  }
+  const counts: Record<string, number> = {};
+  for (const row of rows) counts[row.table] = (counts[row.table] ?? 0) + 1;
+  validateProvenanceCounts(counts, request.result, priorMonth);
+  const monthly = new Map<string, LegacyHistoryRow>();
+  const starts = new Map<string, LegacyCohortStartRow>();
+  for (const row of rows) {
+    const changes = row.changes;
+    const naturalKey =
+      changes.naturalKey !== null && typeof changes.naturalKey === "object" && !Array.isArray(changes.naturalKey)
+        ? (changes.naturalKey as Record<string, unknown>)
+        : {};
+    if (row.table === "saas_metrics_monthly") {
+      const event: ProvenanceEvent = {
+        table: row.table,
+        rowId: row.row_id,
+        month: changes.month as string,
+        naturalKey,
+        event: changes.event,
+        change: changes.change,
+        actor: changes.actor,
+        requestId: changes.requestId,
+        requestKey: changes.request_id,
+        attempt: changes.attempt,
+        sourceV0Hash: changes.sourceV0Hash,
+        v1Hash: changes.v1Hash,
+        before: changes.before,
+        after: changes.after,
+      };
+      const before = validateProvenanceEvent(event, request, "saas_metrics_monthly", priorMonth);
+      const sub = naturalKey.subscriptionId;
+      if (typeof sub !== "string" || monthly.has(sub)) {
+        throw provenanceRefusal("tampered", `saas_metrics_monthly:${String(sub)}:${priorMonth}`, month);
+      }
+      monthly.set(sub, historyRowFromProvenance(before, sub, priorMonth, month));
+    } else if (row.table === "saas_metrics_cohort_monthly") {
+      const event: ProvenanceEvent = {
+        table: row.table,
+        rowId: row.row_id,
+        month: changes.month as string,
+        naturalKey,
+        event: changes.event,
+        change: changes.change,
+        actor: changes.actor,
+        requestId: changes.requestId,
+        requestKey: changes.request_id,
+        attempt: changes.attempt,
+        sourceV0Hash: changes.sourceV0Hash,
+        v1Hash: changes.v1Hash,
+        before: changes.before,
+        after: changes.after,
+      };
+      const before = validateProvenanceEvent(event, request, "saas_metrics_cohort_monthly", priorMonth);
+      const sub = naturalKey.subsidiaryId;
+      const cmon = naturalKey.cohortMonth;
+      if (typeof sub !== "string" || typeof cmon !== "string") {
+        throw provenanceRefusal("tampered", `saas_metrics_cohort_monthly:${String(sub)}:${String(cmon)}`, month);
+      }
+      if (cmon === priorMonth) {
+        if (starts.has(sub)) {
+          throw provenanceRefusal("tampered", `saas_metrics_cohort_monthly:${sub}:${cmon}`, month);
+        }
+        starts.set(sub, startRowFromProvenance(before, sub, cmon, month));
+      }
+    }
+  }
+  return { monthly, starts };
 }
 
 async function legacyReadSources(
@@ -1995,28 +2191,38 @@ async function legacyReadSources(
        order by subscription_id, month
     `)).rows;
     // Prior months already corrected to v1 no longer carry v0 openings:
-    // the reproduction consumes their preserved audit before-images, and
-    // refuses when no reproducible v0 provenance exists.
+    // the reproduction consumes their preserved audit before-images as a
+    // complete request-joined set, and refuses when no reproducible v0
+    // provenance exists.
     if (history.some((row) => row.reporting_currency !== null)) {
-      const images = await legacyProvenanceImages(executor, orgId, "saas_metrics_monthly");
-      const byKey = new Map<string, ProvenanceCandidate[]>();
-      for (const image of images) {
-        const sub = image.naturalKey.subscriptionId;
-        const mon = image.naturalKey.month;
-        if (typeof sub !== "string" || typeof mon !== "string" || mon >= month) continue;
-        const key = `${sub}:${mon}`;
-        byKey.set(key, [...(byKey.get(key) ?? []), image.candidate]);
+      const priorCache = new Map<string, ValidatedPriorMonth>();
+      const priorOf = async (prior: string): Promise<ValidatedPriorMonth> => {
+        let validated = priorCache.get(prior);
+        if (!validated) {
+          validated = await legacyPriorProvenance(executor, orgId, prior, month);
+          priorCache.set(prior, validated);
+        }
+        return validated;
+      };
+      const substituted: LegacyHistoryRow[] = [];
+      for (const row of history) {
+        if (row.reporting_currency === null) {
+          substituted.push(row);
+          continue;
+        }
+        const priorMonth = row.month.slice(0, 10);
+        const prior = await priorOf(priorMonth);
+        const legacyRow = prior.monthly.get(row.subscription_id);
+        if (!legacyRow) {
+          throw provenanceRefusal(
+            "tampered",
+            `saas_metrics_monthly:${row.subscription_id}:${priorMonth}`,
+            month,
+          );
+        }
+        substituted.push(legacyRow);
       }
-      history = history.map((row) =>
-        row.reporting_currency === null
-          ? row
-          : validatedLegacyHistoryBefore(
-              byKey.get(`${row.subscription_id}:${row.month.slice(0, 10)}`) ?? [],
-              row.subscription_id,
-              row.month.slice(0, 10),
-              month,
-            ),
-      );
+      history = substituted;
     }
   }
   const revenueRecognitionEnabled = await orgFeatureEnabled(orgId, "revenueRecognition", executor);
@@ -2147,31 +2353,35 @@ async function legacyReadSources(
      where org_id = ${orgId} and month = cohort_month and cohort_month <= ${month}::date
   `)).rows;
   // A cohort opening already corrected to v1 no longer carries its v0
-  // start: the reproduction consumes the preserved audit before-image,
-  // and refuses when no reproducible v0 provenance exists.
+  // start: the reproduction consumes the preserved audit before-image as
+  // a complete request-joined set, and refuses when no reproducible v0
+  // provenance exists.
   let cohortStartRows: LegacyCohortStartRow[] = storedStarts;
   if (storedStarts.some((row) => row.reporting_currency !== null)) {
-    const images = await legacyProvenanceImages(executor, orgId, "saas_metrics_cohort_monthly");
-    const byKey = new Map<string, ProvenanceCandidate[]>();
-    for (const image of images) {
-      const sub = image.naturalKey.subsidiaryId;
-      const cmon = image.naturalKey.cohortMonth;
-      const mon = image.naturalKey.month;
-      if (typeof sub !== "string" || typeof cmon !== "string" || typeof mon !== "string") continue;
-      if (mon !== cmon || cmon > month) continue;
-      const key = `${sub}:${cmon}`;
-      byKey.set(key, [...(byKey.get(key) ?? []), image.candidate]);
+    const priorCache = new Map<string, ValidatedPriorMonth>();
+    const priorOf = async (prior: string): Promise<ValidatedPriorMonth> => {
+      let validated = priorCache.get(prior);
+      if (!validated) {
+        validated = await legacyPriorProvenance(executor, orgId, prior, month);
+        priorCache.set(prior, validated);
+      }
+      return validated;
+    };
+    const substituted: LegacyCohortStartRow[] = [];
+    for (const row of storedStarts) {
+      if (row.reporting_currency === null) {
+        substituted.push(row);
+        continue;
+      }
+      const cohortMonth = row.cohort_month.slice(0, 10);
+      const prior = await priorOf(cohortMonth);
+      const legacyStart = prior.starts.get(row.subsidiary_id);
+      if (!legacyStart) {
+        throw provenanceRefusal("tampered", `saas_metrics_cohort_monthly:${row.subsidiary_id}:${cohortMonth}`, month);
+      }
+      substituted.push(legacyStart);
     }
-    cohortStartRows = storedStarts.map((row) =>
-      row.reporting_currency === null
-        ? row
-        : validatedLegacyStartBefore(
-            byKey.get(`${row.subsidiary_id}:${row.cohort_month.slice(0, 10)}`) ?? [],
-            row.subsidiary_id,
-            row.cohort_month.slice(0, 10),
-            month,
-          ),
-    );
+    cohortStartRows = substituted;
   }
   return {
     monthEnd,
