@@ -174,5 +174,132 @@
       "deleteFailed": "Die Bedarfszeile konnte nicht gelöscht werden. Versuchen Sie es erneut.",
       "customFields": "Korrigieren Sie die markierten benutzerdefinierten Felder."
     }
+  },
+  "reports": {
+    "utilization": {
+      "title": "Auslastungsprognose",
+      "description": "Prognostizierte abrechenbare Auslastung im Verhältnis zur wöchentlichen Nettokapazität.",
+      "periodPhrase": "Wochen ab {from} bis {to}",
+      "jobTitleSearch": "Stellentitel suchen",
+      "breakout": "Aufschlüsselung",
+      "breakouts": {
+        "person": "Person",
+        "department": "Abteilung",
+        "job_title": "Stellentitel"
+      },
+      "measures": {
+        "utilization": "Auslastung",
+        "booked": "Gebucht",
+        "gap": "Bedarfslücke",
+        "fill": "Kapazitätsauslastung",
+        "margin": "Marge",
+        "marginPercent": "Margenquote",
+        "personCount": "Personen",
+        "unknownCapacity": "Wochen mit unbekannter Kapazität",
+        "unpricedCount": "Nicht bepreiste Aufträge",
+        "uncostedCount": "Nicht kalkulierte Aufträge",
+        "pricedCount": "Bepreiste Aufträge",
+        "costedCount": "Aufträge mit kalkulierten Kosten"
+      },
+      "guards": {
+        "noCapacity": "Keine Kapazität erfasst",
+        "noRevenue": "Kein Umsatz erfasst",
+        "undefined": "Für diese Gruppe nicht definiert.",
+        "noCost": "Keine Arbeitskosten erfasst"
+      }
+    },
+    "bench": {
+      "title": "Leerlaufkapazität",
+      "description": "Wöchentliche Kapazität ohne feste Buchungen.",
+      "periodPhrase": "Wochen ab {from} bis {to}",
+      "jobTitleSearch": "Stellentitel suchen",
+      "breakout": "Aufschlüsselung",
+      "breakouts": {
+        "department": "Abteilung",
+        "job_title": "Stellentitel"
+      },
+      "measures": {
+        "utilization": "Auslastung",
+        "booked": "Gebucht",
+        "gap": "Bedarfslücke",
+        "fill": "Kapazitätsauslastung",
+        "margin": "Marge",
+        "marginPercent": "Margenquote",
+        "personCount": "Personen",
+        "unknownCapacity": "Wochen mit unbekannter Kapazität",
+        "unpricedCount": "Nicht bepreiste Aufträge",
+        "uncostedCount": "Nicht kalkulierte Aufträge",
+        "pricedCount": "Bepreiste Aufträge",
+        "costedCount": "Aufträge mit kalkulierten Kosten"
+      },
+      "guards": {
+        "noCapacity": "Keine Kapazität erfasst",
+        "noRevenue": "Kein Umsatz erfasst",
+        "undefined": "Für diese Gruppe nicht definiert.",
+        "noCost": "Keine Arbeitskosten erfasst"
+      }
+    },
+    "capacity-demand": {
+      "title": "Kapazität und Bedarf",
+      "description": "Nettokapazität mit namentlichen, allgemeinen und gewichteten Pipeline-Bedarfen vergleichen.",
+      "periodPhrase": "Wochen ab {from} bis {to}",
+      "jobTitleSearch": "Stellentitel suchen",
+      "breakout": "Aufschlüsselung",
+      "breakouts": {
+        "department": "Abteilung",
+        "job_title": "Stellentitel"
+      },
+      "measures": {
+        "utilization": "Auslastung",
+        "booked": "Gebucht",
+        "gap": "Bedarfslücke",
+        "fill": "Kapazitätsauslastung",
+        "margin": "Marge",
+        "marginPercent": "Margenquote",
+        "personCount": "Personen",
+        "unknownCapacity": "Wochen mit unbekannter Kapazität",
+        "unpricedCount": "Nicht bepreiste Aufträge",
+        "uncostedCount": "Nicht kalkulierte Aufträge",
+        "pricedCount": "Bepreiste Aufträge",
+        "costedCount": "Aufträge mit kalkulierten Kosten"
+      },
+      "guards": {
+        "noCapacity": "Keine Kapazität erfasst",
+        "noRevenue": "Kein Umsatz erfasst",
+        "undefined": "Für diese Gruppe nicht definiert.",
+        "noCost": "Keine Arbeitskosten erfasst"
+      }
+    },
+    "engagement": {
+      "title": "Auftragsprognose",
+      "description": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung.",
+      "periodPhrase": "Monate mit Wochen vom {from} bis {to}",
+      "jobTitleSearch": "Stellentitel suchen",
+      "breakout": "Aufschlüsselung",
+      "breakouts": {
+        "customer": "Kunde",
+        "project": "Projekt"
+      },
+      "measures": {
+        "utilization": "Auslastung",
+        "booked": "Gebucht",
+        "gap": "Bedarfslücke",
+        "fill": "Kapazitätsauslastung",
+        "margin": "Marge",
+        "marginPercent": "Margenquote",
+        "personCount": "Personen",
+        "unknownCapacity": "Wochen mit unbekannter Kapazität",
+        "unpricedCount": "Nicht bepreiste Aufträge",
+        "uncostedCount": "Nicht kalkulierte Aufträge",
+        "pricedCount": "Bepreiste Aufträge",
+        "costedCount": "Aufträge mit kalkulierten Kosten"
+      },
+      "guards": {
+        "noCapacity": "Keine Kapazität erfasst",
+        "noRevenue": "Kein Umsatz erfasst",
+        "undefined": "Für diese Gruppe nicht definiert.",
+        "noCost": "Keine Arbeitskosten erfasst"
+      }
+    }
   }
 }

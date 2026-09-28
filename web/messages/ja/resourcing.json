@@ -174,5 +174,132 @@
       "deleteFailed": "需要明細を削除できませんでした。もう一度お試しください。",
       "customFields": "強調表示されたカスタム項目を修正してください。"
     }
+  },
+  "reports": {
+    "utilization": {
+      "title": "稼働率予測",
+      "description": "週次の正味稼働可能時間に対する請求対象稼働率の予測です。",
+      "periodPhrase": "{from} から {to} までの週",
+      "jobTitleSearch": "職種を検索",
+      "breakout": "内訳",
+      "breakouts": {
+        "person": "担当者",
+        "department": "部門",
+        "job_title": "職種"
+      },
+      "measures": {
+        "utilization": "稼働率",
+        "booked": "予約済み",
+        "gap": "需要差",
+        "fill": "稼働能力充足率",
+        "margin": "利益",
+        "marginPercent": "利益率",
+        "personCount": "担当者数",
+        "unknownCapacity": "稼働能力不明の週",
+        "unpricedCount": "未価格設定の割当",
+        "uncostedCount": "未原価計算の割当",
+        "pricedCount": "価格設定済みの割当",
+        "costedCount": "原価計算済みの割当"
+      },
+      "guards": {
+        "noCapacity": "容量が記録されていません",
+        "noRevenue": "収益が記録されていません",
+        "undefined": "このグループでは未定義です。",
+        "noCost": "人件費が記録されていません"
+      }
+    },
+    "bench": {
+      "title": "待機稼働能力",
+      "description": "確定予約のない週次稼働可能時間です。",
+      "periodPhrase": "{from} から {to} までの週",
+      "jobTitleSearch": "職種を検索",
+      "breakout": "内訳",
+      "breakouts": {
+        "department": "部門",
+        "job_title": "職種"
+      },
+      "measures": {
+        "utilization": "稼働率",
+        "booked": "予約済み",
+        "gap": "需要差",
+        "fill": "稼働能力充足率",
+        "margin": "利益",
+        "marginPercent": "利益率",
+        "personCount": "担当者数",
+        "unknownCapacity": "稼働能力不明の週",
+        "unpricedCount": "未価格設定の割当",
+        "uncostedCount": "未原価計算の割当",
+        "pricedCount": "価格設定済みの割当",
+        "costedCount": "原価計算済みの割当"
+      },
+      "guards": {
+        "noCapacity": "容量が記録されていません",
+        "noRevenue": "収益が記録されていません",
+        "undefined": "このグループでは未定義です。",
+        "noCost": "人件費が記録されていません"
+      }
+    },
+    "capacity-demand": {
+      "title": "稼働能力と需要",
+      "description": "正味稼働能力を担当者指定、一般、加重パイプラインの需要と比較します。",
+      "periodPhrase": "{from} から {to} までの週",
+      "jobTitleSearch": "職種を検索",
+      "breakout": "内訳",
+      "breakouts": {
+        "department": "部門",
+        "job_title": "職種"
+      },
+      "measures": {
+        "utilization": "稼働率",
+        "booked": "予約済み",
+        "gap": "需要差",
+        "fill": "稼働能力充足率",
+        "margin": "利益",
+        "marginPercent": "利益率",
+        "personCount": "担当者数",
+        "unknownCapacity": "稼働能力不明の週",
+        "unpricedCount": "未価格設定の割当",
+        "uncostedCount": "未原価計算の割当",
+        "pricedCount": "価格設定済みの割当",
+        "costedCount": "原価計算済みの割当"
+      },
+      "guards": {
+        "noCapacity": "容量が記録されていません",
+        "noRevenue": "収益が記録されていません",
+        "undefined": "このグループでは未定義です。",
+        "noCost": "人件費が記録されていません"
+      }
+    },
+    "engagement": {
+      "title": "案件予測",
+      "description": "月および通貨別に、予定時間、売上、労務費、利益を予測します。",
+      "periodPhrase": "{from} から {to} までの週を含む月",
+      "jobTitleSearch": "職種を検索",
+      "breakout": "内訳",
+      "breakouts": {
+        "customer": "顧客",
+        "project": "案件"
+      },
+      "measures": {
+        "utilization": "稼働率",
+        "booked": "予約済み",
+        "gap": "需要差",
+        "fill": "稼働能力充足率",
+        "margin": "利益",
+        "marginPercent": "利益率",
+        "personCount": "担当者数",
+        "unknownCapacity": "稼働能力不明の週",
+        "unpricedCount": "未価格設定の割当",
+        "uncostedCount": "未原価計算の割当",
+        "pricedCount": "価格設定済みの割当",
+        "costedCount": "原価計算済みの割当"
+      },
+      "guards": {
+        "noCapacity": "容量が記録されていません",
+        "noRevenue": "収益が記録されていません",
+        "undefined": "このグループでは未定義です。",
+        "noCost": "人件費が記録されていません"
+      }
+    }
   }
 }

@@ -174,5 +174,132 @@
       "deleteFailed": "The demand line could not be deleted. Try again.",
       "customFields": "Correct the highlighted custom fields."
     }
+  },
+  "reports": {
+    "utilization": {
+      "title": "Utilization forecast",
+      "description": "Forecast billable utilization against net weekly capacity.",
+      "periodPhrase": "Weeks starting {from} through {to}",
+      "jobTitleSearch": "Search job titles",
+      "breakout": "Breakout",
+      "breakouts": {
+        "person": "Person",
+        "department": "Department",
+        "job_title": "Job title"
+      },
+      "measures": {
+        "utilization": "Utilization",
+        "booked": "Booked",
+        "gap": "Demand gap",
+        "fill": "Capacity fill",
+        "margin": "Margin",
+        "marginPercent": "Margin %",
+        "personCount": "People",
+        "unknownCapacity": "Unknown capacity person-weeks",
+        "unpricedCount": "Unpriced assignments",
+        "uncostedCount": "Uncosted assignments",
+        "pricedCount": "Priced assignments",
+        "costedCount": "Costed assignments"
+      },
+      "guards": {
+        "noCapacity": "No capacity recorded",
+        "noRevenue": "No revenue recorded",
+        "undefined": "Undefined for this group.",
+        "noCost": "No labor cost recorded"
+      }
+    },
+    "bench": {
+      "title": "Bench",
+      "description": "Weekly capacity with no hard bookings.",
+      "periodPhrase": "Weeks starting {from} through {to}",
+      "jobTitleSearch": "Search job titles",
+      "breakout": "Breakout",
+      "breakouts": {
+        "department": "Department",
+        "job_title": "Job title"
+      },
+      "measures": {
+        "utilization": "Utilization",
+        "booked": "Booked",
+        "gap": "Demand gap",
+        "fill": "Capacity fill",
+        "margin": "Margin",
+        "marginPercent": "Margin %",
+        "personCount": "People",
+        "unknownCapacity": "Unknown capacity person-weeks",
+        "unpricedCount": "Unpriced assignments",
+        "uncostedCount": "Uncosted assignments",
+        "pricedCount": "Priced assignments",
+        "costedCount": "Costed assignments"
+      },
+      "guards": {
+        "noCapacity": "No capacity recorded",
+        "noRevenue": "No revenue recorded",
+        "undefined": "Undefined for this group.",
+        "noCost": "No labor cost recorded"
+      }
+    },
+    "capacity-demand": {
+      "title": "Capacity versus demand",
+      "description": "Compare net capacity with named, generic, and weighted pipeline demand.",
+      "periodPhrase": "Weeks starting {from} through {to}",
+      "jobTitleSearch": "Search job titles",
+      "breakout": "Breakout",
+      "breakouts": {
+        "department": "Department",
+        "job_title": "Job title"
+      },
+      "measures": {
+        "utilization": "Utilization",
+        "booked": "Booked",
+        "gap": "Demand gap",
+        "fill": "Capacity fill",
+        "margin": "Margin",
+        "marginPercent": "Margin %",
+        "personCount": "People",
+        "unknownCapacity": "Unknown capacity person-weeks",
+        "unpricedCount": "Unpriced assignments",
+        "uncostedCount": "Uncosted assignments",
+        "pricedCount": "Priced assignments",
+        "costedCount": "Costed assignments"
+      },
+      "guards": {
+        "noCapacity": "No capacity recorded",
+        "noRevenue": "No revenue recorded",
+        "undefined": "Undefined for this group.",
+        "noCost": "No labor cost recorded"
+      }
+    },
+    "engagement": {
+      "title": "Engagement forecast",
+      "description": "Forecast assignment hours, revenue, labor cost, and margin by month and currency.",
+      "periodPhrase": "Months containing weeks from {from} through {to}",
+      "jobTitleSearch": "Search job titles",
+      "breakout": "Breakout",
+      "breakouts": {
+        "customer": "Customer",
+        "project": "Project"
+      },
+      "measures": {
+        "utilization": "Utilization",
+        "booked": "Booked",
+        "gap": "Demand gap",
+        "fill": "Capacity fill",
+        "margin": "Margin",
+        "marginPercent": "Margin %",
+        "personCount": "People",
+        "unknownCapacity": "Unknown capacity person-weeks",
+        "unpricedCount": "Unpriced assignments",
+        "uncostedCount": "Uncosted assignments",
+        "pricedCount": "Priced assignments",
+        "costedCount": "Costed assignments"
+      },
+      "guards": {
+        "noCapacity": "No capacity recorded",
+        "noRevenue": "No revenue recorded",
+        "undefined": "Undefined for this group.",
+        "noCost": "No labor cost recorded"
+      }
+    }
   }
 }
