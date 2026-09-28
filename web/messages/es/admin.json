@@ -789,6 +789,32 @@
       },
       "customerCreditsReduceBillings": {
         "label": "Restar los abonos de clientes de la facturación"
+      },
+      "normalization": {
+        "title": "Solicitudes de normalización",
+        "description": "Los meses guardados con definiciones heredadas se corrigen mediante una solicitud auditada con un aprobador distinto. Nada cambia hasta que una solicitud se aprueba y se ejecuta.",
+        "states": {
+          "legacy": "Heredado",
+          "ready": "Listo",
+          "pending": "Pendiente de aprobación",
+          "running": "En curso",
+          "failed": "Fallido",
+          "refused": "Requiere atención"
+        },
+        "monthColumn": "Mes",
+        "statusColumn": "Estado",
+        "countsColumn": "Filas (mensuales / hechos / cohortes)",
+        "requestTitle": "Solicitar normalización",
+        "requestMonth": "Mes",
+        "requestMonthPlaceholder": "AAAA-MM-01",
+        "requestReason": "Motivo",
+        "requestReasonHint": "Describa por qué el mes necesita corrección. Mínimo 8 caracteres.",
+        "requestSubmit": "Enviar solicitud",
+        "approveSubmit": "Aprobar y ejecutar",
+        "failureLabel": "Error",
+        "remedyLabel": "Solución",
+        "empty": "Aún no hay meses registrados.",
+        "loadFailed": "No se pudieron cargar los estados de normalización."
       }
     },
     "approvals": {

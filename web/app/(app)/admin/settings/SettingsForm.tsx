@@ -23,6 +23,7 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
+import { SaasMetricsNormalization } from './SaasMetricsNormalization'
 import type { ControlAccountRole } from '@openbooks/engine/src/records/control-accounts.ts'
 import { countryOptions } from '../../../../lib/countries'
 
@@ -426,6 +427,9 @@ export function SettingsForm({
             />
             <span>{t('saasMetrics.customerCreditsReduceBillings.label')}</span>
           </label>
+        </CardContent>
+        <CardContent className="pt-0">
+          <SaasMetricsNormalization />
         </CardContent>
       </Card> : null}
 

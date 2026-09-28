@@ -41,6 +41,12 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const settingsCopy = (await import('../../../../messages/en/admin.json', { with: { type: 'json' } })).default
   .settings as unknown as Record<string, Record<string, string>>
+const { SaasMetricsNormalization } = await import('./SaasMetricsNormalization')
+const normalizationCopy = (
+  await import('../../../../messages/en/admin.json', { with: { type: 'json' } })
+).default.settings.saasMetrics.normalization as unknown as Record<string, string> & {
+  states: Record<string, string>
+}
 const { SettingsForm } = await import('./SettingsForm')
 
 type FormProps = Parameters<typeof SettingsForm>[0]
@@ -258,5 +264,274 @@ test('the organization card exposes the business time zone picker', async () => 
     )
   } finally {
     await unmount()
+  }
+})
+
+// Normalization operator workflow: composed inside the existing SaaS Metrics
+// card, reading only the authenticated API. Fetch is the one doubled
+// boundary; translations, schemas, and the res.ok-first refusal handling
+// stay real.
+
+type WorkflowSeen = { url: string; method: string; body: unknown }
+
+async function mountWorkflow(
+  respond: (seen: WorkflowSeen) => Response | Promise<Response>,
+) {
+  const seen: WorkflowSeen[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const record: WorkflowSeen = {
+      url: String(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url),
+      method: (init?.method ?? 'GET').toUpperCase(),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    }
+    seen.push(record)
+    return respond(record)
+  }) as typeof fetch
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <SaasMetricsNormalization />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  await tick()
+  return {
+    seen,
+    async unmount() {
+      await act(async () => {
+        root.unmount()
+      })
+      host.remove()
+      globalThis.fetch = prior
+    },
+  }
+}
+
+function setWorkflowInput(id: string, value: string) {
+  const field = document.getElementById(id) as HTMLInputElement | null
+  assert.ok(field, `expected input #${id}`)
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  setter.call(field, value)
+  field.dispatchEvent(new window.Event('input', { bubbles: true }))
+}
+
+function clickWorkflowButton(label: string): HTMLButtonElement {
+  const button = [...document.querySelectorAll('button')].find(
+    (b) => (b.textContent ?? '').trim() === label,
+  ) as HTMLButtonElement | undefined
+  assert.ok(button, `expected a "${label}" button`)
+  return button
+}
+
+const FAILED_MONTH = [
+  {
+    month: '2026-07-01',
+    state: 'failed',
+    counts: { monthly: 1, facts: 1, cohorts: 1 },
+    denominationVersion: null,
+    reportingCurrency: null,
+    request: { id: 'request-1', status: 'failed' },
+    failure: 'Month 2026-07-01 changed under its correction; the proven row counts no longer match.',
+    remedy: 'Retry the request in Company Setup → SaaS Metrics; every metric write was rolled back.',
+  },
+]
+
+test('a failed month reads with its exact failure and remedy, never a bare state', async () => {
+  const { unmount } = await mountWorkflow(() => Response.json(FAILED_MONTH))
+  try {
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.states.failed)),
+      'the failed state must render',
+    )
+    assert.ok(
+      document.body.textContent?.includes('the proven row counts no longer match'),
+      'the recorded failure text must read verbatim',
+    )
+    assert.ok(
+      document.body.textContent?.includes('Company Setup → SaaS Metrics'),
+      'the recorded remedy must name the Setup surface',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('a non-JSON error renders the load fallback, never a parse error', async () => {
+  const { unmount } = await mountWorkflow(
+    () => new Response('Internal Server Error', { status: 500 }),
+  )
+  try {
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.loadFailed)),
+      'the load fallback must render when the body cannot be parsed',
+    )
+    assert.ok(
+      !document.body.textContent?.includes('Unexpected token'),
+      'a JSON parse error must never reach the operator',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('submitting a request posts one month, a reason, and a uuid key, then reloads', async () => {
+  const uuid = '00000000-0000-4000-8000-000000000003'
+  const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+  Object.defineProperty(globalThis, 'crypto', {
+    value: { randomUUID: () => uuid },
+    configurable: true,
+  })
+  let gets = 0
+  const { seen, unmount } = await mountWorkflow((record) => {
+    if (record.method === 'POST') {
+      return Response.json({ request: { id: 'request-1', status: 'pending' }, created: true }, { status: 201 })
+    }
+    gets += 1
+    return Response.json(
+      gets > 1
+        ? [
+            {
+              month: '2026-07-01',
+              state: 'pending',
+              counts: { monthly: 1, facts: 1, cohorts: 1 },
+              denominationVersion: null,
+              reportingCurrency: null,
+              request: { id: 'request-1', status: 'pending' },
+              failure: null,
+              remedy: null,
+            },
+          ]
+        : [],
+    )
+  })
+  try {
+    await act(async () => {
+      setWorkflowInput('normalization-month', '2026-07-01')
+      await tick()
+    })
+    await act(async () => {
+      setWorkflowInput('normalization-reason', 'Correct the July legacy denomination.')
+      await tick()
+    })
+    await act(async () => {
+      clickWorkflowButton(String(normalizationCopy.requestSubmit)).click()
+      await tick()
+      await tick()
+    })
+    await tick()
+    const post = seen.find((entry) => entry.method === 'POST')
+    assert.deepEqual(
+      post?.body,
+      { month: '2026-07-01', reason: 'Correct the July legacy denomination.', idempotencyKey: uuid },
+      'the request posts exactly one month, the reason, and the uuid key',
+    )
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.states.pending)),
+      'the reloaded list must show the pending month',
+    )
+  } finally {
+    if (cryptoDescriptor) Object.defineProperty(globalThis, 'crypto', cryptoDescriptor)
+    await unmount()
+  }
+})
+
+test('approving a pending month posts to its approve URL and surfaces a refusal remedy', async () => {
+  const pending = [
+    {
+      month: '2026-07-01',
+      state: 'pending',
+      counts: { monthly: 1, facts: 1, cohorts: 1 },
+      denominationVersion: null,
+      reportingCurrency: null,
+      request: { id: 'request-1', status: 'pending' },
+      failure: null,
+      remedy: null,
+    },
+  ]
+  const { seen, unmount } = await mountWorkflow((record) => {
+    if (record.method === 'POST') {
+      return Response.json(
+        {
+          error: 'Request request-1 cannot be approved by its requester.',
+          code: 'saas_normalization_self_approval',
+          remedy: 'Have a different authorized approver approve the request in Company Setup → SaaS Metrics.',
+        },
+        { status: 409 },
+      )
+    }
+    return Response.json(pending)
+  })
+  try {
+    await act(async () => {
+      clickWorkflowButton(String(normalizationCopy.approveSubmit)).click()
+      await tick()
+      await tick()
+    })
+    await tick()
+    assert.ok(
+      seen.some(
+        (entry) =>
+          entry.method === 'POST' &&
+          entry.url === '/api/metrics/normalization/requests/request-1/approve',
+      ),
+      'approval posts to the request approve URL with no body',
+    )
+    assert.ok(
+      document.body.textContent?.includes('different authorized approver'),
+      'the self-approval remedy must read verbatim after res.ok fails',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('the SaaS Metrics card hosts the workflow only while the feature is on', async () => {
+  const mountSettings = async (saasMetricsEnabled: boolean) => {
+    const prior = globalThis.fetch
+    globalThis.fetch = (async () => Response.json([])) as typeof fetch
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <SettingsForm initial={INITIAL} {...PROPS} saasMetricsEnabled={saasMetricsEnabled} />
+        </NextIntlClientProvider>,
+      )
+      await tick()
+    })
+    await tick()
+    return {
+      async unmount() {
+        await act(async () => {
+          root.unmount()
+        })
+        host.remove()
+        globalThis.fetch = prior
+      },
+    }
+  }
+  const off = await mountSettings(false)
+  try {
+    assert.ok(
+      !document.body.textContent?.includes(String(normalizationCopy.title)),
+      'no workflow surface may render while the feature is off',
+    )
+  } finally {
+    await off.unmount()
+  }
+  const on = await mountSettings(true)
+  try {
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.title)),
+      'the existing card hosts the workflow while the feature is on',
+    )
+  } finally {
+    await on.unmount()
   }
 })

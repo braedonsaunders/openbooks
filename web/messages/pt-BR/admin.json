@@ -789,6 +789,32 @@
       },
       "customerCreditsReduceBillings": {
         "label": "Deduzir créditos de clientes dos faturamentos"
+      },
+      "normalization": {
+        "title": "Solicitações de normalização",
+        "description": "Os meses salvos com definições legadas são corrigidos por meio de uma solicitação auditada com um aprovador diferente. Nada muda até que uma solicitação seja aprovada e executada.",
+        "states": {
+          "legacy": "Legado",
+          "ready": "Pronto",
+          "pending": "Aguardando aprovação",
+          "running": "Em execução",
+          "failed": "Falhou",
+          "refused": "Requer atenção"
+        },
+        "monthColumn": "Mês",
+        "statusColumn": "Status",
+        "countsColumn": "Linhas (mensais / fatos / coortes)",
+        "requestTitle": "Solicitar normalização",
+        "requestMonth": "Mês",
+        "requestMonthPlaceholder": "AAAA-MM-01",
+        "requestReason": "Motivo",
+        "requestReasonHint": "Descreva por que o mês precisa de correção. Mínimo de 8 caracteres.",
+        "requestSubmit": "Enviar solicitação",
+        "approveSubmit": "Aprovar e executar",
+        "failureLabel": "Falha",
+        "remedyLabel": "Correção",
+        "empty": "Nenhum mês registrado ainda.",
+        "loadFailed": "Não foi possível carregar os estados de normalização."
       }
     },
     "approvals": {
