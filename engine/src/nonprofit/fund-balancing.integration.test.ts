@@ -285,6 +285,11 @@ test("fund readers return the drawer projection with same-org isolation", { skip
   const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`));
   assert.equal(enabled.rows.length, 1);
+  const foreign = await withBypass(() => createScratchOrg());
+  t.after(() => dropScratchOrg(foreign.orgId));
+  const foreignEnabled = await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`));
+  assert.equal(foreignEnabled.rows.length, 1);
   await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "ZZ", name: "Alpha" },
     classifications: { ZZ: { kind: "operating", restrictionClass: "without_donor_restrictions" } } });
   const parent = await createFund({ orgId: org.orgId, code: "MM", name: "Mike",
@@ -299,7 +304,7 @@ test("fund readers return the drawer projection with same-org isolation", { skip
   assert.deepEqual(found, { id: second.id, code: "AA", name: "Zulu", kind: "operating",
     restrictionClass: "without_donor_restrictions", budgetaryControl: "off", isActive: true, parentId: parent.id,
     subsidiaryId: org.subsidiaryId, subsidiaryIncludeChildren: false, custom: { reader: "funds" } });
-  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: randomUUID(), fundId: second.id })), null);
+  assert.equal(await withOrgContext(foreign.orgId, () => getFund({ orgId: foreign.orgId, fundId: second.id })), null);
   assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: randomUUID() })), null);
   assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 101 }))).funds.length, 3);
   await assert.rejects(withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 0 })), /at least 1/);

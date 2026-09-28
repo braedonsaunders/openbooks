@@ -455,6 +455,7 @@ export async function listFunds(
   const search = input.search?.trim();
   if (search) conds.push(sql`(sv.code ilike ${`%${search}%`} or sv.name ilike ${`%${search}%`})`);
   const where = sql.join(conds, sql` and `);
+  // Deterministic order: name (the native default sort), code, id; null codes sort last.
   const rows = await runner.execute<FundReadRow>(sql`
     select f.id::text as id, sv.code, sv.name, f.kind,
            f.restriction_class, f.budgetary_control, sv.is_active, f.custom,
