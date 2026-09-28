@@ -18,7 +18,7 @@ import { createWorkOrder } from "./work-orders.ts";
 const REMEDY_LEAD = "set a lead time in the item's manufacturing policy";
 const decimal = (value: string) => toUnits(value);
 const from = (value: bigint) => fromUnits(value);
-const itemLabel = (code: string | null | undefined) => code?.trim() || "Uncoded item";
+const itemLabel = (code: string | null | undefined, name: string) => code?.trim() || name;
 
 function refuse(message: string, code: string, remedy: string, status = 409): never {
   throw new ManufacturingError(message, { status, code, remedy });
@@ -104,7 +104,7 @@ export interface MrpPlannedOrder extends Record<string, unknown> {
   dismissReason: string | null;
 }
 
-type ItemCode = { id: string; code: string | null };
+type ItemCode = { id: string; code: string | null; name: string };
 type PolicyRow = {
   item_id: string; supply_method: Policy["supplyMethod"]; lead_time_days: number | null;
   safety_stock_qty: string; minimum_qty: string; order_multiple_qty: string; updated_at: string;
@@ -113,11 +113,11 @@ type PolicyRow = {
 async function demandAndSupply(tx: SqlExecutor, orgId: string, subsidiaryId: string, horizonEnd: string) {
   // The order-progress reader includes approved documents only; draft, pending_approval, posted, and voided documents are not open sales-order demand.
   const demandRows = (await tx.execute<{
-    item_id: string; item_code: string | null; line_id: string;
+    item_id: string; item_code: string | null; item_name: string; line_id: string;
     document_id: string; document_number: string; line_number: number; due_date: string;
     quantity: string; unit: string | null;
   }>(sql`
-    select dl.item_id, i.code as item_code, dl.id as line_id,
+    select dl.item_id, i.code as item_code, i.name as item_name, dl.id as line_id,
            d.id as document_id, d.document_number, dl.line_number,
            coalesce(d.due_date, d.document_date)::text as due_date,
            ${openQuantitySql("dl")}::text as quantity, dl.unit
@@ -164,16 +164,16 @@ async function demandAndSupply(tx: SqlExecutor, orgId: string, subsidiaryId: str
        and m.required_qty > m.issued_qty
      group by m.component_item_id`)).rows;
   const itemCodeRows = (await tx.execute<ItemCode>(sql`
-    select id, code from items where org_id=${orgId}`)).rows;
-  const codes = new Map(itemCodeRows.map((row) => [row.id, itemLabel(row.code)]));
+    select id, code, name from items where org_id=${orgId}`)).rows;
+  const codes = new Map(itemCodeRows.map((row) => [row.id, itemLabel(row.code, row.name)]));
   const policyByItem = new Map<string, Policy>(policies.map((row) => [row.item_id, {
-    itemId: row.item_id, itemCode: codes.get(row.item_id) ?? "Uncoded item",
+    itemId: row.item_id, itemCode: codes.get(row.item_id) ?? row.item_id,
     supplyMethod: row.supply_method, leadTimeDays: row.lead_time_days,
     safetyStockQty: row.safety_stock_qty, minimumQty: row.minimum_qty,
     orderMultipleQty: row.order_multiple_qty, updatedAt: row.updated_at,
   }]));
   for (const id of itemIds) if (!policyByItem.has(id)) policyByItem.set(id, {
-    itemId: id, itemCode: codes.get(id) ?? "Uncoded item", supplyMethod: "buy", leadTimeDays: null,
+    itemId: id, itemCode: codes.get(id) ?? id, supplyMethod: "buy", leadTimeDays: null,
     safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", updatedAt: "1970-01-01T00:00:00.000Z",
   });
   const ids = [...new Set([...itemIds, ...policies.map((row) => row.item_id), ...orderLines.map((row) => row.item_id), ...workOrders.map((row) => row.item_id), ...reservations.map((row) => row.item_id)])];
@@ -185,7 +185,7 @@ async function demandAndSupply(tx: SqlExecutor, orgId: string, subsidiaryId: str
     catch (error) { refuse(`${description}: ${error instanceof Error ? error.message : String(error)}`, "mrp_unit_not_convertible", "add a valid unit conversion to the item's inventory profile"); }
   };
   const demands: Demand[] = demandRows.map((row) => ({
-    itemId: row.item_id, itemCode: itemLabel(row.item_code),
+    itemId: row.item_id, itemCode: itemLabel(row.item_code, row.item_name),
     quantity: base(row.item_id, row.quantity, row.unit, `Sales order ${row.document_number} line ${row.line_number}`),
     dueDate: row.due_date,
     demandRef: { type: "sales_order_line", documentId: row.document_id, documentNumber: row.document_number, lineId: row.line_id, lineNumber: row.line_number },
@@ -207,10 +207,10 @@ async function explodedComponentDemand(
 ): Promise<Demand[]> {
   await explodeBom(tx, orgId, parent.itemId, quantity, plannedStart);
   const rows = (await tx.execute<{
-    item_id: string; item_code: string | null;
+    item_id: string; item_code: string | null; item_name: string;
     quantity_per: string; scrap_pct: string | null; is_byproduct: boolean;
   }>(sql`
-    select b.component_item_id as item_id, i.code as item_code,
+    select b.component_item_id as item_id, i.code as item_code, i.name as item_name,
            b.quantity_per::text, b.scrap_pct::text, b.is_byproduct
       from bom_components b join items i on i.org_id=b.org_id and i.id=b.component_item_id
      where b.org_id=${orgId} and b.assembly_item_id=${parent.itemId}
@@ -226,7 +226,7 @@ async function explodedComponentDemand(
     const entry = requiredByItem.get(row.item_id);
     const required = bomRequiredQuantity(quantity, row.quantity_per, row.scrap_pct).quantity;
     requiredByItem.set(row.item_id, {
-      itemCode: itemLabel(row.item_code),
+      itemCode: itemLabel(row.item_code, row.item_name),
       quantity: add(entry?.quantity ?? "0", required),
     });
   }
@@ -516,8 +516,8 @@ export async function getMrpRun(tx: SqlExecutor, orgId: string, id: string) {
     select id,number,horizon_start::text as "horizonStart",horizon_end::text as "horizonEnd",status,parameters,ran_at::text as "ranAt"
       from mfg_mrp_runs where org_id=${orgId} and id=${id}`)).rows[0];
   if (!run) throw new ManufacturingNotFoundError();
-  const suggestions = (await tx.execute<MrpPlannedOrder & { code: string | null }>(sql`
-    select p.id,p.run_id as "runId",p.item_id as "itemId",i.code,p.quantity::text,p.due_date::text as "dueDate",
+  const suggestions = (await tx.execute<MrpPlannedOrder & { code: string | null; item_name: string }>(sql`
+    select p.id,p.run_id as "runId",p.item_id as "itemId",i.code,i.name as item_name,p.quantity::text,p.due_date::text as "dueDate",
            p.planned_start::text as "plannedStart",p.action,p.demand_ref as "demandRef",p.status,
            p.converted_ref_id as "convertedRefId",p.is_expedite as "isExpedite",p.dismiss_reason as "dismissReason"
       from mfg_planned_orders p join items i on i.org_id=p.org_id and i.id=p.item_id
@@ -530,7 +530,7 @@ export async function getMrpRun(tx: SqlExecutor, orgId: string, id: string) {
      order by w.week_start,c.code`)).rows;
   return {
     run,
-    suggestions: suggestions.map(({ code, ...suggestion }) => ({ ...suggestion, itemCode: itemLabel(code) })),
+    suggestions: suggestions.map(({ code, item_name, ...suggestion }) => ({ ...suggestion, itemCode: itemLabel(code, item_name) })),
     capacity: capacity.map((row) => {
       const planned = toUnits(row.planned_hours); const available = toUnits(row.available_hours);
       const percent = available === 0n ? null : fromUnits((planned * 1_000_000n + available / 2n) / available);
@@ -552,14 +552,15 @@ async function lockSuggestion(tx: SqlExecutor, orgId: string, id: string) {
     action: "make" | "buy" | "transfer"; demand_ref: Record<string, unknown>; status: string;
     converted_ref_id: string | null; dismiss_reason: string | null; is_expedite: boolean;
     run_status: string; parameters: Record<string, unknown>;
-    item_code: string | null; policy_changed_after_run: boolean | null;
+    item_code: string | null; item_name: string; base_unit: string | null; policy_changed_after_run: boolean | null;
   }>(sql`
     select p.id,p.run_id,p.item_id,p.quantity::text,p.due_date::text,p.planned_start::text,p.action,p.demand_ref,p.status,
            p.converted_ref_id,p.dismiss_reason,p.is_expedite,r.number as run_number,r.status as run_status,r.parameters,
-           i.code as item_code,
+           i.code as item_code,i.name as item_name,profile.base_unit,
            (p0.updated_at > r.ran_at) as policy_changed_after_run
       from mfg_planned_orders p join mfg_mrp_runs r on r.org_id=p.org_id and r.id=p.run_id
       left join mfg_item_policies p0 on p0.org_id=p.org_id and p0.item_id=p.item_id
+      left join item_inventory_profiles profile on profile.org_id=p.org_id and profile.item_id=p.item_id
       join items i on i.org_id=p.org_id and i.id=p.item_id
      where p.org_id=${orgId} and p.id=${id} for update of p`)).rows[0];
   if (!row) throw new ManufacturingNotFoundError();
@@ -602,7 +603,7 @@ function assertConvertible(row: Awaited<ReturnType<typeof lockSuggestion>>) {
   if (row.status !== "confirmed") refuse("Confirm this planned order before converting it.", "planned_order_not_confirmed", "confirm the suggestion first", 409);
   if (row.run_status === "superseded") refuse("This MRP run was superseded; re-run MRP before converting its suggestions.", "mrp_run_superseded", "re-run MRP", 409);
   if (row.policy_changed_after_run) {
-    refuse(`The manufacturing policy for ${itemLabel(row.item_code)} changed after this MRP run.`, "mrp_policy_changed", "re-run MRP to use the updated item policy", 409);
+    refuse(`The manufacturing policy for ${itemLabel(row.item_code, row.item_name)} changed after this MRP run.`, "mrp_policy_changed", "re-run MRP to use the updated item policy", 409);
   }
 }
 
@@ -613,6 +614,18 @@ async function markConverted(tx: SqlExecutor, orgId: string, actorId: string, ro
   await auditChange(tx, { orgId, actorId, table: "mfg_planned_orders", rowId: row.id, action: "update", before: row, after: { ...row, status: "converted", converted_ref_id: targetId } });
 }
 
+export async function markBuyPlannedOrderConverted(
+  tx: SqlExecutor, orgId: string, actorId: string, id: string, targetId: string,
+): Promise<{ id: string; action: "buy"; replayed: boolean }> {
+  await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
+  const row = await lockSuggestion(tx, orgId, id);
+  if (row.action !== "buy") refuse("Only a purchase suggestion can be converted to a purchase order.", "mrp_buy_action_required", "select a buy suggestion", 409);
+  if (row.status === "converted" && row.converted_ref_id) return { id: row.converted_ref_id, action: "buy", replayed: true };
+  assertConvertible(row);
+  await markConverted(tx, orgId, actorId, row, targetId);
+  return { id: targetId, action: "buy", replayed: false };
+}
+
 export async function convertPlannedOrder(
   tx: SqlExecutor, orgId: string, actorId: string, id: string,
   input: { fromLocationId?: string; toLocationId?: string },
@@ -620,9 +633,10 @@ export async function convertPlannedOrder(
   await assertManufacturingFeature(tx, orgId, "manufacturingMrp");
   const row = await lockSuggestion(tx, orgId, id);
   if (row.action === "buy") refuse(
-    "Purchase suggestions cannot be converted to a purchase order yet.",
-    "mrp_buy_conversion_unavailable",
-    "create the purchase order in Purchasing, then dismiss this suggestion with the order number as the reason",
+    "Convert this purchase suggestion through its purchase order route.",
+    "mrp_buy_route_required",
+    "convert the suggestion with a vendor from its planned order",
+    409,
   );
   if (row.status === "converted" && row.converted_ref_id) return { id: row.converted_ref_id, action: row.action, replayed: true };
   assertConvertible(row);
@@ -632,7 +646,7 @@ export async function convertPlannedOrder(
     const routing = (await tx.execute<{ id: string }>(sql`select id from mfg_routings where org_id=${orgId} and produced_item_id=${row.item_id}
       and status='active' and effective_from <= ${row.planned_start ?? row.due_date}::date
       and (effective_to is null or ${row.planned_start ?? row.due_date}::date < effective_to) order by version desc limit 1`)).rows[0];
-    if (!routing) refuse(`Item ${itemLabel(row.item_code)} has no active routing for this planned start.`, "mrp_routing_required", "activate a routing for the item before converting this make suggestion", 409);
+    if (!routing) refuse(`Item ${itemLabel(row.item_code, row.item_name)} has no active routing for this planned start.`, "mrp_routing_required", "activate a routing for the item before converting this make suggestion", 409);
     const workOrder = await createWorkOrder(tx, orgId, actorId, {
       producedItemId: row.item_id, quantityOrdered: row.quantity, subsidiaryId,
       plannedStart: row.planned_start, plannedEnd: row.due_date, routingId: routing.id, source: "manual",
@@ -649,7 +663,7 @@ export async function convertPlannedOrder(
     if (input.fromLocationId === input.toLocationId) refuse("A transfer needs two different locations.", "mrp_transfer_same_location", "choose different from and to locations", 400);
     const transfer = await createTransferOrder(orgId, actorId, {
       fromStockLocationId: input.fromLocationId, toStockLocationId: input.toLocationId,
-      subsidiaryId, orderedOn: await businessToday(orgId), memo: `MRP run ${row.run_number}: ${itemLabel(row.item_code)} due ${row.due_date}`,
+      subsidiaryId, orderedOn: await businessToday(orgId), memo: `MRP run ${row.run_number}: ${itemLabel(row.item_code, row.item_name)} due ${row.due_date}`,
       lines: [{ itemId: row.item_id, quantity: row.quantity }],
     });
     targetId = transfer.id;
