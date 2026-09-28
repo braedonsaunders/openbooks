@@ -11,10 +11,12 @@ import {
   orgFeatureEnabled,
 } from "../organization/org-feature-lock.ts";
 import {
+  db,
   inDbTransaction,
   withOrgTransaction,
   type SqlExecutor,
 } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import {
   cancelDispatchRuns,
   dispatchFailureReason,
@@ -1180,4 +1182,174 @@ export async function voidFundRelease(input: {
       return result;
     }),
   );
+}
+
+/** Canonical release register read: the drawer detail projection, shared by list and detail. */
+export interface FundReleaseReadRecord {
+  id: string;
+  number: string;
+  releaseDate: string;
+  amount: string;
+  purpose: string;
+  satisfactionRef: string;
+  status: FundReleaseStatus;
+  fromFundId: string;
+  toFundId: string;
+  fromCode: string | null;
+  fromName: string;
+  toCode: string | null;
+  toName: string;
+  postedEntryId: string | null;
+  voidEntryId: string | null;
+  custom: Record<string, unknown>;
+}
+
+export interface FundReleaseReadPage {
+  releases: FundReleaseReadRecord[];
+  total: number;
+}
+
+interface FundReleaseReadRow extends Record<string, unknown> {
+  id: string;
+  release_number: string;
+  release_date: string;
+  amount: string;
+  purpose: string;
+  satisfaction_ref: string;
+  status: FundReleaseStatus;
+  from_fund_id: string;
+  to_fund_id: string;
+  from_code: string | null;
+  from_name: string;
+  to_code: string | null;
+  to_name: string;
+  posted_entry_id: string | null;
+  void_entry_id: string | null;
+  custom: Record<string, unknown> | null;
+}
+
+function mapFundReleaseRead(row: FundReleaseReadRow): FundReleaseReadRecord {
+  return {
+    id: row.id,
+    number: row.release_number,
+    releaseDate: row.release_date,
+    amount: row.amount,
+    purpose: row.purpose,
+    satisfactionRef: row.satisfaction_ref,
+    status: row.status,
+    fromFundId: row.from_fund_id,
+    toFundId: row.to_fund_id,
+    fromCode: row.from_code,
+    fromName: row.from_name,
+    toCode: row.to_code,
+    toName: row.to_name,
+    postedEntryId: row.posted_entry_id,
+    voidEntryId: row.void_entry_id,
+    custom: row.custom ?? {},
+  };
+}
+
+const RELEASE_STATUSES: readonly FundReleaseStatus[] = ["draft", "pending_approval", "posted", "void"];
+
+function releaseReadLimit(limit: number | undefined): number {
+  const value = limit ?? 25;
+  if (!Number.isInteger(value) || value < 1 || value > 100) {
+    throw refusal({
+      message: "The fund release list limit must be a whole number from 1 to 100.",
+      code: "fund_release_list_limit_invalid",
+      remedy: "Request a fund release list limit from 1 to 100.",
+      field: "limit",
+    });
+  }
+  return value;
+}
+
+function releaseReadOffset(offset: number | undefined): number {
+  const value = offset ?? 0;
+  if (!Number.isInteger(value) || value < 0) {
+    throw refusal({
+      message: "The fund release list offset must be a whole number starting at 0.",
+      code: "fund_release_list_offset_invalid",
+      remedy: "Request a fund release list offset of 0 or more.",
+      field: "offset",
+    });
+  }
+  return value;
+}
+
+/** List releases in deterministic date order with same-organization totals. */
+export async function listFundReleases(
+  input: {
+    orgId: string;
+    search?: string;
+    status?: FundReleaseStatus;
+    limit?: number;
+    offset?: number;
+  },
+  executor?: SqlExecutor,
+): Promise<FundReleaseReadPage> {
+  const runner = executor ?? db;
+  const limit = releaseReadLimit(input.limit);
+  const offset = releaseReadOffset(input.offset);
+  if (input.status !== undefined && !RELEASE_STATUSES.includes(input.status)) {
+    throw refusal({
+      message: "The fund release status is not supported.",
+      code: "fund_release_list_status_invalid",
+      remedy: "Filter releases by draft, pending_approval, posted, or void.",
+      field: "status",
+    });
+  }
+  const conds: ReturnType<typeof sql>[] = [sql`r.org_id = ${input.orgId}`];
+  if (input.status !== undefined) conds.push(sql`r.status = ${input.status}`);
+  const search = input.search?.trim();
+  if (search) {
+    conds.push(sql`(r.release_number ilike ${`%${search}%`} or r.purpose ilike ${`%${search}%`} or r.satisfaction_ref ilike ${`%${search}%`})`);
+  }
+  const where = sql.join(conds, sql` and `);
+  const rows = await runner.execute<FundReleaseReadRow>(sql`
+    select r.id::text as id, r.release_number, r.release_date::text as release_date,
+           r.amount::text as amount, r.purpose, r.satisfaction_ref, r.status,
+           r.from_fund_id::text as from_fund_id, r.to_fund_id::text as to_fund_id,
+           ff.code as from_code, ff.name as from_name,
+           tf.code as to_code, tf.name as to_name,
+           r.posted_entry_id::text as posted_entry_id,
+           r.void_entry_id::text as void_entry_id, r.custom
+      from fund_releases r
+      join segment_values ff on ff.org_id = r.org_id and ff.id = r.from_fund_id
+      join segment_values tf on tf.org_id = r.org_id and tf.id = r.to_fund_id
+     where ${where}
+     order by r.release_date desc, r.release_number desc, r.id
+     limit ${limit} offset ${offset}
+  `);
+  const counted = await runner.execute<{ n: string }>(sql`
+    select count(*) as n from fund_releases r where ${where}
+  `);
+  return { releases: rows.rows.map(mapFundReleaseRead), total: Number(counted.rows[0]?.n ?? 0) };
+}
+
+/**
+ * Read one release for the register drawer. Unknown and cross-organization
+ * ids resolve to the same null, so a missing record is indistinguishable
+ * from another organization's record.
+ */
+export async function getFundRelease(
+  input: { orgId: string; releaseId: string },
+  executor?: SqlExecutor,
+): Promise<FundReleaseReadRecord | null> {
+  if (!isUuid(input.releaseId)) return null;
+  const runner = executor ?? db;
+  const row = (await runner.execute<FundReleaseReadRow>(sql`
+    select r.id::text as id, r.release_number, r.release_date::text as release_date,
+           r.amount::text as amount, r.purpose, r.satisfaction_ref, r.status,
+           r.from_fund_id::text as from_fund_id, r.to_fund_id::text as to_fund_id,
+           ff.code as from_code, ff.name as from_name,
+           tf.code as to_code, tf.name as to_name,
+           r.posted_entry_id::text as posted_entry_id,
+           r.void_entry_id::text as void_entry_id, r.custom
+      from fund_releases r
+      join segment_values ff on ff.org_id = r.org_id and ff.id = r.from_fund_id
+      join segment_values tf on tf.org_id = r.org_id and tf.id = r.to_fund_id
+     where r.org_id = ${input.orgId} and r.id = ${input.releaseId}
+  `)).rows[0];
+  return row ? mapFundReleaseRead(row) : null;
 }

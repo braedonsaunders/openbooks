@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { notFound } from 'next/navigation'
+import { getFundRelease } from '@openbooks/engine/src/nonprofit/releases.ts'
 import {
   page,
   pageHeader,
@@ -23,9 +23,13 @@ import { groupTabs } from '../../../../components/module-home/group-tabs'
  * (`fund_release`) carries the list through the Authz-re-deriving slot, and
  * the drawer payload reads the same release row the flow adapter resolves —
  * from/to fund codes, lifecycle status, and the posted/void entry evidence.
- * The approvals tab reuses the native approval actions and history, bound to
+ * That row arrives through the canonical release reader, never a parallel
+ * query, so the drawer and the adapter cannot disagree about a release. The
+ * approvals tab reuses the native approval actions and history, bound to
  * the adapter's `fund_release` subject kind. This page lands before any
  * release-submitting surface: drafts are submitted elsewhere, decided here.
+ * A named release the reader cannot see is a stale or foreign link, so it
+ * ends on the shared not-found boundary instead of an empty page.
  */
 
 export interface ReleaseDetail {
@@ -60,22 +64,6 @@ export interface ReleasesData {
   drawer: ReleaseDrawerData | null
 }
 
-type ReleaseRow = {
-  id: string
-  release_number: string
-  release_date: string
-  amount: string
-  purpose: string
-  satisfaction_ref: string
-  status: string
-  from_code: string | null
-  from_name: string
-  to_code: string | null
-  to_name: string
-  posted_entry_id: string | null
-  void_entry_id: string | null
-}
-
 export async function loadReleases(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ReleasesData> {
@@ -95,20 +83,8 @@ export async function loadReleases(
 
   const releaseId = pickString(sp.release)
   if (!releaseId || !isUuid(releaseId)) return base
-  const found = (
-    await db.execute<ReleaseRow>(sql`
-      select r.id::text as id, r.release_number, r.release_date::text as release_date,
-             r.amount::text as amount, r.purpose, r.satisfaction_ref, r.status,
-             ff.code as from_code, ff.name as from_name,
-             tf.code as to_code, tf.name as to_name,
-             r.posted_entry_id::text as posted_entry_id,
-             r.void_entry_id::text as void_entry_id
-        from fund_releases r
-        join segment_values ff on ff.org_id = r.org_id and ff.id = r.from_fund_id
-        join segment_values tf on tf.org_id = r.org_id and tf.id = r.to_fund_id
-       where r.org_id = ${orgId} and r.id = ${releaseId}`)
-  ).rows[0]
-  if (!found) return base
+  const found = await getFundRelease({ orgId, releaseId })
+  if (!found) notFound()
 
   return {
     ...base,
@@ -116,18 +92,18 @@ export async function loadReleases(
       remountKey: found.id,
       release: {
         id: found.id,
-        number: found.release_number,
-        releaseDate: found.release_date,
+        number: found.number,
+        releaseDate: found.releaseDate,
         amount: found.amount,
         purpose: found.purpose,
-        satisfactionRef: found.satisfaction_ref,
+        satisfactionRef: found.satisfactionRef,
         status: found.status,
-        fromCode: found.from_code ?? found.from_name,
-        fromName: found.from_name,
-        toCode: found.to_code ?? found.to_name,
-        toName: found.to_name,
-        postedEntryId: found.posted_entry_id,
-        voidEntryId: found.void_entry_id,
+        fromCode: found.fromCode ?? found.fromName,
+        fromName: found.fromName,
+        toCode: found.toCode ?? found.toName,
+        toName: found.toName,
+        postedEntryId: found.postedEntryId,
+        voidEntryId: found.voidEntryId,
       },
       canManage: can(authz, 'funds.manage'),
       canCustomize: can(authz, 'admin.customization.manage'),

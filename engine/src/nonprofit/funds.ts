@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
-import { db, withOrgTransaction } from "../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { fundFeatureOff, NonprofitError } from "./errors.ts";
 
 export type FundKind = "operating" | "restricted" | "endowment" | "plant" | "board_designated";
@@ -355,4 +355,131 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
       reason,
     };
   });
+}
+
+/** Canonical fund register read: the drawer primary projection, shared by list and detail. */
+export interface FundReadRecord {
+  id: string;
+  code: string | null;
+  name: string;
+  kind: FundKind;
+  restrictionClass: string;
+  budgetaryControl: BudgetaryControl;
+  isActive: boolean;
+  custom: Record<string, unknown>;
+}
+
+export interface FundReadPage {
+  funds: FundReadRecord[];
+  total: number;
+}
+
+interface FundReadRow extends Record<string, unknown> {
+  id: string;
+  code: string | null;
+  name: string;
+  kind: string;
+  restriction_class: string;
+  budgetary_control: string;
+  is_active: boolean;
+  custom: Record<string, unknown> | null;
+}
+
+function mapFundRead(row: FundReadRow): FundReadRecord {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    kind: row.kind as FundKind,
+    restrictionClass: row.restriction_class,
+    budgetaryControl: row.budgetary_control as BudgetaryControl,
+    isActive: row.is_active,
+    custom: row.custom ?? {},
+  };
+}
+
+function readLimit(limit: number | undefined): number {
+  const value = limit ?? 25;
+  if (!Number.isInteger(value) || value < 1 || value > 100) {
+    throw new NonprofitError({
+      message: "The fund list limit must be a whole number from 1 to 100.",
+      status: 422,
+      code: "fund_list_limit_invalid",
+      remedy: "Request a fund list limit from 1 to 100.",
+      field: "limit",
+    });
+  }
+  return value;
+}
+
+function readOffset(offset: number | undefined): number {
+  const value = offset ?? 0;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new NonprofitError({
+      message: "The fund list offset must be a whole number starting at 0.",
+      status: 422,
+      code: "fund_list_offset_invalid",
+      remedy: "Request a fund list offset of 0 or more.",
+      field: "offset",
+    });
+  }
+  return value;
+}
+
+/** List funds in deterministic code order with same-organization totals. */
+export async function listFunds(
+  input: {
+    orgId: string;
+    search?: string;
+    includeInactive?: boolean;
+    limit?: number;
+    offset?: number;
+  },
+  executor?: SqlExecutor,
+): Promise<FundReadPage> {
+  const runner = executor ?? db;
+  const limit = readLimit(input.limit);
+  const offset = readOffset(input.offset);
+  const conds: ReturnType<typeof sql>[] = [sql`f.org_id = ${input.orgId}`];
+  if (!input.includeInactive) conds.push(sql`sv.is_active`);
+  const search = input.search?.trim();
+  if (search) conds.push(sql`(sv.code ilike ${`%${search}%`} or sv.name ilike ${`%${search}%`})`);
+  const where = sql.join(conds, sql` and `);
+  const rows = await runner.execute<FundReadRow>(sql`
+    select f.id::text as id, sv.code, sv.name, f.kind,
+           f.restriction_class, f.budgetary_control, sv.is_active, f.custom
+      from funds f
+      join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+     where ${where}
+     order by sv.code, sv.id
+     limit ${limit} offset ${offset}
+  `);
+  const counted = await runner.execute<{ n: string }>(sql`
+    select count(*) as n
+      from funds f
+      join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+     where ${where}
+  `);
+  return { funds: rows.rows.map(mapFundRead), total: Number(counted.rows[0]?.n ?? 0) };
+}
+
+/**
+ * Read one fund for the register drawer. Unknown and cross-organization ids
+ * resolve to the same null, so a missing record is indistinguishable from
+ * another organization's record.
+ */
+export async function getFund(
+  input: { orgId: string; fundId: string },
+  executor?: SqlExecutor,
+): Promise<FundReadRecord | null> {
+  if (!UUID_RE.test(input.fundId)) return null;
+  const runner = executor ?? db;
+  const row = (await runner.execute<FundReadRow>(sql`
+    select f.id::text as id, sv.code, sv.name, f.kind,
+           f.restriction_class, f.budgetary_control, sv.is_active, f.custom
+      from funds f
+      join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+     where f.org_id = ${input.orgId} and f.id = ${input.fundId}
+  `)).rows[0];
+  return row ? mapFundRead(row) : null;
 }
