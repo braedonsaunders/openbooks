@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, inDbTransaction } from "../platform/db.ts";
+import { db, inDbTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import {
@@ -25,9 +25,67 @@ import {
 
 export class LaborCostingFeatureDisabledError extends Error {
   constructor() {
-    super("projects feature is disabled");
+    super("projects feature is disabled. Turn it on in Company Settings → Features.");
     this.name = "LaborCostingFeatureDisabledError";
   }
+}
+
+export class ManufacturingLaborFeatureDisabledError extends Error {
+  constructor() {
+    super("manufacturing feature is disabled. Turn it on in Company Settings → Features.");
+    this.name = "ManufacturingLaborFeatureDisabledError";
+  }
+}
+
+/** A time entry names at most one cost object; costing one needs exactly one. */
+export class LaborCostObjectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LaborCostObjectError";
+  }
+}
+
+export interface LaborCostObjectTags {
+  projectId: string | null;
+  workOrderId: string | null;
+}
+
+/**
+ * The time-entry cost-object boundary: a project-tagged entry may cost only
+ * while Projects is on; a work-order-tagged entry (and nothing else) may
+ * cost while Manufacturing is on instead. Entries naming both cost objects
+ * or none refuse by name. Never a broad Projects-or-Manufacturing gate: the
+ * check runs on the entry's own tags, one entry at a time.
+ */
+export async function assertLaborCostObjectFeature(
+  executor: SqlExecutor,
+  orgId: string,
+  entry: LaborCostObjectTags,
+): Promise<"projects" | "manufacturing"> {
+  const hasProject = entry.projectId !== null && entry.projectId !== undefined;
+  const hasWorkOrder = entry.workOrderId !== null && entry.workOrderId !== undefined;
+  if (hasProject && hasWorkOrder) {
+    throw new LaborCostObjectError(
+      "one entry, one cost object: this time entry names both a project and a work order — " +
+      "split it into two entries, one tagged to the project and one to the work order, " +
+      "then approve each where it was captured",
+    );
+  }
+  if (hasProject) {
+    if (!(await lockAndCheckOrgFeature(executor, orgId, "projects"))) {
+      throw new LaborCostingFeatureDisabledError();
+    }
+    return "projects";
+  }
+  if (hasWorkOrder) {
+    if (!(await lockAndCheckOrgFeature(executor, orgId, "manufacturing"))) {
+      throw new ManufacturingLaborFeatureDisabledError();
+    }
+    return "manufacturing";
+  }
+  throw new LaborCostObjectError(
+    "this time entry names no cost object: tag it to a project or a work order before costing it",
+  );
 }
 
 /** A stored or supplied labor-costing input mispriced silently until now:
