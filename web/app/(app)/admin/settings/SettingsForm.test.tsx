@@ -341,6 +341,81 @@ const FAILED_MONTH = [
   },
 ]
 
+test('normalization evidence renders accessible month rows with only pending approval actions', async () => {
+  const ready = {
+    month: '2026-06-01',
+    state: 'ready',
+    counts: { monthly: 4, facts: 12, cohorts: 2 },
+    denominationVersion: 'v3',
+    reportingCurrency: 'CAD',
+    request: null,
+    failure: null,
+    remedy: null,
+  }
+  const pending = {
+    month: '2026-08-01',
+    state: 'pending',
+    counts: { monthly: 3, facts: 8, cohorts: 1 },
+    denominationVersion: null,
+    reportingCurrency: null,
+    request: { id: 'request-august', status: 'pending' },
+    failure: null,
+    remedy: null,
+  }
+  const { seen, unmount } = await mountWorkflow((record) => record.method === 'POST'
+    ? Response.json({
+        error: 'Request request-august needs a different approver.',
+        remedy: 'Have another authorized approver review August in Company Setup → SaaS Metrics.',
+      }, { status: 409 })
+    : Response.json([ready, FAILED_MONTH[0], pending]))
+  try {
+    const table = document.querySelector('table')
+    assert.ok(table, 'the month evidence uses a semantic table')
+    const headings = [...table.querySelectorAll('thead th')].map((cell) => cell.textContent?.trim())
+    assert.deepEqual(headings, [
+      normalizationCopy.monthColumn,
+      normalizationCopy.statusColumn,
+      normalizationCopy.countsColumn,
+      normalizationCopy.approveSubmit,
+    ])
+    const rows = [...table.querySelectorAll('tbody tr')] as HTMLTableRowElement[]
+    assert.equal(rows.length, 3)
+    assert.deepEqual(rows.map((row) => row.cells[0]?.textContent), ['2026-06-01', '2026-07-01', '2026-08-01'])
+    assert.match(rows[0]!.cells[1]!.textContent ?? '', /v3.*CAD/)
+    assert.match(rows[0]!.cells[2]!.textContent ?? '', /4 \/ 12 \/ 2/)
+    assert.match(rows[1]!.cells[1]!.textContent ?? '', /the proven row counts no longer match/)
+    assert.match(rows[1]!.cells[1]!.textContent ?? '', /Company Setup → SaaS Metrics/)
+    assert.match(rows[2]!.cells[1]!.textContent ?? '', /request-august/)
+    const action = rows[2]!.querySelector('button')
+    assert.ok(action, 'only the pending month offers approval')
+    assert.equal(rows[0]!.querySelector('button'), null)
+    assert.equal(rows[1]!.querySelector('button'), null)
+    action.focus()
+    assert.equal(document.activeElement, action, 'the approval remains a native focusable button')
+    await act(async () => {
+      action.click()
+      await tick()
+    })
+    assert.ok(seen.some((entry) => entry.method === 'POST' && entry.url.endsWith('/request-august/approve')))
+    assert.match(document.body.textContent ?? '', /another authorized approver review August/)
+  } finally {
+    await unmount()
+  }
+})
+
+test('normalization empty state keeps the correction form available', async () => {
+  const { unmount } = await mountWorkflow(() => Response.json([]))
+  try {
+    assert.equal(document.querySelector('table'), null)
+    assert.ok(document.body.textContent?.includes(String(normalizationCopy.empty)))
+    assert.ok(document.getElementById('normalization-month'))
+    assert.ok(document.getElementById('normalization-reason'))
+    assert.ok(clickWorkflowButton(String(normalizationCopy.requestSubmit)))
+  } finally {
+    await unmount()
+  }
+})
+
 test('a failed month reads with its exact failure and remedy, never a bare state', async () => {
   const { unmount } = await mountWorkflow(() => Response.json(FAILED_MONTH))
   try {

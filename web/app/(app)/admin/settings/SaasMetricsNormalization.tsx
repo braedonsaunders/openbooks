@@ -10,6 +10,7 @@ import {
   FieldLabel,
   Input,
 } from '@openbooks/ui'
+import { PagedTable } from '@/components/paged-table'
 
 type MonthState = {
   month: string
@@ -162,25 +163,23 @@ export function SaasMetricsNormalization() {
       ) : months.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{copy('empty')}</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-slate-500 dark:text-slate-400">
-              <th className="py-1 pr-3 font-medium">{copy('monthColumn')}</th>
-              <th className="py-1 pr-3 font-medium">{copy('statusColumn')}</th>
-              <th className="py-1 pr-3 font-medium">{copy('countsColumn')}</th>
-              <th className="py-1 font-medium"><span className="sr-only">{copy('approveSubmit')}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {months.map((entry) => {
-              const pendingRequestId = entry.state === 'pending' ? entry.request?.id : undefined
-              return (
-              <tr key={entry.month} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="py-2 pr-3 text-slate-900 dark:text-slate-100">{entry.month}</td>
-                <td className="py-2 pr-3">
-                  <span className="text-slate-700 dark:text-slate-300">
-                    {copy(`states.${entry.state}`)}
-                  </span>
+        <PagedTable<MonthState>
+          rows={months}
+          rowKey={(entry) => entry.month}
+          pageSize={25}
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{copy('empty')}</p>}
+          columns={[
+            {
+              key: 'month',
+              header: copy('monthColumn'),
+              cell: (entry) => <span className="text-slate-900 dark:text-slate-100">{entry.month}</span>,
+            },
+            {
+              key: 'status',
+              header: copy('statusColumn'),
+              cell: (entry) => (
+                <>
+                  <span className="text-slate-700 dark:text-slate-300">{copy(`states.${entry.state}`)}</span>
                   {entry.state === 'ready' && entry.denominationVersion && entry.reportingCurrency ? (
                     <span className="block text-xs text-slate-500 dark:text-slate-400">
                       {copy('resultDenomination')}: {entry.denominationVersion} · {copy('resultCurrency')}: {entry.reportingCurrency}
@@ -199,22 +198,32 @@ export function SaasMetricsNormalization() {
                       {copy('remedyLabel')}: {entry.remedy}
                     </span>
                   ) : null}
-                </td>
-                <td className="py-2 pr-3 text-slate-700 dark:text-slate-300">
+                </>
+              ),
+            },
+            {
+              key: 'counts',
+              header: copy('countsColumn'),
+              cell: (entry) => (
+                <span className="text-slate-700 dark:text-slate-300 tabular-nums">
                   {entry.counts.monthly} / {entry.counts.facts} / {entry.counts.cohorts}
-                </td>
-                <td className="py-2">
-                  {pendingRequestId ? (
-                    <Button disabled={busy} onClick={() => void approve(pendingRequestId)}>
-                      {copy('approveSubmit')}
-                    </Button>
-                  ) : null}
-                </td>
-              </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                </span>
+              ),
+            },
+            {
+              key: 'approve',
+              header: <span className="sr-only">{copy('approveSubmit')}</span>,
+              cell: (entry) => {
+                const requestId = entry.state === 'pending' ? entry.request?.id : undefined
+                return requestId ? (
+                  <Button disabled={busy} onClick={() => void approve(requestId)}>
+                    {copy('approveSubmit')}
+                  </Button>
+                ) : null
+              },
+            },
+          ]}
+        />
       )}
       <div className="space-y-3">
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{copy('requestTitle')}</h4>
