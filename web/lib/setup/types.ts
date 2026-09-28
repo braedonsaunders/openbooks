@@ -301,7 +301,7 @@ export interface SetupEntityGate {
  * switchboard that turns them back on.
  */
 export const SETUP_PROJECTS_OR_MANUFACTURING_REMEDY =
-  'Turn on Projects or Manufacturing in Company Settings → Features'
+  'Turn on Projects or Manufacturing in Company Settings → Features.'
 
 /** Fallback remedy for a closed any-of gate over any other key set. */
 const SETUP_GENERIC_FEATURE_REMEDY = 'Turn on the required feature in Company Settings → Features'

@@ -11,6 +11,7 @@ import { loadExtensionSettingRows } from "../setup/extension-settings";
 import {
   SETUP_ENTITIES,
   SETUP_ENTITY_BY_KEY,
+  resolveSetupEntityGate,
   setupEntityForFeatureState,
   toSnake,
   type SetupEntity,
@@ -22,11 +23,6 @@ import { ApplicationError } from "./errors";
 import { setupReadProjection, setupReadSource } from "../setup/read-shape";
 import { UNRESTRICTED_SCOPE_REQUIRED } from "../subsidiaries";
 import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from "../setup/subsidiary-scope";
-
-function setupEntityEnabled(entity: SetupEntity, features: FeatureState): boolean {
-  if (!entity.featureKey) return true;
-  return featureEnabled(features, entity.featureKey);
-}
 
 function resolveEntity(base: SetupEntity, features: FeatureState): SetupEntity {
   return setupEntityForFeatureState(base, {
@@ -47,7 +43,8 @@ export async function listSetupEntities(context: ApplicationContext) {
       rehomed: entity.rehomed ?? false,
       nestedUnder: entity.nestedUnder ?? null,
       featureKey: entity.featureKey ?? null,
-      enabled: setupEntityEnabled(entity, features),
+      // One authoritative gate admits the catalog — never a local check over featureKey.
+      enabled: resolveSetupEntityGate(entity, features).enabled,
       hasActive: entity.hasActive,
     })),
   };
@@ -74,7 +71,10 @@ async function requireSetupEntity(context: ApplicationContext, entityKey: string
   const base = SETUP_ENTITY_BY_KEY.get(entityKey);
   if (!base) throw setupEntityMissing();
   const features = await resolvedFeatureState(context.authz.user.orgId);
-  if (!setupEntityEnabled(base, features)) throw setupEntityMissing();
+  // One authoritative gate stands between the reader and its rows. A closed
+  // gate answers the same not-found refusal as an unknown entity, so a
+  // disabled module leaks neither rows nor its configuration.
+  if (!resolveSetupEntityGate(base, features).enabled) throw setupEntityMissing();
   return resolveEntity(base, features);
 }
 

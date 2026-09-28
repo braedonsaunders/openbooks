@@ -3,18 +3,13 @@ import { loadExtensionSettingRows } from "../setup/extension-settings";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import {
-  FEATURES,
-  featureEnabled,
-  resolvedFeatureState,
-  type FeatureState,
-} from "../features";
+import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
 import {
   SETUP_ENTITIES,
   SETUP_ENTITY_BY_KEY,
+  resolveSetupEntityGate,
   setupEntityForFeatureState,
   toSnake,
-  type SetupEntity,
 } from "../setup/registry";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { capList } from "./tools-shared";
@@ -29,14 +24,6 @@ import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from "../
  * with sql.raw exactly like the page and the CRUD API); every value stays a
  * bound parameter.
  */
-
-/** Same rule as `setupEntityEnabled` in web/app/api/admin/setup/[entity]/route.ts:
- *  an entity without a featureKey is always on; otherwise it follows the org's
- *  resolved feature state. Callers resolve the state once and pass it in. */
-function setupEntityEnabled(entity: SetupEntity, features: FeatureState): boolean {
-  if (!entity.featureKey) return true;
-  return featureEnabled(features, entity.featureKey);
-}
 
 const listSetupEntitiesTool: AssistantToolDef = {
   name: "list_setup_entities",
@@ -56,7 +43,8 @@ const listSetupEntitiesTool: AssistantToolDef = {
         rehomed: e.rehomed ?? false,
         nestedUnder: e.nestedUnder ?? null,
         featureKey: e.featureKey ?? null,
-        enabled: setupEntityEnabled(e, features),
+        // One authoritative gate reports the enabled state — never a local check.
+        enabled: resolveSetupEntityGate(e, features).enabled,
         hasActive: e.hasActive,
       })),
     );
@@ -84,7 +72,8 @@ const listSetupRecordsTool: AssistantToolDef = {
     const base = SETUP_ENTITY_BY_KEY.get(a.entityKey);
     if (!base) return { ok: false, error: "setup_entity_not_found" };
     const features = await resolvedFeatureState(orgId);
-    if (!setupEntityEnabled(base, features)) return { ok: false, error: "feature_disabled" };
+    // One authoritative gate refuses the read before any storage is touched.
+    if (!resolveSetupEntityGate(base, features).enabled) return { ok: false, error: "feature_disabled" };
     // Same feature-derived descriptor the list page renders (drops subsidiary
     // columns when multi-subsidiary is off).
     const entity = setupEntityForFeatureState(base, {
