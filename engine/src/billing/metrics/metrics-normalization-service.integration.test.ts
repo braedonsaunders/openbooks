@@ -26,6 +26,7 @@ import {
 } from "./metrics-normalization-service.ts";
 import {
   computeLegacyV0Month,
+  recomputeSaasMetrics,
   type LegacyV0Month,
 } from "./metrics-ledger.ts";
 
@@ -37,6 +38,7 @@ import {
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const MONTH = "2026-07-01";
+const NEXT_MONTH = "2026-08-01";
 const REASON = "Correct the July legacy denomination after the packs rollout.";
 const V1_EVIDENCE = '{"inputs_hash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}';
 
@@ -123,9 +125,9 @@ async function seedCustomerAndSubscription(ctx: Fixture, currency = "CAD"): Prom
  * hash. The proof accepts these rows because v0 recomputation reproduces
  * them byte-for-byte — never because a marker was trusted.
  */
-async function seedV0Month(ctx: Fixture): Promise<LegacyV0Month> {
+async function seedV0Month(ctx: Fixture, month: string = MONTH): Promise<LegacyV0Month> {
   const v0 = await withOrgTransaction(ctx.org.orgId, async () =>
-    computeLegacyV0Month(db, ctx.org.orgId, MONTH));
+    computeLegacyV0Month(db, ctx.org.orgId, month));
   await withOrgTransaction(ctx.org.orgId, async () => {
     for (const row of v0.monthly) {
       const stored = await db.execute<{ id: string }>(sql`
@@ -175,6 +177,19 @@ async function seedV0Month(ctx: Fixture): Promise<LegacyV0Month> {
     }
   });
   return v0;
+}
+
+async function setSaaSMetricsFeature(ctx: Fixture, enabled: boolean): Promise<void> {
+  await withOrgTransaction(ctx.org.orgId, async () => {
+    const result = await db.execute<{ id: string }>(sql`
+      update orgs set settings = jsonb_set(
+        settings,
+        '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ saasMetrics: enabled })}::jsonb
+      ) where id = ${ctx.org.orgId} returning id
+    `);
+    assert.equal(result.rows.length, 1, "the feature setting must be applied to the scratch organization");
+  });
 }
 
 async function seedFxRate(ctx: Fixture, from: string, to: string, asOf: string, rate: string): Promise<void> {
@@ -1076,5 +1091,154 @@ test("a failed request records failure then cancels cleanly by the approver", { 
     const last = events[events.length - 1]!;
     assert.equal(last.action, "saas_normalization_cancelled", "the cancel records its canonical event");
     assert.equal(last.changes.actor, ctx.approver, "the cancelled event carries the truthful approver actor");
+  });
+});
+
+test("chained mixed-currency months reproduce v0 across the audited correction", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx, "EUR");
+    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
+    await seedV0Month(ctx, MONTH);
+    const augustBefore = await withOrgTransaction(ctx.org.orgId, async () =>
+      computeLegacyV0Month(db, ctx.org.orgId, NEXT_MONTH));
+    const filedJuly = await fileRequest(ctx, { month: MONTH });
+    const doneJuly = await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filedJuly.request.id,
+      approverId: ctx.approver,
+    });
+    assert.equal(doneJuly.request.status, "succeeded");
+    const augustAfter = await withOrgTransaction(ctx.org.orgId, async () =>
+      computeLegacyV0Month(db, ctx.org.orgId, NEXT_MONTH));
+    assert.equal(
+      augustAfter.legacyHash,
+      augustBefore.legacyHash,
+      "August reproduces its original v0 hash from July's preserved before-image",
+    );
+    await seedV0Month(ctx, NEXT_MONTH);
+    const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
+    const doneAugust = await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filedAugust.request.id,
+      approverId: ctx.approver,
+    });
+    assert.equal(doneAugust.request.status, "succeeded");
+    assert.deepEqual(doneAugust.result.sourceV0Hashes, [augustBefore.legacyHash]);
+    const augustRows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ version: string | null }>(sql`
+        select denomination_version as version from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
+      `)).rows);
+    assert.ok(augustRows.length > 0, "August stores corrected rows");
+    for (const row of augustRows) assert.equal(row.version, "v1");
+  });
+});
+
+test("a prior ordinary v1 rewrite with no preserved provenance refuses", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx, "EUR");
+    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
+    await seedV0Month(ctx, MONTH);
+    await seedV0Month(ctx, NEXT_MONTH);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const rewritten = await recomputeSaasMetrics(ctx.org.orgId, MONTH);
+      assert.equal(rewritten.frozen, false, "the ordinary recompute rewrites July without audit provenance");
+    });
+    const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
+    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, approverId: ctx.approver });
+    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
+    const error = await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, leaseToken }),
+      "saas_normalization_v0_provenance_missing",
+      "audited normalization workflow",
+    );
+    assert.match(error.message, /saas_metrics_monthly:/, "the refusal names the unprovenanced dependency");
+    const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
+    assert.equal(status.status, "failed");
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null }>(sql`
+        select reporting_currency as currency from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
+      `)).rows);
+    assert.ok(rows.length > 0, "August legacy rows remain");
+    for (const row of rows) assert.equal(row.currency, null, "no August row normalizes without provenance");
+  });
+});
+
+test("a tampered prior v1 row does not poison the next month's proof", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx, "EUR");
+    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
+    await seedV0Month(ctx, MONTH);
+    const filedJuly = await fileRequest(ctx, { month: MONTH });
+    await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filedJuly.request.id,
+      approverId: ctx.approver,
+    });
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const tampered = await db.execute(sql`
+        update saas_metrics_monthly set mrr_end = mrr_end + 1
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(tampered.rows.length, 1, "the corrected July row must move to stage prior tamper");
+    });
+    const augustV0 = await seedV0Month(ctx, NEXT_MONTH);
+    const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
+    const doneAugust = await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filedAugust.request.id,
+      approverId: ctx.approver,
+    });
+    assert.equal(doneAugust.request.status, "succeeded", "the immutable before-image still proves August");
+    assert.deepEqual(doneAugust.result.sourceV0Hashes, [augustV0.legacyHash]);
+  });
+});
+
+test("a post-claim feature-off records a fenced failed outcome, never a stranded run", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    const v0 = await seedV0Month(ctx);
+    const filed = await fileRequest(ctx);
+    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
+    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
+    await setSaaSMetricsFeature(ctx, false);
+    const error = await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, leaseToken }),
+      "feature_off",
+      "Company Settings → Features",
+    );
+    assert.match(error.remedy, /SaaS metrics/, "the refusal carries the real Features remedy");
+    const failed = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
+    assert.equal(failed.status, "failed", "the claimed request never strands running");
+    assert.match(failed.failure ?? "", /feature_off/);
+    assert.match(failed.remedy ?? "", /Features/);
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null; hash: string }>(sql`
+        select reporting_currency as currency, inputs_hash as hash from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `)).rows);
+    assert.equal(rows.length, v0.monthly.length, "no metric write survives the feature-off rollback");
+    for (const row of rows) {
+      assert.equal(row.currency, null);
+      assert.equal(row.hash, v0.legacyHash);
+    }
+    await setSaaSMetricsFeature(ctx, true);
+    const retried = await retryNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
+    await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, leaseToken }),
+      "saas_normalization_lease_mismatch",
+      "live token",
+    );
+    const revived = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
+    assert.equal(revived.status, "running", "the stale token never overwrites the newer lease");
+    const result = await executeNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filed.request.id,
+      leaseToken: retried.leaseToken,
+    });
+    assert.equal(result.attempt, 2);
+    assert.match(result.monthHash, /^[0-9a-f]{64}$/);
   });
 });
