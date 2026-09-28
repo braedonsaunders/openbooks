@@ -1,11 +1,41 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
+import { PgDialect } from 'drizzle-orm/pg-core'
+import type { SQL } from 'drizzle-orm'
+import { pathToFileURL } from 'node:url'
+import { resolveAppModule } from '../../../lib/test-module-hooks'
 import test from 'node:test'
 import { canSeeWidget } from './_widget-access'
-import { WIDGETS } from './_widget-registry'
 import { filterPersistableDashboardWidgets } from './_layout-input'
 import type { Authz } from '@/lib/authz'
 
+const root = pathToFileURL(process.cwd() + '/').href
+const boundary = { enabled: false, features: [] as string[], metrics: [] as string[][], writes: [] as SQL[] }
+Object.assign(globalThis, { __dashboardFeatureBoundary: boundary })
+registerHooks({
+  resolve(s, c, next) {
+    const wrap = (path: string, source: string) => ({ shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export * from ${JSON.stringify(root + path)};${source}`) })
+    if ((s === '@/lib/authz' || s === '../../lib/authz') && c.parentURL?.includes('/web/')) {
+      return wrap('web/lib/authz.ts', 'export async function getAuthz(){return globalThis.__dashboardFeatureReader}')
+    }
+    if (s === '@/lib/features' && c.parentURL?.endsWith('/widget-features.ts')) {
+      return wrap('web/lib/features.ts', `export async function isFeatureEnabled(orgId,key){const b=globalThis.__dashboardFeatureBoundary;b.features.push(key);return key !== 'resourcing' || b.enabled}`)
+    }
+    if (s.endsWith('/dashboard/_load-layout') || (s === './_load-layout' && c.parentURL?.endsWith('/dashboard/actions.ts'))) {
+      return wrap('web/app/(app)/dashboard/_load-layout.ts', `
+        export async function loadDashboardLayout(){return {layout:{widgets:[{id:'resourcing-pulse',x:0,y:0,w:3,h:2},{id:'kpi-journal-lines',x:3,y:0,w:3,h:2}]},role:'reader',hiddenQuickActionIds:[]}}
+        export async function resolveDashboardDefault(){return {sourceKey:'reader'}}`)
+    }
+    if (s === './_metrics' && c.parentURL?.endsWith('/_edit-canvas.tsx')) {
+      return wrap('web/app/(app)/dashboard/_metrics.ts', `export async function loadDashboardMetrics(authz,ids){globalThis.__dashboardFeatureBoundary.metrics.push(ids);return {}}`)
+    }
+    if (s === '@openbooks/engine/src/platform/db.ts' && c.parentURL?.endsWith('/dashboard/actions.ts')) {
+      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async transaction(fn){return fn({async execute(query){globalThis.__dashboardFeatureBoundary.writes.push(query);return {rows:[]}}})}}`) }
+    }
+    if (s === 'next/cache') return { shortCircuit: true, url: 'data:text/javascript,export function revalidatePath(){}' }
+    return resolveAppModule(s, c, next, root) ?? next(s, c)
+  },
+})
 const { resolveAllowedWidgetIds } = await import('./widget-features.ts')
 
 /**
@@ -28,16 +58,19 @@ function fakeAuthz(permissions: string[]): Authz {
 }
 
 const reader = fakeAuthz(['dashboard.read', 'gl.read', 'resourcing.read'])
+Object.assign(globalThis, { __dashboardFeatureReader: reader })
 const noGrant = fakeAuthz(['dashboard.read', 'gl.read'])
 const featureOff = async (id: string) => id !== 'resourcing-pulse'
 const featureOn = async (_id: string) => true
 
 const tile = (id: string) => ({ id, x: 0, y: 0, w: 3, h: 2 })
 
-/** The exact filter both slots apply: registry ids through the resolved set. */
-function slotFilter(authz: Authz, allowed: ReadonlySet<string>, ids: string[]): string[] {
-  return ids.filter((id) => (id in WIDGETS ? allowed.has(id) : canSeeWidget(authz, id)))
-}
+// Finish loading every boundary before registering tests: the native runner
+// exits after registered tests finish, including while a later import waits.
+const { DashboardGridSlot } = await import('../../../components/viewspec/dashboard-grid-slot.tsx')
+const { DashboardEditSlot } = await import('../../../components/viewspec/dashboard-edit-slot.tsx')
+const { loadDashboardView, loadDashboardEditCanvas } = await import('./_edit-canvas.tsx')
+const { saveDashboardLayout } = await import('./actions.ts')
 
 test('feature-off prunes an existing pulse tile from the layout', async () => {
   // The defect, pinned: permission alone still sees the tile, so any
@@ -45,8 +78,8 @@ test('feature-off prunes an existing pulse tile from the layout', async () => {
   // is off.
   assert.equal(canSeeWidget(reader, 'resourcing-pulse'), true, 'resourcing.read passes the permission check alone')
   const allowed = await resolveAllowedWidgetIds(reader, featureOff)
-  const visible = slotFilter(reader, allowed, ['resourcing-pulse', 'kpi-journal-lines', 'personal-actions'])
-  assert.deepEqual(visible, ['kpi-journal-lines', 'personal-actions'], 'resourcing-pulse drops out while Resourcing is off')
+  const visible = await loadDashboardView(reader, { widgets: [tile('resourcing-pulse'), tile('kpi-journal-lines')] }, allowed)
+  assert.deepEqual(Object.keys(visible.nodes), ['kpi-journal-lines'], 'resourcing-pulse drops out while Resourcing is off')
 })
 
 test('feature-off keeps the pulse tile out of the addable set', async () => {
@@ -78,49 +111,57 @@ test('missing permission refuses the pulse tile even with the feature on', async
   assert.equal(allowed.has('resourcing-pulse'), false, 'resourcing-pulse stays hidden without resourcing.read')
 })
 
-/**
- * Real-boundary proof, in the house source-reading style: the resolver
- * properties above would stay green if a slot or the save action went blind
- * and rebuilt a permission-only set by hand. These assertions tie each
- * server boundary to the single resolver and the required allowed set, so a
- * boundary that stops consuming it fails here.
- */
-const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8')
+// Only session/storage/feature I/O is replaced. Both slots, both canvas
+// loaders, the resolver, and the save action execute their real decisions.
 
-const gridSlot = read('../../../components/viewspec/dashboard-grid-slot.tsx')
-const editSlot = read('../../../components/viewspec/dashboard-edit-slot.tsx')
-const canvas = read('./_edit-canvas.tsx')
-const actionsSource = read('./actions.ts')
-
-test('the view slot resolves once and hands the set to the canvas loader', () => {
-  assert.ok(gridSlot.includes('await resolveAllowedWidgetIds(authz)'), 'view slot resolves the allowed set')
-  assert.ok(
-    gridSlot.includes('loadDashboardView(authz, visibleLayout, allowedWidgetIds)'),
-    'view slot passes that same set into the canvas loader',
-  )
-  assert.equal(gridSlot.includes('new Set(Object.keys(WIDGETS)'), false, 'view slot builds no parallel permission-only set')
+test('the view slot resolves once and excludes disabled nodes and metric reads', async () => {
+  for (const enabled of [false, true]) {
+    Object.assign(boundary, { enabled, features: [], metrics: [] })
+    const result = await DashboardGridSlot()
+    assert.ok(result)
+    assert.equal(result.props.initialLayout.widgets.some((w: { id: string }) => w.id === 'resourcing-pulse'), enabled)
+    assert.equal(Object.hasOwn(result.props.nodes, 'resourcing-pulse'), enabled)
+    assert.equal(boundary.metrics.flat().includes('resourcing-pulse'), enabled)
+    assert.equal(boundary.features.filter((key) => key === 'resourcing').length, 1)
+    assert.ok(result.props.nodes['kpi-journal-lines'])
+  }
 })
 
-test('the edit slot drives layout, palette, and canvas from one set', () => {
-  assert.ok(editSlot.includes('await resolveAllowedWidgetIds(authz)'), 'edit slot resolves the allowed set')
-  assert.ok(
-    editSlot.includes('loadDashboardEditCanvas(authz, visibleLayout, {'),
-    'edit slot passes the set into the edit canvas loader',
-  )
-  assert.equal(editSlot.includes('new Set(Object.keys(WIDGETS)'), false, 'edit slot builds no parallel permission-only set')
+test('the edit slot keeps layout, palette, nodes and metric reads on one feature decision', async () => {
+  for (const enabled of [false, true]) {
+    Object.assign(boundary, { enabled, features: [], metrics: [] })
+    const result = await DashboardEditSlot()
+    assert.ok(result)
+    assert.equal(result.props.initialLayout.widgets.some((w: { id: string }) => w.id === 'resourcing-pulse'), enabled)
+    assert.equal(result.props.allowedWidgetIds.includes('resourcing-pulse'), enabled)
+    assert.equal(Object.hasOwn(result.props.nodes, 'resourcing-pulse'), enabled)
+    assert.equal(boundary.metrics.flat().includes('resourcing-pulse'), enabled)
+    assert.equal(boundary.features.filter((key) => key === 'resourcing').length, 1)
+  }
 })
 
-test('both canvas loaders require the set and never resolve features', () => {
-  const required = canvas.match(/allowedWidgetIds: AllowedWidgetIds/g) ?? []
-  assert.equal(required.length >= 2, true, 'view and edit canvas loaders both declare the required allowed set')
-  assert.equal(canvas.includes('resolveAllowedWidgetIds'), false, 'the canvas never resolves the set itself')
-  assert.equal(canvas.includes('widgetFeatureOn'), false, 'the canvas holds no second feature check')
-  assert.equal(canvas.includes('allowedWidgetIds?'), false, 'the canvas takes no optional allowed set')
-  assert.equal(canvas.includes('!opts.allowedWidgetIds'), false, 'the canvas has no fail-open registry path')
+test('both canvas loaders obey the supplied set without querying features', async () => {
+  Object.assign(boundary, { enabled: true, features: [], metrics: [] })
+  const layout = { widgets: [tile('resourcing-pulse'), tile('kpi-journal-lines')] }
+  const allowed = new Set(['kpi-journal-lines'])
+  for (const result of [await loadDashboardView(reader, layout, allowed), await loadDashboardEditCanvas(reader, layout, { allowedWidgetIds: allowed })]) {
+    assert.deepEqual(Object.keys(result.nodes), ['kpi-journal-lines'])
+  }
+  assert.deepEqual(boundary.metrics, [['kpi-journal-lines'], ['kpi-journal-lines']])
+  assert.deepEqual(boundary.features, [])
 })
 
-test('the save action persists through the resolved set', () => {
-  assert.ok(actionsSource.includes('await resolveAllowedWidgetIds(authz)'), 'save resolves the allowed set')
-  assert.ok(actionsSource.includes('allowedWidgetIds,'), 'save feeds that set into the persistence filter')
-  assert.equal(actionsSource.includes('canSeeWidget'), false, 'save keeps no permission-only registry path')
+test('the save action persists only widgets allowed by the feature decision', async () => {
+  for (const enabled of [false, true]) {
+    Object.assign(boundary, { enabled, features: [], writes: [] })
+    assert.deepEqual(await saveDashboardLayout({ widgets: [tile('resourcing-pulse'), tile('kpi-journal-lines')] }), { ok: true })
+    assert.equal(boundary.writes.length, 3)
+    const query = new PgDialect().sqlToQuery(boundary.writes[2]!)
+    const layouts = query.params.filter((param): param is string => typeof param === 'string' && param.startsWith('{"widgets":'))
+    assert.equal(layouts.length, 2, 'insert and conflict-update carry the same filtered layout')
+    for (const serialized of layouts) {
+      assert.deepEqual(JSON.parse(serialized).widgets.map((w: { id: string }) => w.id), enabled ? ['resourcing-pulse', 'kpi-journal-lines'] : ['kpi-journal-lines'])
+    }
+    assert.equal(boundary.features.filter((key) => key === 'resourcing').length, 1)
+  }
 })

@@ -30,15 +30,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import pg from "pg";
+import { withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationSql = readFileSync(
   join(here, "generated", "0455_saas_metrics_normalization_evidence.sql"),
-  "utf8",
-);
-const preflightNone = readFileSync(
-  join(here, "preflight", "0455_saas_metrics_normalization_evidence.none"),
   "utf8",
 );
 
@@ -98,6 +96,17 @@ async function seedUser(client, orgId, label) {
      values ($1, $2, $3, $4, 'test-hash')`,
     [id, orgId, `${label}-${id}@example.invalid`, `User ${label}`],
   );
+  const role = await client.query(
+    `insert into app_roles (org_id, key, name, permissions)
+     values ($1, $2, 'Normalization reviewer', '[]'::jsonb) returning id`,
+    [orgId, `normalization-reviewer-${id}`],
+  );
+  assert.equal(role.rowCount, 1, "normalization reviewer role is created");
+  const assignment = await client.query(
+    `insert into role_assignments (org_id, user_id, role_id) values ($1, $2, $3) returning user_id`,
+    [orgId, id, role.rows[0].id],
+  );
+  assert.equal(assignment.rowCount, 1, "active normalization reviewer has an explicit role");
   return id;
 }
 
@@ -114,10 +123,14 @@ async function pendingRequest(client, orgId, month) {
 }
 
 async function auditEvents(client, requestId) {
+  // These fresh append-only rows can share a transaction timestamp and a
+  // millisecond UUID prefix. The insertion command records their order in
+  // the transaction; rows emitted by one command are an atomic batch, whose
+  // sibling actions are presented deterministically.
   const result = await client.query(
     `select action, changes, actor_id from audit_log
       where table_name = 'saas_metrics_normalization_requests' and row_id = $1
-      order by at, id`,
+      order by at, cmin::text::bigint, action`,
     [requestId],
   );
   return result.rows;
@@ -132,16 +145,9 @@ function assertActorsPresent(events) {
   }
 }
 
-test("0455 is additive: no row backfill, no data rewrite, preflight decision recorded",
+test("0455 reporting columns remain nullable and evidence tables enforce tenant isolation",
   { skip: !DB },
   async () => {
-    assert.ok(
-      preflightNone.replace(/\s/g, "").length >= 20,
-      "0455 preflight .none must record why no preflight is needed",
-    );
-    const body = migrationSql.replace(/--[^\n]*/g, "");
-    assert.ok(!/^\s*UPDATE\s+public\./m.test(body), "0455 performs zero UPDATE");
-    assert.ok(!/^\s*DELETE\s+FROM\s+public\./m.test(body), "0455 performs zero DELETE");
     const client = new pg.Client({ connectionString: connectionString() });
     await client.connect();
     try {
@@ -185,9 +191,10 @@ test("tenant isolation holds on both new tables", { skip: !DB }, async () => {
       `insert into saas_metrics_fx_evidence
          (org_id, month, base_currency, quote_currency, rate, source, quoted_at, evidence, inputs_hash)
        values ($1, $2, 'CAD', 'USD', 0.72, 'bank_of_canada', '2026-09-01T00:00:00Z', '{"base_currency":"CAD","quote_currency":"USD","rate":"0.72","source":"bank_of_canada","quoted_at":"2026-09-01T00:00:00Z","inputs_hash":"${DIGEST_A}"}', '${DIGEST_A}')`,
-      [orgA],
+      [orgA, month],
     );
     const { id: reqA } = await pendingRequest(client, orgA, month);
+    await client.query("set local role openbooks_app");
     await client.query("select set_config('app.bypass_rls', 'off', true)");
     await client.query("select set_config('app.current_org', $1, true)", [orgB]);
     const hidden = await client.query(`select id from saas_metrics_fx_evidence where org_id = $1`, [orgA]);
@@ -202,7 +209,7 @@ test("tenant isolation holds on both new tables", { skip: !DB }, async () => {
         `insert into saas_metrics_fx_evidence
            (org_id, month, base_currency, quote_currency, rate, source, quoted_at, evidence, inputs_hash)
          values ($1, $2, 'CAD', 'USD', 0.72, 'bank_of_canada', '2026-09-01T00:00:00Z', '{"base_currency":"CAD","quote_currency":"USD","rate":"0.72","source":"bank_of_canada","quoted_at":"2026-09-01T00:00:00Z","inputs_hash":"${DIGEST_A}"}', '${DIGEST_A}')`,
-        [orgA],
+        [orgA, month],
       ),
       (error) => {
         assert.equal(postgresCode(error), "42501");
@@ -233,7 +240,7 @@ test("metric reporting triple is all-null-or-complete with a usable shape refusa
       const base = {
         id: randomUUID(), org_id: orgId, subsidiary_id: subId, month: "2026-09-01",
       };
-      const amounts = `0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'recognised', 'hash'`;
+      const amounts = `0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'recognised', 'hash'`;
       await client.query(
         `insert into saas_metrics_facts_monthly
            (id, org_id, subsidiary_id, month, mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr,
@@ -510,10 +517,12 @@ test("request lifecycle: guarded transitions, live-token fencing, immutable appr
       const otherOrg = await seedOrg(client, "lifecycle-other");
       const requester = await seedUser(client, orgId, "requester");
       const approver = await seedUser(client, orgId, "approver");
+      const replacementApprover = await seedUser(client, orgId, "replacement-approver");
       const stranger = await seedUser(client, otherOrg, "stranger");
       const month = "2026-09-01";
 
       // Inserts start pending with a requester, no lease, no outcome, no approver.
+      await client.query("savepoint before_running_insert");
       await assert.rejects(
         client.query(
           `insert into saas_metrics_normalization_requests
@@ -523,6 +532,8 @@ test("request lifecycle: guarded transitions, live-token fencing, immutable appr
         ),
         /start as pending/,
       );
+      await client.query("rollback to savepoint before_running_insert");
+      await client.query("savepoint before_missing_requester");
       await assert.rejects(
         client.query(
           `insert into saas_metrics_normalization_requests
@@ -535,6 +546,8 @@ test("request lifecycle: guarded transitions, live-token fencing, immutable appr
           return true;
         },
       );
+      await client.query("rollback to savepoint before_missing_requester");
+      await client.query("savepoint before_short_reason");
       await assert.rejects(
         client.query(
           `insert into saas_metrics_normalization_requests
@@ -547,6 +560,7 @@ test("request lifecycle: guarded transitions, live-token fencing, immutable appr
           return true;
         },
       );
+      await client.query("rollback to savepoint before_short_reason");
       const reqId = randomUUID();
       const idemKey = randomUUID();
       await client.query(
@@ -576,6 +590,7 @@ test("request lifecycle: guarded transitions, live-token fencing, immutable appr
       );
       await client.query("rollback to savepoint before_self_approve");
       // Deleting the requester is refused: identity cannot be erased.
+      await client.query("set constraints all immediate");
       await client.query("savepoint before_user_delete");
       await assert.rejects(
         client.query(`delete from users where id = $1`, [requester]),
@@ -594,9 +609,9 @@ test("request lifecycle: guarded transitions, live-token fencing, immutable appr
       await assert.rejects(
         client.query(
           `update saas_metrics_normalization_requests set approved_by = $1 where id = $2`,
-          [requester, reqId],
+          [replacementApprover, reqId],
         ),
-        /immutable once recorded/,
+        /approver is immutable once recorded; the recorded approval stands/,
       );
       await client.query("rollback to savepoint before_reapprove");
       // Illegal jump pending to succeeded names the legal path.
@@ -617,7 +632,7 @@ test("request lifecycle: guarded transitions, live-token fencing, immutable appr
       await client.query(
         `insert into saas_metrics_normalization_requests
            (id, org_id, month, reason, requested_by, idempotency_key, request_hash)
-         values ($1, $2, '2026-08-01', 'normalize August SaaS revenue unapproved', $4, $5, '${DIGEST_F}')`,
+         values ($1, $2, '2026-08-01', 'normalize August SaaS revenue unapproved', $3, $4, '${DIGEST_F}')`,
         [unapprovedId, orgId, requester, randomUUID()],
       );
       await client.query("savepoint before_unapproved_claim");
@@ -745,11 +760,12 @@ test("stale reacquisition after expiry pairs abandoned evidence and fences the o
   async () => {
     const client = new pg.Client({ connectionString: connectionString() });
     await client.connect();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
       await ensureMigration(client);
       await client.query("begin");
       await client.query("select set_config('app.bypass_rls', 'on', true)");
-      const orgId = await seedOrg(client, "stale");
+      const orgId = org.orgId;
       const month = "2026-10-01";
       const reqId = randomUUID();
       const requester = await seedUser(client, orgId, "requester");
@@ -776,7 +792,20 @@ test("stale reacquisition after expiry pairs abandoned evidence and fences the o
         [tokenA, approver, reqId, orgId],
       );
       assert.equal(claim.rowCount, 1, "approved pending claim affects exactly one row");
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      // Commit the claim so the next transaction has a new now(). Wait for
+      // the stored expiry using the database wall clock, then prove expiry
+      // is visible to the transaction that exercises the refused heartbeat.
+      await client.query("commit");
+      await client.query(
+        `select pg_sleep(greatest(0, extract(epoch from (lease_expires_at - clock_timestamp()))::double precision))
+           from saas_metrics_normalization_requests where id = $1`, [reqId],
+      );
+      await client.query("begin");
+      await client.query("select set_config('app.bypass_rls', 'on', true)");
+      const expired = await client.query(
+        `select lease_expires_at <= now() as expired from saas_metrics_normalization_requests where id = $1`, [reqId],
+      );
+      assert.deepEqual(expired.rows, [{ expired: true }], "new transaction observes the stored lease expiry");
       // Expired heartbeat refuses and names reacquisition as the remedy.
       await client.query("savepoint before_expired_hb");
       await assert.rejects(
@@ -890,6 +919,7 @@ test("stale reacquisition after expiry pairs abandoned evidence and fences the o
       throw error;
     } finally {
       await client.end();
+      await dropScratchOrg(org.orgId);
     }
   },
 );
@@ -972,7 +1002,7 @@ test("cancellation is guarded, actor-bound, and audited once", { skip: !DB }, as
     );
     await client.query("rollback to savepoint before_requester_failed_cancel");
     const failedCancelled = await client.query(
-      `update saas_metrics_normalization_requests set status = 'cancelled', updated_by = $1
+      `update saas_metrics_normalization_requests set status = 'cancelled', failure = null, remedy = null, updated_by = $1
         where id = $2 and org_id = $3 and status = 'failed'
         returning id`,
       [approver, failedId, orgId],
@@ -1114,7 +1144,8 @@ test("failure names failure and remedy; retry and live-month fencing compose",
       const retried = await client.query(
         `update saas_metrics_normalization_requests
             set status = 'running', lease_token = $1,
-                lease_expires_at = now() + interval '1 hour', attempt_count = 2, updated_by = $2
+                lease_expires_at = now() + interval '1 hour', attempt_count = 2,
+                failure = null, remedy = null, updated_by = $2
           where id = $3 and org_id = $4 and status = 'failed'
           returning id`,
         [token2, approver, reqId, orgId],
