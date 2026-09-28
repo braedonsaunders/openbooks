@@ -29,8 +29,8 @@ async function orgWith(featured: boolean) {
   const org = await withBypassContext(() => createScratchOrg());
   const owner = await withBypassContext(() => createScratchUser(org.orgId, "Reader owner", "reader-owner"));
   await withBypassContext(async () => {
-    if (featured) await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId}`);
-    await db.execute(sql`update app_roles set permissions = '["resourcing.read","projects.read"]' where org_id = ${org.orgId} and key = 'reader-owner'`);
+    if (featured) assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId} returning id`)).rows.length, 1, "entity reader fixture feature setup updates one organization");
+    assert.equal((await db.execute(sql`update app_roles set permissions = '["resourcing.read","projects.read"]' where org_id = ${org.orgId} and key = 'reader-owner' returning key`)).rows.length, 1, "entity reader fixture permission setup updates reader-owner role");
     if (featured) await seed(org.orgId, owner);
   });
   return { org, owner };
@@ -39,7 +39,7 @@ async function orgWith(featured: boolean) {
 async function scopedActor(orgId: string, name: string, key: string, restriction: unknown, perms = '["resourcing.read"]') {
   return withBypassContext(async () => {
     const actor = await createScratchUser(orgId, name, key);
-    await db.execute(sql`update app_roles set permissions = ${perms}::jsonb, subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key}`);
+    assert.equal((await db.execute(sql`update app_roles set permissions = ${perms}::jsonb, subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key} returning key`)).rows.length, 1, `${key}: entity reader scoped actor setup updates one role`);
     return actor;
   });
 }
@@ -146,7 +146,7 @@ test("feature-off refuses by name; outage rejects instead of refusing", enabled,
   try {
     const r = await readEntityListPage(query(org.orgId, owner));
     assert.ok(!r.ok && /feature_disabled/.test(r.error) && /Features/.test(r.remedy));
-    await withBypassContext(() => db.execute(sql`update orgs set settings = '"corrupt"'::jsonb where id = ${org.orgId}`));
+    await withBypassContext(async () => assert.equal((await db.execute(sql`update orgs set settings = '"corrupt"'::jsonb where id = ${org.orgId} returning id`)).rows.length, 1, "entity reader outage setup corrupts one organization"));
     await assert.rejects(readEntityListPage(query(org.orgId, owner)));
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
