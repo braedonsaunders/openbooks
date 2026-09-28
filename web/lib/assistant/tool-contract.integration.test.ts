@@ -145,6 +145,7 @@ test("contract reader holds every permission declared by read-tool gates", () =>
   const authz = readerAuthz(randomUUID());
   for (const tool of READ_TOOLS) {
     if (tool.gate.mode === "public") continue;
+    assert.ok(tool.gate.perms.length > 0, `${tool.name} gate declares no permissions`);
     for (const permission of tool.gate.perms) {
       assert.ok(authz.permissions.has(permission), `${tool.name} gate is missing permission ${permission}`);
     }
