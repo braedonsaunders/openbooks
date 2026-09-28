@@ -83,11 +83,15 @@ export type ReportEntityColumn = {
   txnCurrency?: boolean
   /**
    * True when values in this money column are denominated in the row's
-   * FUNCTIONAL currency (GL base amounts are stamped per-line in the owning
-   * subsidiary's base_currency — see posting applySubsidiaries). Aggregating
-   * such a column needs a breakout on the entity's `baseCurrencyColumn` or
-   * a single observed/pinned base currency. Never infer the denomination
-   * from `currency`: that is the transaction currency, not the base.
+   * persisted base-like currency named by the entity's `baseCurrencyColumn`
+   * rather than any transaction currency. On GL entities that is the
+   * FUNCTIONAL currency (base amounts are stamped per-line in the owning
+   * subsidiary's base_currency — see posting applySubsidiaries); on SaaS
+   * metric entities it is the normalized REPORTING currency persisted per
+   * row by the metrics writer. Aggregating such a column needs a breakout
+   * on the entity's `baseCurrencyColumn` or a single observed/pinned base
+   * currency. Never infer the denomination from `currency`: that is the
+   * transaction currency, not the base.
    */
   baseMoney?: boolean
   /**
@@ -100,6 +104,29 @@ export type ReportEntityColumn = {
    * across time) carry the same flag: a snapshot never sums.
    */
   snapshot?: boolean
+}
+
+/** Server-owned normalization metadata for governed metric rows. The
+ *  compiler classifies legacy only when the row's currency, version, and
+ *  evidence are literally all NULL; any non-null malformed evidence is an
+ *  evidence failure, never legacy. `supportedVersions` is the reader's
+ *  capability protocol (mirroring the writer's version, never imported from
+ *  it) — never a second writer source. */
+export type ReportEntityNormalization = {
+  /** Table-qualified version expression (e.g. `m.denomination_version`). */
+  versionExpr: string
+  /** Denomination versions this report reader understands (e.g. `['v1']`). */
+  supportedVersions: readonly string[]
+  /** Raw evidence expression, NULL-testable (e.g. `m.normalization_evidence`).
+   *  Absent evidence is NULL; present-but-malformed evidence is non-null and
+   *  therefore never legacy — the `evidenceValidExpr` check below decides it. */
+  evidenceExpr: string
+  /** Boolean shape test for present evidence (object carrying a digest hash). */
+  evidenceValidExpr: string
+  /** Evidence-carried inputs hash (e.g. `m.normalization_evidence->>'inputs_hash'`). */
+  evidenceHashExpr: string
+  /** The row's own inputs hash (e.g. `m.inputs_hash`). */
+  rowHashExpr: string
 }
 
 /** One catalog-authored native link on a displayed rows-mode cell. Metadata
@@ -139,11 +166,32 @@ export type ReportEntity = {
    *  (e.g. `currency`). Set alongside `txnCurrency` money columns so mixed
    *  transaction-currency aggregates are refused at run time. */
   currencyColumn?: string
-  /** Key of the text column carrying the row's FUNCTIONAL-currency code
-   *  (e.g. `base_currency` via the owning subsidiary). Set alongside
-   *  `baseMoney` columns; null/absence means the entity has no base-money
-   *  columns. Never the `currency` column — that is transactional. */
+  /** Key of the text column carrying the row's persisted base-like currency
+   *  code (e.g. `base_currency` via the owning subsidiary, or
+   *  `reporting_currency` persisted per row on normalized SaaS metrics).
+   *  Set alongside `baseMoney` columns; null/absence means the entity has
+   *  no base-money columns. Never the `currency` column — that is
+   *  transactional. */
   baseCurrencyColumn?: string
+  /** Human nouns for the base denomination, used in refusal wording. Absent
+   *  means the GL default (`functional currencies` / `Base currency`); SaaS
+   *  metric entities author the reporting-currency pair so refusals name the
+   *  stored reporting currency instead of a functional base that does not
+   *  exist on those rows. */
+  baseDenominationNouns?: { plural: string; breakout: string }
+  /** False when a single-subsidiary scope must NOT certify a single base
+   *  denomination. The default (absent/true) keeps the GL contract: one
+   *  subsidiary owns one functional currency. SaaS metric entities set this
+   *  to false because their denomination is the row-persisted reporting
+   *  currency, which an org-base change can vary independently of the
+   *  subsidiary — one subsidiary proves nothing about it. */
+  singleSubsidiaryCertifiesBase?: boolean
+  /** Catalog-authored normalization contract for governed metric rows. When
+   *  present, any plan aggregating this entity's `baseMoney` measures
+   *  executes normalization-state probes over the same snapshot — pins,
+   *  breakouts, and subsidiary scopes never suppress them. All expressions
+   *  are server-owned table-qualified fragments, never user input. */
+  normalization?: ReportEntityNormalization
   /** Columns selectable for output AND filterable. Order is preserved. */
   columns: ReportEntityColumn[]
   defaultSort?: { column: string; direction: 'asc' | 'desc' }
@@ -189,6 +237,22 @@ export { REPORT_AS_OF, bindReportFromAsOf } from './report-as-of'
  *  The report-catalog statement of the engine rule in
  *  engine/src/records/order-line-remainders.ts; an agreement test pins them. */
 const BACKORDER_OPEN_QUANTITY = '(dl.quantity - dl.quantity_fulfilled - dl.quantity_cancelled)'
+
+/** Shared normalization contract for the SaaS metric entities. Every stored
+ *  SaaS amount is normalized to the row's persisted reporting currency, so
+ *  all three read entities share one reader capability (`v1`) and one set of
+ *  server-owned evidence expressions over their own `m` alias. */
+const SAAS_NORMALIZATION: ReportEntityNormalization = {
+  versionExpr: 'm.denomination_version',
+  supportedVersions: ['v1'],
+  evidenceExpr: 'm.normalization_evidence',
+  evidenceValidExpr: `(jsonb_typeof(m.normalization_evidence) = 'object' AND (m.normalization_evidence ->> 'inputs_hash') ~ '^[0-9a-f]{64}$')`,
+  evidenceHashExpr: `(m.normalization_evidence ->> 'inputs_hash')`,
+  rowHashExpr: 'm.inputs_hash',
+}
+
+/** Reporting-currency nouns shared by the SaaS metric entities. */
+const SAAS_BASE_NOUNS = { plural: 'reporting currencies', breakout: 'Reporting currency' } as const
 
 export const REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -1563,23 +1627,30 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'usage.read',
     featureKey: 'saasMetrics',
     timeKey: 'month',
+    // Every stored amount is normalized to the row's persisted reporting
+    // currency, so every money column is baseMoney under that dimension.
+    baseCurrencyColumn: 'reporting_currency',
+    baseDenominationNouns: { ...SAAS_BASE_NOUNS },
+    singleSubsidiaryCertifiesBase: false,
+    normalization: SAAS_NORMALIZATION,
     columns: [
       { key: 'month', label: 'Month', kind: 'date', expr: 'm.month' },
       { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      { key: 'reporting_currency', label: 'Reporting currency', kind: 'text', expr: 'm.reporting_currency' },
       { key: 'customer', label: 'Customer', kind: 'text', expr: 'cust.display_name' },
       { key: 'plan', label: 'Plan', kind: 'text', expr: 'plan.name' },
       { key: 'subscription_id', label: 'Subscription (id)', kind: 'uuid', expr: 'm.subscription_id' },
       { key: 'cohort_month', label: 'Cohort month', kind: 'date', expr: 'm.cohort_month' },
       { key: 'movement', label: 'Movement', kind: 'enum', expr: 'm.movement', options: ['new', 'expansion', 'contraction', 'churn', 'reactivation', 'flat'] },
-      { key: 'mrr_start', label: 'Opening MRR', kind: 'money', expr: 'm.mrr_start', snapshot: true },
-      { key: 'mrr_end', label: 'Closing MRR', kind: 'money', expr: 'm.mrr_end', snapshot: true },
-      { key: 'new_mrr', label: 'New MRR', kind: 'money', expr: 'm.new_mrr' },
-      { key: 'expansion_mrr', label: 'Expansion MRR', kind: 'money', expr: 'm.expansion_mrr' },
-      { key: 'contraction_mrr', label: 'Contraction MRR', kind: 'money', expr: 'm.contraction_mrr' },
-      { key: 'churned_mrr', label: 'Churned MRR', kind: 'money', expr: 'm.churned_mrr' },
-      { key: 'reactivation_mrr', label: 'Reactivated MRR', kind: 'money', expr: 'm.reactivation_mrr' },
-      { key: 'recognized_revenue', label: 'Recognised revenue', kind: 'money', expr: 'm.recognized_revenue' },
-      { key: 'deferred_delta', label: 'Deferred revenue change', kind: 'money', expr: 'm.deferred_delta' },
+      { key: 'mrr_start', label: 'Opening MRR', kind: 'money', expr: 'm.mrr_start', snapshot: true, baseMoney: true },
+      { key: 'mrr_end', label: 'Closing MRR', kind: 'money', expr: 'm.mrr_end', snapshot: true, baseMoney: true },
+      { key: 'new_mrr', label: 'New MRR', kind: 'money', expr: 'm.new_mrr', baseMoney: true },
+      { key: 'expansion_mrr', label: 'Expansion MRR', kind: 'money', expr: 'm.expansion_mrr', baseMoney: true },
+      { key: 'contraction_mrr', label: 'Contraction MRR', kind: 'money', expr: 'm.contraction_mrr', baseMoney: true },
+      { key: 'churned_mrr', label: 'Churned MRR', kind: 'money', expr: 'm.churned_mrr', baseMoney: true },
+      { key: 'reactivation_mrr', label: 'Reactivated MRR', kind: 'money', expr: 'm.reactivation_mrr', baseMoney: true },
+      { key: 'recognized_revenue', label: 'Recognised revenue', kind: 'money', expr: 'm.recognized_revenue', baseMoney: true },
+      { key: 'deferred_delta', label: 'Deferred revenue change', kind: 'money', expr: 'm.deferred_delta', baseMoney: true },
     ],
     defaultSort: { column: 'month', direction: 'asc' },
   },
@@ -1638,30 +1709,37 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'usage.read',
     featureKey: 'saasMetrics',
     timeKey: 'month',
+    // Every stored amount is normalized to the row's persisted reporting
+    // currency, so every money column is baseMoney under that dimension.
+    baseCurrencyColumn: 'reporting_currency',
+    baseDenominationNouns: { ...SAAS_BASE_NOUNS },
+    singleSubsidiaryCertifiesBase: false,
+    normalization: SAAS_NORMALIZATION,
     columns: [
       { key: 'month', label: 'Month', kind: 'date', expr: 'm.month' },
       { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      { key: 'reporting_currency', label: 'Reporting currency', kind: 'text', expr: 'm.reporting_currency' },
       { key: 'basis', label: 'Revenue basis', kind: 'enum', expr: 'm.basis', options: ['recognised', 'billed'] },
-      { key: 'mrr_start', label: 'Opening MRR', kind: 'money', expr: 'm.mrr_start', snapshot: true },
-      { key: 'mrr_end', label: 'Closing MRR', kind: 'money', expr: 'm.mrr_end', snapshot: true },
-      { key: 'new_mrr', label: 'New MRR', kind: 'money', expr: 'm.new_mrr' },
-      { key: 'expansion_mrr', label: 'Expansion MRR', kind: 'money', expr: 'm.expansion_mrr' },
-      { key: 'contraction_mrr', label: 'Contraction MRR', kind: 'money', expr: 'm.contraction_mrr' },
-      { key: 'churned_mrr', label: 'Churned MRR', kind: 'money', expr: 'm.churned_mrr' },
-      { key: 'reactivation_mrr', label: 'Reactivated MRR', kind: 'money', expr: 'm.reactivation_mrr' },
-      { key: 'recognized_revenue', label: 'Recognised revenue', kind: 'money', expr: 'm.recognized_revenue' },
-      { key: 'deferred_delta', label: 'Deferred revenue change', kind: 'money', expr: 'm.deferred_delta' },
-      { key: 'mrr_at_risk', label: 'MRR at risk', kind: 'money', expr: 'm.mrr_at_risk' },
+      { key: 'mrr_start', label: 'Opening MRR', kind: 'money', expr: 'm.mrr_start', snapshot: true, baseMoney: true },
+      { key: 'mrr_end', label: 'Closing MRR', kind: 'money', expr: 'm.mrr_end', snapshot: true, baseMoney: true },
+      { key: 'new_mrr', label: 'New MRR', kind: 'money', expr: 'm.new_mrr', baseMoney: true },
+      { key: 'expansion_mrr', label: 'Expansion MRR', kind: 'money', expr: 'm.expansion_mrr', baseMoney: true },
+      { key: 'contraction_mrr', label: 'Contraction MRR', kind: 'money', expr: 'm.contraction_mrr', baseMoney: true },
+      { key: 'churned_mrr', label: 'Churned MRR', kind: 'money', expr: 'm.churned_mrr', baseMoney: true },
+      { key: 'reactivation_mrr', label: 'Reactivated MRR', kind: 'money', expr: 'm.reactivation_mrr', baseMoney: true },
+      { key: 'recognized_revenue', label: 'Recognised revenue', kind: 'money', expr: 'm.recognized_revenue', baseMoney: true },
+      { key: 'deferred_delta', label: 'Deferred revenue change', kind: 'money', expr: 'm.deferred_delta', baseMoney: true },
+      { key: 'mrr_at_risk', label: 'MRR at risk', kind: 'money', expr: 'm.mrr_at_risk', baseMoney: true },
       { key: 'customers_start', label: 'Starting customers', kind: 'number', expr: 'm.customers_start', snapshot: true },
       { key: 'customers_end', label: 'Ending customers', kind: 'number', expr: 'm.customers_end', snapshot: true },
       { key: 'customers_new', label: 'New customers', kind: 'number', expr: 'm.customers_new' },
       { key: 'customers_churned', label: 'Churned customers', kind: 'number', expr: 'm.customers_churned' },
       { key: 'customers_reactivated', label: 'Reactivated customers', kind: 'number', expr: 'm.customers_reactivated' },
-      { key: 'gl_revenue', label: 'GL revenue', kind: 'money', expr: 'm.gl_revenue' },
-      { key: 'gl_cogs', label: 'GL cost of goods sold', kind: 'money', expr: 'm.gl_cogs' },
-      { key: 'bookings', label: 'Bookings', kind: 'money', expr: 'm.bookings' },
-      { key: 'billings', label: 'Billings', kind: 'money', expr: 'm.billings' },
-      { key: 'deferred_balance', label: 'Deferred balance', kind: 'money', expr: 'm.deferred_balance', snapshot: true },
+      { key: 'gl_revenue', label: 'GL revenue', kind: 'money', expr: 'm.gl_revenue', baseMoney: true },
+      { key: 'gl_cogs', label: 'GL cost of goods sold', kind: 'money', expr: 'm.gl_cogs', baseMoney: true },
+      { key: 'bookings', label: 'Bookings', kind: 'money', expr: 'm.bookings', baseMoney: true },
+      { key: 'billings', label: 'Billings', kind: 'money', expr: 'm.billings', baseMoney: true },
+      { key: 'deferred_balance', label: 'Deferred balance', kind: 'money', expr: 'm.deferred_balance', snapshot: true, baseMoney: true },
     ],
     defaultSort: { column: 'month', direction: 'asc' },
   },
@@ -1677,13 +1755,20 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'usage.read',
     featureKey: 'saasMetrics',
     timeKey: 'month',
+    // Every stored amount is normalized to the row's persisted reporting
+    // currency, so every money column is baseMoney under that dimension.
+    baseCurrencyColumn: 'reporting_currency',
+    baseDenominationNouns: { ...SAAS_BASE_NOUNS },
+    singleSubsidiaryCertifiesBase: false,
+    normalization: SAAS_NORMALIZATION,
     columns: [
       { key: 'cohort_month', label: 'Cohort month', kind: 'date', expr: 'm.cohort_month' },
       { key: 'month', label: 'Month', kind: 'date', expr: 'm.month' },
       { key: 'months_since_start', label: 'Months since start', kind: 'number', expr: 'm.months_since_start' },
       { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'start_mrr', label: 'Starting MRR', kind: 'money', expr: 'm.start_mrr', snapshot: true },
-      { key: 'mrr', label: 'Cohort MRR', kind: 'money', expr: 'm.mrr', snapshot: true },
+      { key: 'reporting_currency', label: 'Reporting currency', kind: 'text', expr: 'm.reporting_currency' },
+      { key: 'start_mrr', label: 'Starting MRR', kind: 'money', expr: 'm.start_mrr', snapshot: true, baseMoney: true },
+      { key: 'mrr', label: 'Cohort MRR', kind: 'money', expr: 'm.mrr', snapshot: true, baseMoney: true },
       { key: 'start_customers', label: 'Starting customers', kind: 'number', expr: 'm.start_customers', snapshot: true },
       { key: 'customers', label: 'Cohort customers', kind: 'number', expr: 'm.customers', snapshot: true },
     ],

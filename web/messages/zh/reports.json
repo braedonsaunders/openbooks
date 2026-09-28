@@ -2023,6 +2023,7 @@
       "saas_metrics_subscriptions": {
         "month": "月份",
         "subsidiary": "子公司",
+        "reporting_currency": "报告货币",
         "customer": "客户",
         "plan": "计划",
         "subscription_id": "订阅（ID）",
@@ -2041,6 +2042,7 @@
       "saas_metrics_facts": {
         "month": "月份",
         "subsidiary": "子公司",
+        "reporting_currency": "报告货币",
         "basis": "收入口径",
         "mrr_start": "期初MRR",
         "mrr_end": "期末MRR",
@@ -2068,6 +2070,7 @@
         "month": "月份",
         "months_since_start": "开始后月数",
         "subsidiary": "子公司",
+        "reporting_currency": "报告货币",
         "start_mrr": "期初MRR",
         "mrr": "群组MRR",
         "start_customers": "期初客户数",

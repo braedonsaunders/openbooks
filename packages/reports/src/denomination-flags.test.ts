@@ -133,6 +133,56 @@ describe('denomination flags are enforceable', () => {
     )
   })
 
+  it('saas metric entities denominate every stored amount in the persisted reporting currency', () => {
+    for (const key of ['saas_metrics_subscriptions', 'saas_metrics_facts', 'saas_metrics_cohorts'] as const) {
+      const entity = REPORT_ENTITY_MAP[key]
+      assert.ok(entity, `${key} entity must exist`)
+      assert.equal(entity.baseCurrencyColumn, 'reporting_currency', `${key} denominates in the persisted reporting currency`)
+      const reporting = (entity.columns ?? []).find((c) => c.key === 'reporting_currency')
+      assert.ok(reporting, `${key} must expose the reporting_currency breakout column`)
+      assert.equal(reporting.kind, 'text')
+      assert.ok(!entity.currencyColumn, `${key} has no transaction-currency dimension`)
+      for (const column of entity.columns ?? []) {
+        if (column.kind !== 'money') continue
+        assert.equal(
+          column.baseMoney,
+          true,
+          `${key}.${String(column.key)} is normalized to the stored reporting currency — flag it baseMoney`,
+        )
+      }
+    }
+  })
+
+  it('row-persisted reporting denomination never certifies from a single subsidiary', () => {
+    for (const key of ['saas_metrics_subscriptions', 'saas_metrics_facts', 'saas_metrics_cohorts'] as const) {
+      assert.equal(
+        REPORT_ENTITY_MAP[key]!.singleSubsidiaryCertifiesBase,
+        false,
+        `${key} must opt out: one subsidiary cannot prove one reporting currency across an org-base change`,
+      )
+    }
+    assert.equal(
+      REPORT_ENTITY_MAP.ledger_lines!.singleSubsidiaryCertifiesBase ?? true,
+      true,
+      'ledger_lines keeps the GL contract: one subsidiary owns one functional currency',
+    )
+  })
+
+  it('saas entities author reporting-currency nouns; the GL default is untouched', () => {
+    for (const key of ['saas_metrics_subscriptions', 'saas_metrics_facts', 'saas_metrics_cohorts'] as const) {
+      assert.deepEqual(
+        REPORT_ENTITY_MAP[key]!.baseDenominationNouns,
+        { plural: 'reporting currencies', breakout: 'Reporting currency' },
+        `${key} refusals must name reporting currencies`,
+      )
+    }
+    assert.equal(
+      REPORT_ENTITY_MAP.ledger_lines!.baseDenominationNouns,
+      undefined,
+      'ledger_lines keeps the default functional-base wording',
+    )
+  })
+
   it('fixed_assets carrying_value is in the named exclusion (E31 scope probe)', () => {
     const assets = REPORT_ENTITY_MAP.fixed_assets
     assert.ok(assets, 'fixed_assets entity must exist')
