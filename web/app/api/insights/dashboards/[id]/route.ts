@@ -16,8 +16,12 @@ import { notFound } from "@/lib/api/responses";
 
 export { runtime } from "@/lib/api/route";
 
+// cardId stays a plain string here on purpose: a malformed reference must
+// reach the domain check below (normalizeLayout) so the caller gets the
+// usable 422 board refusal. Rejecting it in the schema would answer 400 and
+// erase that domain refusal.
 const layoutBody = z.array(z.strictObject({
-  cardId: z.string().uuid("layout.cardId must be a valid id"),
+  cardId: z.string(),
   x: z.number().int().min(0).max(11),
   y: z.number().int().min(0).max(999),
   w: z.number().int().min(1).max(12),
