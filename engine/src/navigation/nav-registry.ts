@@ -545,6 +545,13 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting', subgroup: 'close', requiredPermission: 'gl.read',
   },
   {
+    // Nonprofit workspace home — the fund-accounting cockpit. Funds and
+    // releases live as tabs on this page behind fundAccounting; the single
+    // nav entry stays with the parent switch.
+    key: 'nonprofit', href: '/nonprofit', label: 'Nonprofit', iconKey: 'landmark',
+    group: 'accounting', requiredPermission: 'funds.read', featureKey: 'nonprofit',
+  },
+  {
     key: 'tax-depreciation',
     href: '/assets?tab=tax-depreciation',
     label: 'Tax Depreciation',
@@ -1018,6 +1025,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'tax-provisions',
     'close',
     'accounting-changes',
+    'nonprofit',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],
   settings: [
