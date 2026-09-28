@@ -420,6 +420,66 @@ test('saved explicit book filters survive validation verbatim', () => {
 })
 
 
+test('saas single-subsidiary scope does not certify the reporting currency', () => {
+  const facts = REPORT_ENTITY_MAP.saas_metrics_facts!
+  const plan = {
+    entity: 'saas_metrics_facts',
+    mode: 'summarize',
+    columns: [],
+    breakouts: [{ column: 'month' }],
+    measures: [{ fn: 'sum', column: 'new_mrr' }],
+  }
+  const scoped = compileCustomQuery(facts, plan, ORG, { allowedSubsidiaryIds: [SUB] })
+  assert.equal(scoped.baseSingleSubsidiary, false, 'one subsidiary proves nothing about the row-persisted reporting currency')
+  assert.equal(scoped.hasNormalizationCensus, true)
+  assert.match(scoped.text, /__norm_legacy_n/)
+})
+
+test('gl single-subsidiary scope still certifies the functional base', () => {
+  const ledger = REPORT_ENTITY_MAP.ledger_lines!
+  const plan = {
+    entity: 'ledger_lines',
+    mode: 'summarize',
+    columns: [],
+    breakouts: [{ column: 'account_number' }],
+    measures: [{ fn: 'sum', column: 'amount' }],
+  }
+  const scoped = compileCustomQuery(ledger, plan, ORG, { allowedBookIds: [PRIMARY], allowedSubsidiaryIds: [SUB] })
+  assert.equal(scoped.baseSingleSubsidiary, true)
+  assert.equal(scoped.hasDenominationCensus, false)
+  assert.equal(scoped.hasNormalizationCensus, undefined)
+})
+
+test('a reporting-currency pin partitions but never skips normalization probes', () => {
+  const facts = REPORT_ENTITY_MAP.saas_metrics_facts!
+  const plan = {
+    entity: 'saas_metrics_facts',
+    mode: 'summarize',
+    columns: [],
+    breakouts: [{ column: 'month' }],
+    measures: [{ fn: 'sum', column: 'new_mrr' }],
+    filters: { combinator: 'and', rules: [{ field: 'reporting_currency', op: 'eq', value: 'USD' }] },
+  }
+  const pinned = compileCustomQuery(facts, plan, ORG, {})
+  assert.equal(pinned.baseCurrencyPinned, 'USD')
+  assert.equal(pinned.hasNormalizationCensus, true, 'a pin certifies denomination, never normalization truth')
+  assert.match(pinned.text, /__norm_total/)
+})
+
+test('a reporting-currency breakout never skips normalization probes', () => {
+  const facts = REPORT_ENTITY_MAP.saas_metrics_facts!
+  const plan = {
+    entity: 'saas_metrics_facts',
+    mode: 'summarize',
+    columns: [],
+    breakouts: [{ column: 'reporting_currency' }, { column: 'month' }],
+    measures: [{ fn: 'sum', column: 'new_mrr' }],
+  }
+  const partitioned = compileCustomQuery(facts, plan, ORG, {})
+  assert.equal(partitioned.hasNormalizationCensus, true, 'a partition labels denominations, never proves normalization')
+  assert.match(partitioned.text, /__norm_ev_bad_n/)
+})
+
 test('missing census refuses nonempty results; empty results stay empty', async () => {
   const plan = { entity: 'documents', mode: 'summarize', columns: [], measures: [{ fn: 'sum', column: 'total' }] }
   await assert.rejects(runCustomQuery({ query: async () => ({ rows: [{ m0: '300' }] }) }, plan,

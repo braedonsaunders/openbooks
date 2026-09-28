@@ -59,9 +59,25 @@ export type CompiledReportQuery = {
   /** True when the server book clamp already restricts the run to one basis
    *  (singleton allowlist) or no rows (empty allowlist). */
   bookSingleBasis?: boolean
-  /** True when a single-subsidiary scope already certifies one functional
-   *  currency (one subsidiary owns one base_currency). */
+  /** True when a single-subsidiary scope already certifies one base
+   *  denomination (one subsidiary owns one base_currency). Never set for
+   *  row-persisted reporting denominations, which opt out via the catalog. */
   baseSingleSubsidiary?: boolean
+  /** True when the plan carries the normalization census (reserved `__norm_*`
+   *  columns on every result row, plus a `__page_present` sentinel in rows
+   *  mode). Pins, breakouts, and subsidiary scopes never suppress it. */
+  hasNormalizationCensus?: boolean
+  /** Reader-supported denomination versions for the census, echoed for the
+   *  shaper. Catalog-authored capability protocol, never a writer import. */
+  normalizationSupportedVersions?: readonly string[]
+  /** Every hidden column the census adds (probe inputs, sort carriers,
+   *  sentinel, probe aliases). The executor strips all of them from product
+   *  output and never counts the sentinel as a row. */
+  normalizationHiddenColumns?: readonly string[]
+  /** Sentinel column marking product rows in governed rows queries. */
+  normalizationPresentColumn?: string
+  /** Same-statement scope-count alias driving governed page totals. */
+  normalizationTotalAlias?: string
   /** True when the compiled SELECT carries the inline `__denom` census
    *  (reserved `__txn_n`/`__base_n`/`__book_n` columns on every result row).
    *  False when every money dimension is already certified single (or the
@@ -386,6 +402,172 @@ export function buildDenominationCensus(
   }
 }
 
+/** Sentinel marking product rows in governed rows queries (`1`) versus the
+ *  census-only carrier row (NULL). Uses the reserved `__` prefix no catalog
+ *  column may use. */
+export const NORMALIZATION_PRESENT_COLUMN = '__page_present'
+/** Same-statement scope-count alias: the governed page total with no second
+ *  query. */
+export const NORMALIZATION_TOTAL_ALIAS = '__norm_total'
+/** Reserved hidden probe aliases for the normalization census. */
+export const NORMALIZATION_PROBE_ALIASES = [
+  '__norm_total',
+  '__norm_legacy_n',
+  '__norm_v1_n',
+  '__norm_ver_n',
+  '__norm_ver_v',
+  '__norm_badver_n',
+  '__norm_badver_v',
+  '__norm_ev_bad_n',
+] as const
+
+/** The normalization refusal remedy: the Company Setup → SaaS Metrics
+ *  request + distinct-approval workflow that re-proves stored rows before
+ *  any write. Quoted verbatim everywhere it is surfaced. */
+export const NORMALIZATION_REMEDY =
+  'File a normalization request for the month in Company Setup → SaaS Metrics and have a different authorized approver approve it; the approved correction re-proves the stored rows before any write.'
+
+/** True when the plan blends governed SaaS money (any baseMoney aggregate on
+ *  an entity carrying the catalog normalization contract). Pins, breakouts,
+ *  and subsidiary scopes never suppress the probes. */
+export function needsNormalizationCensus(entity: ReportEntity, measures: readonly ReportMeasure[]): boolean {
+  return !!entity.normalization && measures.some((m) => isBaseMoneyMeasure(entity, m))
+}
+
+/** True when a rows-mode plan selects governed SaaS money (any selected
+ *  baseMoney column on an entity carrying the catalog normalization
+ *  contract). Rows never blend, but they may not bypass normalization truth. */
+export function needsRowsNormalizationCensus(entity: ReportEntity, columns: readonly string[]): boolean {
+  if (!entity.normalization) return false
+  return columns.some((c) => {
+    const column = entityColumn(entity, c)
+    return column?.kind === 'money' && column.baseMoney === true
+  })
+}
+
+/** Server-owned SQL fragments the normalization probes aggregate. In
+ *  summarize mode these are base-table expressions; in rows mode they are
+ *  the `__scope` hidden aliases — one builder, no entity-name branching. */
+export type NormalizationProbeExprs = {
+  currency: string
+  version: string
+  evidence: string
+  evidenceValid: string
+  evidenceHash: string
+  rowHash: string
+}
+
+function quoteCatalogLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+/** Normalization probes over one scope: scope size, all-null legacy count,
+ *  complete-triple count, version census, unsupported-version census, and
+ *  evidence-failure count. Legacy counts only rows whose currency, version,
+ *  AND evidence are literally all NULL — present-but-malformed evidence is
+ *  non-null and lands in the evidence failure, never in legacy. Every probe
+ *  shares the plan's own snapshot; no separate preflight. */
+export function buildNormalizationProbes(
+  exprs: NormalizationProbeExprs,
+  supportedVersions: readonly string[],
+): { inner: string[]; refs: string[] } {
+  const supported = supportedVersions.map(quoteCatalogLiteral).join(', ')
+  const inner = [
+    `COUNT(*) AS "${NORMALIZATION_TOTAL_ALIAS}"`,
+    `COUNT(*) FILTER (WHERE ${exprs.currency} IS NULL AND ${exprs.version} IS NULL AND ${exprs.evidence} IS NULL) AS "__norm_legacy_n"`,
+    `COUNT(*) FILTER (WHERE ${exprs.currency} IS NOT NULL AND ${exprs.version} IS NOT NULL AND ${exprs.evidence} IS NOT NULL) AS "__norm_v1_n"`,
+    `COUNT(DISTINCT ${exprs.version}) AS "__norm_ver_n"`,
+    `MIN(${exprs.version}) AS "__norm_ver_v"`,
+    `COUNT(DISTINCT ${exprs.version}) FILTER (WHERE ${exprs.version} IS NOT NULL AND ${exprs.version} NOT IN (${supported})) AS "__norm_badver_n"`,
+    `MIN(${exprs.version}) FILTER (WHERE ${exprs.version} IS NOT NULL AND ${exprs.version} NOT IN (${supported})) AS "__norm_badver_v"`,
+    `COUNT(*) FILTER (WHERE ${exprs.evidence} IS NOT NULL AND (NOT (${exprs.evidenceValid}) OR ${exprs.evidenceHash} IS DISTINCT FROM ${exprs.rowHash})) AS "__norm_ev_bad_n"`,
+  ]
+  const refs = NORMALIZATION_PROBE_ALIASES.map((a) => `(SELECT "${a}" FROM __denom) AS "${a}"`)
+  return { inner, refs }
+}
+
+/** One exact normalization census, read from the hidden `__norm_*` columns
+ *  of a result row. Guard and result rows come from the same statement. */
+export type NormalizationCounts = {
+  total: number
+  legacy: number
+  v1: number
+  verDistinct: number
+  verSample: string | null
+  badVerDistinct: number
+  badVerSample: string | null
+  evBad: number
+}
+
+/** Parse the hidden normalization columns of one result row. A missing row
+ *  or an unparseable count yields null — the executor fails closed on it,
+ *  never treats it as coherent. */
+export function parseNormalizationCounts(row: Record<string, unknown> | null | undefined): NormalizationCounts | null {
+  if (row == null) return null
+  const ints = ['__norm_total', '__norm_legacy_n', '__norm_v1_n', '__norm_ver_n', '__norm_badver_n', '__norm_ev_bad_n'] as const
+  const parsed: Record<string, number> = {}
+  for (const key of ints) {
+    const n = Number(row[key])
+    if (!Number.isSafeInteger(n) || n < 0) return null
+    parsed[key] = n
+  }
+  const sample = (key: string): string | null => {
+    const v = row[key]
+    if (v == null) return null
+    if (typeof v !== 'string') return null
+    return v === '' ? null : v
+  }
+  if (parsed.__norm_ver_n! > 0 && sample('__norm_ver_v') === null && row['__norm_ver_v'] != null) return null
+  if (parsed.__norm_badver_n! > 0 && sample('__norm_badver_v') === null) return null
+  return {
+    total: parsed.__norm_total!,
+    legacy: parsed.__norm_legacy_n!,
+    v1: parsed.__norm_v1_n!,
+    verDistinct: parsed.__norm_ver_n!,
+    verSample: sample('__norm_ver_v'),
+    badVerDistinct: parsed.__norm_badver_n!,
+    badVerSample: sample('__norm_badver_v'),
+    evBad: parsed.__norm_ev_bad_n!,
+  }
+}
+
+/** Fail-closed normalization enforcement, identical in rows and summarize
+ *  modes. An empty scope is honestly empty, never a refusal. Otherwise, in
+ *  deterministic order: unsupported versions by name; coherent all-null
+ *  legacy; mixed/partial triples; multiple distinct versions; missing,
+ *  malformed, or mismatched evidence. Coherent supported v1 continues into
+ *  the shared denomination enforcement. Every refusal names the
+ *  normalization request + distinct-approval remedy. */
+export function resolveNormalization(entity: ReportEntity, counts: NormalizationCounts): void {
+  const breakout = entity.baseDenominationNouns?.breakout ?? 'Base currency'
+  if (counts.total === 0) return
+  if (counts.badVerDistinct > 0) {
+    throw new Error(
+      `Cannot report SaaS metrics: rows carry an unsupported denomination version (${counts.badVerSample ?? 'unknown'}) — ${NORMALIZATION_REMEDY}`,
+    )
+  }
+  if (counts.legacy === counts.total) {
+    throw new Error(
+      `Cannot report SaaS metrics: rows are stored in the legacy unnormalized denomination with no ${breakout.toLowerCase()} — ${NORMALIZATION_REMEDY}`,
+    )
+  }
+  if (counts.legacy + counts.v1 !== counts.total) {
+    throw new Error(
+      `Cannot report SaaS metrics: rows mix legacy and normalized denominations or carry an incomplete denomination — ${NORMALIZATION_REMEDY}`,
+    )
+  }
+  if (counts.verDistinct > 1) {
+    throw new Error(
+      `Cannot report SaaS metrics: rows mix denomination versions (${counts.verSample ?? 'unknown'} and others) — ${NORMALIZATION_REMEDY}`,
+    )
+  }
+  if (counts.evBad > 0) {
+    throw new Error(
+      `Cannot report SaaS metrics: rows carry normalization evidence that is missing, malformed, or does not match the stored rows — ${NORMALIZATION_REMEDY}`,
+    )
+  }
+}
+
 /** The entity's implicit predicates: org scope + subsidiary/book allowlists
  *  + optional baseFilter. Lifting the book clamp (null allowlist) never
  *  touches the org or subsidiary fences. */
@@ -457,6 +639,22 @@ function compileRows(
     .slice(0, 3)
   const limit = page?.limit ?? resolveLimit(q.limit, opts.maxRows)
 
+  // Governed SaaS money rows execute the SAME normalization census over the
+  // same snapshot in ONE statement — never a preflight, never a filter, and
+  // never a second count query. Invalid rows are refused, not hidden.
+  if (entity.normalization && needsRowsNormalizationCensus(entity, selectKeys)) {
+    return compileGovernedRows(entity, q, {
+      requestedColumns,
+      selectKeys,
+      groupBy,
+      limit,
+      page,
+      whereParts,
+      from,
+      params,
+    })
+  }
+
   const text = [
     `SELECT ${selectList}`,
     `FROM ${from}`,
@@ -481,6 +679,113 @@ function compileRows(
       page,
       countText: `SELECT COUNT(*) AS "${REPORT_TOTAL_ROWS_COLUMN}" FROM ${countFrom} WHERE ${whereParts.join(' AND ')}`,
     } : {}),
+  }
+}
+
+/** Hidden probe-input column names carried inside `__scope` for governed
+ *  rows. Unquoted here so the executor strips them by exact row key; SQL
+ *  sites quote them. */
+const GOVERNED_ROWS_INPUTS = {
+  cur: '__nc_cur',
+  ver: '__nc_ver',
+  ev: '__nc_ev',
+  evOk: '__nc_ev_ok',
+  evh: '__nc_evh',
+  rowh: '__nc_rowh',
+} as const
+
+/** One-statement governed rows query: a full unpaged `__scope` carrying the
+ *  product columns plus hidden normalization inputs, a `__page` slice with a
+ *  present marker, and an always-one-row `__denom` with the same-snapshot
+ *  census and total. The RIGHT JOIN carries a sentinel at zero scope rows or
+ *  an offset past the last row. No `countText`: the page total comes from
+ *  `__norm_total` in this same statement. */
+function compileGovernedRows(
+  entity: ReportEntity,
+  q: ReportCustomQuery,
+  args: {
+    requestedColumns: string[]
+    selectKeys: string[]
+    groupBy: string | null
+    limit: number
+    page: ReportPageRequest | null
+    whereParts: string[]
+    from: string
+    params: SqlParams
+  },
+): CompiledReportQuery {
+  const norm = entity.normalization!
+  const curRef = entity.baseCurrencyColumn ? columnRef(entity, entity.baseCurrencyColumn) : null
+  if (!curRef) {
+    throw new Error(`entity ${entity.key} carries a normalization contract with no base denomination column`)
+  }
+  const scopeSelect = [
+    ...args.selectKeys.map((c) => `${columnRef(entity, c)} AS ${queryIdentifier(c)}`),
+    `${curRef} AS "${GOVERNED_ROWS_INPUTS.cur}"`,
+    `${norm.versionExpr} AS "${GOVERNED_ROWS_INPUTS.ver}"`,
+    `${norm.evidenceExpr} AS "${GOVERNED_ROWS_INPUTS.ev}"`,
+    `(${norm.evidenceValidExpr}) AS "${GOVERNED_ROWS_INPUTS.evOk}"`,
+    `${norm.evidenceHashExpr} AS "${GOVERNED_ROWS_INPUTS.evh}"`,
+    `${norm.rowHashExpr} AS "${GOVERNED_ROWS_INPUTS.rowh}"`,
+  ]
+  // Sorts resolve against __scope output aliases so ORDER BY lives in __page
+  // alongside LIMIT/OFFSET. Sort columns outside the selection ride hidden.
+  const selectedAliases = new Map(args.selectKeys.map((c) => [c, queryIdentifier(c)] as const))
+  const hiddenSorts: string[] = []
+  const hiddenSortAliases: string[] = []
+  const orderTerms: string[] = []
+  for (const s of (q.sorts ?? []).slice(0, 3)) {
+    const ref = s.column ? columnRef(entity, s.column) : null
+    if (!ref || !s.column) continue
+    let alias = selectedAliases.get(s.column)
+    if (!alias) {
+      const hidden = `__sort_${hiddenSorts.length}`
+      alias = `"${hidden}"`
+      hiddenSorts.push(`${ref} AS ${alias}`)
+      hiddenSortAliases.push(hidden)
+    }
+    orderTerms.push(`${alias} ${s.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`)
+  }
+  const offset = args.page?.offset ?? 0
+  const scopeText = `SELECT ${[...scopeSelect, ...hiddenSorts].join(', ')} FROM ${args.from} WHERE ${args.whereParts.join(' AND ')}`
+  const probes = buildNormalizationProbes(
+    {
+      currency: `"${GOVERNED_ROWS_INPUTS.cur}"`,
+      version: `"${GOVERNED_ROWS_INPUTS.ver}"`,
+      evidence: `"${GOVERNED_ROWS_INPUTS.ev}"`,
+      evidenceValid: `"${GOVERNED_ROWS_INPUTS.evOk}"`,
+      evidenceHash: `"${GOVERNED_ROWS_INPUTS.evh}"`,
+      rowHash: `"${GOVERNED_ROWS_INPUTS.rowh}"`,
+    },
+    norm.supportedVersions,
+  )
+  const denomRefs = NORMALIZATION_PROBE_ALIASES.map((a) => `__denom."${a}" AS "${a}"`).join(', ')
+  const text = [
+    `WITH __scope AS (${scopeText})`,
+    `__page AS (SELECT *, 1 AS "${NORMALIZATION_PRESENT_COLUMN}" FROM __scope${orderTerms.length ? ` ORDER BY ${orderTerms.join(', ')}` : ''} LIMIT ${args.limit} OFFSET ${offset})`,
+    `__denom AS (SELECT ${probes.inner.join(', ')} FROM __scope)`,
+    `SELECT __page.*, ${denomRefs} FROM __page RIGHT JOIN __denom ON TRUE`,
+  ].join(' ')
+  return {
+    text,
+    values: args.params.values,
+    mode: 'rows',
+    columns: args.requestedColumns,
+    breakouts: [],
+    measures: [],
+    groupBy: args.groupBy,
+    limit: args.limit,
+    ...(args.page ? { page: args.page } : {}),
+    hasNormalizationCensus: true,
+    normalizationSupportedVersions: [...norm.supportedVersions],
+    normalizationHiddenColumns: [
+      ...Object.values(GOVERNED_ROWS_INPUTS),
+      ...hiddenSortAliases,
+      NORMALIZATION_PRESENT_COLUMN,
+      ...NORMALIZATION_PROBE_ALIASES,
+    ],
+    normalizationPresentColumn: NORMALIZATION_PRESENT_COLUMN,
+    normalizationTotalAlias: NORMALIZATION_TOTAL_ALIAS,
   }
 }
 
@@ -525,7 +830,10 @@ function compileSummarize(
   const baseCurrencyPinned = baseMeasures.length > 0 ? reportBaseCurrencyPin(entity, q) : null
   const bookPinned = moneyMeasures.length > 0 ? reportBookPin(entity, q) : null
   const bookSingleBasis = !!entity.bookScope && opts.allowedBookIds != null && opts.allowedBookIds.length <= 1
+  // Row-persisted reporting denominations opt out via the catalog: one
+  // subsidiary cannot prove one reporting currency across an org-base change.
   const baseSingleSubsidiary = !!entity.baseCurrencyColumn
+    && entity.singleSubsidiaryCertifiesBase !== false
     && opts.allowedSubsidiaryIds != null && opts.allowedSubsidiaryIds.length === 1
 
   const startMonth = opts.fiscalStartMonth && opts.fiscalStartMonth >= 1 && opts.fiscalStartMonth <= 12 ? opts.fiscalStartMonth : 1
@@ -589,8 +897,32 @@ function compileSummarize(
     base: baseMeasures.length > 0 && !baseCurrencyPinned && !baseSingleSubsidiary,
     book: moneyMeasures.length > 0 && !bookSingleBasis && !bookPinned,
   })
-  const censusRefs = census.censusRefs
-  const censusCTE = census.censusCTE(from, whereParts.join(' AND '))
+  // Normalization probes ride the same snapshot unconditionally: pins,
+  // breakouts, and subsidiary scopes never suppress them.
+  const norm = entity.normalization && needsNormalizationCensus(entity, measures)
+    ? (() => {
+      const curRef = entity.baseCurrencyColumn ? columnRef(entity, entity.baseCurrencyColumn) : null
+      if (!curRef) {
+        throw new Error(`entity ${entity.key} carries a normalization contract with no base denomination column`)
+      }
+      return buildNormalizationProbes(
+        {
+          currency: curRef,
+          version: entity.normalization!.versionExpr,
+          evidence: entity.normalization!.evidenceExpr,
+          evidenceValid: entity.normalization!.evidenceValidExpr,
+          evidenceHash: entity.normalization!.evidenceHashExpr,
+          rowHash: entity.normalization!.rowHashExpr,
+        },
+        entity.normalization!.supportedVersions,
+      )
+    })()
+    : null
+  const censusRefs = [...census.censusRefs, ...(norm?.refs ?? [])]
+  const allInner = [...census.censusInner, ...(norm?.inner ?? [])]
+  const censusCTE = allInner.length > 0
+    ? `WITH __denom AS (SELECT ${allInner.join(', ')} FROM ${from} WHERE ${whereParts.join(' AND ')}) `
+    : ''
   const bookGroupCount = hasSemiAdditive && census.bookGroupCount.length
     ? [`COUNT(DISTINCT "__book") AS "__book_group_n"`]
     : census.bookGroupCount
@@ -629,6 +961,14 @@ function compileSummarize(
     baseSingleSubsidiary,
     hasDenominationCensus: censusRefs.length > 0,
     denominationDimensions: census.dimensions,
+    ...(norm
+      ? {
+        hasNormalizationCensus: true as const,
+        normalizationSupportedVersions: [...entity.normalization!.supportedVersions],
+        normalizationHiddenColumns: [...NORMALIZATION_PROBE_ALIASES],
+        normalizationTotalAlias: NORMALIZATION_TOTAL_ALIAS,
+      }
+      : {}),
   }
 }
 
@@ -734,6 +1074,9 @@ export function resolveDenominations(
     }
   }
   const measures = compiled.measures ?? []
+  // Entity-authored base nouns: SaaS refusals name reporting currencies
+  // while every other entity keeps its exact functional-base meaning.
+  const baseNouns = entity.baseDenominationNouns ?? { plural: 'functional currencies', breakout: 'Base currency' }
   check(
     measures.filter((m) => isTxnCurrencyMeasure(entity, m)),
     singles.txn,
@@ -745,8 +1088,8 @@ export function resolveDenominations(
     measures.filter((m) => isBaseMoneyMeasure(entity, m)),
     singles.base,
     entity.baseCurrencyColumn ? [entity.baseCurrencyColumn] : [],
-    'functional currencies',
-    'Base currency',
+    baseNouns.plural,
+    baseNouns.breakout,
   )
   check(
     measures.filter((m) => isMoneyBlendingMeasure(entity, m)),

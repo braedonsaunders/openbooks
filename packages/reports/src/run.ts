@@ -18,8 +18,10 @@ import {
   labelFor,
   measureLabel,
   parseDenominationCounts,
+  parseNormalizationCounts,
   REPORT_TOTAL_ROWS_COLUMN,
   resolveDenominations,
+  resolveNormalization,
   type CompileCustomQueryOpts,
   type DenominationSingles,
 } from './custom-query'
@@ -262,7 +264,35 @@ export async function runCustomQuery(
     allowedBookIds: opts.allowedBookIds,
   })
   const labels = opts.labels ?? {}
-  const { rows } = await client.query(compiled.text, compiled.values)
+  const { rows: rawRows } = await client.query(compiled.text, compiled.values)
+  let rows = rawRows
+  // Governed normalization census: validated BEFORE any shaping or return,
+  // from the same statement that produced the rows. Empty scopes are honestly
+  // empty; anything else incoherent throws here. Rows-mode hidden columns and
+  // the sentinel never reach product output and never count as rows.
+  let normTotal: number | null = null
+  // Summarize mode carries inline refs only when a result row exists; an
+  // empty scope is honestly empty and skips validation. Governed rows mode
+  // always returns its sentinel carrier, so it always validates.
+  if (compiled.hasNormalizationCensus && (rows.length > 0 || compiled.mode === 'rows')) {
+    const counts = parseNormalizationCounts(rows.find((r) => r != null) ?? null)
+    if (!counts) throw new Error('Report returned invalid normalization evidence')
+    resolveNormalization(entity, counts)
+    normTotal = counts.total
+    if (compiled.mode === 'rows') {
+      const present = compiled.normalizationPresentColumn ?? '__page_present'
+      const hidden = new Set(compiled.normalizationHiddenColumns ?? [])
+      rows = rows
+        .filter((row) => Number(row?.[present]) === 1)
+        .map((row) => {
+          const clean: Record<string, unknown> = {}
+          for (const [key, value] of Object.entries(row ?? {})) {
+            if (!hidden.has(key)) clean[key] = value
+          }
+          return clean
+        })
+    }
+  }
 
   let result: ReportRunResult
   if (compiled.mode === 'summarize') {
@@ -303,7 +333,11 @@ export async function runCustomQuery(
 
   if (!compiled.page) return result
   let totalRows: number
-  if (rows.length > 0) {
+  // Governed rows derive the page total from the same statement — no second
+  // count query. Every other plan keeps its existing count behavior.
+  if (normTotal != null) {
+    totalRows = normTotal
+  } else if (rows.length > 0) {
     totalRows = parseTotalRows(rows[0]?.[REPORT_TOTAL_ROWS_COLUMN])
   } else if (compiled.page.offset > 0) {
     if (!compiled.countText) throw new Error('Paged report query is missing its count probe')
