@@ -145,6 +145,19 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "parties", columnName: "tax_ids", transform: "null_out" },
   { tableName: "usage_records", columnName: "distinct_key", transform: "hash" },
   { tableName: "usage_records", columnName: "reversal_reason", transform: "redact" },
+  // SaaS normalization operator prose and evidence may name people and carry
+  // request detail: redact the text, empty the JSONB. Currency, source,
+  // status, hash and version columns stay: enumerations and digests that
+  // identify nobody.
+  { tableName: "saas_metrics_normalization_requests", columnName: "reason", transform: "redact" },
+  { tableName: "saas_metrics_normalization_requests", columnName: "failure", transform: "redact" },
+  { tableName: "saas_metrics_normalization_requests", columnName: "remedy", transform: "redact" },
+  { tableName: "saas_metrics_normalization_requests", columnName: "progress", transform: "null_out" },
+  { tableName: "saas_metrics_normalization_requests", columnName: "result", transform: "null_out" },
+  { tableName: "saas_metrics_fx_evidence", columnName: "evidence", transform: "null_out" },
+  { tableName: "saas_metrics_monthly", columnName: "normalization_evidence", transform: "null_out" },
+  { tableName: "saas_metrics_facts_monthly", columnName: "normalization_evidence", transform: "null_out" },
+  { tableName: "saas_metrics_cohort_monthly", columnName: "normalization_evidence", transform: "null_out" },
   // 0195: candidate PII masks exactly like parties (a prospect's contact
   // identity is as sensitive as a worker's). Columns absent from the schema
   // are skipped by the clone generator, so ordering with the migration is

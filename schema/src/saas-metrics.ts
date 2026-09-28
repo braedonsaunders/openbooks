@@ -5,6 +5,8 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -13,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { orgs } from "./core";
 import { parties } from "./parties";
+import { users } from "./extension";
 import { id, money, orgRef } from "./helpers";
 import { subsidiaries } from "./subsidiaries";
 import { subscriptions } from "./subscriptions";
@@ -41,6 +44,9 @@ export const saasMetricsMonthly = pgTable(
     recognizedRevenue: money("recognized_revenue").notNull(),
     deferredDelta: money("deferred_delta").notNull(),
     inputsHash: text("inputs_hash").notNull(),
+    reportingCurrency: text("reporting_currency"),
+    denominationVersion: text("denomination_version"),
+    normalizationEvidence: jsonb("normalization_evidence").$type<Record<string, unknown>>(),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -55,6 +61,14 @@ export const saasMetricsMonthly = pgTable(
     check("saas_metrics_monthly_nonnegative_mrr", sql`${t.mrrStart} >= 0 and ${t.mrrEnd} >= 0 and ${t.newMrr} >= 0 and ${t.expansionMrr} >= 0 and ${t.contractionMrr} >= 0 and ${t.churnedMrr} >= 0 and ${t.reactivationMrr} >= 0`),
     check("saas_metrics_monthly_movement_identity", sql`${t.mrrEnd} - ${t.mrrStart} = ${t.newMrr} + ${t.expansionMrr} + ${t.reactivationMrr} - ${t.contractionMrr} - ${t.churnedMrr}`),
     check("saas_metrics_monthly_month_start", sql`extract(day from ${t.month}) = 1 and extract(day from ${t.cohortMonth}) = 1`),
+    check(
+      "saas_metrics_monthly_norm_complete",
+      sql`(${t.reportingCurrency} is null and ${t.denominationVersion} is null and ${t.normalizationEvidence} is null) or (${t.reportingCurrency} is not null and ${t.denominationVersion} is not null and ${t.normalizationEvidence} is not null)`,
+    ),
+    check(
+      "saas_metrics_monthly_norm_shape",
+      sql`${t.reportingCurrency} is null or (${t.reportingCurrency} ~ '^[A-Z]{3}$' and ${t.denominationVersion} ~ '^v[0-9]+$' and char_length(${t.denominationVersion}) <= 64 and jsonb_typeof(${t.normalizationEvidence}) = 'object' and (${t.normalizationEvidence} ->> 'inputs_hash') ~ '^[0-9a-f]{64}$')`,
+    ),
   ],
 );
 
@@ -87,6 +101,9 @@ export const saasMetricsFactsMonthly = pgTable(
     deferredBalance: money("deferred_balance").notNull(),
     basis: text("basis", { enum: ["recognised", "billed"] }).notNull(),
     inputsHash: text("inputs_hash").notNull(),
+    reportingCurrency: text("reporting_currency"),
+    denominationVersion: text("denomination_version"),
+    normalizationEvidence: jsonb("normalization_evidence").$type<Record<string, unknown>>(),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -97,6 +114,14 @@ export const saasMetricsFactsMonthly = pgTable(
     check("saas_metrics_facts_monthly_counts_nonnegative", sql`${t.customersStart} >= 0 and ${t.customersEnd} >= 0 and ${t.customersNew} >= 0 and ${t.customersChurned} >= 0 and ${t.customersReactivated} >= 0`),
     check("saas_metrics_facts_monthly_basis_valid", sql`${t.basis} in ('recognised', 'billed')`),
     check("saas_metrics_facts_monthly_month_start", sql`extract(day from ${t.month}) = 1`),
+    check(
+      "saas_metrics_facts_monthly_norm_complete",
+      sql`(${t.reportingCurrency} is null and ${t.denominationVersion} is null and ${t.normalizationEvidence} is null) or (${t.reportingCurrency} is not null and ${t.denominationVersion} is not null and ${t.normalizationEvidence} is not null)`,
+    ),
+    check(
+      "saas_metrics_facts_monthly_norm_shape",
+      sql`${t.reportingCurrency} is null or (${t.reportingCurrency} ~ '^[A-Z]{3}$' and ${t.denominationVersion} ~ '^v[0-9]+$' and char_length(${t.denominationVersion}) <= 64 and jsonb_typeof(${t.normalizationEvidence}) = 'object' and (${t.normalizationEvidence} ->> 'inputs_hash') ~ '^[0-9a-f]{64}$')`,
+    ),
   ],
 );
 
@@ -114,6 +139,9 @@ export const saasMetricsCohortMonthly = pgTable(
     startCustomers: integer("start_customers").notNull(),
     customers: integer("customers").notNull(),
     inputsHash: text("inputs_hash").notNull(),
+    reportingCurrency: text("reporting_currency"),
+    denominationVersion: text("denomination_version"),
+    normalizationEvidence: jsonb("normalization_evidence").$type<Record<string, unknown>>(),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -126,5 +154,110 @@ export const saasMetricsCohortMonthly = pgTable(
     check("saas_metrics_cohort_monthly_counts_nonnegative", sql`${t.startCustomers} >= 0 and ${t.customers} >= 0`),
     check("saas_metrics_cohort_monthly_mrr_nonnegative", sql`${t.startMrr} >= 0 and ${t.mrr} >= 0`),
     check("saas_metrics_cohort_monthly_month_start", sql`extract(day from ${t.cohortMonth}) = 1 and extract(day from ${t.month}) = 1 and ${t.month} >= ${t.cohortMonth}`),
+    check(
+      "saas_metrics_cohort_monthly_norm_complete",
+      sql`(${t.reportingCurrency} is null and ${t.denominationVersion} is null and ${t.normalizationEvidence} is null) or (${t.reportingCurrency} is not null and ${t.denominationVersion} is not null and ${t.normalizationEvidence} is not null)`,
+    ),
+    check(
+      "saas_metrics_cohort_monthly_norm_shape",
+      sql`${t.reportingCurrency} is null or (${t.reportingCurrency} ~ '^[A-Z]{3}$' and ${t.denominationVersion} ~ '^v[0-9]+$' and char_length(${t.denominationVersion}) <= 64 and jsonb_typeof(${t.normalizationEvidence}) = 'object' and (${t.normalizationEvidence} ->> 'inputs_hash') ~ '^[0-9a-f]{64}$')`,
+    ),
+  ],
+);
+
+/** Append-only reproducible FX observations for SaaS normalization. */
+export const saasMetricsFxEvidence = pgTable(
+  "saas_metrics_fx_evidence",
+  {
+    id: id(),
+    orgId: orgRef(),
+    month: date("month").notNull(),
+    baseCurrency: text("base_currency").notNull(),
+    quoteCurrency: text("quote_currency").notNull(),
+    rate: numeric("rate", { precision: 19, scale: 10 }).notNull(),
+    source: text("source").notNull(),
+    quotedAt: timestamp("quoted_at", { withTimezone: true }).notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    inputsHash: text("inputs_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (t) => [
+    uniqueIndex("saas_metrics_fx_evidence_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("saas_metrics_fx_evidence_org_observation_unique").on(
+      t.orgId,
+      t.month,
+      t.baseCurrency,
+      t.quoteCurrency,
+      t.source,
+      t.quotedAt,
+    ),
+    index("saas_metrics_fx_evidence_org_month").on(t.orgId, t.month),
+    foreignKey({ name: "saas_metrics_fx_evidence_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
+    check("saas_metrics_fx_evidence_month_start", sql`extract(day from ${t.month}) = 1`),
+    check(
+      "saas_metrics_fx_evidence_currencies_valid",
+      sql`${t.baseCurrency} ~ '^[A-Z]{3}$' and ${t.quoteCurrency} ~ '^[A-Z]{3}$' and ${t.baseCurrency} <> ${t.quoteCurrency}`,
+    ),
+    check("saas_metrics_fx_evidence_rate_positive", sql`${t.rate} > 0`),
+    check("saas_metrics_fx_evidence_source_valid", sql`${t.source} in ('manual', 'bank_of_canada', 'ecb', 'open_exchange_rates')`),
+    check("saas_metrics_fx_evidence_inputs_hash_digest", sql`${t.inputsHash} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "saas_metrics_fx_evidence_shape",
+      sql`jsonb_typeof(${t.evidence}) = 'object' and (${t.evidence} ->> 'base_currency') = ${t.baseCurrency} and (${t.evidence} ->> 'quote_currency') = ${t.quoteCurrency} and (${t.evidence} ->> 'rate')::numeric(19,10) = ${t.rate} and (${t.evidence} ->> 'source') = ${t.source} and (${t.evidence} ->> 'quoted_at')::timestamptz = ${t.quotedAt} and (${t.evidence} ->> 'inputs_hash') = ${t.inputsHash}`,
+    ),
+  ],
+);
+
+/** Guarded SaaS normalization request lifecycle; current fenced liveness only. */
+export const saasMetricsNormalizationRequests = pgTable(
+  "saas_metrics_normalization_requests",
+  {
+    id: id(),
+    orgId: orgRef(),
+    month: date("month").notNull(),
+    reason: text("reason").notNull(),
+    requestedBy: uuid("requested_by").notNull(),
+    approvedBy: uuid("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    idempotencyKey: uuid("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    status: text("status", {
+      enum: ["pending", "running", "succeeded", "failed", "cancelled"],
+    }).notNull().default("pending"),
+    progress: jsonb("progress").$type<Record<string, unknown>>().notNull().default({}),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    failure: text("failure"),
+    remedy: text("remedy"),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+  },
+  (t) => [
+    uniqueIndex("saas_metrics_normalization_requests_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("saas_metrics_normalization_requests_org_idempotency_unique").on(t.orgId, t.idempotencyKey),
+    uniqueIndex("saas_metrics_normalization_requests_org_month_live").on(t.orgId, t.month)
+      .where(sql`${t.status} in ('pending', 'running')`),
+    index("saas_metrics_normalization_requests_org_status").on(t.orgId, t.status),
+    foreignKey({ name: "saas_metrics_normalization_requests_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
+    foreignKey({ name: "saas_metrics_normalization_requests_requested_by_fk", columns: [t.requestedBy], foreignColumns: [users.id] }),
+    foreignKey({ name: "saas_metrics_normalization_requests_approved_by_fk", columns: [t.approvedBy], foreignColumns: [users.id] }),
+    check("saas_metrics_normalization_requests_month_start", sql`extract(day from ${t.month}) = 1`),
+    check("saas_metrics_normalization_requests_reason_nonblank", sql`char_length(btrim(${t.reason})) between 8 and 1000`),
+    check("saas_metrics_normalization_requests_request_hash_digest", sql`${t.requestHash} ~ '^[0-9a-f]{64}$'`),
+    check("saas_metrics_normalization_requests_status_valid", sql`${t.status} in ('pending', 'running', 'succeeded', 'failed', 'cancelled')`),
+    check("saas_metrics_normalization_requests_approved_pair", sql`(${t.approvedBy} is null) = (${t.approvedAt} is null)`),
+    check("saas_metrics_normalization_requests_approver_distinct", sql`${t.approvedBy} is null or ${t.approvedBy} <> ${t.requestedBy}`),
+    check("saas_metrics_normalization_requests_lease_pair", sql`(${t.leaseToken} is null) = (${t.leaseExpiresAt} is null)`),
+    check("saas_metrics_normalization_requests_attempt_nonnegative", sql`${t.attemptCount} >= 0`),
+    check(
+      "saas_metrics_normalization_requests_outcome_shape",
+      sql`(${t.status} in ('pending', 'running', 'cancelled') and ${t.result} is null and ${t.failure} is null and ${t.remedy} is null) or (${t.status} = 'succeeded' and ${t.result} is not null and ${t.failure} is null and ${t.remedy} is null) or (${t.status} = 'failed' and ${t.result} is null and ${t.failure} is not null and ${t.remedy} is not null and btrim(${t.failure}) <> '' and btrim(${t.remedy}) <> '')`,
+    ),
   ],
 );

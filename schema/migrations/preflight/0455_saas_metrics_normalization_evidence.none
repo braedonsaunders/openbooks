@@ -1,0 +1,1 @@
+0455 adds only nullable columns to the three SaaS metric tables and creates two empty tenant tables with guards. No existing row is backfilled, rewritten, or constrained, so there is no legacy state to refuse and no preflight query to run.
