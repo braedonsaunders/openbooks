@@ -143,6 +143,8 @@ type HistoryRow = {
   month: string;
   cohort_month: string;
   mrr_end: string;
+  reporting_currency: string | null;
+  denomination_version: string | null;
 };
 
 type MonthlySubscriptionFact = {
@@ -393,6 +395,48 @@ function attributedBucket<Bucket extends { subsidiary_id: string; entry_ids: str
   return args.buckets[0]!;
 }
 
+/**
+ * Every historical metrics row the writer consumes carries the denomination
+ * it was stored in. A row without a reporting currency — written before
+ * normalization — or under an unknown version fails closed instead of
+ * silently inheriting the current org base. That includes rows consulted
+ * only for sign or existence: a denomination-invariant comparison still
+ * consumes the row, so legacy rows cannot bypass the rollout refusal.
+ *
+ * The remedy is real: recompute the source month through SaaS metrics
+ * recompute — the flow that normalizes stored months to the definitions in
+ * Company Settings → Setup → Company — so its rows carry v1 evidence, then
+ * recompute the current month. A closed legacy month stays frozen; correct
+ * it through the period-close reversal flow, never by rewriting history.
+ */
+function validatedHistoryCurrency(args: {
+  scope: string;
+  month: string;
+  sourceMonth: string;
+  reportingCurrency: string | null;
+  denominationVersion: string | null;
+}): string {
+  const currency = args.reportingCurrency?.trim().toUpperCase() ?? null;
+  if (currency === null || args.denominationVersion !== SAAS_METRICS_DENOMINATION_VERSION) {
+    const stored = args.denominationVersion ?? "absent";
+    throw refusal(
+      "saas_metrics_history_denomination_unknown",
+      `${args.scope} is stored without normalized denomination evidence (reporting currency ${currency ?? "absent"}, denomination ${stored}) and cannot open ${args.month}.`,
+      `Recompute ${args.sourceMonth} through SaaS metrics recompute — the flow that normalizes stored months to the definitions in Company Settings → Setup → Company — so its rows carry v1 evidence, then recompute ${args.month}. A closed legacy month stays frozen; correct it through the period-close reversal flow, never by rewriting history.`,
+      { field: "month" },
+    );
+  }
+  return currency;
+}
+
+/** Calendar month-end for a month start, for cohort-opening translation. */
+async function monthEndFor(executor: SqlExecutor, monthStart: string): Promise<string> {
+  const bounds = await executor.execute<{ month_end: string }>(sql`
+    select (${monthStart}::date + interval '1 month - 1 day')::date::text as month_end
+  `);
+  return bounds.rows[0]!.month_end;
+}
+
 async function monthCloseState(
   executor: SqlExecutor,
   orgId: string,
@@ -443,7 +487,14 @@ async function readSources(
   deferredBuckets: DeferredBucket[];
   ledgerBuckets: LedgerBucket[];
   billingLegs: BillingLeg[];
-  cohortStartRows: Array<{ subsidiary_id: string; cohort_month: string; start_mrr: string; start_customers: number }>;
+  cohortStartRows: Array<{
+    subsidiary_id: string;
+    cohort_month: string;
+    start_mrr: string;
+    start_customers: number;
+    reporting_currency: string | null;
+    denomination_version: string | null;
+  }>;
 }> {
   const bounds = await executor.execute<{ month_end: string; previous_month: string }>(sql`
     select (${month}::date + interval '1 month - 1 day')::date::text as month_end,
@@ -484,7 +535,8 @@ async function readSources(
   let history: HistoryRow[] = [];
   if (subscriptionIds.length > 0) {
     history = (await executor.execute<HistoryRow>(sql`
-      select subscription_id, customer_id, subsidiary_id, month::text, cohort_month::text, mrr_end::text
+      select subscription_id, customer_id, subsidiary_id, month::text, cohort_month::text, mrr_end::text,
+             reporting_currency, denomination_version
         from saas_metrics_monthly
        where org_id = ${orgId} and month < ${month}::date
          and subscription_id in (${sql.join(subscriptionIds.map((id) => sql`${id}::uuid`), sql`, `)})
@@ -645,8 +697,11 @@ async function readSources(
     cohort_month: string;
     start_mrr: string;
     start_customers: number;
+    reporting_currency: string | null;
+    denomination_version: string | null;
   }>(sql`
-    select subsidiary_id, cohort_month::text, start_mrr::text, start_customers
+    select subsidiary_id, cohort_month::text, start_mrr::text, start_customers,
+           reporting_currency, denomination_version
       from saas_metrics_cohort_monthly
      where org_id = ${orgId} and month = cohort_month and cohort_month <= ${month}::date
      order by subsidiary_id, cohort_month
@@ -744,11 +799,54 @@ async function computeRows(
       ? mulDecimal(normalized(), mrrEvidence.rate!)
       : "0.0000";
     const history = historyBySubscription.get(source.id) ?? [];
+    // Every consumed history row validates first — including rows consulted
+    // only for sign below, which never bypass the rollout refusal.
+    for (const row of history) {
+      validatedHistoryCurrency({
+        scope: `Subscription ${source.id} history for ${row.month.slice(0, 10)}`,
+        month,
+        sourceMonth: row.month.slice(0, 10),
+        reportingCurrency: row.reporting_currency,
+        denominationVersion: row.denomination_version,
+      });
+    }
     const priorMonth = history.find((row) => row.month.slice(0, 10) === previousMonthStart);
     const previousStatus = statusAtMonthEnd(source, previousMonthEnd);
-    let mrrStart = priorMonth?.mrr_end ?? "0.0000";
+    // A month opens from its predecessor's persisted closing MRR, converted
+    // to the current org base at the prior month end when the predecessor
+    // was denominated elsewhere. Same-currency v1 rows reuse their amount
+    // with explicit no-conversion evidence. This lands before movement
+    // classification and aggregation, and the opening evidence joins the
+    // canonical hash through the monthly evidence below.
+    let mrrStart = "0.0000";
+    let openingTranslation: Record<string, unknown> | null = null;
     let previousEvidence: FxAsOfEvidence | null = null;
-    if (!priorMonth && source.start_on <= previousMonthEnd && previousStatus === "active") {
+    if (priorMonth) {
+      const priorCurrency = validatedHistoryCurrency({
+        scope: `Subscription ${source.id} closing MRR for ${previousMonthStart}`,
+        month,
+        sourceMonth: previousMonthStart,
+        reportingCurrency: priorMonth.reporting_currency,
+        denominationVersion: priorMonth.denomination_version,
+      });
+      const opening = await asOfEvidence(executor, orgId, fx, {
+        measure: "opening MRR",
+        from: priorCurrency,
+        to: baseCurrency,
+        onDate: previousMonthEnd,
+        field: "month",
+        context: `subscription ${source.id} opening from ${previousMonthStart}`,
+      });
+      mrrStart = mulDecimal(priorMonth.mrr_end, opening.rate!);
+      openingTranslation = {
+        prior_month: previousMonthStart,
+        prior_month_end: previousMonthEnd,
+        prior_mrr_end: priorMonth.mrr_end,
+        prior_reporting_currency: priorCurrency,
+        prior_denomination_version: priorMonth.denomination_version,
+        opening_rate: opening,
+      };
+    } else if (source.start_on <= previousMonthEnd && previousStatus === "active") {
       previousEvidence = await asOfEvidence(executor, orgId, fx, {
         measure: "subscription MRR",
         from: sourceCurrency,
@@ -875,6 +973,7 @@ async function computeRows(
         target_month_end: monthEnd,
         month_end_rate: mrrEvidence,
         previous_month_end_rate: previousEvidence,
+        opening: openingTranslation,
         mrr_start: mrrStart,
         mrr_end: mrrEnd,
       },
@@ -1010,6 +1109,17 @@ function aggregateFacts(
   deferredBalanceBySubscription: Map<string, string>,
   basis: FactsRow["basis"],
 ): FactsRow[] {
+  // Liveness is denomination-invariant but still consumes each row, so every
+  // row validates before its sign is read.
+  for (const row of history) {
+    validatedHistoryCurrency({
+      scope: `Customer history for ${row.month.slice(0, 10)} in subsidiary ${row.subsidiary_id}`,
+      month,
+      sourceMonth: row.month.slice(0, 10),
+      reportingCurrency: row.reporting_currency,
+      denominationVersion: row.denomination_version,
+    });
+  }
   const historyLive = new Set(history.filter((row) => cmp(row.mrr_end, "0") > 0).map((row) => `${row.subsidiary_id}:${row.customer_id}`));
   const facts: FactsRow[] = [];
   for (const subsidiaryId of subsidiaryIds) {
@@ -1057,12 +1167,7 @@ function aggregateFacts(
   return facts;
 }
 
-function aggregateCohorts(
-  month: string,
-  rows: MonthlySubscriptionFact[],
-  history: HistoryRow[],
-  cohortStarts: Awaited<ReturnType<typeof readSources>>["cohortStartRows"],
-): Array<{
+type CohortFact = {
   subsidiaryId: string;
   cohortMonth: string;
   month: string;
@@ -1071,13 +1176,64 @@ function aggregateCohorts(
   mrr: string;
   startCustomers: number;
   customers: number;
-}> {
+  opening: Record<string, unknown>;
+};
+
+async function aggregateCohorts(
+  executor: SqlExecutor,
+  orgId: string,
+  baseCurrency: string,
+  month: string,
+  rows: MonthlySubscriptionFact[],
+  history: HistoryRow[],
+  cohortStarts: Awaited<ReturnType<typeof readSources>>["cohortStartRows"],
+): Promise<CohortFact[]> {
+  const fx: FxEvidenceCache = { asOf: new Map(), monthAverage: new Map() };
+  const monthEnds = new Map<string, string>();
+  const cohortMonthEnd = async (cohortMonth: string): Promise<string> => {
+    let end = monthEnds.get(cohortMonth);
+    if (!end) {
+      end = await monthEndFor(executor, cohortMonth);
+      monthEnds.set(cohortMonth, end);
+    }
+    return end;
+  };
+  // A cohort opening is a persisted amount in its own recorded denomination:
+  // it converts to the current org base at the cohort month end, exactly
+  // like a prior-month opening converts at the prior month end. Customer
+  // counts stay counts and are never converted.
+  const normalizeOpening = async (args: {
+    subsidiaryId: string;
+    cohortMonth: string;
+    rawAmount: string;
+    reportingCurrency: string | null;
+    denominationVersion: string | null;
+    scope: string;
+  }): Promise<{ amount: string; conversion: FxAsOfEvidence }> => {
+    const currency = validatedHistoryCurrency({
+      scope: args.scope,
+      month,
+      sourceMonth: args.cohortMonth,
+      reportingCurrency: args.reportingCurrency,
+      denominationVersion: args.denominationVersion,
+    });
+    const conversion = await asOfEvidence(executor, orgId, fx, {
+      measure: "cohort opening",
+      from: currency,
+      to: baseCurrency,
+      onDate: await cohortMonthEnd(args.cohortMonth),
+      field: "month",
+      context: `${args.scope} at ${args.cohortMonth} month end`,
+    });
+    return { amount: mulDecimal(args.rawAmount, conversion.rate!), conversion };
+  };
   const groups = new Map<string, MonthlySubscriptionFact[]>();
   for (const row of rows) {
     const key = `${row.subsidiaryId}:${row.cohortMonth}`;
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
-  return [...groups.entries()].map(([key, cohortRows]) => {
+  const facts: CohortFact[] = [];
+  for (const [key, cohortRows] of groups) {
     const separator = key.indexOf(":");
     const subsidiaryId = key.slice(0, separator);
     const cohortMonth = key.slice(separator + 1);
@@ -1087,14 +1243,6 @@ function aggregateCohorts(
       && row.month.slice(0, 10) === cohortMonth
       && row.cohort_month.slice(0, 10) === cohortMonth
     );
-    const startMrr = storedStart?.start_mrr
-      ?? (cohortMonth === month
-        ? moneySum(cohortRows.map((row) => row.mrrEnd))
-        : moneySum(historicalStartRows.map((row) => row.mrr_end)));
-    const startCustomers = storedStart?.start_customers
-      ?? new Set((cohortMonth === month
-        ? cohortRows.filter((row) => cmp(row.mrrEnd, "0") > 0).map((row) => row.customerId)
-        : historicalStartRows.filter((row) => cmp(row.mrr_end, "0") > 0).map((row) => row.customer_id))).size;
     if (cohortMonth < month && historicalStartRows.length === 0 && storedStart === undefined) {
       throw refusal(
         "saas_metrics_cohort_start_missing",
@@ -1102,7 +1250,67 @@ function aggregateCohorts(
         `Recompute the cohort's opening month ${cohortMonth} before recomputing ${month}.`,
       );
     }
-    return {
+    let startMrr: string;
+    let startCustomers: number;
+    let opening: Record<string, unknown>;
+    if (storedStart !== undefined) {
+      const normalized = await normalizeOpening({
+        subsidiaryId,
+        cohortMonth,
+        rawAmount: storedStart.start_mrr,
+        reportingCurrency: storedStart.reporting_currency,
+        denominationVersion: storedStart.denomination_version,
+        scope: `SaaS cohort opening for ${cohortMonth} in subsidiary ${subsidiaryId}`,
+      });
+      startMrr = normalized.amount;
+      startCustomers = storedStart.start_customers;
+      opening = {
+        source: "stored",
+        cohort_month: cohortMonth,
+        cohort_month_end: await cohortMonthEnd(cohortMonth),
+        raw_start_mrr: storedStart.start_mrr,
+        raw_reporting_currency: storedStart.reporting_currency,
+        raw_denomination_version: storedStart.denomination_version,
+        raw_start_customers: storedStart.start_customers,
+        conversion: normalized.conversion,
+      };
+    } else if (cohortMonth === month) {
+      startMrr = moneySum(cohortRows.map((row) => row.mrrEnd));
+      startCustomers = new Set(cohortRows.filter((row) => cmp(row.mrrEnd, "0") > 0).map((row) => row.customerId)).size;
+      opening = {
+        source: "opening",
+        cohort_month: cohortMonth,
+        start_mrr: startMrr,
+        start_customers: startCustomers,
+      };
+    } else {
+      const converted = await Promise.all(historicalStartRows.map(async (row) => normalizeOpening({
+        subsidiaryId,
+        cohortMonth,
+        rawAmount: row.mrr_end,
+        reportingCurrency: row.reporting_currency,
+        denominationVersion: row.denomination_version,
+        scope: `Subscription ${row.subscription_id} opening-month MRR for ${cohortMonth}`,
+      })));
+      startMrr = moneySum(converted.map((entry) => entry.amount));
+      startCustomers = new Set(
+        historicalStartRows.filter((row) => cmp(row.mrr_end, "0") > 0).map((row) => row.customer_id),
+      ).size;
+      opening = {
+        source: "historical",
+        cohort_month: cohortMonth,
+        cohort_month_end: await cohortMonthEnd(cohortMonth),
+        rows: historicalStartRows.map((row, index) => ({
+          subscription_id: row.subscription_id,
+          raw_mrr_end: row.mrr_end,
+          raw_reporting_currency: row.reporting_currency,
+          raw_denomination_version: row.denomination_version,
+          conversion: converted[index]!.conversion,
+        })),
+        start_customers: startCustomers,
+      };
+    }
+    facts.push({
       subsidiaryId,
       cohortMonth,
       month,
@@ -1111,8 +1319,10 @@ function aggregateCohorts(
       mrr: moneySum(cohortRows.map((row) => row.mrrEnd)),
       startCustomers,
       customers: new Set(cohortRows.filter((row) => cmp(row.mrrEnd, "0") > 0).map((row) => row.customerId)).size,
-    };
-  });
+      opening,
+    });
+  }
+  return facts;
 }
 
 async function writeMonthlyRow(
@@ -1199,7 +1409,7 @@ async function writeFactsRow(
 async function writeCohortRow(
   executor: SqlExecutor,
   orgId: string,
-  row: ReturnType<typeof aggregateCohorts>[number],
+  row: CohortFact,
   reportingCurrency: string,
   evidence: Record<string, unknown>,
   inputsHash: string,
@@ -1252,7 +1462,7 @@ export async function recomputeSaasMetrics(
       computed.deferredBalanceBySubscription,
       basis,
     );
-    const cohorts = aggregateCohorts(month, computed.rows, sources.history, sources.cohortStartRows);
+    const cohorts = await aggregateCohorts(db, orgId, reportingCurrency, month, computed.rows, sources.history, sources.cohortStartRows);
     // Per-row evidence bodies first (without their digest), then one
     // canonical versioned hash over the exact inputs-plus-evidence payload.
     // Every stored row carries the same digest in its evidence and its
@@ -1278,6 +1488,7 @@ export async function recomputeSaasMetrics(
       months_since_start: cohort.monthsSinceStart,
       start_mrr: cohort.startMrr,
       mrr: cohort.mrr,
+      opening: cohort.opening,
       member_subscriptions: computed.rows
         .filter((row) => row.subsidiaryId === cohort.subsidiaryId && row.cohortMonth === cohort.cohortMonth)
         .map((row) => row.subscriptionId)
@@ -1287,6 +1498,7 @@ export async function recomputeSaasMetrics(
       baseCurrency: reportingCurrency,
       revenueRecognitionEnabled: sources.revenueRecognitionEnabled,
       subscriptions: computed.rows,
+      history: sources.history,
       cohortStarts: sources.cohortStartRows,
       definitions: sources.definitions,
       revenueBuckets: sources.revenueBuckets,
