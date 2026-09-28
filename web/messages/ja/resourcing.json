@@ -301,5 +301,102 @@
         "noCost": "人件費が記録されていません"
       }
     }
+  },
+  "retainers": {
+    "title": "リテイナー",
+    "description": "プロジェクト作業に充当する前払いの時間または料金。",
+    "newRetainer": "新規リテイナー",
+    "kpi": {
+      "balance": "残高（{currency}）",
+      "drawn": "消費額（{currency}）",
+      "expiring": "まもなく期限切れ",
+      "expiringSub": "有効、30日以内に終了"
+    },
+    "drawer": {
+      "title": "リテイナー",
+      "newTitle": "新規リテイナー",
+      "description": "条件、取崩し、証跡と収益認識。",
+      "saveFailed": "リテイナーを保存できませんでした。内容を確認して再試行してください。",
+      "unsaved": "未保存の変更",
+      "balance": "残高",
+      "noInvoiceHint": "リテイナー請求書がありません。請求を開始するには作成してください。",
+      "activatesOnPost": "この請求書の転記で有効化されます：",
+      "activatesHint": "下書きのリテイナーです。請求書の転記後に取崩しが可能になります。",
+      "noEligibleItem": "適合する認識ルールを持つサービス品目がありません。サービス品目に使用量（時間）またはマイルストーン（料金）の認識ルールを設定してください。",
+      "extendTitle": "リテイナーを延長",
+      "extendLabel": "新しい終了日",
+      "closeConfirm": "このリテイナーをクローズしますか？残高はゼロである必要があります。",
+      "tabs": {
+        "label": "リテイナーのセクション",
+        "terms": "条件",
+        "drawdowns": "取崩し",
+        "evidence": "証跡",
+        "recognition": "収益認識"
+      },
+      "status": {
+        "draft": "下書き",
+        "active": "有効",
+        "exhausted": "消費済み",
+        "expired": "期限切れ",
+        "closed": "クローズ済み"
+      },
+      "fields": {
+        "project": "プロジェクト",
+        "customer": "顧客",
+        "kind": "種別",
+        "totalAmount": "合計金額",
+        "totalHours": "合計時間",
+        "unitRate": "時間単価",
+        "startsOn": "開始日",
+        "endsOn": "終了日",
+        "retainerItem": "リテイナー品目",
+        "choose": "選択してください"
+      },
+      "kind": {
+        "hours": "時間",
+        "fees": "料金"
+      },
+      "actions": {
+        "save": "保存",
+        "saving": "保存中…",
+        "createInvoice": "リテイナー請求書を作成",
+        "draftDrawdown": "週を起案…",
+        "post": "転記",
+        "extend": "延長",
+        "close": "クローズ"
+      },
+      "drawdowns": {
+        "week": "週開始日",
+        "hours": "時間",
+        "amount": "金額",
+        "state": "状態",
+        "empty": "取崩しはまだありません。",
+        "weekTitle": "取崩しの週",
+        "weekLabel": "週開始の日曜日",
+        "amountTitle": "取崩し金額",
+        "amountLabel": "取り崩す金額"
+      },
+      "drawdownState": {
+        "draft": "下書き",
+        "posted": "転記済み"
+      },
+      "evidence": {
+        "date": "作業日",
+        "person": "担当者",
+        "hours": "時間",
+        "empty": "取り崩された時間はまだありません。"
+      },
+      "recognition": {
+        "month": "月",
+        "amount": "金額",
+        "posted": "転記済み",
+        "hint": "このリテイナー債務に対する収益処理の認識イベント。",
+        "runLink": "収益認識を開く",
+        "empty": "認識イベントはまだありません。",
+        "isPosted": "転記済み",
+        "pending": "保留中",
+        "reversed": "取消済み"
+      }
+    }
   }
 }

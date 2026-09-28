@@ -301,5 +301,102 @@
         "noCost": "未记录人工成本"
       }
     }
+  },
+  "retainers": {
+    "title": "预付费",
+    "description": "用于项目工作的预付小时或费用。",
+    "newRetainer": "新建预付费",
+    "kpi": {
+      "balance": "余额（{currency}）",
+      "drawn": "已用（{currency}）",
+      "expiring": "即将到期",
+      "expiringSub": "有效，30天内结束"
+    },
+    "drawer": {
+      "title": "预付费",
+      "newTitle": "新建预付费",
+      "description": "条款、扣减、证据与收入确认。",
+      "saveFailed": "无法保存预付费。请检查内容后重试。",
+      "unsaved": "未保存的更改",
+      "balance": "剩余余额",
+      "noInvoiceHint": "尚无预付费发票。请创建发票以开始计费。",
+      "activatesOnPost": "该发票过账后生效：",
+      "activatesHint": "草稿状态的预付费。其发票过账后方可扣减。",
+      "noEligibleItem": "没有服务物料具有匹配的确认规则。请为服务物料设置用量（小时）或里程碑（费用）确认规则。",
+      "extendTitle": "延长预付费",
+      "extendLabel": "新的结束日期",
+      "closeConfirm": "关闭此预付费？剩余余额必须为零。",
+      "tabs": {
+        "label": "预付费分区",
+        "terms": "条款",
+        "drawdowns": "扣减",
+        "evidence": "证据",
+        "recognition": "收入确认"
+      },
+      "status": {
+        "draft": "草稿",
+        "active": "有效",
+        "exhausted": "已用完",
+        "expired": "已到期",
+        "closed": "已关闭"
+      },
+      "fields": {
+        "project": "项目",
+        "customer": "客户",
+        "kind": "类型",
+        "totalAmount": "总金额",
+        "totalHours": "总小时",
+        "unitRate": "小时费率",
+        "startsOn": "开始日期",
+        "endsOn": "结束日期",
+        "retainerItem": "预付费物料",
+        "choose": "请选择"
+      },
+      "kind": {
+        "hours": "小时",
+        "fees": "费用"
+      },
+      "actions": {
+        "save": "保存",
+        "saving": "保存中…",
+        "createInvoice": "创建预付费发票",
+        "draftDrawdown": "起草周扣减…",
+        "post": "过账",
+        "extend": "延长",
+        "close": "关闭"
+      },
+      "drawdowns": {
+        "week": "起始周",
+        "hours": "小时",
+        "amount": "金额",
+        "state": "状态",
+        "empty": "暂无扣减。",
+        "weekTitle": "扣减周",
+        "weekLabel": "起始周日",
+        "amountTitle": "扣减金额",
+        "amountLabel": "要扣减的金额"
+      },
+      "drawdownState": {
+        "draft": "草稿",
+        "posted": "已过账"
+      },
+      "evidence": {
+        "date": "工作日期",
+        "person": "人员",
+        "hours": "小时",
+        "empty": "暂无已扣减工时。"
+      },
+      "recognition": {
+        "month": "月份",
+        "amount": "金额",
+        "posted": "已过账",
+        "hint": "收入处理针对此预付费义务的确认事件。",
+        "runLink": "打开收入确认",
+        "empty": "暂无确认事件。",
+        "isPosted": "已过账",
+        "pending": "待处理",
+        "reversed": "已冲销"
+      }
+    }
   }
 }

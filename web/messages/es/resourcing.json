@@ -301,5 +301,102 @@
         "noCost": "No se han registrado costes laborales"
       }
     }
+  },
+  "retainers": {
+    "title": "Anticipos",
+    "description": "Horas u honorarios prepagados aplicados al trabajo del proyecto.",
+    "newRetainer": "Nuevo anticipo",
+    "kpi": {
+      "balance": "Saldo ({currency})",
+      "drawn": "Consumido ({currency})",
+      "expiring": "Por vencer",
+      "expiringSub": "Activo, vence en 30 días"
+    },
+    "drawer": {
+      "title": "Anticipo",
+      "newTitle": "Nuevo anticipo",
+      "description": "Condiciones, consumos, evidencia y reconocimiento.",
+      "saveFailed": "No se pudo guardar el anticipo. Revise los datos e inténtelo de nuevo.",
+      "unsaved": "Cambios sin guardar",
+      "balance": "Saldo restante",
+      "noInvoiceHint": "Aún no hay factura de anticipo. Cree una para empezar a facturar.",
+      "activatesOnPost": "Se activa cuando esta factura se contabilice:",
+      "activatesHint": "Un anticipo en borrador. Los consumos se habilitan cuando su factura se contabilice.",
+      "noEligibleItem": "Ningún artículo de servicio tiene una regla de reconocimiento compatible. Asigne al artículo una regla de uso (horas) o de hito (honorarios).",
+      "extendTitle": "Prorrogar anticipo",
+      "extendLabel": "Nueva fecha de fin",
+      "closeConfirm": "¿Cerrar este anticipo? Su saldo restante debe ser cero.",
+      "tabs": {
+        "label": "Secciones del anticipo",
+        "terms": "Condiciones",
+        "drawdowns": "Consumos",
+        "evidence": "Evidencia",
+        "recognition": "Reconocimiento"
+      },
+      "status": {
+        "draft": "Borrador",
+        "active": "Activo",
+        "exhausted": "Agotado",
+        "expired": "Vencido",
+        "closed": "Cerrado"
+      },
+      "fields": {
+        "project": "Proyecto",
+        "customer": "Cliente",
+        "kind": "Tipo",
+        "totalAmount": "Importe total",
+        "totalHours": "Horas totales",
+        "unitRate": "Tarifa por hora",
+        "startsOn": "Inicio",
+        "endsOn": "Fin",
+        "retainerItem": "Artículo del anticipo",
+        "choose": "Elija una opción"
+      },
+      "kind": {
+        "hours": "Horas",
+        "fees": "Honorarios"
+      },
+      "actions": {
+        "save": "Guardar",
+        "saving": "Guardando…",
+        "createInvoice": "Crear factura de anticipo",
+        "draftDrawdown": "Consumo semanal…",
+        "post": "Contabilizar",
+        "extend": "Prorrogar",
+        "close": "Cerrar"
+      },
+      "drawdowns": {
+        "week": "Semana del",
+        "hours": "Horas",
+        "amount": "Importe",
+        "state": "Estado",
+        "empty": "Aún no hay consumos.",
+        "weekTitle": "Semana del consumo",
+        "weekLabel": "Domingo de inicio",
+        "amountTitle": "Importe del consumo",
+        "amountLabel": "Importe a consumir"
+      },
+      "drawdownState": {
+        "draft": "Borrador",
+        "posted": "Contabilizado"
+      },
+      "evidence": {
+        "date": "Fecha de trabajo",
+        "person": "Persona",
+        "hours": "Horas",
+        "empty": "Aún no hay partes de horas consumidos."
+      },
+      "recognition": {
+        "month": "Mes",
+        "amount": "Importe",
+        "posted": "Contabilizado",
+        "hint": "Eventos de reconocimiento del proceso de ingresos para esta obligación.",
+        "runLink": "Abrir reconocimiento de ingresos",
+        "empty": "Aún no hay eventos.",
+        "isPosted": "Contabilizado",
+        "pending": "Pendiente",
+        "reversed": "Revertido"
+      }
+    }
   }
 }

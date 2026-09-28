@@ -301,5 +301,102 @@
         "noCost": "Keine Arbeitskosten erfasst"
       }
     }
+  },
+  "retainers": {
+    "title": "Retainer",
+    "description": "Vorausbezahlte Stunden oder Honorare für Projektarbeit.",
+    "newRetainer": "Neuer Retainer",
+    "kpi": {
+      "balance": "Restguthaben ({currency})",
+      "drawn": "Verbraucht ({currency})",
+      "expiring": "Läuft bald ab",
+      "expiringSub": "Aktiv, endet innerhalb von 30 Tagen"
+    },
+    "drawer": {
+      "title": "Beratungsretainer",
+      "newTitle": "Neuer Retainer",
+      "description": "Vertragsbedingungen, Entnahmen, Nachweise und Umsatzrealisierung.",
+      "saveFailed": "Der Retainer konnte nicht gespeichert werden. Prüfen Sie die Angaben und versuchen Sie es erneut.",
+      "unsaved": "Ungespeicherte Änderungen",
+      "balance": "Verbleibendes Guthaben",
+      "noInvoiceHint": "Noch keine Retainer-Rechnung. Erstellen Sie eine, um abzurechnen.",
+      "activatesOnPost": "Wird aktiv, sobald diese Rechnung gebucht ist:",
+      "activatesHint": "Ein Retainer im Entwurf. Entnahmen sind möglich, sobald seine Rechnung gebucht ist.",
+      "noEligibleItem": "Kein Serviceartikel hat eine passende Realisierungsregel. Geben Sie dem Serviceartikel eine Usage- (Stunden) oder Milestone- (Honorare) Realisierungsregel.",
+      "extendTitle": "Retainer verlängern",
+      "extendLabel": "Neues Enddatum",
+      "closeConfirm": "Diesen Retainer schließen? Sein Restguthaben muss null sein.",
+      "tabs": {
+        "label": "Retainer-Bereiche",
+        "terms": "Bedingungen",
+        "drawdowns": "Entnahmen",
+        "evidence": "Nachweise",
+        "recognition": "Realisierung"
+      },
+      "status": {
+        "draft": "Entwurf",
+        "active": "Aktiv",
+        "exhausted": "Aufgebraucht",
+        "expired": "Abgelaufen",
+        "closed": "Geschlossen"
+      },
+      "fields": {
+        "project": "Projekt",
+        "customer": "Kunde",
+        "kind": "Art",
+        "totalAmount": "Gesamtbetrag",
+        "totalHours": "Gesamtstunden",
+        "unitRate": "Stundensatz",
+        "startsOn": "Beginn",
+        "endsOn": "Ende",
+        "retainerItem": "Retainer-Artikel",
+        "choose": "Bitte wählen"
+      },
+      "kind": {
+        "hours": "Stunden",
+        "fees": "Honorare"
+      },
+      "actions": {
+        "save": "Speichern",
+        "saving": "Wird gespeichert…",
+        "createInvoice": "Retainer-Rechnung erstellen",
+        "draftDrawdown": "Woche entwerfen…",
+        "post": "Buchen",
+        "extend": "Verlängern",
+        "close": "Schließen"
+      },
+      "drawdowns": {
+        "week": "Woche ab",
+        "hours": "Stunden",
+        "amount": "Betrag",
+        "state": "Status",
+        "empty": "Noch keine Entnahmen.",
+        "weekTitle": "Entnahmewoche entwerfen",
+        "weekLabel": "Sonntag zum Wochenbeginn",
+        "amountTitle": "Entnahmebetrag",
+        "amountLabel": "Zu entnehmender Betrag"
+      },
+      "drawdownState": {
+        "draft": "Entwurf",
+        "posted": "Gebucht"
+      },
+      "evidence": {
+        "date": "Geleistet am",
+        "person": "Person",
+        "hours": "Stunden",
+        "empty": "Noch keine entnommenen Zeiteinträge."
+      },
+      "recognition": {
+        "month": "Monat",
+        "amount": "Betrag",
+        "posted": "Gebucht",
+        "hint": "Realisierungsereignisse des Umsatzlaufs für diese Retainer-Verpflichtung.",
+        "runLink": "Umsatzrealisierung öffnen",
+        "empty": "Noch keine Realisierungsereignisse.",
+        "isPosted": "Gebucht",
+        "pending": "Ausstehend",
+        "reversed": "Storniert"
+      }
+    }
   }
 }

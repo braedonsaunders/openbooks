@@ -301,5 +301,102 @@
         "noCost": "Aucun coût de main-d’œuvre enregistré"
       }
     }
+  },
+  "retainers": {
+    "title": "Forfaits",
+    "description": "Heures ou honoraires payés d'avance imputés sur le projet.",
+    "newRetainer": "Nouveau forfait",
+    "kpi": {
+      "balance": "Solde ({currency})",
+      "drawn": "Consommé ({currency})",
+      "expiring": "Expire bientôt",
+      "expiringSub": "Actif, se termine sous 30 jours"
+    },
+    "drawer": {
+      "title": "Forfait",
+      "newTitle": "Nouveau forfait",
+      "description": "Conditions, imputations, preuves et reconnaissance.",
+      "saveFailed": "Le forfait n'a pas pu être enregistré. Vérifiez les données et réessayez.",
+      "unsaved": "Modifications non enregistrées",
+      "balance": "Solde restant",
+      "noInvoiceHint": "Aucune facture de forfait. Créez-en une pour facturer.",
+      "activatesOnPost": "S'active à la comptabilisation de cette facture :",
+      "activatesHint": "Un forfait en brouillon. Les imputations ouvrent après comptabilisation de sa facture.",
+      "noEligibleItem": "Aucun article de service n'a de règle de reconnaissance compatible. Donnez à l'article une règle d'usage (heures) ou de jalon (honoraires).",
+      "extendTitle": "Prolonger le forfait",
+      "extendLabel": "Nouvelle date de fin",
+      "closeConfirm": "Clore ce forfait ? Son solde restant doit être nul.",
+      "tabs": {
+        "label": "Sections du forfait",
+        "terms": "Conditions",
+        "drawdowns": "Imputations",
+        "evidence": "Preuves",
+        "recognition": "Reconnaissance"
+      },
+      "status": {
+        "draft": "Brouillon",
+        "active": "Actif",
+        "exhausted": "Épuisé",
+        "expired": "Expiré",
+        "closed": "Clôturé"
+      },
+      "fields": {
+        "project": "Projet",
+        "customer": "Client",
+        "kind": "Type",
+        "totalAmount": "Montant total",
+        "totalHours": "Heures totales",
+        "unitRate": "Taux horaire",
+        "startsOn": "Début",
+        "endsOn": "Fin",
+        "retainerItem": "Article du forfait",
+        "choose": "Choisir une option"
+      },
+      "kind": {
+        "hours": "Heures",
+        "fees": "Honoraires"
+      },
+      "actions": {
+        "save": "Enregistrer",
+        "saving": "Enregistrement…",
+        "createInvoice": "Créer la facture de forfait",
+        "draftDrawdown": "Semaine à imputer…",
+        "post": "Comptabiliser",
+        "extend": "Prolonger",
+        "close": "Clore"
+      },
+      "drawdowns": {
+        "week": "Semaine du",
+        "hours": "Heures",
+        "amount": "Montant",
+        "state": "Statut",
+        "empty": "Aucune imputation.",
+        "weekTitle": "Semaine à imputer",
+        "weekLabel": "Dimanche de début",
+        "amountTitle": "Montant à imputer",
+        "amountLabel": "Montant à imputer"
+      },
+      "drawdownState": {
+        "draft": "Brouillon",
+        "posted": "Comptabilisé"
+      },
+      "evidence": {
+        "date": "Jour travaillé",
+        "person": "Personne",
+        "hours": "Heures",
+        "empty": "Aucune heure imputée."
+      },
+      "recognition": {
+        "month": "Mois",
+        "amount": "Montant",
+        "posted": "Comptabilisé",
+        "hint": "Événements de reconnaissance du traitement des produits pour cette obligation.",
+        "runLink": "Ouvrir la reconnaissance des produits",
+        "empty": "Aucun événement.",
+        "isPosted": "Comptabilisé",
+        "pending": "En attente",
+        "reversed": "Contre-passé"
+      }
+    }
   }
 }
