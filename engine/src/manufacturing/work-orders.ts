@@ -546,6 +546,30 @@ function checkCurrencyCode(value: unknown): string {
   return code;
 }
 
+// The release date through the shared executor-bound business clock. The
+// helper throws ordinary Errors for its two operator-actionable
+// misconfigurations, so exactly those shapes translate into manufacturing
+// refusals carrying code and remedy; every other failure (including
+// database errors) rethrows unchanged rather than misclassified.
+async function releaseBusinessDate(tx: SqlExecutor, orgId: string): Promise<string> {
+  try {
+    return await businessTodayInTx(tx, orgId);
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message === `organization ${orgId} not found — cannot resolve its business time zone`) {
+        refuse("The work order cannot be released because its organization is missing.", "org_not_found", "Contact an administrator; the organization record is missing.");
+      }
+      if (
+        err.message.startsWith("Stored business time zone ") &&
+        err.message.endsWith(" is not a known IANA time zone — set Business time zone in Company Settings → Organization")
+      ) {
+        refuse(err.message, "invalid_business_timezone", "Set Business time zone in Company Settings → Organization.");
+      }
+    }
+    throw err;
+  }
+}
+
 // The authoritative work-order legal entity and its functional currency,
 // re-read inside the release transaction. A subsidiary that left the
 // hierarchy, was deactivated, or lost its currency since creation refuses;
@@ -899,7 +923,7 @@ async function releaseOne(
   // mutation below: any refusal throws here and rolls the whole release
   // back, so operations are only ever inserted with complete coherent
   // values. There is no draft/null insert-then-fill path.
-  const releaseDate = await businessTodayInTx(tx, orgId);
+  const releaseDate = await releaseBusinessDate(tx, orgId);
   const functionalCurrency = await releaseFunctionalCurrency(tx, orgId, order);
   const snapshots = await resolveOperationReleaseSnapshots(tx, orgId, order, operations.rows, routing, releaseDate, functionalCurrency);
   const before = order;
