@@ -82,10 +82,13 @@ function docWith(status: string) {
   };
 }
 
-function scriptFetch() {
+function scriptFetch(postWarnings?: unknown) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.includes("/api/journals/actions") && postWarnings !== undefined) {
+      return Response.json({ ok: true, entryId: "e1", warnings: postWarnings });
+    }
     if (url.includes("/api/flows/record-state")) {
       return Response.json({
         approvalState: { status: "none", pendingWith: [], myActions: null },
@@ -157,9 +160,9 @@ async function openActions() {
 
 // The five gating cases below share one mount/open/cleanup head; only the
 // status, the permission, and the asserted buttons differ.
-async function mountGated(t: TestContext, status: string, canPost: boolean, initialMode = "view") {
+async function mountGated(t: TestContext, status: string, canPost: boolean, initialMode = "view", postWarnings?: unknown) {
   (globalThis as Record<string, unknown>).__journalRouter = { push() {}, refresh() {} };
-  const restoreFetch = scriptFetch();
+  const restoreFetch = scriptFetch(postWarnings);
   t.after(restoreFetch);
   const { unmount } = await mount(docWith(status), canPost, initialMode);
   t.after(unmount);
@@ -240,4 +243,23 @@ test("a ?mode=edit deep link without gl.post lands read-only", async (t) => {
   await openActions();
   assert.equal(buttonsNamed("Save").length, 0, "the deep link must not strand the reader in an unsavable editor");
   assert.equal(buttonsNamed("Edit").length, 0, "no Edit to re-enter the editor either");
+});
+test("posting with a budgetary advisory pins every dimension with its remedy", async (t) => {
+  await mountGated(t, "draft", true, "view", [
+    { code: "budgetary_control_advisory", overages: [{ scenarioName: "Primary 2026", accountNumber: "5000", accountName: "Program costs", fundCode: "25NP", fundName: "Annual fund", subsidiaryName: "Main Co", departmentName: "Programs", projectName: "Harbor Outreach", locationName: "HQ", className: "Weekend Kitchen", extraDims: { fund: "fund-extra-id", awardYear: "2026" }, available: "75.0000", amountOver: "25.0000" }] },
+  ]);
+  await openActions();
+  const post = buttonsNamed("Post")[0];
+  assert.ok(post, "Post stays offered with gl.post");
+  await act(async () => {
+    post.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  const alerts = [...document.querySelectorAll('[role="alert"]')].map((p) => p.textContent ?? "");
+  assert.equal(alerts.length, 1, "one pinned advisory per overage");
+  assert.ok(alerts[0].includes("Primary 2026") && alerts[0].includes("HQ") && alerts[0].includes("25.0000"), "the advisory keeps scenario, dimensions, and overage");
+  assert.ok(alerts[0].includes("Programs") && alerts[0].includes("Harbor Outreach") && alerts[0].includes("Weekend Kitchen") && alerts[0].includes("awardYear: 2026") && !alerts[0].includes("fund-extra-id"), "every named dimension renders a recognizable label");
+  assert.ok(alerts[0].includes("budget scenario approval flow"), "the advisory names the remedy");
 });

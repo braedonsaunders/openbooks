@@ -78,6 +78,8 @@
     "columns": {
       "debit": "借方",
       "credit": "贷方"
-    }
+    },
+    "budgetaryControlWarning": "预算{scenario}超出拨款：{account}、基金{fund}、{subsidiary}{dimensions}，可用额度{available}，超支{amountOver}。",
+    "budgetaryControlRemedy": "请通过预算审批流程修改预算，或将该实际数关联至指定的预留款。"
   }
 }

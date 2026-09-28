@@ -14,7 +14,7 @@ import {
 } from '@openbooks/engine/src/records/control-accounts.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { uuidId } from '../../../../lib/api/json'
-import { partylessControlLines } from '../../../../lib/journal-warnings'
+import { budgetaryControlAdvisories, partylessControlLines } from '../../../../lib/journal-warnings'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { notFound } from "@/lib/api/responses";
 
@@ -96,10 +96,21 @@ export const POST = defineRoute({
             // outside every subledger: report it on the response instead of
             // accepting the journal silently. The drawer pins the
             // warning on the record; the aging carries the balance explicitly.
+            // Both collectors read through this transaction's own handle, so
+            // both warnings describe the posting that just committed. The
+            // budgetary read is advisory-only and never rolls the posting
+            // back; hard budget_exceeded still refuses pre-commit inside the
+            // balancing seam.
+            // The collectors share one transaction-bound handle: run them
+            // sequentially so their reads never interleave on that handle.
             const partyless = await partylessControlLines(gate.user.orgId, entryId)
-            const warnings = partyless.length > 0
-              ? [{ code: 'partyless_control_lines' as const, accounts: partyless }]
-              : []
+            const advisories = await budgetaryControlAdvisories(gate.user.orgId, entryId)
+            const warnings = [
+              ...(partyless.length > 0
+                ? [{ code: 'partyless_control_lines' as const, accounts: partyless }]
+                : []),
+              ...advisories,
+            ]
             return { kind: 'posted' as const, entryId, previousStatus, warnings }
           })
 

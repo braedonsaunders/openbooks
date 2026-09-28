@@ -78,6 +78,8 @@
     "columns": {
       "debit": "Débito",
       "credit": "Crédito"
-    }
+    },
+    "budgetaryControlWarning": "O orçamento {scenario} excede a dotação para {account}, fundo {fund}, {subsidiary}{dimensions}: disponível {available}, excesso de {amountOver}.",
+    "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação ou vincule este valor ao empenho indicado."
   }
 }

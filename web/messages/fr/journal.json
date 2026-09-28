@@ -78,6 +78,8 @@
     "columns": {
       "debit": "Débit",
       "credit": "Crédit"
-    }
+    },
+    "budgetaryControlWarning": "Le budget {scenario} dépasse la dotation pour {account}, fonds {fund}, {subsidiary}{dimensions} : disponible {available}, dépassement de {amountOver}.",
+    "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation, ou liez ce montant à l''engagement nommé."
   }
 }

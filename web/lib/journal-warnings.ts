@@ -1,6 +1,10 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import {
+  budgetaryControlWarnings,
+  type BudgetaryControlWarning,
+} from "@openbooks/engine/src/nonprofit/encumbrances.ts";
 import type { ExactDecimal } from "./statement-format";
 
 export interface PartylessControlLine {
@@ -35,4 +39,24 @@ export async function partylessControlLines(orgId: string, entryId: string): Pro
     accountName: row.account_name,
     amount: row.amount as ExactDecimal,
   }));
+}
+
+export interface BudgetaryControlAdvisory {
+  code: "budgetary_control_advisory";
+  overages: BudgetaryControlWarning[];
+}
+
+/**
+ * Advisory budgetary-control overages for a posted entry. Read-only: this
+ * reads through the ambient transaction-bound handle, the exact snapshot the
+ * posting committed in — the same handle partylessControlLines reads
+ * through, so both warnings describe one posting. Advisory mode never
+ * throws; an empty array means all clear.
+ */
+export async function budgetaryControlAdvisories(
+  orgId: string,
+  entryId: string,
+): Promise<BudgetaryControlAdvisory[]> {
+  const overages = await budgetaryControlWarnings(db, orgId, entryId);
+  return overages.length > 0 ? [{ code: "budgetary_control_advisory", overages }] : [];
 }
