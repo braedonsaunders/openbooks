@@ -152,6 +152,16 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     });
     assert.equal(validCustom.status, 200);
     assert.equal((validCustom.json.assignment as { custom: Record<string, unknown> }).custom[requiredCustomKey], "Reviewed by delivery");
+    // A supplied key with no definition is refused by name instead of being
+    // silently dropped: the required value is present, so only the unknown
+    // key can explain the refusal.
+    const unknownCustom = await call(postAssignment, "/api/resourcing/assignments", {
+      projectId, employeePartyId: employeeId, weekStart, plannedHours: "8.0000",
+      custom: { [requiredCustomKey]: "Reviewed by delivery", region: "west" },
+    });
+    assert.equal(unknownCustom.status, 422);
+    assert.match(unknownCustom.json.error as string, /unknown custom field: region/);
+    assert.match(unknownCustom.json.remedy as string, /Custom Fields/);
     const board = await call(getBoard, `/api/resourcing/board?firstSunday=${weekStart}&lastSunday=${weekStart}&departmentId=${departmentId}`);
     assert.equal(board.status, 200);
     assert.equal((board.json.rows as unknown[]).length, 1);

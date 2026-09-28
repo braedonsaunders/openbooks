@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { upsertAssignment } from "@openbooks/engine/src/resourcing/assignments.ts";
 import { defineRoute } from "@/lib/api/route";
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "@/lib/custom-fields";
+import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
 const Common = {
   projectId: z.string().uuid(),
@@ -26,6 +26,22 @@ export const POST = defineRoute({
   body: Body,
   handler: async ({ authz, body }) => {
     const definitions = await loadFieldDefs("res_assignments");
+    // A supplied key with no definition would be stripped silently below, so
+    // refuse it by name first. Only the supplied bag is examined: stored keys
+    // whose definitions were later removed are never re-examined here, and an
+    // omitted custom bag still preserves the stored one in the writer.
+    if (body.custom !== undefined) {
+      const unknownKey = unknownCustomFieldKey(definitions, body.custom);
+      if (unknownKey) {
+        return Response.json(
+          {
+            error: `unknown custom field: ${unknownKey}`,
+            remedy: "remove the key or define it in Admin → Custom Fields",
+          },
+          { status: 422 },
+        );
+      }
+    }
     const custom = validateCustomValues(definitions, body.custom);
     if (!custom.ok) {
       return Response.json(
