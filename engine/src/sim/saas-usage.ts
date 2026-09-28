@@ -352,13 +352,29 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
     }
   }
 
+  // Posted invoice history survives both voiding and rating-run supersession.
+  // Each reversal is a separate negative leg in its own accounting month;
+  // filtering the original by its current state would erase earlier revenue.
   const invoiceAmount = (await db.execute<{ amount: string }>(sql`
-    select coalesce(sum(line.amount), 0)::text as amount
-      from usage_rating_runs run
-      join documents invoice on invoice.org_id = run.org_id and invoice.id = run.invoice_id and invoice.status = 'posted'
-      join document_lines line on line.org_id = invoice.org_id and line.document_id = invoice.id
-     where run.org_id = ${orgId} and run.status = 'active'
-       and run.period_end >= ${monthStart}::date and run.period_end <= ${latest}::date`)).rows[0]?.amount ?? "0";
+    with invoice_legs as (
+      select line.amount, posted.posting_date
+        from usage_rating_runs run
+        join documents invoice on invoice.org_id = run.org_id and invoice.id = run.invoice_id
+        join document_lines line on line.org_id = invoice.org_id and line.document_id = invoice.id
+        join journal_entries posted on posted.org_id = invoice.org_id and posted.id = invoice.posted_entry_id
+       where run.org_id = ${orgId} and invoice.status in ('posted', 'voided')
+         and posted.status in ('posted', 'reversed')
+      union all
+      select -line.amount, reversal.posting_date
+        from usage_rating_runs run
+        join documents invoice on invoice.org_id = run.org_id and invoice.id = run.invoice_id
+        join document_lines line on line.org_id = invoice.org_id and line.document_id = invoice.id
+        join journal_entries reversal on reversal.org_id = invoice.org_id and reversal.id = invoice.reversal_entry_id
+       where run.org_id = ${orgId} and invoice.status = 'voided' and invoice.posted_entry_id is not null
+         and reversal.status in ('posted', 'reversed')
+    )
+    select coalesce(sum(amount), 0)::text as amount from invoice_legs
+     where posting_date >= ${monthStart}::date and posting_date <= ${latest}::date`)).rows[0]?.amount ?? "0";
   const drawAmount = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(amount), 0)::text as amount from usage_prepaid_draws
      where org_id = ${orgId} and period_month = ${monthStart}::date`)).rows[0]?.amount ?? "0";
@@ -374,13 +390,13 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
       join journal_entries entry on entry.org_id = line.org_id and entry.id = line.entry_id
      where line.org_id = ${orgId} and line.account_id = ${usageAccount.id}
        and line.posting_date >= ${monthStart}::date and line.posting_date <= ${latest}::date
-       and entry.status = 'posted'`)).rows[0]?.amount ?? "0";
+       and entry.status in ('posted', 'reversed')`)).rows[0]?.amount ?? "0";
   const expected = add(invoiceAmount, drawAmount);
   const credited = neg(parseMoney(creditAmount));
   if (cmp(credited, expected) !== 0) {
     failures.push({
       invariant: "saas-usage-revenue-tieout",
-      detail: `account 4010 credits ${credited} in ${monthStart.slice(0, 7)}; posted usage invoice lines plus prepaid draws total ${expected}`,
+      detail: `account 4010 credits ${credited} in ${monthStart.slice(0, 7)}; usage invoice and reversal lines plus prepaid draws total ${expected}`,
     });
   }
   return failures;
