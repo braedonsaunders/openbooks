@@ -117,9 +117,32 @@ const END_OF_LIFE = [
   { value: 'retain_balance', labelKey: 'options.endOfLife.retainBalance' },
 ]
 
+/**
+ * Overhead card kinds — the stored job-costing bases (schema/documents.ts
+ * `overhead_rates`). The first three are the MF-07 routing bases: labor hours
+ * read $/labor hour, machine hours read $/machine hour, units read $/unit.
+ * Percent of labor is a Projects costing card with no manufacturing basis,
+ * so it stays behind the Projects gate (see the overhead-rates descriptor).
+ */
 export const OVERHEAD_RATE_KINDS = [
   { value: 'per_hour', labelKey: 'options.overheadRateKind.per_hour' },
+  { value: 'per_machine_hour', labelKey: 'options.overheadRateKind.per_machine_hour' },
+  { value: 'per_unit', labelKey: 'options.overheadRateKind.per_unit' },
   { value: 'percent', labelKey: 'options.overheadRateKind.percent' },
+]
+
+/**
+ * Overhead card methods — the costing doctrine behind a row. Live recomputes
+ * from actuals through the True Cost engine, three-year average carries the
+ * historical average, and Standard freezes the effective-dated card both
+ * Projects and Manufacturing cost from. Only Standard has a manufacturing
+ * basis, so the other two stay behind the Projects gate (see the
+ * overhead-rates descriptor).
+ */
+export const OVERHEAD_RATE_METHODS = [
+  { value: 'three_year_average', labelKey: 'options.overheadMethod.three_year_average' },
+  { value: 'live', labelKey: 'options.overheadMethod.live' },
+  { value: 'standard', labelKey: 'options.overheadMethod.standard' },
 ]
 
 const FX_RATE_TYPES = [

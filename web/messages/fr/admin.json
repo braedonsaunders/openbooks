@@ -3598,12 +3598,15 @@
       "manufacturingScrap": {"normal":"Rebut normal","abnormal":"Rebut anormal"},
       "manufacturingSupplyMethod": {"make":"Fabriquer","buy":"Acheter","transfer":"Transférer entre emplacements"},
       "overheadMethod": {
-        "live": "Live",
-        "standard": "Standard"
+        "three_year_average": "Moyenne sur trois ans (historique)",
+        "live": "En direct (recalculé des coûts réels)",
+        "standard": "Standard (carte datée)"
       },
       "overheadRateKind": {
-        "per_hour": "$/heure",
-        "percent": "% de la main-d’œuvre"
+        "per_hour": "$/heure de main-d’œuvre",
+        "per_machine_hour": "$/heure machine",
+        "per_unit": "$/unité",
+        "percent": "%"
       },
       "complianceCategory": {
         "insurance": "Assurance",

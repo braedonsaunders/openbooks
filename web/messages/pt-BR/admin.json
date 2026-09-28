@@ -3703,12 +3703,15 @@
       "manufacturingScrap": {"normal":"Refugo normal","abnormal":"Refugo anormal"},
       "manufacturingSupplyMethod": {"make":"Fabricar","buy":"Comprar","transfer":"Transferir entre locais"},
       "overheadMethod": {
-        "live": "Ao vivo",
-        "standard": "Padrão"
+        "three_year_average": "Média de três anos (histórica)",
+        "live": "Ao vivo (recalculado dos custos reais)",
+        "standard": "Padrão (cartão com vigência)"
       },
       "overheadRateKind": {
-        "per_hour": "$/hora",
-        "percent": "% de mão de obra"
+        "per_hour": "$/hora de mão de obra",
+        "per_machine_hour": "$/hora máquina",
+        "per_unit": "$/unidade",
+        "percent": "%"
       },
       "complianceCategory": {
         "insurance": "Seguros",

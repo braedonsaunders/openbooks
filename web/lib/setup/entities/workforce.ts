@@ -1,6 +1,7 @@
 /** Setup-registry workforce entities (split from registry.ts; pure moves only). */
-import type { SetupEntity } from '../types'
-import { OVERHEAD_RATE_KINDS, PAY_FREQUENCIES, PAY_COMPONENT_KINDS, PAY_COMPONENT_COUNTRIES, PAY_COMPONENT_BASES, PAY_SUPPLEMENTAL_WAGE_CATEGORIES, PAY_STATUTORY_EXEMPTION_CATEGORIES, PAY_TAX_TREATMENTS, PAY_PROTECTION_BASES, PAY_PROTECTED_BASES, PAYROLL_PROGRAM_TYPES, PAYROLL_REMITTER_TYPES, ENTITLEMENT_UNITS, ENTITLEMENT_DIRECTIONS, ENTITLEMENT_ACCRUAL_METHODS, ENTITLEMENT_CAP_BEHAVIORS } from '../options'
+import type { SetupEntity, SetupEntityValidationHook } from '../types'
+import { featureEnabled } from '@openbooks/engine/src/organization/feature-registry.ts'
+import { OVERHEAD_RATE_KINDS, OVERHEAD_RATE_METHODS, PAY_FREQUENCIES, PAY_COMPONENT_KINDS, PAY_COMPONENT_COUNTRIES, PAY_COMPONENT_BASES, PAY_SUPPLEMENTAL_WAGE_CATEGORIES, PAY_STATUTORY_EXEMPTION_CATEGORIES, PAY_TAX_TREATMENTS, PAY_PROTECTION_BASES, PAY_PROTECTED_BASES, PAYROLL_PROGRAM_TYPES, PAYROLL_REMITTER_TYPES, ENTITLEMENT_UNITS, ENTITLEMENT_DIRECTIONS, ENTITLEMENT_ACCRUAL_METHODS, ENTITLEMENT_CAP_BEHAVIORS } from '../options'
 import { PAY_DERIVED_RULE_ENTITIES } from '../payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from '../payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from '../hrm-leave'
@@ -12,6 +13,67 @@ import { CONSTRUCTION_CLASSIFICATIONS_ENTITY, CONSTRUCTION_COMP_CLASSES_ENTITY, 
 import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from '../hrm-qualifications'
 import { AI_RAILS_SETTINGS_ENTITY } from '../hrm-ai-rails'
 import { PROJECT_GEOFENCES_ENTITY, TIME_KIOSKS_ENTITY } from '../field-time'
+
+/**
+ * Rate kinds a manufacturing-only org may write: the routing bases read
+ * these three card kinds (labor hours → $/labor hour, machine hours →
+ * $/machine hour, units → $/unit). Percent of labor is a Projects costing
+ * card with no manufacturing basis.
+ */
+const OVERHEAD_MANUFACTURING_RATE_KINDS = ['per_hour', 'per_machine_hour', 'per_unit']
+
+const OVERHEAD_METHOD_NAMES: Record<string, string> = {
+  live: 'Live',
+  three_year_average: 'Three-year average',
+}
+
+const OVERHEAD_KIND_NAMES: Record<string, string> = {
+  percent: 'Percent of labor',
+}
+
+/**
+ * Manufacturing-only writes stay inside the basis set routings can consume:
+ * the Standard method with a per-hour, per-machine-hour, or per-unit kind.
+ * Projects-gated cards refuse by name with the Features remedy, so the
+ * operator knows the exact switch that admits them. Projects-on behavior is
+ * untouched (early pass), and both-off is the shared any-of gate's refusal —
+ * this hook never re-adjudicates the gate, and deletes never reach it (the
+ * write path skips validation when there is no body, so preserved history
+ * stays deletable while a feature is off).
+ */
+const validateOverheadRateWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
+  // This module rides the client registry bundle, so the query builder stays
+  // out of the top-level imports and loads lazily: the hook only ever runs
+  // inside the server write path (stripped from client descriptors).
+  const { sql } = await import('drizzle-orm')
+  const stored = (await executor.execute<{ f: Record<string, boolean> | null }>(
+    sql`select settings->'features' as f from orgs where id = ${orgId}`,
+  )).rows[0]?.f ?? {}
+  if (featureEnabled(stored, 'projects')) return null
+  if (!featureEnabled(stored, 'manufacturing')) return null
+  const current = rowId
+    ? (await executor.execute<{ method: string | null; rate_kind: string | null }>(
+      sql`select method, rate_kind from overhead_rates where id = ${rowId} and org_id = ${orgId}`,
+    )).rows[0]
+    : null
+  if (rowId && !current) return 'not found'
+  // An omitted method falls through to the storage default (live), which has
+  // no manufacturing basis — fail closed rather than store a card the
+  // requester never named.
+  const method = body.method === undefined || body.method === null
+    ? (current?.method ?? 'live')
+    : String(body.method)
+  if (method !== 'standard') {
+    return `The ${OVERHEAD_METHOD_NAMES[method] ?? method} overhead method needs Projects: use the Standard method, or turn on Projects in Company Settings → Features.`
+  }
+  const kind = body.rateKind === undefined || body.rateKind === null
+    ? (current?.rate_kind ?? 'per_hour')
+    : String(body.rateKind)
+  if (!OVERHEAD_MANUFACTURING_RATE_KINDS.includes(kind)) {
+    return `The ${OVERHEAD_KIND_NAMES[kind] ?? kind} overhead kind needs Projects: use $/labor hour, $/machine hour, or $/unit, or turn on Projects in Company Settings → Features.`
+  }
+  return null
+}
 
 export const WORKFORCE_ENTITIES: SetupEntity[] = [
   // --- Workforce -----------------------------------------------------------
@@ -542,11 +604,16 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     singularTitleKey: 'entities.overhead-rates.singular',
     actorCols: true,
     groupKey: 'projects',
-    featureKey: 'projects',
+    // One shared card serves Projects or Manufacturing: the any-of gate (C7a)
+    // admits while either member is on, so the same rows cost jobs and absorb
+    // into work orders without reinterpretation. Never declare featureKey
+    // alongside it — a descriptor carrying both fails closed.
+    featureKeysAny: ['projects', 'manufacturing'],
     iconKey: 'percent',
     orgScoped: true,
     orderBy: 'effective_from desc',
     hasActive: false,
+    validateWrite: validateOverheadRateWrite,
     columns: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
       { key: 'category', kind: 'text' },
@@ -556,6 +623,8 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     ],
     fields: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
+      { key: 'category', kind: 'text' },
+      { key: 'method', kind: 'select', options: OVERHEAD_RATE_METHODS },
       { key: 'rateKind', kind: 'select', options: OVERHEAD_RATE_KINDS },
       { key: 'ratePercent', kind: 'decimal', required: true },
       { key: 'effectiveFrom', kind: 'date', required: true },

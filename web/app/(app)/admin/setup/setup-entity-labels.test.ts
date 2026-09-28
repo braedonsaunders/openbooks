@@ -72,6 +72,11 @@ function entitiesOf(locale: string): Record<string, { title?: unknown; descripti
   return catalog.setup.entities as Record<string, { title?: unknown; description?: unknown }>
 }
 
+function optionsOf(locale: string): Record<string, Record<string, unknown>> {
+  const catalog = JSON.parse(readFileSync(join(ROOT, 'web', 'messages', locale, 'admin.json'), 'utf8'))
+  return catalog.setup.options as Record<string, Record<string, unknown>>
+}
+
 test('every Setup-mounted registry entity has a title in every locale', () => {
   const violations: string[] = []
   for (const locale of LOCALES) {
@@ -106,6 +111,65 @@ test('every Setup mount names a real registry entity', () => {
   const mounted = mountedKeys()
   for (const key of [...mounted].sort()) {
     assert.ok(SETUP_ENTITY_BY_KEY.has(key), `Setup surface mounts unknown entity '${key}'`)
+  }
+})
+
+test('overhead rates carry their exact entity and unit labels', () => {
+  // The single card serves Projects and Manufacturing alike, so its title
+  // and its kind/method units are pinned exactly: a reworded unit
+  // (notably an abbreviated hour) would misprice a manufacturing basis.
+  const entities = entitiesOf('en')
+  assert.equal(entities['overhead-rates']?.title, 'Overhead rates')
+  const options = optionsOf('en')
+  assert.deepEqual(options['overheadRateKind'], {
+    per_hour: '$/labor hour',
+    per_machine_hour: '$/machine hour',
+    per_unit: '$/unit',
+    percent: '%',
+  })
+  assert.deepEqual(options['overheadMethod'], {
+    three_year_average: 'Three-year average (historical)',
+    live: 'Live (recomputed from actuals)',
+    standard: 'Standard (effective-dated rate card)',
+  })
+})
+
+test('every locale names every overhead kind and method', () => {
+  // The drawer resolves each option through its labelKey: a locale missing a
+  // key renders the raw key, the exact prod-log class this suite guards.
+  for (const locale of LOCALES) {
+    const options = optionsOf(locale)
+    for (const key of ['per_hour', 'per_machine_hour', 'per_unit', 'percent']) {
+      assert.equal(typeof options['overheadRateKind']?.[key], 'string', `${locale}: options.overheadRateKind.${key} is missing`)
+    }
+    for (const key of ['three_year_average', 'live', 'standard']) {
+      assert.equal(typeof options['overheadMethod']?.[key], 'string', `${locale}: options.overheadMethod.${key} is missing`)
+    }
+  }
+})
+
+test('the overhead descriptor options match the locale catalog', () => {
+  // Code/i18n drift guard: every kind/method value the entity offers must
+  // resolve to a label, and every catalogued kind must be offered — an
+  // offered value with no label (or a labelled value with no offer) is a
+  // refusal or a raw key waiting to happen.
+  const entity = SETUP_ENTITY_BY_KEY.get('overhead-rates')
+  assert.ok(entity, 'overhead-rates must be registered')
+  const offered: Array<{ value: string; labelKey: string }> = []
+  for (const field of entity.fields) {
+    if (field.key !== 'rateKind' && field.key !== 'method') continue
+    for (const option of field.options ?? []) {
+      assert.ok(option.labelKey, `${option.value} must resolve through a labelKey, never a literal`)
+      offered.push({ value: option.value, labelKey: option.labelKey })
+    }
+  }
+  const kinds = optionsOf('en')['overheadRateKind'] ?? {}
+  const methods = optionsOf('en')['overheadMethod'] ?? {}
+  assert.deepEqual(offered.map((option) => option.value).sort(), [...Object.keys(kinds), ...Object.keys(methods)].sort())
+  for (const { value, labelKey } of offered) {
+    const group = labelKey.startsWith('options.overheadRateKind.') ? kinds : methods
+    const leaf = labelKey.split('.').pop() ?? ''
+    assert.equal(typeof group[leaf], 'string', `${value} resolves through ${labelKey}`)
   }
 })
 

@@ -3668,8 +3668,9 @@
         "retainBalance": "Restwert beibehalten"
       },
       "overheadMethod": {
-        "live": "Live",
-        "standard": "Standard"
+        "three_year_average": "Dreijahresdurchschnitt (historisch)",
+        "live": "Live (aus Ist-Kosten neu berechnet)",
+        "standard": "Standard (effektiv datierte Karte)"
       },
       "fxRateType": {
         "spot": "Kassakurs",
@@ -3798,8 +3799,10 @@
         "proportionate": "Anteiliger Anteil am Nettovermögen"
       },
       "overheadRateKind": {
-        "per_hour": "$/Stunde",
-        "percent": "% der Lohnkosten"
+        "per_hour": "$/Arbeitsstunde",
+        "per_machine_hour": "$/Maschinenstunde",
+        "per_unit": "$/Einheit",
+        "percent": "%"
       },
       "payComponentBasis": {
         "fixedAmount": "Fester Betrag",
