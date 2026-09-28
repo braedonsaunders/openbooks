@@ -84,7 +84,7 @@ stubModules({
   },
 });
 
-const { POST } = (await import("./route.ts?metrics-normalization-approve")) as typeof import("./route.ts");
+const { POST } = (await import(new URL("./route.ts?metrics-normalization-approve", import.meta.url).href)) as typeof import("./route.ts");
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000002";
 

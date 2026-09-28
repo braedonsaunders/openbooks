@@ -81,7 +81,7 @@ stubModules({
   },
 });
 
-const { POST } = (await import("./route.ts?metrics-normalization-requests")) as typeof import("./route.ts");
+const { POST } = (await import(new URL("./route.ts?metrics-normalization-requests", import.meta.url).href)) as typeof import("./route.ts");
 
 const KEY = "00000000-0000-4000-8000-000000000001";
 

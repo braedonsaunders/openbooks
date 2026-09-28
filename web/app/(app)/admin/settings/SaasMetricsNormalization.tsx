@@ -34,6 +34,22 @@ async function readError(response: Response): Promise<ErrorBody> {
   }
 }
 
+async function readMonths(loadFailed: string, signal?: AbortSignal): Promise<{
+  months: MonthState[]
+  problem: ErrorBody | null
+}> {
+  try {
+    const res = await fetch('/api/metrics/normalization', { signal })
+    if (!res.ok) {
+      const body = await readError(res)
+      return { months: [], problem: { ...body, error: body.error ?? loadFailed } }
+    }
+    return { months: (await res.json()) as MonthState[], problem: null }
+  } catch {
+    return { months: [], problem: { error: loadFailed } }
+  }
+}
+
 /**
  * The normalization operator workflow, composed inside the existing Company
  * Settings SaaS Metrics card. Lists every month with its audited state and
@@ -54,27 +70,20 @@ export function SaasMetricsNormalization() {
   const [keyFingerprint, setKeyFingerprint] = useState('')
 
   const load = useCallback(async () => {
-    let res: Response
-    try {
-      res = await fetch('/api/metrics/normalization')
-    } catch {
-      setProblem({ error: t('saasMetrics.normalization.loadFailed') })
-      setMonths([])
-      return
-    }
-    if (!res.ok) {
-      const body = await readError(res)
-      setProblem({ ...body, error: body.error ?? t('saasMetrics.normalization.loadFailed') })
-      setMonths([])
-      return
-    }
-    setProblem(null)
-    setMonths((await res.json()) as MonthState[])
+    const result = await readMonths(t('saasMetrics.normalization.loadFailed'))
+    setProblem(result.problem)
+    setMonths(result.months)
   }, [t])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    const controller = new AbortController()
+    void readMonths(t('saasMetrics.normalization.loadFailed'), controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      setProblem(result.problem)
+      setMonths(result.months)
+    })
+    return () => controller.abort()
+  }, [t])
 
   async function submitRequest() {
     setBusy(true)

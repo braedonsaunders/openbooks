@@ -91,7 +91,7 @@ stubModules({
   },
 });
 
-const { GET } = (await import("./route.ts?metrics-normalization-get")) as typeof import("./route.ts");
+const { GET } = (await import(new URL("./route.ts?metrics-normalization-get", import.meta.url).href)) as typeof import("./route.ts");
 
 function reset(overrides?: Partial<typeof routeState>) {
   Object.assign(routeState, {
