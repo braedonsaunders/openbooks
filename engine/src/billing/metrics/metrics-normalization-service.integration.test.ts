@@ -334,7 +334,8 @@ function provEvent(overrides: Partial<ProvenanceEvent> = {}): ProvenanceEvent {
     change: "corrected",
     actor: PROV_APPROVER,
     requestId: PROV_REQUEST,
-    requestKey: PROV_KEY,
+    columnRequestKey: PROV_KEY,
+    columnActorId: PROV_APPROVER,
     attempt: 1,
     sourceV0Hash: PROV_V0H,
     v1Hash: PROV_V1H,
@@ -349,7 +350,35 @@ function provEvent(overrides: Partial<ProvenanceEvent> = {}): ProvenanceEvent {
       reportingCurrency: null,
       denominationVersion: null,
     },
-    after: { id: PROV_ROW, inputsHash: PROV_V1H },
+    after: { id: PROV_ROW, subscriptionId: PROV_SUB, month: MONTH, inputsHash: PROV_V1H },
+    ...overrides,
+  };
+}
+
+function provFactsEvent(overrides: Partial<ProvenanceEvent> = {}): ProvenanceEvent {
+  return {
+    table: "saas_metrics_facts_monthly",
+    rowId: PROV_ROW,
+    month: MONTH,
+    naturalKey: { subsidiaryId: PROV_SUBSIDIARY, month: MONTH },
+    event: "saas_normalization_corrected",
+    change: "corrected",
+    actor: PROV_APPROVER,
+    requestId: PROV_REQUEST,
+    columnRequestKey: PROV_KEY,
+    columnActorId: PROV_APPROVER,
+    attempt: 1,
+    sourceV0Hash: PROV_V0H,
+    v1Hash: PROV_V1H,
+    before: {
+      subsidiaryId: PROV_SUBSIDIARY,
+      month: MONTH,
+      mrrEnd: "100.0000",
+      inputsHash: PROV_V0H,
+      reportingCurrency: null,
+      denominationVersion: null,
+    },
+    after: { id: PROV_ROW, subsidiaryId: PROV_SUBSIDIARY, month: MONTH, inputsHash: PROV_V1H },
     ...overrides,
   };
 }
@@ -376,7 +405,9 @@ test("provenance field mismatches refuse as tampered before any write", () => {
     ["naturalKey month", { naturalKey: { subscriptionId: PROV_SUB, month: NEXT_MONTH } }, {}],
     ["attempt", { attempt: 2 }, {}],
     ["actor", { actor: PROV_APPROVER.replace("1", "9") }, {}],
-    ["requestKey", { requestKey: PROV_KEY.replace("3", "9") }, {}],
+    ["column actor", { columnActorId: PROV_APPROVER.replace("1", "9") }, {}],
+    ["column idempotency key", { columnRequestKey: PROV_KEY.replace("3", "9") }, {}],
+    ["null column idempotency key", { columnRequestKey: null }, {}],
     ["requestId", { requestId: PROV_REQUEST.replace("2", "9") }, {}],
     ["sourceV0Hash outside the recorded set", { sourceV0Hash: "c".repeat(64) }, {}],
     [
@@ -386,11 +417,14 @@ test("provenance field mismatches refuse as tampered before any write", () => {
     ],
     ["malformed before hash", { sourceV0Hash: "xyz", before: { ...(provEvent().before as Record<string, unknown>), inputsHash: "xyz" } }, {}],
     ["v1Hash", { v1Hash: "d".repeat(64) }, {}],
-    ["after hash", { after: { id: PROV_ROW, inputsHash: "d".repeat(64) } }, {}],
+    ["after hash", { after: { id: PROV_ROW, subscriptionId: PROV_SUB, month: MONTH, inputsHash: "d".repeat(64) } }, {}],
     ["row identity", { rowId: PROV_ROW.replace("5", "9") }, {}],
+    ["after subscription", { after: { id: PROV_ROW, subscriptionId: PROV_SUB.replace("4", "9"), month: MONTH, inputsHash: PROV_V1H } }, {}],
+    ["after month", { after: { id: PROV_ROW, subscriptionId: PROV_SUB, month: NEXT_MONTH, inputsHash: PROV_V1H } }, {}],
     ["failed request", {}, { status: "failed" }],
     ["null result", {}, { result: null }],
     ["wrong result month", {}, { result: { ...provRequest().result!, month: NEXT_MONTH } }],
+    ["malformed sourceV0Hashes", {}, { result: { ...provRequest().result!, sourceV0Hashes: "b".repeat(64) as unknown as string[] } }],
   ];
   for (const [name, eventOverride, requestOverride] of cases) {
     expectSyncRefusal(
@@ -411,6 +445,53 @@ test("provenance count shortfalls refuse as incomplete and over-counts as tamper
   );
   expectSyncRefusal(
     () => validateProvenanceCounts({ saas_metrics_monthly: 2, saas_metrics_facts_monthly: 1, saas_metrics_cohort_monthly: 1 }, result, MONTH),
+    "saas_normalization_provenance_tampered",
+    "escalate with the request id",
+  );
+});
+
+test("malformed recorded result shapes refuse instead of bypassing", () => {
+  const good = provRequest().result!;
+  expectSyncRefusal(
+    () => validateProvenanceCounts(
+      { saas_metrics_monthly: 1, saas_metrics_facts_monthly: 1, saas_metrics_cohort_monthly: 1 },
+      { ...good, replacedMonthly: -1 },
+      MONTH,
+    ),
+    "saas_normalization_provenance_tampered",
+    "escalate with the request id",
+  );
+  expectSyncRefusal(
+    () => validateProvenanceCounts(
+      { saas_metrics_monthly: 1, saas_metrics_facts_monthly: 1 },
+      good,
+      MONTH,
+    ),
+    "saas_normalization_provenance_incomplete",
+    "escalate with the request id",
+  );
+});
+
+test("facts events authenticate with the same contract and after natural key", () => {
+  const before = validateProvenanceEvent(provFactsEvent(), provRequest(), "saas_metrics_facts_monthly", MONTH);
+  assert.equal((before as Record<string, unknown>).subsidiaryId, PROV_SUBSIDIARY);
+  expectSyncRefusal(
+    () => validateProvenanceEvent(
+      provFactsEvent({ after: { id: PROV_ROW, subsidiaryId: PROV_SUBSIDIARY.replace("7", "9"), month: MONTH, inputsHash: PROV_V1H } }),
+      provRequest(),
+      "saas_metrics_facts_monthly",
+      MONTH,
+    ),
+    "saas_normalization_provenance_tampered",
+    "escalate with the request id",
+  );
+  expectSyncRefusal(
+    () => validateProvenanceEvent(
+      provFactsEvent({ actor: PROV_APPROVER.replace("1", "9") }),
+      provRequest(),
+      "saas_metrics_facts_monthly",
+      MONTH,
+    ),
     "saas_normalization_provenance_tampered",
     "escalate with the request id",
   );
@@ -1397,6 +1478,61 @@ async function appendAuditEvent(
     assert.equal(stored.rows.length, 1, "the conflicting audit candidate must append");
   });
 }
+
+test("a succeeded correction binds audit columns, counts, and hashes to its request", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx, MONTH);
+    const filed = await fileRequest(ctx);
+    const done = await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filed.request.id,
+      approverId: ctx.approver,
+    });
+    assert.equal(done.request.status, "succeeded");
+    const bound = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{
+        table: string;
+        row_id: string;
+        request_key: string | null;
+        actor_id: string | null;
+        changes: Record<string, unknown>;
+      }>(sql`
+        select table_name as table, row_id::text as row_id,
+               request_id as request_key, actor_id::text as actor_id, changes
+          from audit_log
+         where org_id = ${ctx.org.orgId} and action = 'saas_normalization_corrected'
+         order by at
+      `)).rows);
+    assert.equal(bound.length, 3, "one correction records all three row sets");
+    const counts: Record<string, number> = {};
+    for (const row of bound) {
+      counts[row.table] = (counts[row.table] ?? 0) + 1;
+      assert.equal(row.request_key, filed.request.idempotencyKey, "the canonical column carries the idempotency key");
+      assert.equal(row.actor_id, ctx.approver, "the canonical column carries the approver actor");
+      const changes = row.changes;
+      assert.equal(changes.requestId, filed.request.id, "the envelope binds the request row");
+      assert.equal(changes.actor, ctx.approver, "the envelope actor matches the canonical column");
+      assert.equal(changes.sourceV0Hash, (changes.before as Record<string, unknown>).inputsHash);
+      assert.equal(changes.v1Hash, done.result.monthHash);
+      assert.equal((changes.after as Record<string, unknown>).id, row.row_id);
+      assert.equal((changes.after as Record<string, unknown>).inputsHash, done.result.monthHash);
+    }
+    assert.deepEqual(
+      counts,
+      {
+        saas_metrics_monthly: done.result.replacedMonthly,
+        saas_metrics_facts_monthly: done.result.replacedFacts,
+        saas_metrics_cohort_monthly: done.result.replacedCohorts,
+      },
+      "event counts equal the recorded replacement counts",
+    );
+    assert.ok(
+      (done.result.sourceV0Hashes as string[]).length > 0,
+      "the recorded result carries the proved v0 hashes",
+    );
+  });
+});
 
 test("a conflicting appended provenance candidate refuses as ambiguous", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
