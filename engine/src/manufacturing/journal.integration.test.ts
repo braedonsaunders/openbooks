@@ -67,13 +67,19 @@ test("manufacturing period-pool refuses extra keys without writing", { skip: !DB
       const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true}'::jsonb) where id=${org.orgId} returning id`);
       assert.equal(rows.rows.length, 1, "feature update must match its scratch organization");
     });
-    const before = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
+    const snapshot = async () => {
+      const result: Record<string, unknown[]> = {};
+      for (const table of ["journal_entries", "journal_lines", "audit_log", "inventory_movements"]) {
+        result[table] = (await withBypassContext(async () => await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`))).rows;
+      }
+      return result;
+    };
+    const before = await snapshot();
     await assert.rejects(post(org, actorId, { scope: "period-pool", poolNote: "overtime" }), (error: unknown) =>
       error instanceof ManufacturingPostingError &&
       error.message.includes("poolNote") &&
       error.message.includes("remove") &&
       error.message.includes('"work-order"'));
-    const after = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
-    assert.equal(after, before);
+    assert.deepEqual(await snapshot(), before);
   } finally { await dropScratchOrg(org.orgId); }
 });
