@@ -181,7 +181,7 @@ export const FEATURES: FeatureDef[] = [
   { key: 'allocationsAtPosting', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
   // Nonprofit accounting: funds, grants, pledges, encumbrances, and
   // functional-expense reporting, all subordinate to the nonprofit parent.
-  { key: 'nonprofit', defaultEnabled: false, category: 'accounting' },
+  { key: 'nonprofit', defaultEnabled: false, category: 'accounting', navModules: ['nonprofit'] },
   { key: 'fundAccounting', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit' },
   { key: 'grantManagement', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit', requiresAll: ['fundAccounting'] },
   { key: 'pledges', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit' },

@@ -20,6 +20,16 @@ test("distribution features are opt-in and declare their dependencies", () => {
   }
 });
 
+test("nonprofit is an opt-in accounting feature owning one nav module", () => {
+  const def = FEATURE_BY_KEY.get("nonprofit");
+  assert.ok(def, "nonprofit must be registered before nonprofit routes gate on it");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.category, "accounting");
+  assert.deepEqual(def.navModules, ["nonprofit"]);
+  assert.equal(featureEnabled({}, "nonprofit"), false);
+  assert.equal(featureEnabled({ nonprofit: true }, "nonprofit"), true);
+});
+
 test("allocations is an opt-in accounting feature with no nav modules", () => {
   const def = FEATURE_BY_KEY.get("allocations");
   assert.ok(def, "allocations must be registered before sibling shards gate on it");

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import { hiddenNavModules, type FeatureState } from '../features'
 import {
   DEFAULT_NAV_ORDER,
   NAV_GROUPS,
@@ -127,6 +128,18 @@ test('default workspaces follow the approved journey-oriented information archit
       requiredPermission: 'gl.read',
     },
   )
+  assert.deepEqual(
+    NAV_MODULES.find((module) => module.key === 'nonprofit'),
+    {
+      key: 'nonprofit',
+      href: '/nonprofit',
+      label: 'Nonprofit',
+      iconKey: 'landmark',
+      group: 'accounting',
+      requiredPermission: 'funds.read',
+      featureKey: 'nonprofit',
+    },
+  )
 })
 
 test('default mobile navigation pins exactly four high-frequency destinations', () => {
@@ -139,6 +152,13 @@ test('default mobile navigation pins exactly four high-frequency destinations', 
 
 test('applications for payment is not exposed as a top-level navigation module', () => {
   assert.equal(NAV_MODULES.some((candidate) => candidate.key === 'construction-billing'), false)
+})
+
+test('nonprofit hides while its governing key is off', () => {
+  const entry = NAV_MODULES.find((module) => module.key === 'nonprofit')!
+  assert.equal(entry.featureKey, 'nonprofit')
+  assert.ok(hiddenNavModules({} as FeatureState).has(entry.key))
+  assert.ok(!hiddenNavModules({ nonprofit: true } as FeatureState).has(entry.key))
 })
 
 test('installed apps are absent from default navigation until explicitly placed', () => {
