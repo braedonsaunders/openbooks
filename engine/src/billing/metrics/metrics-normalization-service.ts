@@ -1762,15 +1762,16 @@ function monthRequestState(
   const coherentV1 = completeV1Shape && coherentHashes;
   const describeShape = (): string => {
     if (shape.total === 0) return `Month ${month} has no stored metric rows.`;
-    if (shape.currencies.length > 1) {
-      return `Month ${month} mixes reporting currencies (${shape.currencies.join(", ")}).`;
-    }
-    // An unsupported version outranks shape and hash disagreement: the
-    // operator must fix the version first, and a versioned row can never
-    // authenticate the set no matter what its hashes say.
+    // An unsupported version outranks currency, shape, and hash
+    // disagreement: the operator must fix the version first, and a
+    // versioned row can never authenticate the set no matter what the
+    // rest of the month says.
     const unsupported = shape.versions.filter((version) => version !== "v1");
     if (unsupported.length > 0) {
       return `Month ${month} carries an unsupported denomination version (${unsupported.join(", ")}).`;
+    }
+    if (shape.currencies.length > 1) {
+      return `Month ${month} mixes reporting currencies (${shape.currencies.join(", ")}).`;
     }
     if (!coherentLegacy && !completeV1Shape) {
       return `Month ${month} mixes legacy and normalized rows or carries an incomplete denomination.`;
