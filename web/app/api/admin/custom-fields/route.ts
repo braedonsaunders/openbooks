@@ -50,7 +50,11 @@ function revisionConflict() {
 export const POST = defineRoute({
   permission: "admin.custom_fields.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  body: createCustomFieldBodySchema,
+  // Definitions keep the established 400 contract for invalid bodies, and
+  // creation accepts no undocumented fields: a supplied key outside the
+  // create shape is refused instead of silently stripped.
+  invalidBodyStatus: 400,
+  body: createCustomFieldBodySchema.strict(),
   handler: async ({ request, body, authz: routeAuthz }) => {
 
     const gate = routeAuthz
@@ -97,6 +101,9 @@ export const POST = defineRoute({
 export const PATCH = defineRoute({
   permission: "admin.custom_fields.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  // Same 400 contract as creation. The update shape stays non-strict: patch
+  // callers resend stable identity fields the update ignores.
+  invalidBodyStatus: 400,
   body: updateCustomFieldBodySchema,
   handler: async ({ request, body, authz: routeAuthz }) => {
 
