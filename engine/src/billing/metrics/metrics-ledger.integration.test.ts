@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { neg, toUnits } from "../../money/money.ts";
+import { add, mulDecimal, neg, toUnits } from "../../money/money.ts";
+import { lookupSpotRateWithEvidence } from "../../fx/spot-rate.ts";
 import { runScenario } from "../../golden/scenario.ts";
 import { cancelRevenueRecognitionForInvoice } from "../../ledger/revenue-recognition-cancellation.ts";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
@@ -16,6 +17,36 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const MONTH = "2026-07-01";
 
 type Movement = "new" | "expansion" | "contraction" | "churn" | "reactivation" | "flat";
+
+function evidenceAt(text: string, ...path: Array<string | number>): unknown {
+  let value: unknown = JSON.parse(text);
+  for (const key of path) {
+    assert.ok(value !== null && typeof value === "object" && key in value, `missing evidence path ${path.join(".")}`);
+    value = Reflect.get(value, key);
+  }
+  return value;
+}
+
+async function seedRecognitionPeriods(orgId: string, periodId: string): Promise<void> {
+  const calendar = await db.execute<{ id: string }>(sql`
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} and id = ${periodId}
+  `);
+  assert.equal(calendar.rows.length, 1, "the July recognition period must identify its fiscal calendar");
+  // The service item's real rule recognizes over twelve monthly periods,
+  // starting in the existing July period and ending in June of the next year.
+  for (let offset = 1; offset < 12; offset++) {
+    const period = await db.execute(sql`
+      insert into accounting_periods
+        (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      select ${orgId}, extract(year from starts)::int, extract(month from starts)::int,
+             to_char(starts, 'YYYY-MM'), starts, (starts + interval '1 month - 1 day')::date,
+             false, ${calendar.rows[0]!.id}
+        from (select (${MONTH}::date + ${offset} * interval '1 month')::date as starts) bounds
+      returning id
+    `);
+    assert.equal(period.rows.length, 1, `recognition period ${offset + 1} of twelve must be stored`);
+  }
+}
 
 async function enableMetrics(orgId: string): Promise<void> {
   const result = await db.execute<{ id: string }>(sql`
@@ -297,7 +328,7 @@ test("voided subscription invoices preserve closed-month metrics and reverse in 
   } finally { await dropScratchOrg(org.orgId); }
 });
 
-test("normalized SaaS metrics translate every measure to org base with v1 evidence", { skip: !DB }, async () => {
+test("normalized SaaS metrics translate every measure to org base with v1 evidence", { skip: !DB }, async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withOrgTransaction(org.orgId, () => createScratchUser(org.orgId, "Metrics normalization controller", "admin"));
   const eurSubId = org.subsidiaryId;
@@ -343,11 +374,31 @@ test("normalized SaaS metrics translate every measure to org base with v1 eviden
         `);
         assert.equal(seeded.rows.length, 1, `the ${from}→${to} observation for ${asOf} must be stored`);
       }
-      const calendar = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!;
-      const august = await db.execute(sql`insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-        values (${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar.id}) returning id`);
-      assert.equal(august.rows.length, 1, "the August period must exist for the reversal month");
+      await seedRecognitionPeriods(org.orgId, org.periodId);
     });
+    const quotes = (await db.execute<{
+      id: string; from_currency: string; to_currency: string; as_of: string;
+      rate: string; source: string; updated_at: string;
+    }>(sql`
+      select id, from_currency, to_currency, as_of::text, rate::text, source,
+             to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
+        from fx_rates where org_id = ${org.orgId} and rate_type = 'spot'
+       order by as_of, from_currency, to_currency
+    `)).rows;
+    assert.equal(quotes.length, 8, "all dated spot observations must be available to the resolver");
+    const olderDirect = await lookupSpotRateWithEvidence(db, org.orgId, "USD", "EUR", "2026-06-15");
+    assert.equal(olderDirect.rate, "0.8000000000", "the direct quote governs before any newer inverse is effective");
+    const postingFx = await lookupSpotRateWithEvidence(db, org.orgId, "USD", "EUR", "2026-07-15");
+    const selectedQuote = quotes.find((quote) => quote.from_currency === "EUR"
+      && quote.to_currency === "USD" && quote.as_of === "2026-07-15");
+    assert.ok(selectedQuote, "the invoice-date inverse quote must exist");
+    assert.equal(postingFx.rate, "0.2000000000", "newest eligible date precedes direct-direction preference");
+    assert.deepEqual(postingFx.observations, [{
+      id: selectedQuote.id, asOf: "2026-07-15", source: "manual",
+      storedRate: "5.0000000000", updatedAt: selectedQuote.updated_at,
+      direction: "inverse", derivedRate: "0.2000000000",
+    }], "posting must identify the exact eligible observation, excluding later July and August quotes");
+    t.diagnostic(JSON.stringify({ quotes, postingFx }));
     const invoice1 = await createSubscriptionInvoice({ orgId: org.orgId, actorId, customerId: org.customerId, subsidiaryId: eurSubId,
       currency: "EUR", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "EUR subscription",
       quantity: "1", unitPrice: "100", memo: "EUR invoice", invoiceDate: "2026-07-15", autoPost: true, custom: { subscriptionId: sub1 } });
@@ -358,21 +409,115 @@ test("normalized SaaS metrics translate every measure to org base with v1 eviden
       currency: "USD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "USD top-up",
       quantity: "1", unitPrice: "50", memo: "USD invoice", invoiceDate: "2026-07-15", autoPost: true, custom: { subscriptionId: sub1 } });
     assert.ok(invoice2.invoiceId && invoice3.invoiceId, "all three invoices must post");
+    const postedTopUp = (await db.execute<{
+      currency: string; posting_date: string; posting_period_id: string;
+      fx_rate: string; deferred: string; balance: string;
+    }>(sql`
+      select d.currency, d.posting_date::text, d.posting_period_id, d.fx_rate::text,
+             (select -sum(l.amount) from journal_lines l where l.org_id = d.org_id
+               and l.entry_id = d.posted_entry_id and l.account_id = ${org.accounts.deferred})::text as deferred,
+             (select sum(l.amount) from journal_lines l where l.org_id = d.org_id
+               and l.entry_id = d.posted_entry_id)::text as balance
+        from documents d where d.org_id = ${org.orgId} and d.id = ${invoice3.invoiceId}
+    `)).rows;
+    assert.deepEqual(postedTopUp, [{ currency: "USD", posting_date: "2026-07-15",
+      posting_period_id: org.periodId, fx_rate: "0.2000000000", deferred: "10.0000", balance: "0.0000" }],
+    "the invoice must persist the selected rate and a balanced EUR journal with 50 × 0.2 deferred");
+    t.diagnostic(JSON.stringify({ postedTopUp }));
 
     // Before recognition the invoice sits in deferred stock: the July delta
     // translates at the target month end (1.30), never at the entry-date
     // spot (5.00) or a future August observation.
     await recomputeSaasMetrics(org.orgId, MONTH);
-    const deferred = (await db.execute<{ delta: string; balance: string }>(sql`
-      select m.deferred_delta::text as delta, f.deferred_balance::text as balance
+    const deferred = (await db.execute<{ delta: string; balance: string; evidence: string }>(sql`
+      select m.deferred_delta::text as delta, f.deferred_balance::text as balance,
+             m.normalization_evidence::text as evidence
         from saas_metrics_monthly m
         join saas_metrics_facts_monthly f on f.org_id = m.org_id and f.subsidiary_id = m.subsidiary_id and f.month = m.month
        where m.org_id = ${org.orgId} and m.subscription_id = ${sub1} and m.month = ${MONTH}::date
     `)).rows[0]!;
-    assert.equal(deferred.delta, "182.0000", "deferred flow prices at the July month-end rate, not the entry-date 5.00");
-    assert.equal(deferred.balance, "182.0000", "deferred stock prices at the target month end");
+    assert.equal(evidenceAt(deferred.evidence, "deferred", "functional_delta"), "110.0000");
+    assert.equal(evidenceAt(deferred.evidence, "deferred", "functional_balance"), "110.0000");
+    assert.equal(evidenceAt(deferred.evidence, "deferred", "target_month_end", "rate"), "1.3000000000");
+    assert.equal(evidenceAt(deferred.evidence, "deferred", "target_month_end", "observations", 0, "asOf"), "2026-07-20");
+    const expectedDeferred = mulDecimal(add("100", mulDecimal("50", postingFx.rate)), "1.3000000000");
+    assert.equal(expectedDeferred, "143.0000", "(100 EUR + 50 USD × 0.2) × 1.3 USD/EUR is exactly 143 USD");
+    assert.equal(deferred.delta, expectedDeferred, "deferred flow uses posted functional amounts and the July closing rate");
+    assert.equal(deferred.balance, expectedDeferred, "deferred stock uses the same July closing rate");
+    t.diagnostic(JSON.stringify({ deferred }));
 
+    const scheduleSnapshot = async () => (await db.execute<{
+      document_id: string; currency: string; total: string; rate: string;
+      method: string; periods: number; start_on: string; starts_on: string; ends_on: string;
+      planned: string; recognized: string; journal_entry_id: string | null;
+    }>(sql`
+      select d.id as document_id, s.transaction_currency as currency, s.total_amount::text as total,
+             s.transaction_fx_rate::text as rate, r.method, r.recognition_periods as periods,
+             o.recognition_starts_on::text as start_on, p.starts_on::text, p.ends_on::text,
+             l.planned_amount::text as planned, coalesce(l.recognized_amount, 0)::numeric(19,4)::text as recognized,
+             l.journal_entry_id
+        from recognition_schedules s
+        join performance_obligations o on o.org_id = s.org_id and o.id = s.obligation_id
+        join recognition_rules r on r.org_id = o.org_id and r.id = o.recognition_rule_id
+        join document_lines dl on dl.org_id = o.org_id and dl.id = o.document_line_id
+        join documents d on d.org_id = dl.org_id and d.id = dl.document_id
+        join recognition_schedule_lines l on l.org_id = s.org_id and l.schedule_id = s.id
+        join accounting_periods p on p.org_id = l.org_id and p.id = l.period_id
+       where s.org_id = ${org.orgId} and s.book_id = ${org.bookId}
+       order by d.id, p.starts_on
+    `)).rows;
+    // Equal monthly allocation has no day-count proration. At four decimals,
+    // indivisible units go to the earliest periods with equal remainders.
+    const expectedSchedules = [
+      { id: invoice1.invoiceId, currency: "EUR", total: "100.0000", rate: "1.0000000000", start: "2026-07-15",
+        planned: [...Array<string>(4).fill("8.3334"), ...Array<string>(8).fill("8.3333")] },
+      { id: invoice2.invoiceId, currency: "GBP", total: "200.0000", rate: "1.0000000000", start: "2026-07-10",
+        planned: [...Array<string>(8).fill("16.6667"), ...Array<string>(4).fill("16.6666")] },
+      { id: invoice3.invoiceId, currency: "USD", total: "50.0000", rate: "0.2000000000", start: "2026-07-15",
+        planned: [...Array<string>(8).fill("4.1667"), ...Array<string>(4).fill("4.1666")] },
+    ];
+    const scheduleBefore = await scheduleSnapshot();
+    assert.equal(scheduleBefore.length, 36, "three invoices each require twelve monthly lines");
+    for (const expected of expectedSchedules) {
+      const lines = scheduleBefore.filter((line) => line.document_id === expected.id);
+      assert.equal(lines.length, 12);
+      assert.ok(lines.every((line) => line.method === "straight_line_even" && line.periods === 12
+        && line.start_on === expected.start && line.currency === expected.currency
+        && line.total === expected.total && line.rate === expected.rate), "the stored schedule must preserve invoice units and the twelve-month rule");
+      assert.deepEqual(lines.map((line) => [line.starts_on, line.ends_on]), [
+        ["2026-07-01", "2026-07-31"], ["2026-08-01", "2026-08-31"], ["2026-09-01", "2026-09-30"],
+        ["2026-10-01", "2026-10-31"], ["2026-11-01", "2026-11-30"], ["2026-12-01", "2026-12-31"],
+        ["2027-01-01", "2027-01-31"], ["2027-02-01", "2027-02-28"], ["2027-03-01", "2027-03-31"],
+        ["2027-04-01", "2027-04-30"], ["2027-05-01", "2027-05-31"], ["2027-06-01", "2027-06-30"],
+      ]);
+      assert.deepEqual(lines.map((line) => line.planned), expected.planned, "first, intermediate and final allocations must preserve all residual units");
+      assert.equal(lines.reduce((total, line) => add(total, line.planned), "0"), expected.total, "the full plan must conserve the invoice amount");
+      assert.ok(lines.every((line) => line.recognized === "0.0000" && line.journal_entry_id === null), "no revenue is recognized before the cutoff run");
+    }
+    assert.equal((await runRevenueRecognition(org.orgId, "2026-07-30", actorId)).posted, 0, "an unfinished monthly period is not due");
     assert.equal((await runRevenueRecognition(org.orgId, "2026-07-31", actorId)).posted, 3);
+    const scheduleAfter = await scheduleSnapshot();
+    for (const expected of expectedSchedules) {
+      const lines = scheduleAfter.filter((line) => line.document_id === expected.id);
+      assert.equal(lines[0]!.recognized, expected.planned[0]);
+      assert.ok(lines[0]!.journal_entry_id, "July recognition must identify its journal");
+      assert.ok(lines.slice(1).every((line) => line.recognized === "0.0000" && line.journal_entry_id === null), "future periods remain unrecognized");
+      assert.equal(lines.reduce((total, line) => add(total, line.recognized), "0"), expected.planned[0], "cumulative recognized revenue is exactly one monthly allocation");
+      const journal = (await db.execute<{ account_id: string; amount: string; txn_amount: string; fx_rate: string; posting_date: string }>(sql`
+        select l.account_id, l.amount::text, l.txn_amount::text, l.fx_rate::text, e.posting_date::text
+          from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
+         where l.org_id = ${org.orgId} and l.entry_id = ${lines[0]!.journal_entry_id}
+         order by l.amount desc
+      `)).rows;
+      const functional = mulDecimal(expected.planned[0]!, expected.rate);
+      assert.deepEqual(journal, [
+        { account_id: org.accounts.deferred, amount: functional, txn_amount: expected.planned[0], fx_rate: expected.rate, posting_date: "2026-07-31" },
+        { account_id: org.accounts.recognized, amount: neg(functional), txn_amount: neg(expected.planned[0]!), fx_rate: expected.rate, posting_date: "2026-07-31" },
+      ], "recognition must debit deferred and credit earned at the historical posting rate with exact balance");
+      t.diagnostic(JSON.stringify({ documentId: expected.id, journal }));
+    }
+    assert.equal((await runRevenueRecognition(org.orgId, "2026-07-31", actorId)).posted, 0, "replaying the cutoff cannot recognize a period twice");
+    t.diagnostic(JSON.stringify({ scheduleBefore, scheduleAfter }));
     await recomputeSaasMetrics(org.orgId, MONTH);
     const stored = (await db.execute<{
       reporting_currency: string | null;
@@ -395,9 +540,18 @@ test("normalized SaaS metrics translate every measure to org base with v1 eviden
     // July EUR average covers only July observations (1.10, 5.00, 1.30):
     // the June/August 9.00 quotes and the June USD→EUR kernel rate never leak in.
     const eur = stored.find((row) => row.evidence.includes(eurSubId))!;
-    assert.ok(eur.evidence.includes('"kind":"calendar-month-average"'));
+    assert.equal(evidenceAt(eur.evidence, "gl", "calendar_month_average", "kind"), "calendar-month-average");
     assert.ok(!eur.evidence.includes("2026-06-30") && !eur.evidence.includes("2026-08-01"), "out-of-month observations are excluded");
-    assert.ok(eur.evidence.includes("0.8000000000") && eur.evidence.includes("1.0000000000"), "both stored document posting rates survive to evidence");
+    const billingLegs = evidenceAt(eur.evidence, "billings", "legs");
+    assert.ok(Array.isArray(billingLegs), "billings must preserve per-document evidence");
+    const topUpEvidence = billingLegs.find((leg: unknown) => leg !== null && typeof leg === "object"
+      && Reflect.get(leg, "document_id") === invoice3.invoiceId);
+    assert.ok(topUpEvidence, "the USD top-up must have its own billing leg");
+    const topUpText = JSON.stringify(topUpEvidence);
+    assert.equal(evidenceAt(topUpText, "stored_posting_fx_rate"), "0.2000000000");
+    assert.equal(evidenceAt(topUpText, "functional_amount"), "10.0000");
+    assert.equal(evidenceAt(topUpText, "txn_amount"), "50.0000");
+    assert.equal(evidenceAt(topUpText, "calendar_month_average", "rate"), "2.4666666667");
     const amounts = (await db.execute<{ mrr: string; revenue: string; billings: string; gl: string; bookings: string }>(sql`
       select m.mrr_end::text as mrr, m.recognized_revenue::text as revenue,
              f.billings::text as billings, f.gl_revenue::text as gl, f.bookings::text as bookings
@@ -406,16 +560,24 @@ test("normalized SaaS metrics translate every measure to org base with v1 eviden
        where m.org_id = ${org.orgId} and m.subscription_id = ${sub1} and m.month = ${MONTH}::date
     `)).rows[0]!;
     assert.equal(amounts.mrr, "130.0000", "MRR keeps its plan-to-base month-end convention");
-    assert.equal(amounts.revenue, "345.3333", "recognized revenue averages the July functional books");
-    assert.equal(amounts.gl, "345.3333", "GL revenue translates the same functional lines");
-    assert.equal(amounts.billings, "645.3334", "billings convert two-leg per document leg before grouping");
+    const julyFunctional = add("8.3334", mulDecimal("4.1667", "0.2000000000"));
+    assert.equal(julyFunctional, "9.1667");
+    const julyRevenue = mulDecimal(julyFunctional, "2.4666666667");
+    assert.equal(julyRevenue, "22.6112", "one monthly allocation, at historical posting FX then the July average");
+    assert.equal(evidenceAt(eur.evidence, "gl", "functional_revenue"), julyFunctional);
+    assert.equal(evidenceAt(eur.evidence, "gl", "calendar_month_average", "rate"), "2.4666666667");
+    assert.equal(amounts.revenue, julyRevenue, "recognized revenue averages the July functional books");
+    assert.equal(amounts.gl, julyRevenue, "GL revenue translates the same functional lines");
+    const julyBillings = add(mulDecimal("100", "2.4666666667"), mulDecimal("10", "2.4666666667"));
+    assert.equal(julyBillings, "271.3334", "both EUR entity invoices are rounded per leg before grouping");
+    assert.equal(amounts.billings, julyBillings, "billings include full invoices, separately from monthly earned revenue");
     assert.equal(amounts.bookings, "1560.0000", "bookings stay in org base");
     const gbp = (await db.execute<{ mrr: string; revenue: string }>(sql`
       select mrr_end::text as mrr, recognized_revenue::text as revenue
         from saas_metrics_monthly where org_id = ${org.orgId} and subscription_id = ${sub2} and month = ${MONTH}::date
     `)).rows[0]!;
     assert.equal(gbp.mrr, "300.0000");
-    assert.equal(gbp.revenue, "300.0000");
+    assert.equal(gbp.revenue, mulDecimal("16.6667", "1.5000000000"), "GBP revenue is its first monthly allocation, not the full invoice");
 
     // The stored digest reproduces exactly until inputs change.
     const eurOldHash = eur.inputs_hash;
@@ -458,7 +620,9 @@ test("normalized SaaS metrics translate every measure to org base with v1 eviden
         join saas_metrics_facts_monthly f on f.org_id = m.org_id and f.subsidiary_id = m.subsidiary_id and f.month = m.month
        where m.org_id = ${org.orgId} and m.subscription_id = ${sub1} and m.month = ${MONTH}::date
     `)).rows[0]!;
-    assert.equal(overridden.revenue, "318.5000", "the manual override reprices the July average");
+    assert.equal(evidenceAt(overridden.evidence, "gl", "calendar_month_average", "rate"), "2.2750000000");
+    assert.equal(evidenceAt(overridden.evidence, "gl", "functional_revenue"), julyFunctional, "the new quote cannot rewrite historical functional journals");
+    assert.equal(overridden.revenue, mulDecimal(julyFunctional, "2.2750000000"), "the manual override reprices the July average");
     assert.notEqual(overridden.inputs_hash, eurOldHash);
     assert.ok(overridden.evidence.includes("2026-07-25"), "the override observation is evidenced");
 
@@ -481,9 +645,9 @@ test("normalized SaaS metrics translate every measure to org base with v1 eviden
     // August's own average covers the 08-01 and 08-10 observations (5.50):
     // the 08-01 quote belongs to August, never to July.
     assert.equal(august.billings, "-550.0000", "the reversal leg reuses the original stored rate with August evidence");
-    assert.equal(august.revenue, "-550.0000", "August recognized revenue reverses at the August average");
-    assert.ok(august.evidence.includes('"leg":"reversal"'), "the reversal leg is evidenced as a reversal");
-    assert.ok(august.evidence.includes('"month":8'), "the second leg is evidenced in the reversal month");
+    assert.equal(august.revenue, mulDecimal(neg("8.3334"), "5.5000000000"), "August reverses only the earned July allocation at the August average");
+    assert.equal(evidenceAt(august.evidence, "billings", "legs", 0, "leg"), "reversal", "the reversal leg is evidenced as a reversal");
+    assert.equal(evidenceAt(august.evidence, "billings", "legs", 0, "calendar_month_average", "month"), 8, "the second leg is evidenced in the reversal month");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -497,6 +661,7 @@ test("normalized SaaS metrics refuse cross-subsidiary attribution before aggrega
     const secondSubsidiaryId = randomUUID(), secondCustomerId = randomUUID();
     await withOrgTransaction(org.orgId, async () => {
       await enableMetrics(org.orgId);
+      await seedRecognitionPeriods(org.orgId, org.periodId);
       const subsidiary = await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${secondSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Metrics Entity Two', 'CAD', 'CA')
@@ -585,9 +750,9 @@ test("prior-month opening MRR converts to the current org base with prior-month-
     assert.equal(august.mrrStart, "75.0000", "August opens from July closing translated at the July month end");
     assert.equal(august.mrrEnd, "80.0000");
     assert.equal(august.expansion, "5.0000", "movement classifies after conversion");
-    assert.ok(august.evidence.includes('"prior_reporting_currency":"CAD"'), "the opening records its source currency");
-    assert.ok(august.evidence.includes('"prior_mrr_end":"100.0000"'), "the opening records its raw source amount");
-    assert.ok(august.evidence.includes("2026-07-31"), "the opening conversion is evidenced at the prior month end");
+    assert.equal(evidenceAt(august.evidence, "mrr", "opening", "prior_reporting_currency"), "CAD", "the opening records its source currency");
+    assert.equal(evidenceAt(august.evidence, "mrr", "opening", "prior_mrr_end"), "100.0000", "the opening records its raw source amount");
+    assert.equal(evidenceAt(august.evidence, "mrr", "opening", "prior_month_end"), "2026-07-31", "the opening conversion is evidenced at the prior month end");
     const cohort = (await db.execute<{ startMrr: string; evidence: string }>(sql`
       select start_mrr::text as "startMrr", normalization_evidence::text as evidence
         from saas_metrics_cohort_monthly
@@ -595,8 +760,8 @@ test("prior-month opening MRR converts to the current org base with prior-month-
          and cohort_month = '2026-07-01'::date and month = '2026-08-01'::date
     `)).rows[0]!;
     assert.equal(cohort.startMrr, "75.0000", "the cohort opening stays continuous across the base change");
-    assert.ok(cohort.evidence.includes('"source":"stored"'), "the cohort opening names its raw source");
-    assert.ok(cohort.evidence.includes("2026-07-31"), "the cohort conversion is evidenced at the cohort month end");
+    assert.equal(evidenceAt(cohort.evidence, "opening", "source"), "stored", "the cohort opening names its raw source");
+    assert.equal(evidenceAt(cohort.evidence, "opening", "cohort_month_end"), "2026-07-31", "the cohort conversion is evidenced at the cohort month end");
     const factsHash = (await db.execute<{ inputs_hash: string }>(sql`
       select inputs_hash from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = '2026-08-01'::date
     `)).rows[0]!.inputs_hash;

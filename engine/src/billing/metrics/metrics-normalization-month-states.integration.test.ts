@@ -550,11 +550,10 @@ test("a partial evidence triple cannot be stored, so the classifier never meets 
       );
       assert.fail("partial evidence must be refused by the table check");
     } catch (error) {
-      assert.match(
-        String(error),
-        /saas_metrics_monthly_norm_complete/,
-        "the complete-triple check must name itself",
-      );
+      assert.ok(error instanceof Error && error.cause instanceof Error, "the write must retain its database refusal cause");
+      assert.ok("code" in error.cause && "constraint" in error.cause);
+      assert.equal(error.cause.code, "23514", "incomplete normalization evidence must violate the stored-row invariant");
+      assert.equal(error.cause.constraint, "saas_metrics_monthly_norm_complete");
     }
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "legacy", "the refused write stores nothing");
@@ -648,10 +647,9 @@ test("ordinary v1 rows with a hand-edited evidence hash refuse with no request",
     });
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "refused");
-    assert.ok(
-      state.failure && state.failure.includes("evidence hashes do not agree"),
-      `the failure must name the evidence disagreement, got: ${state.failure}`,
-    );
+    assert.ok(state.failure, "the refused month must expose its reason");
+    assert.ok(state.failure.includes(MONTH), `the refusal must identify the affected month: ${state.failure}`);
+    assert.match(state.failure, /evidence hashes.*do not agree.*stored canonical hash/);
     assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
   });
 });

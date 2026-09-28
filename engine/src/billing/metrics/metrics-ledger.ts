@@ -694,6 +694,9 @@ async function readSources(
        and scoped.effective_date < (${month}::date + interval '1 month')
      order by scoped.document_id, scoped.leg
   `)).rows;
+  // The month being computed supplies its own cohort opening from current
+  // subscription facts. Only earlier openings are persisted inputs; reading
+  // this month's output would change its hash on an unchanged recompute.
   const cohortStartRows = (await executor.execute<{
     subsidiary_id: string;
     cohort_month: string;
@@ -705,7 +708,7 @@ async function readSources(
     select subsidiary_id, cohort_month::text, start_mrr::text, start_customers,
            reporting_currency, denomination_version
       from saas_metrics_cohort_monthly
-     where org_id = ${orgId} and month = cohort_month and cohort_month <= ${month}::date
+     where org_id = ${orgId} and month = cohort_month and cohort_month < ${month}::date
      order by subsidiary_id, cohort_month
   `)).rows;
   return {
@@ -2622,7 +2625,11 @@ function legacyAggregateCohorts(
     const separator = key.indexOf(":");
     const subsidiaryId = key.slice(0, separator);
     const cohortMonth = key.slice(separator + 1);
-    const storedStart = cohortStarts.find((row) => row.subsidiary_id === subsidiaryId && row.cohort_month.slice(0, 10) === cohortMonth);
+    // The opening month's values must be proved from subscription inputs,
+    // never vouched for by the output row that is being verified.
+    const storedStart = cohortMonth < month
+      ? cohortStarts.find((row) => row.subsidiary_id === subsidiaryId && row.cohort_month.slice(0, 10) === cohortMonth)
+      : undefined;
     const historicalStartRows = history.filter((row) =>
       row.subsidiary_id === subsidiaryId
       && row.month.slice(0, 10) === cohortMonth
@@ -2677,13 +2684,14 @@ export interface LegacyV0Month {
   facts: FactsRow[];
   cohorts: LegacyV0CohortRow[];
   legacyHash: string;
+  initialLegacyHash: string;
 }
 
 /**
- * Reproduce the legacy v0 row sets and their one canonical hash from the
- * current sources. Read-only: no metric, request, or audit write occurs
- * here. The D proof compares every stored legacy field against this
- * reproduction before any correction write.
+ * Reproduce legacy v0 row sets and the exact initial/repeated writer hashes
+ * from current sources. Read-only: no metric, request, or audit write occurs
+ * here. The correction proof compares every stored legacy field against
+ * this reproduction before any correction write.
  */
 export async function computeLegacyV0Month(
   executor: SqlExecutor,
@@ -2708,13 +2716,23 @@ export async function computeLegacyV0Month(
     basis,
   );
   const cohorts = legacyAggregateCohorts(month, computed.rows, sources.history, sources.cohortStartRows);
-  const legacyHash = legacyInputsHash({
+  // The historical writer hashed four cohort fields, before denomination
+  // metadata existed. A first computation has no current-month cohort
+  // output yet; a repeat computation can include that output. Reproduce
+  // both exact historical payloads without accepting arbitrary hash drift.
+  const cohortStarts = sources.cohortStartRows.map((row) => ({
+    subsidiary_id: row.subsidiary_id,
+    cohort_month: row.cohort_month,
+    start_mrr: row.start_mrr,
+    start_customers: row.start_customers,
+  }));
+  const payload = {
     orgId,
     month,
     baseCurrency: sources.baseCurrency,
     revenueRecognitionEnabled: sources.revenueRecognitionEnabled,
     subscriptions: computed.rows,
-    cohortStarts: sources.cohortStartRows,
+    cohortStarts,
     definitions: sources.definitions,
     rates: computed.rates,
     revenue: sources.revenueRows,
@@ -2722,8 +2740,10 @@ export async function computeLegacyV0Month(
     ledger: sources.ledgerRows,
     billings: sources.billingRows,
     subsidiaries: sources.subsidiaries,
-  });
-  return { monthly: computed.rows, facts, cohorts, legacyHash };
+  };
+  const legacyHash = legacyInputsHash(payload);
+  const initialLegacyHash = legacyInputsHash({ ...payload, cohortStarts: cohortStarts.filter((row) => row.cohort_month.slice(0, 10) < month) });
+  return { monthly: computed.rows, facts, cohorts, legacyHash, initialLegacyHash };
 }
 
 export async function recomputeSaasMetrics(
