@@ -6,7 +6,7 @@ import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { created, unprocessable } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentResourcingCreate } from "../_idempotent";
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "@/lib/custom-fields";
+import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
 const Body = z.object({
   projectId: z.string().uuid(),
@@ -30,6 +30,13 @@ export const POST = defineRoute({
   body: Body,
   handler: async ({ request, authz, body: routeBody }) => {
     const defs = await loadFieldDefs("res_retainers");
+    const unknownKey = unknownCustomFieldKey(defs, routeBody.custom ?? {});
+    if (unknownKey !== null) {
+      return unprocessable("invalid_custom_fields", {
+        field: "custom",
+        fieldErrors: { [unknownKey]: [`unknown custom field: ${unknownKey}`] },
+      });
+    }
     const validated = validateCustomValues(defs, routeBody.custom ?? {});
     if (!validated.ok) {
       return unprocessable("invalid_custom_fields", {
