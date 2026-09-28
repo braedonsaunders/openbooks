@@ -10,7 +10,7 @@ import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/s
 import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
 import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
 import { setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
-import { can, guardSubsidiaryScope } from "../../../../lib/authz";
+import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isValidEmailAddress } from "@openbooks/emails";
@@ -582,7 +582,28 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
 
 
 export const POST = defineRoute({
-  public: "session",
+  // Close scope is capability-blind: a selected subsidiary must see 404 for
+  // every organization-wide close action, including a malformed one, before
+  // the typed body is validated. Per-action permission stays in the handler.
+  authorize: async ({ request }) => {
+    const session = await getAuthz();
+    if (!session) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+    let action = "";
+    try {
+      const payload: unknown = await request.clone().json();
+      if (typeof payload === "object" && payload !== null && "action" in payload && typeof payload.action === "string") action = payload.action;
+    } catch {
+      // The declared body schema answers malformed bodies once scope passes.
+    }
+    if (action !== "set-lock") {
+      const denied = guardCloseScope(session);
+      if (denied) return denied;
+    }
+    return session;
+  },
+  feature: { none: "Close has no route-wide feature gate; the handler enforces per-action permission, close scope, and the Advanced close feature." },
   body: requestBodySchema,
   handler: async ({ body: parsedBody, authz: routeAuthz }) => {
     const body = parsedBody as Body;
