@@ -6,7 +6,7 @@ import { proposeAssetReversal } from "@openbooks/engine/src/assets/asset-change-
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { parseJsonBody } from "@/lib/api/json";
 import { authorizeChange } from "../../_authorization";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const POST = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),

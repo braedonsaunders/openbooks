@@ -6,7 +6,7 @@ import { leaseChangeSchema } from "../../_schema";
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/list-params";
 import { proposeLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",

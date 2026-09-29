@@ -4,7 +4,7 @@ import { LeaseError } from "@openbooks/engine/src/revenue/leases.ts";
 import { NextResponse } from "next/server";
 import { createLeaseAgreement } from "@openbooks/engine/src/revenue/leases.ts";
 import { leaseSchema } from "./_schema";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",

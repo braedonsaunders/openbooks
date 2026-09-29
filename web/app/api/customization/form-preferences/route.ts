@@ -14,7 +14,7 @@ const putBodySchema0 = z.strictObject({
   layoutId: z.string().uuid("layoutId must be a valid id").nullable().optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Same accessibility rule resolveFormLayout uses: empty/null ⇒ everyone. */
 function rowIsAccessible(

@@ -18,7 +18,7 @@ const postBodySchema0 = z.strictObject({
   reason: z.string().trim().min(8, "a reversal reason between 8 and 500 characters is required").max(500),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 const REVERSIBLE_KINDS = [
   "revalued",

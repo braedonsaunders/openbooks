@@ -17,7 +17,7 @@ import {
   strOrNull,
 } from "../_lib";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 const layoutBody = z.array(z.strictObject({
   cardId: z.string().uuid("layout.cardId must be a valid id"),

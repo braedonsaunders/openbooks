@@ -16,7 +16,7 @@ import {
 } from "../../_lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Lossless wire representation for PostgreSQL's six-digit timestamptz. */
 function cardRevisionSql(column: ReturnType<typeof sql.raw>) {

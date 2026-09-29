@@ -20,7 +20,7 @@ const postBodySchema0 = z.strictObject({
   date: isoDate("date must be a valid calendar date").optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Revalue or impair an asset to a new carrying value: posts the adjustment and
  *  rebuilds the remaining depreciation schedule on the new basis. */

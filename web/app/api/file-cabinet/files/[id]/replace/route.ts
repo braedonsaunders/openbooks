@@ -14,7 +14,7 @@ import {
 } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Upload a new version of a file (the old version is preserved). */
 export const POST = defineRoute({

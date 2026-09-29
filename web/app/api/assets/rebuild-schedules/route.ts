@@ -7,7 +7,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { buildSchedule } from "@openbooks/engine/src/assets/depreciation.ts";
 import { isUuid } from "../../../../lib/list-params";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 // Typed body (never jsonObject: the financial-boundary ceiling only shrinks).
 // Explicit operator-initiated rebuild for schedules the preview reports as

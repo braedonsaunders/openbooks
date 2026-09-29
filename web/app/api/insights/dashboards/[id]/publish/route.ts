@@ -15,7 +15,7 @@ const postBodySchema0 = z.strictObject({
   ),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Publish / unpublish a dashboard. Publishing requires a real name. */
 export const POST = defineRoute({

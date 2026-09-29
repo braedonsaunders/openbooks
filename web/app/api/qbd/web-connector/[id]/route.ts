@@ -21,7 +21,7 @@ import {
 } from "@openbooks/engine/src/qbd/qbxml.ts";
 import { QBD_MAX_BODY_BYTES } from "./body-limit";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 

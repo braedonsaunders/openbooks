@@ -14,7 +14,7 @@ const postBodySchema0 = z.strictObject({
   fileIds: z.array(z.string().uuid("fileIds must contain valid ids")).min(1, "select at least one file"),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Zip a set of selected files. Per-file visibility is enforced while building
  *  (unreadable files are skipped). Body: { fileIds: string[] }. */

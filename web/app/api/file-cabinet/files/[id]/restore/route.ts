@@ -6,7 +6,7 @@ import { isUuid } from "../../../../../../lib/list-params";
 import { fileViewer, requireFileAccess } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Restore a trashed file. Needs Manager on the file. */
 export const POST = defineRoute({

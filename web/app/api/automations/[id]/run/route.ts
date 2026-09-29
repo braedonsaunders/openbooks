@@ -7,7 +7,7 @@ import { runAutomationBody } from "../../bodies";
 import { automationErrorResponse } from "../../_lib";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Run-now: fire one enabled automation immediately (manual trigger with an

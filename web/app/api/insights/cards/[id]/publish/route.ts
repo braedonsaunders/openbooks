@@ -17,7 +17,7 @@ const postBodySchema0 = z.strictObject({
   ),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * A stored card query that no longer validates refuses publish at 422 with

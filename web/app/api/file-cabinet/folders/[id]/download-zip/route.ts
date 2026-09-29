@@ -14,7 +14,7 @@ import { isUuid } from "../../../../../../lib/list-params";
 import { fileViewer, requireFolderAccess } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Download a folder (and its sub-folders) as a single .zip. Viewer+ required. */
 export const GET = defineRoute({

@@ -8,7 +8,7 @@ import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.
 import { proposeAssetGroupValuation } from "@openbooks/engine/src/assets/group-valuations.ts";
 import { isUuid } from "@/lib/list-params";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
 const proposal = z.object({
   sourceEventId: z.uuid(),

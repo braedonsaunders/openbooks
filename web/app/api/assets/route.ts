@@ -36,7 +36,7 @@ import {
   ASSET_METHODS,
 } from "./_fields";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 // Typed collection body (never jsonObject: the financial-boundary ceiling
 // only shrinks). Shape-only here — every domain refusal below keeps its

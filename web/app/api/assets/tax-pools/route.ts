@@ -28,7 +28,7 @@ const postBodySchema0 = z.strictObject({
   subsidiaryId: z.string().uuid("subsidiaryId must be a valid id").optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** A year the run window can be built from: the Jan-1 fallback must be a real calendar day. */
 function isRunnableTaxYear(value: unknown): value is number {

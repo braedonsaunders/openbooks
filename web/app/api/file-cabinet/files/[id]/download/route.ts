@@ -12,7 +12,7 @@ import { can } from "../../../../../../lib/authz";
 import { fileViewer } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Stream a file's bytes (inline, cache-revalidated — see blobResponse). A pinned

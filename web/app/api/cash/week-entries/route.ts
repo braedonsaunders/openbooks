@@ -10,7 +10,7 @@ import { analyticsConfig } from "../../../../lib/analytics/config";
 import { notFound } from "@/lib/api/responses";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * One forecast week's transactions, at full detail.

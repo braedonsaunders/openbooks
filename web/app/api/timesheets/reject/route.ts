@@ -19,7 +19,7 @@ const postBodySchema0 = z.strictObject({
   reason: z.string().trim().min(3, "A rejection reason is required").max(500, "Rejection reason is too long"),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 });

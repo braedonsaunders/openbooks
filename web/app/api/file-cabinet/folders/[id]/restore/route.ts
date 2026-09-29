@@ -6,7 +6,7 @@ import { isUuid } from "../../../../../../lib/list-params";
 import { fileViewer, requireFolderAccess } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Restore a trashed folder subtree. Needs Manager on the folder. */
 export const POST = defineRoute({

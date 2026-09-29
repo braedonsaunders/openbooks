@@ -35,7 +35,7 @@ const postBodySchema0 = z.strictObject({
   isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** GET /api/customization/list-views?recordType=vendor_bill — saved views for the user. */
 export const GET = defineRoute({

@@ -28,7 +28,7 @@ const postBodySchema0 = z.discriminatedUnion("action", [
   "select at least one file or folder",
 );
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 function idList(v: unknown): string[] {
   return Array.isArray(v)

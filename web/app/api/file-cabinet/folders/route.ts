@@ -15,7 +15,7 @@ const postBodySchema0 = z.strictObject({
   isPrivate: z.boolean().optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Folder tree for the org (flat list with parent references + counts). */
 export const GET = defineRoute({

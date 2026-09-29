@@ -21,11 +21,9 @@ import { notFound, postingRefusal } from "./responses";
  * anything else rethrows so the edge request id lands in the server log,
  * never the body.
  *
- * `export const runtime = "nodejs"` lives here so factory routes do not
- * repeat it per file.
+ * Route files declare `export const runtime = "nodejs"` locally because Next.js
+ * statically reads segment configuration rather than following re-exports.
  */
-export const runtime = "nodejs";
-
 export type RouteScope = "unrestricted" | "root";
 export type FeatureGate = string | { none: string };
 

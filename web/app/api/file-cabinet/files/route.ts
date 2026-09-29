@@ -9,7 +9,7 @@ import {
   requireFolderAccess,
 } from "../lib";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** List files (optionally filtered by folder, with search + pagination). */
 export const GET = defineRoute({

@@ -19,7 +19,7 @@ import {
   strOrNull,
 } from "../_lib";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 const insightQueryBody = z.json().refine((value) => {
   try { validateInsightQuery(value); return true; } catch { return false; }

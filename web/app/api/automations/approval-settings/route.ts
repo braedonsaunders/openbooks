@@ -6,7 +6,7 @@ import { approvalSettingsBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Exception-only approval tuning per subject kind (a setting, not a feature). */
 export const GET = defineRoute({

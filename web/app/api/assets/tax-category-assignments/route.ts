@@ -12,7 +12,7 @@ const patchBodySchema0 = z.strictObject({
   classCode: z.string().trim().min(1).nullable().optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 export const PATCH = defineRoute({
   permission: "admin.setup.manage",

@@ -9,7 +9,7 @@ import { subsidiaryScopeAllows } from "@openbooks/engine/src/organization/subsid
 import { isUuid } from "@/lib/list-params";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { postDueLeaseSchedules } from "@openbooks/engine/src/revenue/leases.ts";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",
