@@ -111,8 +111,20 @@ export async function ensureRootSubsidiary(orgId: string): Promise<void> {
 }
 
 export async function seedRoles(orgId: string): Promise<void> {
-  // New-org defaults only: re-running refreshes built-in name/description
-  // metadata and leaves stored permissions exactly as configured.
+  // New-org defaults only: an org that already has roles keeps its configuration.
+  const existing = await db.execute<{ present: boolean }>(sql`
+    select exists(select 1 from app_roles where org_id = ${orgId}) as present
+  `);
+  const hasRoles = existing.rows[0]?.present;
+  if (hasRoles === undefined || hasRoles === null) {
+    throw new Error(`[bootstrap] could not determine existing roles for org ${orgId}; refusing to seed blindly`);
+  }
+  if (hasRoles) {
+    console.log(
+      `[bootstrap] org ${orgId} already has roles — existing role configuration preserved (built-in catalogue not seeded)`,
+    );
+    return;
+  }
   await upsertBuiltInRolesForOrg(db, orgId, BUILT_IN_ROLES);
   console.log("[bootstrap] built-in roles ensured (new-org defaults; existing grants unchanged)");
 }

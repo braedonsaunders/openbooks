@@ -13,6 +13,7 @@
  */
 // source-pin-contract: swarm release ordering and migration policy (swarm-release.sh: migrate-before-serve, digest pin, owner/runtime login split, stdin guard)
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -118,16 +119,41 @@ test("psql calls cannot swallow the script's own stdin", () => {
   // script simply stops, mid-release.
   for (const line of code.split("\n")) {
     if (!line.includes("docker exec") || !line.includes("psql")) continue;
-    assert.match(
-      line.includes("</dev/null") ? line : `${line}${nextRedirect(code, line)}`,
-      /<\/dev\/null/,
-      `every docker exec psql call must redirect stdin: ${line.trim()}`,
+    assert.ok(
+      hasBoundedStdin(code, line),
+      `every docker exec psql call must use /dev/null or a complete here-document: ${line.trim()}`,
     );
   }
 });
 
 /** A call may place its redirect on a continuation line. */
-function nextRedirect(source, line) {
+function hasBoundedStdin(source, line) {
   const at = source.indexOf(line);
-  return source.slice(at, at + line.length + 200).split("\n").slice(1, 3).join("\n");
+  const lines = source.slice(at).split("\n");
+  let command = lines[0];
+  for (let index = 1; /\\\s*$/.test(command) && index < lines.length; index += 1) {
+    command = `${command.replace(/\\\s*$/, "")} ${lines[index]}`;
+  }
+  if (/<\/dev\/null/.test(command)) return true;
+  const delimiter = /<<\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/.exec(command)?.[1];
+  return delimiter !== undefined && new RegExp(`\n${delimiter}(?:\n|$)`).test(source.slice(at + line.length));
 }
+
+test("stdin protection refuses an unbounded or incomplete psql invocation", () => {
+  const unbounded = 'sudo docker exec -i "$PG" psql "$MIGRATION_URL"';
+  assert.equal(hasBoundedStdin(unbounded, unbounded), false);
+  assert.equal(hasBoundedStdin(`${unbounded}\nprintf done </dev/null\n`, unbounded), false);
+  const incomplete = `${unbounded} <<'SQL'`;
+  assert.equal(hasBoundedStdin(`${incomplete}\nselect 1;\n`, incomplete), false);
+  assert.equal(hasBoundedStdin(`${incomplete}\nselect 1;\nSQL\n`, incomplete), true);
+  assert.equal(hasBoundedStdin(`${unbounded} </dev/null`, `${unbounded} </dev/null`), true);
+});
+
+test("a here-document cannot consume the remainder of a piped release script", () => {
+  const result = spawnSync("bash", ["-s"], {
+    input: "docker() { cat; }\ndocker exec -i database psql <<'SQL'\nselect 1;\nSQL\nprintf 'release continues\\n'\n",
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "select 1;\nrelease continues\n");
+});

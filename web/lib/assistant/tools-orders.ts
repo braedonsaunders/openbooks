@@ -15,7 +15,7 @@ import {
   toQuantityUnits,
 } from "../order-cycle-math";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { assistantListPage, dateInput, money, uuidInput } from "./tools-shared";
+import { assistantListPage, dateInput, decimalText, money, uuidInput } from "./tools-shared";
 
 /**
  * Quote / sales-order / purchase-order reads. Orders are non-posting
@@ -226,7 +226,7 @@ const getOrder: AssistantToolDef = {
       return {
         ...l,
         amount: money(l.amount),
-        unit_price: money(l.unit_price),
+        unit_price: decimalText(l.unit_price),
         tax_amount: money(l.tax_amount),
         quantityFulfilled: fromQuantityUnits(toQuantityUnits(fulfilled)),
         quantityBilled: fromQuantityUnits(toQuantityUnits(billed)),

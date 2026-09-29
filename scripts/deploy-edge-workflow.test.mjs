@@ -16,6 +16,14 @@ function occurrenceCount(source, value) {
   return source.split(value).length - 1;
 }
 
+test("edge publishing follows an explicitly requested full suite, not routine static checks", () => {
+  assert.match(deployWorkflow, /github\.event\.workflow_run\.event == 'workflow_dispatch'/);
+  assert.match(deployWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(deployWorkflow, /github\.event\.workflow_run\.head_branch == 'main'/);
+  assert.match(deployWorkflow, /github\.event\.workflow_run\.head_repository\.full_name == github\.repository/);
+  assert.doesNotMatch(deployWorkflow, /github\.event\.workflow_run\.event == 'push'/);
+});
+
 function namedStep(source, name) {
   const marker = `      - name: ${name}\n`;
   const start = source.indexOf(marker);
@@ -294,7 +302,7 @@ test("container verification runs the deployment workflow contract test", () => 
 });
 
 
-test("publisher reuses proven merge checks without omitting release policies", () => {
+test("publisher reuses static checks and executes focused financial release checks", () => {
   const scripts = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts;
   const checks = scripts["verify:release:checks"].split(" && ");
   // verify:release is the full gate (it runs `npm test`); the suite-free
@@ -304,7 +312,11 @@ test("publisher reuses proven merge checks without omitting release policies", (
   const merge = readFileSync(new URL("../.github/workflows/test.yml", import.meta.url), "utf8");
   assert.match(merge, /npm run typecheck --workspaces --if-present/);
   assert.match(merge, /npm run build -w web/);
-  assert.match(publishWorkflow, /No successful 'test' run for/);
+  assert.match(publishWorkflow, /No successful static 'test' push run for/);
+  assert.match(publishWorkflow, /head_sha=\$\{SOURCE_COMMIT\}/);
+  assert.match(publishWorkflow, /Run the release smoke set/);
+  assert.match(publishWorkflow, /web\/lib\/assistant\/tools-orders\.integration\.test\.ts/);
+  assert.doesNotMatch(publishWorkflow, /select\(\.name == "full-verification"\)/);
 });
 
 

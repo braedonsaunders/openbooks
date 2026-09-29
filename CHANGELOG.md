@@ -6,8 +6,24 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
-One migration: 0417 (sealed-secret hygiene gate — refuses non-sealed values
-in sealed columns, changes no schema).
+## [0.1.0-alpha.25.1] - 2026-09-29
+
+The corrected alpha.25 release preserves existing organization role
+configuration during bootstrap, including custom roles whose keys overlap
+the built-in catalogue. Explicit role seeding still refuses collisions and
+names the supported replacement-and-reassignment procedure. Order reads
+preserve eight-decimal unit prices without relaxing monetary amount precision.
+
+Routine updates run static checks; comprehensive test matrices remain
+available on demand. Release verification exercises real database-backed
+financial controls and representative upgrades, followed by scanned,
+attested images and backup-first, migrate-first deployment. Upgrade refusals
+retain the underlying command error in their reports.
+
+The deployment applies pending forward migrations automatically. Run the
+read-only migration preflight and resolve any named refusals before upgrading
+an installation outside the reference deployment. The maintenance corrections
+above add no new migration and do not change published migration fingerprints.
 
 ### Backups
 

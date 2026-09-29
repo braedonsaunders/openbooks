@@ -64,7 +64,11 @@ are external responsibilities in that example.
 
 The reference swarm installation releases itself from a version tag. Pushing
 `v<version>` runs `publish-container.yml`: the tagged commit must already have
-a green `test` run and a passing upgrade rehearsal (below), both architectures are built and scanned, the merged image
+a green static `test` push run and a passing upgrade rehearsal (below).
+Release verification then bootstraps a clean database, proves the constrained
+runtime role, and executes database-backed checks for tenant isolation,
+ledger invariants, atomic posting, subledger tie-out, and order-read precision.
+Skipped or unregistered test files refuse the release. Both architectures are built and scanned, the merged image
 is attested, and then `deploy-production.yml` runs on the self-hosted runner
 that shares a network with the swarm manager. That job connects to the
 manager over ssh with a dedicated deploy key and executes
@@ -102,8 +106,13 @@ Every install upgrades in place: bootstrap applies the pending migrations over
 whatever data that install holds. A release is therefore only as safe as its
 migrations are on data that earlier releases wrote. Proving that on a fresh
 database proves nothing about it. `upgrade-rehearsal.yml` is the release gate
-for it. It is deliberately NOT part of per-commit CI: it spins up every dataset
-for every supported source release, and that cost belongs to releases.
+for it. It is deliberately NOT part of per-commit CI. The release default is
+two populated upgrades: the oldest and latest supported sources, each on the
+multi-entity dataset (foreign currencies, intercompany activity,
+consolidation, and closed periods). Each also builds a fresh-install reference
+for catalog parity. Every preservation assertion below remains mandatory.
+The full source/dataset matrix is available only by explicitly dispatching
+the workflow with `full_matrix=true`.
 
 Start it on the exact release-candidate commit:
 
@@ -112,8 +121,10 @@ git push origin "${SHA}:refs/heads/upgrade-rehearsal/${SHA:0:9}"
 ```
 
 `publish-container.yml` refuses a `v*` tag whose commit has no successful
-`upgrade-verification` job, just as it refuses one without an exhaustive
-`test` run. Delete the branch once the release is out.
+`upgrade-verification` job. Comprehensive unit, database, simulation, and
+browser suites remain available through a manual `test.yml` dispatch; they
+are not rerun for each push or required before the focused release checks.
+Delete the rehearsal branch once the release is out.
 
 Each cell of the matrix is one (source release, dataset) pair, as planned by
 `scripts/upgrade-rehearsal/plan.mjs` from `scripts/upgrade-rehearsal/rehearsal.json`.
@@ -153,7 +164,7 @@ The job summary lists each cell's phases and slowest migrations. The artifact
 holds the before and after fingerprints and the catalog comparison.
 
 **Sources.** After each release, add its tag to `sources` in
-`rehearsal.json`. Drop a source only when upgrading from it stops being
+`rehearsal.json`, ordered oldest first and newest last. Drop a source only when upgrading from it stops being
 supported, and say so in the release notes.
 
 **Datasets.** Every class in `requiredDatasetClasses` must have a dataset, and

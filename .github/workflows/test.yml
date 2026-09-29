@@ -27,15 +27,16 @@ jobs:
   scope:
     # What this push could possibly have broken.
     #
-    # Work lands directly on main here, many times an hour, so there is no PR
-    # tier to be fast in — the scoping has to happen on main itself. That is
-    # only safe because a scoped run cannot clear a release: the
-    # `full-verification` job below runs ONLY in full mode, and
-    # publish-container refuses any commit whose green `test` run lacks it.
-    # Fast on the way in, exhaustive on what ships.
+    # The comprehensive partitions below (unit, database, simulation, browser)
+    # run ONLY on manual workflow_dispatch. Ordinary pushes and PRs run the
+    # cheap typecheck job alone — contracts, lint, typechecks — so no push,
+    # however broad, dispatches the heavy matrices by itself. A manual dispatch
+    # still runs the entire suite with full-verification. The release stays
+    # safe because publish-container runs its own focused smoke set instead of
+    # trusting any test.yml run.
     #
     # Fails toward FULL. An unknown event, a force push, a missing base, or
-    # anything touching the build's own inputs runs everything.
+    # anything touching the build's own inputs runs everything on dispatch.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -62,8 +63,11 @@ jobs:
           else
             changed="$(git diff --name-only "$base" "${{ github.sha }}")"
             # The build's own inputs: a change here can move any result, so
-            # nothing about it is scopable.
-            if grep -qE '^(\.github/workflows/|package-lock\.json|package\.json|schema/|scripts/)' <<< "$changed"; then
+            # nothing about it is scopable. Workflow files are deliberately
+            # NOT in this list: the typecheck job below is never scoped out
+            # and runs the workflow contract tests, so a workflow-only push is
+            # verified without launching every partition.
+            if grep -qE '^(package-lock\.json|package\.json|schema/|scripts/)' <<< "$changed"; then
               full=true
             fi
           fi
@@ -117,7 +121,7 @@ jobs:
 
   unit:
     needs: [scope, typecheck]
-    if: needs.scope.outputs.code == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -160,7 +164,7 @@ jobs:
 
   database:
     needs: [scope, typecheck]
-    if: needs.scope.outputs.code == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     # 15 was enough until the payroll and tax packs landed: ten installable
     # countries and 41 tax packs added real work to every partition, and 11
@@ -356,7 +360,7 @@ jobs:
 
   simulation:
     needs: [scope, typecheck]
-    if: needs.scope.outputs.code == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -480,8 +484,9 @@ jobs:
 
   integration:
     # Preserve the required check name and verify complete, disjoint execution.
+    # Manual runs only; always() keeps aggregation firing when a partition fails.
     needs: [scope, unit, database, simulation]
-    if: always()
+    if: github.event_name == 'workflow_dispatch' && always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -490,10 +495,10 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
           FULL: ${{ needs.scope.outputs.full }}
         run: |
-          # A partition may be SKIPPED only on a scoped run. On a full run —
-          # which is the only kind that can clear a release — every partition
-          # must have executed and succeeded. Treating 'skipped' as acceptable
-          # unconditionally is how a release gate quietly stops gating.
+          # A partition may be SKIPPED only on a scoped run. This job runs on
+          # manual dispatch only, which is always a full run, so every
+          # partition must have executed and succeeded here. Treating 'skipped'
+          # as acceptable unconditionally is how a gate quietly stops gating.
           node -e '
             const jobs = JSON.parse(process.env.RESULTS);
             const full = process.env.FULL === "true";
@@ -621,7 +626,7 @@ jobs:
   # would add a dependency edge longer than the fan-out removes.
   e2e-app:
     needs: [scope, typecheck]
-    if: needs.scope.outputs.browser == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.browser == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -743,7 +748,7 @@ jobs:
   # measured runtime so no job is left holding the two slowest suites.
   e2e-workflows:
     needs: [scope, typecheck]
-    if: needs.scope.outputs.browser == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.browser == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -908,17 +913,16 @@ jobs:
           if-no-files-found: ignore
 
   full-verification:
-    # The release keystone, and the only reason scoping main is safe.
-    #
-    # Runs ONLY on a full run, and only if every partition and both browser
-    # tiers actually succeeded. publish-container refuses to release any
-    # commit whose green `test` run does not carry this job, so a scoped run
-    # is fast feedback and can never be mistaken for a release verification.
+    # Manual full-suite attestation. Runs ONLY on workflow_dispatch full runs,
+    # and only if every partition and both browser tiers actually succeeded.
+    # It no longer clears releases — publish-container proves its own focused
+    # smoke set — but it remains the on-demand proof that the entire suite is
+    # green on one commit.
     #
     # Do not add `if: always()`. Its whole value is that it cannot exist
     # unless everything it needs really passed.
     needs: [scope, typecheck, unit, database, simulation, integration, e2e-app, e2e-workflows]
-    if: needs.scope.outputs.full == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -4,7 +4,7 @@ name: trust
 # accounting-standards corpus (ASC/IFRS) and the internal-controls evidence
 # set against a real kernel; the publish job combines them with the ledger
 # checkpoint emitted by the SOLE golden harness run in test.yml's
-# integration job.
+# simulation job on an explicitly requested full run.
 #
 # test.yml is the single owner of that checkpoint; this workflow consumes it
 # via workflow_run and never produces simulation evidence of its own, so the
@@ -12,11 +12,6 @@ name: trust
 # failing conformance case is a red build, not a footnote.
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "docs/trust/**"
-  pull_request:
   workflow_dispatch:
   workflow_run:
     workflows: ["test"]
@@ -36,6 +31,11 @@ env:
 jobs:
   conformance:
     name: standards conformance
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'workflow_dispatch' &&
+       github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -158,7 +158,7 @@ jobs:
     # `needs:` — the workflow_run trigger is what binds this corpus to a
     # green, harness-gated test run on main.
     needs: [conformance]
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'workflow_dispatch' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

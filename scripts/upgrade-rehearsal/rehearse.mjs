@@ -45,7 +45,7 @@
  *     --source-dir ../source --report-dir upgrade-report
  */
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -69,11 +69,55 @@ function requireEnv(name) {
   return value;
 }
 
-class PhaseRefusal extends Error {
-  constructor(phase, message, details) {
-    super(`[${phase}] ${message}`);
+export class PhaseRefusal extends Error {
+  constructor(phase, message, details, options) {
+    super(`[${phase}] ${message}`, options);
     this.phase = phase;
     this.details = details;
+  }
+}
+
+export function tailLines(text, maxLines = 20) {
+  const lines = String(text ?? "").split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines.slice(-maxLines).join("\n");
+}
+
+export function maskDatabaseUrl(value) {
+  return String(value ?? "").replace(/:\/\/[^/@\s]*:[^/@\s]*@/, "://***@");
+}
+
+export function phaseLogPath(reportDir, phase, stream) {
+  if (stream !== "stdout" && stream !== "stderr") throw new Error(`unknown log stream ${JSON.stringify(stream)}`);
+  if (!/^[a-z0-9-]+$/.test(phase)) throw new Error(`unsafe phase name ${JSON.stringify(phase)}`);
+  return join(reportDir, `${phase}.${stream}.log`);
+}
+
+let phaseLogSink = null;
+let phaseLogError = null;
+
+export function setPhaseLogSink(dir, name) {
+  phaseLogSink = { dir, name };
+}
+
+export function clearPhaseLogSink() {
+  phaseLogSink = null;
+  phaseLogError = null;
+}
+
+function takePhaseLogError() {
+  const error = phaseLogError;
+  phaseLogError = null;
+  return error;
+}
+
+function appendPhaseLog(stream, chunk) {
+  if (!phaseLogSink || !chunk || phaseLogError) return;
+  try {
+    appendFileSync(phaseLogPath(phaseLogSink.dir, phaseLogSink.name, stream), chunk);
+  } catch (error) {
+    phaseLogError = error instanceof Error ? error : new Error(String(error));
+    console.error(`[rehearse] phase evidence log failed for ${phaseLogSink.name}.${stream}: ${phaseLogError.message}`);
   }
 }
 
@@ -81,19 +125,25 @@ class PhaseRefusal extends Error {
  * Run a command, streaming its output, and resolve with the captured stdout.
  * `onLine` sees each stdout line with the wall-clock time it arrived.
  */
-function run(phase, command, args, { cwd, env = {}, onLine } = {}) {
+export function run(phase, command, args, { cwd, env = {}, onLine } = {}) {
   return new Promise((resolvePromise, reject) => {
+    const invocation = `${command} ${args.map((arg) => maskDatabaseUrl(arg)).join(" ")}`;
+    const header = `$ ${invocation} (cwd=${cwd ?? process.cwd()})\n`;
+    appendPhaseLog("stdout", header);
+    appendPhaseLog("stderr", header);
     const child = spawn(command, args, {
       cwd,
       env: { ...process.env, ...env },
-      stdio: ["ignore", "pipe", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
+    let stderr = "";
     let pending = "";
     child.stdout.on("data", (chunk) => {
       const text = chunk.toString();
       stdout += text;
       process.stdout.write(text);
+      appendPhaseLog("stdout", text);
       pending += text;
       let newline;
       while ((newline = pending.indexOf("\n")) >= 0) {
@@ -102,13 +152,41 @@ function run(phase, command, args, { cwd, env = {}, onLine } = {}) {
         onLine?.(line, performance.now());
       }
     });
-    child.on("error", (error) => reject(new PhaseRefusal(phase, `${command} failed to start: ${error.message}`)));
+    child.stderr.on("data", (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      process.stderr.write(text);
+      appendPhaseLog("stderr", text);
+    });
+    child.on("error", (error) => {
+      takePhaseLogError();
+      reject(new PhaseRefusal(phase, `${invocation} failed to start: ${error.message}`));
+    });
     child.on("close", (code, signal) => {
       if (pending) onLine?.(pending, performance.now());
-      if (code === 0) resolvePromise(stdout);
-      else {
-        reject(new PhaseRefusal(phase, `${command} ${args.join(" ")} exited ${code ?? signal}`, { stdout }));
+      const logError = takePhaseLogError();
+      if (code === 0 && !logError) {
+        resolvePromise(stdout);
+        return;
       }
+      if (code === 0) {
+        reject(new PhaseRefusal(
+          phase,
+          `phase evidence log failed: ${logError.message}`,
+          { stdout, stderr },
+          { cause: logError },
+        ));
+        return;
+      }
+      const tail = tailLines(stderr) || tailLines(stdout);
+      const outcome = `${invocation} exited ${code ?? signal}`;
+      const logNote = logError ? `; phase evidence log also failed: ${logError.message}` : "";
+      reject(new PhaseRefusal(
+        phase,
+        tail ? `${outcome}: ${tail}${logNote}` : `${outcome}${logNote}`,
+        { stdout, stderr },
+        { cause: logError ?? (stderr || stdout || undefined) },
+      ));
     });
   });
 }
@@ -333,7 +411,7 @@ async function harness(phase, treeDir, orgIds, tolerated = new Set(), env = {}) 
     try {
       await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir, env });
     } catch (error) {
-      if (tolerated.size === 0 || !(error instanceof PhaseRefusal) || typeof error.details?.stdout !== "string") throw error;
+      if (tolerated.size === 0 || !(error instanceof PhaseRefusal) || error.cause instanceof Error || typeof error.details?.stdout !== "string") throw error;
       const { failed, unexpected } = classifyHarnessFailures(error.details.stdout, tolerated);
       if (failed.length === 0 || unexpected.length > 0) {
         throw new PhaseRefusal(phase, `harness failed on org ${orgId}: ${unexpected.join(", ") || "non-zero exit with no FAIL line"}`);
@@ -605,14 +683,22 @@ async function main() {
   const phase = async (name, fn) => {
     const started = performance.now();
     console.log(`\n=== upgrade rehearsal: ${name} ===`);
+    setPhaseLogSink(reportDir, name);
     try {
       const result = await fn();
       report.phases.push({ name, ok: true, seconds: Number(((performance.now() - started) / 1000).toFixed(3)) });
       return result;
     } catch (error) {
       report.phases.push({ name, ok: false, seconds: Number(((performance.now() - started) / 1000).toFixed(3)) });
-      throw error instanceof PhaseRefusal ? error : new PhaseRefusal(name, error instanceof Error ? error.message : String(error));
+      if (error instanceof PhaseRefusal) throw error;
+      throw new PhaseRefusal(
+        name,
+        error instanceof Error ? error.message : String(error),
+        undefined,
+        { cause: error },
+      );
     } finally {
+      clearPhaseLogSink();
       writeReport();
     }
   };

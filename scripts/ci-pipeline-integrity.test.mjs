@@ -455,7 +455,7 @@ test('the merge-gating workflow runs the golden harness, after real activity, in
   assert.ok(simulation.includes(harnessCode.trim().split('\n')[0]), 'simulation must own the golden harness')
   const integration = topLevelBlock(source, 'integration')
   // `scope` is there because the gate reads its `full` output: a partition may
-  // be skipped only on a scoped run, never on the full run that clears a release.
+  // be skipped only on a scoped run, never on an explicitly requested full run.
   assert.match(integration, /needs: \[scope, unit, database, simulation\]/, 'the required gate must wait for every test partition and the simulation')
   assert.doesNotMatch(simulation, /continue-on-error/)
 
@@ -471,7 +471,12 @@ test('the trust workflow consumes the checkpoint but never produces simulation e
   // from a run nothing gated, and would do so without turning anything red.
   const source = readFileSync(join(WORKFLOW_DIR, 'trust.yml'), 'utf8')
   const on = source.slice(source.indexOf('\non:'), source.indexOf('\njobs:'))
-  assert.match(on, /pull_request:/, 'trust.yml must keep its pull_request trigger')
+  assert.match(on, /workflow_dispatch:/, 'trust evidence remains available on demand')
+  assert.doesNotMatch(on, /(?:push|pull_request):/, 'routine updates must not launch duplicate conformance runs')
+  const conformance = topLevelBlock(source, 'conformance')
+  assert.match(conformance, /github\.event_name == 'workflow_dispatch'/)
+  assert.match(conformance, /github\.event\.workflow_run\.event == 'workflow_dispatch'/)
+  assert.match(conformance, /github\.event\.workflow_run\.conclusion == 'success'/)
   assert.match(
     withoutComments(on),
     /workflow_run:/,
@@ -509,6 +514,7 @@ test('the trust workflow consumes the checkpoint but never produces simulation e
   // checkpoint from the triggering test run (run-id), not from thin air, and
   // must stamp the corpus with that run's SHA rather than its own checkout.
   const publishBlock = topLevelBlock(source, 'publish')
+  assert.match(publishBlock, /github\.event\.workflow_run\.event == 'workflow_dispatch'/)
   assert.match(
     publishBlock,
     /run-id:\s*\$\{\{\s*github\.event\.workflow_run\.id\s*\}\}/,
@@ -526,7 +532,7 @@ test('the trust conformance producer checks out the tested commit', () => {
   // the conformance job must PRODUCE from that commit — otherwise the
   // artifacts describe a different checkout than the label claims. On
   // workflow_run the checkout must pin to the triggering head SHA; on
-  // push/pull_request it must stay on the event commit. And because
+  // manual dispatch it must stay on the event commit. And because
   // GITHUB_SHA still names the trust workflow's own tip on workflow_run,
   // the job must pass the true source to the producers explicitly.
   const source = readFileSync(join(WORKFLOW_DIR, 'trust.yml'), 'utf8')
@@ -543,12 +549,13 @@ test('the trust conformance producer checks out the tested commit', () => {
   )
 })
 
-test('the release job does not re-run the suite, and fails closed without a green merge gate', () => {
+test('the release job does not re-run the suite, and fails closed without its focused smoke set', () => {
   // The suite ran ~35 minutes inside publish-container's verify job to
   // reproduce a result test.yml had already produced for the same commit
-  // minutes earlier. Removing that is only sound while the substitute is
-  // enforced, so this pins BOTH halves: the job must not run the suite, and
-  // it must verify a successful `test` run for the exact SHA it releases.
+  // minutes earlier. The substitute is a focused smoke set run in the verify
+  // job itself against the release database, so this pins BOTH halves: the
+  // job must not run the suite, and it must run the smoke files with the
+  // canonical runner shape and fail-closed guards.
   const publish = readFileSync(join(WORKFLOW_DIR, 'publish-container.yml'), 'utf8')
   const verify = topLevelBlock(publish.slice(publish.indexOf('\njobs:')), 'verify')
 
@@ -574,13 +581,51 @@ test('the release job does not re-run the suite, and fails closed without a gree
     'verify:release:full must retain the suite so a full local verification is still available',
   )
 
-  const gate = stepAround(verify, 'actions/runs?head_sha=')
-  assert.match(gate, /select\(\.name == "test"\)/, 'the gate must look for the merge-gate workflow by name')
-  assert.match(gate, /head_sha=\$\{SOURCE_COMMIT\}/, 'the gate must be scoped to the exact commit being released')
-  assert.match(gate, /exit 1/, 'the gate must fail closed when no green run exists')
+  const smoke = stepAround(verify, 'Run the release smoke set')
+  for (const file of [
+    'engine\\/src\\/platform\\/db-rls\\.integration\\.test\\.ts',
+    'engine\\/src\\/ledger\\/kernel-constraints\\.integration\\.test\\.ts',
+    'engine\\/src\\/ledger\\/journal-posting-atomic\\.integration\\.test\\.ts',
+    'engine\\/src\\/ledger\\/document-subledger\\.integration\\.test\\.ts',
+    'web\\/lib\\/assistant\\/tools-orders\\.integration\\.test\\.ts',
+    'engine\\/src\\/provisioning\\/built-in-role-seed\\.integration\\.test\\.ts',
+  ]) {
+    assert.match(smoke, new RegExp(file), `the smoke set must run ${file.replaceAll('\\', '')}`)
+  }
+  assert.match(
+    smoke,
+    /--import \.\/scripts\/test-hooks\.mjs/,
+    'the smoke must run under the canonical runner hooks',
+  )
+  assert.match(
+    smoke,
+    /--import \.\/engine\/src\/testing\/database-bypass\.ts/,
+    'the smoke runs DB-backed files, so it needs the trusted-bypass boundary import',
+  )
+  assert.match(smoke, /--test-concurrency=1/, 'database files run serially so fixtures cannot contend')
+  assert.match(
+    smoke,
+    /OPENBOOKS_TRUSTED_TEST_BYPASS/,
+    'the smoke runs DB-backed files, so it needs the trusted-bypass contract',
+  )
+  assert.match(
+    smoke,
+    /verify-test-registration\.mjs/,
+    'the smoke must prove per-file registration, not just an overall TAP count',
+  )
+  assert.match(smoke, /# SKIP/, 'the smoke must fail closed on skipped files')
+  assert.match(smoke, /process\.exit\(1\)/, 'the smoke guards must fail closed')
   assert.ok(
-    !/continue-on-error/.test(gate),
-    'an advisory merge-gate check would let an unverified commit be released',
+    !/continue-on-error/.test(smoke),
+    'an advisory smoke step would let an unverified commit be released',
+  )
+  assert.ok(
+    !/select\(\.name == "full-verification"\)/.test(verify),
+    'the release proves its own focused checks; it must not require the exhaustive job',
+  )
+  assert.ok(
+    !/No EXHAUSTIVE 'test' run/.test(verify),
+    'the release proves its own focused checks; it must not require a prior exhaustive hosted run',
   )
 })
 
