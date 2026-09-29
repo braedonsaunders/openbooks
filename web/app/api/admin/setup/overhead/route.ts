@@ -32,7 +32,7 @@ const overheadProfileSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("posted_gl_account_group"), accountGroup: z.object({ dimension: z.string().min(1), groupKeys: z.array(z.string()).optional() }) }),
 ]);
 const requestBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("publish"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rates: z.array(z.object({ departmentId: z.string().uuid(), ratePerHour: exactDecimalText("Overhead rate") })).max(500).optional() }),
+  z.object({ action: z.literal("publish"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rates: z.array(z.object({ departmentId: z.string().nullable(), ratePerHour: exactDecimalText("Overhead rate") })).max(500).optional() }),
   z.object({ action: z.literal("apply"), projectTypeIds: z.array(z.string().uuid()).min(1).max(500), overhead: overheadProfileSchema, effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("set-lifecycle"), mode: z.enum(["manual", "scheduled", "live"]).optional(), cadence: z.enum(["monthly", "quarterly"]).optional() }),
   z.object({ action: z.literal("set-application"), mode: z.enum(["report_only", "net_zero_pair", "off"]).optional(), accountId: z.string().uuid().nullable().optional() }),
@@ -106,6 +106,7 @@ export const POST = defineRoute({
   permission: "admin.setup.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: requestBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
 
     const gate = routeAuthz

@@ -13,7 +13,7 @@ const bodyObjectSchema = z.object({
   description: z.string().nullable().optional(),
   sortOrder: z.number().optional(),
   isActive: z.boolean().optional(),
-  expectedRevision: z.string().min(1),
+  expectedRevision: z.union([z.string(), z.null()]).optional(),
 }).strict();
 
 /** One rule head (identity/ordering) with its version timeline. */

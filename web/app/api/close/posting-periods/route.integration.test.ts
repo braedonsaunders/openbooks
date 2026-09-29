@@ -31,8 +31,10 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../../lib/feature-gates"
-      && context.parentURL?.includes("close/posting-periods")
+      (specifier === "../../../../lib/feature-gates"
+        && context.parentURL?.includes("close/posting-periods")) ||
+      (specifier === "@/lib/feature-gates"
+        && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }

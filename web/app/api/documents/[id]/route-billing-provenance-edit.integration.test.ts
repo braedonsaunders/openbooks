@@ -16,7 +16,8 @@ Object.assign(globalThis, { __billingProvenanceEditState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz') return virtual(`
+    if (specifier === '../../../../lib/authz' ||
+        (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function getAuthz() {
         const s = globalThis.__billingProvenanceEditState;
         return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };

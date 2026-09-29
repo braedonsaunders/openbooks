@@ -25,8 +25,10 @@ const createCustomFieldBodySchema = z.object({
   sortOrder: z.number().int().optional(),
 });
 const updateCustomFieldBodySchema = z.object({
-  id: z.string().uuid(),
-  expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, 'Reload the custom field and send its exact revision before saving'),
+  // The handler hides malformed/foreign ids alike and returns a named
+  // reload conflict for every absent or malformed revision.
+  id: z.string(),
+  expectedUpdatedAt: z.union([z.string(), z.null()]).optional(),
   targetTable: z.string().optional(),
   targetKind: z.string().nullable().optional(),
   key: z.string().optional(),

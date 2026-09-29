@@ -22,7 +22,7 @@ import { notFound } from "@/lib/api/responses";
 const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submit'), documentId: z.string() }),
   z.object({ action: z.literal('post'), documentId: z.string() }),
-  z.object({ action: z.literal('recall'), documentId: z.string(), expectedUpdatedAt: z.string().min(1) }),
+  z.object({ action: z.literal('recall'), documentId: z.string(), expectedUpdatedAt: z.union([z.string(), z.null()]).optional() }),
 ]);
 
 

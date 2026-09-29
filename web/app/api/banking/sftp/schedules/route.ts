@@ -14,10 +14,11 @@ import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { randomUUID } from 'node:crypto'
 import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpWatchFolderOverlapRefusal } from '@openbooks/engine/src/sftp/watch-folders.ts'
 const POSTBodySchema1 = z.object({
-  sftpServerId: z.string().uuid(), accountId: z.string().uuid(), format: z.enum(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940']).optional(),
+  // The handler applies the same named refusal before either UUID reaches SQL.
+  sftpServerId: z.string(), accountId: z.string(), format: z.enum(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940']).optional(),
   folder: z.string().optional(),
   csvMapping: z.object({ date: z.number().int().nonnegative(), amount: z.number().int().nonnegative(), description: z.number().int().nonnegative(), counterpartyRef: z.number().int().nonnegative().optional(), bankTransactionId: z.number().int().nonnegative().optional(), debitAmount: z.number().int().nonnegative().optional() }).nullable().optional(),
-  expectedExternalAccountId: z.string().nullable().optional(),
+  expectedExternalAccountId: z.union([z.string(), z.null()], { error: 'expectedExternalAccountId must be a string or null' }).optional(),
 });
 
 

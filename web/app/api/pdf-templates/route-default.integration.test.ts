@@ -33,8 +33,9 @@ const mockAuthz = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === "../../../lib/authz" || specifier === "../../../../lib/authz") &&
-      context.parentURL?.includes("pdf-templates")
+      ((specifier === "../../../lib/authz" || specifier === "../../../../lib/authz") &&
+        context.parentURL?.includes("pdf-templates")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:authz-template-default", shortCircuit: true };
     }
@@ -52,7 +53,7 @@ const postUrl = "./route.ts?pdf-template-default-post";
 const idUrl = "./[id]/route.ts?pdf-template-default-id";
 const { POST } = (await import(postUrl)) as typeof import("./route.ts");
 const { PATCH } = (await import(idUrl)) as typeof import("./[id]/route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(

@@ -85,7 +85,7 @@ const hooks = registerHooks({
 
 const itemUrl = "./route.ts?sftp-schedule-create-test";
 const { POST, GET } = (await import(itemUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 const { db, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
@@ -203,7 +203,7 @@ test(
         format: "ofx",
       });
       assert.equal(outcome.status, 404);
-      assert.deepEqual(outcome.body, { error: "SFTP server not found" });
+      assert.deepEqual(outcome.body, { error: "not_found" }, "unknown servers share the tenant-safe not-found response");
       assert.equal(await scheduleCount(fixture), 0);
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
@@ -468,7 +468,8 @@ test(
       assert.equal(outcome.status, 400);
       assert.deepEqual(outcome.body, {
         error: "expectedExternalAccountId must be a string or null",
-      });
+        issues: [{ path: "expectedExternalAccountId", message: "expectedExternalAccountId must be a string or null" }],
+      }, "the refusal identifies the malformed binding field");
       assert.equal(await scheduleCount(fixture), 0);
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));

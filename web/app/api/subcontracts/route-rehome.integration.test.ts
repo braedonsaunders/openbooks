@@ -80,6 +80,11 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
     const subcontractId = (await withBypassContext(() => createSubcontract({
       orgId: org.orgId, userId: actorId, projectId, vendorId, number: "SC-RACE-1", title: "Before race", originalCommitment: "100.00",
     }))).id;
+    const revisionRows = (await withBypassContext(() => db.execute<{ token: string }>(sql`
+      select updated_at::text as token from subcontracts where org_id = ${org.orgId} and id = ${subcontractId}
+    `))).rows;
+    assert.equal(revisionRows.length, 1, "the concurrent edit must start from one existing subcontract revision");
+    const expectedUpdatedAt = revisionRows[0]!.token;
     state.user = session(org.orgId, actorId);
     state.allowedSubsidiaryId = org.subsidiaryId;
     await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
@@ -88,7 +93,7 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
     let settled = false;
     const pending = withOrgContext(org.orgId, () => POST(new Request("http://openbooks.test/api/subcontracts", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "updateSubcontract", id: subcontractId, title: "After race", originalCommitment: "100.00", defaultRetainagePercent: "10" }),
+      body: JSON.stringify({ action: "updateSubcontract", id: subcontractId, title: "After race", originalCommitment: "100.00", defaultRetainagePercent: "10", expectedUpdatedAt }),
     }))).then((response) => { settled = true; return response; });
     let waiting = 0;
     const deadline = Date.now() + 10_000;

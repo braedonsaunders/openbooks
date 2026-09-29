@@ -26,7 +26,8 @@ registerHooks({
     // the subsidiary-scope guards the routes call are the production
     // functions — the previous allow-all guard double could not produce a
     // refusal and made every scope boundary hollow.
-    if (specifier === "../../../lib/authz" || specifier === "../../../../lib/authz") {
+    if (specifier === "../../../lib/authz" || specifier === "../../../../lib/authz" ||
+        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))) {
       const real = nextResolve(specifier, context).url;
       const nextServer = nextResolve("next/server", context).url;
       return module_(`

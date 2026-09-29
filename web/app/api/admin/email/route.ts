@@ -10,7 +10,8 @@ import { isEmailProvider } from '@openbooks/emails'
 
 const requestBodySchema = z.object({
   "enabled": z.boolean().optional(),
-  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken, "Reload the email settings and supply their exact revision before saving"),
+  // Keep semantic revision refusals at the conflict boundary below.
+  "expectedUpdatedAt": z.union([z.string(), z.null()]).optional(),
   "fromEmail": z.string().nullable().optional(),
   "fromName": z.string().nullable().optional(),
   "mailgunDomain": z.string().nullable().optional(),
@@ -22,7 +23,7 @@ const requestBodySchema = z.object({
   "smtpPort": z.union([z.number().int(), z.string().regex(/^\\d+$/), z.null()]).optional(),
   "smtpSecure": z.boolean().optional(),
   "smtpUsername": z.string().nullable().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, "Provide an email setting to update or reload the page before saving");
 
 
 export const runtime = 'nodejs'

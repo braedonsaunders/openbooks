@@ -20,8 +20,9 @@ Object.assign(globalThis, { __taxPoolFlagsGate: state });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (
-      (specifier.endsWith("/lib/feature-gates") || specifier.endsWith("/lib/authz")) &&
-      context.parentURL?.includes("/api/assets/tax-pools/")
+      ((specifier.endsWith("/lib/feature-gates") || specifier.endsWith("/lib/authz")) &&
+        context.parentURL?.includes("/api/assets/tax-pools/")) ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return {
         shortCircuit: true,
@@ -41,7 +42,7 @@ const hooks = registerHooks({
 });
 const { POST } = await import("./route");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 const request = (body: unknown) =>
   new Request("http://taxpool.local/api/assets/tax-pools", {

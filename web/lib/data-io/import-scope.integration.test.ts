@@ -38,7 +38,8 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/data/import/")) {
+    if (specifier.endsWith("/lib/authz") && (context.parentURL?.includes("/api/data/import/") ||
+        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")))) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -52,7 +53,7 @@ const hooks = registerHooks({
 });
 const routeUrl = "../../app/api/data/import/route.ts?import-scope";
 const { POST } = (await import(routeUrl)) as typeof import("../../app/api/data/import/route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 const post = (body: Record<string, unknown>) =>
   POST(

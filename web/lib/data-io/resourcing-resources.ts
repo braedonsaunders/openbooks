@@ -101,11 +101,16 @@ async function findStored(orgId: string, projectId: string, weekStart: string, e
   const scopeCond = scope === null
     ? sql`true`
     : scope.size === 0 ? sql`false` : sql`p.subsidiary_id in (${sql.join([...scope].map((id) => sql`${id}`), sql`, `)})`
+  // A separate IS NULL placeholder has no PostgreSQL type when the selected
+  // subject is an employee. Choose the exact natural-key predicate instead.
+  const subjectCond = employeePartyId === null
+    ? sql`a.employee_party_id is null and a.job_title = ${jobTitle}`
+    : sql`a.employee_party_id = ${employeePartyId}::uuid`
   const rows = (await db.execute<StoredAssignment>(sql`
     select a.id, a.employee_party_id, a.job_title, a.planned_hours::text, a.is_billable, a.booking
       from res_assignments a inner join projects p on p.id = a.project_id
      where a.org_id = ${orgId} and a.project_id = ${projectId} and a.week_start = ${weekStart}::date
-       and ((a.employee_party_id = ${employeePartyId}) or (${employeePartyId} is null and a.job_title = ${jobTitle}))
+       and (${subjectCond})
        and ${scopeCond}
      limit 1`)).rows
   return rows[0] ?? null
