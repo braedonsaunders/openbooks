@@ -35,7 +35,7 @@ const subsidiaryScopeUrl = new URL(
 ).href
 const jsonUrl = new URL('../../../../lib/api/json.ts', import.meta.url).href
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/authz' || /(^|\/)lib\/authz$/.test(specifier)) {
       return { shortCircuit: true, url: 'mock:data-export-authz' }
@@ -75,7 +75,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?data-export-scope'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
@@ -129,7 +128,7 @@ test('an unknown resource is a 404 and a missing read grant is a 403', { skip: !
 
     const unknown = await POST(postRequest({ resource: 'nope', format: 'json' }))
     assert.equal(unknown.status, 404)
-    assert.deepEqual(await unknown.json(), { error: 'unknown resource' })
+    assert.deepEqual(await unknown.json(), { error: 'not_found' })
 
     gate(org.orgId, randomUUID(), ['data.export'], null)
     const forbidden = await POST(postRequest({ resource: 'parties', format: 'json' }))

@@ -17,15 +17,23 @@ import { issueMaterials } from "./materials.ts";
 import { completeWorkOrder, markWorkOrderDone, reverseMaterialIssue, waiveMaterial } from "./completion.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-type Fixture = { org: ScratchOrg; actorId: string; wipId: string; usageId: string; postingDate: string };
+type Fixture = { org: ScratchOrg; actorId: string; wipId: string; usageId: string; departmentId: string; postingDate: string };
 type Case = { name: string; run: (f: Fixture) => Promise<void> };
 function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return withBypassContext(() => db.transaction(work)); }
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
-    const wipId = randomUUID(), usageId = randomUUID();
+    const wipId = randomUUID(), usageId = randomUUID(), departmentId = randomUUID();
     await withBypassContext(async () => {
+      const department = await db.execute<{ id: string }>(sql`insert into departments (id, org_id, name, subsidiary_id)
+        values (${departmentId}, ${org.orgId}, 'Assembly', ${org.subsidiaryId}) returning id`);
+      assert.equal(department.rows.length, 1, "assembly department fixture must be created before manufacturing completion");
+      const laborRate = await db.execute<{ id: string }>(sql`insert into labor_cost_rates
+        (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${actorId}, ${actorId})
+        returning id`);
+      assert.equal(laborRate.rows.length, 1, "assembly labor-cost rate fixture must cover work-order release");
       await db.execute(sql`insert into accounts (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
         values (${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`);
       await db.execute(sql`insert into accounts (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
@@ -45,12 +53,12 @@ async function setup(): Promise<Fixture> {
       }
     });
     const postingDate = await withBypassContext(() => businessToday(org.orgId));
-    return { org, actorId, wipId, usageId, postingDate };
+    return { org, actorId, wipId, usageId, departmentId, postingDate };
   } catch (error) { await withBypassContext(() => dropScratchOrg(org.orgId)); throw error; }
 }
 async function route(f: Fixture, itemId: string, qualityGate: "none" | "measure" = "none") {
   const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
-    code: "WC-" + randomUUID(), name: "Assembly center", kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
+    code: "WC-" + randomUUID(), name: "Assembly center", kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", departmentId: f.departmentId, absorbsOverhead: false,
   }));
   const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
     producedItemId: itemId, code: "RT-" + randomUUID(), name: "Assembly route", effectiveFrom: "2026-01-01",

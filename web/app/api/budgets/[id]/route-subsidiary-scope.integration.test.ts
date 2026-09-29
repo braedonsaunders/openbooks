@@ -204,7 +204,12 @@ test('writes refuse a cross-scope scenario by name', async () => {
     const lines = await withOrgContext(org.orgId, () =>
       saveLines(new Request(`http://budgets.test/api/budgets/${cross}/lines`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expectedRevision: rev, cells: [] }),
+        body: JSON.stringify({ expectedRevision: rev, cells: [{
+          accountId: org.accounts.revenue,
+          periodId: org.periodId,
+          subsidiaryId: org.subsidiaryId,
+          amount: '1',
+        }] }),
       }), params).then(jsonResponse))
     assert.equal(lines.status, 403, 'cell save on a cross-scope scenario is refused')
     assert.match(String(lines.json.error ?? ''), /out_of_scope_subsidiaries/)

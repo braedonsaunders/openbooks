@@ -625,14 +625,22 @@ for (const boundary of [
               await db.execute(
                 sql`update parties set subsidiary_id=${org.subsidiaryId} where id=${org.customerId}`,
               )
+              // A valid catalog-version command reaches its organization-wide
+              // authority check; a restricted actor cannot reprice every entity.
+              const deniedVersion = await amend(request({action:'createVersion',planId,effectiveFrom:org.date,intervalCount:1,components:[{componentKey:'invalid',name:'Invalid',unitPrice:'1'}]}))
+              assert.equal(deniedVersion.status,403)
+              assert.deepEqual(await deniedVersion.json(), { error: 'requires unrestricted subsidiary access' })
               for (const invalid of [true, [], 0, -1, 1.5, '1.5', 'bad']) {
-                // Catalog versions price every subsidiary at once (canonical
-                // shape 2), so the restricted auditor gets the named 403
-                // before validation even sees the invalid intervalCount.
+                // The shared JSON boundary rejects malformed command fields
+                // before the action-specific organization scope check.
                 const deniedVersion = await amend(request({action:'createVersion',planId,effectiveFrom:org.date,intervalCount:invalid,components:[{componentKey:'invalid',name:'Invalid',unitPrice:'1'}]}))
-                assert.equal(deniedVersion.status,403)
-                assert.deepEqual(await deniedVersion.json(), { error: 'requires unrestricted subsidiary access' })
-                assert.equal((await amend(request({action:'activateLifecycle',subscriptionId,planVersionId:versionId,termStartsOn:org.date,renewalTermMonths:invalid}))).status,422)
+                assert.equal(deniedVersion.status,400)
+                const refusal = await deniedVersion.json() as { issues: Array<{ path: string }> }
+                assert.ok(refusal.issues.some((issue) => issue.path === 'intervalCount'), 'malformed interval count is named at the JSON boundary')
+                const invalidTerm = await amend(request({action:'activateLifecycle',subscriptionId,planVersionId:versionId,termStartsOn:org.date,renewalTermMonths:invalid}))
+                assert.equal(invalidTerm.status,400)
+                const termRefusal = await invalidTerm.json() as { issues: Array<{ path: string }> }
+                assert.ok(termRefusal.issues.some((issue) => issue.path === 'renewalTermMonths'), 'malformed renewal term is named at the JSON boundary')
               }
               assert.equal(
                 (

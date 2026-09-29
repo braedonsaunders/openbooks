@@ -35,14 +35,16 @@ const module_ = (source: string): { shortCircuit: true; format: "module"; url: s
   url: `data:text/javascript,${encodeURIComponent(source)}`,
 });
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as the IR recipient route test).
     // The route imports authz by relative path. Re-export the REAL module and
     // override only the session gate, so the subsidiary-scope guards under
     // test are the production functions — a hand-copied guard double could
     // only drift from the original.
-    if (specifier === "../../../../lib/authz") {
+    if (specifier === "../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts")) ||
+      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))) {
       const real = nextResolve(specifier, context).url;
       const nextServer = nextResolve("next/server", context).url;
       return module_(`
@@ -62,7 +64,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?account-hierarchy-test";
 const { GET, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");

@@ -78,12 +78,13 @@ const mockImportJob = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === "./authz" &&
       (context.parentURL?.includes("/lib/feature-gates") ||
         context.parentURL?.includes("/lib/super-admin"))
+      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -105,7 +106,6 @@ const hooks = registerHooks({
 
 const itemUrl = "./route.ts?sftp-schedule-toggle-delete-test";
 const { PATCH, DELETE } = (await import(itemUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, pool, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");

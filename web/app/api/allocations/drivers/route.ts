@@ -81,7 +81,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
 }
 
 export const GET = defineRoute({
-  public: "session",
+  permission: "allocations.read", feature: "allocations",
 
   handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
 });

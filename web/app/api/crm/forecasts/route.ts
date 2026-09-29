@@ -96,7 +96,7 @@ export const POST = defineRoute({
     // Stored forecasts aggregate the whole organization and lack entity lineage.
     if (gate.allowedSubsidiaryIds !== null) return notFound("record")
     const { user } = gate
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     const { periodStart, periodEnd } = body

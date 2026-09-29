@@ -108,7 +108,7 @@ export const PATCH = defineRoute({
     if (!isUuid(id)) return notFound("record")
     const current = (await db.execute(sql`select a.* from crm_activities a where a.id = ${id} and a.org_id = ${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)}`))
     if (!current.rows[0]) return notFound("record")
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     // Mandatory optimistic-concurrency evidence (same contract as document,

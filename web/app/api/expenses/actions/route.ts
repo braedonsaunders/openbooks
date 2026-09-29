@@ -20,9 +20,9 @@ import { isUuid } from '../../../../lib/list-params'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { notFound } from "@/lib/api/responses";
 const POSTBodySchema1 = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('submit'), documentId: z.string().uuid() }),
-  z.object({ action: z.literal('post'), documentId: z.string().uuid() }),
-  z.object({ action: z.literal('recall'), documentId: z.string().uuid(), expectedUpdatedAt: z.string().min(1) }),
+  z.object({ action: z.literal('submit'), documentId: z.string() }),
+  z.object({ action: z.literal('post'), documentId: z.string() }),
+  z.object({ action: z.literal('recall'), documentId: z.string(), expectedUpdatedAt: z.string().min(1) }),
 ]);
 
 

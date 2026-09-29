@@ -217,8 +217,8 @@ test(
         const edited = await edit(org.orgId, id, {
           probability: 30,
           lines: [
-            { itemId: org.items.service, quantity: '2', unitPrice: '100' },
-            { itemId: org.items.service, quantity: '1', unitPrice: '100', probability: 60 },
+            { itemId: org.items.service, description: 'Base service', unit: 'each', quantity: '2', unitPrice: '100' },
+            { itemId: org.items.service, description: 'Additional service', unit: 'each', quantity: '1', unitPrice: '100', probability: 60 },
           ],
         })
         assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
