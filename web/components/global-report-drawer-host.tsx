@@ -28,12 +28,13 @@ export function GlobalReportDrawerHost() {
   const query = overlay.search
   const params = useMemo(() => new URLSearchParams(query), [query])
   const t = useTranslations('reports')
-  const target = params.get('reportDrill')
+  const journalPage = pathname === '/journal'
+  const target = journalPage ? null : params.get('reportDrill')
   const page = Math.max(1, Number(params.get('reportDrillPage') ?? 1) || 1)
   const drillPeriod = params.get(REPORT_DRILL_PERIOD_PARAM)
   const drillFrom = params.get(REPORT_DRILL_FROM_PARAM)
   const drillTo = params.get(REPORT_DRILL_TO_PARAM)
-  const recordId = params.get('reportRecord')
+  const recordId = journalPage ? null : params.get('reportRecord')
   const recordKind = params.get('reportRecordKind')
   const parsed = useMemo(() => parseReportDrillTarget(target), [target])
   const periodBrowsable = parsed?.kind === 'ledger' && Boolean(parsed.period)
@@ -208,7 +209,7 @@ export function GlobalReportDrawerHost() {
           )}
         </div>
       </UrlDrawer>
-      <AccountRegisterDrawer />
+      {!journalPage ? <AccountRegisterDrawer /> : null}
       {recordData && loadedRecord === recordRequest ? <RelatedTransactionDrawerClient data={recordData} /> : null}
       <EntryFlyout />
     </>

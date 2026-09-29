@@ -2,21 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// The setup guide, the journal header, and the journal list each
-// counted "posted entries" with a different scope (guide: every posted or
-// reversed entry in the org; header: journalsOnly with no status filter;
-// list: the JOURNAL_ENTRY_TABLE union with no status filter), so one
-// tenant read three different totals on three surfaces at once. All three
-// now count one scope — the journal-list union — through journalScopeWhere.
-// The fixture is a miniature of that tenant: a doc-linked migration posting
-// (the 21,770-class the old header dropped), a reversed journal-document
-// entry (the 42-class a posted-only unification would drop), and a pure
-// subledger posting (bills live in their module, never in the journal).
-// SQL builders and storage are real; only server-only is stubbed.
+// Header, setup guide, and list must count the same journal scope. The
+// fixture includes standalone journals, source-linked migration postings,
+// reversed journal records, and ordinary subledger postings. Query builders
+// and storage are real; only server-only is stubbed.
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { JOURNAL_ENTRY_TABLE, journalEntryWhere, journalScopeWhere } = await import("./journal-entries.ts");
 const { defaultListView } = await import("@openbooks/customization");
+const { readResolvedEntityListPageForView } = await import("../../list/entity-reader.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const DATE = "2026-07-15";
@@ -79,13 +73,32 @@ test("guide, header, and list count one journal scope", { skip: !DB }, async () 
     await linkDocument(org, "vendor_bill", "VB-T11-005", await postBalanced(org, "JE-T11-005", "document", "posted"));
     await linkDocument(org, "pay_run", "PR-T11-006", await postBalanced(org, "JE-T11-006", "manual", "posted"));
     await linkDocument(org, "journal", "JR-T11-007", await postBalanced(org, "JE-T11-007", "manual", "reversed"));
-    // Six of seven: everything except the pure subledger posting, whose
-    // bill lives in its own module. The doc-linked migration posting and
-    // both reversed entries stay in — the journal list shows them, so the
-    // header and guide count them too.
-    assert.equal(await scopeCount(org.orgId), 6, "shared scope counts six of seven fixture entries");
-    assert.equal(await listTotal(org.orgId), 6, "list total counts the same six");
+    // Source-linked migration corrections stay with their subledger document.
+    // Both reversed journal records remain in the journal scope.
+    assert.equal(await scopeCount(org.orgId), 5, "shared scope excludes both vendor-bill postings");
+    assert.equal(await listTotal(org.orgId), 5, "list total uses the same journal scope");
     assert.equal(await scopeCount(org.orgId), await listTotal(org.orgId), "header/guide scope agrees with the list total");
+    const page = await readResolvedEntityListPageForView({
+      recordType: "journal", orgId: org.orgId, allowedSubsidiaryIds: null,
+      view: defaultListView("journal"), sort: "date", dir: "desc", page: 1, perPage: 5,
+    }, { inventory: true, crm: false, hrm: false });
+    assert.ok(page.ok, "the bounded page query executes");
+    assert.equal(page.filteredTotal, 5);
+    assert.equal(page.rows.length, 5);
+    assert.ok(page.rows.every((row) => row.line_count === '2' && row.total_debits === '100.0000'), "the returned page hydrates its ledger totals");
+    const draft = (await db.execute<{ id: string }>(sql`insert into documents
+      (org_id, kind, document_number, document_date, currency, subsidiary_id, status)
+      values (${org.orgId}, 'journal', 'JE-DRAFT', ${DATE}, 'CAD', ${org.subsidiaryId}, 'draft') returning id`)).rows[0]!.id;
+    await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, amount)
+      values (${org.orgId}, ${draft}, 1, ${org.accounts.bank}, '95.00'),
+             (${org.orgId}, ${draft}, 2, ${org.accounts.cogs}, '-95.00')`);
+    const drafts = await readResolvedEntityListPageForView({
+      recordType: "journal_draft", orgId: org.orgId, allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      view: defaultListView("journal_draft"), sort: "date", dir: "desc", page: 1, perPage: 5,
+    }, { inventory: true, crm: false, hrm: false });
+    assert.ok(drafts.ok);
+    assert.equal(drafts.filteredTotal, 1);
+    assert.equal(drafts.rows[0]?.total_debits, '95.0000', "draft list shows debit total, not the balanced document's net zero");
   } finally {
     await dropScratchOrg(org.orgId);
   }

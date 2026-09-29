@@ -6,6 +6,7 @@ import { isReportUuidParam } from '../../../../../lib/report-filters'
 import { getAuthz, can } from '../../../../../lib/authz'
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../../../../../lib/payroll-confidentiality'
 import { notFound } from "@/lib/api/responses";
+import { loadJournalDoc } from '@/lib/journals'
 
 
 export const runtime = 'nodejs'
@@ -19,10 +20,14 @@ export const runtime = 'nodejs'
  */
 export const GET = defineRoute({
   public: 'session',
-  handler: async ({ request: _req, params: routeParams }) => {
+  handler: async ({ request: req, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const journalDrawer = new URL(req.url).searchParams.get('journal') === '1'
+    if (journalDrawer && !can(authz, 'gl.read')) {
+      return NextResponse.json({ error: 'missing permission: gl.read' }, { status: 403 })
+    }
     if (!can(authz, 'gl.read') && !can(authz, 'reports.read')) {
         return NextResponse.json({ error: 'missing permission: gl.read or reports.read' }, { status: 403 })
       }
@@ -30,7 +35,10 @@ export const GET = defineRoute({
     if (!isReportUuidParam(id)) return notFound("record")
     const subsidiaryFilter = authz.allowedSubsidiaryIds
         ? authz.allowedSubsidiaryIds.size > 0
-          ? sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
+          ? journalDrawer
+            ? sql`and exists (select 1 from journal_lines visible where visible.entry_id = e.id
+                and visible.org_id = e.org_id and visible.subsidiary_id in ${[...authz.allowedSubsidiaryIds]})`
+            : sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
           : sql`and false`
         : sql``
     const lineSubsidiaryFilter = authz.allowedSubsidiaryIds
@@ -40,7 +48,7 @@ export const GET = defineRoute({
         : sql``
     const e = (await db.execute<Record<string, unknown>>(sql`
         select e.id, e.entry_number, e.posting_date::text as date, e.memo, e.origin, e.status,
-               e.source_document_id,
+               e.source_document_id, e.subsidiary_id,
                re.entry_number as reverses_number,
                d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number
           from journal_entries e
@@ -53,6 +61,8 @@ export const GET = defineRoute({
     if (!entry) return notFound("record")
     const lines = (await db.execute<Record<string, unknown>>(sql`
         select l.line_number, l.amount, l.memo, l.is_open_item,
+               l.subsidiary_id, sub.name as subsidiary, sub.base_currency as functional_currency,
+               l.extra_dims,
                l.contributor_kind, l.contributor_ref,
                coalesce(ar.name, us.name) as contributor_name,
                a.id as account_id, a.number as account_number, a.name as account_name,
@@ -61,6 +71,7 @@ export const GET = defineRoute({
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
+          join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
           left join parties p on p.id = l.party_id and p.org_id = l.org_id
           left join departments d on d.id = l.department_id and d.org_id = l.org_id
           left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
@@ -84,7 +95,9 @@ export const GET = defineRoute({
         ...row,
         amount: row.amount as string,
         entryId: id,
-        accountId: row.account_id as string,
+        // Currency/entity boundaries must survive confidentiality grouping
+        // when the native journal drawer displays functional-currency totals.
+        accountId: journalDrawer ? `${row.account_id}:${row.subsidiary_id}:${row.functional_currency}` : row.account_id as string,
         partyId: (row.party_id ?? null) as string | null,
         payrollOrigin: row.doc_kind === 'pay_run' || row.entry_origin === 'payroll',
       }))
@@ -104,6 +117,22 @@ export const GET = defineRoute({
         } = row
         return rest
       })
-    return NextResponse.json({ entry, lines: shaped })
+    // Only the current journal document offers document actions. Historical
+    // generations and subledger postings remain immutable ledger snapshots.
+    const sourceJournal = journalDrawer && entry.doc_kind === 'journal' && entry.doc_id
+      ? await loadJournalDoc(String(entry.doc_id), authz.user.orgId, authz.allowedSubsidiaryIds)
+      : null
+    const currentJournal = sourceJournal?.doc.entry_id === id ? sourceJournal : null
+    const journalHeader = currentJournal ? {
+      doc: {
+        ...currentJournal.doc,
+        ...(canSeePayroll || entry.origin !== 'payroll' ? {} : { party_id: null, party_name: null }),
+      },
+      // The drawer displays the immutable, confidentiality-shaped GL lines.
+      lines: [],
+    } : null
+    return NextResponse.json({ entry, lines: shaped,
+      ...(journalDrawer ? { sourceJournal: journalHeader, canPost: Boolean(currentJournal) && can(authz, 'gl.post') } : {}),
+    })
   },
 });

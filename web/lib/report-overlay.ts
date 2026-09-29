@@ -22,6 +22,7 @@ export const REPORT_OVERLAY_PARAMS = [
   'reportRecord',
   'reportRecordKind',
   'txn',
+  'journalEntry',
   'drawerReturn',
   'form',
   'transactionTab',

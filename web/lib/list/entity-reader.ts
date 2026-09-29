@@ -527,15 +527,24 @@ async function executeEntityListPage(
   const planned = plannedIds ? plannedPageClauses(plannedIds, idExpr) : null;
   const pageWhere = planned ? planned.where : where;
   const pageOrder = planned ? planned.order : entityOrderClause(source, orderExpr, dir);
+  const earlyPage = source.pageBeforeJoins?.sorts.includes(sort) && !planned;
+  const select = sql`${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}`;
+  // Header sorts need only the visibility/filter joins. Hydrate aggregates
+  // after the bounded page; aggregate sorts retain their global SQL order.
+  const rowQuery = earlyPage
+    ? sql`with list_page as materialized (
+        select ${idExpr} as id from ${tableSql} ${countJoins}
+         where ${where} order by ${pageOrder}
+         limit ${perPage} offset ${(page - 1) * perPage}
+      )
+      select ${select} from ${sql.raw(`${source.pageBeforeJoins!.table} ${source.alias}`)}
+        join list_page on list_page.id = ${idExpr} ${baseJoins}
+       where ${where} order by ${pageOrder}`
+    : sql`select ${select} from ${tableSql} ${baseJoins}
+       where ${pageWhere} order by ${pageOrder}
+       limit ${perPage} offset ${(page - 1) * perPage}`;
   const [rowsRes, totalRow] = await Promise.all([
-    (db.execute(sql`
-      select ${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
-        from ${tableSql}
-        ${baseJoins}
-       where ${pageWhere}
-       order by ${pageOrder}
-       limit ${perPage} offset ${(page - 1) * perPage}
-    `)),
+    db.execute(rowQuery),
     db.execute<{ n: string }>(sql`
       select count(*) as n from ${tableSql}
         ${countJoins}

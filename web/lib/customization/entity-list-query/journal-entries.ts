@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { dateOrFalse, pushCustomFieldFilter } from "../list-query";
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /* ------------------------------------------------------------------ */
 /* Journal entries                                                     */
@@ -29,7 +30,7 @@ export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
 
 /**
  * Origins posted as standalone GL-native journals with no subledger document:
- * every engine that writes its own journal_entries rows without a source
+ * every engine that writes its own journal_entries rows without a subledger
  * document must appear here or its journals vanish from the Journal list
  * (reports still tie — the entries exist — but the audit trail does not show
  * them). Entries posted from a subledger document (bills, invoices, payments,
@@ -66,25 +67,26 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
 ];
 
 /**
- * The journal list's backing relation: entries visible in the journal are the
- * union of (a) standalone engine journals by origin and (b) entries posted by
- * a journal- or pay-run-kind document. Both legs are index-driven ((org_id,
- * origin, posting_date) and documents (org_id, kind) → posted_entry_id); the
- * outer org_id predicate pushes down into each. UNION (not ALL) dedupes an
- * entry that qualifies both ways. Pay runs ride leg (b): a posted payroll JE
- * hits the GL like any other posting and the run links to it, so hiding it
- * here breaks the audit trail. Other subledger postings (bills,
- * invoices, payments, …) still live in their own modules and stay out. The
- * /journal header and the setup-guide "posted entries" tile count this same
- * relation through journalScopeWhere, so all three surfaces agree by
- * construction.
+ * Standalone engine journals and entries linked to journal/pay-run documents.
+ * Subledger postings and their migration corrections stay with their source
+ * transaction. Historical journal generations remain visible after the source
+ * document points to a replacement. UNION deduplicates the two inclusion legs.
+ * The page header and setup guide count this same relation.
  */
 export const JOURNAL_ENTRY_TABLE = `(
   select je.* from journal_entries je
    where je.origin in (${JOURNAL_GL_NATIVE_ORIGINS.map((origin) => `'${origin}'`).join(",")})
+     and je.source_document_id is null
+     and not exists (
+       select 1 from documents source
+        where source.org_id = je.org_id
+          and source.posted_entry_id = je.id
+          and source.kind not in ('journal', 'pay_run')
+     )
   union
   select je.* from journal_entries je
-    join documents jd on jd.posted_entry_id = je.id and jd.kind in ('journal', 'pay_run') and jd.org_id = je.org_id
+    join documents jd on (jd.posted_entry_id = je.id or jd.id = je.source_document_id)
+      and jd.kind in ('journal', 'pay_run') and jd.org_id = je.org_id
 )`
 
 /** The source-document join the journal-entry WHERE clause references for
@@ -116,12 +118,25 @@ export function journalScopeWhere(orgId: string, allowedSubsidiaryIds?: Readonly
   return sql.join(parts, sql` `)
 }
 
+/** Draft lists share the whole-document authorization used by their editor. */
+export function journalDraftScopeWhere(orgId: string, allowed: ReadonlySet<string> | null): SQL {
+  const ids = allowed ? [...allowed] : []
+  return sql`e.org_id = ${orgId} and e.kind = 'journal' and e.status = 'draft'
+    ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowed)}
+    ${allowed ? sql`and not exists (
+      select 1 from document_lines l where l.document_id = e.id and l.org_id = e.org_id
+       and l.subsidiary_id is not null
+       and not (l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))
+    )` : sql``}`
+}
+
 export function journalEntryCountJoins(): SQL {
   return sql`
     left join lateral (
       select d.id, d.custom, d.kind
         from documents d
-       where d.posted_entry_id = e.id and d.kind in ('journal', 'pay_run')
+       where (d.posted_entry_id = e.id or d.id = e.source_document_id)
+         and d.org_id = e.org_id and d.kind in ('journal', 'pay_run')
        limit 1
     ) source_doc on true`
 }
@@ -178,6 +193,7 @@ export function journalEntryWhere(
   adhoc: EntityAdhoc,
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
+  customFieldAlias = 'source_doc',
 ): SQL {
   // Visibility (journal-document entries plus standalone engine journals) is
   // built into JOURNAL_ENTRY_TABLE as a union of two index-driven legs — a
@@ -187,7 +203,7 @@ export function journalEntryWhere(
   // the list total and the header/guide counts cannot drift apart.
   const parts: SQL[] = [journalScopeWhere(orgId, allowedSubsidiaryIds)]
   for (const filter of view.filters) {
-    if (pushCustomFieldFilter(parts, filter, "source_doc")) continue
+    if (pushCustomFieldFilter(parts, filter, customFieldAlias)) continue
     const predicate = journalEntryFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

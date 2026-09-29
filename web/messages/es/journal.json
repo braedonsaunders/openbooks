@@ -1,5 +1,7 @@
 {
   "list": {
+    "entriesTab": "Asientos",
+    "draftsTab": "Borradores",
     "title": "Diario",
     "description": "{count, plural, one {# asiento contabilizado} other {# asientos contabilizados}} · auditado; los períodos cerrados son inmutables.",
     "searchPlaceholder": "Buscar por número de asiento o memo…",

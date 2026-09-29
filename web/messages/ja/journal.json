@@ -1,5 +1,7 @@
 {
   "list": {
+    "entriesTab": "仕訳",
+    "draftsTab": "下書き",
     "title": "仕訳",
     "description": "{count, plural, one {# 件の記帳済み仕訳} other {# 件の記帳済み仕訳}} · 監査対象。締め切られた期間は変更不可です。",
     "searchPlaceholder": "仕訳番号またはメモを検索…",

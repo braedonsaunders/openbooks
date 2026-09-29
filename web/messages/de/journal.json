@@ -1,5 +1,7 @@
 {
   "list": {
+    "entriesTab": "Buchungen",
+    "draftsTab": "Entwürfe",
     "title": "Journal",
     "description": "{count, plural, one {# gebuchte Buchung} other {# gebuchte Buchungen}} · geprüft; abgeschlossene Perioden sind unveränderlich.",
     "searchPlaceholder": "Buchungsnummer oder Notiz durchsuchen…",

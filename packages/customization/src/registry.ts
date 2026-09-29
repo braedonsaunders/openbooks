@@ -385,6 +385,7 @@ const JOURNAL: RecordTypeMeta = {
   key: "journal",
   labelKey: "customization.recordTypes.journal",
   category: "transaction",
+  defaultSort: { sortKey: "date", dir: "desc" },
   headerFields: [
     { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
     { key: "party_id", labelKey: "common.labels.party", level: "header", kind: "entity_ref" },
@@ -414,7 +415,7 @@ const JOURNAL: RecordTypeMeta = {
         ["revaluation", "revaluation"], ["labor_burden", "laborBurden"],
         ["depreciation", "depreciation"], ["revenue_recognition", "revenueRecognition"],
         ["fx_settlement", "fxSettlement"], ["translation", "translation"],
-        // Migration true-ups are list-visible GL-native journals (F-t12-014).
+        // Standalone migration true-ups remain visible in the journal list.
         ["migration", "migration"],
       ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),
     },
@@ -430,6 +431,14 @@ const JOURNAL: RecordTypeMeta = {
     },
     { key: "posting_date", labelKey: "common.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },
   ],
+};
+
+const JOURNAL_DRAFT: RecordTypeMeta = {
+  ...JOURNAL,
+  key: "journal_draft",
+  supportsForms: false,
+  listColumns: JOURNAL.listColumns.filter((column) => column.key !== "origin" && column.key !== "line_count"),
+  listFilters: JOURNAL.listFilters.filter((filter) => filter.key === "posting_date"),
 };
 
 function bankDocumentRecordType(key: "deposit" | "transfer"): RecordTypeMeta {
@@ -2267,6 +2276,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   TRANSFER,
   EXPENSE_REPORT,
   JOURNAL,
+  JOURNAL_DRAFT,
   VENDOR_PAYMENT,
   CUSTOMER_PAYMENT,
   QUOTE,
@@ -2450,6 +2460,8 @@ export function customFieldTargetFor(recordType: string): {
   lineTable: string | null
   lineKind: string | undefined
 } {
+  // The draft tab is a list projection of journal documents, not a new kind.
+  if (recordType === "journal_draft") return customFieldTargetFor("journal")
   const meta = RECORD_TYPE_BY_KEY[recordType]
   const documentKind = meta?.category === "transaction"
   const table = meta?.customFieldTable ?? (documentKind ? "documents" : null)

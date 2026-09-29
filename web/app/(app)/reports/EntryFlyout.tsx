@@ -14,7 +14,7 @@ import { decimalCmp, decimalNeg } from '../../../lib/statement-format'
 import { hrefWithoutKeys } from '../../../lib/report-overlay'
 import { useReportOverlayOptional } from '../../../components/navigation-provider'
 
-type EntryData = {
+export type EntryData = {
   entry: {
     id: string
     entry_number: string
@@ -27,6 +27,7 @@ type EntryData = {
     doc_id: string | null
     doc_kind: string | null
     doc_number: string | null
+    subsidiary_id: string
   }
   lines: {
     line_number: number
@@ -42,6 +43,10 @@ type EntryData = {
     party: string | null
     department: string | null
     project: string | null
+    subsidiary_id: string
+    subsidiary: string
+    functional_currency: string
+    extra_dims: Record<string, string>
   }[]
 }
 
@@ -66,7 +71,7 @@ export function EntryFlyout() {
   const t = useTranslations('journal')
   const tc = useTranslations('common')
   const tr = useTranslations('reports')
-  const txn = params.get('txn')
+  const txn = pathname === '/journal' ? null : params.get('txn')
 
   const [data, setData] = useState<EntryData | null>(null)
   const [loading, setLoading] = useState(false)

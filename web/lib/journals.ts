@@ -7,6 +7,7 @@ import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { allowedSubsidiaryIds as resolveAllowedSubsidiaryIds } from './subsidiaries'
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 
 export interface CreateDraftJournalOptions {
   /** Explicit legal entity requested by the caller (omitted = choose a default). */
@@ -129,7 +130,9 @@ export async function loadJournalDoc(
     // reads in the same transaction so a concurrent rehome cannot move the
     // header between authorization and the line read.
     const doc = await db.execute<Record<string, unknown>>(sql`
-      select d.*, p.display_name as party_name, e.id as entry_id
+      select d.*, d.document_date::text as document_date,
+             ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at,
+             p.display_name as party_name, e.id as entry_id
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id

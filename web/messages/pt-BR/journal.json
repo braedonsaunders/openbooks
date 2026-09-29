@@ -1,5 +1,7 @@
 {
   "list": {
+    "entriesTab": "Lançamentos",
+    "draftsTab": "Rascunhos",
     "title": "Lançamentos",
     "description": "{count, plural, one {# lançamento lançado} other {# lançamentos lançados}} · auditados; períodos fechados são imutáveis.",
     "searchPlaceholder": "Buscar número do lançamento ou memorando…",

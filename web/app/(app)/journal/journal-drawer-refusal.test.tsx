@@ -8,6 +8,7 @@ declare global {
   var __journalToasts: { kind: string; message: string }[] | undefined;
   var __journalRouter: { push(url: string): void; refresh(): void } | undefined;
   var __journalGets: number | undefined;
+  var __journalQuery: string | undefined;
 }
 
 // JournalDrawer on the shared action path. Save failures toasted without
@@ -26,7 +27,7 @@ stubModules({
     source:
       "export function useRouter(){return globalThis.__journalRouter}" +
       "export function usePathname(){return '/journal'}" +
-      "export function useSearchParams(){return new URLSearchParams()}",
+      "export function useSearchParams(){return new URLSearchParams(globalThis.__journalQuery??'')}",
   },
   intl: false,
   authz: false,
@@ -66,6 +67,9 @@ const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../components/money-provider");
 const { JournalDrawer, isBlankJournalLine, findMissingJournalAccountLine } = await import("./JournalDrawer");
+const { JournalEntryDrawer } = await import("./JournalEntryDrawer");
+const { EntryFlyout } = await import("../reports/EntryFlyout");
+const { NavigationProvider } = await import("../../../components/navigation-provider");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const TOKEN = "2026-09-17T12:00:00.000000Z";
@@ -99,6 +103,7 @@ function freshGlobals() {
   globalThis.__journalToasts = [];
   globalThis.__journalRouter = { push() {}, refresh() {} };
   globalThis.__journalGets = 0;
+  globalThis.__journalQuery = undefined;
 }
 
 function snapshotBody(id: string) {
@@ -185,6 +190,62 @@ const BALANCED_LINES = [
   { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
   { account_id: "a2", amount: "-100.00", description: "leg two", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
 ];
+
+test("switching journals resets the editor without a false revision conflict", async (t) => {
+  freshGlobals();
+  const first = DRAFT_DOC();
+  const second = { ...DRAFT_DOC(), document_number: "JE-00013", memo: "second journal" };
+  const restoreFetch = scriptFetch((url) => {
+    const doc = url === `/api/journals/${first.id}` ? first : url === `/api/journals/${second.id}` ? second : null;
+    return doc ? Response.json({ doc, lines: BALANCED_LINES }) : null;
+  });
+  t.after(restoreFetch);
+  const drawer = await mountJournal(first, "edit");
+  t.after(drawer.unmount);
+  assert.doesNotMatch(document.body.textContent ?? "", /Unsaved changes/);
+  await drawer.rerender(second);
+  await tick();
+  assert.match(document.body.textContent ?? "", /JE-00013/);
+  assert.match(document.body.textContent ?? "", /second journal/);
+  assert.equal((globalThis.__journalToasts ?? []).filter((toast) => /changed after you opened it/.test(toast.message)).length, 0);
+});
+
+test("posted journal links use one native drawer with immutable ledger lines", async (t) => {
+  freshGlobals();
+  const doc = { ...DRAFT_DOC(), status: "posted" };
+  const entryId = randomUUID();
+  globalThis.__journalQuery = `journalEntry=${entryId}&txn=stale-payment`;
+  const requests: string[] = [];
+  const restoreFetch = scriptFetch((url) => {
+    requests.push(url);
+    if (url === `/api/reports/entry/${entryId}?journal=1`) return Response.json({
+      entry: { id: entryId, entry_number: "JE-4080", date: "2026-09-17", status: "posted", origin: "manual", subsidiary_id: "sub-1" },
+      sourceJournal: { doc, lines: [{ ...BALANCED_LINES[0], amount: "999.00", description: "source document line" }] },
+      canPost: true,
+      lines: BALANCED_LINES.map((line, index) => ({ ...line, line_number: index + 1, memo: "immutable ledger line", account_number: String(index + 1000), account_name: `Account ${index}`, subsidiary_id: "sub-1", subsidiary: "Main entity", functional_currency: "CAD" })),
+    });
+    return null;
+  });
+  t.after(restoreFetch);
+  t.after(() => { globalThis.__journalQuery = undefined; });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD"><NavigationProvider><JournalEntryDrawer /><EntryFlyout /></NavigationProvider></MoneyProvider></NextIntlClientProvider>);
+    await tick();
+  });
+  await tick();
+  assert.match(document.body.textContent ?? "", /JE-4080/);
+  assert.match(document.body.textContent ?? "", /immutable ledger line/);
+  assert.match(document.body.textContent ?? "", /CAD/);
+  assert.doesNotMatch(document.body.textContent ?? "", /999\.00/);
+  assert.doesNotMatch(document.body.textContent ?? "", /source document line|Open full transaction/i);
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
+  assert.equal(requests.some((url) => url.includes('stale-payment')), false);
+  assert.equal(requests.some((url) => url === `/api/journals/${doc.id}`), false, "opening posted evidence does not reload editable source lines");
+});
 
 test("a refused save pins the reason instead of toasting into the void", async (t) => {
   freshGlobals();
