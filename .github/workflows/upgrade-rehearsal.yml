@@ -2,24 +2,20 @@ name: upgrade-rehearsal
 
 # RELEASE GATE ONLY. This never runs on ordinary commits: no pull_request, no
 # push to main, no schedule. Representative populated upgrades are the release
-# default; the full matrix requires an explicit manual dispatch. Start it for
-# a release candidate in one of two ways:
+# default; the full matrix requires an explicit manual dispatch. Start it once
+# the release candidate is on main:
 #
-#   git push origin "${SHA}:refs/heads/upgrade-rehearsal/<short>"   # push trigger
-#   gh workflow run upgrade-rehearsal.yml --ref <branch-at-SHA>     # once on main
+#   gh workflow run upgrade-rehearsal.yml --ref main
 #
 # The candidate is always the commit the run was started on (github.sha), so
 # publish-container.yml can find this run by head_sha. It refuses a release
-# whose exact commit has no successful `upgrade-verification` job here.
+# commit lacks a successful exact or input-equivalent ancestor rehearsal.
 #
 # What one cell proves: scripts/upgrade-rehearsal/rehearse.mjs (header).
 # What the matrix covers: scripts/upgrade-rehearsal/rehearsal.json.
 # Pinned by scripts/upgrade-rehearsal/upgrade-rehearsal.test.mjs.
 
 on:
-  push:
-    branches:
-      - "upgrade-rehearsal/**"
   workflow_dispatch:
     inputs:
       full_matrix:

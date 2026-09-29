@@ -156,15 +156,10 @@ test("the summary names a refusal and the slowest migrations", () => {
   assert.match(text, /generated\/0296_x\.sql \| 9/);
 });
 
-test("the rehearsal never runs on ordinary commits (owner directive: release gate only)", () => {
+test("the rehearsal starts only on explicit dispatch without candidate branches", () => {
   const triggers = WORKFLOW.slice(WORKFLOW.indexOf("\non:"), WORKFLOW.indexOf("\npermissions:"));
-  assert.doesNotMatch(triggers, /pull_request|schedule|merge_group|workflow_run/);
-  assert.doesNotMatch(triggers, /branches:\s*\n\s*-\s*"?main"?/);
-  assert.deepEqual(
-    [...triggers.matchAll(/^\s+-\s+"([^"]+)"$/gm)].map((match) => match[1]),
-    ["upgrade-rehearsal/**"],
-    "the only push trigger is the release-candidate upgrade-rehearsal/** branch",
-  );
+  assert.doesNotMatch(triggers, /(?:push|pull_request|schedule|merge_group|workflow_run|branches):/);
+  assert.match(triggers, /workflow_dispatch:/);
 });
 
 test("finding keys compare as a multiset, so a duplicate refusal is not hidden", () => {
