@@ -175,12 +175,15 @@ DUMP_FILE="$DB_BACKUP_DIR/pre-${TAG_SANITIZED}-${SHORT_SHA}-${STAMP}.dump"
 echo "snapshotting the target database to $DUMP_FILE ..."
 # pg_dump is the client inside the Dokploy postgres container: it connects to
 # the dedicated BYPASSRLS URL for that same database, and the archive streams to
-# the host backup directory. The URL travels as a transient process argument
+# the host backup directory. Scratch fixture snapshot schemas are test-only
+# artifacts, not application state; their separate owners may deny access to
+# this dedicated login, so they are excluded from the application backup.
+# The URL travels as a transient process argument
 # visible only to root on the manager, which already owns the credential
 # files this script writes.
 # shellcheck disable=SC2024  # the redirect intentionally runs as the release
 # user, who owns the backup directory; only the docker call needs sudo.
-if ! sudo docker exec "$PG" pg_dump -Fc "$BYPASS_URL" </dev/null > "$DUMP_FILE"; then
+if ! sudo docker exec "$PG" pg_dump -Fc --exclude-schema='scratch_fixture_*' "$BYPASS_URL" </dev/null > "$DUMP_FILE"; then
   echo "pre-migration snapshot failed: pg_dump of the target database did not complete; refusing the release" >&2
   rm -f -- "$DUMP_FILE"
   exit 1
