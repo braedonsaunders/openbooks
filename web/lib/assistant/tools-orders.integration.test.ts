@@ -70,6 +70,7 @@ test('order reads: backlog, line remainders, and subsidiary isolation', { skip: 
     assert.equal(get.ok, true, JSON.stringify(get));
     const line = ((get as { ok: true; data: Record<string, unknown> }).data.lines as Record<string, unknown>[])[0];
     assert.ok(line);
+    assert.equal(line.unit_price, '20');
     assert.equal(line.remainingBillable, '8.0000');
     assert.equal(line.fulfilment, 'partially_fulfilled');
 

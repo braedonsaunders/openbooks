@@ -9,6 +9,7 @@
  * while rehearsing less than the gate promises.
  *
  *   node scripts/upgrade-rehearsal/plan.mjs                  # print the matrix
+ *   node scripts/upgrade-rehearsal/plan.mjs --default-only    # print the release default
  *   node scripts/upgrade-rehearsal/plan.mjs --github-output "$GITHUB_OUTPUT"
  */
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
@@ -292,6 +293,51 @@ export function planMatrix(config) {
   };
 }
 
+function validateDefaultGate(config, problems) {
+  const gate = config?.defaultGate;
+  if (!gate || typeof gate !== "object") {
+    refuse(problems, "defaultGate is missing: the release default must name its datasets");
+    return;
+  }
+  if (!Array.isArray(gate.datasets) || gate.datasets.length === 0) {
+    refuse(problems, "defaultGate.datasets is empty: the release default proves nothing");
+    return;
+  }
+  const ids = new Set((config?.datasets ?? []).map((dataset) => dataset?.id));
+  const seen = new Set();
+  for (const id of gate.datasets) {
+    if (!ids.has(id)) refuse(problems, `defaultGate names unknown dataset ${JSON.stringify(id)}`);
+    if (seen.has(id)) refuse(problems, `defaultGate lists dataset ${JSON.stringify(id)} twice`);
+    seen.add(id);
+  }
+  const classes = new Set(
+    (config?.datasets ?? []).filter((dataset) => seen.has(dataset?.id)).map((dataset) => dataset?.class),
+  );
+  if (!classes.has("multi-entity")) {
+    refuse(problems, "defaultGate must include a populated multi-entity-class dataset; an empty-only default proves no upgrade");
+  }
+}
+
+/** The release default: oldest plus latest source on the gate datasets. */
+export function defaultMatrix(config) {
+  const problems = validateConfig(config);
+  if (problems.length === 0) {
+    problems.push(...coverageGaps(config));
+    validateDefaultGate(config, problems);
+  }
+  if (problems.length > 0) {
+    const error = new Error(`upgrade rehearsal config refused:\n  - ${problems.join("\n  - ")}`);
+    error.problems = problems;
+    throw error;
+  }
+  const tags = [...new Set([config.sources[0].tag, config.sources.at(-1).tag])];
+  return {
+    include: tags.flatMap((source) =>
+      config.defaultGate.datasets.map((dataset) => ({ source, dataset })),
+    ),
+  };
+}
+
 export function loadConfig(path = CONFIG_PATH) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -299,7 +345,7 @@ export function loadConfig(path = CONFIG_PATH) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const outputIndex = process.argv.indexOf("--github-output");
   try {
-    const matrix = planMatrix(loadConfig());
+    const matrix = process.argv.includes("--default-only") ? defaultMatrix(loadConfig()) : planMatrix(loadConfig());
     const json = JSON.stringify(matrix);
     if (outputIndex >= 0) {
       const target = process.argv[outputIndex + 1];

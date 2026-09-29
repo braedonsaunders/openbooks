@@ -48,8 +48,9 @@ export async function upsertBuiltInRolesForOrg(
       if (upserted.rows.length !== 1) {
         throw new Error(
           `built-in role "${key}" for organization ${orgId} was not seeded: ` +
-            `a custom role already uses that key. Rename the custom role in ` +
-            `Admin -> Users & Roles, then re-run the seed.`,
+            `a custom role already uses that key. In Admin -> Users & Roles, ` +
+            `create a replacement custom role with a different key and the same permissions and subsidiary scope, ` +
+            `reassign every affected user to it, then delete the conflicting custom role and re-run the seed.`,
         );
       }
     }

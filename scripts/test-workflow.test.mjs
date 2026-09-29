@@ -1,4 +1,4 @@
-// source-pin-contract: CI test-partition scope and full-verification release gate wiring (test.yml, publish-container.yml)
+// source-pin-contract: CI test-partition scope and focused release gate wiring (test.yml, publish-container.yml)
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
@@ -86,6 +86,13 @@ test('units, database shards and simulation run independently without omitted te
   assert.match(simulation, /sim -- run/)
   assert.match(simulation, /harness --/)
   assert.match(simulation, /services:/)
+  for (const job of ['unit', 'database', 'simulation']) {
+    assert.match(
+      topLevelJob(job),
+      /if: github\.event_name == 'workflow_dispatch' && needs\.scope\.outputs\.code == 'true'/,
+      `${job} must run on manual dispatch only`,
+    )
+  }
 })
 
 test('browser suites fan out and claim every workflow spec exactly once', () => {
@@ -93,6 +100,13 @@ test('browser suites fan out and claim every workflow spec exactly once', () => 
   // critical path on their own; every other partition finished inside 16
   // minutes. Pinned so the fan-out stays a decision rather than drift.
   const app = topLevelJob('e2e-app')
+  for (const job of ['e2e-app', 'e2e-workflows']) {
+    assert.match(
+      topLevelJob(job),
+      /if: github\.event_name == 'workflow_dispatch' && needs\.scope\.outputs\.browser == 'true'/,
+      `${job} must run on manual dispatch only`,
+    )
+  }
   assert.match(app, /shard: \[1, 2, 3\]/)
   assert.match(app, /--project app --shard=\$\{\{ matrix.shard \}\}\/3/)
   assert.match(app, /fail-fast: false/)
@@ -338,28 +352,35 @@ test('a skipped control is an unrun control: both partitions audit their own ski
   }
 })
 
-test('scoping main is safe only because a scoped run cannot clear a release', () => {
+test('workflow-only pushes skip the matrices because the release proves itself', () => {
   const scope = topLevelJob('scope')
   // Fails toward FULL on every unknown: non-push events, force pushes, a base
   // that is not in history, and anything touching the build's own inputs.
   assert.match(scope, /github\.event_name \}\}" != "push" \]; then full=true/)
   assert.match(scope, /0000000000000000000000000000000000000000/)
   assert.match(scope, /git cat-file -e "\$base\^\{commit\}"/)
-  assert.match(scope, /\\\.github\/workflows\/\|package-lock\\\.json/)
+  assert.match(scope, /package-lock\\\.json/)
+  assert.doesNotMatch(scope, /\\\.github\/workflows\//)
 
-  // The expensive matrices are gated; the cheap gate never is.
+  // The expensive matrices are gated on manual dispatch; the cheap gate never is.
   for (const job of ['unit', 'database', 'simulation']) {
-    assert.match(topLevelJob(job), /if: needs\.scope\.outputs\.code == 'true'/, job)
+    assert.match(topLevelJob(job), /needs\.scope\.outputs\.code == 'true'/, job)
+    assert.match(topLevelJob(job), /github\.event_name == 'workflow_dispatch'/, job)
   }
   for (const job of ['e2e-app', 'e2e-workflows']) {
-    assert.match(topLevelJob(job), /if: needs\.scope\.outputs\.browser == 'true'/, job)
+    assert.match(topLevelJob(job), /needs\.scope\.outputs\.browser == 'true'/, job)
+    assert.match(topLevelJob(job), /github\.event_name == 'workflow_dispatch'/, job)
   }
+  assert.match(topLevelJob('integration'), /github\.event_name == 'workflow_dispatch'/, 'integration')
   assert.doesNotMatch(topLevelJob('typecheck'), /^\s+if:/m)
 
-  // The keystone. It must NOT be always() — its entire value is that it cannot
-  // exist unless everything it needs really passed.
+  // Manual full-suite attestation. It must NOT be always() — its entire value
+  // is that it cannot exist unless everything it needs really passed — and it
+  // must run on dispatch only, never on pushes or PRs.
   const full = topLevelJob('full-verification')
-  assert.match(full, /if: needs\.scope\.outputs\.full == 'true'/)
+  assert.match(full, /github\.event_name == 'workflow_dispatch'/)
+  assert.match(full, /needs\.scope\.outputs\.full == 'true'/)
+  assert.doesNotMatch(full, /push|pull_request/)
   // The DIRECTIVE, not the prose — the comment above it names `if: always()`
   // precisely to warn the next person off adding one.
   assert.doesNotMatch(full, /^\s*if: always\(\)/m)
@@ -370,17 +391,27 @@ test('scoping main is safe only because a scoped run cannot clear a release', ()
     )
   }
 
-  // And publish must actually require it, or scoping silently weakens the gate.
+  // And publish must prove the artifact itself, or scoping silently weakens
+  // the gate: the verify job runs a focused smoke set (tenant isolation,
+  // kernel invariants, atomic posting, subledger tie-out) instead of
+  // requiring an exhaustive test run for the exact SHA.
   const publish = readFileSync(
     new URL('../.github/workflows/publish-container.yml', import.meta.url),
     'utf8',
   )
-  assert.match(publish, /select\(\.name == "full-verification"\)/)
-  assert.match(publish, /No EXHAUSTIVE 'test' run/)
+  assert.match(publish, /Run the release smoke set/)
+  assert.match(publish, /db-rls\.integration\.test\.ts/)
+  assert.match(publish, /verify-test-registration\.mjs/)
+  assert.doesNotMatch(publish, /No EXHAUSTIVE 'test' run/)
 })
 
 test('the aggregator only tolerates a skipped partition on a scoped run', () => {
   const integration = topLevelJob('integration')
   assert.match(integration, /FULL: \$\{\{ needs\.scope\.outputs\.full \}\}/)
   assert.match(integration, /full \? \["success"\] : \["success", "skipped"\]/)
+  assert.match(
+    integration,
+    /if: github\.event_name == 'workflow_dispatch' && always\(\)/,
+    'aggregation runs on manual dispatch and still fires when a partition fails',
+  )
 })

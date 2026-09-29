@@ -45,6 +45,10 @@
     "simulation",
     "edge"
   ],
+  "defaultGate": {
+    "$comment": "Release default: oldest plus latest source (sources-list order, oldest first) on the representative populated dataset. The full matrix stays available opt-in (workflow_dispatch full_matrix). Never wire either into push or pull_request CI.",
+    "datasets": ["multi-entity"]
+  },
   "datasets": [
     {
       "id": "empty",

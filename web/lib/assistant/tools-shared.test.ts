@@ -97,6 +97,10 @@ test("capList keeps its existing contract", () => {
 
 test("decimalText preserves exact decimal strings", () => {
   assert.equal(decimalText("9007199254740993.1234"), "9007199254740993.1234");
+  assert.equal(decimalText("12.12345678"), "12.12345678");
+  assert.equal(decimalText("20.00000000"), "20");
+  assert.throws(() => decimalText("12.123456789"), /exact decimal strings/);
+  assert.throws(() => money("12.12345678"), /at most 4 decimal places/);
 });
 
 test("assistantListPage reports exact-limit completeness from an extra-row fetch", () => {

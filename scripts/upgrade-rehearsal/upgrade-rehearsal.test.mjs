@@ -3,8 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
-import { REMEDY_DIR_PREFIX, coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, diffFindingKeys, findingKeys, preUpgradeDumpName, summarize, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
+import { REMEDY_DIR_PREFIX, coverageGaps, defaultMatrix, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
+import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, clearPhaseLogSink, diffFindingKeys, findingKeys, maskDatabaseUrl, phaseLogPath, PhaseRefusal, preUpgradeDumpName, run, setPhaseLogSink, summarize, tailLines, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
@@ -39,6 +39,34 @@ test("the matrix is one cell per source release and dataset", () => {
     { source: "v0.1.0-alpha.23", dataset: "empty" },
     { source: "v0.1.0-alpha.23", dataset: "small" },
   ]);
+});
+
+test("the release default is oldest plus latest source on the gate datasets", () => {
+  assert.deepEqual(defaultMatrix(loadConfig()).include, [
+    { source: "v0.1.0-alpha.22", dataset: "multi-entity" },
+    { source: "v0.1.0-alpha.23", dataset: "multi-entity" },
+  ]);
+  assert.equal(planMatrix(loadConfig()).include.length, 18);
+});
+
+test("the release default refuses an unknown dataset and dedupes one source", () => {
+  const unknown = config();
+  unknown.defaultGate = { datasets: ["no-such-dataset"] };
+  assert.throws(() => defaultMatrix(unknown), /unknown dataset/);
+  const single = config({ sources: [{ tag: "v0.1.0-alpha.23" }], requiredDatasetClasses: ["empty", "small", "multi-entity"] });
+  single.datasets.push({ id: "multi-entity", class: "multi-entity", steps: [{ kind: "samples" }] });
+  single.defaultGate = { datasets: ["multi-entity"] };
+  assert.deepEqual(defaultMatrix(single).include, [{ source: "v0.1.0-alpha.23", dataset: "multi-entity" }]);
+});
+
+test("the release default refuses a vacuous gate", () => {
+  const emptyOnly = config();
+  emptyOnly.defaultGate = { datasets: ["empty"] };
+  assert.throws(() => defaultMatrix(emptyOnly), /multi-entity-class/);
+  const dupe = config({ requiredDatasetClasses: ["empty", "small", "multi-entity"] });
+  dupe.datasets.push({ id: "multi-entity", class: "multi-entity", steps: [{ kind: "samples" }] });
+  dupe.defaultGate = { datasets: ["multi-entity", "multi-entity"] };
+  assert.throws(() => defaultMatrix(dupe), /twice/);
 });
 
 test("the release plan refuses a required dataset class with no dataset, by name", () => {
@@ -373,6 +401,74 @@ test("the pre-upgrade dump name carries source, candidate, and stamp, and a host
   assert.equal(hostile, "pre-refs_tags_v1_.._.._x-abc-s.dump");
   assert.doesNotMatch(hostile, /[/\s]/);
   assert.equal(preUpgradeDumpName("", null, ""), "pre-untagged-candidate-nostamp.dump");
+});
+
+test("tailLines keeps the last lines for a refusal message", () => {
+  assert.equal(tailLines("a\nb\nc\n", 2), "b\nc");
+  assert.equal(tailLines("", 20), "");
+  assert.equal(tailLines("only", 20), "only");
+});
+
+test("phase logs live per phase and stream under the report dir, and hostile names are refused", () => {
+  assert.ok(phaseLogPath("/tmp/r", "upgrade", "stderr").endsWith("upgrade.stderr.log"));
+  assert.ok(phaseLogPath("/tmp/r", "upgrade", "stdout").endsWith("upgrade.stdout.log"));
+  assert.throws(() => phaseLogPath("/tmp/r", "../escape", "stdout"), /unsafe phase/);
+  assert.throws(() => phaseLogPath("/tmp/r", "upgrade", "stdin"), /unknown log stream/);
+});
+
+test("a phase refusal carries its stderr as cause so the report can name the installer error", () => {
+  const refusal = new PhaseRefusal(
+    "upgrade",
+    "bootstrap exited 1",
+    { stdout: "", stderr: "line1\nline2" },
+    { cause: "line1\nline2" },
+  );
+  assert.equal(refusal.phase, "upgrade");
+  assert.match(refusal.message, /\[upgrade\]/);
+  assert.equal(refusal.cause, "line1\nline2");
+  assert.equal(refusal.details.stderr, "line1\nline2");
+});
+
+test("run() captures a failing child's stderr into details and cause", async () => {
+  await assert.rejects(
+    run("probe-test", process.execPath, ["-e", "console.error('installer says no'); process.exit(1)"]),
+    (error) => {
+      assert.match(error.message, /installer says no/);
+      assert.match(error.details.stderr, /installer says no/);
+      assert.match(String(error.cause ?? ""), /installer says no/);
+      return true;
+    },
+  );
+});
+
+test("run() still resolves stdout on success", async () => {
+  const out = await run("probe-test", process.execPath, ["-e", "console.log('hello')"]);
+  assert.match(out, /hello/);
+});
+
+test("database credentials never reach phase logs or refusal messages", () => {
+  assert.equal(
+    maskDatabaseUrl("postgres://openbooks:s3cret@127.0.0.1:5439/openbooks_upgrade_test"),
+    "postgres://***@127.0.0.1:5439/openbooks_upgrade_test",
+  );
+  assert.equal(maskDatabaseUrl("postgres://openbooks@127.0.0.1:5439/db"), "postgres://openbooks@127.0.0.1:5439/db");
+  assert.equal(maskDatabaseUrl("redis://127.0.0.1:6391/0"), "redis://127.0.0.1:6391/0");
+  assert.equal(maskDatabaseUrl("--dataset"), "--dataset");
+});
+
+test("a phase evidence log failure refuses at child close", async () => {
+  setPhaseLogSink("/tmp/definitely-missing-dir-ug-probe", "probe-test");
+  try {
+    await assert.rejects(
+      run("probe-test", process.execPath, ["-e", "process.exit(0)"]),
+      (error) => {
+        assert.match(error.message, /phase evidence log failed/);
+        return true;
+      },
+    );
+  } finally {
+    clearPhaseLogSink();
+  }
 });
 
 test("a declared source harness defect must name its check and say why the tagged check is wrong", () => {

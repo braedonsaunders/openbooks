@@ -1,9 +1,9 @@
 name: upgrade-rehearsal
 
 # RELEASE GATE ONLY. This never runs on ordinary commits: no pull_request, no
-# push to main, no schedule. Spinning up every dataset for every source release
-# is a release cost, not a per-commit cost (owner directive, 2026-09-23). Start
-# it for a release candidate in one of two ways:
+# push to main, no schedule. Representative populated upgrades are the release
+# default; the full matrix requires an explicit manual dispatch. Start it for
+# a release candidate in one of two ways:
 #
 #   git push origin "${SHA}:refs/heads/upgrade-rehearsal/<short>"   # push trigger
 #   gh workflow run upgrade-rehearsal.yml --ref <branch-at-SHA>     # once on main
@@ -14,13 +14,19 @@ name: upgrade-rehearsal
 #
 # What one cell proves: scripts/upgrade-rehearsal/rehearse.mjs (header).
 # What the matrix covers: scripts/upgrade-rehearsal/rehearsal.json.
-# Pinned by scripts/upgrade-rehearsal/workflow.test.mjs.
+# Pinned by scripts/upgrade-rehearsal/upgrade-rehearsal.test.mjs.
 
 on:
   push:
     branches:
       - "upgrade-rehearsal/**"
   workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: "Rehearse every source/dataset cell instead of the release default"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -48,8 +54,15 @@ jobs:
           node-version: 24
       - id: plan
         # Fails closed on a required dataset class with no dataset, an unknown
-        # step kind, or a malformed source tag.
-        run: node scripts/upgrade-rehearsal/plan.mjs --github-output "$GITHUB_OUTPUT"
+        # step kind, or a malformed source tag. The release default (oldest
+        # plus latest source on the gate datasets) runs unless full_matrix is
+        # dispatched for the whole matrix.
+        run: |
+          if [ "${{ inputs.full_matrix }}" = "true" ]; then
+            node scripts/upgrade-rehearsal/plan.mjs --github-output "$GITHUB_OUTPUT"
+          else
+            node scripts/upgrade-rehearsal/plan.mjs --default-only --github-output "$GITHUB_OUTPUT"
+          fi
 
   rehearse:
     needs: plan
