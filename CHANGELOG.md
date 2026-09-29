@@ -6,13 +6,15 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
-## [0.1.0-alpha.25.1] - 2026-09-29
+## [0.1.0-alpha.25.2] - 2026-09-29
 
 The corrected alpha.25 release preserves existing organization role
 configuration during bootstrap, including custom roles whose keys overlap
 the built-in catalogue. Explicit role seeding still refuses collisions and
 names the supported replacement-and-reassignment procedure. Order reads
 preserve eight-decimal unit prices without relaxing monetary amount precision.
+Non-posting orders retain a null open balance as not applicable, never as an
+invented zero monetary amount.
 
 Routine updates run static checks; comprehensive test matrices remain
 available on demand. Release verification exercises real database-backed
