@@ -128,7 +128,7 @@ done < "$ENV_FILE"
 # the dedicated BYPASSRLS login can, without granting it schema ownership.
 database_identity() {
   sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$1" \
-    -c "select inet_server_addr()::text || ':' || inet_server_port()::text || '/' || current_database()" </dev/null
+    -c "select host(inet_server_addr()) || ':' || inet_server_port()::text || '/' || current_database()" </dev/null
 }
 MIGRATION_TARGET=$(database_identity "$MIGRATION_URL")
 BYPASS_TARGET=$(database_identity "$BYPASS_URL")
