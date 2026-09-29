@@ -123,11 +123,34 @@ done < "$ENV_FILE"
   echo "Web/worker must serve as a non-owner runtime login while migrations run as the schema owner." >&2
   exit 1; }
 
+# The snapshot must cover the same production database that receives the
+# migration. The schema owner cannot dump tables with FORCE ROW LEVEL SECURITY;
+# the dedicated BYPASSRLS login can, without granting it schema ownership.
+database_identity() {
+  sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$1" \
+    -c "select host(inet_server_addr()) || ':' || inet_server_port()::text || '/' || current_database()" </dev/null
+}
+MIGRATION_TARGET=$(database_identity "$MIGRATION_URL")
+BYPASS_TARGET=$(database_identity "$BYPASS_URL")
+RUNTIME_TARGET=$(database_identity "$RUNTIME_URL")
+[[ "$MIGRATION_TARGET" == 10.0.0.85:5432/* ]] || {
+  echo "refusing to deploy: migration URL reaches $MIGRATION_TARGET rather than production PostgreSQL at 10.0.0.85:5432" >&2
+  exit 1; }
+[ "$MIGRATION_TARGET" = "$BYPASS_TARGET" ] && [ "$MIGRATION_TARGET" = "$RUNTIME_TARGET" ] || {
+  echo "refusing to deploy: runtime, bypass and migration URLs do not reach the same database" >&2
+  exit 1; }
+BYPASS_ROLE=$(sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$BYPASS_URL" \
+  -c "select rolbypassrls and not rolsuper from pg_roles where rolname = current_user" </dev/null)
+[ "$BYPASS_ROLE" = "t" ] || {
+  echo "refusing to deploy: snapshot login is not a dedicated non-superuser BYPASSRLS role" >&2
+  exit 1; }
+echo "production database target and complete-snapshot role verified"
+
 # ---------------------------------------------------------------------------
 # 1. Snapshot the target database BEFORE anything migrates it. A mid-chain
 #    bootstrap failure leaves earlier migrations committed; without a snapshot
 #    there is nothing to restore. (Placed after the URL checks because the
-#    dump connects with the migration URL they validate.)
+#    dump connects with the dedicated bypass URL validated above.)
 # ---------------------------------------------------------------------------
 # The tag names the release in the dump filename; anything outside the
 # filename-safe set is flattened so a tag can never escape the backup
@@ -151,13 +174,16 @@ DUMP_FILE="$DB_BACKUP_DIR/pre-${TAG_SANITIZED}-${SHORT_SHA}-${STAMP}.dump"
 
 echo "snapshotting the target database to $DUMP_FILE ..."
 # pg_dump is the client inside the Dokploy postgres container: it connects to
-# the migration URL wherever that database lives, and the archive streams to
-# the host backup directory. The URL travels as a transient process argument
+# the dedicated BYPASSRLS URL for that same database, and the archive streams to
+# the host backup directory. Scratch fixture snapshot schemas are test-only
+# artifacts, not application state; their separate owners may deny access to
+# this dedicated login, so they are excluded from the application backup.
+# The URL travels as a transient process argument
 # visible only to root on the manager, which already owns the credential
 # files this script writes.
 # shellcheck disable=SC2024  # the redirect intentionally runs as the release
 # user, who owns the backup directory; only the docker call needs sudo.
-if ! sudo docker exec "$PG" pg_dump -Fc "$MIGRATION_URL" </dev/null > "$DUMP_FILE"; then
+if ! sudo docker exec "$PG" pg_dump -Fc --exclude-schema='scratch_fixture_*' "$BYPASS_URL" </dev/null > "$DUMP_FILE"; then
   echo "pre-migration snapshot failed: pg_dump of the target database did not complete; refusing the release" >&2
   rm -f -- "$DUMP_FILE"
   exit 1
@@ -186,6 +212,58 @@ if [ "${#dump_files[@]}" -gt "$DB_BACKUP_KEEP" ]; then
     rm -f -- "$old"
     echo "pruned snapshot older than the newest $DB_BACKUP_KEEP: $old"
   done
+fi
+
+# Migration 0417 is a precheck-only body: its published SQL contains no DDL or
+# data rewrite. Its LIKE pattern accidentally escapes the version wildcard,
+# rejecting valid enc:v1:/enc:v2: envelopes. Do not rewrite published bytes.
+# For this exact historical body only, hold its affected tables against writes,
+# prove the intended sealed-envelope condition, then record its original hash.
+# Any real plaintext/corrupt value refuses the release without changing data.
+SEALED_MIGRATION="generated/0417_sealed_secrets_v2_binding.sql"
+SEALED_SHA="e55db514abbeb319c5b48a7f81d099fd00c8f14b6d6e87b7b35beba45599e150"
+SEALED_PRESENT=$(sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$MIGRATION_URL" \
+  -c "select count(*) from public._applied_migrations where filename = '$SEALED_MIGRATION'" </dev/null)
+if [ "$SEALED_PRESENT" = "0" ]; then
+  IMAGE_SEALED_SHA=$(sudo docker run --rm --entrypoint sha256sum "${IMAGE_REPO}@${NEW}" \
+    "/app/schema/migrations/$SEALED_MIGRATION" | cut -d' ' -f1)
+  [ "$IMAGE_SEALED_SHA" = "$SEALED_SHA" ] || {
+    echo "refusing historical sealed-secret precheck correction: image migration bytes differ" >&2
+    exit 1; }
+  sudo docker exec -i "$PG" psql -X -q -v ON_ERROR_STOP=1 "$MIGRATION_URL" <<'SEALED_SQL'
+begin;
+lock table public.connections, public.bank_feed_connections, public.fx_provider_configs,
+  public.payment_bank_profiles, public.psp_provider_configs, public.payment_links,
+  public.employee_payroll_profiles, public.auth_mfa_factors, public.party_bank_accounts,
+  public.sftp_servers, public.tax_rate_provider_configs, public.vendor_roles in share mode;
+do $sealed$
+begin
+  if exists (select 1 from public._applied_migrations where filename = 'generated/0417_sealed_secrets_v2_binding.sql')
+    or exists (select 1 from public.connections where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.bank_feed_connections where credentials is not null and credentials !~ '^enc:v[12]:')
+    or exists (select 1 from public.fx_provider_configs where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.payment_bank_profiles where originator_secrets_encrypted is not null and originator_secrets_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.psp_provider_configs where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.payment_links where token_sealed is not null and token_sealed !~ '^enc:v[12]:')
+    or exists (select 1 from public.employee_payroll_profiles where sin_encrypted is not null and sin_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.auth_mfa_factors where secret_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.party_bank_accounts where account_number_encrypted is not null and account_number_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.sftp_servers where password_encrypted is not null and password_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.tax_rate_provider_configs where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.vendor_roles where tin_encrypted is not null and tin_encrypted !~ '^enc:v[12]:')
+  then
+    raise exception 'historical sealed-secret precheck correction refused: a migration row or genuinely unsealed value exists';
+  end if;
+end
+$sealed$;
+insert into public._applied_migrations (filename, sha256)
+values ('generated/0417_sealed_secrets_v2_binding.sql', 'e55db514abbeb319c5b48a7f81d099fd00c8f14b6d6e87b7b35beba45599e150');
+commit;
+SEALED_SQL
+  echo "verified all sealed-secret columns and recorded exact precheck-only migration 0417 digest"
+elif [ "$SEALED_PRESENT" != "1" ]; then
+  echo "refusing release: unexpected migration 0417 ledger cardinality" >&2
+  exit 1
 fi
 
 # Keep credentialed URLs out of the Docker process argument list.
