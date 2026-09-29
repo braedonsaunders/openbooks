@@ -26,6 +26,8 @@ const config = {
   experimental: {
     cpus: 1,
     staticGenerationMaxConcurrency: 1,
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
   },
   // Types are gated by CI's own `npm run typecheck -w web` job, and a release
   // needs that job green on the exact SHA. Type-checking again inside

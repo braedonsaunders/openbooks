@@ -16,8 +16,9 @@ preserve eight-decimal unit prices without relaxing monetary amount precision.
 Non-posting orders retain a null open balance as not applicable, never as an
 invented zero monetary amount.
 
-Production image builds collect page data with one worker and generate one
-page at a time to reduce peak memory use on standard build runners.
+Production image builds isolate Webpack compilation with a bounded JavaScript
+heap, collect page data with one worker, and generate one page at a time to
+reduce peak memory use on standard build runners.
 
 Routine updates run static checks; comprehensive test matrices remain
 available on demand. Release verification exercises real database-backed

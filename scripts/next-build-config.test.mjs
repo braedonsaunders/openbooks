@@ -6,12 +6,14 @@ import config from '../web/next.config.mjs';
 test('production page collection and generation stay within a single-worker budget', () => {
   assert.equal(config.experimental.cpus, 1);
   assert.equal(config.experimental.staticGenerationMaxConcurrency, 1);
+  assert.equal(config.experimental.webpackBuildWorker, true);
+  assert.equal(config.experimental.webpackMemoryOptimizations, true);
   assert.equal(config.output, 'standalone');
 });
 
-test('the production image retains the pinned compiler without an independent heap restriction', () => {
+test('the production image uses isolated Webpack compilation within its heap budget', () => {
   const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
-  assert.match(dockerfile, /^RUN cd web && npx next build$/m);
+  assert.match(dockerfile, /^RUN cd web && NODE_OPTIONS=--max-old-space-size=6144 npx next build --webpack$/m);
 });
 
 test('the informational stats card does not start CI or mutate main on routine updates', () => {
