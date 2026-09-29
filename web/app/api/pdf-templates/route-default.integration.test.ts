@@ -53,13 +53,12 @@ const postUrl = "./route.ts?pdf-template-default-post";
 const idUrl = "./[id]/route.ts?pdf-template-default-id";
 const { POST } = (await import(postUrl)) as typeof import("./route.ts");
 const { PATCH } = (await import(idUrl)) as typeof import("./[id]/route.ts");
-test.after(() => hooks.deregister());
-
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { resolvePdfTemplate } = await import("../../../lib/pdf-templates/store");
+test.after(() => hooks.deregister());
 
 const MIGRATION_PATH = join(process.cwd(), "schema/migrations/generated/0277_pdf_template_default_and_revision.sql");
 
