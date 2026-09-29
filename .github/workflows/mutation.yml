@@ -1,6 +1,6 @@
 name: mutation
 
-# Nightly, non-blocking mutation measurement for the financial engine.
+# Manual, non-blocking mutation measurement for the financial engine.
 # Report first, gate later: this job never fails the build (continue-on-error)
 # — it uploads the JSON + Markdown report as an artifact. The ratchet lives
 # in-repo: engine/src/harness/mutation/mutation-floor.test.ts fails `npm run
@@ -8,8 +8,6 @@ name: mutation
 # an explicit commit of mutation-report.json + mutation-floor.json together.
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
   workflow_dispatch:
 
 concurrency:
