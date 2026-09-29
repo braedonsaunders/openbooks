@@ -123,11 +123,34 @@ done < "$ENV_FILE"
   echo "Web/worker must serve as a non-owner runtime login while migrations run as the schema owner." >&2
   exit 1; }
 
+# The snapshot must cover the same production database that receives the
+# migration. The schema owner cannot dump tables with FORCE ROW LEVEL SECURITY;
+# the dedicated BYPASSRLS login can, without granting it schema ownership.
+database_identity() {
+  sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$1" \
+    -c "select inet_server_addr()::text || ':' || inet_server_port()::text || '/' || current_database()" </dev/null
+}
+MIGRATION_TARGET=$(database_identity "$MIGRATION_URL")
+BYPASS_TARGET=$(database_identity "$BYPASS_URL")
+RUNTIME_TARGET=$(database_identity "$RUNTIME_URL")
+[[ "$MIGRATION_TARGET" == 10.0.0.85:5432/* ]] || {
+  echo "refusing to deploy: migration URL does not reach production PostgreSQL at 10.0.0.85:5432" >&2
+  exit 1; }
+[ "$MIGRATION_TARGET" = "$BYPASS_TARGET" ] && [ "$MIGRATION_TARGET" = "$RUNTIME_TARGET" ] || {
+  echo "refusing to deploy: runtime, bypass and migration URLs do not reach the same database" >&2
+  exit 1; }
+BYPASS_ROLE=$(sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$BYPASS_URL" \
+  -c "select rolbypassrls and not rolsuper from pg_roles where rolname = current_user" </dev/null)
+[ "$BYPASS_ROLE" = "t" ] || {
+  echo "refusing to deploy: snapshot login is not a dedicated non-superuser BYPASSRLS role" >&2
+  exit 1; }
+echo "production database target and complete-snapshot role verified"
+
 # ---------------------------------------------------------------------------
 # 1. Snapshot the target database BEFORE anything migrates it. A mid-chain
 #    bootstrap failure leaves earlier migrations committed; without a snapshot
 #    there is nothing to restore. (Placed after the URL checks because the
-#    dump connects with the migration URL they validate.)
+#    dump connects with the dedicated bypass URL validated above.)
 # ---------------------------------------------------------------------------
 # The tag names the release in the dump filename; anything outside the
 # filename-safe set is flattened so a tag can never escape the backup
@@ -151,13 +174,13 @@ DUMP_FILE="$DB_BACKUP_DIR/pre-${TAG_SANITIZED}-${SHORT_SHA}-${STAMP}.dump"
 
 echo "snapshotting the target database to $DUMP_FILE ..."
 # pg_dump is the client inside the Dokploy postgres container: it connects to
-# the migration URL wherever that database lives, and the archive streams to
+# the dedicated BYPASSRLS URL for that same database, and the archive streams to
 # the host backup directory. The URL travels as a transient process argument
 # visible only to root on the manager, which already owns the credential
 # files this script writes.
 # shellcheck disable=SC2024  # the redirect intentionally runs as the release
 # user, who owns the backup directory; only the docker call needs sudo.
-if ! sudo docker exec "$PG" pg_dump -Fc "$MIGRATION_URL" </dev/null > "$DUMP_FILE"; then
+if ! sudo docker exec "$PG" pg_dump -Fc "$BYPASS_URL" </dev/null > "$DUMP_FILE"; then
   echo "pre-migration snapshot failed: pg_dump of the target database did not complete; refusing the release" >&2
   rm -f -- "$DUMP_FILE"
   exit 1
