@@ -85,12 +85,11 @@ const hooks = registerHooks({
 
 const itemUrl = "./route.ts?sftp-schedule-create-test";
 const { POST, GET } = (await import(itemUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister());
-
 const { db, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
+test.after(() => hooks.deregister());
 
 
 interface Fixture {
