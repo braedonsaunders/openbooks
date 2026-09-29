@@ -26,9 +26,13 @@ const presentContent = new Map(presentFiles.map((name) => [name, readFileSync(jo
 // included in a tagged release. Derive publication from tagged release trees,
 // so an unreleased migration under active development does not need a ledger
 // transition for each interim edit.
-const releaseTags = execFileSync('git', ['tag', '--list', 'v*'], { cwd: ROOT, encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+const releaseTags = execFileSync('git', ['tag', '--list', 'v*', '--sort=version:refname'], { cwd: ROOT, encoding: 'utf8' }).trim().split('\n').filter(Boolean)
 const publishedFiles = new Set()
+const taggedReleases = new Map()
+const firstAncestralTag = new Map()
 for (const tag of releaseTags) {
+  const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', tag, 'HEAD'], { cwd: ROOT })
+  assert.ok(ancestry.status === 0 || ancestry.status === 1, `Cannot check release ancestry for ${tag}`)
   const files = execFileSync(
     'git',
     ['ls-tree', '-r', '--name-only', tag, '--', 'schema/migrations/generated'],
@@ -36,7 +40,11 @@ for (const tag of releaseTags) {
   )
   for (const path of files.split('\n')) {
     if (path.startsWith('schema/migrations/generated/')) {
-      publishedFiles.add(path.slice('schema/migrations/generated/'.length))
+      const name = path.slice('schema/migrations/generated/'.length)
+      publishedFiles.add(name)
+      if (!taggedReleases.has(name)) taggedReleases.set(name, [])
+      taggedReleases.get(name).push(tag)
+      if (ancestry.status === 0 && !firstAncestralTag.has(name)) firstAncestralTag.set(name, tag)
     }
   }
 }
@@ -51,9 +59,8 @@ function uncoveredHistoricalDigests({ name, current, history, transitions, queue
 }
 
 /**
- * Every digest each migration file ever published on main: only landed bytes
- * can wedge a durable ledger, so fleet lanes' drafts stay invisible (they
- * converge on rebase; no lane can audit another's unfinished edit).
+ * Every digest landed in this branch's history. This proves a transition's
+ * source bytes existed; release eligibility is checked separately below.
  */
 function publishedDigests() {
   const raw = execFileSync(
@@ -108,6 +115,42 @@ function publishedDigests() {
 
 const published = publishedDigests()
 
+// Include exact snapshots from every release tag, including older tags on a
+// divergent branch. On the current branch, drafts before its first ancestral
+// release could not be recorded by a released database; later revisions may
+// be applied between tags and remain possible ledger identities.
+function releasedOrLaterDigests(name) {
+  const path = `schema/migrations/generated/${name}`
+  const digests = new Set((taggedReleases.get(name) ?? []).map((tag) => sha256(execFileSync(
+    'git', ['show', `${tag}:${path}`], { cwd: ROOT, maxBuffer: 128 * 1024 * 1024 },
+  ))))
+  const tag = firstAncestralTag.get(name)
+  if (!tag) return digests
+  const commits = execFileSync('git', ['log', '--format=%H', `${tag}..HEAD`, '--', path], {
+    cwd: ROOT, encoding: 'utf8',
+  }).trim().split('\n').filter(Boolean)
+  for (const commit of commits) {
+    const pathAtCommit = execFileSync('git', ['ls-tree', '--name-only', commit, '--', path], {
+      cwd: ROOT, encoding: 'utf8',
+    }).trim()
+    if (!pathAtCommit) continue // A deletion has no migration body to apply.
+    assert.equal(pathAtCommit, path)
+    digests.add(sha256(execFileSync('git', ['show', `${commit}:${path}`], {
+      cwd: ROOT, maxBuffer: 128 * 1024 * 1024,
+    })))
+  }
+  return digests
+}
+
+const releasedHistory = new Map(
+  presentFiles.filter((name) => publishedFiles.has(name))
+    .map((name) => [name, releasedOrLaterDigests(name)]),
+)
+for (const [name, digests] of releasedHistory) {
+  if (!published.has(name)) published.set(name, new Set())
+  for (const digest of digests) published.get(name).add(digest)
+}
+
 test('tagged release refs are available for migration publication checks', () => {
   assert.ok(
     releaseTags.length > 0,
@@ -115,13 +158,11 @@ test('tagged release refs are available for migration publication checks', () =>
   )
 })
 
-// The historical digests still awaiting an individually-audited transition.
-// Each was published by an in-place corrective edit to an already-applied
-// migration, so a ledger recording it is wedged exactly like the 0001
-// baseline was; unlike 0001 these are per-file corrective revisions whose
-// diffs each need their own reviewed reason before an entry can honestly be
-// written. The queue is bidirectional: an entry that lands strikes its slot,
-// and a slot that no longer matches a real uncovered digest fails the build.
+// The historical source digests still awaiting an individually-audited transition.
+// Each was landed by an in-place corrective edit to a migration that may
+// already have been applied. Their diffs need individual review before a
+// transition can honestly be written. A landed transition strikes its slot;
+// a slot whose source digest disappears from history fails the build.
 const PENDING_TRANSITION_AUDIT = new Map(Object.entries({
   '0011_payment_run_live_selection.sql': ['17cacb57c512ae6ce45ab61ef47450e49e917e3397e62b5d5a29560675aff09b'],
   '0022_close_posting_fence.sql': ['61a5ffdabbcc4dbca2d6e190553b101a081a4be42400820b36d249a54b626c09'],
@@ -183,7 +224,7 @@ test('every historical digest can advance: covered by a transition or queued for
     uncovered.push(...uncoveredHistoricalDigests({
       name,
       current,
-      history: published.get(name) ?? [],
+      history: releasedHistory.get(name) ?? [current],
       transitions: TRANSITIONS,
       queued: PENDING_TRANSITION_AUDIT.get(name) ?? [],
       isPublished: publishedFiles.has(name),
@@ -191,8 +232,8 @@ test('every historical digest can advance: covered by a transition or queued for
   }
   assert.deepEqual(uncovered, [], `Historical ledger digests with no path to the current identity wedge the database at "changed after it was applied":\n${uncovered.join('\n')}\nAdd an individually-audited transition entry (review the corrective edit, write its reason) or extend the pending queue with a justification.`)
 
-  // Bidirectional: a queue slot that no longer matches a real uncovered
-  // digest is stale - the audit landed and must strike it in the same commit.
+  // A queued source digest remains an audit obligation even if it predates the
+  // first tag. Strike its slot when its transition lands or history disproves it.
   const stale = []
   for (const [name, digests] of PENDING_TRANSITION_AUDIT) {
     const current = presentContent.has(name) ? sha256(presentContent.get(name)) : null
@@ -202,7 +243,7 @@ test('every historical digest can advance: covered by a transition or queued for
       if (!stillPublished || covered) stale.push(`${name} ${digest.slice(0, 12)}`)
     }
   }
-  assert.deepEqual(stale, [], `Pending-audit queue entries that no longer name a real uncovered digest (strike them with the transition that landed):\n${stale.join('\n')}`)
+  assert.deepEqual(stale, [], `Pending-audit queue entries that no longer name a landed historical digest needing review (strike them when the transition lands or history disproves them):\n${stale.join('\n')}`)
 })
 
 test('published migrations still require transitions for uncovered historical digests', () => {
@@ -220,6 +261,35 @@ test('published migrations still require transitions for uncovered historical di
     uncoveredHistoricalDigests({ ...fixture, isPublished: true }),
     ['0438_nonprofit_pledges_gifts.sql aaaaaaaaaaaa'],
   )
+})
+
+test('a tag does not retroactively publish an earlier draft digest', () => {
+  const name = '0438_nonprofit_pledges_gifts.sql'
+  const draft = 'cec9160e0409bc32f67949865f23e1215f734309e3dfb956eb222ebf8a0b4bb4'
+  assert.ok(published.get(name)?.has(draft), 'the draft must really exist in source history')
+  assert.ok(taggedReleases.has(name), 'the migration must have a tagged release')
+  const released = releasedOrLaterDigests(name)
+  assert.ok(!released.has(draft), 'a pre-release draft cannot be inferred to have reached a released ledger')
+  assert.ok(released.has(sha256(presentContent.get(name))), 'the tagged identity remains covered')
+})
+
+test('a main-branch revision after first release remains a possible ledger identity', () => {
+  const name = '0150_applications_org_line_indexes.sql'
+  const revision = '48cdacf0c5e2055dcfbd93723910f954046525042500a738ec322e690761ca0c'
+  assert.ok(published.get(name)?.has(revision), 'the revision must really exist in source history')
+  assert.equal(firstAncestralTag.get(name), 'v0.1.0-alpha.6')
+  assert.ok(releasedOrLaterDigests(name).has(revision), 'post-release changes cannot evade transition coverage')
+})
+
+test('a divergent release contributes its exact ledger identity', () => {
+  const name = '0001_baseline.sql'
+  const tag = 'v0.1.0-alpha.3'
+  assert.ok(taggedReleases.get(name)?.includes(tag))
+  assert.notEqual(firstAncestralTag.get(name), tag, 'the earlier release is on a divergent branch')
+  const releasedDigest = sha256(execFileSync('git', ['show', `${tag}:schema/migrations/generated/${name}`], {
+    cwd: ROOT, maxBuffer: 128 * 1024 * 1024,
+  }))
+  assert.ok(releasedOrLaterDigests(name).has(releasedDigest), 'divergent released bytes still need a transition')
 })
 
 test('no migration body commits the runner transaction from inside itself', () => {
