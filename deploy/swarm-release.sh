@@ -214,6 +214,58 @@ if [ "${#dump_files[@]}" -gt "$DB_BACKUP_KEEP" ]; then
   done
 fi
 
+# Migration 0417 is a precheck-only body: its published SQL contains no DDL or
+# data rewrite. Its LIKE pattern accidentally escapes the version wildcard,
+# rejecting valid enc:v1:/enc:v2: envelopes. Do not rewrite published bytes.
+# For this exact historical body only, hold its affected tables against writes,
+# prove the intended sealed-envelope condition, then record its original hash.
+# Any real plaintext/corrupt value refuses the release without changing data.
+SEALED_MIGRATION="generated/0417_sealed_secrets_v2_binding.sql"
+SEALED_SHA="e55db514abbeb319c5b48a7f81d099fd00c8f14b6d6e87b7b35beba45599e150"
+SEALED_PRESENT=$(sudo docker exec "$PG" psql -X -q -A -t -v ON_ERROR_STOP=1 "$MIGRATION_URL" \
+  -c "select count(*) from public._applied_migrations where filename = '$SEALED_MIGRATION'" </dev/null)
+if [ "$SEALED_PRESENT" = "0" ]; then
+  IMAGE_SEALED_SHA=$(sudo docker run --rm --entrypoint sha256sum "${IMAGE_REPO}@${NEW}" \
+    "/app/schema/migrations/$SEALED_MIGRATION" | cut -d' ' -f1)
+  [ "$IMAGE_SEALED_SHA" = "$SEALED_SHA" ] || {
+    echo "refusing historical sealed-secret precheck correction: image migration bytes differ" >&2
+    exit 1; }
+  sudo docker exec -i "$PG" psql -X -q -v ON_ERROR_STOP=1 "$MIGRATION_URL" <<'SEALED_SQL'
+begin;
+lock table public.connections, public.bank_feed_connections, public.fx_provider_configs,
+  public.payment_bank_profiles, public.psp_provider_configs, public.payment_links,
+  public.employee_payroll_profiles, public.auth_mfa_factors, public.party_bank_accounts,
+  public.sftp_servers, public.tax_rate_provider_configs, public.vendor_roles in share mode;
+do $sealed$
+begin
+  if exists (select 1 from public._applied_migrations where filename = 'generated/0417_sealed_secrets_v2_binding.sql')
+    or exists (select 1 from public.connections where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.bank_feed_connections where credentials is not null and credentials !~ '^enc:v[12]:')
+    or exists (select 1 from public.fx_provider_configs where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.payment_bank_profiles where originator_secrets_encrypted is not null and originator_secrets_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.psp_provider_configs where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.payment_links where token_sealed is not null and token_sealed !~ '^enc:v[12]:')
+    or exists (select 1 from public.employee_payroll_profiles where sin_encrypted is not null and sin_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.auth_mfa_factors where secret_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.party_bank_accounts where account_number_encrypted is not null and account_number_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.sftp_servers where password_encrypted is not null and password_encrypted !~ '^enc:v[12]:')
+    or exists (select 1 from public.tax_rate_provider_configs where secrets is not null and secrets !~ '^enc:v[12]:')
+    or exists (select 1 from public.vendor_roles where tin_encrypted is not null and tin_encrypted !~ '^enc:v[12]:')
+  then
+    raise exception 'historical sealed-secret precheck correction refused: a migration row or genuinely unsealed value exists';
+  end if;
+end
+$sealed$;
+insert into public._applied_migrations (filename, sha256)
+values ('generated/0417_sealed_secrets_v2_binding.sql', 'e55db514abbeb319c5b48a7f81d099fd00c8f14b6d6e87b7b35beba45599e150');
+commit;
+SEALED_SQL
+  echo "verified all sealed-secret columns and recorded exact precheck-only migration 0417 digest"
+elif [ "$SEALED_PRESENT" != "1" ]; then
+  echo "refusing release: unexpected migration 0417 ledger cardinality" >&2
+  exit 1
+fi
+
 # Keep credentialed URLs out of the Docker process argument list.
 MIGRATION_ENV=$(mktemp "$BK/migration.XXXXXXXX.env")
 cleanup_migration_env() {
