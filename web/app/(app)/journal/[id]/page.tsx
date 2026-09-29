@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { requirePermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { journalScopeWhere } from '../../../../lib/customization/entity-list-query/journal-entries'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,27 +12,12 @@ export default async function LegacyJournalEntry({ params }: { params: Promise<{
   const authz = await requirePermission('gl.read')
   const { id } = await params
   if (!isUuid(id)) redirect('/journal')
-  const subsidiaryFilter = authz.allowedSubsidiaryIds
-    ? authz.allowedSubsidiaryIds.size > 0
-      ? sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
-      : sql`and false`
-    : sql``
-  const result = (await db.execute<{ doc_id: string | null; doc_kind: string | null }>(sql`
-    select d.id as doc_id, d.kind as doc_kind
+  const result = (await db.execute<{ id: string }>(sql`
+    select e.id
       from journal_entries e
-      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-     where e.id = ${id} and e.org_id = ${authz.user.orgId}
-       ${subsidiaryFilter}
+     where e.id = ${id} and ${journalScopeWhere(authz.user.orgId, authz.allowedSubsidiaryIds)}
   `))
   const row = result.rows[0]
   if (!row) redirect('/journal')
-  if (row.doc_id && row.doc_kind) {
-    const next = new URLSearchParams({
-      reportRecord: row.doc_id,
-      reportRecordKind: row.doc_kind,
-      drawerReturn: '/journal',
-    })
-    redirect(`/journal?${next}`)
-  }
-  redirect(`/journal?txn=${id}`)
+  redirect(`/journal?journalEntry=${id}`)
 }

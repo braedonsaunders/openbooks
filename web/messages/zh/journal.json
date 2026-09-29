@@ -1,5 +1,7 @@
 {
   "list": {
+    "entriesTab": "分录",
+    "draftsTab": "草稿",
     "title": "日记账",
     "description": "{count, plural, one {# 条已过账分录} other {# 条已过账分录}} · 已审计；已结账期间不可更改。",
     "searchPlaceholder": "搜索分录编号或摘要……",

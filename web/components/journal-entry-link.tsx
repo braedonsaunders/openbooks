@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Lock } from 'lucide-react'
+import { OverlayLink } from './overlay-link'
 
 /** Opens posted GL impact as a stacked drawer without leaving its source record. */
 export function JournalEntryLink({
@@ -17,6 +18,11 @@ export function JournalEntryLink({
   const pathname = usePathname() ?? '/'
   const current = useSearchParams()
   const params = new URLSearchParams(current.toString())
+  if (pathname === '/journal') {
+    for (const key of ['entry', 'entryNew', 'txn', 'reportRecord', 'reportRecordKind', 'accountRegister', 'mode', 'form', 'transactionTab']) params.delete(key)
+    params.set('journalEntry', entryId)
+    return <OverlayLink href={`${pathname}?${params}`} className={className}>{children}</OverlayLink>
+  }
   params.set('txn', entryId)
   return (
     <Link href={`${pathname}?${params}` as never} className={className} scroll={false}>

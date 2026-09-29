@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { getMoneyFormatter } from '@/lib/money-server'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -14,40 +13,17 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, mergeHref, pickString } from '../../../lib/list-params'
+import { mergeHref, pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { loadJournalDoc } from '../../../lib/journals'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { JOURNAL_ENTRY_TABLE, journalScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
+import { JOURNAL_ENTRY_TABLE, journalScopeWhere, journalDraftScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
 import type { JournalDrawer } from './JournalDrawer'
-import type { JournalDraftRow } from './sections'
-
-/**
- * The journal list, split into a loader and a spec.
- *
- * The body is two blocks: an optional draft-manual-journals panel (a
- * conditional composite, so a shared component both paths render) and the
- * universal entity list, which arrives through the `entity-list-view` widget
- * and its slot — the slot re-derives org id, user id and permissions from
- * the session because a spec must never carry a capability or an org id.
- *
- * The drawer is the manual-journal flyout over DOCUMENT ids (?entry=); the
- * entity list's own row links (?txn=) are a separate surface the list owns,
- * via the shared `related-txn-drawer` widget. Posted-entry links to
- * /journal/[id] are a third, untouched surface.
- */
-
-interface DraftJournalRow {
-  id: string
-  document_number: string
-  document_date: string
-  memo: string | null
-  total: string | number
-}
+import type { ModuleHomeTab } from '../../../components/module-home/tab-types'
 
 interface PickerResult<T> { rows: T[] }
 interface PartyPickerRow { id: string; display_name: string }
@@ -65,9 +41,8 @@ export interface JournalData {
   scopeUnavailable: boolean
   scopeUnavailableMessage: string
   currentParams: Record<string, string | string[] | undefined>
-  hasDrafts: boolean
-  draftsHeading: string
-  drafts: JournalDraftRow[]
+  draftsView: boolean
+  tabs: ModuleHomeTab[]
   drawerOpen: boolean
   drawer: JournalDrawerProps | null
 }
@@ -75,11 +50,9 @@ export interface JournalData {
 export async function loadJournal(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<JournalData> {
-  const { money } = await getMoneyFormatter()
   const t = await getTranslations('journal')
   const authz = await requirePermission('gl.read')
   const allowedSubsidiaries = authz.allowedSubsidiaryIds
-  const allowedIds = allowedSubsidiaries ? [...allowedSubsidiaries] : []
   const canCreate = can(authz, 'gl.post') && (allowedSubsidiaries === null || allowedSubsidiaries.size > 0)
   const scopeUnavailable = can(authz, 'gl.post') && allowedSubsidiaries !== null && allowedSubsidiaries.size === 0
 
@@ -97,26 +70,11 @@ export async function loadJournal(
     redirect(canCreate ? '/journal?entryNew=1&mode=edit' : '/journal')
   }
 
-  // The header counts the list's own backing relation (JOURNAL_ENTRY_TABLE)
-  // through the shared journalScopeWhere — same scope, same subsidiary
-  // fence, no status filter — so the header total and the list total agree
-  // by construction. The old journalsOnly predicate counted a
-  // narrower scope (it dropped native entries carrying a subledger document,
-  // e.g. migrated bills) with no status filter, which is why the header
-  // read 25,943 against the list's 47,625.
-  // draft manual journals are documents (not entries yet) — surfaced separately
-  const [draftDocs, openJournal, pickers, postedCount] = await Promise.all([
-    (db.execute(sql`
-      select id, document_number, document_date, memo, total
-        from documents
-       where org_id = ${authz.user.orgId} and kind = 'journal' and status = 'draft'
-         ${allowedSubsidiaries
-           ? allowedIds.length
-             ? sql`and subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])`
-             : sql`and false`
-           : sql``}
-       order by created_at desc
-    `)),
+  const draftsView = pickString(sp.journalTab) === 'drafts'
+  const [draftCount, openJournal, pickers, postedCount] = await Promise.all([
+    db.execute<{ n: string }>(sql`
+      select count(*) as n from documents e
+       where ${journalDraftScopeWhere(authz.user.orgId, allowedSubsidiaries)}`),
     entryParam ? loadJournalDoc(entryParam, authz.user.orgId, allowedSubsidiaries).then((journal) => {
       if (!journal || !allowedSubsidiaries) return journal
       return allowedSubsidiaries.has(String(journal.doc.subsidiary_id)) ? journal : null
@@ -164,14 +122,16 @@ export async function loadJournal(
       })
     : null
 
-  const drafts = (draftDocs.rows as unknown as DraftJournalRow[]).map((d) => ({
-    id: String(d.id),
-    href: buildListDrawerHref('/journal', sp, 'entry', String(d.id)),
-    documentNumber: d.document_number,
-    documentDate: d.document_date,
-    memo: d.memo,
-    total: money(d.total),
-  }))
+  // Tab changes reset view-specific filters and close competing drawers.
+  const tabParams = { ...sp, page: undefined, sort: undefined, dir: undefined,
+    status: undefined, origin: undefined, view: undefined, q: undefined,
+    entry: undefined, entryNew: undefined, journalEntry: undefined, txn: undefined,
+    reportRecord: undefined, reportRecordKind: undefined, accountRegister: undefined,
+    reportDrill: undefined, drawerReturn: undefined, mode: undefined, form: undefined }
+  const tabs: ModuleHomeTab[] = [
+    { label: t('list.entriesTab'), href: mergeHref('/journal', tabParams, { journalTab: undefined }), active: !draftsView, count: total },
+    { label: t('list.draftsTab'), href: mergeHref('/journal', tabParams, { journalTab: 'drafts' }), active: draftsView, count: Number(draftCount.rows[0]?.n ?? 0) },
+  ]
 
   // The unsaved-create payload: no row exists, so the drawer edits blanks
   // and posts them once. Draft by default, dated today, homed to the first
@@ -182,6 +142,11 @@ export async function loadJournal(
     entryNew: undefined,
     mode: undefined,
     form: undefined,
+    journalEntry: undefined,
+    txn: undefined,
+    reportRecord: undefined,
+    reportRecordKind: undefined,
+    drawerReturn: undefined,
   })
   const newJournalPayload = creating && pickers
     ? (() => {
@@ -240,9 +205,8 @@ export async function loadJournal(
     scopeUnavailable,
     scopeUnavailableMessage: t('list.noAvailableSubsidiary'),
     currentParams: sp,
-    hasDrafts: drafts.length > 0,
-    draftsHeading: t('list.draftsHeading'),
-    drafts,
+    draftsView,
+    tabs,
     drawerOpen: Boolean(drawer),
     drawer,
   }
@@ -261,7 +225,7 @@ export function journalSpec(data: JournalData): PageSpec {
         // The create button shows iff the server would allow the save:
         // ?entryNew=1 opens nothing without gl.post, so offering it would
         // be a dead click. The drawer's explicit Save enforces gl.post too.
-        actions: [widget('new-journal', {}, f('canPost'))],
+        actions: [widget('new-journal', {}, f('canPost')), widget('module-home-tabs', { tabs: data.tabs })],
       }),
     ],
     body: [
@@ -275,17 +239,10 @@ export function journalSpec(data: JournalData): PageSpec {
         }),
         when: f('scopeUnavailable'),
       },
-      {
-        ...widgetBlock('journal-drafts', {
-          heading: data.draftsHeading,
-          drafts: data.drafts,
-        }),
-        when: f('hasDrafts'),
-      },
       widgetBlock('entity-list-view', {
-        recordType: 'journal',
+        recordType: data.draftsView ? 'journal_draft' : 'journal',
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'journal-drawer', props: { drawer: data.drawer } } : null,
+        drawer: { widget: 'journal-drawer', props: { drawer: data.drawer } },
         // The empty-state New is the same dead click without gl.post, and
         // the slot carries no `when` — the loader flag decides at build.
         emptyAction: data.canPost ? { widget: 'new-journal', props: {} } : null,

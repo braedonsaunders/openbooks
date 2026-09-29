@@ -9,7 +9,7 @@ import { sql, type SQL } from "drizzle-orm";
 // the agreement without a database: the header/guide scope must be exactly
 // the predicate the list total applies under the journal default view,
 // carry no status filter of its own, and keep the list's subsidiary fence.
-// Row-shape coverage (doc-linked migration postings in, pure
+// Row-shape coverage (doc-linked migration postings out, pure
 // subledger postings out, reversed entries in) lives in the companion
 // journal-scope-agreement.integration.test.ts, which needs a fixture
 // database. Only server-only is stubbed; query building is offline.

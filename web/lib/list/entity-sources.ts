@@ -1,6 +1,7 @@
 import { financialChangeSubjectExpr, lifecycleWhere } from "../customization/entity-list-query/accounting-lifecycles";
 import 'server-only'
 import { accountListBalanceDrill } from '../account-balance-drill'
+import { journalDraftScopeWhere } from '../customization/entity-list-query/journal-entries'
 import type { ReportDrillTarget } from '../report-drill'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -186,6 +187,12 @@ export interface EntityListSource {
   statusFilterKey?: string
   /** Source-specific drawer target when rows do not all use one URL param. */
   drawerTarget?: (row: Record<string, unknown>) => { param: string; id: string }
+  /** Mutually exclusive record selectors removed when a row opens. */
+  exclusiveDrawerParams?: readonly string[]
+  /** Client-loaded record detail may open without rerunning the list. */
+  overlayDrawer?: boolean
+  /** Page by inexpensive header columns before hydrating per-row aggregates. */
+  pageBeforeJoins?: { table: string; sorts: readonly string[] }
   /** Full row href for read-only aggregate rows that do not own a drawer. */
   rowHref?: (row: Record<string, unknown>) => string
   /**
@@ -708,20 +715,45 @@ const SOURCES: Record<string, EntityListSource> = {
       { paramKey: 'status', filterKey: 'status' },
     ],
     where: journalEntryWhere,
-    drawerParam: 'txn',
-    // Only manual-journal documents open in the journal document drawer
-    // (?entry=, kind journal only). A pay_run source opens its posted entry
-    // (?txn=) instead — ?entry= with a pay_run document id resolves nothing
-    // and stranded the run's View-journal link.
-    drawerTarget: (row) => {
-      if (row.source_document_id && String(row.source_document_kind ?? '') === 'journal') {
-        return { param: 'entry', id: String(row.source_document_id) }
-      }
-      return { param: 'txn', id: String(row.id) }
-    },
+    readPermission: 'gl.read',
+    drawerParam: 'journalEntry',
+    overlayDrawer: true,
+    exclusiveDrawerParams: ['entry', 'entryNew', 'journalEntry', 'txn', 'reportRecord', 'reportRecordKind', 'accountRegister', 'form', 'mode', 'transactionTab'],
+    pageBeforeJoins: { table: 'journal_entries', sorts: ['date', 'number', 'origin', 'status'] },
     basePath: '/journal',
     extraSelect: sql`source_doc.id as source_document_id, source_doc.kind as source_document_kind`,
     statusVariant: (row) => row.status === 'posted' ? 'success' : row.status === 'reversed' ? 'destructive' : 'secondary',
+  },
+  journal_draft: {
+    recordType: 'journal_draft',
+    table: `(select id, org_id, kind, status, subsidiary_id, memo, custom,
+                    document_date as posting_date, document_number as entry_number,
+                    'manual'::text as origin
+               from documents where kind = 'journal' and status = 'draft')`,
+    alias: 'e',
+    customFieldTable: 'documents',
+    customFieldKind: 'journal',
+    customFieldAlias: 'e',
+    baseJoins: sql`join lateral (
+      select coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as total_debits
+        from document_lines l where l.document_id = e.id and l.org_id = e.org_id
+    ) entry_totals on true`,
+    countJoins: sql``,
+    builtInExpr: { ...JOURNAL_ENTRY_BUILT_IN_EXPR, line_count: sql`null` },
+    sorts: { date: sql`e.posting_date`, number: sql`e.entry_number`, debits: sql`entry_totals.total_debits`, status: sql`e.status` },
+    defaultSort: sql`e.posting_date`,
+    statusExpr: sql`e.status`,
+    quickFilters: [],
+    where: (view, adhoc, orgId, allowed) => {
+      // Drafts have no posted ledger lines yet: authorize their document entity.
+      const predicate = journalEntryWhere(view, adhoc, orgId, null, 'e')
+      return sql`${predicate} and ${journalDraftScopeWhere(orgId, allowed ?? null)}`
+    },
+    readPermission: 'gl.read',
+    drawerParam: 'entry',
+    exclusiveDrawerParams: ['entry', 'entryNew', 'journalEntry', 'txn', 'reportRecord', 'reportRecordKind', 'accountRegister', 'form', 'mode', 'transactionTab'],
+    basePath: '/journal',
+    statusVariant: () => 'secondary',
   },
   inventory_onhand: {
     recordType: 'inventory_onhand',

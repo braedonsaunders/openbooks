@@ -32,6 +32,7 @@ import {
 import { entityListSource } from '../lib/list/entity-sources'
 import { readResolvedEntityListPageForView } from '../lib/list/entity-reader'
 import { ReportDrillLink } from '../app/(app)/reports/ReportDrillLink'
+import { OverlayLink } from './overlay-link'
 import { resolvePeriod } from '../lib/periods'
 import { DRILL_LINK_CLASS } from './viewspec/tone'
 
@@ -398,10 +399,11 @@ export async function EntityListView({
     const sourceRow = row && typeof row === 'object' ? row as Record<string, unknown> : null
     if (sourceRow && source.rowHref) return source.rowHref(sourceRow)
     const target = sourceRow && source.drawerTarget ? source.drawerTarget(sourceRow) : { param: source.drawerParam, id }
-    return buildListDrawerHref(basePath, sp, target.param, target.id)
+    return buildListDrawerHref(basePath, sp, target.param, target.id, source.exclusiveDrawerParams)
   }
 
   const cell = (row: Record<string, unknown>, c: ListColDesc) => {
+    const RecordLink = source.overlayDrawer ? OverlayLink : Link
     const v = row[c.key]
     switch (c.kind) {
       case 'reference': {
@@ -412,13 +414,13 @@ export async function EntityListView({
           : hasOptions ? optionLabel(c.key, String(v)) : String(v)
         return (
           <TableCell key={c.key} className="font-medium">
-            <Link
+            <RecordLink
               href={(href)}
               title={display}
               className="block max-w-[18rem] truncate text-teal-700 hover:underline dark:text-teal-300"
             >
               {display}
-            </Link>
+            </RecordLink>
           </TableCell>
         )
       }
@@ -475,14 +477,14 @@ export async function EntityListView({
       case 'actions':
         return (
           <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
-            <Link
+            <RecordLink
               href={(openHref(String(row.id), row))}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
               aria-label={tCommon('actions.open')}
               title={tCommon('actions.open')}
             >
               <Eye size={15} />
-            </Link>
+            </RecordLink>
           </TableCell>
         )
       default: {

@@ -1,5 +1,7 @@
 {
   "list": {
+    "entriesTab": "Entries",
+    "draftsTab": "Drafts",
     "title": "Journal",
     "description": "{count, plural, one {# posted entry} other {# posted entries}} · audited; closed periods are immutable.",
     "searchPlaceholder": "Search entry number or memo…",

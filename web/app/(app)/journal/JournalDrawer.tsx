@@ -2,6 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
+import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -239,6 +240,7 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
     subsidiaryId: lineText(l.subsidiary_id),
+    functionalCurrency: lineText(l.functional_currency),
     debit: units > 0n ? formatJournalAmount(units) : '',
     credit: units < 0n ? formatJournalAmount(-units) : '',
   }
@@ -280,7 +282,12 @@ export async function saveJournalDraft(input: JournalDraftSaveInput): Promise<Fe
   return { status: 'saved', saved: outcome.data as JournalPayload, revision: outcome.revision }
 }
 
-export function JournalDrawer({
+/** Each journal owns its editor state and revision baseline. */
+export function JournalDrawer(props: Parameters<typeof JournalDrawerBody>[0]) {
+  return <JournalDrawerBody key={`${props.ledgerSnapshot ? 'ledger' : 'document'}:${String(props.journal.doc.id)}`} {...props} />
+}
+
+function JournalDrawerBody({
   journal,
   initialMode = 'view',
   parties,
@@ -293,6 +300,11 @@ export function JournalDrawer({
   lineDefs,
   layout,
   createMode = false,
+  ledgerSnapshot = false,
+  ledgerDescription,
+  ledgerTotals,
+  onLedgerRefresh,
+  sourceDocument = true,
   canPost,
   closeHref,
 }: {
@@ -312,6 +324,13 @@ export function JournalDrawer({
   /** Unsaved-create: no persisted row exists. Cancel/close navigate away
    *  with zero writes; Save is the first write (one idempotent POST). */
   createMode?: boolean
+  /** Immutable posted ledger lines, rather than editable document lines. */
+  ledgerSnapshot?: boolean
+  ledgerDescription?: string
+  ledgerTotals?: { currency: string; debit: string; credit: string }[]
+  onLedgerRefresh?: () => void
+  /** Standalone and historical entries have no current document actions. */
+  sourceDocument?: boolean
   /**
    * Holds gl.post — the single permission every drawer mutation (save,
    * post, delete, void) requires server-side. Without it the drawer is
@@ -335,7 +354,7 @@ export function JournalDrawer({
   // approval or posts, its accounting evidence is preserved; use the controlled
   // correction/void workflows for changes. Voided journals are read-only. Save
   // is EXPLICIT — no autosave.
-  const canEditStatus = doc.status === 'draft'
+  const canEditStatus = !ledgerSnapshot && doc.status === 'draft'
   const [mode, setMode] = useState<DrawerMode>(
     // Without gl.post there is no edit mode to enter: every mutation the
     // mode would offer (save, post, delete, void) meets the server's
@@ -460,11 +479,14 @@ export function JournalDrawer({
   // marks the form dirty (same guarantee as the ref-mirrored gate this
   // replaces, without the effect-body setState).
   const [dirty, setDirty] = useState(false)
+  const [resetVersion, setResetVersion] = useState(0)
+  const [observedResetVersion, setObservedResetVersion] = useState(0)
   const [prevPayload, setPrevPayload] = useState(payload)
   if (prevPayload !== payload) {
     setPrevPayload(payload)
-    if (editable) setDirty(true)
+    if (editable && observedResetVersion === resetVersion) setDirty(true)
   }
+  if (observedResetVersion !== resetVersion) setObservedResetVersion(resetVersion)
 
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
@@ -484,16 +506,15 @@ export function JournalDrawer({
 
   // -- optimistic-concurrency fence -----------------------------------------
   // The journal PATCH route refuses any write without an exact revision token.
-  // RSC props carry updated_at as a lossy Date that can never satisfy that
-  // contract, so the canonical read below mints this editor's first usable
-  // token; every later token comes from a save response. Until one exists,
-  // saving fails closed instead of 409-ing.
-  const [, setDocumentRevisionState] = useState<string | null>(null)
-  const documentRevisionRef = useRef<string | null>(null)
+  // The loader and API return the exact revision counter. Legacy payloads
+  // without one stay fenced until the canonical read supplies it.
+  const initialRevision = isDocumentRevisionToken(doc.updated_at) ? doc.updated_at : null
+  const [, setDocumentRevisionState] = useState<string | null>(initialRevision)
+  const documentRevisionRef = useRef<string | null>(initialRevision)
   const seenPersistedRevisions = useRef(new Set<string>())
   const draftBaseline = useRef<PersistedDocumentSnapshot<JournalPayload>>({
     documentId: String(doc.id),
-    revision: '',
+    revision: initialRevision ?? '',
     payload: journal,
   })
   const dirtyRef = useRef(dirty)
@@ -507,6 +528,8 @@ export function JournalDrawer({
 
   /** Reset every field back to an explicit persisted payload (used by Cancel). */
   function resetForm(source: JournalPayload) {
+    setResetVersion((version) => version + 1)
+    setDirty(false)
     const sourceDoc = asJournalDoc(source.doc)
     setPartyId(sourceDoc.party_id ?? '')
     setDocumentDate(sourceDoc.document_date ?? '')
@@ -566,17 +589,21 @@ export function JournalDrawer({
   )
 
   async function refreshFromServer(notifyOnConflict = true): Promise<void> {
-    applyCanonicalRead(
-      await loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed')),
-      notifyOnConflict,
-    )
+    const incoming = await loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed'))
+    if (ledgerSnapshot) {
+      // Refresh the document fence without replacing immutable ledger lines
+      // with the source document's editable transaction-currency lines.
+      setDocumentRevision(incoming.revision)
+      return
+    }
+    applyCanonicalRead(incoming, notifyOnConflict)
   }
 
   useEffect(() => {
     // Unsaved-create has no persisted row to read: there is no revision to
     // pin and nothing to reconcile. Skipped entirely — zero reads that could
     // 404, zero writes by construction.
-    if (createMode) return
+    if (createMode || ledgerSnapshot) return
     let active = true
     loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed'))
       .then((incoming) => {
@@ -589,7 +616,7 @@ export function JournalDrawer({
     return () => {
       active = false
     }
-  }, [doc.id, t, createMode])
+  }, [doc.id, t, createMode, ledgerSnapshot])
 
   /**
    * Unsaved-create Save: one idempotent POST carrying the whole journal —
@@ -883,6 +910,7 @@ export function JournalDrawer({
           const status = (data as { status?: unknown } | null)?.status
           if (status === 'pending_approval') toast.success(tc('actions.submitForApproval'))
           else toast.success(tc('status.voided'))
+          onLedgerRefresh?.()
         },
       },
     )
@@ -942,8 +970,10 @@ export function JournalDrawer({
               type: 'select',
               options: [{ value: '', label: '—' }, ...subsidiaryOpts],
             } satisfies LineGridColumn<LineRow> } : {}),
-      debit: { key: 'debit', label: t('columns.debit'), width: '120px', type: 'amount', align: 'right' },
-      credit: { key: 'credit', label: t('columns.credit'), width: '120px', type: 'amount', align: 'right' },
+      debit: { key: 'debit', label: t('columns.debit'), width: '120px', type: 'amount', align: 'right',
+        render: ledgerSnapshot ? (row) => row.debit ? money(row.debit, { currency: String(row.functionalCurrency) }) : '' : undefined },
+      credit: { key: 'credit', label: t('columns.credit'), width: '120px', type: 'amount', align: 'right',
+        render: ledgerSnapshot ? (row) => row.credit ? money(row.credit, { currency: String(row.functionalCurrency) }) : '' : undefined },
       }
       const custom = new Map(customFieldColumns<LineRow>(lineDefs).map((column) => [column.key, column]))
       const segmentColumns: LineGridColumn<LineRow>[] = segments.filter((segment) => segment.showOnLines).map((segment) => ({
@@ -963,7 +993,7 @@ export function JournalDrawer({
       })
       return [...configured, ...segmentColumns]
     },
-    [accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc],
+    [accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc, ledgerSnapshot, money],
   )
 
   const field = 'space-y-1.5'
@@ -999,7 +1029,7 @@ export function JournalDrawer({
       // Unsaved-create hides the evidence tabs: both panels read the
       // persisted row the drawer has not written yet, so mounting them
       // would only probe the API with an empty record id.
-      showEvidenceTabs={!createMode}
+      showEvidenceTabs={!createMode && sourceDocument}
       canEditAttachments
       // Detach 409s on posted records (evidence is retained), so posted
       // journals hide Remove and name the retention; uploading stays on.
@@ -1014,7 +1044,7 @@ export function JournalDrawer({
           </Badge>
         </span>
       }
-      description={mode === 'edit' ? tc('feedback.editingHint') : (doc.party_name ?? undefined)}
+      description={mode === 'edit' ? tc('feedback.editingHint') : (ledgerDescription ?? doc.party_name ?? undefined)}
       primaryAction={
         canEditStatus && canPost ? (
           <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>
@@ -1023,7 +1053,7 @@ export function JournalDrawer({
         ) : null
       }
       actions={
-        <>
+        sourceDocument ? <>
           {mode === 'edit' ? (
             <>
               {canPost ? (
@@ -1032,17 +1062,17 @@ export function JournalDrawer({
                 </Button>
               ) : null}
             </>
-          ) : (
+          ) : sourceDocument ? (
             <>
               <PdfButton recordType="journal" recordId={String(doc.id)} />
               <FlowManualButtons subjectKind="journal" subjectId={String(doc.id)} />
               <ApprovalActions subjectKind="journal" subjectId={String(doc.id)} />
-              {canPost && (isDraft || doc.status === 'approved') ? (
+              {!ledgerSnapshot && canPost && (isDraft || doc.status === 'approved') ? (
                 <Button disabled={busy || !balanced || dirty} onClick={post}>
                   {tc('actions.post')}
                 </Button>
               ) : null}
-              {doc.entry_id ? (
+              {doc.entry_id && !ledgerSnapshot ? (
                 <Button variant="outline" asChild>
                   <JournalEntryLink entryId={doc.entry_id}>{t('viewGlImpact')}</JournalEntryLink>
                 </Button>
@@ -1058,8 +1088,8 @@ export function JournalDrawer({
                 </Button>
               ) : null}
             </>
-          )}
-        </>
+          ) : null}
+        </> : null
       }
       footer={
         <div className="flex w-full items-center gap-3">
@@ -1081,7 +1111,11 @@ export function JournalDrawer({
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t.rich('totals', {
+            {ledgerTotals ? ledgerTotals.map((total) => <span key={total.currency} className="block">{total.currency} · {t.rich('totals', {
+              debits: money(total.debit, { currency: total.currency }),
+              credits: money(total.credit, { currency: total.currency }),
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}</span>) : t.rich('totals', {
               debits: money(formatJournalAmount(debits)),
               credits: money(formatJournalAmount(credits)),
               strong: (chunks) => (
@@ -1209,7 +1243,7 @@ export function JournalDrawer({
           />
         </div>
 
-        {mode === 'view' ? (
+        {mode === 'view' && sourceDocument ? (
           <ApprovalHistory subjectKind="journal" subjectId={String(doc.id)} />
         ) : null}
       </div>

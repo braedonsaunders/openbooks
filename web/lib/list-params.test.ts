@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildListDrawerHref, hasActiveListFilters, isUuid } from './list-params'
 
+test('exclusive journal links clear competing drawers and preserve list state', () => {
+  const href = buildListDrawerHref('/journal', { q: 'accrual', page: '3', entry: 'old-journal', txn: 'old-payment', reportRecord: 'old-invoice' },
+    'journalEntry', 'next-journal', ['entry', 'txn', 'reportRecord'])
+  const params = new URL(href, 'https://openbooks.example').searchParams
+  assert.equal(params.get('journalEntry'), 'next-journal')
+  for (const key of ['entry', 'txn', 'reportRecord']) assert.equal(params.has(key), false)
+  assert.equal(params.get('drawerReturn'), '/journal?q=accrual&page=3')
+})
+
 test('isUuid accepts canonical UUIDs and rejects malformed route ids', () => {
   const canonicalIds = [
     '019f68a5-6a24-78ec-bed6-cc04e06f2078',

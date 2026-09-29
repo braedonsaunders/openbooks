@@ -176,14 +176,17 @@ export function buildListDrawerHref(
   current: Search,
   drawerParam: string,
   drawerValue: string,
+  exclusiveParams: readonly string[] = [],
 ): string {
+  const cleared = Object.fromEntries(exclusiveParams.map((key) => [key, undefined]))
   const returnHref = mergeHref(base, current, {
+    ...cleared,
     [drawerParam]: undefined,
     drawerReturn: undefined,
   })
   return mergeHref(base, current, {
+    ...cleared,
     [drawerParam]: drawerValue,
     drawerReturn: returnHref,
   })
 }
-

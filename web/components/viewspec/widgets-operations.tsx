@@ -19,6 +19,7 @@ import { BudgetDrawer } from '../../app/(app)/budgets/BudgetDrawer'
 import { CloseActionCell, CloseReadinessCell, CloseStatusCell, SingleBookLabel } from '../../app/(app)/close/sections'
 import { JournalDraftsPanel } from '../../app/(app)/journal/sections'
 import { JournalDrawer } from '../../app/(app)/journal/JournalDrawer'
+import { JournalEntryDrawer } from '../../app/(app)/journal/JournalEntryDrawer'
 import { NewJournalButton } from '../../app/(app)/journal/NewJournalButton'
 import { MatrixFilters } from '../../app/(app)/compliance/vendors/MatrixFilters'
 import { VendorComplianceDrawer } from '../../app/(app)/compliance/vendors/VendorComplianceDrawer'
@@ -196,12 +197,9 @@ export const OPERATIONS_WIDGETS = {
       drafts={(props.drafts as ComponentProps<typeof JournalDraftsPanel>['drafts']) ?? []}
     />
   ),
-  /** No remount key: the native page renders this drawer keyless and resets
-   *  its state from an effect on the document id. */
   'journal-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof JournalDrawer> | null
-    if (!drawer) return null
-    return <JournalDrawer {...drawer} />
+    return <>{drawer ? <JournalDrawer {...drawer} /> : null}<JournalEntryDrawer /></>
   },
   'new-journal': () => <NewJournalButton />,
 
