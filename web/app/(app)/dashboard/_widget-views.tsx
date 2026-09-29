@@ -138,6 +138,8 @@ export function WidgetCard({
       return data.revenueMtd === null
         ? <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value="—" href="/reports/pnl" tone="emerald" hint={withAsOf(t('metricContext.noData'))} />
         : <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value={money(data.revenueMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="emerald" hint={withAsOf(t('metricContext.monthToDate'))} />
+    case 'kpi-expenses-mtd':
+      return <MetricTile icon={<Wallet size={15} />} label={t('widgets.operatingExpenses')} value={data.expensesMtd === null ? '—' : money(data.expensesMtd, { currency: data.baseCurrency })} href="/reports/pnl" tone="amber" hint={withAsOf(t(data.expensesMtd === null ? 'metricContext.noData' : 'metricContext.monthToDate'))} />
     case 'kpi-net-income-mtd':
       return data.netIncomeMtd === null
         ? <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value="—" href="/reports/pnl" tone="teal" hint={withAsOf(t('metricContext.noData'))} />

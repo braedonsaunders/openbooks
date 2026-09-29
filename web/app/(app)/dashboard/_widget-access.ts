@@ -22,6 +22,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // P&L tiles read the P&L report reader over the caller's subsidiary scope —
   // the same doorway as /reports/pnl, so the same grant guards both.
   'kpi-revenue-mtd': ['reports.read'],
+  'kpi-expenses-mtd': ['reports.read'],
   'kpi-net-income-mtd': ['reports.read'],
   'kpi-gross-margin-mtd': ['reports.read'],
   'kpi-expected-receipts-30d': ['ar.read'],

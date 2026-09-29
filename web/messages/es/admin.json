@@ -4618,6 +4618,7 @@
         }
       },
       "rhythm": {
+        "optional": "Configurar ahora el volumen y la frecuencia de cierre (opcional)",
         "title": "Defina su ritmo contable",
         "description": "El volumen cambia cuánto ayuda la automatización. La cadencia de cierre cambia qué rutinas debe mostrarle OpenBooks.",
         "activityQuestion": "¿Cuánto movimiento gestiona aproximadamente cada mes?",
@@ -4732,8 +4733,15 @@
         "description": "Creando su plan contable, configurando funciones y asignando cuentas de control."
       },
       "done": {
+        "actions": {
+          "invoice": "Crear su primera factura",
+          "migrate": "Importar desde QuickBooks, Xero u otro sistema",
+          "statement": "Importar un extracto bancario",
+          "demo": "Explorar una empresa de demostración separada",
+          "readiness": "Continuar con la lista de configuración"
+        },
         "title": "Su espacio inicial está listo",
-        "description": "Ahora la guía de puesta en marcha verificará las últimas decisiones de empresa, impuestos, numeración, banca y saldos de apertura antes de contabilizar movimiento real. Los agentes en segundo plano pueden instalarse en cualquier momento en Configuración → Agentes."
+        "description": "Su espacio está configurado. Elija la siguiente acción; la lista muestra los pasos pendientes."
       },
       "industries": {
         "general_business": {

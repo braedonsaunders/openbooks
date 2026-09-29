@@ -4618,6 +4618,7 @@
         }
       },
       "rhythm": {
+        "optional": "Configurer maintenant le volume et la fréquence de clôture (facultatif)",
         "title": "Définissez votre rythme comptable",
         "description": "Le volume change l'utilité de l'automatisation. La cadence de clôture change les routines qu'OpenBooks doit vous proposer.",
         "activityQuestion": "Quel volume d'activité traitez-vous environ chaque mois ?",
@@ -4732,8 +4733,15 @@
         "description": "Création de votre plan comptable, configuration des fonctionnalités et paramétrage des comptes de contrôle."
       },
       "done": {
+        "actions": {
+          "invoice": "Créer votre première facture",
+          "migrate": "Importer depuis QuickBooks, Xero ou un autre système",
+          "statement": "Importer un relevé bancaire",
+          "demo": "Explorer une société de démonstration distincte",
+          "readiness": "Continuer avec la liste de configuration"
+        },
         "title": "Votre espace de départ est prêt",
-        "description": "Ensuite, le guide de mise en service vérifiera les dernières décisions d'entreprise, de taxe, de numérotation, de banque et de soldes d'ouverture avant de comptabiliser une activité réelle. Les agents d'arrière-plan peuvent être installés à tout moment sous Configuration → Agents."
+        "description": "Votre espace est configuré. Choisissez votre prochaine action ; la liste suit les étapes restantes."
       },
       "industries": {
         "general_business": {

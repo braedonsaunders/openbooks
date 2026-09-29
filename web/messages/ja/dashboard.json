@@ -10,6 +10,7 @@
     "customize": "カスタマイズ"
   },
   "widgets": {
+    "operatingExpenses": "営業費用",
     "journalLines": "仕訳明細",
     "activeAccounts": "有効な勘定",
     "entriesToday": "本日の記帳",
@@ -92,6 +93,7 @@
     "admin": "管理"
   },
   "catalog": {
+    "operatingExpenses": "損益計算書に基づく当月の営業費用。売上原価は含みません。",
     "journalLines": "記帳された仕訳明細の合計です。",
     "activeAccounts": "会計科目表内の有効な勘定です。",
     "entriesToday": "本日記帳された仕訳です。",
@@ -171,6 +173,8 @@
     "empty": "クイックアクションはまだありません",
     "addFirst": "最初のアクションを追加",
     "labels": {
+      "receivePayment": "入金を受け取る",
+      "reviewBanking": "銀行取引を確認",
       "newJournalEntry": "新規仕訳",
       "newBill": "新規仕入請求書",
       "newInvoice": "新規請求書",

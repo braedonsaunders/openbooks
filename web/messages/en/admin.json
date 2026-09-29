@@ -4628,6 +4628,7 @@
         }
       },
       "rhythm": {
+        "optional": "Configure transaction volume and closing cadence now (optional)",
         "title": "Set your accounting rhythm",
         "description": "Volume changes how much automation helps. Close cadence changes which routines OpenBooks should put in front of you.",
         "activityQuestion": "Roughly how much activity do you handle each month?",
@@ -4742,8 +4743,15 @@
         "description": "Creating your chart of accounts, configuring features, and mapping control accounts."
       },
       "done": {
+        "actions": {
+          "invoice": "Create your first invoice",
+          "migrate": "Import from QuickBooks, Xero or another system",
+          "statement": "Import a bank statement",
+          "demo": "Explore a separate demo company",
+          "readiness": "Continue with the setup checklist"
+        },
         "title": "Your starting workspace is ready",
-        "description": "Next, the go-live guide will verify the remaining company, tax, numbering, banking, and opening-balance decisions before you post live activity. Background agents can be installed any time under Setup → Agents."
+        "description": "Your workspace is configured. Choose your next action; the checklist keeps track of remaining setup."
       },
       "industries": {
         "general_business": {

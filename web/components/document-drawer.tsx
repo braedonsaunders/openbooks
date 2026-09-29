@@ -2411,6 +2411,7 @@ export function DocumentDrawer({
         return {
           ...base,
           width: p.width ?? base.width,
+          secondary: p.secondary,
           required: meta?.required ?? (base as { required?: boolean }).required,
           label: p.labelOverride?.trim() ? p.labelOverride.trim() : (defLabel[p.key] ?? p.key),
         }
@@ -2935,7 +2936,7 @@ export function DocumentDrawer({
 
         {useLayout ? (
           <>
-            <HeaderFields layout={layout!} editable={editable} renderField={renderHeaderField} />
+            <HeaderFields layout={layout!} editable={editable} renderField={renderHeaderField} expandDetails={!createMode} />
             {multiSub && !layoutShowsSubsidiary ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className={field}>{renderHeaderField({ key: 'subsidiary_id', visible: true }, editable)}</div>

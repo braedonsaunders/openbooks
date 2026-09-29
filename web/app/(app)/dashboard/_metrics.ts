@@ -95,11 +95,12 @@ export type DashboardMetrics = {
   overduePayables: string
   /**
    * Month-to-date P&L off the canonical profitAndLoss reader (one call feeds
-   * all three tiles). Null when the subsidiary scope spans functional
+   * all month-to-date tiles). Null when the subsidiary scope spans functional
    * currencies — the reader refuses rather than mixing, and a tile must
    * render that as no-data ("—"), never as a zero that reads as a fact.
    */
   revenueMtd: string | null
+  expensesMtd: string | null
   netIncomeMtd: string | null
   grossProfitMtd: string | null
   /** Gross-margin ratio on the 0–1 scale; null when MTD revenue is zero. */
@@ -367,7 +368,7 @@ export async function loadDashboardMetrics(
   const wantMoney = need('baseCurrency')
   const wantAr = need('openReceivables', 'overdueReceivables', 'expectedReceipts30d', 'receivablesDso', 'topCustomers')
   const wantAp = need('openPayables', 'overduePayables', 'expectedPayments30d', 'payablesDpo', 'topVendors')
-  const wantPl = need('revenueMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
+  const wantPl = need('revenueMtd', 'expensesMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
   const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek')
@@ -442,6 +443,7 @@ export async function loadDashboardMetrics(
         .profitAndLoss(startOfMonth(today), today, { subsidiaryIds: subIds }, orgId)
         .then((r) => ({
           revenue: r.revenue,
+          expenses: r.expenses,
           netIncome: r.netIncome,
           grossProfit: r.grossProfit,
           margin: decimalRatio(r.grossProfit, r.revenue),
@@ -644,6 +646,7 @@ export async function loadDashboardMetrics(
     openPayables: apTile.open,
     overduePayables: apTile.overdue,
     revenueMtd: pl?.revenue ?? null,
+    expensesMtd: pl?.expenses ?? null,
     netIncomeMtd: pl?.netIncome ?? null,
     grossProfitMtd: pl?.grossProfit ?? null,
     grossMarginMtd: pl?.margin ?? null,
@@ -703,6 +706,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-open-payables': ['baseCurrency', 'openPayables', 'payablesDpo', 'asOfDate'],
   'kpi-overdue-payables': ['baseCurrency', 'overduePayables', 'asOfDate'],
   'kpi-revenue-mtd': ['baseCurrency', 'revenueMtd', 'asOfDate'],
+  'kpi-expenses-mtd': ['baseCurrency', 'expensesMtd', 'asOfDate'],
   'kpi-net-income-mtd': ['baseCurrency', 'netIncomeMtd', 'asOfDate'],
   'kpi-gross-margin-mtd': ['baseCurrency', 'grossProfitMtd', 'grossMarginMtd', 'asOfDate'],
   'kpi-expected-receipts-30d': ['baseCurrency', 'expectedReceipts30d', 'asOfDate'],
@@ -754,6 +758,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   openPayables: '0',
   overduePayables: '0',
   revenueMtd: null,
+  expensesMtd: null,
   netIncomeMtd: null,
   grossProfitMtd: null,
   grossMarginMtd: null,

@@ -6,6 +6,7 @@ import { canSwitchIndustry } from '@/lib/industries'
 import { INDUSTRIES } from '@/lib/industries'
 import { SetupWizard } from '@/app/(app)/admin/setup/wizard/SetupWizard'
 import type { Authz } from '@/lib/authz'
+import { setupLaunchActions } from '@/lib/setup-launch-actions'
 import { onboardingStatus } from '@/lib/onboarding'
 import { FEATURES, featureEnabled, resolvedFeatureState } from '@/lib/features'
 import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '@/lib/workspace-profile'
@@ -37,6 +38,7 @@ export async function OnboardingWizard({ authz }: { authz: Authz }) {
   return (
     <SetupWizard
       open
+      launchActions={setupLaunchActions(authz)}
       suppressOnPaths={['/inbox']}
       industries={INDUSTRIES}
       initial={{

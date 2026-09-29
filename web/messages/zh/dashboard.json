@@ -10,6 +10,7 @@
     "customize": "自定义"
   },
   "widgets": {
+    "operatingExpenses": "营业费用",
     "journalLines": "日记账明细行",
     "activeAccounts": "启用科目",
     "entriesToday": "今日分录",
@@ -92,6 +93,7 @@
     "admin": "管理"
   },
   "catalog": {
+    "operatingExpenses": "损益表中本月至今的营业费用，不含销售成本。",
     "journalLines": "已过账日记账明细行总数。",
     "activeAccounts": "会计科目表中的启用科目。",
     "entriesToday": "今日已过账的日记账分录。",
@@ -171,6 +173,8 @@
     "empty": "尚无快捷操作",
     "addFirst": "添加您的第一个操作",
     "labels": {
+      "receivePayment": "收取付款",
+      "reviewBanking": "审核银行交易",
       "newJournalEntry": "新建日记账分录",
       "newBill": "新建账单",
       "newInvoice": "新建发票",

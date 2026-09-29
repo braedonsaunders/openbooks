@@ -275,6 +275,10 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'kpi-expenses-mtd': {
+    id: 'kpi-expenses-mtd', category: 'kpi', labelKey: 'widgets.operatingExpenses', descriptionKey: 'catalog.operatingExpenses',
+    defaultSize: { w: 3, h: 2 }, minSize: { w: 2, h: 2 }, maxSize: { w: 6, h: 4 },
+  },
   'kpi-overdue-receivables': {
     id: 'kpi-overdue-receivables',
     category: 'ar',

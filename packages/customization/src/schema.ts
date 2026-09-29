@@ -54,12 +54,14 @@ const headerFieldPlacementSchema = z.object({
 const headerGroupSchema = z.object({
   id: z.string().min(1).max(60),
   label: z.string().max(120).nullable().optional(),
+  collapsible: z.boolean().optional(),
   fields: z.array(headerFieldPlacementSchema).max(200),
 });
 
 const lineColumnPlacementSchema = z.object({
   key: fieldKeySchema,
   visible: z.boolean(),
+  secondary: z.boolean().optional(),
   width: z.string().max(60).nullable().optional(),
   labelOverride: z.string().max(120).nullable().optional(),
 });

@@ -128,7 +128,9 @@ export async function PaymentsSection({
             bank_account_number: null,
             bank_account_name: null,
           },
-          bankAccountId: null,
+          // A sole eligible bank account is an unambiguous draft default;
+          // the shared drawer still requires explicit Save and posting.
+          bankAccountId: banks.rows.length === 1 ? banks.rows[0]!.id : null,
           allocations: [],
           applied: [],
         }

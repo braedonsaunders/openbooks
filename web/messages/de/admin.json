@@ -4781,6 +4781,7 @@
         "taxPosition": "Steuerposition"
       },
       "rhythm": {
+        "optional": "Transaktionsvolumen und Abschlussrhythmus jetzt konfigurieren (optional)",
         "activity": {
           "high": {
             "description": "Automatisierung und laufende Überwachung sollten von Anfang an bereit sein.",
@@ -4821,7 +4822,14 @@
         "title": "Ihre Bücher werden eingerichtet …"
       },
       "done": {
-        "description": "Als Nächstes prüft die Go-live-Anleitung die übrigen Unternehmens-, Steuer-, Nummerierungs-, Bank- und Eröffnungsbilanzentscheidungen, bevor Sie Live-Bewegungen buchen. Hintergrundagenten können jederzeit unter Einrichtung → Agenten installiert werden.",
+        "actions": {
+          "invoice": "Erste Rechnung erstellen",
+          "migrate": "Aus QuickBooks, Xero oder einem anderen System importieren",
+          "statement": "Kontoauszug importieren",
+          "demo": "Ein separates Demounternehmen erkunden",
+          "readiness": "Mit der Einrichtungsliste fortfahren"
+        },
+        "description": "Ihr Arbeitsbereich ist eingerichtet. Wählen Sie die nächste Aktion; die Checkliste zeigt die verbleibenden Schritte.",
         "title": "Ihr Startarbeitsbereich ist bereit"
       },
       "industries": {

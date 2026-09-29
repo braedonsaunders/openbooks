@@ -17,6 +17,8 @@ import {
   customFieldDefKey,
 } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
+import { essentialsWorkspace } from "../workspace-presentation";
+import { essentialsFormLayout } from "./essentials-form";
 import { AmbiguousListViewDefaultError } from "./list-view-default.ts";
 import { isUuid as isUuidShape } from "../list-params";
 export { AmbiguousListViewDefaultError };
@@ -231,7 +233,8 @@ export const resolveFormLayout = cache(
     if (!chosen) chosen = accessible[0];
 
     if (!chosen) {
-      const sys = defaultFormLayout(recordType);
+      const defaults = defaultFormLayout(recordType);
+      const sys = await essentialsWorkspace(orgId) ? essentialsFormLayout(defaults) : defaults;
       return {
         layout: mergeCustomFieldsIntoLayout(sys, headerDefs, lineDefs),
         source: "system",
