@@ -13,16 +13,19 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __sovSortState: state });
+const realAuthz = new URL('../../../lib/authz.ts', import.meta.url).href;
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
+        export * from ${JSON.stringify(realAuthz)};
         export async function guardPermission() {
           const s = globalThis.__sovSortState;
           return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
         }
+        export async function getAuthz() { return guardPermission(); }
         export function guardSubsidiaryScope() { return null; }
       `);
     if (specifier.endsWith("/lib/projects-gate")) return virtual("export async function guardProjectsFeature() { return null }");
@@ -77,6 +80,7 @@ test("addSov refuses an out-of-int32 sort order without writing", async () => {
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
     assert.notEqual(response.status, 500, `expected a named error, got 500: ${JSON.stringify(json)}`);
     assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.match(json?.error ?? '', /sortOrder must fit a 32-bit integer/);
     assert.equal(await lineCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);

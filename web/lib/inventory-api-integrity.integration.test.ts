@@ -23,6 +23,7 @@ type InventorySessionUser = {
 };
 const state: { user: InventorySessionUser | null } = { user: null };
 Object.assign(globalThis, { __inventoryApiAudit: state });
+const realAuthz = new URL('./authz.ts', import.meta.url).href;
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
@@ -32,7 +33,7 @@ registerHooks({
     }
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:null}}",
+        `export * from ${JSON.stringify(realAuthz)}; export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:null}}`,
       ) };
     }
     return next(specifier, context);

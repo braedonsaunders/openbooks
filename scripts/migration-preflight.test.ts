@@ -89,6 +89,17 @@ test("a preflight is deferred only when an earlier pending migration creates the
   assert.equal(earlierPendingCreatesObject(missingTable, ["select 1;"]), false);
   assert.equal(earlierPendingCreatesObject(missingTable, []), false);
 
+  const qualifiedMissingTable = Object.assign(
+    new Error('relation "public.financial_changes" does not exist'),
+    { code: "42P01" },
+  );
+  assert.equal(earlierPendingCreatesObject(qualifiedMissingTable, [
+    "SET search_path = public, pg_catalog; CREATE TABLE IF NOT EXISTS financial_changes (id uuid);",
+  ]), true);
+  assert.equal(earlierPendingCreatesObject(qualifiedMissingTable, [
+    "CREATE TABLE private.financial_changes (id uuid);",
+  ]), false);
+
   const missingColumn = Object.assign(
     new Error('column "executed_snapshot" of relation "lien_waivers" does not exist'),
     { code: "42703" },

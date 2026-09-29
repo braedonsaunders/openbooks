@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import test from "node:test";
+import test, { after } from "node:test";
 
 // A8 options endpoint: one picker payload, gated, subsidiary-scoped.
 
@@ -28,6 +28,9 @@ const mockAuthz = `
     if (state.authz.allowedSubsidiaryIds === null) return { ...state.authz, allowedSubsidiaryIds: null }
     return { ...state.authz, allowedSubsidiaryIds: new Set(state.authz.allowedSubsidiaryIds) }
   }
+  export async function guardFeaturePermission(permission) {
+    return guardPermission(permission)
+  }
 `;
 
 routeState.NextResponse = (await import("next/server")).NextResponse;
@@ -36,6 +39,9 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
       return { url: "mock:options-authz", shortCircuit: true };
+    }
+    if (specifier === '@/lib/feature-gates' && String(context.parentURL ?? '').includes('/lib/api/route')) {
+      return { url: 'mock:options-authz', shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
@@ -49,7 +55,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?alloc-options";
 const optionsRoute = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+after(() => hooks.deregister());
 
 const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

@@ -27,8 +27,8 @@ const bodyObjectSchema = z.object({
   paperSize: z.enum(['letter', 'a4', 'legal']).optional(),
   orientation: z.enum(["landscape", "portrait"]).optional(),
   marginMm: z.number().optional(),
-  isDefault: z.boolean().optional(),
-  isActive: z.boolean().optional(),
+  isDefault: z.boolean({ error: 'isDefault must be a boolean' }).optional(),
+  isActive: z.boolean({ error: 'isActive must be a boolean' }).optional(),
 }).strict();
 
 type Params = { params: Promise<{ id: string }> };

@@ -6,7 +6,8 @@ import test from 'node:test'
 const state: { gate: { user: { id: string; orgId: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null }
 Object.assign(globalThis, { __paymentMandateReadScope: state })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier.endsWith('/lib/authz') && (context.parentURL ?? '').includes('/api/admin/payment-operations/')) {
+  if (specifier.endsWith('/lib/authz') && ((context.parentURL ?? '').includes('/api/admin/payment-operations/') ||
+      (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route')))) {
     return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
       export async function guardPermission() { return globalThis.__paymentMandateReadScope.gate }
     `) }

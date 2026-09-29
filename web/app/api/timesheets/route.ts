@@ -36,12 +36,12 @@ const saveBodySchema = z.strictObject({
   employee: z.string().uuid("employee must be a valid id"),
   week: isoDate("week must be a valid calendar date"),
   rows: z.array(z.strictObject({
-    projectId: z.string().uuid("projectId must be a valid id").nullable(),
-    itemId: z.string().uuid("itemId must be a valid id").nullable(),
-    timeTypeId: z.string().uuid("timeTypeId must be a valid id").nullable(),
-    departmentId: z.string().uuid("departmentId must be a valid id").nullable(),
-    isBillable: z.boolean(),
-    memo: z.string().max(2000).nullable(),
+    projectId: z.string().uuid("projectId must be a valid id").nullable().optional(),
+    itemId: z.string().uuid("itemId must be a valid id").nullable().optional(),
+    timeTypeId: z.string().uuid("timeTypeId must be a valid id").nullable().optional(),
+    departmentId: z.string().uuid("departmentId must be a valid id").nullable().optional(),
+    isBillable: z.boolean().optional(),
+    memo: z.string().max(2000).nullable().optional(),
     hours: z.array(z.union([z.string(), z.number().finite(), z.null()])).length(7),
     custom: z.record(z.string().min(1), z.json()).default({}),
   })).max(1000),
@@ -170,6 +170,7 @@ const save = defineRoute({
   permission: "time.manage",
   feature: "timeTracking",
   body: saveBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ authz: gate, body: requestBody }) => {
     const { user } = gate;
     const orgId = user.orgId;

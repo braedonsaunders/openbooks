@@ -236,13 +236,23 @@ export function earlierPendingCreatesObject(
   const table = missingColumn?.[2] ?? missingTable;
   const column = missingColumn?.[1];
   if (table) {
+    // PostgreSQL reports a schema-qualified relation when the preflight
+    // names public.foo, while a pending migration may create the same table
+    // unqualified after setting search_path to public. Match that identity
+    // without treating a different schema's foo as its creator.
+    const publicTable = table.startsWith("public.") ? table.slice("public.".length) : null;
+    const tableNamePattern = publicTable
+      ? `(?:public\\s*\\.\\s*)?${escapeRegExp(publicTable)}`
+      : table.includes(".")
+        ? escapeRegExp(table)
+        : `(?:public\\s*\\.\\s*)?${escapeRegExp(table)}`;
     const tablePattern = new RegExp(
-      `create\\s+(?:or\\s+replace\\s+)?(?:table|view|materialized\\s+view)\\b[^;]*?\\b${escapeRegExp(table)}\\b`,
+      `create\\s+(?:or\\s+replace\\s+)?(?:table|view|materialized\\s+view)\\b[^;]*?(?<![\\w.])${tableNamePattern}\\b`,
       "is",
     );
     const columnPattern = column
       ? new RegExp(
-          `alter\\s+table\\b[^;]*?\\b${escapeRegExp(table)}\\b[^;]*?\\b${ADD_COLUMN}${escapeRegExp(column)}\\b`,
+          `alter\\s+table\\b[^;]*?(?<![\\w.])${tableNamePattern}\\b[^;]*?\\b${ADD_COLUMN}${escapeRegExp(column)}\\b`,
           "is",
         )
       : null;

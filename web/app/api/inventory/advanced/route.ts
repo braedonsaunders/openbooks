@@ -243,6 +243,7 @@ export const POST = defineRoute({
   },
   feature: { none: "The action-specific inventory authorization checks the inventory feature before dispatch." },
   body: advancedInventoryBody,
+  invalidBodyStatus: 422,
   handler: async ({ body, authz: gate }) => {
   // ensureLot/ensureSerial only mint catalog identifiers (idempotent by
   // construction), so they keep the catalog-maintenance grant and stay outside

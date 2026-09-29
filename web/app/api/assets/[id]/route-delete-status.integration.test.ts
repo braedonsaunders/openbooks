@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import test from "node:test";
+import test, { after } from "node:test";
 import { sql } from "drizzle-orm";
 
 // Only in-service assets reach the delete path with planned lines and no
@@ -29,8 +29,10 @@ const mockFeatureGates = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/assets/")
+      (specifier === "../../../../lib/feature-gates" &&
+        context.parentURL?.includes("/api/assets/")) ||
+      (specifier === "@/lib/feature-gates" &&
+        context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:asset-delete-feature-gates", shortCircuit: true };
     }
@@ -46,7 +48,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?asset-delete-status-test";
 const { DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+after(() => hooks.deregister());
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { buildSchedule } = await import("@openbooks/engine/src/assets/depreciation.ts");

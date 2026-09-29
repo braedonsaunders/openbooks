@@ -120,6 +120,7 @@ export const POST = defineRoute({
   },
   feature: { none: "The action-specific inventory authorization checks the inventory feature before dispatch." },
   body: inventoryActionBody,
+  invalidBodyStatus: 422,
   handler: async ({ body, authz: gate }) => {
   const user = gate.user
 

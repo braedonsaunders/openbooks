@@ -42,8 +42,8 @@ async function withScopedReader(permission: string, fn: (ctx: { org: ScratchOrg;
   const org: ScratchOrg = await withBypassContext(() => createScratchOrg())
   const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Scope reader', 'scope-reader'))
   const outside = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-    insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${randomUUID()}, ${org.orgId}, 'Uptown', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb) returning id`))).rows[0]!.id
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+    values (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, 'Uptown', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb) returning id`))).rows[0]!.id
   assert.equal((await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify([permission])}::jsonb,
     subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [outside] })}::jsonb where org_id = ${org.orgId} and key = 'scope-reader' returning key`))).rows.length, 1, 'register scope fixture permission and subsidiary setup updates scope-reader role')
   assert.equal((await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',

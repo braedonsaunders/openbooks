@@ -21,6 +21,7 @@ const Body = z.union([
 
 export const POST = defineRoute({
   permission: "manufacturing.manage", feature: "manufacturingMrp", params: Params, body: Body,
+  invalidBodyStatus: 422,
   handler: async ({ authz, params, body }) => manufacturingTransaction(authz.user.orgId, async () => {
     const suggestion = await getPlannedOrder(db, authz.user.orgId, params.id);
     const denied = guardSubsidiaryScope(authz, suggestion.subsidiaryId);

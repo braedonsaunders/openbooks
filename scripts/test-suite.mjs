@@ -251,7 +251,11 @@ function ownerRequest(port, request, timeoutMs) {
     const finish = (error, value) => {
       if (settled) return
       settled = true
-      socket.destroy()
+      // A complete response is newline-framed. Close the successful exchange
+      // cleanly; a hard reset can surface as an unhandled read error in the
+      // fixture owner while other workers still need it.
+      if (error) socket.destroy()
+      else socket.end()
       if (error) reject(error)
       else resolveResult(value)
     }

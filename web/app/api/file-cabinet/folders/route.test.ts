@@ -141,7 +141,10 @@ test('a blank name is refused before anything is written', { skip: !DB }, async 
     const response = await POST(postRequest({ name: '  ' }))
 
     assert.equal(response.status, 400)
-    assert.deepEqual(await response.json(), { error: 'name is required' })
+    assert.deepEqual(await response.json(), {
+      error: 'name is required',
+      issues: [{ path: 'name', message: 'name is required' }],
+    })
     assert.equal(await folderCount(org.orgId), 0)
     assert.equal(await auditCount(org.orgId), 0)
   } finally {

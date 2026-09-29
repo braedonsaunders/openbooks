@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { after, afterEach, beforeEach } from "node:test";
 import { fileURLToPath } from "node:url";
+import { observeFixtureOwnerSocket } from "./fixture-owner-transport.mjs";
 
 const RECEIPT_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", ".local", "fixture-lifecycle-receipt.txt");
 
@@ -33,7 +34,7 @@ async function runOwner() {
 
   const server = createServer((socket) => {
     let buffer = "";
-    socket.on("data", (chunk) => {
+    observeFixtureOwnerSocket(socket, (chunk) => {
       buffer += chunk.toString();
       const newline = buffer.indexOf("\n");
       if (newline < 0) return;

@@ -3,15 +3,16 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// Banking-rules PATCH requires a body id but never gates it: a malformed id
-// binds straight into the row lock and escapes as a raw Postgres uuid throw
-// (HTTP 500) instead of the same 404 an unknown id returns.
+// A malformed body id must refuse at the JSON boundary before PostgreSQL's
+// UUID cast; a well-formed unknown id must remain indistinguishable from an
+// out-of-scope rule.
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __bankRulesPatchIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../lib/feature-gates' ||
+        (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__bankRulesPatchIdState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -52,11 +53,12 @@ async function patch(body: unknown): Promise<{ status: number; json: unknown }> 
   }
 }
 
-test('PATCH returns 404 for a malformed rule id', async () => {
+test('PATCH returns 400 for a malformed rule id before database access', async () => {
   const org = await fixture()
   try {
     const result = await patch({ id: 'not-a-uuid', ...RULE_BODY })
-    assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.match(JSON.stringify(result.json), /id.*UUID/)
   } finally {
     await dropScratchOrg(org.orgId)
   }
