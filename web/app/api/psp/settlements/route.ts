@@ -147,7 +147,7 @@ const postBodySchema0 = z.discriminatedUnion("action", [
   }),
 ]);
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 export const GET = defineRoute({
   permission: "banking.read",

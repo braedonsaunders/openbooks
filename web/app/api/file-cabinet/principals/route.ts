@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Users + roles in the org, for the sharing principal picker. Gated by

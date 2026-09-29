@@ -24,7 +24,7 @@ const postBodySchema0 = z.strictObject({
   bookId: z.string().uuid("bookId must be a valid id").optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 interface Body {
   effectiveDate?: unknown;

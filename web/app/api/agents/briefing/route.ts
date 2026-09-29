@@ -12,7 +12,7 @@ const postBodySchema0 = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("send") }),
 ]);
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Generation runs one bounded background turn (8 read-tool steps max).
 export const maxDuration = 180;

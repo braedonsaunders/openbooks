@@ -4,7 +4,7 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { submitFinancialChange } from "@openbooks/engine/src/flows/financial-changes-adapter.ts";
 import { authorizeChange } from "../../_authorization";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const POST = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),

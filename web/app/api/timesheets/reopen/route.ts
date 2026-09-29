@@ -22,7 +22,7 @@ const postBodySchema0 = z.strictObject({
   week: isoDate("week must be a valid calendar date"),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 function bad(error: string, extra: Record<string, unknown> = {}, status = 422) {
   return NextResponse.json({ error, ...extra }, { status });

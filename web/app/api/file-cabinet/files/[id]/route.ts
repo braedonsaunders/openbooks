@@ -21,7 +21,7 @@ const patchBodySchema0 = z
   })
   .refine((body) => Object.keys(body).length > 0, "provide a file name or folderId to update");
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Abort a multi-verb file edit so the shared transaction rolls everything back. */
 class FilePatchAbort extends Error {

@@ -25,7 +25,7 @@ const postBodySchema0 = z.union([
   }),
 ]);
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * POST { entryId } or { employee, week } → create offsetting draft entries

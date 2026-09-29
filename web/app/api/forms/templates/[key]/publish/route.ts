@@ -12,7 +12,7 @@ const postBodySchema0 = z.strictObject({
   changelog: z.string().trim().max(2000).nullable().optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Publish the current draft: re-validate its schema, stamp published_at

@@ -4,7 +4,7 @@ import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/agents/contin
 import { isUuid, pickString } from "../../../../lib/list-params";
 import { loadAgentInbox } from "../../../../lib/agents/inbox";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**

@@ -14,7 +14,7 @@ const putBodySchema0 = z.strictObject({
   viewId: z.string().uuid("viewId must be a valid id").nullable().optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * PUT /api/customization/list-preferences — set the signed-in user's default

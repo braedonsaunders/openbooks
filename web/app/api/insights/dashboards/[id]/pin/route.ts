@@ -9,7 +9,7 @@ import { loadDashboard } from "../../../_lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({ pin: z.boolean() });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Toggle a personal pin for the current user. Pinned dashboards are what the

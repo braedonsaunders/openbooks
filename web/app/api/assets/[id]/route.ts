@@ -83,7 +83,7 @@ const patchBodySchema0 = z
     status: z.enum(["draft", "in_service"]).optional(),
   });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 interface ExistingAsset extends Record<string, unknown> {
   id: string;

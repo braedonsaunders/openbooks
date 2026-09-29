@@ -11,7 +11,7 @@ import { applyAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts"
 import { applyLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
 import { applyRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
 import { authorizeChange } from "../../_authorization";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 export const POST = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),

@@ -25,7 +25,7 @@ function schemaHash(schema: unknown): string {
   return createHash("sha256").update(JSON.stringify(schema)).digest("hex");
 }
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 
 /** Template meta + all versions + the editable draft schema. */

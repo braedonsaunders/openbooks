@@ -11,7 +11,7 @@ import {
 } from "@openbooks/engine/src/platform/business-date.ts";
 import { isUuid } from "../../../../lib/list-params";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 // Typed preview body (never jsonObject: the financial-boundary ceiling only
 // shrinks). Read-only: this boundary performs SELECTs only — no locks, no

@@ -7,7 +7,7 @@ import { emptyFormSchema } from "@openbooks/forms-core";
 import { auditSetupChange } from "../../../../lib/setup/audit";
 import { pgErrorCode } from "../../../../lib/setup/coerce";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 const KEY_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 const postBodySchema0 = z.strictObject({

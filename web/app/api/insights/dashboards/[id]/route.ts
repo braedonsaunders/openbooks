@@ -14,7 +14,7 @@ import {
 } from "../../_lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 // cardId stays a plain string here on purpose: a malformed reference must
 // reach the domain check below (normalizeLayout) so the caller gets the

@@ -177,7 +177,7 @@ const postBodySchema0 = z.union([
   ]),
 ]);
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Construction progress billing API for one project. GET ?projectId returns the

@@ -31,7 +31,7 @@ const postBodySchema0 = z.strictObject({
   targetTable: z.string().refine(isAttachableTargetTable, "targetTable must be an attachable record type"),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** List files attached to a record (metadata only). */
 export const GET = defineRoute({

@@ -31,7 +31,7 @@ const patchBodySchema0 = z
     }
   });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Get a single folder. Private-folder visibility applies: a folder hidden
  *  behind someone else's private boundary reads as not found. */

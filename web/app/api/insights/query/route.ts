@@ -40,7 +40,7 @@ const postBodySchema0 = z.strictObject({
   allowedSubsidiaryIds: z.json().optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Compile + execute an insight query and return the typed result — the card

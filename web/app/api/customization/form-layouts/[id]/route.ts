@@ -18,7 +18,7 @@ import {
 } from "../../../../../lib/customization/active-default";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 const layoutBody = z.json().refine(
   (value) => parseFormLayout(value).success,

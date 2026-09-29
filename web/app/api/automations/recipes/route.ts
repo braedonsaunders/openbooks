@@ -4,7 +4,7 @@ import { automationRecipes } from "@openbooks/engine/src/automations/services.ts
 import { automationErrorResponse } from "../_lib";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Shipped recipe templates for the builder's recipe picker. */
 export const GET = defineRoute({

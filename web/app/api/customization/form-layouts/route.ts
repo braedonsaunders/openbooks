@@ -32,7 +32,7 @@ const postBodySchema0 = z.strictObject({
   isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** GET /api/customization/form-layouts?recordType=vendor_bill — list org forms. */
 export const GET = defineRoute({

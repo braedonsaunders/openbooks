@@ -7,7 +7,7 @@ import { patchAutomationBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Single automation: GET reads, PATCH edits (bumps version). */
 export const GET = defineRoute({

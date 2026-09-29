@@ -29,7 +29,7 @@ import { accountInputFields } from "../_input";
 
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 const CURRENCY_RE = /^[A-Z]{3}$/;
 

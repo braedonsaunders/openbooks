@@ -15,7 +15,7 @@ import {
 import { depreciationFailure } from "../../../../lib/assets/depreciation-error-response";
 import { isUuid } from "../../../../lib/list-params";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 // Typed body (never jsonObject: the financial-boundary ceiling only shrinks).
 // Legacy immediate runs ({assetId?, bookId?}) keep working; the review drawer

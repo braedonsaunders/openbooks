@@ -6,7 +6,7 @@ import { isUuid } from "../../../../../lib/list-params";
 import { automationErrorResponse } from "../../_lib";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Run drawer: one run with its steps and error. */
 export const GET = defineRoute({

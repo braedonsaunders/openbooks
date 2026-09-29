@@ -33,7 +33,7 @@ import { decimalCmp, decimalSum } from "../../../../../lib/statement-format";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PER_PAGE = 100;

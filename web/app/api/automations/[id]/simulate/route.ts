@@ -9,7 +9,7 @@ import { automationErrorResponse } from "../../_lib";
 import { notFound } from "@/lib/api/responses";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Simulate: dry-run the recipe against a chosen subject (or the last N

@@ -17,7 +17,7 @@ import {
 } from "../../lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /**
  * Detach a file from a record (does NOT delete the file).

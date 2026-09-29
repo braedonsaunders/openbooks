@@ -11,7 +11,7 @@ const postBodySchema0 = z.strictObject({
   code: z.string().trim().min(1, "code is required").max(100),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 export const GET = defineRoute({
   permission: "assets.read",

@@ -14,7 +14,7 @@ import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 
 import { notFound } from "@/lib/api/responses";
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
 const plan = z.array(z.object({ date, amount: exactMoney() })).max(1200);
 const groupComponent = z.object({

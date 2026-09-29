@@ -8,7 +8,7 @@ import { createAutomationBody } from "./bodies";
 import { automationErrorResponse } from "./_lib";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Automation recipes: GET lists, POST authors a draft recipe. */
 export const GET = defineRoute({

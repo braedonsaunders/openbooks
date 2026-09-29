@@ -7,7 +7,7 @@ import { automationStatusBody } from "../../bodies";
 import { automationErrorResponse } from "../../_lib";
 
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Enable/disable an automation (enabling re-validates the recipe). */
 export const POST = defineRoute({

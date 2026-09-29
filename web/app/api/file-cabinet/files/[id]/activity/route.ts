@@ -6,7 +6,7 @@ import { listFileActivity } from "../../../../../../lib/file-audit";
 import { requireFileAccess } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Activity history for a file. Requires at least Viewer access. */
 export const GET = defineRoute({

@@ -22,7 +22,7 @@ const postBodySchema0 = z.strictObject({
   week: isoDate("week must be a valid calendar date"),
 });
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 class SubmissionFlowError extends Error {
   constructor() {

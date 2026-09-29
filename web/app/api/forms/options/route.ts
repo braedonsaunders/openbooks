@@ -26,7 +26,7 @@ function requiredPermission(
   return null;
 }
 
-export { runtime } from "@/lib/api/route";
+export const runtime = "nodejs";
 
 /** Shared form/master-data pickers. Authentication does not grant visibility
  * into another legal entity: match native record scope and the Projects gate.
