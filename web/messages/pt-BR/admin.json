@@ -2551,6 +2551,18 @@
         "title": "Categorias de Ativo",
         "description": "Método de depreciação e contas padrão para ativos imobilizados."
       },
+      "nonprofit-frameworks": {
+        "title": "Estrutura de restrição",
+        "description": "Base de apresentação da contabilidade de fundos (ex.: US ASC 958)."
+      },
+      "fund-pairs": {
+        "title": "Pares entre fundos",
+        "description": "Contas de liquidação entre dois fundos."
+      },
+      "functional-mappings": {
+        "title": "Mapeamentos funcionais",
+        "description": "Classificação com vigência das despesas de departamentos e projetos."
+      },
       "depreciation-methods": {
         "title": "Métodos de Depreciação",
         "description": "Crie fórmulas de depreciação personalizadas — o construtor de fórmulas."
@@ -3015,6 +3027,7 @@
       "targetLocationId": "Local de destino",
       "capacityQuantity": "Capacidade",
       "services": "Serviços",
+      "setAt": "Definido em",
       "trackingUrlTemplate": "Modelo do link de rastreamento",
       "accountId": "Conta",
       "code": "Código",
@@ -3099,6 +3112,7 @@
       "vacationable": "Conta p/ férias",
       "nonPeriodic": "Não periódico (método de bônus)",
       "programExclusions": "Exclusões de programas",
+      "programKey": "Programa",
       "supplementalWageCategory": "Categoria de remuneração suplementar",
       "statutoryReportingCategory": "Categoria de declaração legal",
       "statutoryExemptionCategory": "Categoria de isenção legal",
@@ -3135,6 +3149,7 @@
       "baseCurrency": "Moeda base",
       "isElimination": "Eliminação",
       "fromSubsidiaryId": "Subsidiária de origem",
+      "function": "Função",
       "toSubsidiaryId": "Subsidiária de destino",
       "dueFromAccountId": "Conta a receber de",
       "dueToAccountId": "Conta a pagar a",
@@ -3156,7 +3171,9 @@
       "fairValueAdjustmentAccountId": "Conta de ajuste a valor justo",
       "asOf": "Na data de",
       "fromCurrency": "Moeda de origem",
+      "fromFundId": "Fundo de origem",
       "toCurrency": "Moeda de destino",
+      "toFundId": "Fundo de destino",
       "rateType": "Tipo de taxa",
       "source": "Origem",
       "periodId": "Período contábil",
@@ -3377,6 +3394,7 @@
       "requiresEvidence": "Exige evidência",
       "extraCategories": "Categorias extras",
       "frameworkId": "Matriz",
+      "framework": "Matriz",
       "categoryKey": "Categoria",
       "retainYears": "Retenção (anos)",
       "fromEvent": "Início da contagem",

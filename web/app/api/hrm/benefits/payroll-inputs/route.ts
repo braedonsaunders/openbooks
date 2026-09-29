@@ -14,6 +14,7 @@ export const POST = defineRoute({
   permission: "hrm.benefits.manage",
   feature: "hrm",
   body: benefitPayrollInputsBody,
+  invalidBodyStatus: 400,
   handler: async ({ request: _req, authz: gate, body }) => {
     try {
       if (body.action === "void") {

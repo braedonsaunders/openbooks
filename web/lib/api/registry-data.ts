@@ -1,4 +1,5 @@
 import { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts';
+import { createPermission, documentReadPermission } from '@openbooks/engine/src/records/document-kind-permissions.ts';
 export { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken };
 
 /**
@@ -340,6 +341,15 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     docKind: "sales_order",
     readPermission: "ar.read",
     writePermission: null,
+    featureKey: "orders",
+  }),
+  documentResource({
+    key: "return-authorizations",
+    label: "Return Authorizations",
+    description: "Customer return authorizations. Draft creation and edits use the document writer; fulfillment remains an explicit controlled action.",
+    docKind: "rma",
+    readPermission: documentReadPermission("rma"),
+    writePermission: createPermission("rma"),
     featureKey: "orders",
   }),
   documentResource({

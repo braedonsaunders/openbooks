@@ -32,7 +32,8 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     const entityRoute = context.parentURL?.includes("%5Bentity%5D")
       ?? context.parentURL?.includes("[entity]");
-    if (specifier === "../../../../../lib/authz" && entityRoute) {
+    if ((specifier === "../../../../../lib/authz" && entityRoute)
+      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);

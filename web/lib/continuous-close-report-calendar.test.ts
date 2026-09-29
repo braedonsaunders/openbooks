@@ -10,7 +10,7 @@ const stamp = '2026-03-15'
 const mockSources = new Map<string, string>([
   ['mock:intl', `export async function getTranslations() { return (key) => key }; export async function getLocale() { return 'en-US' }`],
   ['mock:business-date', `export async function businessToday(orgId) { if (orgId !== 'org-1') throw new Error('wrong organization'); return '${stamp}' }`],
-  ['mock:db', `export const db = { async execute() { return { rows: [{ agent_key: 'accounting', finished_at: new Date('2026-03-14T23:59:00Z'), narrative: { title: 'Close review', periodLabel: 'March close', executiveSummary: 'Two risks need review.' } }] } } }`],
+  ['mock:db', `export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}; export const db = { async execute() { return { rows: [{ agent_key: 'accounting', finished_at: new Date('2026-03-14T23:59:00Z'), narrative: { title: 'Close review', periodLabel: 'March close', executiveSummary: 'Two risks need review.' } }] } } }`],
   ['mock:feature-gate', `export async function guardFeaturePermission() { return { user: { orgId: 'org-1' } } }`],
   ['mock:authz', `export function guardUnrestrictedScope() { return null }`],
   ['mock:continuous-close', `export function readableContinuousCloseAgents() { return ['accounting'] }`],
@@ -25,6 +25,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/pdf', 'mock:pdf'],
   ['../../../../../../lib/feature-gates', 'mock:feature-gate'],
+  ['@/lib/feature-gates', 'mock:feature-gate'],
   ['../../../../../../lib/authz', 'mock:authz'],
   ['../../../../../../lib/continuous-close', 'mock:continuous-close'],
   ['../../../../../../lib/export', 'mock:export'],

@@ -24,7 +24,9 @@ import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.object({ idempotencyKey: z.string().uuid().optional() }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+// The bulk key's domain validator supplies the stable SCRIPT_RUN_KEY_INVALID
+// refusal; the boundary still rejects unknown fields and malformed JSON.
+const requestBodySchema = z.strictObject({ idempotencyKey: z.json().optional() });
 
 
 
@@ -55,7 +57,7 @@ export const POST = defineRoute({
   feature: "scripts",
   params: z.object({ "id": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, params, authz: routeAuthz }) => {
+  handler: async ({ params, authz: routeAuthz, body }) => {
 
     const gate = routeAuthz
 
@@ -83,16 +85,9 @@ export const POST = defineRoute({
         // cross-request dedupe). The queue id is deterministic in the key, so
         // live duplicates collapse in BullMQ; the worker re-checks the claim
         // because BullMQ dedupe only covers live jobs.
-        let rawBody: unknown = null
-        try {
-          rawBody = await request.json()
-        } catch {
-          rawBody = null
-        }
-        const provided = (rawBody as { idempotencyKey?: unknown } | null)?.idempotencyKey
         let runKey: string
         try {
-          runKey = bulkRunClientKey(provided)
+          runKey = bulkRunClientKey(body.idempotencyKey)
         } catch {
           return NextResponse.json(
             { error: 'A valid idempotencyKey is required; retry this run with the same client key.', code: 'SCRIPT_RUN_KEY_INVALID' },

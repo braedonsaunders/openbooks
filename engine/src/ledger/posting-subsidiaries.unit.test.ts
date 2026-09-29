@@ -231,7 +231,17 @@ test("a default header rate is unset, so one spot read prices every line", async
     subsidiariesStep([root], "org-1"),
     {
       sql: /from fx_rates/,
-      rows: [{ rate: spot }],
+      // The shared spot lookup reads an evidence row (stored/derived rates
+      // plus identity), not a bare rate column.
+      rows: [{
+        id: "00000000-0000-4000-8000-000000000001",
+        as_of: "2026-09-15",
+        source: "unit",
+        stored_rate: spot,
+        updated_at: "2026-09-15T00:00:00.000000Z",
+        priority: 0,
+        derived_rate: spot,
+      }],
       check: ({ params }) => {
         assert.ok(params.includes("EUR") && params.includes("USD"), "the pair is named");
         assert.ok(params.includes("2026-09-15"), "the rate respects the posting date");

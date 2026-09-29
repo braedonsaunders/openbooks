@@ -24,6 +24,7 @@ export const POST = defineRoute({
   public: "session",
   params: z.object({ stepId: z.string().min(1) }),
   body: completeStepBody,
+  invalidBodyStatus: 400,
   handler: async ({ params: routeParams, body: body }) => {
     const processGate = await guardPermission("hrm.process.read");
     const gate =

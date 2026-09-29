@@ -29,20 +29,21 @@ const callsKey = Symbol.for('openbooks.payroll-amendments-permission-calls')
 const calls: Array<[string, string]> = []
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[callsKey] = calls
 
+const featureGateSource = `
+  export async function guardFeaturePermission(permission, feature) {
+    globalThis[Symbol.for('openbooks.payroll-amendments-permission-calls')].push([permission, feature])
+    const refusal = globalThis.__filingPermissionRefusal ?? null
+    if (refusal) return refusal
+    return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+  }
+`
+
 stubModules({
   navigation: false,
   intl: false,
   authz: false,
-  features: false,
+  features: { source: featureGateSource },
   extra: {
-    "../../../../../lib/feature-gates": `
-      export async function guardFeaturePermission(permission, feature) {
-        globalThis[Symbol.for('openbooks.payroll-amendments-permission-calls')].push([permission, feature])
-        const refusal = globalThis.__filingPermissionRefusal ?? null
-        if (refusal) return refusal
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
-      }
-    `,
     "../../subsidiary-scope": `
       export class FilingScopeDenied {
         constructor(response) {
@@ -53,6 +54,7 @@ stubModules({
       export async function guardPayrollFilingData() { return null }
     `,
     "@openbooks/engine/src/platform/db.ts": `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
       export const db = { execute: async () => ({ rows: [] }) }
     `,
     "drizzle-orm": `
@@ -102,7 +104,6 @@ function post(body: Record<string, unknown>): Promise<Response> {
         country: 'CA',
         filing: 't4',
         year: 2026,
-        rowIds: ['row-1'],
         ...body,
       }),
     }),

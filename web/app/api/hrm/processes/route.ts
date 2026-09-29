@@ -62,6 +62,7 @@ export const POST = defineRoute({
   permission: "hrm.process.manage",
   feature: "hrm",
   body: openProcessBody,
+  invalidBodyStatus: 400,
   handler: async ({ authz: gate, body: body }) => {
     try {
       const process = await openProcess({

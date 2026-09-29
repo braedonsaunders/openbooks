@@ -38,7 +38,7 @@ const openingAmountMap = z.record(z.string(), openingAmount)
 const openingBalanceRowSchema = z.strictObject({
   employeePartyId: z.string().uuid(),
   amounts: openingAmountMap.optional(),
-  components: openingAmountMap.optional(),
+  components: z.unknown().optional(),
   programs: openingAmountMap.optional(),
   suiStates: openingAmountMap.optional(),
   accountBases: z.array(z.strictObject({
@@ -47,7 +47,7 @@ const openingBalanceRowSchema = z.strictObject({
     region: z.string().nullable(),
     insurableYtd: openingAmount,
   })).optional(),
-  updatedAt: z.string().nullable().optional(),
+  updatedAt: z.unknown().optional(),
 })
 const requestBodySchema = z.strictObject({
   taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/).transform(Number)]),
@@ -176,13 +176,17 @@ export const POST = defineRoute({
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
 
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 })
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.data
 
     const rows: OpeningBalanceWrite[] = []
     const saldoRows: { employeePartyId: string; regionaleSaldo: unknown; comunaleSaldo: unknown }[] = []
     for (const row of body.rows) {
+      if (row.components !== undefined && row.components !== null &&
+          (typeof row.components !== 'object' || Array.isArray(row.components))) {
+        return NextResponse.json({ error: 'components must be an object of component amounts' }, { status: 422 })
+      }
       // The row's loader-served version for the lost-update guard. Absent
       // means the caller does not speak versions (the file importer) and the
       // row saves unguarded, as before — never a silent default.

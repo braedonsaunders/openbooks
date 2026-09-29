@@ -31,10 +31,10 @@ import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
   data: z.record(z.string(), z.json()).optional(),
-  expectedUpdatedAt: z.string().datetime({ offset: true }),
-  reason: z.string().trim().min(1).max(500).nullable().optional(),
+  expectedUpdatedAt: z.json().optional(),
+  reason: z.json().optional(),
   status: z.enum(["active", "inactive"]).optional(),
-});
+}).default({});
 
 
 

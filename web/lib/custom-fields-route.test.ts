@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 type ExistingField = {
   updated_at: string
@@ -76,6 +76,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
       const state = globalThis[Symbol.for('openbooks.custom-fields-route-test')]
       const sqlText = globalThis.openbooksCustomFieldsSqlText
       export const db = {
@@ -97,6 +98,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/customization/gates', 'mock:feature-gates'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/flows/documents-adapter.ts', 'mock:documents-adapter'],
@@ -117,7 +119,7 @@ const hooks = registerHooks({
 
 const routeUrl = '../app/api/admin/custom-fields/route.ts?custom-fields-route-test'
 const { PATCH, POST } = (await import(routeUrl)) as typeof import('../app/api/admin/custom-fields/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const FIELD_ID = '00000000-0000-4000-8000-00000000a001'
 

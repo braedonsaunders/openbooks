@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
-import { DOC_KINDS } from '../document-kinds.ts'
+import { DOC_KINDS, createPermission, postPermission } from '../document-kinds.ts'
 import type { DataResource } from './resource-core.ts'
 import {
   CELL_PROVENANCE_KEY,
@@ -39,6 +39,7 @@ interface ImportRouteState {
     historyJobs: Record<string, unknown>[]
   }
   idempotency: Map<string, { request: string; value: unknown }>
+  permissions: Set<string>
 }
 
 const stateKey = Symbol.for('openbooks.data-import-route-test')
@@ -60,6 +61,7 @@ const importState: ImportRouteState = {
   activeOrgTxn: null,
   committed: { documents: [], lines: [], historyJobs: [] },
   idempotency: new Map(),
+  permissions: new Set(),
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
 
@@ -75,6 +77,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
       const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
       export const schema = {
         documents: Symbol.for('openbooks.data-import-route-test.documents'),
@@ -218,14 +221,13 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
-      export function can() {
-        return true
-      }
+      const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
+      export { can } from ${JSON.stringify(import.meta.resolve('@/lib/authz'))}
 
       export async function guardPermission() {
         // An organization-wide caller: the route refuses restricted callers
         // for resources whose write path cannot enforce the subsidiary fence.
-        return { user: { orgId: 'org-1', id: 'actor-1' }, permissions: new Set(), allowedSubsidiaryIds: null }
+        return { user: { orgId: 'org-1', id: 'actor-1' }, permissions: state.permissions, allowedSubsidiaryIds: null }
       }
     `,
   ],
@@ -316,6 +318,7 @@ const hooks = registerHooks({
       ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
       ['../../../../lib/authz', 'mock:authz'],
+      ['@/lib/authz', 'mock:authz'],
       ['../../../../lib/application/context', 'mock:db'],
       ['../../../../lib/application/idempotency', 'mock:db'],
       ['../../../../lib/data-io/resources', 'mock:resources'],
@@ -337,6 +340,7 @@ const transactionUrl = './transaction-resources.ts?generic-import-route-test'
 const { transactionResource } = await import(transactionUrl) as typeof import('./transaction-resources.ts')
 const cardCharge = DOC_KINDS.card_charge
 assert.ok(cardCharge)
+importState.permissions = new Set(['data.import', createPermission(cardCharge.kind), postPermission(cardCharge.kind)])
 const actualResource = transactionResource(cardCharge, 'org-1')
 importState.resource = {
   ...actualResource,
@@ -350,7 +354,7 @@ const routeUrl = '../../app/api/data/import/route.ts?duplicate-mapping-test'
 const { POST } = await import(routeUrl) as typeof import('../../app/api/data/import/route.ts')
 const parseUrl = './parse.ts?duplicate-mapping-route-test'
 const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function resetImportState(): void {
   importState.resourceLookupCalls = 0

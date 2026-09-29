@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import ExcelJS from 'exceljs'
 import { stubModules } from '../testing/stub-modules.ts'
 
@@ -70,6 +70,7 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['../../../../../lib/report-authz', mockUrl('report-authz')],
   ['../../../../../lib/views', mockUrl('views')],
   ['../../../../../lib/report-pdf', mockUrl('report-pdf')],
@@ -100,7 +101,7 @@ const hooks = registerHooks({
 
 const viewExportUrl = '../app/api/views/[id]/export/route.ts?view-export-stamp'
 const { GET } = (await import(viewExportUrl)) as typeof import('../app/api/views/[id]/export/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const VIEW_ID = '00000000-0000-4000-8000-00000000c001'
 const get = (format: string) =>

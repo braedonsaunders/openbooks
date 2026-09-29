@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 const mockSources = new Map<string, string>([
   [
@@ -63,6 +63,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', new URL('../../../../../lib/api/json.ts', import.meta.url).href],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
   ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
   ['@openbooks/engine/src/payroll/filing-registry.ts', 'mock:registry'],
@@ -101,7 +102,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-year-end-file-test'
 const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function get(query: string): Promise<Response> {
   return GET(new Request(`http://openbooks.test/api/payroll/year-end/file${query}`))

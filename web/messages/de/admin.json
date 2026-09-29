@@ -2594,6 +2594,18 @@
         "title": "Anlagekategorien",
         "description": "Standard-Abschreibungsmethode und -konten für Anlagevermögen."
       },
+      "nonprofit-frameworks": {
+        "title": "Restriktionsrahmen",
+        "description": "Berichtsgrundlage für die Fondsbuchhaltung (z. B. US ASC 958)."
+      },
+      "fund-pairs": {
+        "title": "Interfonds-Paare",
+        "description": "Verrechnungskonten zwischen zwei Fonds."
+      },
+      "functional-mappings": {
+        "title": "Funktionale Zuordnungen",
+        "description": "Stichtagsbezogene Klassifizierung von Abteilungs- und Projektausgaben."
+      },
       "depreciation-methods": {
         "title": "Abschreibungsmethoden",
         "description": "Erstellen Sie benutzerdefinierte Abschreibungsformeln — der Formel-Builder."
@@ -3090,6 +3102,7 @@
       "targetLocationId": "Ziellagerort",
       "capacityQuantity": "Kapazität",
       "services": "Versandarten",
+      "setAt": "Festgelegt am",
       "trackingUrlTemplate": "Vorlage für den Sendungsverfolgungslink",
       "accountId": "Konto",
       "classAttribute": "Attribut der Anlagegüterklasse",
@@ -3183,12 +3196,15 @@
       "baseCurrency": "Basiswährung",
       "isElimination": "Eliminierung",
       "fromSubsidiaryId": "Von Tochtergesellschaft",
+      "function": "Funktion",
       "toSubsidiaryId": "An Tochtergesellschaft",
       "dueFromAccountId": "Forderungskonto",
       "dueToAccountId": "Verbindlichkeitskonto",
       "asOf": "Stand",
       "fromCurrency": "Von Währung",
+      "fromFundId": "Von Fonds",
       "toCurrency": "In Währung",
+      "toFundId": "In Fonds",
       "rateType": "Kursart",
       "source": "Quelle",
       "periodId": "Buchungsperiode",
@@ -3287,6 +3303,7 @@
       "nciMeasurement": "NCI-Bewertung",
       "nonPeriodic": "Nicht periodisch (Bonusmethode)",
       "programExclusions": "Programmausschlüsse",
+      "programKey": "Programm",
       "supplementalWageCategory": "Kategorie der zusätzlichen Lohnzahlung",
       "statutoryReportingCategory": "Gesetzliche Meldekategorie",
       "statutoryExemptionCategory": "Gesetzliche Befreiungskategorie",
@@ -3452,6 +3469,7 @@
       "requiresEvidence": "Nachweis erforderlich",
       "extraCategories": "Zusätzliche Kategorien",
       "frameworkId": "Rahmen",
+      "framework": "Rahmen",
       "categoryKey": "Kategorie",
       "retainYears": "Aufbewahrung (Jahre)",
       "fromEvent": "Fristbeginn",

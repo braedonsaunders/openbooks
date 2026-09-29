@@ -119,6 +119,7 @@ stubModules({
   features: false,
   extra: {
     "@openbooks/engine/src/platform/db.ts": `
+    export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
     const state = globalThis[Symbol.for('openbooks.opportunity-contact-route-test')]
     const sqlText = globalThis.openbooksSqlTextOpportunity
     const respondExecute = (query) => {
@@ -230,11 +231,8 @@ stubModules({
     export const env = {}
     export function withOrgTransaction(_orgId, work) { return work() }
     export async function withOrg(_orgId, work) { return work() }
-    export async function withOrgContext(_orgId, work) { return work() }
     export async function withBypass(work) { return work() }
-    export async function withBypassContext(_opts, work) { return work() }
     export function inDbTransaction(_work) { throw new Error('unexpected inDbTransaction') }
-    export function registerRequestOrgResolver() {}
   `,
     "@openbooks/engine/src/crm/crm.ts": `
     export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }
@@ -252,6 +250,9 @@ stubModules({
     export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
   `,
     "../../../../../lib/feature-gates": `
+    export async function guardFeaturePermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
+  `,
+    "@/lib/feature-gates": `
     export async function guardFeaturePermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
   `,
     "../../../../../lib/features": `
@@ -630,11 +631,11 @@ test('the line write carries the cost columns', async () => {
   reset()
 
   const response = await patch({
-    lines: [{ itemId: PARTY_A, quantity: '2', unitPrice: '50', unitCost: '30' }],
+    lines: [{ itemId: PARTY_A, description: 'Costed item', quantity: '2', unit: 'each', unitPrice: '50', unitCost: '30' }],
     expectedUpdatedAt: REVISION,
   })
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200, `line save refusal: ${JSON.stringify(await response.clone().json())}`)
   const insert = routeState.calls.find(
     (call) => call.kind === 'tx-execute' && call.text.includes('insert into crm_opportunity_lines'),
   )

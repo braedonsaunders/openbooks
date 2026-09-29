@@ -116,7 +116,7 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (['@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts'].includes(specifier)) return { url: 'mock:payroll-run', shortCircuit: true }
@@ -146,7 +146,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-run-id-refusals-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const RUN_ID = '00000000-0000-4000-8000-000000000001'
 const COMPONENT_ID = '00000000-0000-4000-8000-000000000002'

@@ -866,7 +866,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'usage-billing-detail',
     name: 'Usage billing detail',
-    description: 'Every rated usage invoice line with its meter, rating run, plan version and source-record trace.',
+    description: 'Rated usage invoice lines with meter, rating run, plan version and source trace.',
     query: {
       entity: 'usage_billing_lines',
       mode: 'rows',

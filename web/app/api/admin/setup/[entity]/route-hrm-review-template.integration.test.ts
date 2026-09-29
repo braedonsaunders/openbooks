@@ -31,7 +31,8 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     const entityRoute = context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
-    if (specifier === "../../../../../lib/authz" && entityRoute) {
+    if ((specifier === "../../../../../lib/authz" && entityRoute)
+      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -46,20 +47,37 @@ registerHooks({
 
 const routeUrl = "./route.ts?hrm-review-template-labels-route-test";
 const { PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { listReviewTemplates } = await import("@openbooks/engine/src/hrm/performance/review-cycles.ts");
 
 async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
+  await withBypassContext(async () => {
+    for (const permission of permissions) {
+      const rows = (await db.execute<{ id: string }>(sql`
       insert into user_permission_overrides (org_id, user_id, permission, effect)
       values (${orgId}, ${userId}, ${permission}, 'grant')
       on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
+      returning id
+      `)).rows;
+      assert.equal(rows.length, 1, `performance permission ${permission} must be granted once`);
+    }
+  });
+}
+
+async function seedReviewOrg() {
+  return withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
+    const rows = (await db.execute<{ id: string }>(sql`
+      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
+       where id = ${org.orgId} returning id
+    `)).rows;
+    assert.equal(rows.length, 1, "the review organization must enable HRM exactly once");
+    return { org, actorId };
+  });
 }
 
 function authenticate(f: { orgId: string; actorId: string }) {
@@ -93,11 +111,7 @@ test("a review template created with rating-scale labels persists and reads back
   // The drawer edits the scale as three structured fields (min, max, labels)
   // and the writer folds them into rating_scale before buildRow: the labels
   // the TagInput collects must survive the fold to storage and back.
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
-     where id = ${org.orgId}`);
+  const { org, actorId } = await seedReviewOrg();
   authenticate({ orgId: org.orgId, actorId });
 
   const created = await POST(
@@ -148,11 +162,7 @@ test("string scale bounds from the drawer save as numbers; garbage is refused by
   // boundary coerces decimal strings to JSON numbers so the storage
   // CHECK (numbers only) never sees them; an unparseable bound is
   // refused by field name instead of reaching the write.
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
-     where id = ${org.orgId}`);
+  const { org, actorId } = await seedReviewOrg();
   authenticate({ orgId: org.orgId, actorId });
 
   const created = await POST(
@@ -193,11 +203,7 @@ test("inverted and over-wide scales are refused by name, never raw CHECK text", 
   // fail in the engine's own words (validateEntityIntegrity runs
   // parseRatingScale before the write) — the raw Postgres CHECK text must
   // never reach the dialog.
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
-     where id = ${org.orgId}`);
+  const { org, actorId } = await seedReviewOrg();
   authenticate({ orgId: org.orgId, actorId });
 
   const inverted = await POST(
@@ -235,11 +241,7 @@ test("a template created with drawer string bounds appears in the cycle picker",
   // The /hrm/performance?cycle=new template picker lists
   // hrm_review_templates through listReviewTemplates — a template saved
   // from the drawer (string bounds folded to numbers) must be pickable.
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
-     where id = ${org.orgId}`);
+  const { org, actorId } = await seedReviewOrg();
   await grant(org.orgId, actorId, ["hrm.performance.manage"]);
   authenticate({ orgId: org.orgId, actorId });
 

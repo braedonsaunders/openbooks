@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 /**
  * Parse-mode wiring for /api/data/import: parser refusals must come back as
@@ -15,6 +15,7 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
       ['../../../../lib/authz', 'mock:parse-route-authz'],
+      ['@/lib/authz', 'mock:parse-route-authz'],
       ['../../../../lib/data-io/resources', 'mock:parse-route-resources'],
     ]).get(specifier)
     if (mockUrl) return { url: mockUrl, shortCircuit: true }
@@ -60,7 +61,7 @@ const hooks = registerHooks({
 
 const routeUrl = '../../app/api/data/import/route.ts?parse-refusal-test'
 const { POST } = await import(routeUrl) as typeof import('../../app/api/data/import/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function parseRequest(text: string) {
   return new Request('http://openbooks.test/api/data/import', {

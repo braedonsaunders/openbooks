@@ -1,9 +1,8 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { listReviewTemplates } from '../../../../../lib/setup/hrm-builders'
 import type { ReviewTemplateCard } from './ReviewTemplateIndex'
 
@@ -20,7 +19,7 @@ export interface ReviewTemplatesData {
 export async function loadReviewTemplates(): Promise<ReviewTemplatesData> {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(orgId, 'hrm')
   return { templates: await listReviewTemplates(orgId) }
 }
 

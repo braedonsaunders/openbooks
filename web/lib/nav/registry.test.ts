@@ -54,6 +54,7 @@ test('default workspaces follow the approved journey-oriented information archit
     'projects',
     'wip-billing',
     'timesheets',
+    'resourcing',
     'field-tickets',
     'payroll',
     'items',
@@ -89,8 +90,8 @@ test('default workspaces follow the approved journey-oriented information archit
     ['leases', 'budgets'],
   )
   assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(-2), [
-    'close',
     'accounting-changes',
+    'nonprofit',
   ])
   assert.deepEqual(
     NAV_MODULES.find((module) => module.key === 'tax-depreciation'),

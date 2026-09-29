@@ -106,7 +106,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/flows/bank-accounts-adapter.ts', 'mock:bank-adapter'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
@@ -122,7 +122,6 @@ const hooks = registerHooks({
 
 const routeUrl = '../app/api/parties/[id]/bank-accounts/route.ts?party-bank-accounts-occ-test'
 const { PATCH, DELETE } = (await import(routeUrl)) as typeof import('../app/api/parties/[id]/bank-accounts/route.ts')
-hooks.deregister()
 
 function reset(): void {
   routeState.calls.length = 0

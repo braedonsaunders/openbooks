@@ -31,7 +31,7 @@ export const POST = defineRoute({
   if (!requestHasInternalToken(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
-  const parsedBody = await parseJsonBody(req, publishBody);
+  const parsedBody = await parseJsonBody(req, publishBody, { status: 400 });
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   // The body schema rejects malformed ids before any org-scoped work; this

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
 import type { FilingLifecycle, FilingRowReview } from '../app/(app)/payroll/_ui/filing-amendments.tsx'
 import { stubModules } from '../testing/stub-modules.ts'
@@ -73,6 +73,7 @@ const routeMocks = new Map<string, string>([
 
 const routeUrls = new Map<string, string>([
   ['../../../../../lib/feature-gates', mockUrl('feature-gates')],
+  ['@/lib/feature-gates', mockUrl('feature-gates')],
   ['@openbooks/engine/src/payroll/yearend.ts', mockUrl('yearend')],
   ['@openbooks/engine/src/payroll/yearend-amendments.ts', mockUrl('yearend-amendments')],
 ])
@@ -111,7 +112,7 @@ const routeHooks = registerHooks({
 
 const amendmentsUrl = '../app/api/payroll/year-end/amendments/route.ts?filing-amendments-route'
 const { POST } = (await import(amendmentsUrl)) as typeof import('../app/api/payroll/year-end/amendments/route.ts')
-routeHooks.deregister()
+after(() => routeHooks.deregister())
 
 function cancelPost(body: Record<string, unknown>): Promise<Response> {
   return POST(
@@ -128,6 +129,7 @@ const CANCEL = {
   filing: 't4',
   year: 2026,
   revision: 'cancelled',
+  rowIds: ['00000000-0000-4000-8000-000000000001:ON:'],
 }
 
 // --- FilingCorrectionSection (jsdom + the real section component) ---
@@ -185,7 +187,7 @@ test('an unconfirmed cancellation is refused before any write', async () => {
   const response = await cancelPost({ ...CANCEL, reason: 'Duplicate slip' })
 
   assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'cancellation must be explicitly confirmed' })
+  assert.equal((await response.json() as { error: string }).error, 'cancellation must be explicitly confirmed')
   assert.deepEqual(amendState.issued, [])
 })
 
@@ -196,7 +198,7 @@ test('a reason-less cancellation is refused before any write', async () => {
   const response = await cancelPost({ ...CANCEL, confirmedCancellation: true, reason: '   ' })
 
   assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'a nonblank cancellation reason is required' })
+  assert.equal((await response.json() as { error: string }).error, 'a nonblank cancellation reason is required')
   assert.deepEqual(amendState.issued, [])
 })
 
@@ -210,7 +212,7 @@ test('a confirmed cancellation persists its trimmed reason as the filing note', 
     reason: '  Employee belonged to the other entity  ',
   })
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
   const issued = amendState.issued.at(-1) as { note: string; reason: string; revision: string }
   assert.equal(issued.revision, 'cancelled')
   assert.equal(issued.note, 'Employee belonged to the other entity')

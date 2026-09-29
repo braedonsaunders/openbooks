@@ -51,7 +51,10 @@ const mockSources = new Map<string, string>([
       export function featureEnabled() { return true }
       export function featureGateLockKey() { throw new Error('read-only currency route must not request a feature lock') }
       export async function isFeatureEnabled() { return true }
-      export async function resolvedFeatureState() { return {} }
+      // The currencies table is feature-gated on multiCurrency: the fixture
+      // enables it so the refusal under test is the read-only 405, not the
+      // hidden-entity 404 a feature-off org correctly receives first.
+      export async function resolvedFeatureState() { return { multiCurrency: true } }
       export async function subsidiaryFeatureEnabled() { return true }
       export async function orgFeatureState() { return {} }
     `,
@@ -122,8 +125,12 @@ test('currency mutations fail closed before parsing or touching the database', a
   routeState.executeCalls = 0
   routeState.transactionCalls = 0
   const params = { params: Promise.resolve({ entity: 'currencies' }) }
+  // POST requires an Idempotency-Key, checked before the preflight: the
+  // malformed bodies below still prove the read-only refusal lands before
+  // parsing, with the header a real drawer call always sends.
+  const keyHeaders = { 'Idempotency-Key': '00000000-0000-4000-8000-00000000c001' }
   const responses = [
-    await POST(new Request('http://localhost/api/admin/setup/currencies', { method: 'POST', body: '{not-json' }), params),
+    await POST(new Request('http://localhost/api/admin/setup/currencies', { method: 'POST', headers: keyHeaders, body: '{not-json' }), params),
     await PATCH(new Request('http://localhost/api/admin/setup/currencies', { method: 'PATCH', body: '{not-json' }), params),
     await DELETE(new Request('http://localhost/api/admin/setup/currencies', { method: 'DELETE' }), params),
   ]

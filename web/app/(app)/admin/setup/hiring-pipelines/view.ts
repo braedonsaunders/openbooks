@@ -1,9 +1,8 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { listPipelineTemplates } from '../../../../../lib/setup/hrm-builders'
 import type { PipelineCard } from './PipelineIndex'
 
@@ -20,7 +19,7 @@ export interface HiringPipelinesData {
 export async function loadHiringPipelines(): Promise<HiringPipelinesData> {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(orgId, 'hrm')
   return { pipelines: await listPipelineTemplates(orgId) }
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import ExcelJS from 'exceljs'
 import { stubModules } from '../testing/stub-modules.ts'
 
@@ -69,6 +69,7 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['@openbooks/engine/src/tax-returns/return.ts', mockUrl('compute-return')],
   ['../../../../../../lib/report-pdf', mockUrl('report-pdf')],
 ])
@@ -98,7 +99,7 @@ const hooks = registerHooks({
 
 const returnExportUrl = '../app/api/tax/returns/[code]/export/route.ts?return-export-stamp'
 const { GET } = (await import(returnExportUrl)) as typeof import('../app/api/tax/returns/[code]/export/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const get = (format: string) =>
   GET(

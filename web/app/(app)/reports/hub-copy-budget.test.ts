@@ -2,7 +2,16 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { BUILT_IN_REPORT_DEFINITIONS, BUILT_IN_REPORT_DEFINITION_MAP } from '@openbooks/reports'
+import { BUILT_IN_REPORT_DEFINITIONS } from '@openbooks/reports'
+import { NONPROFIT_REPORTS } from '@openbooks/engine/src/reports/catalog-reports.ts'
+
+// The hub serves the seeded catalog: package built-ins plus the nonprofit
+// board reports seeded alongside them. Walking only the package half flags
+// every nonprofit message as an orphan.
+const SEEDED_DEFINITIONS = [...BUILT_IN_REPORT_DEFINITIONS, ...NONPROFIT_REPORTS]
+const SEEDED_DEFINITION_MAP: Record<string, { name: string; description: string }> = Object.fromEntries(
+  SEEDED_DEFINITIONS.map((definition) => [definition.slug, definition]),
+)
 
 /**
  * UX-12b: hub card copy must fit the card — no mid-word clipping at 1280px.
@@ -79,7 +88,7 @@ test('hub chrome copy (studio, saved views, true cost) fits the card', () => {
 
 test('every built-in registry name and description fits the card', () => {
   const over: string[] = []
-  for (const definition of BUILT_IN_REPORT_DEFINITIONS) {
+  for (const definition of SEEDED_DEFINITIONS) {
     if (definition.name.length > TITLE_BUDGET) over.push(`${definition.slug} name (${definition.name.length})`)
     if (definition.description.length > DESCRIPTION_BUDGET) {
       over.push(`${definition.slug} description (${definition.description.length})`)
@@ -94,7 +103,7 @@ test('localized built-ins say the same thing as the registry', () => {
   // one thing on the hub and another on its own page.
   const drift: string[] = []
   for (const [slug, entry] of Object.entries(reports.builtIns)) {
-    const definition = BUILT_IN_REPORT_DEFINITION_MAP[slug]
+    const definition = SEEDED_DEFINITION_MAP[slug]
     assert.ok(definition, `builtIns message ${slug} has no registry definition`)
     if (definition.name !== entry.name) drift.push(`${slug} name`)
     if (definition.description !== entry.description) drift.push(`${slug} description`)

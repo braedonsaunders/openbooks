@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
+
+const ROW_A = '00000000-0000-4000-8000-000000000001:ON:'
+const ROW_B = '00000000-0000-4000-8000-000000000002:QC:'
 
 interface RecordedIssue {
   revision: string
@@ -51,13 +54,13 @@ const mockSources = new Map<string, string>([
       // is in scope. An unrestricted gate (null) allows everything.
       export async function guardPayrollFilingRowIds(gate, country, filing, rowIds) {
         state.guardCalls.push({ kind: 'rowIds', rowIds: [...rowIds] })
-        if (gate.allowedSubsidiaryIds !== null && rowIds.some((id) => id === 'row-b')) return denied()
+        if (gate.allowedSubsidiaryIds !== null && rowIds.some((id) => id === '${ROW_B}')) return denied()
         return null
       }
       export async function guardPayrollFilingData(gate, country, filing, data) {
         const ids = data.rows.map((row) => String(row[data.rowKey] ?? ''))
         state.guardCalls.push({ kind: 'data', rowIds: ids })
-        if (gate.allowedSubsidiaryIds !== null && ids.includes('row-b')) return denied()
+        if (gate.allowedSubsidiaryIds !== null && ids.includes('${ROW_B}')) return denied()
         return null
       }
     `,
@@ -70,7 +73,7 @@ const mockSources = new Map<string, string>([
         // The pre-guard's snapshot. Tests simulating a row committed between
         // the guard and the service set sectionRows to the earlier, smaller
         // population; the service mocks above still see row-b.
-        const ids = state.sectionRows ?? ['row-a', 'row-b']
+        const ids = state.sectionRows ?? ['${ROW_A}', '${ROW_B}']
         return [{
           country: 'CA', key: 't4',
           data: { rowKey: 'rowId', columns: [], rows: ids.map((rowId) => ({ rowId })) },
@@ -81,7 +84,8 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export const db = { execute: async () => ({ rows: [{ rowId: 'row-a' }] }) }
+      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
+      export const db = { execute: async () => ({ rows: [{ rowId: '${ROW_A}' }] }) }
     `,
   ],
   [
@@ -109,7 +113,7 @@ const mockSources = new Map<string, string>([
       export async function filingLifecycle(orgId, country, filing, year, scope, authorizeRowIds) {
         // The service authorizes the ids it actually returns, inside its own
         // build: the current population grew row-b after the route's pre-guard.
-        if (authorizeRowIds) await authorizeRowIds(['row-a', 'row-b'])
+        if (authorizeRowIds) await authorizeRowIds(['${ROW_A}', '${ROW_B}'])
         return { submissions: [], rows: [] }
       }
       export async function recordFilingIssue(input) {
@@ -117,7 +121,7 @@ const mockSources = new Map<string, string>([
         // transaction: an original persists the whole population even when
         // the caller named a subset (or nothing) — row-b arrived after the
         // route's pre-guard.
-        const persisted = input.revision === 'original' ? ['row-a', 'row-b'] : (input.rowIds ?? [])
+        const persisted = input.revision === 'original' ? ['${ROW_A}', '${ROW_B}'] : (input.rowIds ?? [])
         if (input.authorizeRowIds) await input.authorizeRowIds(persisted)
         const { authorizeRowIds: _ignored, ...recorded } = input
         state.issues.push(recorded)
@@ -136,6 +140,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', new URL('../../../../../lib/api/json.ts', import.meta.url).href],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['drizzle-orm', 'mock:drizzle'],
@@ -160,7 +165,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-amendments-cancellation-test'
 const { POST, GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function reset(): void {
   state.issues.length = 0
@@ -178,7 +183,7 @@ function post(body: Record<string, unknown>): Promise<Response> {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      country: 'CA', filing: 't4', year: 2026, rowIds: ['row-1'], ...body,
+      country: 'CA', filing: 't4', year: 2026, rowIds: [ROW_A], ...body,
     }),
   }))
 }
@@ -278,7 +283,7 @@ test('a confirmed cancellation passes its trimmed reason into the filing note', 
     filingKey: 't4',
     taxYear: 2026,
     revision: 'cancelled',
-    rowIds: ['row-1'],
+    rowIds: [ROW_A],
     scope: undefined,
     note: 'Employee belonged to the other entity',
     reason: 'Employee belonged to the other entity',
@@ -295,32 +300,32 @@ test('a restricted original with rowIds [] is guarded on the full population, no
   // The bypass this closes: the old code guarded only the caller list (empty
   // → allowed) while the service persisted the whole population. The full
   // population is what gets guarded now.
-  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: ['row-a', 'row-b'] }])
+  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: [ROW_A, ROW_B] }])
 })
 
 test('a restricted original naming one in-scope row is still refused: the service files the whole return', async () => {
   reset()
   restrict()
-  const response = await post({ revision: 'original', rowIds: ['row-a'] })
+  const response = await post({ revision: 'original', rowIds: [ROW_A] })
 
   assert.equal(response.status, 403)
   assert.deepEqual(state.issues, [])
-  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: ['row-a', 'row-b'] }])
+  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: [ROW_A, ROW_B] }])
 })
 
 test('a restricted correction naming in-scope rows is allowed: it persists exactly those rows', async () => {
   reset()
   restrict()
   // Amendments need explicit confirmation (2ddfd6895); this posts past it like the cancellation posts do.
-  const response = await post({ revision: 'amended', confirmedAmendment: true, rowIds: ['row-a'] })
+  const response = await post({ revision: 'amended', confirmedAmendment: true, rowIds: [ROW_A] })
 
   assert.equal(response.status, 200)
   assert.equal(state.issues.length, 1)
   // Twice: the route's pre-guard, then the service's in-transaction
   // re-authorization of the exact rows it persists.
   assert.deepEqual(state.guardCalls, [
-    { kind: 'rowIds', rowIds: ['row-a'] },
-    { kind: 'rowIds', rowIds: ['row-a'] },
+    { kind: 'rowIds', rowIds: [ROW_A] },
+    { kind: 'rowIds', rowIds: [ROW_A] },
   ])
 })
 
@@ -348,21 +353,21 @@ test('a row committed between guard and issue is not issued: the service authori
   // The pre-guard's snapshot holds row-a only, so it passes; the service's
   // own population then contains row-b, and the in-service authorization
   // denies before anything is persisted.
-  state.sectionRows = ['row-a']
+  state.sectionRows = [ROW_A]
   const response = await post({ revision: 'original', rowIds: [] })
 
   assert.equal(response.status, 403)
   assert.deepEqual(state.issues, [])
   assert.deepEqual(state.guardCalls, [
-    { kind: 'data', rowIds: ['row-a'] },
-    { kind: 'rowIds', rowIds: ['row-a', 'row-b'] },
+    { kind: 'data', rowIds: [ROW_A] },
+    { kind: 'rowIds', rowIds: [ROW_A, ROW_B] },
   ])
 })
 
 test('a row committed between guard and read is not returned: the lifecycle authorizes what it returns', async () => {
   reset()
   restrict()
-  state.sectionRows = ['row-a']
+  state.sectionRows = [ROW_A]
   const response = await get('?country=CA&filing=t4&year=2026')
 
   assert.equal(response.status, 403)

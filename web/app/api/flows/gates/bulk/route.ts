@@ -32,6 +32,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
 
     const authz = routeAuthz

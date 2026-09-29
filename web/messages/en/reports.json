@@ -2552,23 +2552,23 @@
     },
     "statement-of-activities": {
       "name": "Statement of activities",
-      "description": "Posted revenue, expenses, and gross releases by class."
+      "description": "Posted revenue, expenses, and gross releases by restriction class."
     },
     "functional-expense-matrix": {
       "name": "Functional expense matrix",
-      "description": "Posted expenses by natural account and function."
+      "description": "Posted expenses by natural account, function, and program."
     },
     "cash-flow-reconciliation": {
       "name": "Cash flow reconciliation",
-      "description": "Posted cash movement with a net asset reconciliation."
+      "description": "Posted ledger movements with cash and net asset reconciliation detail."
     },
     "grant-pipeline": {
       "name": "Grant pipeline",
-      "description": "Grant awards, sponsors, periods, status, and fund classification."
+      "description": "Grant awards, sponsors, periods, status, and associated fund classification."
     },
     "usage-billing-detail": {
       "name": "Usage billing detail",
-      "description": "Lists every rated usage invoice line with its meter, rating run, plan version, and source-record trace."
+      "description": "Rated usage invoice lines with meter, rating run, plan version and source trace."
     }
   },
   "generalLedger": {

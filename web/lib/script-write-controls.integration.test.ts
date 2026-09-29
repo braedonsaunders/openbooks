@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import type { SessionUser } from "./auth";
@@ -119,8 +120,8 @@ for (const method of ["PATCH", "DELETE"] as const) {
   });
 }
 
-const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: async () => {
-  const root = (await import('node:url')).pathToFileURL(process.cwd() + '/').href;
+const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: () => {
+  const root = pathToFileURL(process.cwd() + '/').href;
   const control: { afterRun: (() => Promise<void>) | null } = { afterRun: null };
   Object.assign(globalThis, { __scriptLifecycleRun: control });
   const hooks = registerHooks({ resolve(specifier, context, next) {
@@ -130,8 +131,10 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: asyn
     }
     return next(specifier, context);
   }});
-  const { POST: RUN } = await import('../app/api/admin/scripts/[id]/run/route');
-  hooks.deregister();
+  const runRouteReady = import('../app/api/admin/scripts/[id]/run/route').then(
+    ({ POST }) => { hooks.deregister(); return POST; },
+    (error: unknown) => { hooks.deregister(); throw error; },
+  );
   async function fixture(run: (orgId: string, id: string, actor: string) => Promise<void>) {
     const org = await createScratchOrg();
     try {
@@ -149,7 +152,7 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: asyn
   const patch = (orgId: string, id: string, body: Record<string, unknown>) => withOrgContext(orgId, () => PATCH(new Request('http://audit.local/api/admin/scripts', {
     method: 'PATCH', body: JSON.stringify({ id, name: 'Edited', triggerPoint: 'scheduled', source: 'function main(ctx) { return 1; }', cron: '0 12 * * *', isActive: true, ...body }),
   })));
-  const runNow = (orgId: string, id: string) => withOrgContext(orgId, () => RUN(new Request(`http://audit.local/api/admin/scripts/${id}/run`, {
+  const runNow = (orgId: string, id: string) => withOrgContext(orgId, async () => (await runRouteReady)(new Request(`http://audit.local/api/admin/scripts/${id}/run`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
   }), { params: Promise.resolve({ id }) }));
   const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -204,7 +207,7 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: asyn
     } finally { release.resolve(); await pending; control.afterRun = null; }
   }));
 }}] as const;
-for (const row of scriptLifecycleCases) await row.register();
+for (const row of scriptLifecycleCases) row.register();
 
 for (const method of ["POST", "PATCH"] as const) {
   test(`script ${method} rechecks the feature after request parsing`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

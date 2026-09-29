@@ -46,13 +46,26 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksBenfordSql = sql;
 
+const authzSource = `
+  const state = globalThis[Symbol.for('openbooks.benford-route-test')]
+  export async function guardPermission() {
+    return {
+      user: { orgId: 'org-1', id: 'user-1' },
+      permissions: new Set(state.permissions),
+      allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+    }
+  }
+  export { can } from ${JSON.stringify(import.meta.resolve("@/lib/authz"))}
+`;
+
 stubModules({
   navigation: false,
   intl: false,
-  authz: false,
+  authz: { source: authzSource },
   features: false,
   extra: {
     "@openbooks/engine/src/platform/db.ts": `
+      export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/src/platform/db.ts"))}
       const state = globalThis[Symbol.for('openbooks.benford-route-test')]
       const sqlText = globalThis.openbooksBenfordSqlText
       export const db = {
@@ -65,32 +78,7 @@ stubModules({
         },
       }
     `,
-    "../../../../../lib/authz": `
-      const state = globalThis[Symbol.for('openbooks.benford-route-test')]
-      export async function guardPermission() {
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          permissions: new Set(state.permissions),
-          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
-        }
-      }
-      export function can(authz, perm) {
-        return authz.permissions instanceof Set && authz.permissions.has(perm)
-      }
-    `,
-    "../authz": `
-      const state = globalThis[Symbol.for('openbooks.benford-route-test')]
-      export async function guardPermission() {
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          permissions: new Set(state.permissions),
-          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
-        }
-      }
-      export function can(authz, perm) {
-        return authz.permissions instanceof Set && authz.permissions.has(perm)
-      }
-    `,
+    "../authz": authzSource,
     "../../../../../lib/subsidiaries": `
       const state = globalThis[Symbol.for('openbooks.benford-route-test')]
       const sqlText = globalThis.openbooksBenfordSqlText

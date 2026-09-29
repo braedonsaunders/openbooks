@@ -132,6 +132,11 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/crm/crm.ts", "mock:crm"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],
+  // defineRoute resolves the gate through the production alias, not through
+  // the route's own side-effect import above, so the scripted gate must be
+  // reachable under that exact specifier or the real chain runs and every
+  // request answers 401.
+  ["@/lib/feature-gates", "mock:feature-gates"],
   ["../../../../lib/features", "mock:features"],
 ]);
 
@@ -171,7 +176,9 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?crm-setup-route-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+// The gate resolves lazily per request inside defineRoute, so the doubles
+// must stay registered until the last test runs, not just until import.
+test.after(() => hooks.deregister());
 
 function reset(): void {
   state.executed = [];

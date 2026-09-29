@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
 
 /**
@@ -107,7 +107,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-run-delete-test'
 const { DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 void NextResponse
 const RUN_ID = '00000000-0000-4000-8000-000000000001'

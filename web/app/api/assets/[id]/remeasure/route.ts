@@ -17,7 +17,7 @@ import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 import { exactMoney, isoDate } from "../../../../../lib/api/json";
 const postBodySchema0 = z.strictObject({
   newCarryingValue: exactMoney("newCarryingValue must be a decimal string; JSON numbers are refused"),
-  date: isoDate("date must be a valid calendar date"),
+  date: isoDate("date must be a valid calendar date").optional(),
 });
 
 export { runtime } from "@/lib/api/route";
@@ -29,6 +29,7 @@ export const POST = defineRoute({
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
   body: postBodySchema0,
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id))

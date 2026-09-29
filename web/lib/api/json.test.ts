@@ -70,7 +70,7 @@ test("parseJsonBody rejects non-object and array payloads with 400", async () =>
   }
 });
 
-test("parseJsonBody reports well-formed schema failures as 422 with all issues", async () => {
+test("parseJsonBody reports schema failures with issues and honors an explicit 422 contract", async () => {
   const schema = z.object({
     decision: z.string({ error: "decision required" }).min(1, "invalid decision"),
     reason: z.string().max(3, "reason too long"),
@@ -78,7 +78,7 @@ test("parseJsonBody reports well-formed schema failures as 422 with all issues",
   const parsed = await parseJsonBody(jsonRequest({ reason: "way too long" }), schema);
   assert.equal(parsed.ok, false);
   if (!parsed.ok) {
-    assert.equal(parsed.response.status, 422);
+    assert.equal(parsed.response.status, 400);
     const body = (await parsed.response.json()) as { error: string; issues: { path: string; message: string }[] };
     assert.equal(body.error, "decision required");
     assert.deepEqual(
@@ -88,6 +88,15 @@ test("parseJsonBody reports well-formed schema failures as 422 with all issues",
         { path: "reason", message: "reason too long" },
       ],
     );
+  }
+  const optedIn = await parseJsonBody(jsonRequest({ reason: "way too long" }), schema, { status: 422 });
+  assert.equal(optedIn.ok, false);
+  if (!optedIn.ok) {
+    assert.equal(optedIn.response.status, 422);
+    assert.deepEqual((await optedIn.response.json()).issues, [
+      { path: "decision", message: "decision required" },
+      { path: "reason", message: "reason too long" },
+    ]);
   }
 });
 

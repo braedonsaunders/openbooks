@@ -93,7 +93,10 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.hrm-changerequest-id-test')]
       // The classification rule reads the org's declared codes itself;
       // the route's job is to run it before the service with the body's
-      // classification.
+      // classification. The error class mirrors the real module: the real
+      // automations error mapping (loaded unmocked) imports it for its
+      // instanceof checks, so omitting it breaks the mapping's load.
+      export class ActionReasonError extends Error {}
       export async function validateSubmitActionReason(args) {
         state.calls.push({ fn: 'validateReason', args })
       }

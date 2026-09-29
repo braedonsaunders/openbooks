@@ -53,6 +53,7 @@ export const PUT = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   scope: "unrestricted",
   body: requestBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
 
     const gate = routeAuthz

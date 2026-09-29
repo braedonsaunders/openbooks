@@ -10,20 +10,19 @@ const stateKey = Symbol.for("openbooks.utilization-entries-precision-test");
 const state: RouteState = { rows: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
+const featureGateSource = `export async function guardFeaturePermission() {
+  // Unrestricted caller: subsidiary scope is covered by the DB-backed test.
+  return { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null }
+}`;
+
 stubModules({
   navigation: false,
   intl: false,
   authz: false,
-  features: false,
+  features: { source: featureGateSource },
   extra: {
-    "../../../../../lib/feature-gates": `export async function guardFeaturePermission() {
-       // Unrestricted caller: subsidiary scope is covered by the DB-backed
-       // scope test; here the drill must not filter.
-       return { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null }
-     }`,
     "@openbooks/engine/src/platform/db.ts": `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
-     export const ambientTenantOrgId = () => null
-     export const withBypassContext = (fn) => fn()
+     export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/src/platform/db.ts"))}
      export const db = { execute: async (query) => {
        // The route resolves the presentation currency through the org row;
        // entry fixture rows carry no currency, so they translate 1:1.

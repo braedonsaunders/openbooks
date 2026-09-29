@@ -37,6 +37,11 @@ stubModules({
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
     `,
+    "@/lib/feature-gates": `
+      export async function guardFeaturePermission() {
+        return { user: { orgId: 'org-1', id: 'user-1' } }
+      }
+    `,
     "@openbooks/engine/src/platform/business-date.ts": `
       const state = globalThis[Symbol.for('openbooks.asset-disposal-route-test')]
       export async function businessToday(orgId) {

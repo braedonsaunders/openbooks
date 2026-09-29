@@ -87,7 +87,9 @@ export const PATCH = defineRoute({
       vizType: z.enum(INSIGHT_VIZ_TYPES).optional(),
       vizSettings: z.record(z.string().min(1), z.json()).optional(),
       allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys")).nullable().optional(),
-      expectedUpdatedAt: revisionBody,
+      // Optional at the schema so a missing token reaches the handler's 409
+      // (reload remedy) instead of failing as a faceless schema refusal.
+      expectedUpdatedAt: revisionBody.optional(),
     })
     .refine((body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"), "provide at least one card field to update"),
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import { stubModules } from '../testing/stub-modules.ts'
 
@@ -100,7 +100,9 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../../../lib/feature-gates', mockUrl('feature-gates')],
+  ['@/lib/feature-gates', mockUrl('feature-gates')],
   ['../../../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['@openbooks/engine/src/payroll/bank-file.ts', mockUrl('bank-file')],
   ['@openbooks/engine/src/payroll/bank-file-artifact.ts', mockUrl('bank-file-artifact')],
@@ -125,7 +127,7 @@ const hooks = registerHooks({
 
 const bankFileUrl = '../app/api/payroll/runs/[id]/bank-file/route.ts?bank-file-route'
 const { GET, POST } = (await import(bankFileUrl)) as typeof import('../app/api/payroll/runs/[id]/bank-file/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const NO_STORE = 'no-store'
 

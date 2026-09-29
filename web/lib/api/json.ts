@@ -13,9 +13,9 @@ import { isUuid } from "../list-params";
  *   // parsed.data is fully typed + validated from here on.
  *
  * Malformed JSON and non-object payloads fail closed as 400. A well-formed
- * object that fails its route schema returns 422 with the first issue message
- * (plus an `issues` array for field-level UI rendering) — a route never sees
- * unvalidated input shape again.
+ * object that fails its route schema retains the established 400 default,
+ * or a caller's explicit status, with the first issue message and an
+ * `issues` array for field-level UI rendering.
  */
 
 export interface BodyIssue {
@@ -80,7 +80,7 @@ export async function parseJsonBody<S extends z.ZodType>(
     }
     return {
       ok: false,
-      response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
+      response: NextResponse.json({ error: INVALID_BODY }, { status: 400 }),
     };
   }
   if (bounded.text === "") {
@@ -88,7 +88,7 @@ export async function parseJsonBody<S extends z.ZodType>(
     if (parsed.success) return { ok: true, data: parsed.data };
     return {
       ok: false,
-      response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
+      response: NextResponse.json({ error: INVALID_BODY }, { status: 400 }),
     };
   }
   let raw: unknown;
@@ -97,13 +97,13 @@ export async function parseJsonBody<S extends z.ZodType>(
   } catch {
     return {
       ok: false,
-      response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
+      response: NextResponse.json({ error: INVALID_BODY }, { status: 400 }),
     };
   }
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return {
       ok: false,
-      response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
+      response: NextResponse.json({ error: INVALID_BODY }, { status: 400 }),
     };
   }
   return validateJsonBody(raw, schema, opts);
@@ -125,7 +125,7 @@ export function validateJsonBody<S extends z.ZodType>(
       ok: false,
       response: NextResponse.json(
         { error: issues[0]?.message ?? INVALID_BODY, issues },
-        { status: opts?.status ?? 422 },
+        { status: opts?.status ?? 400 },
       ),
     };
   }

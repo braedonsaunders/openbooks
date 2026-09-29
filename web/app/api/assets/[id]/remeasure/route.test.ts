@@ -30,7 +30,11 @@ stubModules({
   navigation: false,
   intl: false,
   authz: false,
-  features: false,
+  features: { source: `
+    export async function guardFeaturePermission() {
+      return { user: { orgId: 'org-1', id: 'user-1' } }
+    }
+  ` },
   extra: {
     "../../../../../lib/feature-gates": `
       export async function guardFeaturePermission() {

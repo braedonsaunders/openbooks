@@ -77,7 +77,7 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
 /** Recompute server-side and freeze a versioned return snapshot in history. */
 async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
   const gate = injectedGate as Authz;
-  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
+  const parsedBody = await parseJsonBody(req, bodyObjectSchema, { status: 400 });
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     code?: string

@@ -2469,6 +2469,18 @@
         "title": "Catégories d'actifs",
         "description": "Méthode d'amortissement et comptes par défaut pour les immobilisations."
       },
+      "nonprofit-frameworks": {
+        "title": "Référentiel de restriction",
+        "description": "Base de présentation de la comptabilité des fonds (ex. US ASC 958)."
+      },
+      "fund-pairs": {
+        "title": "Paires interfonds",
+        "description": "Comptes de règlement dus entre deux fonds."
+      },
+      "functional-mappings": {
+        "title": "Mappings fonctionnels",
+        "description": "Classement daté des dépenses des départements et projets."
+      },
       "depreciation-methods": {
         "title": "Méthodes d’amortissement",
         "description": "Créez des formules d’amortissement personnalisées — le générateur de formules."
@@ -2970,6 +2982,7 @@
       "targetLocationId": "Emplacement cible",
       "capacityQuantity": "Capacité",
       "services": "Niveaux de service",
+      "setAt": "Défini le",
       "trackingUrlTemplate": "Modèle de lien de suivi",
       "accountId": "Compte",
       "classAttribute": "Attribut de catégorie d'immobilisation",
@@ -3059,12 +3072,15 @@
       "baseCurrency": "Devise de base",
       "isElimination": "Élimination",
       "fromSubsidiaryId": "Filiale d'origine",
+      "function": "Fonction",
       "toSubsidiaryId": "Filiale de destination",
       "dueFromAccountId": "Compte à recevoir de",
       "dueToAccountId": "Compte à payer à",
       "asOf": "À la date du",
       "fromCurrency": "Devise source",
+      "fromFundId": "Fonds source",
       "toCurrency": "Devise cible",
+      "toFundId": "Fonds cible",
       "rateType": "Type de taux",
       "source": "Source",
       "periodId": "Période comptable",
@@ -3201,6 +3217,7 @@
       "nciMeasurement": "Évaluation NCI",
       "nonPeriodic": "Non périodique (méthode des primes)",
       "programExclusions": "Exclusions de programmes",
+      "programKey": "Programme",
       "supplementalWageCategory": "Catégorie de rémunération supplémentaire",
       "statutoryReportingCategory": "Catégorie de déclaration légale",
       "statutoryExemptionCategory": "Catégorie d'exonération légale",
@@ -3332,6 +3349,7 @@
       "requiresEvidence": "Justificatif requis",
       "extraCategories": "Catégories supplémentaires",
       "frameworkId": "Référentiel",
+      "framework": "Référentiel",
       "categoryKey": "Catégorie",
       "retainYears": "Conservation (années)",
       "fromEvent": "Début du délai",

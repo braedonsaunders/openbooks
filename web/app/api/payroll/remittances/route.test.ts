@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 /**
  * POST create-bill — every malformed shape refuses by NAME (422). The engine
@@ -71,7 +71,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-remittances-post-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const PARTY_ID = '00000000-0000-4000-8000-000000000001'
 const FILING_ACCOUNT_ID = '00000000-0000-4000-8000-000000000002'

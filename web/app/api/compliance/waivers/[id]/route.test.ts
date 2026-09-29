@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 // Route boundary suite: waiver revocation and its mandatory audit evidence
 // must commit as one unit. The scripted database fake keeps writes pending
@@ -133,7 +133,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?compliance-waiver-revocation-test'
 const { DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function reset(): void {
   routeState.calls.length = 0

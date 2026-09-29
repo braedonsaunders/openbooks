@@ -15,6 +15,7 @@ export const POST = defineRoute({
   feature: "hrm",
   params: z.object({ stepId: z.string().min(1) }),
   body: skipStepBody,
+  invalidBodyStatus: 400,
   handler: async ({
     authz: gate,
     params: routeParams,

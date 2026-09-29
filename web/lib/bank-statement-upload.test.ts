@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
+
+const ACCOUNT_ID = '00000000-0000-4000-8000-000000000001'
 
 interface CapturedImport {
   dryRun?: boolean
@@ -114,6 +116,7 @@ const reactHarness = createReactHookHarness()
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/banking/banking.ts', 'mock:banking'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['@/components/money-provider', 'mock:money-provider'],
   ['next/navigation', 'mock:next-navigation'],
   ['next-intl', 'mock:next-intl'],
@@ -261,7 +264,7 @@ const { ImportStatementButton } = (await import(
 )) as typeof import('../app/(app)/banking/[accountId]/ImportStatementButton.tsx')
 const routeUrl = '../app/api/banking/import/route.ts?upload-boundary-test'
 const { POST } = (await import(routeUrl)) as typeof import('../app/api/banking/import/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function request(body: Record<string, unknown>): Request {
   return new Request('http://openbooks.test/api/banking/import', {
@@ -308,7 +311,7 @@ function renderedText(value: unknown): string {
 
 function renderImportButton(): RenderedElement {
   reactHarness.beginRender()
-  return ImportStatementButton({ accountId: 'account-1' }) as unknown as RenderedElement
+  return ImportStatementButton({ accountId: ACCOUNT_ID }) as unknown as RenderedElement
 }
 
 function requiredElement(
@@ -457,7 +460,7 @@ test('component file input sends exact bytes through preview, import, parser and
   }
   assert.equal('accountId' in requestBodies[0]!, false)
   for (const body of requestBodies.slice(1)) {
-    assert.equal(body.accountId, 'account-1')
+    assert.equal(body.accountId, ACCOUNT_ID)
     assert.equal(body.filename, 'legacy.ofx')
     assert.equal(body.contentType, 'application/x-ofx')
   }
@@ -561,7 +564,7 @@ test('server rejects non-canonical browser base64 before parsing or persistence'
 
       const response = await POST(
         request({
-          accountId: 'account-1',
+          accountId: ACCOUNT_ID,
           source: 'ofx',
           text: 'fallback text must not make an invalid upload acceptable',
           sourceBytesBase64,

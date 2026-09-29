@@ -74,6 +74,7 @@ export const PATCH = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "resource": z.string(), "id": z.string() }),
   body: requestBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ request, body, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz

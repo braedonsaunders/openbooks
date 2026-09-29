@@ -16,7 +16,7 @@ import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidia
 const requestBodySchema = z.looseObject({
   country: z.string().trim().min(2).max(3),
   filing: z.string().trim().min(1).max(120),
-  year: z.union([z.number().int(), z.string().regex(/^\d{4}$/, 'year must be a four-digit year')]),
+  year: z.unknown(),
 }).catchall(z.string({ error: 'each filing parameter must be text' }).max(2000))
 
 
@@ -174,7 +174,7 @@ export const POST = defineRoute({
   permission: 'payroll.run',
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 })
     if (!parsedBody.ok) return parsedBody.response
     const input = parseBody(parsedBody.data)
     if (input instanceof NextResponse) return input

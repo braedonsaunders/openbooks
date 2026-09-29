@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../../../lib/feature-gates'
 import { listCompetencyOptions, loadReviewTemplate } from '../../../../../../lib/setup/hrm-builders'
 import type { ReviewTemplateNode } from '../../../../../../lib/setup/hrm-builder-outline'
 import type { CompetencyChoice } from '../ReviewTemplateBuilder'
@@ -23,7 +24,7 @@ export interface ReviewTemplateBuilderData {
 export async function loadReviewTemplateBuilder(id: string): Promise<ReviewTemplateBuilderData> {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(orgId, 'hrm')
   const template = await loadReviewTemplate(orgId, id)
   if (!template) notFound()
   // Competencies are part of Performance.

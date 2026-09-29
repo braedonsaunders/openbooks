@@ -28,6 +28,7 @@ stubModules({
   features: false,
   extra: {
     "@openbooks/engine/src/platform/db.ts": `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export const db = {
         async execute(query) {
@@ -58,6 +59,16 @@ stubModules({
       export function guardSubsidiaryScope() {
         return null
       }
+    `,
+    "@/lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: new Set(state.permissions) }
+      }
+      export function can(authz, perm) {
+        return authz.permissions.has('*') || authz.permissions.has(perm)
+      }
+      export function guardSubsidiaryScope() { return null }
     `,
   },
 })

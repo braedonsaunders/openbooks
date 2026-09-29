@@ -51,6 +51,8 @@ const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
   expense_report: 'expenses.create',
   field_ticket: 'time.manage',
   shipment: 'ar.create',
+  shipment_carton_label: 'ar.create',
+  shipment_shipping_label: 'ar.create',
   journal: 'gl.post',
   journal_entry: 'gl.post',
   pay_stub: 'payroll.run',

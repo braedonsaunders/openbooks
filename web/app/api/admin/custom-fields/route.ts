@@ -27,6 +27,9 @@ const createCustomFieldBodySchema = z.object({
 const updateCustomFieldBodySchema = z.object({
   id: z.string().uuid(),
   expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, 'Reload the custom field and send its exact revision before saving'),
+  targetTable: z.string().optional(),
+  targetKind: z.string().nullable().optional(),
+  key: z.string().optional(),
   config: customFieldConfigSchema.optional(),
   fieldType: z.enum(["text", "long_text", "number", "currency", "date", "boolean", "select", "multi_select", "reference"]).optional(),
   isActive: z.boolean().optional(),

@@ -69,8 +69,9 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
     assert.ok(!allVisible.includes(key), `${key} must not appear in the setup rail`)
   }
 
-  // The Inventory setup group is now empty — all three moved to the module.
-  assert.equal(byGroup.get('inventory')?.length, 0)
+  // The three moved entities stay out; the group's current members are the
+  // newer rail entities (scan identifiers, customer part numbers).
+  assert.deepEqual(byGroup.get('inventory')?.map((entity) => entity.key), ['item-identifiers', 'customer-item-refs'])
   assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories'])
 })
 

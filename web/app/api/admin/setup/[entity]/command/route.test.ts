@@ -5,12 +5,15 @@ import test from "node:test";
 const stateKey = Symbol.for("openbooks.setup-command-route-test");
 const routeState = { manage: false, setup: false, features: {} as Record<string, boolean> };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
-const authzStub = `const s = globalThis[Symbol.for('openbooks.setup-command-route-test')]; const perms = () => new Set([...(s.manage ? ['funds.manage'] : []), ...(s.setup ? ['admin.setup.manage'] : [])]); export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, permissions: perms(), allowedSubsidiaryIds: null }; } export async function guardPermission(p) { const a = await getAuthz(); if (!a.permissions.has(p)) return new Response(null, { status: 403 }); return a; } export function can(a, p) { return a.permissions.has(p); }`;
-const featuresStub = `export { featureEnabled } from "@openbooks/engine/src/organization/feature-registry.ts"; export async function resolvedFeatureState() { return globalThis[Symbol.for('openbooks.setup-command-route-test')].features; }`;
-const dbStub = `const fail = () => { throw new Error("no database in this test") }; const bomb = new Proxy({}, { get: fail }); export const db = bomb; export const inDbTransaction = (...a) => fail(); export const withOrgTransaction = (...a) => fail(); export const withOrgContext = (...a) => fail();`;
+const realAuthzUrl = import.meta.resolve("@/lib/authz");
+const realFeaturesUrl = import.meta.resolve("@/lib/features");
+const realPlatformDbUrl = import.meta.resolve("@openbooks/engine/src/platform/db.ts");
+const authzStub = `const s = globalThis[Symbol.for('openbooks.setup-command-route-test')]; const perms = () => new Set([...(s.manage ? ['funds.manage'] : []), ...(s.setup ? ['admin.setup.manage'] : [])]); export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, permissions: perms(), allowedSubsidiaryIds: null }; } export async function guardPermission(p) { const a = await getAuthz(); if (!a.permissions.has(p)) return new Response(null, { status: 403 }); return a; } export { can } from ${JSON.stringify(realAuthzUrl)};`;
+const featuresStub = `export * from ${JSON.stringify(realFeaturesUrl)}; export async function resolvedFeatureState() { return globalThis[Symbol.for('openbooks.setup-command-route-test')].features; }`;
+const dbStub = `export * from ${JSON.stringify(realPlatformDbUrl)}; const fail = () => { throw new Error("no database in this test") }; const bomb = new Proxy({}, { get: fail }); export const db = bomb; export const inDbTransaction = (...a) => fail(); export const withOrgTransaction = (...a) => fail(); export const withOrgContext = (...a) => fail();`;
 registerHooks({
   resolve(s, c, n) {
-    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s.endsWith("platform/db.ts") ? "mock:cmd-db" : null;
+    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s === "@openbooks/engine/src/platform/db.ts" ? "mock:cmd-db" : null;
     return u ? { shortCircuit: true, format: "module", url: u } : n(s, c);
   },
   load(u, c, n) {
@@ -45,7 +48,7 @@ test("feature-off commands 404 before body parsing", async () => {
 });
 test("generic writes refuse command-owned entities before parsing", async () => {
   routeState.manage = true; routeState.setup = true; routeState.features = { nonprofit: true, fundAccounting: true, functionalExpenses: true };
-  for (const [handler, init] of [[genericPOST, { method: "POST", body: "{" }], [genericPATCH, { method: "PATCH", body: "{" }], [genericDELETE, { method: "DELETE" }]] as const) {
+  for (const [handler, init] of [[genericPOST, { method: "POST", headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" }, body: "{" }], [genericPATCH, { method: "PATCH", body: "{" }], [genericDELETE, { method: "DELETE" }]] as const) {
     const res = await handler(new Request("http://localhost/api/admin/setup/fund-pairs", init), { params: Promise.resolve({ entity: "fund-pairs" }) });
     assert.deepEqual([res.status, (await res.json() as { error?: string }).error], [405, "This configuration changes only through its setup command (POST /api/admin/setup/fund-pairs/command). Open Nonprofit Setup to make this change."]);
   }

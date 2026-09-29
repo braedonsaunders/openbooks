@@ -101,7 +101,7 @@ test("worklist unifies gates, gateless documents, and pay runs; vitals counts th
   }
 });
 
-const approvalSubjectCases = [{ label: "approval subject summaries", register: async () => {
+const approvalSubjectCases = [{ label: "approval subject summaries", register: () => {
   const kind = "hrm_employment_change_request";
   const text = Object.assign((key: string) => ({
     "me.requestKinds.hire": "Hire", "queue.columns.effective": "Effective",
@@ -142,7 +142,7 @@ const approvalSubjectCases = [{ label: "approval subject summaries", register: a
     } finally { await dropScratchOrg(org.orgId); }
   });
 }}] as const;
-for (const row of approvalSubjectCases) await row.register();
+for (const row of approvalSubjectCases) row.register();
 
 test("decide paths resolve each subject kind with separation of duties", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
