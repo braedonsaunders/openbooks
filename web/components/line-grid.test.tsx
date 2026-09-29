@@ -103,7 +103,7 @@ test("editable cells are named by their column header and line number", async (t
   }
 });
 
-function Probe({ initial }: { initial: TestRow[] }) {
+function Probe({ initial, compact = false }: { initial: TestRow[]; compact?: boolean }) {
   const [rows, setRows] = useState(initial);
   const apply = (next: TestRow[]) => {
     store.rows = next;
@@ -132,6 +132,7 @@ function Probe({ initial }: { initial: TestRow[] }) {
       isCellEditable: (row) => row.itemId === "stocked-item",
     },
   ];
+  if (compact) columns.push({ key: 'description', label: 'Details text', width: '120px', type: 'text', secondary: true });
   return (
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
       <LineGrid<TestRow>
@@ -144,13 +145,13 @@ function Probe({ initial }: { initial: TestRow[] }) {
   );
 }
 
-async function mount(initial: TestRow[]) {
+async function mount(initial: TestRow[], compact = false) {
   store.rows = initial;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(<Probe initial={initial} />);
+    root.render(<Probe initial={initial} compact={compact} />);
     await tick();
   });
   await tick();
@@ -206,6 +207,20 @@ const line = (key: string, quantity: string): TestRow => ({
   quantity,
   taxAmount: "",
   taxOverridden: false,
+});
+
+test('optional columns expand on demand and populated values remain visible when collapsed', async (t) => {
+  const { host, done } = await mount([{ ...line('a', '1'), description: '' }], true);
+  t.after(done);
+  const hasDetails = () => [...host.querySelectorAll('[role="columnheader"]')].some((header) => header.textContent === 'Details text');
+  assert.equal(hasDetails(), false, 'empty optional columns start collapsed');
+  const toggle = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Details')!;
+  await act(async () => { toggle.click(); await tick(); });
+  assert.equal(hasDetails(), true);
+  await typeInto(cellInput(host, 0, 5), 'Keep this description');
+  await act(async () => { toggle.click(); await tick(); });
+  assert.equal(hasDetails(), true, 'a populated column is never concealed');
+  assert.equal(store.rows[0]!.description, 'Keep this description', 'collapsing changes no transaction values');
 });
 
 test("a row edit gate exposes the warehouse picker only on applicable lines", async (t) => {

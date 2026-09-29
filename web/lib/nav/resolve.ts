@@ -4,6 +4,8 @@ import { sql } from 'drizzle-orm'
 import { hiddenNavModules, resolvedFeatureState } from '../features'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
+import { essentialsWorkspace } from '../workspace-presentation'
+import { essentialsNavConfig } from './essentials'
 import {
   ADMIN_HUB_PERMISSIONS,
   ADMIN_MODULE_KEY,
@@ -96,7 +98,9 @@ export async function resolveNav(
     listActiveExtensionContributions(orgId),
   ])
   const saved = r.rows[0]?.config
-  const baseConfig = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
+  const baseConfig = saved?.version === 2
+    ? layerInNewModules(saved)
+    : await essentialsWorkspace(orgId) ? essentialsNavConfig() : defaultNavConfig()
   const config = baseConfig
   const appByKey = new Map(appResult.rows.map((app) => [app.key, app]))
   const featureHiddenModules = hiddenNavModules(featureState)

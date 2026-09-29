@@ -10,6 +10,7 @@
     "customize": "Anpassen"
   },
   "widgets": {
+    "operatingExpenses": "Betriebsaufwendungen",
     "journalLines": "Journalzeilen",
     "activeAccounts": "Aktive Konten",
     "entriesToday": "Buchungen heute",
@@ -92,6 +93,7 @@
     "admin": "Verwaltung"
   },
   "catalog": {
+    "operatingExpenses": "Betriebsaufwendungen seit Monatsbeginn ohne Umsatzkosten, aus der Gewinn- und Verlustrechnung.",
     "journalLines": "Gesamtzahl der gebuchten Journalzeilen.",
     "activeAccounts": "Aktive Konten im Kontenplan.",
     "entriesToday": "Heute gebuchte Buchungen.",
@@ -171,6 +173,8 @@
     "empty": "Noch keine Schnellaktionen",
     "addFirst": "Fügen Sie Ihre erste Aktion hinzu",
     "labels": {
+      "receivePayment": "Zahlung erhalten",
+      "reviewBanking": "Banktransaktionen prüfen",
       "newJournalEntry": "Neue Journalbuchung",
       "newBill": "Neue Eingangsrechnung",
       "newInvoice": "Neue Ausgangsrechnung",

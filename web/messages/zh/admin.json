@@ -4628,6 +4628,7 @@
         }
       },
       "rhythm": {
+        "optional": "现在配置交易量和结账频率（可选）",
         "title": "设定核算节奏",
         "description": "业务量决定自动化有多大帮助。结账频率决定 OpenBooks 应把哪些例行工作摆到您面前。",
         "activityQuestion": "每月大概处理多少业务？",
@@ -4742,8 +4743,15 @@
         "description": "正在创建会计科目表、配置功能、映射统驭科目。"
       },
       "done": {
+        "actions": {
+          "invoice": "创建第一张发票",
+          "migrate": "从 QuickBooks、Xero 或其他系统导入",
+          "statement": "导入银行对账单",
+          "demo": "探索独立的演示公司",
+          "readiness": "继续完成设置清单"
+        },
         "title": "起始工作区已就绪",
-        "description": "接下来，上线指南将在您过账实际业务前核验公司、税务、编号、银行与期初余额等剩余事项。后台代理可随时在“设置 → 代理”下安装。"
+        "description": "工作区已配置。请选择下一步操作；设置清单会记录剩余步骤。"
       },
       "industries": {
         "general_business": {

@@ -10,6 +10,7 @@
     "customize": "Customize"
   },
   "widgets": {
+    "operatingExpenses": "Operating expenses",
     "journalLines": "Journal lines",
     "activeAccounts": "Active accounts",
     "entriesToday": "Entries today",
@@ -92,6 +93,7 @@
     "admin": "Administration"
   },
   "catalog": {
+    "operatingExpenses": "Month-to-date operating expenses, excluding cost of sales, from the profit and loss report.",
     "journalLines": "Total posted journal lines.",
     "activeAccounts": "Active accounts in the chart of accounts.",
     "entriesToday": "Journal entries posted today.",
@@ -171,6 +173,8 @@
     "empty": "No quick actions yet",
     "addFirst": "Add your first action",
     "labels": {
+      "receivePayment": "Receive payment",
+      "reviewBanking": "Review bank transactions",
       "newJournalEntry": "New journal entry",
       "newBill": "New bill",
       "newInvoice": "New invoice",

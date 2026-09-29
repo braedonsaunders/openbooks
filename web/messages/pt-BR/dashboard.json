@@ -10,6 +10,7 @@
     "customize": "Personalizar"
   },
   "widgets": {
+    "operatingExpenses": "Despesas operacionais",
     "journalLines": "Linhas de lançamento",
     "activeAccounts": "Contas ativas",
     "entriesToday": "Lançamentos hoje",
@@ -92,6 +93,7 @@
     "admin": "Administração"
   },
   "catalog": {
+    "operatingExpenses": "Despesas operacionais do mês até hoje, sem o custo das vendas, da demonstração de resultados.",
     "journalLines": "Total de linhas de lançamento lançadas.",
     "activeAccounts": "Contas ativas no plano de contas.",
     "entriesToday": "Lançamentos contábeis lançados hoje.",
@@ -171,6 +173,8 @@
     "empty": "Nenhuma ação rápida ainda",
     "addFirst": "Adicione sua primeira ação",
     "labels": {
+      "receivePayment": "Receber pagamento",
+      "reviewBanking": "Revisar transações bancárias",
       "newJournalEntry": "Novo lançamento contábil",
       "newBill": "Nova conta a pagar",
       "newInvoice": "Nova fatura",

@@ -36,6 +36,8 @@ export interface LineGridOption {
 
 export interface LineGridColumn<Row extends Record<string, unknown>> {
   key: string
+  /** Optional empty columns may be disclosed with Details; values stay in rows. */
+  secondary?: boolean
   label: string
   /** Optional explanation shown from the column heading. */
   help?: React.ReactNode
@@ -202,7 +204,7 @@ export interface LineGridDistribution<Row extends Record<string, unknown>> {
 }
 
 export function LineGrid<Row extends Record<string, unknown>>({
-  columns,
+  columns: allColumns,
   rows,
   onRowsChange,
   emptyRow,
@@ -251,6 +253,10 @@ export function LineGrid<Row extends Record<string, unknown>>({
 }) {
   const t = useTranslations('ui.lineGrid')
   const tEntry = useTranslations('allocations')
+  const tCommon = useTranslations('common')
+  const [showDetails, setShowDetails] = useState(false)
+  const columns = allColumns.filter((column) => !column.secondary || column.required || readOnly || showDetails
+    || rows.some((row) => row[column.key] != null && row[column.key] !== ''))
   const headerIdPrefix = useId()
   const headerIds = columns.map((_column, index) => `${headerIdPrefix}-column-${index}`)
   const rowLabelPrefix = `${headerIdPrefix}-row`
@@ -473,7 +479,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
       setDistTarget(index)
       distMenu.onContextMenu(e)
     },
-    [distMenu],
+    [distMenu, setDistTarget],
   )
 
   const distMenuItems: ContextMenuEntry[] = useMemo(() => {
@@ -522,6 +528,13 @@ export function LineGrid<Row extends Record<string, unknown>>({
 
   return (
     <div>
+      {allColumns.some((column) => column.secondary) && !readOnly ? (
+        <div className="mb-2 flex justify-end">
+          <Button type="button" variant="outline" size="sm" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>
+            {tCommon('auditTrail.tabs.details')}
+          </Button>
+        </div>
+      ) : null}
       {!readOnly && addPlacement === 'top' ? (
         <div className="mb-2 flex justify-end">
           <Button type="button" variant="outline" size="sm" onClick={() => insertRow(rows.length)}>

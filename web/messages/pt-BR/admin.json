@@ -4628,6 +4628,7 @@
         }
       },
       "rhythm": {
+        "optional": "Configurar agora o volume e a frequência de fechamento (opcional)",
         "title": "Defina seu ritmo contábil",
         "description": "Volume muda quanto a automação ajuda. Cadência de fechamento muda quais rotinas o OpenBooks deve pôr à sua frente.",
         "activityQuestion": "Aproximadamente quanto movimento você trata por mês?",
@@ -4742,8 +4743,15 @@
         "description": "Criando seu plano de contas, configurando funcionalidades e mapeando contas de controle."
       },
       "done": {
+        "actions": {
+          "invoice": "Criar sua primeira fatura",
+          "migrate": "Importar do QuickBooks, Xero ou outro sistema",
+          "statement": "Importar um extrato bancário",
+          "demo": "Explorar uma empresa de demonstração separada",
+          "readiness": "Continuar com a lista de configuração"
+        },
         "title": "Seu workspace inicial está pronto",
-        "description": "A seguir, o guia de entrada em produção vai verificar as decisões restantes de empresa, tributos, numeração, bancos e saldos iniciais antes de você lançar movimento real. Agentes de fundo podem ser instalados a qualquer hora em Configurações → Agentes."
+        "description": "Seu espaço está configurado. Escolha a próxima ação; a lista acompanha as etapas restantes."
       },
       "industries": {
         "general_business": {

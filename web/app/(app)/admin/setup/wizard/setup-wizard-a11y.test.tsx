@@ -111,6 +111,7 @@ async function renderWizard(host: HTMLElement, root: ReturnType<typeof createRoo
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <SetupWizard
           open
+          launchActions={['invoice', 'migrate', 'demo']}
           industries={INDUSTRIES}
           initial={{
             name: "Acme",
@@ -304,8 +305,7 @@ test("apply sends the chosen business time zone", async (t) => {
   });
   await tick();
   await cont(); // industry → profile
-  await cont(); // profile → rhythm
-  await cont(); // rhythm → operations
+  await cont(); // profile → operations (optional rhythm deferred)
   await cont(); // operations → launch
   await cont(); // launch → review
   const launch = buttonsNamed("Set up my books")[0];
@@ -317,6 +317,9 @@ test("apply sends the chosen business time zone", async (t) => {
   await tick(STEP_WAIT);
   const puts = seen.filter((request) => request.method === "PUT");
   assert.equal(puts.length, 1, "applying writes the company once");
+  assert.ok(buttonsNamed('Create your first invoice')[0], 'setup offers the first useful action');
+  assert.ok(buttonsNamed('Continue with the setup checklist')[0], 'unfinished setup remains reachable');
+  assert.equal(buttonsNamed('Import a bank statement').length, 0, 'unavailable actions are omitted');
   assert.equal(
     (puts[0]!.body as Record<string, unknown>).timeZone,
     "America/Toronto",
@@ -379,8 +382,7 @@ test("review badges click-through defaults and spares deliberate choices", async
   });
   await tick();
   await cont(); // industry → profile (team/complexity stay default)
-  await cont(); // profile → rhythm (activity/close stay default)
-  await cont(); // rhythm → operations (toggles stay default)
+  await cont(); // profile → operations (activity/close stay default)
   await cont(); // operations → launch (books/tax stay default)
   await cont(); // launch → review
   const review = document.body.textContent ?? "";

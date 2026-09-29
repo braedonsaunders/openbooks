@@ -10,6 +10,7 @@
     "customize": "Personnaliser"
   },
   "widgets": {
+    "operatingExpenses": "Charges d’exploitation",
     "journalLines": "Lignes de journal",
     "activeAccounts": "Comptes actifs",
     "entriesToday": "Écritures aujourd'hui",
@@ -92,6 +93,7 @@
     "admin": "Administration"
   },
   "catalog": {
+    "operatingExpenses": "Charges d’exploitation du mois à ce jour, hors coût des ventes, issues du compte de résultat.",
     "journalLines": "Nombre total de lignes de journal comptabilisées.",
     "activeAccounts": "Comptes actifs du plan comptable.",
     "entriesToday": "Écritures de journal comptabilisées aujourd’hui.",
@@ -171,6 +173,8 @@
     "empty": "Aucune action rapide",
     "addFirst": "Ajouter votre première action",
     "labels": {
+      "receivePayment": "Recevoir un paiement",
+      "reviewBanking": "Vérifier les opérations bancaires",
       "newJournalEntry": "Nouvelle écriture de journal",
       "newBill": "Nouvelle facture fournisseur",
       "newInvoice": "Nouvelle facture client",

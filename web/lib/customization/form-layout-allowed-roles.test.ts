@@ -44,6 +44,7 @@ type Row = Record<string, unknown>
     if (text.includes('user_form_preferences')) {
       return { rows: state.prefLayoutId ? [{ layoutId: state.prefLayoutId }] : [] }
     }
+    if (text.includes('workspaceProfile')) return { rows: [{ complexity: 'essentials' }] }
     return { rows: state.formRows }
   },
 }
@@ -102,6 +103,7 @@ test('resolveFormLayout does not throw when stored allowedRoles is a non-array',
   assert.equal(resolved.source, 'system')
   assert.equal(resolved.row, null)
   assert.equal(resolved.available.length, 0)
+  assert.ok(resolved.layout.header.groups.some((group) => group.collapsible), 'Essentials applies to the system fallback')
 })
 
 test('resolveFormLayout does not throw when stored allowedRoles is a non-UUID list', async () => {
@@ -126,6 +128,7 @@ test('a clerk who holds the gated role id can use the form', async () => {
   assert.equal(resolved.source, 'org')
   assert.equal(resolved.row?.id, LAYOUT_ID)
   assert.equal(resolved.available.length, 1)
+  assert.deepEqual(resolved.layout, defaultFormLayout('vendor_bill'), 'an assigned form takes precedence over Essentials')
 })
 
 test('a clerk who holds a different role id cannot use the gated form', async () => {

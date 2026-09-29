@@ -151,7 +151,9 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
     },
     {
       title: t('setup.guide.tax.title'),
-      description: org?.tax_codes > 0
+      description: taxPosition === 'unsure'
+        ? t('setup.guide.tax.descUndecided')
+        : org?.tax_codes > 0
         ? t('setup.guide.tax.descReady', { count: org!.tax_codes })
         : taxPosition === 'not_registered'
           ? t('setup.guide.tax.descNotRegistered')
@@ -159,7 +161,7 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
             ? t('setup.guide.tax.descRegistered')
             : t('setup.guide.tax.descUndecided'),
       href: '/admin/setup/tax-setup', action: t('setup.guide.tax.action'),
-      state: org?.tax_codes > 0 || taxPosition === 'not_registered' ? 'complete' : 'review',
+      state: taxPosition !== 'unsure' && (org?.tax_codes > 0 || taxPosition === 'not_registered') ? 'complete' : 'review',
     },
     {
       title: t('setup.guide.bank.title'),
@@ -177,8 +179,8 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
         : org?.posted_entries > 0
           ? t('setup.guide.opening.descMigratePosted', { count: org!.posted_entries })
           : t('setup.guide.opening.descMigrateEmpty'),
-      href: '/journal',
-      action: bookStart === 'fresh' ? t('setup.guide.opening.actionFreshLedger') : org?.posted_entries > 0 ? t('setup.guide.opening.actionMigrateJournal') : t('setup.guide.opening.actionMigrateEnter'),
+      href: bookStart === 'migrate' && org.posted_entries === 0 ? '/sync' : '/journal',
+      action: bookStart === 'fresh' ? t('setup.guide.opening.actionFreshLedger') : org?.posted_entries > 0 ? t('setup.guide.opening.actionMigrateJournal') : t('setup.wizard.done.actions.migrate'),
       state: bookStart === 'fresh' ? 'complete' : org?.posted_entries > 0 ? 'review' : 'waiting',
     },
     {

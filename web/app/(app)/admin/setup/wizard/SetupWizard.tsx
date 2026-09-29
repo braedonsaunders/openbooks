@@ -54,6 +54,8 @@ import {
   type WorkspaceProfile,
 } from '@/lib/workspace-profile'
 import { initialPayrollPack, packDescription, packTitle, type WizardPayrollPack, type WizardT } from './payroll-pack-display'
+import type { SetupLaunchAction } from '@/lib/setup-launch-actions'
+import { documentCreateHref } from '@/lib/document-kinds'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -99,6 +101,7 @@ function browserTimeZone(locale: string): string {
 // ─── Component ────────────────────────────────────────────────────────────
 
 export function SetupWizard(props: {
+  launchActions?: SetupLaunchAction[]
   open: boolean
   industries: IndustryDef[]
   initial: {
@@ -159,6 +162,7 @@ export function SetupWizard(props: {
   const [industryKey, setIndustryKey] = useState<string | null>(props.initial.industry)
   const [teamSize, setTeamSize] = useState<TeamSize>(props.initial.workspaceProfile.teamSize)
   const [complexity, setComplexity] = useState<ComplexityLevel>(props.initial.workspaceProfile.complexity)
+  const [configureRhythm, setConfigureRhythm] = useState(false)
   const [bookStart, setBookStart] = useState<BookStart>(props.initial.workspaceProfile.bookStart)
   const [taxPosition, setTaxPosition] = useState<TaxPosition>(props.initial.workspaceProfile.taxPosition)
   const [monthlyActivity, setMonthlyActivity] = useState<MonthlyActivityLevel>(props.initial.workspaceProfile.monthlyActivity)
@@ -184,11 +188,10 @@ export function SetupWizard(props: {
   // The Payroll step only exists when the module is switched on — it is an
   // optional module step, inserted after Operations where it was enabled.
   const steps = useMemo<StepKey[]>(
-    () =>
-      toggles.payroll
-        ? BASE_STEPS.flatMap((key): StepKey[] => (key === 'operations' ? ['operations', 'payroll'] : [key]))
-        : BASE_STEPS,
-    [toggles.payroll],
+    () => BASE_STEPS
+      .filter((key) => key !== 'rhythm' || complexity !== 'essentials' || configureRhythm)
+      .flatMap((key): StepKey[] => key === 'operations' && toggles.payroll ? ['operations', 'payroll'] : [key]),
+    [toggles.payroll, complexity, configureRhythm],
   )
 
   const step = steps[stepIdx]!
@@ -293,8 +296,7 @@ export function SetupWizard(props: {
           body: JSON.stringify({ action: 'install-pack', country: payrollPack }),
         })
         if (!pack.ok) {
-          const detail = await pack.json().catch(() => ({}))
-          toast.error(detail.error ?? t('payroll.installError'))
+          throw new Error(await readApiErrorMessage(pack, t('payroll.installError')))
         }
       }
       if (includeSampleCompany && industryKey) {
@@ -305,18 +307,15 @@ export function SetupWizard(props: {
         })
         if (!sample.ok) {
           const detail = await sample.clone().json().catch(() => null) as { message?: unknown } | null
-          toast.error(
+          throw new Error(
             typeof detail?.message === 'string' && detail.message.trim()
               ? detail.message
               : await readApiErrorMessage(sample, t('launch.sample.error')),
           )
         }
       }
-      // Show the done step briefly, then close
+      // Keep the next action available until the operator chooses a destination.
       setStepIdx(steps.indexOf('done'))
-      setTimeout(() => {
-        close()
-      }, 2500)
     } catch (e) {
       toast.error((e as Error).message)
       setStepIdx(steps.indexOf('review'))
@@ -588,7 +587,16 @@ export function SetupWizard(props: {
         />
       )}
       {step === 'applying' && <ApplyingStep t={t} />}
-      {step === 'done' && <DoneStep t={t} />}
+      {step === 'profile' && complexity === 'essentials' && (
+        <label className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <input type="checkbox" checked={configureRhythm} onChange={(event) => setConfigureRhythm(event.target.checked)} />
+          {t('rhythm.optional')}
+        </label>
+      )}
+      {step === 'done' && <DoneStep t={t} bookStart={bookStart} actions={(props.launchActions ?? []).filter((action) => action !== 'statement' || featureChoices.banking)} onNavigate={(href) => {
+        router.push(href)
+        router.refresh()
+      }} />}
     </WizardShell>
   )
 }
@@ -1464,7 +1472,19 @@ function ApplyingStep({ t }: { t: ReturnType<typeof useTranslations<'admin.setup
   )
 }
 
-function DoneStep({ t }: { t: ReturnType<typeof useTranslations<'admin.setup.wizard'>> }) {
+function DoneStep({ t, bookStart, actions, onNavigate }: {
+  t: ReturnType<typeof useTranslations<'admin.setup.wizard'>>
+  bookStart: BookStart
+  actions: SetupLaunchAction[]
+  onNavigate: (href: string) => void
+}) {
+  const destinations: Record<SetupLaunchAction, string> = {
+    invoice: documentCreateHref('/ar/invoices', 'customer_invoice'),
+    migrate: '/sync', statement: '/banking/imports', demo: '/data/import',
+  }
+  const preferred: SetupLaunchAction = bookStart === 'migrate' ? 'migrate' : 'invoice'
+  const ordered = [preferred, ...actions.filter((action) => action !== preferred)]
+    .filter((action) => actions.includes(action))
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <motion.div
@@ -1497,6 +1517,19 @@ function DoneStep({ t }: { t: ReturnType<typeof useTranslations<'admin.setup.wiz
       >
         {t('done.description')}
       </motion.p>
+      <div className="mt-6 flex w-full max-w-md flex-col gap-3">
+        {ordered.map((action, index) => (
+          <button key={action} type="button" onClick={() => onNavigate(destinations[action])}
+            className={cn('rounded-lg border px-4 py-3 text-sm font-medium', index === 0
+              ? 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700'
+              : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800')}>
+            {t(`done.actions.${action}`)}
+          </button>
+        ))}
+        <button type="button" onClick={() => onNavigate('/admin/setup/readiness')} className="py-2 text-sm text-teal-700 underline dark:text-teal-300">
+          {t('done.actions.readiness')}
+        </button>
+      </div>
     </div>
   )
 }

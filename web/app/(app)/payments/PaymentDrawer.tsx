@@ -726,13 +726,14 @@ export function PaymentDrawer({
   }
 
   const field = 'space-y-1.5'
+  const soleSelectedBank = bankAccounts.length === 1 && bankAccounts[0]!.id === bankAccountId ? bankAccounts[0] : null
   const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
     const label = placement.labelOverride?.trim()
     switch (placement.key) {
       case 'party_id':
         return <><FieldLabel fieldName={label || partyLabel}>{label || partyLabel}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { side })} /> : <p className="text-sm">{doc.party_name}</p>}</>
       case 'bank_account_id':
-        return <><FieldLabel fieldName={label || t('bankAccount')}>{label || t('bankAccount')}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={bankAccounts.map((account) => ({ value: account.id, label: `${account.number ?? ''} ${account.name ?? ''}`.trim() }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={t('selectBankAccountPlaceholder')} /> : <p className="text-sm">{`${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
+        return <><FieldLabel fieldName={label || t('bankAccount')}>{label || t('bankAccount')}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable && !soleSelectedBank ? <SearchSelect options={bankAccounts.map((account) => ({ value: account.id, label: `${account.number ?? ''} ${account.name ?? ''}`.trim() }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={t('selectBankAccountPlaceholder')} /> : <p className="text-sm">{soleSelectedBank ? `${soleSelectedBank.number ?? ''} ${soleSelectedBank.name ?? ''}`.trim() : `${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
       case 'document_date':
         return <><FieldLabel fieldName={label || tCommon('labels.date')}>{label || tCommon('labels.date')}</FieldLabel>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'reference_number':
@@ -878,7 +879,7 @@ export function PaymentDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.postFailed')} />
-        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} expandDetails={!createMode} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
               {partyLabel}

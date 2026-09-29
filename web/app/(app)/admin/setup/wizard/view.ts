@@ -17,6 +17,7 @@ import {
 import { installablePayrollPacks } from '@openbooks/engine/src/payroll/packs.ts'
 import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
 import type { SetupWizard } from './SetupWizard'
+import { setupLaunchActions, type SetupLaunchAction } from '@/lib/setup-launch-actions'
 
 /**
  * The setup wizard page — used when the user re-runs the wizard from the
@@ -50,6 +51,7 @@ import type { SetupWizard } from './SetupWizard'
 type SetupWizardProps = Parameters<typeof SetupWizard>[0]
 
 export interface WizardData {
+  launchActions: SetupLaunchAction[]
   open: boolean
   industries: SetupWizardProps['industries']
   initial: SetupWizardProps['initial']
@@ -79,6 +81,7 @@ export async function loadWizard(): Promise<WizardData> {
   const storedProfile = settings.workspaceProfile as Record<string, unknown> | undefined
 
   return {
+    launchActions: setupLaunchActions(authz),
     open: true,
     industries: INDUSTRIES,
     payrollPacks: installablePayrollPacks(),
@@ -137,6 +140,7 @@ export function wizardSpec(data: WizardData): PageSpec {
     body: [
       widgetBlock('setup-wizard', {
         open: data.open,
+        launchActions: data.launchActions,
         industries: data.industries,
         initial: data.initial,
         canSwitchIndustry: data.canSwitchIndustry,

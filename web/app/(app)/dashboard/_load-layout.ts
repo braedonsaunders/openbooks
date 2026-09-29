@@ -5,6 +5,10 @@ import {
   type DashboardLayoutData,
 } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'
+import { can } from '@/lib/authz'
+import { essentialsWorkspace } from '@/lib/workspace-presentation'
+import { essentialsDefaultLayout } from './_essentials-layout'
+import { canSeeWidget } from './_widget-access'
 import { isFeatureEnabled } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
@@ -53,6 +57,15 @@ async function loadAssignedRoleDefault(
 export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDefault> {
   const roleDefault = await loadAssignedRoleDefault(authz)
   if (roleDefault) return roleDefault
+  if (can(authz, 'gl.read') && await essentialsWorkspace(authz.user.orgId)) {
+    const layout = essentialsDefaultLayout()
+    layout.widgets = layout.widgets.filter((widget) => canSeeWidget(authz, widget.id))
+    layout.quickActions = layout.quickActions?.filter((action) => {
+      const definition = CURATED_QUICK_ACTIONS.find((candidate) => candidate.id === action.id)
+      return definition != null && (!definition.requiredPermission || can(authz, definition.requiredPermission))
+    })
+    return { layout, sourceKey: 'workspace:essentials' }
+  }
   // HR-15 persona defaults: employee always, manager by reports or
   // approval grant, admin by manage grants — what the actor holds, never
   // their role name. Gated tiles join only when their source is live; the

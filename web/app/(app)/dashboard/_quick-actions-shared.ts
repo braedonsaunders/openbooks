@@ -133,6 +133,14 @@ type CuratedQuickAction = Omit<QuickActionOption, 'label' | 'id' | 'hint'> & {
 
 export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   {
+    id: 'd-receipt', labelKey: 'receivePayment', href: '/receipts?paymentNew=1&mode=edit',
+    iconKey: 'receipt', tone: 'emerald', hintKey: 'create', requiredPermission: 'ar.pay',
+  },
+  {
+    id: 'd-bank-review', labelKey: 'reviewBanking', href: '/banking/match',
+    iconKey: 'receipt', tone: 'sky', hintKey: 'open', requiredPermission: 'banking.reconcile', requiredFeature: 'banking',
+  },
+  {
     id: 'd-journal',
     labelKey: 'newJournalEntry',
     href: '/journal',
@@ -190,7 +198,9 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   },
 ]
 
-export const DEFAULT_QUICK_ACTIONS: QuickAction[] = CURATED_QUICK_ACTIONS.map(
+export const DEFAULT_QUICK_ACTIONS: QuickAction[] = CURATED_QUICK_ACTIONS.filter(
+  (action) => action.id !== 'd-receipt' && action.id !== 'd-bank-review',
+).map(
   ({ id, labelKey, href, iconKey, tone }) => ({ id, labelKey, href, iconKey, tone }),
 )
 

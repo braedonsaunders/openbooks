@@ -71,6 +71,8 @@ export interface HeaderGroup {
   id: string
   /** Optional group label; empty = unlabeled group. */
   label?: string | null
+  /** Optional fields may be disclosed progressively by the shared renderer. */
+  collapsible?: boolean
   fields: HeaderFieldPlacement[]
 }
 
@@ -78,6 +80,8 @@ export interface HeaderGroup {
 export interface LineColumnPlacement {
   key: FieldKey
   visible: boolean
+  /** Empty optional columns can stay behind the shared grid's Details control. */
+  secondary?: boolean
   /** CSS grid track (e.g. 'minmax(200px,2fr)', '120px'). null = kind default. */
   width?: string | null
   labelOverride?: string | null
