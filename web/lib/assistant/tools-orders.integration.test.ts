@@ -68,6 +68,8 @@ test('order reads: backlog, line remainders, and subsidiary isolation', { skip: 
     const get = await withOrgContext(org.orgId, () =>
       executeAssistantTool(arOnly, 'get_order', { kind: 'sales_order', id: soId }));
     assert.equal(get.ok, true, JSON.stringify(get));
+    const header = (get as { ok: true; data: { header: Record<string, unknown> } }).data.header;
+    assert.equal(header.open_balance, null);
     const line = ((get as { ok: true; data: Record<string, unknown> }).data.lines as Record<string, unknown>[])[0];
     assert.ok(line);
     assert.equal(line.unit_price, '20');

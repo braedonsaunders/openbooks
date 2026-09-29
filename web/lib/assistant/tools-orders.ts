@@ -240,7 +240,7 @@ const getOrder: AssistantToolDef = {
       subtotal: money(doc.subtotal),
       tax_total: money(doc.tax_total),
       total: money(doc.total),
-      open_balance: money(doc.open_balance),
+      open_balance: doc.open_balance === null ? null : money(doc.open_balance),
     };
     return {
       ok: true,
