@@ -322,7 +322,7 @@ test("F4T2-4: duplicate posts the copy and navigates to its id", async () => {
   const { host, root } = await mountDuplicateButton();
   try {
     await openDuplicateDialog(host);
-    const confirm = [...document.body.querySelectorAll('[role="dialog"] button')].find(
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
       (b) => b.textContent?.trim() === "Save",
     );
     assert.ok(confirm, "the name prompt must offer confirm");
@@ -330,11 +330,13 @@ test("F4T2-4: duplicate posts the copy and navigates to its id", async () => {
     // this test pins the round-trip, not the default.
     const input = document.body.querySelector('[role="dialog"] input') as HTMLInputElement | null;
     assert.ok(input, "the name prompt must offer an input");
-    setInputValue(input, "My template 2");
+    await act(async () => {
+      setInputValue(input, "My template 2");
+    });
+    assert.equal(input.value, "My template 2");
+    assert.equal(confirm.disabled, false, "a valid name enables the save action before confirmation");
     await act(async () => {
       confirm.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      await new Promise((resolve) => setTimeout(resolve, 25));
     });
     assert.equal(posted.length, 1, "confirming posts the copy once");
     assert.equal((posted[0] as { name?: unknown })?.name, "My template 2");
