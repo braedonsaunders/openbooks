@@ -41,7 +41,38 @@ test("a stalled socket times out by name instead of hanging", async () => {
   }
 });
 
-test("a 429 retries honoring Retry-After, then succeeds", async () => {
+test("a 429 retries honoring Retry-After, then succeeds", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  let requests = 0;
+  const transport: typeof fetch = async () => {
+    requests += 1;
+    if (requests === 1) {
+      return new Response(null, { status: 429, headers: { "Retry-After": "1" } });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const pending = fetchWithConnectorRetry("https://qbo.example.test/limited", {}, {
+    describe: "QBO",
+    maxAttempts: 3,
+    transport,
+  });
+  await Promise.resolve(); // Let the first response schedule its retry.
+  assert.equal(requests, 1, "the first 429 must schedule exactly one retry");
+  context.mock.timers.tick(999);
+  await Promise.resolve();
+  assert.equal(requests, 1, "Retry-After must prevent a request before one second");
+  context.mock.timers.tick(1);
+  await Promise.resolve();
+  assert.equal(requests, 2, "the retry must run when the one-second deadline arrives");
+  const res = await pending;
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+});
+
+test("a real HTTP 429 is retried once, then succeeds", async () => {
   let requests = 0;
   const flaky = createServer((_req, res) => {
     requests += 1;
@@ -55,12 +86,14 @@ test("a 429 retries honoring Retry-After, then succeeds", async () => {
   });
   const origin = await listen(flaky);
   try {
-    const started = Date.now();
-    const res = await fetchWithConnectorRetry(`${origin}/limited`, {}, { describe: "QBO", maxAttempts: 3, transport: fetch });
+    const res = await fetchWithConnectorRetry(`${origin}/limited`, {}, {
+      describe: "QBO",
+      maxAttempts: 3,
+      transport: fetch,
+    });
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { ok: true });
     assert.equal(requests, 2, "one retry after the 429, then success");
-    assert.ok(Date.now() - started >= 1_000, "Retry-After must be honored before retrying");
   } finally {
     await close(flaky);
   }
