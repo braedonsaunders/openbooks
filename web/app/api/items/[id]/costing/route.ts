@@ -20,8 +20,8 @@ import { notFound } from "@/lib/api/responses";
 
 const itemParams = z.object({ id: z.string() })
 const costingBody = z.object({
-  costingMethod: z.enum(["fifo", "moving_average", "standard"]),
-  tracking: z.enum(["none", "lot", "serial"]),
+  costingMethod: z.string(),
+  tracking: z.string(),
   recostingAuthorization: z.string().optional(), expectedUpdatedAt: z.string().nullable(),
   assetAccountId: uuidId, cogsAccountId: uuidId,
   adjustmentAccountId: nullableUuidId.optional(), varianceAccountId: nullableUuidId.optional(),
@@ -97,7 +97,7 @@ function moneyOrNull(value: unknown): string | null | 'invalid' {
 }
 
 export const PUT = defineRoute({
-  permission: 'items.manage', feature: 'inventory', scope: 'unrestricted', params: itemParams, body: costingBody,
+  permission: 'items.manage', feature: 'inventory', scope: 'unrestricted', params: itemParams, body: costingBody, invalidBodyStatus: 422,
   handler: async ({ params: { id }, body, authz: gate }) => {
   // The costing profile is shared inventory policy (and can revalue layers
   // org-wide); only the in-transaction layer revaluation below stays

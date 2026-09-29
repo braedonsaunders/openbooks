@@ -3,7 +3,7 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../../../lib/feature-gates'
 import { loadPipelineTemplateNode } from '../../../../../../lib/setup/hrm-builders'
 import type { PipelineTemplateNode } from '../../../../../../lib/setup/hrm-builder-outline'
 
@@ -19,7 +19,7 @@ export interface PipelineBuilderData {
 export async function loadPipelineBuilder(id: string): Promise<PipelineBuilderData> {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(orgId, 'hrm')
   const pipeline = await loadPipelineTemplateNode(orgId, id)
   if (!pipeline) notFound()
   return { pipeline }

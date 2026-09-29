@@ -194,7 +194,7 @@ export function RequestDrawer({ drawer }: { drawer: RequestDrawerData }) {
     if (!(await confirmDialog({
       title: t('drawer.cancelConfirmTitle'),
       message: t('drawer.cancelConfirmMessage'),
-      confirmLabel: t('drawer.cancelRequest'),
+      confirmLabel: t('drawer.actions.cancelRequest'),
       tone: 'danger',
     }))) return
     setBusy(true)

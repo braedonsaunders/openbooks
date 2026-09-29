@@ -59,6 +59,11 @@ let realEmailsUrl = ''
 const mockedSpecifiers = new Map<string, string>([
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
+  // defineRoute resolves the gate through the production alias in a lazy
+  // per-request import, not through the route's own relative specifier, so
+  // the scripted gate must be reachable under that exact specifier or the
+  // real chain runs and every request answers 401.
+  ['@/lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/delivery/email-config.ts', 'mock:email-config'],
 ])
 
@@ -165,11 +170,17 @@ export async function sendVia(transport, input, identity) {
 
 const configRouteUrl = '../app/api/admin/email/route.ts?email-route-permission-test'
 const testRouteUrl = '../app/api/admin/email/test/route.ts?email-route-permission-test'
+let emailHooksDeregistered = false
+function deregisterEmailHooks(): void {
+  if (!emailHooksDeregistered) {
+    emailHooksDeregistered = true
+    hooks.deregister()
+  }
+}
 const emailRoutesReady = Promise.all([
   import(configRouteUrl) as Promise<typeof import('../app/api/admin/email/route.ts')>,
   import(testRouteUrl) as Promise<typeof import('../app/api/admin/email/test/route.ts')>,
 ]).then(([configRoutes, testRoutes]) => {
-  hooks.deregister()
   return { configRoutes, testRoutes }
 })
 
@@ -362,6 +373,10 @@ const { POST: postProvisionRoute } = (await import(
 provisionPostHooks.deregister()
 
 function resetProvisionPost(): void {
+  // Email route tests run first and need the email doubles; provision
+  // requests need the real gate, so the email hooks retire here, before the
+  // first provision request resolves its lazy gate import.
+  deregisterEmailHooks()
   provisionPostState.currentUser = {
     id: PROVISION_POST_USER_ID,
     orgId: PROVISION_POST_ORG_ID,
@@ -383,6 +398,10 @@ function postProvision(id: string): Promise<Response> {
 
 // Complete asynchronous setup before registering tests so --test-force-exit
 // cannot finish the initial queue while later tests are still being loaded.
+// The email gate resolves lazily per request, so its doubles remain registered
+// through those tests. Provision requests retire them in resetProvisionPost;
+// this hook also covers filtered runs without a provision request.
+test.after(() => deregisterEmailHooks())
 test('a user without an explicit role assignment receives no role permissions', () => {
   const permissions = resolveEffectivePermissions({
     rolePermissionSets: [],

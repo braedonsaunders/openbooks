@@ -32,7 +32,8 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     const entityRoute = context.parentURL?.includes("%5Bentity%5D")
       ?? context.parentURL?.includes("[entity]");
-    if (specifier === "../../../../../lib/authz" && entityRoute) {
+    if ((specifier === "../../../../../lib/authz" && entityRoute)
+      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -47,7 +48,7 @@ registerHooks({
 
 const routeUrl = "./route.ts?bom-generic-refusal-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -76,9 +77,10 @@ async function bomEvidence(orgId: string) {
 }
 
 test("generic Setup CRUD refuses every bom-components mutation and names the BOM command", async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "BOM Refusal Admin", "admin");
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "BOM Refusal Admin", "admin"));
     authenticate(org.orgId, actorId);
     const before = await bomEvidence(org.orgId);
 

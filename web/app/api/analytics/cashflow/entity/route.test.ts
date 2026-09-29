@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import test from "node:test";
+import test, { after } from "node:test";
 
 const stateKey = Symbol.for("openbooks.cashflow-entity-route-test");
 interface RouteState {
@@ -45,6 +45,7 @@ const mockSources = new Map<string, string>([
         execute(query) {
           const text = sqlText(query)
           state.calls.push(text)
+          if (text.trimStart().startsWith('select id from accounting_books')) return Promise.resolve({ rows: [{ id: 'book-primary' }] })
           if (text.includes('from parties')) return Promise.resolve({ rows: [{ subsidiaryId: state.partySubsidiaryId }] })
           // The shared open-items reader projects through the document's
           // current posting entry; its rows carry the party for the drill's
@@ -117,6 +118,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
   ["../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
   ["./features", "mock:features"],
 ]);
 
@@ -128,6 +130,9 @@ const hooks = registerHooks({
     // resolves through node_modules like any other real import.
     if (context.parentURL?.startsWith("mock:")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
+    }
+    if (specifier === './db.ts' && context.parentURL?.endsWith('/platform/accounting-books.ts')) {
+      return { url: 'mock:db', shortCircuit: true };
     }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -142,7 +147,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?cashflow-entity-boundary-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+after(() => hooks.deregister());
 
 function reset(): void {
   routeState.allowedSubsidiaryIds = new Set(["sub-allowed"]);
@@ -191,9 +196,9 @@ test("entity drills scope every transaction leg and preserve exact money", async
   assert.equal(body.recentPayments[0].amount, "999999999999999.9999");
 
   const transactionQueries = routeState.calls.slice(1);
-  // pay + shared-reader leg + recents + the reader's org base + the
-  // presentation currency lookup for translated recent amounts.
-  assert.equal(transactionQueries.length, 5);
+  // Pay, primary-book selection, shared-reader leg, recents, the reader's
+  // org base, and presentation currency for translated recent amounts.
+  assert.equal(transactionQueries.length, 6);
   const payQuery = transactionQueries.find((text) => text.includes("from applications"))!;
   const readerQuery = transactionQueries.find((text) => text.includes("d.posted_entry_id"))!;
   const recentQuery = transactionQueries.find((text) => text.includes("round(abs(d.total)"))!;

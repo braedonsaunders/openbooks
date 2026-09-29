@@ -13,7 +13,8 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:t
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../lib/feature-gates'
+      || (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/web/lib/api/route.ts'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__crmQuotaMagnitudeState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };

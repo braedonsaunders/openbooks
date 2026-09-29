@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -18,6 +18,15 @@ const state: RouteState = { resolveCalls: 0 }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
+  [
+    'mock:authz',
+    `
+      export { can } from '${new URL('../../../../../lib/authz.ts', import.meta.url).href}'
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(['payroll.manage']), allowedSubsidiaryIds: null }
+      }
+    `,
+  ],
   [
     'mock:ai-rails',
     `
@@ -52,6 +61,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/ai-rails', 'mock:ai-rails'],
   ['../../../../../lib/features', 'mock:features'],
+  ['@/lib/features', 'mock:features'],
+  ['@/lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/hrm/ai/anomalies.ts', 'mock:anomalies'],
 ])
 
@@ -77,7 +88,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-anomalies-id-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function patch(id: string): Promise<Response> {
   return PATCH(

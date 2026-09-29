@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.budget-actions-route-test')
@@ -96,6 +96,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
       const state = globalThis[Symbol.for('openbooks.budget-actions-route-test')]
       const sqlText = globalThis.openbooksBudgetSqlText
       export const db = {
@@ -128,6 +129,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/subsidiaries', 'mock:subsidiaries'],
   ['../../../../../lib/budget-mutations', 'mock:budget-mutations'],
 ])
@@ -212,7 +214,7 @@ if (process.env.VITEST) {
   })
   const routeUrl = new URL('./route.ts?budget-actions-route-test', import.meta.url).href;
   ({ POST } = (await import(routeUrl)) as typeof import('./route.ts'))
-  hooks.deregister()
+  after(() => hooks.deregister())
 }
 
 function reset(scope: Scope): void {

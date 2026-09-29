@@ -51,16 +51,9 @@ import {
 import { notFound } from "@/lib/api/responses";
 const amount = (field: string) =>
   exactMoney(`${field} must be a decimal string; JSON numbers are refused`);
-const blankAmount = (field: string) => z.union([z.literal(""), amount(field)]);
 const nullableDate = (field: string) =>
   z.union([isoDate(`${field} must be a valid calendar date`), z.literal(""), z.null()]);
 const nullableId = z.string().uuid("must be a valid id").nullable();
-const taxElection = z.strictObject({
-  classCode: z.string().trim().nullable().optional(),
-  businessUsePercent: blankAmount("Business use percent").optional(),
-  bonusPercent: blankAmount("Bonus percent").optional(),
-  section179: blankAmount("Section 179 amount").optional(),
-});
 const patchBodySchema0 = z
   .strictObject({
     expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, "expectedUpdatedAt must be the asset revision"),
@@ -74,25 +67,21 @@ const patchBodySchema0 = z
     acquiredOn: nullableDate("acquiredOn").optional(),
     inServiceOn: nullableDate("inServiceOn").optional(),
     serialNumber: z.string().trim().max(200).nullable().optional(),
-    method: z.enum(["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"]).nullable().optional(),
-    depreciationMethodId: nullableId.optional(),
+    method: z.json().optional(),
+    depreciationMethodId: z.json().optional(),
     lifeMonths: z.union([z.number().int(), z.string().regex(/^\d+$/, "lifeMonths must be a whole number"), z.null()]).optional(),
-    ratePercent: z.union([z.literal(""), amount("Rate percent"), z.null()]).optional(),
-    unitsTotal: z.union([z.literal(""), amount("Units total"), z.null()]).optional(),
-    convention: z.enum(["full_month", "mid_month", "half_year"]).nullable().optional(),
-    openingAccumulated: z.union([z.literal(""), amount("Opening accumulated depreciation"), z.null()]).optional(),
-    openingAsOf: nullableDate("openingAsOf").optional(),
+    ratePercent: z.json().optional(),
+    unitsTotal: z.json().optional(),
+    convention: z.json().optional(),
+    openingAccumulated: z.json().optional(),
+    openingAsOf: z.json().optional(),
     assetAccountId: nullableId.optional(),
     accumulatedDepreciationAccountId: nullableId.optional(),
     depreciationExpenseAccountId: nullableId.optional(),
     custom: z.record(z.string(), z.json()).optional(),
-    taxDepreciation: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,62}$/), taxElection).optional(),
+    taxDepreciation: z.json().optional(),
     status: z.enum(["draft", "in_service"]).optional(),
-  })
-  .refine(
-    (body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"),
-    "provide at least one asset field to update",
-  );
+  });
 
 export { runtime } from "@/lib/api/route";
 
@@ -272,6 +261,7 @@ export const PATCH = defineRoute({
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
   body: patchBodySchema0,
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;

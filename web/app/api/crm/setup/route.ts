@@ -173,7 +173,7 @@ export const POST = defineRoute({
   feature: "crm",
   handler: async ({ request: req, authz: gate }) => {
     const { user } = gate;
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = ((parsedBody.data));
     const action = body.action;

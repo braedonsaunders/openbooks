@@ -51,6 +51,7 @@ stubModules({
   features: false,
   extra: {
     "@openbooks/engine/src/platform/db.ts": `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
       const state = globalThis[Symbol.for('openbooks.rate-book-assignment-route-test')]
       const sqlText = globalThis.openbooksRateBookSqlText
       const clone = (row) => ({ ...row })
@@ -140,6 +141,14 @@ stubModules({
     export function can() { return true }
     export function guardSubsidiaryScope() { return null }
   `,
+    "@/lib/authz": `
+    export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: new Set(['*']) } }
+    export function can() { return true }
+    export function guardSubsidiaryScope() { return null }
+  `,
+    "@/lib/feature-gates": `
+    export async function guardFeaturePermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: new Set(['*']) } }
+  `,
     "../../../lib/features": `export async function isFeatureEnabled() { return true }`,
   },
 })
@@ -147,8 +156,8 @@ stubModules({
 const routeUrl = './route.ts?rate-book-assignment-transaction-test'
 const route = (await import(routeUrl)) as typeof import('./route.ts')
 
-const BOOK = '11111111-1111-1111-1111-111111111111'
-const CUSTOMER = '22222222-2222-2222-2222-222222222222'
+const BOOK = '11111111-1111-4111-8111-111111111111'
+const CUSTOMER = '22222222-2222-4222-8222-222222222222'
 
 function reset(): void {
   routeState.assignments = new Map()
@@ -176,7 +185,7 @@ function assignmentBody(effectiveFrom: string, effectiveTo: string): Record<stri
 
 function seed(): Assignment {
   const row: Assignment = {
-    id: '33333333-3333-3333-3333-333333333333', org_id: 'org-1', rate_book_id: BOOK,
+    id: '33333333-3333-4333-8333-333333333333', org_id: 'org-1', rate_book_id: BOOK,
     customer_id: CUSTOMER, project_id: null, effective_from: '2026-01-01', effective_to: '2026-12-31',
     date_basis: 'usage_date', is_active: true, created_by: 'user-1', updated_by: 'user-1',
   }
@@ -212,8 +221,8 @@ test('concurrent overlapping POST and PATCH map exclusion violations to overlap'
   seed()
   routeState.exclusionAfterFirstWrite = true
   const patches = await Promise.all([
-    route.PATCH(request('PATCH', { id: '33333333-3333-3333-3333-333333333333', ...assignmentBody('2027-01-01', '2027-12-31') })),
-    route.PATCH(request('PATCH', { id: '33333333-3333-3333-3333-333333333333', ...assignmentBody('2027-01-01', '2027-12-31') })),
+    route.PATCH(request('PATCH', { id: '33333333-3333-4333-8333-333333333333', ...assignmentBody('2027-01-01', '2027-12-31') })),
+    route.PATCH(request('PATCH', { id: '33333333-3333-4333-8333-333333333333', ...assignmentBody('2027-01-01', '2027-12-31') })),
   ])
   assert.deepEqual(patches.map((response) => response.status).sort(), [200, 400])
   assert.equal((await patches.find((response) => response.status === 400)!.json()).errorCode, 'overlap')

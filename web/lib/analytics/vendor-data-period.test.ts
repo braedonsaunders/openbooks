@@ -53,7 +53,12 @@ const mockSources = new Map<string, string>([
 
       function billRows(query) {
         const values = query.values
-        const from = query.text.includes('posting_date >= ?') ? values[1] : null
+        // Bill movements fence both sides with between ?::date and ?::date
+        // (values: org, from, ref). A missing lower bound would silently
+        // admit pre-period bills, so an unknown shape fails closed to null.
+        const from = query.text.includes('between ?::date and ?::date')
+          ? values[1]
+          : (query.text.includes('posting_date >= ?') ? values[1] : null)
         const ref = values[2] ?? values[1]
         const selected = state.bills.filter((bill) =>
           bill.status === 'posted' &&
@@ -153,6 +158,5 @@ test("vendor performance counts only bills inside the selected period", async ()
 
   const billQuery = state.queries.find((query) => query.text.includes("from documents"));
   assert.ok(billQuery);
-  assert.match(billQuery.text, /posting_date >= \?/);
-  assert.match(billQuery.text, /posting_date <= \?/);
+  assert.match(billQuery.text, /between \?::date and \?::date/);
 });

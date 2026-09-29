@@ -27,7 +27,9 @@ type AssignmentInput = {
 }
 
 const assignmentDate = z.union([
-  z.string().refine((value) => value === '' || isIsoCalendarDate(value), 'date must be a real calendar date (YYYY-MM-DD)'),
+  // normalizedInput checks the calendar value before any SQL write and
+  // returns the established, actionable dates refusal.
+  z.string(),
   z.null(),
 ])
 const assignmentCreateBody = z.strictObject({
@@ -304,6 +306,7 @@ export const POST = defineRoute({
   permission: 'projects.manage',
   feature: 'projects',
   body: assignmentCreateBody,
+  invalidBodyStatus: 400,
   handler: async ({ authz: gate, body }) => {
   const input: AssignmentInput = body
   try {
@@ -342,6 +345,7 @@ export const PATCH = defineRoute({
   permission: 'projects.manage',
   feature: 'projects',
   body: assignmentPatchBody,
+  invalidBodyStatus: 400,
   handler: async ({ authz: gate, body }) => {
   const input: AssignmentInput = body
   const id = input.id!

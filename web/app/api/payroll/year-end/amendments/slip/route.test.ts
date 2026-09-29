@@ -13,6 +13,11 @@ stubModules({
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
     `,
+    "@/lib/feature-gates": `
+      export async function guardFeaturePermission() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
+    `,
     "../../../subsidiary-scope": `
       export async function guardPayrollFilingRowIds() { return null }
     `,

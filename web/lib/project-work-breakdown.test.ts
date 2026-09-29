@@ -203,7 +203,9 @@ test('WBS PATCH returns an indistinguishable 404 before task writes for a denied
 })
 
 stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
-    './features': 'export async function isFeatureEnabled() { return true }; export async function acquireFeatureGateLock() {}',
+    './features': `export { subsidiaryFeatureEnabled } from ${JSON.stringify(new URL('./features.ts', import.meta.url).href)};
+      export async function isFeatureEnabled() { return true }
+      export async function acquireFeatureGateLock() {}`,
   } });
 
 const scopeHooks = registerHooks({
@@ -214,7 +216,7 @@ const scopeHooks = registerHooks({
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:org-feature-lock') return { format: 'module', source: 'export async function lockAndCheckOrgFeature() { return true }', shortCircuit: true }
+    if (url === 'mock:org-feature-lock') return { format: 'module', source: `export * from ${JSON.stringify(new URL('../../engine/src/organization/org-feature-lock.ts', import.meta.url).href)}; export async function lockAndCheckOrgFeature() { return true }`, shortCircuit: true }
     const source = scopeMockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
     return nextLoad(url, context)
@@ -225,9 +227,10 @@ const scopeModuleSpecifier = './project-work-breakdown.ts?subsidiary-scope-regre
 const workBreakdown = (await import(scopeModuleSpecifier)) as typeof import('./project-work-breakdown.ts')
 scopeHooks.deregister()
 
-const routeHooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.includes('/lib/authz')) return { url: 'mock:project-route-authz', shortCircuit: true }
+    if (specifier === '@/lib/feature-gates') return { url: 'mock:project-route-feature-gate', shortCircuit: true }
     if (specifier.includes('/lib/projects-gate')) return { url: 'mock:project-route-gate', shortCircuit: true }
     // '@/lib/api/json' is not mocked: never double the validation boundary.
     if (specifier === 'next/server') return { url: 'mock:project-route-next-server', shortCircuit: true }
@@ -252,6 +255,14 @@ const routeHooks = registerHooks({
     if (url === 'mock:project-route-gate') {
       return { format: 'module', source: 'export async function guardProjectsFeature() { return null }', shortCircuit: true }
     }
+    if (url === 'mock:project-route-feature-gate') {
+      return { format: 'module', source: `
+        const state = globalThis[Symbol.for('openbooks.project-work-breakdown-scope-test')]
+        export async function guardFeaturePermission() {
+          return { user: { id: 'user-1', orgId: 'org-1' }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }
+        }
+      `, shortCircuit: true }
+    }
     if (url === 'mock:project-route-next-server') {
       return {
         format: 'module',
@@ -265,7 +276,7 @@ const routeHooks = registerHooks({
         shortCircuit: true,
       }
     }
-    if (url === 'mock:org-feature-lock') return { format: 'module', source: 'export async function lockAndCheckOrgFeature() { return true }', shortCircuit: true }
+    if (url === 'mock:org-feature-lock') return { format: 'module', source: `export * from ${JSON.stringify(new URL('../../engine/src/organization/org-feature-lock.ts', import.meta.url).href)}; export async function lockAndCheckOrgFeature() { return true }`, shortCircuit: true }
     const source = scopeMockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
     return nextLoad(url, context)
@@ -274,7 +285,6 @@ const routeHooks = registerHooks({
 
 const routeModuleSpecifier = '../app/api/projects/[id]/tasks/[taskId]/route.ts?subsidiary-scope-regression' as string
 const workBreakdownRoute = (await import(routeModuleSpecifier)) as typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
-routeHooks.deregister()
 resolveModules()
 
 function resetScope(projectSubsidiary: string | null, allowedSubsidiaryIds: Set<string> | null): void {
@@ -393,7 +403,7 @@ async function runWorkBreakdownPatchScopeTest(): Promise<void> {
   )
 
   assert.equal(response.status, 404)
-  assert.equal((await response.json()).error, 'not found')
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(scopeState.calls.filter((statement) => statement.includes('from project_tasks')).length, 0)
   assert.equal(
     scopeState.calls.filter(

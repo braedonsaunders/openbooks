@@ -28,7 +28,7 @@ const requestBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("assign"), userId: z.string().uuid(), roleId: z.string().uuid() }),
   z.object({ action: z.literal("unassign"), userId: z.string().uuid(), roleId: z.string().uuid() }),
   z.object({ action: z.literal("set-active"), userId: z.string().uuid(), isActive: z.boolean() }),
-  z.object({ action: z.literal("set-party"), userId: z.string().uuid(), partyId: z.string().uuid().nullable(), expectedPartyId: z.string().uuid().nullable(), reason: z.string().trim().min(1).max(500), attestation: z.literal(true, { error: "attestation required" }) }),
+  z.object({ action: z.literal("set-party"), userId: z.string().uuid(), partyId: z.string().uuid().nullable(), expectedPartyId: z.string().uuid().nullable(), reason: z.json().optional(), attestation: z.json().optional() }),
   z.object({ action: z.literal("invite"), email: z.string().trim().email().max(320), roleId: z.string().uuid() }),
   z.object({ action: z.literal("resend-invite"), userId: z.string().uuid() }),
 ]);
@@ -606,17 +606,17 @@ export const POST = defineRoute({
         }
         const reason = typeof body.reason === "string" ? body.reason.trim() : "";
         if (!reason) {
-          return NextResponse.json({ error: "reason required" }, { status: 400 });
+          return NextResponse.json({ error: "reason required" }, { status: 422 });
         }
         if (reason.length > 500) {
-          return NextResponse.json({ error: "reason too long" }, { status: 400 });
+          return NextResponse.json({ error: "reason too long" }, { status: 422 });
         }
         // Explicit administrator attestation that the selected native party is
         // the correct human identity for this login user. parties.kind is not
         // proof (drafts are kind=company even with an employee role), and the
         // service never infers employment, hire, or status from kind or flags.
         if (body.attestation !== true) {
-          return NextResponse.json({ error: "attestation required" }, { status: 400 });
+          return NextResponse.json({ error: "attestation required" }, { status: 422 });
         }
         return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
           // Lock the party before reading its subsidiary. The share lock blocks

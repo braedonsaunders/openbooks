@@ -15,16 +15,9 @@ import {
   guardRemittancePeriod,
 } from '../subsidiary-scope'
 
-const requestBodySchema = z.discriminatedUnion('action', [
-  z.strictObject({
-    action: z.literal('create-bill'),
-    partyId: z.string().uuid({ error: 'partyId must be a valid vendor id' }),
-    filingAccountId: z.string().uuid({ error: 'filingAccountId must be a valid payroll filing account id' }),
-    from: z.string().refine(isIsoCalendarDate, 'from must be a real calendar date (YYYY-MM-DD)'),
-    to: z.string().refine(isIsoCalendarDate, 'to must be a real calendar date (YYYY-MM-DD)'),
-    subsidiaryId: z.string().uuid({ error: 'subsidiaryId must be a valid legal entity id' }).nullable().optional(),
-  }).refine((body) => body.from <= body.to, { error: 'to must be on or after from' }),
-], { error: 'action must be create-bill' })
+// The command below owns field-specific refusals with the supplied value and
+// an actionable remedy; the JSON boundary validates the command shape.
+const requestBodySchema = z.looseObject({ action: z.string() })
 
 
 export const dynamic = 'force-dynamic'

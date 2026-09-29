@@ -102,15 +102,15 @@ export function ReturnWorkflowPanel({ authorization, canInspect, canManage, stoc
           <Input id={`rma-accepted-${line.lineId}`} type="number" min="0" step="0.00000001" max={line.received} value={accepted[line.lineId] ?? '0'} onChange={(event) => setAccepted((current) => ({ ...current, [line.lineId]: event.target.value }))} /></div>
         <div><FieldLabel htmlFor={`rma-disposition-${line.lineId}`}>{t('workflow.disposition')}</FieldLabel>
           <Select id={`rma-disposition-${line.lineId}`} value={disposition[line.lineId] ?? ''} onChange={(event) => setDisposition((current) => ({ ...current, [line.lineId]: event.target.value }))}>
-            <option value="">{tc('labels.select')}</option><option value="restock">{t('workflow.restock')}</option><option value="scrap">{t('workflow.scrap')}</option><option value="vendor-return">{t('workflow.vendorReturn')}</option>
+            <option value="">{tc('actions.select')}</option><option value="restock">{t('workflow.restock')}</option><option value="scrap">{t('workflow.scrap')}</option><option value="vendor-return">{t('workflow.vendorReturn')}</option>
           </Select></div>
         {(disposition[line.lineId] ?? '') !== '' ? <div><FieldLabel htmlFor={`rma-location-${line.lineId}`}>{t('workflow.location')}</FieldLabel>
           <Select id={`rma-location-${line.lineId}`} value={location[line.lineId] ?? ''} onChange={(event) => setLocation((current) => ({ ...current, [line.lineId]: event.target.value }))}>
-            <option value="">{tc('labels.select')}</option>{stockLocations.map((option) => <option key={option.id} value={option.id}>{option.code ?? option.id}</option>)}
+            <option value="">{tc('actions.select')}</option>{stockLocations.map((option) => <option key={option.id} value={option.id}>{option.code ?? option.id}</option>)}
           </Select></div> : null}
         {disposition[line.lineId] === 'vendor-return' ? <div><FieldLabel htmlFor={`rma-vendor-${line.lineId}`}>{t('workflow.vendor')}</FieldLabel>
           <Select id={`rma-vendor-${line.lineId}`} value={vendor[line.lineId] ?? ''} onChange={(event) => setVendor((current) => ({ ...current, [line.lineId]: event.target.value }))}>
-            <option value="">{tc('labels.select')}</option>{vendors.map((option) => <option key={option.id} value={option.id}>{option.display_name}</option>)}
+            <option value="">{tc('actions.select')}</option>{vendors.map((option) => <option key={option.id} value={option.id}>{option.display_name}</option>)}
           </Select></div> : null}
       </div>)}</div>
       <Button disabled={busy} onClick={inspect}>{t('workflow.inspect')}</Button><Button variant="outline" disabled={busy || !canManage} onClick={() => sendEmail('received')}>{t('workflow.emailReceived')}</Button>

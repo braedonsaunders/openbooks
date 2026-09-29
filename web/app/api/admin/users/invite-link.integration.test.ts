@@ -34,8 +34,9 @@ registerHooks({
     });
     const parent = String(context.parentURL ?? "");
     if (
-      specifier === "../../../../lib/authz"
-      && (parent.includes("/api/admin/users/route.ts") || parent.includes("/admin/users/view.ts"))
+      (specifier === "../../../../lib/authz"
+        && (parent.includes("/api/admin/users/route.ts") || parent.includes("/admin/users/view.ts")))
+      || (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))
     ) {
       return virtual(`
         export { subsidiaryScopeAllows } from '${pathToFileURL(process.cwd() + "/").href}engine/src/organization/subsidiary-scope.ts';

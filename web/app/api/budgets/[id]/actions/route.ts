@@ -55,6 +55,7 @@ export const POST = defineRoute({
   permission: 'budgets.read',
   feature: 'budgets',
   body: POSTBodySchema1,
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;

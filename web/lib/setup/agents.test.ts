@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { join } from 'node:path'
-import test from 'node:test'
+import test, { after } from 'node:test'
 const { CONTINUOUS_CLOSE_AGENT_KEYS, agentPackMeta, agentPackMetas } = await import('./agents.ts')
 
 /**
@@ -68,6 +68,8 @@ const gateMocks = new Map<string, string>([
   ['../../../../../../lib/authz', gateMock('authz')],
   ['../../../../../../lib/setup/agents', gateMock('adapters')],
   ['../../../../../../../lib/feature-gates', gateMock('authz')],
+  ['@/lib/feature-gates', gateMock('authz')],
+  ['@/lib/authz', gateMock('authz')],
   ['../../../../../../../lib/setup/agents', gateMock('adapters')],
 ])
 const gateHooks = registerHooks({
@@ -89,7 +91,7 @@ const { GET: collectionGET } = (await import(agentsApi('route.ts'))) as typeof i
 const { GET: activityGET } = (await import(agentsApi('activity/route.ts'))) as typeof import('../../app/api/admin/setup/agents/activity/route.ts')
 const { PUT: policyPUT } = (await import(agentsApi('[agentKey]/route.ts'))) as typeof import('../../app/api/admin/setup/agents/[agentKey]/route.ts')
 const { POST: runPOST } = (await import(agentsApi('[agentKey]/run/route.ts'))) as typeof import('../../app/api/admin/setup/agents/[agentKey]/run/route.ts')
-gateHooks.deregister()
+after(() => gateHooks.deregister())
 
 const SETUP_KEY = 'admin.setup.manage'
 const PROVIDER_KEY = 'admin.ai.manage'
@@ -167,9 +169,17 @@ test('a policy write refuses a provider-key manager and otherwise reuses the sha
   assert.deepEqual(gateState.calls, [])
 
   asSetupManager()
-  const allowed = await put({ enabled: true })
-  assert.equal(allowed.status, 200)
-  assert.deepEqual(gateState.calls, [['save', 'org-1', 'user-1', 'accounting', { enabled: true }]])
+  const policy = {
+    enabled: true,
+    automaticRuns: false,
+    cadence: 'daily',
+    materialityThreshold: '500',
+    detectors: [],
+    analysis: { rootCauseAnalysis: false, recommendations: false, narrative: false, modelTier: 'fast', maxToolSteps: 4 },
+  }
+  const allowed = await put(policy)
+  assert.equal(allowed.status, 200, JSON.stringify(await allowed.clone().json()))
+  assert.deepEqual(gateState.calls, [['save', 'org-1', 'user-1', 'accounting', policy]])
 })
 
 test('run-now refuses a provider-key manager and otherwise reuses the shared runner', async () => {

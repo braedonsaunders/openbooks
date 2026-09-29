@@ -130,7 +130,9 @@ function updatesAttempted(): boolean {
 
 test('control: a verify-only user cannot use the named update action', async () => {
   reset()
-  const response = await patch({ action: 'update', issuerName: 'Evil Insurer' })
+  // The revision token is required by the schema: without it the boundary
+  // refuses first and the permission gate below is never exercised.
+  const response = await patch({ action: 'update', revision: 1, issuerName: 'Evil Insurer' })
   assert.equal(response.status, 403)
   assert.ok(!updatesAttempted(), 'no certificate write may run')
 })

@@ -23,18 +23,21 @@ import {
 const filingIssueInput = z.object({
   country: z.string().regex(/^[A-Z]{2}$/),
   filing: z.string().trim().min(1),
-  year: z.union([z.number().int(), z.string().regex(/^\d{4}$/).transform(Number)]).superRefine((year, ctx) => {
-    const refusal = payrollYearRefusal(year)
+  year: z.unknown().superRefine((raw, ctx) => {
+    const refusal = payrollYearRefusal(raw)
     if (refusal !== null) ctx.addIssue({ code: 'custom', message: refusal })
-  }),
+  }).transform(Number),
   note: z.string().trim().max(2000).optional(),
 })
-const correctionRows = z.array(z.string().uuid()).min(1)
+// Filing declarations own row-id grammars (for example, T4 includes employee,
+// province, and account). The shared subsidiary guard validates every row
+// against that declaration before the issue service writes anything.
+const correctionRows = z.array(z.string().min(1)).min(1)
 const requestBodySchema = z.discriminatedUnion('revision', [
-  filingIssueInput.extend({ revision: z.literal('original'), rowIds: z.array(z.string().uuid()).optional() }),
+  filingIssueInput.extend({ revision: z.literal('original'), rowIds: z.array(z.string().min(1)).optional() }),
   filingIssueInput.extend({ revision: z.literal('amended'), confirmedAmendment: z.literal(true), rowIds: correctionRows }),
   filingIssueInput.extend({
-    revision: z.literal('cancelled'), confirmedCancellation: z.literal(true), rowIds: correctionRows,
+    revision: z.literal('cancelled'), confirmedCancellation: z.literal(true, { error: 'cancellation must be explicitly confirmed' }), rowIds: correctionRows,
     reason: z.string().trim().min(1, 'a nonblank cancellation reason is required').max(2000),
   }),
 ])
@@ -145,7 +148,7 @@ export const POST = defineRoute({
   permission: 'payroll.run',
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
-    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 })
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.data
     const year = body.year

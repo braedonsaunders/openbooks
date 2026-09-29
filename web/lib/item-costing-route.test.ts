@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { isUuid } from './list-params'
 
 // Route boundary suite for /api/items/[id]/costing: the costing-profile PUT
@@ -91,6 +91,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
       const state = globalThis[Symbol.for('openbooks.item-costing-route-test')]
       const sqlText = globalThis.openbooksSqlText
       const sqlParams = globalThis.openbooksSqlParams
@@ -222,6 +223,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/authz', 'mock:authz'],
 ])
 
@@ -250,7 +252,7 @@ const hooks = registerHooks({
 
 const routeUrl = '../app/api/items/[id]/costing/route.ts?item-costing-route-test'
 const { GET, PUT } = (await import(routeUrl)) as typeof import('../app/api/items/[id]/costing/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const ORG_ID = '00000000-0000-4000-8000-00000000b001'
 const ITEM_ID = '00000000-0000-4000-8000-00000000c001'

@@ -249,6 +249,7 @@ export const POST = defineRoute({
   permission: "api.keys.manage",
   feature: "apiAccess",
   body: createApiKeyBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
 
     const gate = routeAuthz;
@@ -345,6 +346,7 @@ export const PATCH = defineRoute({
   permission: "api.keys.manage",
   feature: "apiAccess",
   body: updateApiKeyBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
 
     const gate = routeAuthz;

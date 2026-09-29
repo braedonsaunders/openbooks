@@ -15,6 +15,7 @@ export const POST = defineRoute({
   feature: "saasMetrics",
   scope: "unrestricted",
   body: Body,
+  invalidBodyStatus: 422,
   handler: async ({ authz, body }) => {
     const outcome = await createNormalizationRequest({
       orgId: authz.user.orgId,

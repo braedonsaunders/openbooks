@@ -2551,6 +2551,18 @@
         "title": "资产类别",
         "description": "固定资产的默认折旧方法和科目。"
       },
+      "nonprofit-frameworks": {
+        "title": "限制框架",
+        "description": "基金会计的报告基础（例如 US ASC 958）。"
+      },
+      "fund-pairs": {
+        "title": "基金间配对",
+        "description": "两个基金之间的往来结算科目。"
+      },
+      "functional-mappings": {
+        "title": "功能映射",
+        "description": "按生效日期划分的部门与项目费用分类。"
+      },
       "depreciation-methods": {
         "title": "折旧方法",
         "description": "编写自定义折旧公式——公式构建器。"
@@ -3015,6 +3027,7 @@
       "targetLocationId": "目标地点",
       "capacityQuantity": "容量",
       "services": "服务级别",
+      "setAt": "设置日期",
       "trackingUrlTemplate": "跟踪链接模板",
       "accountId": "科目",
       "code": "代码",
@@ -3099,6 +3112,7 @@
       "vacationable": "计入年假工资",
       "nonPeriodic": "非周期性（奖金方法）",
       "programExclusions": "计划排除项",
+      "programKey": "项目",
       "supplementalWageCategory": "补充工资类别",
       "statutoryReportingCategory": "法定申报类别",
       "statutoryExemptionCategory": "法定豁免类别",
@@ -3135,6 +3149,7 @@
       "baseCurrency": "基准币种",
       "isElimination": "抵销",
       "fromSubsidiaryId": "从子公司",
+      "function": "功能",
       "toSubsidiaryId": "至子公司",
       "dueFromAccountId": "应收科目",
       "dueToAccountId": "应付科目",
@@ -3156,7 +3171,9 @@
       "fairValueAdjustmentAccountId": "公允价值调整科目",
       "asOf": "截至",
       "fromCurrency": "从币种",
+      "fromFundId": "从基金",
       "toCurrency": "至币种",
+      "toFundId": "至基金",
       "rateType": "汇率类型",
       "source": "来源",
       "periodId": "会计期间",
@@ -3377,6 +3394,7 @@
       "requiresEvidence": "需要证明",
       "extraCategories": "附加类别",
       "frameworkId": "框架",
+      "framework": "框架",
       "categoryKey": "类别",
       "retainYears": "保留期限（年）",
       "fromEvent": "起算时间",

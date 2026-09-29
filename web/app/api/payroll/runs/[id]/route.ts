@@ -30,10 +30,10 @@ import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const payrollRunUuid = (field: string, subject: string, remedy: string) => z.string({
+const payrollRunUuid = (field: string, subject: string, remedy: string, malformedRemedy = remedy) => z.string({
   error: (issue) => `${field} must be ${subject} — got "${suppliedValue(issue.input)}"; ${remedy}`,
 }).uuid({
-  error: (issue) => `${field} "${suppliedValue(issue.input)}" is not ${subject} — ${remedy}`,
+  error: (issue) => `${field} "${suppliedValue(issue.input)}" is not ${subject} — ${malformedRemedy}`,
 })
 const payrollRunMoney = z.string().superRefine((value, context) => {
   if (canonicalDecimal(value, 4) === null) {
@@ -42,17 +42,24 @@ const payrollRunMoney = z.string().superRefine((value, context) => {
 })
 const holidayEligibilityBody = z.json().optional()
 const actionBody = <A extends string>(action: A) => ({ action: z.literal(action), holidayEligibility: holidayEligibilityBody })
-const employeeIds = z.array(payrollRunUuid('employeePartyIds entry', 'an employee id', 'fix the id and try again'))
+// The handler validates each entry with its index so an operator can repair a
+// specific row in a long payroll roster; the boundary validates list shape.
+const employeeIds = (remedy: string) => z.array(z.json(), {
+  error: (issue) => `employeePartyIds must be a list of employee ids — got "${suppliedValue(issue.input)}"; ${remedy}`,
+})
+const rosterIds = z.array(z.json(), {
+  error: (issue) => `rosterPartyIds must be a list of employee ids — got "${suppliedValue(issue.input)}"; pass the run roster as a list`,
+})
 const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('calculate') }),
   z.strictObject({ ...actionBody('dry-run') }),
-  z.strictObject({ ...actionBody('bulk-adjustment'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, employeePartyIds: employeeIds, note: z.string().nullable().optional(), replaceComponent: z.boolean().optional() }),
+  z.strictObject({ ...actionBody('bulk-adjustment'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, employeePartyIds: employeeIds('pass the employees to adjust as a list'), note: z.json().optional(), replaceComponent: z.json().optional() }),
   z.strictObject({ ...actionBody('preview-gl') }),
-  z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), note: z.string().nullable().optional(), replaceComponent: z.boolean().optional() }),
-  z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id') }),
-  z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds, rosterPartyIds: z.array(payrollRunUuid('rosterPartyIds entry', 'an employee id', 'fix that entry and try again')) }),
-  z.strictObject({ ...actionBody('exclude-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id') }),
-  z.strictObject({ ...actionBody('include-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id') }),
+  z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), note: z.json().optional(), replaceComponent: z.json().optional() }),
+  z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id', 'fix the id and try again') }),
+  z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds('pass the employees to include as a list'), rosterPartyIds: rosterIds }),
+  z.strictObject({ ...actionBody('exclude-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again') }),
+  z.strictObject({ ...actionBody('include-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('email-stubs') }),
   z.strictObject({ ...actionBody('record-payment'), bankAccountId: payrollRunUuid('bankAccountId', 'a bank account id', 'choose a bank account') }),
   z.strictObject({ ...actionBody('submit-approval') }),
@@ -245,7 +252,7 @@ export const POST = defineRoute({
     if (!owned) return notFound("record")
     const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
     if (denied) return denied
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     // Employer attestations for statutory-holiday rules that read them (the

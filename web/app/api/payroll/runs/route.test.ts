@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
 
 interface RouteState {
@@ -39,6 +39,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
       const sqlText = globalThis.openbooksPayrollRunsSqlText
       export const db = {
@@ -111,6 +112,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-run'],
   ['@openbooks/engine/src/payroll/run-lifecycle.ts', 'mock:payroll-run'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/subsidiaries', 'mock:subsidiaries'],
 ])
@@ -130,7 +132,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-runs-subsidiary-scope-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const SCHEDULE_ID = '00000000-0000-4000-8000-000000000001'
 

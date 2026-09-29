@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 // Absolute file URL of the real @openbooks/pdf surface, interpolated into the
 // mock below. A bare or relative specifier cannot be used there: the mock
@@ -94,6 +94,7 @@ const mockUrls = new Map<string, string>([
   ['next-intl/server', 'mock:intl'],
   ['../../../../../lib/report-books', 'mock:report-books'],
   ['../../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../../lib/reports', 'mock:reports'],
   ['../../../../../lib/account-register-export', 'mock:account-register-export'],
   ['../../../../../lib/report-pdf', 'mock:report-pdf'],
@@ -119,7 +120,7 @@ const hooks = registerHooks({
 
 const routeUrl = '../app/api/accounts/[id]/register/route.ts?account-register-date-test'
 const { GET } = (await import(routeUrl)) as typeof import('../app/api/accounts/[id]/register/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const ACCOUNT_ID = '00000000-0000-4000-8000-00000000a001'
 

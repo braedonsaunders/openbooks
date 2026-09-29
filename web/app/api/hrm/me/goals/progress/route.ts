@@ -12,6 +12,7 @@ export const POST = defineRoute({
   permission: "hrm.self.request",
   feature: "hrm",
   body: goalProgressBody,
+  invalidBodyStatus: 400,
   handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const goal = await updateMyGoalProgress({

@@ -71,7 +71,7 @@ export const POST = defineRoute({
   permission: 'payroll.run',
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     const payScheduleId = body.payScheduleId

@@ -15,19 +15,12 @@ import {
 } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 import { exactMoney, isoDate } from "../../../../../lib/api/json";
-const postBodySchema0 = z.discriminatedUnion("writeOff", [
-  z.strictObject({
-    date: isoDate("date must be a valid calendar date"),
-    proceeds: exactMoney("proceeds must be a decimal string; JSON numbers are refused"),
-    writeOff: z.literal(true),
-  }),
-  z.strictObject({
-    date: isoDate("date must be a valid calendar date"),
-    proceeds: exactMoney("proceeds must be a decimal string; JSON numbers are refused"),
-    proceedsAccountId: z.string().uuid("proceedsAccountId must be a valid id").optional(),
-    writeOff: z.literal(false),
-  }),
-]);
+const postBodySchema0 = z.strictObject({
+  date: isoDate("date must be a valid calendar date").optional(),
+  proceeds: exactMoney("proceeds must be a decimal string; JSON numbers are refused").optional(),
+  proceedsAccountId: z.string().uuid("proceedsAccountId must be a valid id").optional(),
+  writeOff: z.boolean().optional(),
+});
 
 export { runtime } from "@/lib/api/route";
 
@@ -49,6 +42,7 @@ export const POST = defineRoute({
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
   body: postBodySchema0,
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id))

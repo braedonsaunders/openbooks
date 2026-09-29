@@ -306,7 +306,7 @@ export const PATCH = defineRoute({
   const scopeDenied = guardSubsidiaryScope(gate, existingParty.subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
-  const parsedBody = await parseJsonBody(req, partyPatchBody)
+  const parsedBody = await parseJsonBody(req, partyPatchBody, { status: 400 })
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data as PatchBody
   // Worker-comp group is Payroll configuration living on the employee role.

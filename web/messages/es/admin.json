@@ -2469,6 +2469,18 @@
         "title": "Categorías de activos",
         "description": "Método de depreciación y cuentas predeterminados para activos fijos."
       },
+      "nonprofit-frameworks": {
+        "title": "Marco de restricción",
+        "description": "Base de presentación de la contabilidad de fondos (p. ej., US ASC 958)."
+      },
+      "fund-pairs": {
+        "title": "Pares entre fondos",
+        "description": "Cuentas de liquidación entre dos fondos."
+      },
+      "functional-mappings": {
+        "title": "Asignaciones funcionales",
+        "description": "Clasificación con vigencia de los gastos de departamentos y proyectos."
+      },
       "depreciation-methods": {
         "title": "Métodos de depreciación",
         "description": "Cree fórmulas de depreciación personalizadas — el generador de fórmulas."
@@ -2970,6 +2982,7 @@
       "targetLocationId": "Ubicación de destino",
       "capacityQuantity": "Capacidad",
       "services": "Servicios",
+      "setAt": "Definido el",
       "trackingUrlTemplate": "Plantilla del enlace de seguimiento",
       "accountId": "Cuenta",
       "classAttribute": "Atributo de clase de activo",
@@ -3059,12 +3072,15 @@
       "baseCurrency": "Moneda base",
       "isElimination": "Eliminación",
       "fromSubsidiaryId": "Filial de origen",
+      "function": "Función",
       "toSubsidiaryId": "Filial de destino",
       "dueFromAccountId": "Cuenta por cobrar intercompañía",
       "dueToAccountId": "Cuenta por pagar intercompañía",
       "asOf": "A fecha de",
       "fromCurrency": "Moneda de origen",
+      "fromFundId": "Fondo de origen",
       "toCurrency": "Moneda de destino",
+      "toFundId": "Fondo de destino",
       "rateType": "Tipo de tasa",
       "source": "Origen",
       "periodId": "Período contable",
@@ -3201,6 +3217,7 @@
       "nciMeasurement": "Medición NCI",
       "nonPeriodic": "No periódico (método de primas)",
       "programExclusions": "Exclusiones de programas",
+      "programKey": "Programa",
       "supplementalWageCategory": "Categoría de remuneración suplementaria",
       "statutoryReportingCategory": "Categoría de declaración obligatoria",
       "statutoryExemptionCategory": "Categoría de exención legal",
@@ -3332,6 +3349,7 @@
       "requiresEvidence": "Requiere evidencia",
       "extraCategories": "Categorías adicionales",
       "frameworkId": "Marco",
+      "framework": "Marco",
       "categoryKey": "Categoría",
       "retainYears": "Conservación (años)",
       "fromEvent": "Inicio del cómputo",

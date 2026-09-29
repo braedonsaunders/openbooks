@@ -2594,6 +2594,18 @@
         "title": "資産カテゴリ",
         "description": "固定資産の既定の減価償却方法および勘定。"
       },
+      "nonprofit-frameworks": {
+        "title": "制限フレームワーク",
+        "description": "ファンド会計の報告基準（例：US ASC 958）。"
+      },
+      "fund-pairs": {
+        "title": "ファンド間ペア",
+        "description": "2つのファンド間の未収未払決済勘定。"
+      },
+      "functional-mappings": {
+        "title": "機能マッピング",
+        "description": "部門およびプロジェクト経費の発効日付き分類。"
+      },
       "depreciation-methods": {
         "title": "減価償却方法",
         "description": "カスタムの減価償却計算式を作成します — 数式ビルダー。"
@@ -3090,6 +3102,7 @@
       "targetLocationId": "格納先",
       "capacityQuantity": "容量",
       "services": "サービス区分",
+      "setAt": "設定日",
       "trackingUrlTemplate": "追跡リンクのテンプレート",
       "accountId": "勘定科目",
       "classAttribute": "資産区分属性",
@@ -3183,12 +3196,15 @@
       "baseCurrency": "基準通貨",
       "isElimination": "消去",
       "fromSubsidiaryId": "移動元子会社",
+      "function": "機能",
       "toSubsidiaryId": "移動先子会社",
       "dueFromAccountId": "対他勘定",
       "dueToAccountId": "対自勘定",
       "asOf": "基準日",
       "fromCurrency": "換算元通貨",
+      "fromFundId": "振替元ファンド",
       "toCurrency": "換算先通貨",
+      "toFundId": "振替先ファンド",
       "rateType": "レートタイプ",
       "source": "ソース",
       "periodId": "会計期間",
@@ -3287,6 +3303,7 @@
       "nciMeasurement": "非支配持分の測定",
       "nonPeriodic": "非定期的（賞与方式）",
       "programExclusions": "プログラムの除外",
+      "programKey": "プログラム",
       "supplementalWageCategory": "追加賃金の分類",
       "statutoryReportingCategory": "法定報告の分類",
       "statutoryExemptionCategory": "法定免除の分類",
@@ -3452,6 +3469,7 @@
       "requiresEvidence": "証跡が必要",
       "extraCategories": "追加カテゴリ",
       "frameworkId": "フレームワーク",
+      "framework": "フレームワーク",
       "categoryKey": "カテゴリ",
       "retainYears": "保持期間（年）",
       "fromEvent": "起算日",

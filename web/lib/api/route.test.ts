@@ -189,6 +189,24 @@ test("invalid bodies fail through the shared JSON boundary", async () => {
   assert.deepEqual(await good.json(), { name: "Cash" });
 });
 
+test("routes may opt into a 422 body refusal without changing the factory default", async () => {
+  reset();
+  const handler = defineRoute({
+    permission: "x",
+    feature: { none: "test surface" },
+    body: z.object({ name: z.string().min(1, "provide a name") }),
+    invalidBodyStatus: 422,
+    handler: async ({ body }) => NextResponse.json({ name: body.name }),
+  });
+  const invalid = await handler(post({ name: "" }));
+  assert.equal(invalid.status, 422);
+  assert.deepEqual(await invalid.json(), {
+    error: "provide a name",
+    issues: [{ path: "name", message: "provide a name" }],
+  });
+  assert.equal((await handler(post({ name: "Cash" }))).status, 200);
+});
+
 test("typed refusals become 4xx carrying code and remedy", async () => {
   reset();
   const handler = defineRoute({

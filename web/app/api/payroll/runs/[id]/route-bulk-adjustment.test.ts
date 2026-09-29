@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 const realRunLifecycleUrl = new URL('../../../../../../engine/src/payroll/run-lifecycle.ts', import.meta.url).href
 const realAuthzUrl = new URL('../../../../../lib/authz.ts', import.meta.url).href
 
@@ -121,7 +121,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payroll-run-bulk-adjustment-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const RUN_ID = '00000000-0000-4000-8000-000000000001'
 const COMPONENT_ID = '00000000-0000-4000-8000-000000000002'

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 // The REAL refusal class and tax-year guard, imported statically (static
 // imports resolve before any module code below runs, so before the hooks
 // are registered) and shared with the engine stub through global state —
@@ -121,7 +121,7 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?opening-balances-version-test'; const { POST } = (await import(routeUrl)) as typeof import('./route.ts'); const { POST: postEmployerLevyOpening } = await import('./employer-levies/route.ts')
 // The genuine refusal class, shared with the stub above.
 const OpeningBalanceSaveError = RealOpeningBalanceSaveError
-hooks.deregister()
+after(() => hooks.deregister())
 
 function uuid(n: number): string {
   return `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`

@@ -79,9 +79,9 @@ const mockUrls = new Map<string, string>([
 ]);
 let dbRealUrl = ''
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../lib/authz") {
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       const real = nextResolve(specifier, context).url;
       return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };
     }
@@ -102,7 +102,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?analytics-config-write-guard-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(updateRowCount: number): void {
   state.executed = [];

@@ -64,6 +64,7 @@ export const POST = defineRoute({
   permission: "reports.create",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: createViewBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ request, body, authz: routeAuthz }) => {
 
     const gate = routeAuthz

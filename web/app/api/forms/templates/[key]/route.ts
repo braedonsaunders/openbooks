@@ -8,10 +8,6 @@ import { parseFormSchema } from "@openbooks/forms-core";
 import { auditSetupChange } from "../../../../../lib/setup/audit";
 import { getLatestVersion, getTemplateByKey } from "../../_lib";
 import { notFound } from "@/lib/api/responses";
-const formSchemaBody = z.json().refine(
-  (value) => parseFormSchema(value).success,
-  "schema must match the form schema contract",
-);
 const putBodySchema0 = z
   .strictObject({
     name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
@@ -19,7 +15,7 @@ const putBodySchema0 = z
     description: z.string().trim().max(2000).nullable().optional(),
     kind: z.enum(["form", "wizard", "checklist", "register"]).optional(),
     allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank keys")).max(20).nullable().optional(),
-    schema: formSchemaBody.optional(),
+    schema: z.json().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, "provide at least one template field to update");
 

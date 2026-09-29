@@ -42,7 +42,8 @@ registerHooks({
       url: "data:text/javascript," + encodeURIComponent(source),
     });
     const parent = String(context.parentURL ?? "");
-    if (specifier === "../../../../lib/authz" && parent.includes("/api/admin/users/route.ts")) {
+    if ((specifier === "../../../../lib/authz" && parent.includes("/api/admin/users/route.ts"))
+      || (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))) {
       return virtual(`
         export { subsidiaryScopeAllows } from '${pathToFileURL(process.cwd() + "/").href}engine/src/organization/subsidiary-scope.ts';
         const state = globalThis[Symbol.for('openbooks.admin-users-delegation-ceiling')];

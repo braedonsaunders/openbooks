@@ -15,6 +15,7 @@ export const POST = defineRoute({
   feature: "hrm",
   params: z.object({ id: z.string().min(1) }),
   body: leaveDecisionBody,
+  invalidBodyStatus: 400,
   handler: async ({
     authz: gate,
     params: routeParams,

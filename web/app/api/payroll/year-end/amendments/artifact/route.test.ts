@@ -14,22 +14,24 @@ interface RouteState { dbCalls: number }
 const state: RouteState = { dbCalls: 0 }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = state
 
+const featureGateSource = `
+  export async function guardFeaturePermission() {
+    return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+  }
+`
+
 stubModules({
   navigation: false,
   intl: false,
   authz: false,
-  features: false,
+  features: { source: featureGateSource },
   extra: {
-    "../../../../../../lib/feature-gates": `
-      export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
-      }
-    `,
     "../../../subsidiary-scope": `
       export async function guardPayrollFilingRowIds() { return null }
       export async function guardPayrollFilingData() { return null }
     `,
     "@openbooks/engine/src/platform/db.ts": `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
       const state = globalThis[Symbol.for('openbooks.payroll-year-end-artifact-test')]
       export const db = {
         execute() {

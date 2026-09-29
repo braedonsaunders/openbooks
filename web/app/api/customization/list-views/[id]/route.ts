@@ -83,7 +83,7 @@ export const GET = defineRoute({
 /** PATCH — update name/config/isDefault/isActive. Owner or admin only. */
 export const PATCH = defineRoute({
   public: "session",
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: z.string().uuid("id must be a UUID") }),
   body: z
     .strictObject({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),

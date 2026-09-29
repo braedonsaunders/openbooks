@@ -72,7 +72,7 @@ export const PATCH = defineRoute({
   feature: {
     none: "This admin surface is governed by its permission and has no separate organization feature switch.",
   },
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: z.string().uuid("id must be a UUID") }),
   body: z
     .strictObject({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),

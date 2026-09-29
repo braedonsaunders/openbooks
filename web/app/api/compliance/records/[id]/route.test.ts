@@ -217,7 +217,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/compliance', 'mock:compliance'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -233,7 +233,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?compliance-record-route-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function certificate(overrides: Certificate = {}): Certificate {
   return {

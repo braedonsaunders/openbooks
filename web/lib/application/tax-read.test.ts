@@ -16,12 +16,41 @@ const dbUrl = new URL("../../../engine/src/platform/db.ts", import.meta.url).hre
 const mockDb = `
   export * from ${JSON.stringify(dbUrl)}
   const state = globalThis[Symbol.for('openbooks.tax-read-test')]
-  export const db = { execute: async () => { state.dbCalls += 1; return { rows: state.formRows } } }
+  function sqlText(query) {
+    const chunks = query?.queryChunks
+    if (!Array.isArray(chunks)) return ""
+    return chunks.map((chunk) => {
+      if (typeof chunk === "string") return chunk
+      if (Array.isArray(chunk?.value)) return chunk.value.map(String).join("")
+      if (Array.isArray(chunk?.queryChunks)) return sqlText(chunk)
+      return ""
+    }).join("")
+  }
+  export const db = {
+    execute: async (query) => {
+      state.dbCalls += 1
+      const text = sqlText(query)
+      // The forms list carries the fixture rows; the feature filter behind
+      // it reads tax_report_lines, which is empty here so nothing is hidden.
+      if (text.includes("tax_return_forms")) return { rows: state.formRows }
+      if (text.includes("tax_report_lines")) return { rows: [] }
+      throw new Error("unexpected tax-read query: " + text.slice(0, 120))
+    },
+  }
 `;
 
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
+      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mockDb) };
+    }
+    // The filing-catalog filter in tax-returns/return.ts reaches the same
+    // database through its relative specifier; leaving it real sends the
+    // unit test to the live pool and fails closed on the bypass guard.
+    if (
+      specifier === "../platform/db.ts"
+      && (context.parentURL ?? "").endsWith("/tax-returns/return.ts")
+    ) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mockDb) };
     }
     return next(specifier, context);
@@ -56,7 +85,9 @@ test("tax form reads map the filing catalog under reports.read", async () => {
 
   const result = await listApplicationTaxReturnForms(context(["reports.read"], null));
 
-  assert.equal(state.dbCalls, 1);
+  // Two reads: the forms list, then the input-namespace feature filter that
+  // hides forms whose provider namespace is off (empty here, so none hide).
+  assert.equal(state.dbCalls, 2);
   assert.deepEqual(result, {
     total: 1,
     forms: [{

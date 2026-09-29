@@ -14,7 +14,8 @@ const state: { authz: {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.user-control-integration")] = state;
 registerHooks({ resolve(specifier, context, next) {
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
-  if (specifier.endsWith("/lib/authz") && /\/api\/admin\/(users|roles)\/route.ts/.test(context.parentURL ?? "")) {
+  if ((specifier.endsWith("/lib/authz") && /\/api\/admin\/(users|roles)\/route.ts/.test(context.parentURL ?? ""))
+    || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
     const realAuthzUrl = next(specifier, context).url;
     return virtual(`export { subsidiaryScopeAllows } from '${realAuthzUrl}'; export async function guardPermission(){return globalThis[Symbol.for('openbooks.user-control-integration')].authz}`);
   }

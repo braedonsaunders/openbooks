@@ -2551,6 +2551,18 @@
         "title": "Asset Categories",
         "description": "Default depreciation method and accounts for fixed assets."
       },
+      "nonprofit-frameworks": {
+        "title": "Restriction Framework",
+        "description": "Reporting basis for fund accounting (e.g. US ASC 958)."
+      },
+      "fund-pairs": {
+        "title": "Interfund Pairs",
+        "description": "Due-to/due-from settlement accounts between two funds."
+      },
+      "functional-mappings": {
+        "title": "Functional Mappings",
+        "description": "Effective-dated classification of department and project expenses."
+      },
       "depreciation-methods": {
         "title": "Depreciation Methods",
         "description": "Author custom depreciation formulas — the formula builder."
@@ -3015,6 +3027,7 @@
       "targetLocationId": "Target location",
       "capacityQuantity": "Capacity",
       "services": "Services",
+      "setAt": "Set on",
       "trackingUrlTemplate": "Tracking link template",
       "accountId": "Account",
       "code": "Code",
@@ -3099,6 +3112,7 @@
       "vacationable": "Counts toward vacation pay",
       "nonPeriodic": "Non-periodic (bonus method)",
       "programExclusions": "Program exclusions",
+      "programKey": "Program",
       "supplementalWageCategory": "Supplemental wage category",
       "statutoryReportingCategory": "Statutory reporting category",
       "statutoryExemptionCategory": "Statutory exemption category",
@@ -3135,6 +3149,7 @@
       "baseCurrency": "Base currency",
       "isElimination": "Elimination",
       "fromSubsidiaryId": "From subsidiary",
+      "function": "Function",
       "toSubsidiaryId": "To subsidiary",
       "dueFromAccountId": "Due-from account",
       "dueToAccountId": "Due-to account",
@@ -3156,7 +3171,9 @@
       "fairValueAdjustmentAccountId": "Fair-value adjustment account",
       "asOf": "As of",
       "fromCurrency": "From currency",
+      "fromFundId": "From fund",
       "toCurrency": "To currency",
+      "toFundId": "To fund",
       "rateType": "Rate type",
       "source": "Source",
       "periodId": "Accounting period",
@@ -3377,6 +3394,7 @@
       "requiresEvidence": "Requires evidence",
       "extraCategories": "Extra categories",
       "frameworkId": "Framework",
+      "framework": "Framework",
       "categoryKey": "Category",
       "retainYears": "Retain (years)",
       "fromEvent": "Clock starts",

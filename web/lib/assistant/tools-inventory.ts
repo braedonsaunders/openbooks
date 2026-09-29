@@ -324,8 +324,8 @@ const resolveScanValue: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["items.read"] },
   feature: "barcodeScanning",
   inputSchema: z.object({
-    field: z.enum(["item", "bin", "lot", "serial"]),
-    value: z.string().max(200),
+    field: z.enum(["item", "bin", "lot", "serial"]).describe("Which identifier the scan value is: item, bin, lot, or serial"),
+    value: z.string().max(200).describe("The exact scanned value to resolve"),
     customerId: uuidInput.optional(),
     itemId: uuidInput.optional(),
   }),

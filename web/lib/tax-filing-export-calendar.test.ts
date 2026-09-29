@@ -97,13 +97,14 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['../../../../../../lib/report-pdf', mockUrl('report-pdf')],
 ])
 
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
       return {
@@ -126,7 +127,6 @@ const hooks = registerHooks({
 
 const filingExportUrl = '../app/api/tax/filings/[id]/export/route.ts?filing-export-stamp'
 const { GET } = (await import(filingExportUrl)) as typeof import('../app/api/tax/filings/[id]/export/route.ts')
-hooks.deregister()
 
 const get = (format: string) =>
   GET(new Request(`http://openbooks.test/api/tax/filings/${randomUUID()}/export?format=${format}`), {

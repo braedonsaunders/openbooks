@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 /**
  * Pay-run adjustment boundary: every adjustment mutation runs through the
@@ -103,7 +103,9 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/feature-gates', mockUrl('feature-gates')],
+  ['@/lib/feature-gates', mockUrl('feature-gates')],
   ['../../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['@openbooks/engine/src/payroll/run-adjustments.ts', mockUrl('run-adjustments')],
 ])
@@ -125,7 +127,7 @@ const hooks = registerHooks({
 
 const adjustRouteUrl = '../app/api/payroll/runs/[id]/route.ts?payrun-adjustment-route'
 const { POST } = (await import(adjustRouteUrl)) as typeof import('../app/api/payroll/runs/[id]/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function post(body: unknown, headers: Record<string, string> = {}): Promise<Response> {
   return POST(
@@ -220,11 +222,7 @@ test('the idempotency key travels in the header, never a body field', async () =
   assert.equal(viaHeader.mutation.idempotencyKey, KEY_ONE)
 
   adjustState.mutations = []
-  await post({ ...addBody(), idempotencyKey: KEY_TWO })
-  const viaBody = adjustState.mutations.at(-1) as { mutation: { idempotencyKey?: string } }
-  assert.equal(
-    viaBody.mutation.idempotencyKey,
-    undefined,
-    'a body idempotencyKey field must not reach the engine — the header carries it',
-  )
+  const bodyOnly = await post({ ...addBody(), idempotencyKey: KEY_TWO })
+  assert.equal(bodyOnly.status, 422)
+  assert.deepEqual(adjustState.mutations, [], 'a body idempotencyKey must never dispatch an adjustment')
 })
