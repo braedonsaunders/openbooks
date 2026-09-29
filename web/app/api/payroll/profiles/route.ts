@@ -65,9 +65,9 @@ const profileUuid = (field: string) => z.preprocess(
     .nullable()
     .optional(),
 )
-const optionalProfileMoney = (field: string) => z.string({
-  error: `${field} must be an exact decimal string; JSON numbers are refused`,
-}).nullable().optional()
+// The domain's decimalNullRefusal names the precise cause and remedy for
+// malformed money; preserve the raw value until that checked boundary.
+const optionalProfileMoney = z.unknown().nullable().optional()
 const profileBodySchema = z.strictObject({
   employeePartyId: z.string({ error: 'employeePartyId must be a UUID; select an active employee in this organization' })
     .uuid({ error: 'employeePartyId must be a UUID; select an active employee in this organization' }),
@@ -85,17 +85,17 @@ const profileBodySchema = z.strictObject({
     (value) => value === '' ? null : value,
     z.enum(PAYMENT_METHOD_OPTIONS, { error: 'paymentMethod must be eft or cheque' }).nullable().optional(),
   ),
-  federalClaimAmount: optionalProfileMoney('federalClaimAmount'),
-  provincialClaimAmount: optionalProfileMoney('provincialClaimAmount'),
-  additionalTaxPerPeriod: optionalProfileMoney('additionalTaxPerPeriod'),
-  prescribedZoneDeduction: optionalProfileMoney('prescribedZoneDeduction'),
-  authorizedAnnualDeductions: optionalProfileMoney('authorizedAnnualDeductions'),
-  authorizedFederalCredits: optionalProfileMoney('authorizedFederalCredits'),
-  authorizedProvincialCredits: optionalProfileMoney('authorizedProvincialCredits'),
-  dependentCredits: optionalProfileMoney('dependentCredits'),
-  otherIncomeAnnual: optionalProfileMoney('otherIncomeAnnual'),
-  deductionsAnnual: optionalProfileMoney('deductionsAnnual'),
-  vacationPercent: optionalProfileMoney('vacationPercent'),
+  federalClaimAmount: optionalProfileMoney,
+  provincialClaimAmount: optionalProfileMoney,
+  additionalTaxPerPeriod: optionalProfileMoney,
+  prescribedZoneDeduction: optionalProfileMoney,
+  authorizedAnnualDeductions: optionalProfileMoney,
+  authorizedFederalCredits: optionalProfileMoney,
+  authorizedProvincialCredits: optionalProfileMoney,
+  dependentCredits: optionalProfileMoney,
+  otherIncomeAnnual: optionalProfileMoney,
+  deductionsAnnual: optionalProfileMoney,
+  vacationPercent: optionalProfileMoney,
   federalClaimCode: optionalCount,
   provincialClaimCode: optionalCount,
   w4Allowances: optionalCount,

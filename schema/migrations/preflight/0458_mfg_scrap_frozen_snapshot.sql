@@ -109,4 +109,8 @@ SELECT '0458.snapshot_domain_check_unknown' AS code,
     WHERE n.nspname = 'public'
       AND t.relname = 'financial_changes'
       AND c.contype = 'c'
-      AND pg_get_constraintdef(c.oid) LIKE '%lease%revenue%asset%consolidation%');
+      AND pg_get_constraintdef(c.oid) LIKE '%lease%revenue%asset%consolidation%')
+   -- This relation is created by an earlier migration on a fresh upgrade.
+   -- Refer to it directly so the bootstrap defers this preflight until that
+   -- migration has run, then verifies the domain check before applying 0458.
+   AND (SELECT count(*) FROM (SELECT 1 FROM public.financial_changes LIMIT 0) AS prerequisite) = 0;

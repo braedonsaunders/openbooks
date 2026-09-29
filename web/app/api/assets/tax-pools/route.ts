@@ -85,6 +85,7 @@ export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",
   body: postBodySchema0,
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const body = routeBody;
     const availableRegimes = await listTaxRegimes(gate.user.orgId);

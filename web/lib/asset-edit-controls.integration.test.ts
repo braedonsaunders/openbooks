@@ -25,7 +25,8 @@ async function seedAsset(org: ScratchOrg) {
 const state: { gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null };
 Object.assign(globalThis, { __assetEditControls: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier.endsWith('/lib/feature-gates') && context.parentURL?.includes('/api/assets/')) {
+  if (specifier.endsWith('/lib/feature-gates') &&
+      (context.parentURL?.includes('/api/assets/') || context.parentURL?.includes('/lib/api/route'))) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetEditControls.gate}' };
   }
   return next(specifier, context);

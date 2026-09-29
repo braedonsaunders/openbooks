@@ -18,7 +18,8 @@ Object.assign(globalThis, { __expenseActionsPostAtomicState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz') return virtual(`
+    if (specifier === '../../../../lib/authz' ||
+        (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function getAuthz() {
         const s = globalThis.__expenseActionsPostAtomicState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: ['expenses.create', 'ap.post'], allowedSubsidiaryIds: null };

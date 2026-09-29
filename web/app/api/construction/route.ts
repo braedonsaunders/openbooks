@@ -76,7 +76,7 @@ const nonEmptyDescription = z.string().trim().min(1, "description is required");
 const itemNo = z.string().trim().max(80).nullable().optional();
 const sortOrder = z
   .union([
-    z.number().int(),
+    z.number().refine(Number.isInteger, "sortOrder must be a whole number"),
     z.string().regex(/^-?\d+$/, "sortOrder must be a whole number").transform(Number),
   ])
   .refine(
@@ -486,6 +486,7 @@ async function actionProjectScope(
 export const POST = defineRoute({
   public: "session",
   body: postBodySchema0,
+  invalidBodyStatus: 422,
   handler: async ({ authz, body: routeBody }) => {
     // Project/pay-app ids below are pre-validated by actionProjectScope (garbage
     // 404s there), so the `as string` pins at the call sites only restate that.

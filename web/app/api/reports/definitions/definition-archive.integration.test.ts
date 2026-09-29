@@ -24,7 +24,8 @@ registerHooks({
     if (specifier === "@/lib/custom-record-report-catalog") {
       return nextResolve(root + "web/lib/custom-record-report-catalog.ts", context);
     }
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/")) {
+    if (specifier.endsWith("/lib/authz") && (context.parentURL?.includes("/api/reports/") ||
+        (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route')))) {
       return {
         shortCircuit: true,
         url:

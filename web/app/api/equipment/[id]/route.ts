@@ -24,6 +24,7 @@ const requestBodySchema = z.object({
   inServiceOn: z.string().refine(isIsoCalendarDate, 'inServiceOn must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
   name: z.string().trim().max(200).nullable().optional(),
   purchasePrice: exactMoney('purchasePrice must be an exact decimal string with at most four decimal places').optional(),
+  revision: z.number().int().nonnegative().optional(),
   rateBookId: z.string().uuid({ error: 'rateBookId must be a valid rate book id' }).nullable().optional(),
   serialNumber: z.string().trim().max(200).nullable().optional(),
   status: z.enum(['draft', 'active', 'inactive', 'retired'], { error: 'status must be draft, active, inactive, or retired' }).optional(),

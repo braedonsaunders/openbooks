@@ -36,8 +36,9 @@ const hooks = registerHooks({
     // route lives one level deeper than the labor-rate-cards exemplar, so
     // the alias climbs five directories to the web root.
     if (
-      specifier === "../../../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/items/")
+      (specifier === "../../../../../lib/feature-gates" &&
+      context.parentURL?.includes("/api/items/")) ||
+      (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }

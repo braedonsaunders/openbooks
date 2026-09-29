@@ -17,6 +17,8 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts')
 const { PUT } = await import('./route')
+const { loadWeek } = await import('./_lib')
+const { isIsoCalendarDate } = await import('@openbooks/engine/src/platform/business-date.ts')
 
 async function fixture(requireApproval: boolean) {
   const org = await createScratchOrg()
@@ -38,9 +40,13 @@ async function fixture(requireApproval: boolean) {
     values (${org.orgId},${employee},'CAD','30','hour','2026-01-01',true)`)
   await db.execute(sql`update items set default_rate='100' where org_id=${org.orgId} and id=${org.items.service}`)
   const row = { projectId: project, itemId: org.items.service, isBillable: true, hours: ['', '', '', '4', '', '', ''] }
-  const save = (body: object) => withOrgContext(org.orgId, () => PUT(new Request('http://audit.local/api/timesheets', {
-    method: 'PUT', body: JSON.stringify({ employee, week: '2026-07-12', rows: [row], ...body }),
-  })))
+  const save = async (body: { week?: string; expectedRevision?: string; [key: string]: unknown }) => {
+    const week = body.week && isIsoCalendarDate(body.week) ? body.week : '2026-07-12'
+    const expectedRevision = body.expectedRevision ?? (await withOrgContext(org.orgId, () => loadWeek(org.orgId, employee, week))).revision
+    return withOrgContext(org.orgId, () => PUT(new Request('http://audit.local/api/timesheets', {
+      method: 'PUT', body: JSON.stringify({ employee, week: '2026-07-12', rows: [row], expectedRevision, ...body }),
+    })))
+  }
   const snapshot = () => db.execute(sql`select * from time_entries where org_id=${org.orgId} order by id`)
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, actor, employee, project, row, save, snapshot, close }
@@ -144,8 +150,9 @@ test('time cannot be pinned to a party without an active employment', async () =
     assert.equal(refused.status, 422, await refused.clone().text())
     assert.match(((await refused.json()) as { error: string }).error, /Employee not found/)
     // Deactivating the employment closes the pin even though the party stays.
+    const expectedRevision = (await withOrgContext(f.org.orgId, () => loadWeek(f.org.orgId, f.employee, '2026-07-12'))).revision
     await db.execute(sql`update employee_roles set is_active = false where org_id=${f.org.orgId} and party_id=${f.employee}`)
-    const closed = await f.save({})
+    const closed = await f.save({ expectedRevision })
     assert.equal(closed.status, 422, await closed.clone().text())
     assert.match(((await closed.json()) as { error: string }).error, /Employee not found/)
     assert.equal((await f.snapshot()).rows.length, 1, 'refused pins store nothing new')

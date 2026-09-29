@@ -30,6 +30,8 @@ async function addBin(org: ScratchOrg, code: string): Promise<string> {
 
 async function postSale(org: ScratchOrg): Promise<string[]> {
   const documentId = randomUUID()
+  const stockBefore = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)
+  assert.equal(stockBefore.quantity, '3.0000', 'return source fixture has three units before invoice posting')
   await withBypassContext(async () => {
     await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
@@ -49,10 +51,17 @@ async function postSale(org: ScratchOrg): Promise<string[]> {
     assert.equal(approved.rows.length, 1)
   })
   await postDocument(documentId, postingDeps(org))
-  const issues = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+  const stockAfter = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)
+  assert.equal(stockAfter.quantity, '0.0000', 'posting consumed the three shipped units')
+  // postSale runs inside the caller-owned transaction. Read its pending
+  // movement evidence on that same connection before the transaction commits.
+  const issues = (await db.execute<{ id: string }>(sql`
     select m.id from inventory_movements m join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
-     where m.org_id = ${org.orgId} and l.document_id = ${documentId} and m.kind = 'issue' order by l.line_number`))).rows
-  assert.equal(issues.length, 3)
+     where m.org_id = ${org.orgId} and l.document_id = ${documentId} and m.kind = 'issue' order by l.line_number`)).rows
+  const movementEvidence = (await db.execute(sql`
+    select id, kind, document_line_id, quantity::text as quantity from inventory_movements
+    where org_id = ${org.orgId} and item_id = ${org.items.fifo} order by moved_at, id`)).rows
+  assert.equal(issues.length, 3, JSON.stringify({ stockBefore, stockAfter, movementEvidence }))
   return issues.map(({ id }) => id)
 }
 

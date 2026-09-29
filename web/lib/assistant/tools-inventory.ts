@@ -69,7 +69,8 @@ const searchItems: AssistantToolDef = {
         truncated: count > rows.rows.length,
         items: rows.rows.map((r) => ({
           ...(r as Record<string, unknown>),
-          defaultRate: money((r as Record<string, unknown>).defaultRate),
+          defaultRate: (r as Record<string, unknown>).defaultRate === null
+            ? null : money((r as Record<string, unknown>).defaultRate),
         })),
         href: "/items",
       },
@@ -95,9 +96,9 @@ const getItem: AssistantToolDef = {
       ok: true,
       data: {
         ...item,
-        default_rate: money(item.default_rate),
-        default_cost: money(item.default_cost),
-        standalone_selling_price: money(item.standalone_selling_price),
+        default_rate: item.default_rate === null ? null : money(item.default_rate),
+        default_cost: item.default_cost === null ? null : money(item.default_cost),
+        standalone_selling_price: item.standalone_selling_price === null ? null : money(item.standalone_selling_price),
         incomeAccountName: payload.incomeAccountName,
         expenseAccountName: payload.expenseAccountName,
         taxCodeName: payload.taxCodeName,
@@ -237,8 +238,8 @@ const inventoryMovements: AssistantToolDef = {
         rows: rows.map((r) => ({
           ...r,
           quantity: money(r.quantity),
-          unitCost: money(r.unitCost),
-          totalValue: money(r.totalValue),
+          unitCost: r.unitCost === null ? null : money(r.unitCost),
+          totalValue: r.totalValue === null ? null : money(r.totalValue),
         })),
         href: "/inventory",
       },

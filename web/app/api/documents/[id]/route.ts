@@ -23,7 +23,9 @@ import { type DocumentEditCurrent, type DocumentEditInput } from "../../../../..
 import { notFound } from "@/lib/api/responses";
 const jsonObjectSchema = z.record(z.string(), z.json());
 const documentLineSchema = z.object({
-  lineId: z.string().uuid().nullable().optional(), accountId: z.string().uuid(),
+  // An intentionally blank account reaches document-edit's line-numbered
+  // refusal, which names the missing posting prerequisite for the operator.
+  lineId: z.string().uuid().nullable().optional(), accountId: z.union([z.string().uuid(), z.literal('')]),
   amount: z.string(), description: z.string().nullable().optional(),
   taxCodeId: z.string().uuid().nullable().optional(), taxGroupId: z.string().uuid().nullable().optional(),
   taxOverridden: z.boolean().optional(), taxAmount: z.string().nullable().optional(),
@@ -99,6 +101,7 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   public: 'session',
   body: PATCHBodySchema1,
+  invalidBodyStatus: 422,
   handler: async ({ params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = await getAuthz()

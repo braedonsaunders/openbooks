@@ -4,9 +4,10 @@ import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { createServer } from 'node:net'
+import { createConnection, createServer } from 'node:net'
 import test from 'node:test'
 import { testManifest, stopFixtureOwner, literalTestPath } from './test-suite.mjs'
+import { observeFixtureOwnerSocket } from './fixture-owner-transport.mjs'
 
 test('every tracked supported test belongs to exactly one canonical suite', () => {
   const manifest = testManifest()
@@ -50,6 +51,47 @@ test('owner closing without a response rejects instead of abandoning the promise
   try {
     await assert.rejects(stopFixtureOwner({ owner, port: server.address().port, output: '', clearTimeout() {} },
       { timeoutMs: 1000 }), /without a response/)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test('a disconnected worker does not stop the fixture owner serving the next request', async () => {
+  let received = 0
+  const errors = []
+  const server = createServer((socket) => {
+    observeFixtureOwnerSocket(socket, () => {
+      received += 1
+      if (received === 1) {
+        // A peer reset is a transport failure for one worker, not permission
+        // to abort every later tenant lease in this partition.
+        socket.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))
+        socket.destroy()
+      } else {
+        socket.end('{"ok":true}\n')
+      }
+    }, (error) => errors.push(error))
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const first = createConnection({ host: '127.0.0.1', port: server.address().port })
+    await new Promise((resolve, reject) => {
+      first.once('connect', () => first.end('first\n'))
+      first.once('close', resolve)
+      first.once('error', reject)
+    })
+    const second = createConnection({ host: '127.0.0.1', port: server.address().port })
+    const response = await new Promise((resolve, reject) => {
+      let data = ''
+      second.on('data', (chunk) => { data += chunk })
+      second.once('end', () => resolve(data))
+      second.once('error', reject)
+      second.once('connect', () => second.end('second\n'))
+    })
+    assert.deepEqual(JSON.parse(response), { ok: true })
+    assert.equal(errors.length, 1)
+    assert.equal(errors[0].code, 'ECONNRESET')
+    assert.equal(received, 2)
   } finally {
     await new Promise((resolve) => server.close(resolve))
   }

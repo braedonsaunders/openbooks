@@ -15,7 +15,8 @@ import type { SessionUser } from '../../../../lib/auth'
 const session: { user: SessionUser | null; scope: Set<string> | null } = { user: null, scope: null }
 Object.assign(globalThis, { __captureReprocessConfirm: session, __captureEnqueued: [] })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/ap-capture/')) {
+  if ((specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/ap-capture/')) ||
+      (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return {user:globalThis.__captureReprocessConfirm.user,permissions:new Set(["ap.create"]),allowedSubsidiaryIds:globalThis.__captureReprocessConfirm.scope}};export function guardSubsidiaryScope(){return null}' }
   }
   if (specifier === '@openbooks/jobs') {

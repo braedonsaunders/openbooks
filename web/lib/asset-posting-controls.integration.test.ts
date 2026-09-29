@@ -24,7 +24,8 @@ async function seedAsset(org: ScratchOrg) {
 const state: { gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null };
 Object.assign(globalThis, { __assetPostingControls: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier.endsWith('/lib/feature-gates') && context.parentURL?.includes('/api/assets/')) {
+  if (specifier.endsWith('/lib/feature-gates') &&
+      (context.parentURL?.includes('/api/assets/') || context.parentURL?.includes('/lib/api/route'))) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetPostingControls.gate}' };
   }
   return next(specifier, context);
@@ -66,7 +67,9 @@ for (const operation of ['dispose', 'remeasure'] as const) {
         const route = operation === 'dispose' ? dispose : remeasure;
         const response = await route(new Request(`http://audit.local/api/assets/${assetId}/${operation}`, {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({date,writeOff:true,newCarryingValue:'800'}),
+          body:JSON.stringify(operation === 'dispose'
+            ? {date,writeOff:true}
+            : {date,newCarryingValue:'800'}),
         }), {params:Promise.resolve({id:assetId})});
         const body = await response.json();
         if (scenario in dates || scenario === 'outside scope' || scenario === 'empty scope') {
@@ -104,7 +107,9 @@ for (const operation of ['dispose', 'remeasure'] as const) {
       assert.equal((await writer.query('update fixed_assets set subsidiary_id=$1 where id=$2', [outsideId,assetId])).rowCount,1,'concurrent writer must hold the asset row');
       pending = (operation === 'dispose' ? dispose : remeasure)(new Request(`http://audit.local/api/assets/${assetId}/${operation}`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({date:'2026-07-31',writeOff:true,newCarryingValue:'800'}),
+        body:JSON.stringify(operation === 'dispose'
+          ? {date:'2026-07-31',writeOff:true}
+          : {date:'2026-07-31',newCarryingValue:'800'}),
       }), {params:Promise.resolve({id:assetId})});
       void pending.catch(() => {});
       await waitForLockWaiter(writer, { label: 'the asset posting' });

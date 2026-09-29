@@ -9,9 +9,9 @@ import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { BUDGET_KINDS } from '../../../../lib/budgets'
 const POSTBodySchema1 = z.object({
-  bookId: z.string().uuid().optional(), description: z.string().max(2000).optional(),
-  fiscalYear: z.number().int().min(1900).max(9999).optional(), kind: z.enum(['forecast', 'budget']).optional(),
-  name: z.string().max(200).optional(), sourceScenarioId: z.string().uuid().optional(),
+  bookId: z.string({ error: 'invalid_book_id' }).uuid({ error: 'invalid_book_id' }).optional(), description: z.string({ error: 'invalid_description' }).max(2000, { error: 'invalid_description' }).optional(),
+  fiscalYear: z.number({ error: 'invalid_fiscal_year' }).int({ error: 'invalid_fiscal_year' }).min(1900, { error: 'invalid_fiscal_year' }).max(9999, { error: 'invalid_fiscal_year' }).optional(), kind: z.enum(['forecast', 'budget'], { error: 'invalid_kind' }).optional(),
+  name: z.string().max(200).optional(), sourceScenarioId: z.string({ error: 'invalid_source_scenario_id' }).uuid({ error: 'invalid_source_scenario_id' }).optional(),
 }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
@@ -35,6 +35,7 @@ export const POST = defineRoute({
   permission: 'budgets.manage',
   feature: 'budgets',
   body: POSTBodySchema1,
+  invalidBodyStatus: 422,
   handler: async ({ authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const user = gate.user

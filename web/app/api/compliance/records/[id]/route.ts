@@ -14,24 +14,17 @@ import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { notFound } from "@/lib/api/responses";
 
-const requestMoney = (field: string) => z.union([
-  z.string().superRefine((value, ctx) => {
-    const exact = canonicalDecimal(value, 4)
-    if (exact === null || wholeDigits(exact) > 15) {
-      ctx.addIssue({ code: 'custom', message: moneyRefusal(field, value) })
-    }
-  }),
-  z.literal(''),
-  z.null(),
-])
+// Keep numeric text at the JSON boundary; optionalCoverageMoney below owns the
+// precise amount and column-width refusal for a well-formed update command.
+const requestMoney = z.string().nullable()
 const revisionField = z.number().int().safe().min(1, 'revision must be a positive certificate revision')
 const updateRecordFields = {
   issuerName: z.string().trim().max(200).nullable().optional(),
   policyNumber: z.string().trim().max(200).nullable().optional(),
   effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
   expiresOn: z.string().refine(isIsoCalendarDate, 'expiresOn must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
-  coverageAmount: requestMoney('Coverage amount').optional(),
-  aggregateAmount: requestMoney('Aggregate amount').optional(),
+  coverageAmount: requestMoney.optional(),
+  aggregateAmount: requestMoney.optional(),
   coverageCurrency: z.string().regex(/^[A-Z]{3}$/, 'coverageCurrency must be a three-letter ISO currency code').nullable().optional(),
   additionalInsured: z.boolean().nullable().optional(),
   waiverOfSubrogation: z.boolean().nullable().optional(),

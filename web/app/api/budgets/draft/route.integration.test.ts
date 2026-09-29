@@ -10,7 +10,8 @@ Object.assign(globalThis, { __budgetDraftState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../lib/feature-gates' ||
+        (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetDraftState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
@@ -67,6 +68,14 @@ async function post(body: unknown) {
   ))
 }
 
+async function assertFieldRefusal(response: Response, error: string, path: string) {
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), {
+    error,
+    issues: [{ path, message: error }],
+  })
+}
+
 async function copiedLines(scenarioId: string, orgId: string) {
   return (await db.execute<{ subsidiary_id: string; amount: string }>(
     sql`select subsidiary_id, amount::text as amount from budget_lines
@@ -114,8 +123,7 @@ test('draft creation rejects a malformed explicit book id instead of defaulting'
     const before = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     const response = await post({ bookId: 'not-a-uuid', fiscalYear: fy })
-    assert.equal(response.status, 422)
-    assert.deepEqual(await response.json(), { error: 'invalid_book_id' })
+    await assertFieldRefusal(response, 'invalid_book_id', 'bookId')
     const after = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     assert.equal(after, before, 'malformed book input must not create a default-book draft')
@@ -131,8 +139,7 @@ test('draft creation rejects a malformed source scenario id instead of creating 
     const before = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: fy, sourceScenarioId: 'not-a-uuid' })
-    assert.equal(response.status, 422)
-    assert.deepEqual(await response.json(), { error: 'invalid_source_scenario_id' })
+    await assertFieldRefusal(response, 'invalid_source_scenario_id', 'sourceScenarioId')
     const after = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     assert.equal(after, before, 'malformed source input must not create a blank draft')
@@ -148,8 +155,7 @@ test('draft creation rejects a malformed explicit fiscal year instead of default
     const before = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: 'not-a-year' })
-    assert.equal(response.status, 422)
-    assert.deepEqual(await response.json(), { error: 'invalid_fiscal_year' })
+    await assertFieldRefusal(response, 'invalid_fiscal_year', 'fiscalYear')
     const after = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     assert.equal(after, before, 'malformed fiscal-year input must not create a default-year draft')
@@ -166,8 +172,7 @@ test('draft creation rejects an unknown explicit kind instead of defaulting to b
     const before = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: fy, kind: 'not-a-kind' })
-    assert.equal(response.status, 422)
-    assert.deepEqual(await response.json(), { error: 'invalid_kind' })
+    await assertFieldRefusal(response, 'invalid_kind', 'kind')
     const after = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     assert.equal(after, before, 'unknown kind input must not create a budget draft')
@@ -203,8 +208,7 @@ test('draft creation refuses a non-string description instead of coercing it', a
     const before = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: fy, description: 42 })
-    assert.equal(response.status, 422)
-    assert.deepEqual(await response.json(), { error: 'invalid_description' })
+    await assertFieldRefusal(response, 'invalid_description', 'description')
     const after = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
     assert.equal(after, before, 'malformed description input must not create a draft')

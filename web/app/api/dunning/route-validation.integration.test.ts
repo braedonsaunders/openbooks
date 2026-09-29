@@ -13,7 +13,8 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningValidationUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/")) {
+    if (specifier.endsWith("/lib/authz") && (context.parentURL?.includes("/api/dunning/") ||
+        (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route')))) {
       return {
         shortCircuit: true,
         url:
