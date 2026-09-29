@@ -178,7 +178,7 @@ export const PATCH = defineRoute({
     const { user } = gate
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     const current = (await db.execute<{ id: string; lifecycle_stage: string; owner_user_id: string | null; territory_id: string | null; revision: string }>(sql`

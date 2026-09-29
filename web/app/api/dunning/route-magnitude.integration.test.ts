@@ -14,7 +14,8 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningMagnitudeUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/")) {
+    if (specifier.endsWith("/lib/authz") &&
+      (context.parentURL?.includes("/api/dunning/") || context.parentURL?.includes("/web/lib/api/route.ts"))) {
       return {
         shortCircuit: true,
         url:

@@ -266,7 +266,7 @@ export const PATCH = defineRoute({
     if (!isDocumentRevisionToken(expectedUpdatedAt)) {
       return NextResponse.json({ error: 'A current opportunity revision is required; reload the opportunity and try again' }, { status: 409 })
     }
-    const parsedBody = validateJsonBody(rawBody.data, requestBodySchema);
+    const parsedBody = validateJsonBody(rawBody.data, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     let partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)

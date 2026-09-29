@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 const stateKey = Symbol.for('openbooks.folder-route-test')
@@ -22,9 +22,10 @@ const mockAuthz = `
   export function subsidiaryScopeAllows() { return true }
 `
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../../lib/authz' || specifier === '../../../lib/authz') {
+    if (specifier === '../../../../../lib/authz' || specifier === '../../../lib/authz' ||
+      (specifier === '@/lib/authz' && context.parentURL?.includes('/web/lib/api/route.ts'))) {
       return { shortCircuit: true, url: 'mock:folder-authz' }
     }
     return nextResolve(specifier, context)
@@ -37,10 +38,9 @@ const hooks = registerHooks({
 
 const routeSpecifier: string = './route.ts?folder-compound-test'
 const { PATCH } = (await import(routeSpecifier)) as typeof import('./route.ts')
-hooks.deregister()
 
 test('compound folder edits validate and audit as one transaction', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   const actorId = randomUUID()
   const targetId = randomUUID()
   const destinationId = randomUUID()
@@ -51,12 +51,15 @@ test('compound folder edits validate and audit as one transaction', async () => 
     allowedSubsidiaryIds: null,
   }
   try {
-    await db.execute(sql`
+    const folders = await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into folders (id, org_id, parent_folder_id, name, is_system)
       values (${targetId}, ${org.orgId}, null, 'Attachments', true),
              (${destinationId}, ${org.orgId}, null, 'Destination', false),
              (${movableId}, ${org.orgId}, null, 'Movable', false)
-    `)
+      returning id
+    `))
+    assert.deepEqual(new Set(folders.rows.map((row) => row.id)), new Set([targetId, destinationId, movableId]),
+      'the three folder fixtures must be created before testing compound edits')
 
     const response = await PATCH(
       new Request('http://openbooks.test/api/file-cabinet/folders/x', {
@@ -101,14 +104,20 @@ test('compound folder edits validate and audit as one transaction', async () => 
     // An explicit move to the cabinet root publishes to every documents.read
     // user: a Manager grant on the folder alone must not allow it.
     const scopedId = randomUUID()
-    await db.execute(sql`
+    const scopedFolder = await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into folders (id, org_id, parent_folder_id, name, is_system)
       values (${scopedId}, ${org.orgId}, ${destinationId}, 'Scoped child', false)
-    `)
-    await db.execute(sql`
+      returning id
+    `))
+    assert.equal(scopedFolder.rows.length, 1, 'the scoped child folder must exist before testing root-move refusal')
+    assert.equal(scopedFolder.rows[0]?.id, scopedId)
+    const folderGrant = await withBypassContext(() => db.execute<{ resource_id: string }>(sql`
       insert into resource_grants (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
       values (${org.orgId}, 'folder', ${scopedId}, 'user', ${actorId}, 'manager', ${actorId})
-    `)
+      returning resource_id
+    `))
+    assert.equal(folderGrant.rows.length, 1, 'the manager grant must exist before testing root-move refusal')
+    assert.equal(folderGrant.rows[0]?.resource_id, scopedId)
     state.authz = {
       user: { id: actorId, orgId: org.orgId },
       permissions: new Set(['documents.read']),

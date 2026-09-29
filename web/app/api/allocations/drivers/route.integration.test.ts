@@ -26,6 +26,7 @@ const routeState: RouteState = { authz: null, NextResponse: null };
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.alloc-drivers-route-test')]
   const { NextResponse } = state
+  export async function getAuthz() { return state.authz }
   export async function guardPermission(permission) {
     if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     const perms = state.authz.permissions
@@ -42,11 +43,13 @@ const mockAuthz = `
 
 routeState.NextResponse = (await import("next/server")).NextResponse;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts"))
       || (specifier.endsWith("/lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/drivers/"))
+      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+      || (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -66,7 +69,6 @@ const previewUrl = "./preview/route.ts?alloc-drivers";
 const listRoute = (await import(listUrl)) as typeof import("./route.ts");
 const itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
 const previewRoute = (await import(previewUrl)) as typeof import("./preview/route.ts");
-hooks.deregister();
 
 const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

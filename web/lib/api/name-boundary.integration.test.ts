@@ -12,7 +12,8 @@ import { sql, type SQL } from "drizzle-orm";
 // the database are real.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz" || specifier.endsWith("/lib/authz")) {
+    if (specifier === "../../../../lib/authz" || specifier.endsWith("/lib/authz") ||
+      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))) {
       return { shortCircuit: true, url: "mock:name-gate" };
     }
     return nextResolve(specifier, context);
@@ -80,10 +81,16 @@ function call(
   id: string = randomUUID(),
 ): Promise<Response> {
   const handler = handlers.get(file)!;
+  const payload = file === "../../app/api/insights/dashboards/[id]/route.ts"
+    ? { ...(body as Record<string, unknown>), expectedUpdatedAt: "2026-07-15T00:00:00.000000Z" }
+    : file === "../../app/api/labor-rate-cards/[id]/route.ts"
+      ? { ...(body as Record<string, unknown>), code: "BOUNDARY", effective_from: "2026-07-15",
+          status: "draft", derivation_policy: "explicit", scopes: [], lines: [], adjustments: [], terms: [] }
+    : body;
   const req = new Request(`http://openbooks.test/${file}`, {
     method,
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
   const ctx = params ? { params: Promise.resolve({ id }) } : undefined;
   return handler(req, ctx as never);

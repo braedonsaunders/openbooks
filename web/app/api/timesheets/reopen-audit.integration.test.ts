@@ -15,7 +15,8 @@ registerHooks({
   resolve(specifier, context, next) {
     if (
       specifier.endsWith("/lib/feature-gates") &&
-      context.parentURL?.includes("/api/timesheets/reopen/")
+      (context.parentURL?.includes("/api/timesheets/reopen/") ||
+        context.parentURL?.includes("/web/lib/api/route.ts"))
     ) {
       return {
         shortCircuit: true,

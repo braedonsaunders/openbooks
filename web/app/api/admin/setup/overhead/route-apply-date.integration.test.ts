@@ -48,7 +48,8 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead")) {
+    if ((specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);

@@ -19,7 +19,8 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
+    if ((specifier === '../../../../lib/authz' && context.parentURL?.includes('/api/records/')) ||
+      (specifier === '@/lib/authz' && context.parentURL?.includes('/web/lib/api/route.ts'))) {
       return { url: 'mock:record-type-count-scope-authz', shortCircuit: true }
     }
     if (context.parentURL?.startsWith('mock:') && (specifier.startsWith('@openbooks/') || specifier === 'next/server')) {
