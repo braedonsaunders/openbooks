@@ -1,8 +1,8 @@
 name: test
 
-# All tests remain release gates. Units, isolated database partitions, browser tests,
-# and the accounting simulation run independently. Coverage instrumentation is
-# manual so per-push latency measures tests rather than tracing overhead.
+# Routine updates run static checks. Comprehensive unit, database, browser,
+# and accounting simulation tests run independently on manual dispatch.
+# The publisher owns the focused financial release checks.
 
 on:
   push:
