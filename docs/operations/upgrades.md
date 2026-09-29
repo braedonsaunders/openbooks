@@ -117,14 +117,14 @@ the workflow with `full_matrix=true`.
 Start it on the exact release-candidate commit:
 
 ```bash
-git push origin "${SHA}:refs/heads/upgrade-rehearsal/${SHA:0:9}"
+gh workflow run upgrade-rehearsal.yml --ref main
 ```
 
 `publish-container.yml` refuses a `v*` tag whose commit has no successful
 `upgrade-verification` job. Comprehensive unit, database, simulation, and
 browser suites remain available through a manual `test.yml` dispatch; they
 are not rerun for each push or required before the focused release checks.
-Delete the rehearsal branch once the release is out.
+The candidate must be on `main` before dispatch; no rehearsal branch is needed.
 
 Each cell of the matrix is one (source release, dataset) pair, as planned by
 `scripts/upgrade-rehearsal/plan.mjs` from `scripts/upgrade-rehearsal/rehearsal.json`.
