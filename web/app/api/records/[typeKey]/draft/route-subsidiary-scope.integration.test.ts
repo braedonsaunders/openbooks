@@ -22,6 +22,12 @@ registerHooks({
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:custom-record-draft-scope-authz', shortCircuit: true }
     }
+    // The route factory authenticates through the `@/lib/authz` alias, which
+    // the relative-only condition above never matches: without this edge the
+    // factory loads the real cookie session instead of the test session.
+    if (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route')) {
+      return { url: 'mock:custom-record-draft-scope-authz', shortCircuit: true }
+    }
     if (context.parentURL?.startsWith('mock:') && (specifier.startsWith('@openbooks/') || specifier === 'next/server')) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url })
     }

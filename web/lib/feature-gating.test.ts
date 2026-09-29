@@ -4,6 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import pg from 'pg'
+import { NextResponse } from 'next/server'
 import { stubModules } from '../testing/stub-modules.ts'
 
 // The three production surfaces under test import the real authz layer (cookie
@@ -15,6 +16,11 @@ stubModules({ navigation: {}, intl: false, authz: false, features: false });
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', format: 'module', shortCircuit: true }
+    // The project routes declare permission plus a feature key, so the route
+    // factory lazily imports `@/lib/feature-gates` at request time from its
+    // own module URL. Serve the same scratch-org session there, keeping the
+    // real feature-state check so disable/enable refusals still behave.
+    if (specifier === '@/lib/feature-gates') return { url: 'mock:feature-gates', format: 'module', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
@@ -34,6 +40,23 @@ registerHooks({
           }
           export function subsidiariesInScope(authz, ids) {
             return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
+          }
+        `,
+      }
+    }
+    if (url === 'mock:feature-gates') {
+      return {
+        format: 'module',
+        shortCircuit: true,
+        source: `
+          const gate = globalThis[Symbol.for('openbooks.feature-gating-gate')]
+          const state = globalThis[Symbol.for('openbooks.feature-gating-test')]
+          export async function guardFeaturePermission(permission, featureKey) {
+            const authz = { user: { id: state.userId, orgId: state.orgId }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
+            if (!(await gate.isFeatureEnabled(authz.user.orgId, featureKey))) {
+              return gate.NextResponse.json({ error: 'not_found' }, { status: 404 })
+            }
+            return authz
           }
         `,
       }
@@ -155,6 +178,9 @@ const featureGateLockKey = (orgId: string): string => `openbooks:feature-gate:${
 const { db, env } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { isFeatureEnabled } = await import('./features.ts')
+// The factory gate double above answers at request time; hand it the real
+// responder and the real feature check before any route is imported.
+;(globalThis as Record<symbol, unknown>)[Symbol.for('openbooks.feature-gating-gate')] = { NextResponse, isFeatureEnabled }
 const { PUT: putFeaturesRoute } = await import('../app/api/admin/setup/features/route.ts') as {
   PUT: (req: Request) => Promise<Response>
 }
@@ -243,7 +269,7 @@ test('serial order disable-then-activate: the disable applies, the stale-guard a
   try {
     const created = await createProject()
     assert.equal(created.status, 201)
-    const projectId = ((await created.json()) as { id: string }).id
+    const projectId = ((await created.json()) as { project: { id: string } }).project.id
 
     const disable = await putFeatures(DISABLE_PROJECTS)
     assert.equal(disable.status, 200, 'a disable with no blocker must succeed')
@@ -270,7 +296,7 @@ test('serial order activate-then-disable: the activation applies, the disable is
   try {
     const created = await createProject()
     assert.equal(created.status, 201)
-    const projectId = ((await created.json()) as { id: string }).id
+    const projectId = ((await created.json()) as { project: { id: string } }).project.id
 
     // Park the activation behind the fence, then release it: the activation
     // lands whole while the feature is still on (the allow side).
@@ -333,7 +359,7 @@ test('project creation joins the fence: it queues behind a held feature-gate loc
     await waitForInterleaving('project creation to finish after release', async () => creation.settled)
     const response = creation.value as Response
     assert.equal(response.status, 201)
-    const row = await projectRow(((await response.json()) as { id: string }).id)
+    const row = await projectRow(((await response.json()) as { project: { id: string } }).project.id)
     assert.equal(row.is_active, false, 'the requested initial state is inactive')
     assert.equal(row.name, 'Feature gate test project')
   } finally {
@@ -347,7 +373,7 @@ test('adversarial interleave: a disable parked mid-flight and an activation land
   let holder: pg.Client | undefined
   try {
     const created = await createProject()
-    const projectId = ((await created.json()) as { id: string }).id
+    const projectId = ((await created.json()) as { project: { id: string } }).project.id
 
     // Hold BOTH serialization points the two generations of this code use:
     // the feature-gate fence (post-fix) and the orgs row the toggle updates

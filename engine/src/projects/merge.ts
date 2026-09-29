@@ -65,8 +65,10 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["journal_lines", "project_id"],
   ["document_lines", "project_id"],
   ["documents", "project_id"],
+  ["encumbrances", "project_id"],
   ["fixed_assets", "project_id"],
   ["budget_lines", "project_id"],
+  ["functional_mappings", "project_id"],
   ["project_tasks", "project_id"],
   ["time_entries", "project_id"],
   ["billing_requests", "project_id"],
@@ -455,6 +457,23 @@ async function planMerge(
      where d.org_id = ${orgId} and d.project_id = ${duplicateId}`)).rows[0]?.n;
   if (budgetCollision !== "0") {
     throw new ProjectMergeError("both projects hold the same budget cell; reconcile budgets first");
+  }
+  const functionalCollision = (await runner.execute<{ duplicate_period: string; survivor_period: string }>(sql`
+    select daterange(d.effective_from, d.effective_to, '[]')::text as duplicate_period,
+           daterange(s.effective_from, s.effective_to, '[]')::text as survivor_period
+      from functional_mappings d
+      join functional_mappings s on s.org_id = d.org_id
+       and s.project_id = ${survivorId}
+       and daterange(d.effective_from, d.effective_to, '[]') &&
+           daterange(s.effective_from, s.effective_to, '[]')
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+     limit 5`)).rows;
+  if (functionalCollision.length > 0) {
+    throw new ProjectMergeError(
+      `both projects have functional mappings for overlapping effective periods `
+      + `(${functionalCollision.map((row) => `${row.duplicate_period} and ${row.survivor_period}`).join("; ")}); `
+      + "reconcile the project mappings in Nonprofit Setup before merging",
+    );
   }
   const retroCollision = (await runner.execute<{ n: string }>(sql`
     select count(*)::text as n

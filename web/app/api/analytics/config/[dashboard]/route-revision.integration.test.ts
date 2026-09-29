@@ -35,9 +35,10 @@ const mockFeatures = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../../../lib/authz" &&
-      (context.parentURL?.includes("analytics/config/[dashboard]/route") === true ||
-        context.parentURL?.includes("analytics/config/%5Bdashboard%5D/route") === true)
+      (specifier === "../../../../../lib/authz" &&
+        (context.parentURL?.includes("analytics/config/[dashboard]/route") === true ||
+          context.parentURL?.includes("analytics/config/%5Bdashboard%5D/route") === true)) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route") === true)
     ) {
       return { url: "mock:analytics-config-authz", shortCircuit: true };
     }
@@ -63,7 +64,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?analytics-config-revision-integration";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
@@ -324,3 +324,6 @@ test(
     });
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

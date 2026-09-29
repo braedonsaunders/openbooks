@@ -23,6 +23,15 @@ registerHooks({
           return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
         }
       `);
+    // The route factory resolves the feature gate by @/ alias at request
+    // time; serve it the same intended session as the permission gate.
+    if (specifier === "@/lib/feature-gates")
+      return virtual(`
+        export async function guardFeaturePermission() {
+          const s = globalThis.__rateCardWidthState;
+          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+        }
+      `);
     if (specifier.endsWith("/lib/projects-gate")) return virtual("export async function guardProjectsFeature() { return null }");
     return next(specifier, context);
   },

@@ -20,7 +20,9 @@ import { notFound } from "@/lib/api/responses";
 const requestBodySchema = z.object({
   "allowedRoles": z.array(z.string().min(1).max(100)).max(50).nullable().optional(),
   "description": z.string().optional(),
-  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken),
+  // An omitted token reaches the named reload refusal below; a supplied
+  // token must still have the exact wire shape the reader returned.
+  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken).optional(),
   "fields": z.array(formSectionSchema).max(100).optional(),
   "iconKey": z.string().optional(),
   "key": z.string().optional(),
@@ -28,7 +30,7 @@ const requestBodySchema = z.object({
   "pluralName": z.string().optional(),
   "showInNav": z.boolean().optional(),
   "sortOrder": z.number().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 

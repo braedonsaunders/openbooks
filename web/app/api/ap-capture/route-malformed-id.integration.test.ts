@@ -12,7 +12,10 @@ const state = { user: { orgId: randomUUID(), id: randomUUID() } };
 Object.assign(globalThis, { __apCaptureRouteUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/ap-capture/")) {
+    // The route factory imports the gate by @/ alias at request time, from
+    // web/lib/api/route.ts rather than the route directory; serve it the
+    // same intended session as the route's own import.
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/ap-capture/"))) {
       return {
         shortCircuit: true,
         url:

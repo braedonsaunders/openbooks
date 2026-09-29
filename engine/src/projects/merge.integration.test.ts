@@ -33,10 +33,17 @@ const routeAuthz = `
     return Response.json({ error: 'out of scope' }, { status: 404 })
   }
 `;
+const routeFeatureGate = `
+  const state = globalThis[Symbol.for('openbooks.project-merge-route-test')]
+  export async function guardFeaturePermission() { return state.gate }
+`;
 const routeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier === "@/lib/feature-gates") {
+      return { shortCircuit: true, format: "module", url: "mock:project-merge-feature-gates" };
     }
     if (specifier.startsWith("@/") && context.parentURL?.includes("/web/app/api/projects/merge/")) {
       return nextResolve(
@@ -56,6 +63,9 @@ const routeHooks = registerHooks({
     if (url === "mock:project-merge-authz") {
       return { shortCircuit: true, format: "module", source: routeAuthz };
     }
+    if (url === "mock:project-merge-feature-gates") {
+      return { shortCircuit: true, format: "module", source: routeFeatureGate };
+    }
     return nextLoad(url, _context);
   },
 });
@@ -63,7 +73,9 @@ const mergeRouteUrl = new URL("../../../web/app/api/projects/merge/route.ts", im
 const { POST: postMergeRoute } = await import(
   `${mergeRouteUrl.href}?project-merge-route-test`
 ) as typeof import("../../../web/app/api/projects/merge/route.ts");
-routeHooks.deregister();
+// The factory resolves its session gate lazily at request time, so the hooks
+// stay registered until the file's tests have all run.
+test.after(() => routeHooks.deregister());
 
 async function seedProject(
   orgId: string,
@@ -114,6 +126,7 @@ async function seedReferences(
   projectId: string,
   tag: string,
   actorId: string,
+  accountId: string,
 ): Promise<void> {
   const employee = randomUUID();
   await db.execute(sql`
@@ -140,6 +153,20 @@ async function seedReferences(
   await db.execute(sql`
     insert into sov_lines (org_id, project_id, description)
     values (${orgId}, ${projectId}, ${`SOV ${tag}`})`);
+  const encumbrance = await db.execute<{ id: string }>(sql`
+    insert into encumbrances
+      (org_id, encumbrance_number, source_kind, account_id, subsidiary_id,
+       project_id, amount, created_by, updated_by)
+    values (${orgId}, ${`ENC-${tag}`}, 'manual', ${accountId}, ${subsidiaryId},
+            ${projectId}, '10.0000', ${actorId}, ${actorId})
+    returning id`);
+  assert.equal(encumbrance.rows.length, 1, "project-merge fixture must establish its commitment");
+  const mapping = await db.execute<{ id: string }>(sql`
+    insert into functional_mappings
+      (org_id, project_id, function, effective_from, created_by, updated_by)
+    values (${orgId}, ${projectId}, 'management_general', '2026-01-01', ${actorId}, ${actorId})
+    returning id`);
+  assert.equal(mapping.rows.length, 1, "project-merge fixture must establish its effective-dated mapping");
 }
 
 test("duplicate projects merge every reference and deactivate with a pointer", { skip: !DB }, async () => {
@@ -155,7 +182,7 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-1", "Same job", {
       nsId: "100",
     });
-    await seedReferences(org.orgId, org.subsidiaryId, duplicate, "DUP", actor);
+    await seedReferences(org.orgId, org.subsidiaryId, duplicate, "DUP", actor, org.accounts.ap);
     // A project custom reference pointing at the duplicate follows the merge.
     await db.execute(sql`
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
@@ -176,12 +203,14 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     assert.equal(moved.get("time_entries"), 1);
     assert.equal(moved.get("change_orders"), 1);
     assert.equal(moved.get("sov_lines"), 1);
+    assert.equal(moved.get("encumbrances"), 1);
+    assert.equal(moved.get("functional_mappings"), 1);
     assert.equal(preview.customRefs.length, 1);
 
     const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
     assert.equal(result.alreadyMerged, false);
     assert.ok(result.auditId);
-    for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines"]) {
+    for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines", "encumbrances", "functional_mappings"]) {
       const left = await db.execute<{ n: string }>(sql`
         select count(*)::text as n from ${sql.identifier(table)}
          where org_id = ${org.orgId} and project_id = ${duplicate}`);
@@ -211,6 +240,47 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     assert.equal(again.auditId, null);
     const after = await findDuplicateProjects(org.orgId);
     assert.ok(!after.some((group) => group.projects.some((p) => p.id === duplicate)));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("project merge refuses overlapping functional mapping periods before moving either project", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "MAP-1", "Surviving project");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "MAP-2", "Duplicate project");
+    const mappings = await db.execute<{ project_id: string }>(sql`
+      insert into functional_mappings
+        (org_id, project_id, function, effective_from, effective_to, created_by, updated_by)
+      values
+        (${org.orgId}, ${survivor}, 'program', '2026-01-01', '2026-06-30', ${actorId}, ${actorId}),
+        (${org.orgId}, ${duplicate}, 'fundraising', '2026-06-01', '2026-12-31', ${actorId}, ${actorId})
+      returning project_id`);
+    assert.equal(mappings.rows.length, 2, "overlapping project mappings must both exist before merge");
+
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId }),
+      (error: unknown) => {
+        assert.ok(error instanceof ProjectMergeError);
+        assert.match(error.message, /functional mappings.*overlapping effective periods/);
+        assert.match(error.message, /2026-06-01/);
+        assert.match(error.message, /2026-01-01/);
+        assert.match(error.message, /Nonprofit Setup/);
+        return true;
+      },
+    );
+    const unchanged = (await db.execute<{ project_id: string }>(sql`
+      select project_id from functional_mappings
+       where org_id = ${org.orgId} and project_id in (${survivor}, ${duplicate})
+       order by project_id`)).rows.map((row) => row.project_id);
+    assert.deepEqual(unchanged, [duplicate, survivor].sort(), "a refused merge cannot rewrite either mapping");
+    const projects = (await db.execute<{ id: string; is_active: boolean }>(sql`
+      select id, is_active from projects
+       where org_id = ${org.orgId} and id in (${survivor}, ${duplicate})`)).rows;
+    assert.equal(projects.length, 2);
+    assert.ok(projects.every((row) => row.is_active), "a refused merge cannot deactivate either project");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -933,4 +1003,3 @@ test("project merge covers every catalog project_id column or excludes it by rev
     await dropScratchOrg(org.orgId);
   }
 });
-

@@ -32,9 +32,13 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // load under the plain runner (same seam as platform.test.ts).
-    // Forward Next.js-style aliases to the real modules they point at.
+    // Only the session is stubbed: the route reads it from the factory's
+    // context, and the factory authenticates string-feature routes inside
+    // the real feature gate, which reads its session from `./authz`.
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("labor-rate-cards")) {
+      return { url: "mock:authz", shortCircuit: true };
+    }
+    if (specifier === "./authz" && (context.parentURL ?? "").includes("web/lib/feature-gates.ts")) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);

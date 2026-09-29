@@ -14,14 +14,26 @@ import { documentRevisionCounterSql } from "../../../../../engine/src/records/re
 import { type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { notFound } from "@/lib/api/responses";
-const DELETEBodySchema1 = z.object({ expectedUpdatedAt: z.string().min(1) });
+const DELETEBodySchema1 = z.object({
+  // An omitted token reaches the named revision refusal below; a supplied
+  // token must still be a non-empty string.
+  expectedUpdatedAt: z.string().min(1).optional(),
+});
 
 const nullableId = z.string().uuid().nullable();
 const PATCHBodySchema1 = z.object({
-  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // The boundary admits the full edit shape and refuses only wrong types;
+  // every domain rule (including a malformed documentDate) belongs to
+  // prepareExpenseEdit, which refuses by name with the line number. A
+  // narrower schema silently drops submitted lines and custom values while
+  // still answering 200.
+  documentDate: z.string().optional(),
   expectedUpdatedAt: z.string().min(1).optional(),
   memo: z.string().nullable().optional(),
   partyId: nullableId.optional(), paymentCardId: nullableId.optional(),
+  extraDims: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.unknown()).optional(),
+  lines: z.array(z.looseObject({})).optional(),
 }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
@@ -70,6 +82,10 @@ export const PATCH = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: PATCHBodySchema1,
+  opaque: {
+    extraDims: "segment dimensions are validated by name in prepareExpenseEdit",
+    custom: "custom values are validated against the live definitions in prepareExpenseEdit",
+  },
   handler: async ({ authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
@@ -204,6 +220,9 @@ export const DELETE = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: DELETEBodySchema1,
+  opaque: {
+    expectedUpdatedAt: "an omitted token reaches the named revision refusal",
+  },
   handler: async ({ authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;

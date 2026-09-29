@@ -26,7 +26,20 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../../lib/authz' || specifier === '../../../lib/authz') {
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time, so the hook must cover that alias
+    // in addition to the route's relative imports.
+    if (
+      specifier === '../../../../../lib/authz' || specifier === '../../../lib/authz'
+    ) {
+      return { shortCircuit: true, url: 'mock:file-patch-authz' }
+    }
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time: a separate branch, one parent
+    // per branch, so the static wiring check keeps reading both edges.
+    if (
+      (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route'))
+    ) {
       return { shortCircuit: true, url: 'mock:file-patch-authz' }
     }
     return nextResolve(specifier, context)
@@ -39,7 +52,9 @@ const hooks = registerHooks({
 
 const routeSpecifier: string = './route.ts?file-patch-test'
 const { PATCH } = (await import(routeSpecifier)) as typeof import('./route.ts')
-hooks.deregister()
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister())
 
 function patchReq(id: string, body: unknown): [Request, { params: Promise<{ id: string }> }] {
   const req = new Request(`https://meta.fixture/api/file-cabinet/files/${id}`, {

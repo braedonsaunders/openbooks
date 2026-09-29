@@ -80,7 +80,6 @@ const { GET: getStubsPdf } = (await import(stubsPdfUrl)) as typeof import("./[id
 const { POST: postChequesPdf } = (await import(chequesPdfUrl)) as typeof import("./[id]/cheques-pdf/route.ts");
 const { GET: getBankFilePanel, POST: postBankFileGenerate } = (await import(bankFileUrl)) as typeof import("./[id]/bank-file/route.ts");
 const { POST: postBankFileRelease } = (await import(bankFileReleaseUrl)) as typeof import("./[id]/bank-file/[fileId]/route.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment } = await import(
@@ -495,3 +494,8 @@ const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecyc
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy feature-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

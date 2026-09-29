@@ -12,6 +12,14 @@ const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
 Object.assign(globalThis, { __taxQuoteMagnitudeState: state })
 const engineRoot = new URL('../../../../../engine/', import.meta.url).href
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+// The test session both the route and the factory authenticate against.
+const sessionSource = `
+  export async function guardPermission() {
+    const s = globalThis.__taxQuoteMagnitudeState;
+    return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowed };
+  }
+`
+const sessionUrl = virtual(sessionSource).url
 registerHooks({
   resolve(specifier, context, next) {
     // Bare @openbooks/engine/* resolves cross-checkout to main; pin the
@@ -20,15 +28,18 @@ registerHooks({
       return next(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context)
     }
     if (specifier === '../../../../lib/authz') return virtual(`
-      export async function guardPermission() {
-        const s = globalThis.__taxQuoteMagnitudeState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowed };
-      }
+      ${sessionSource}
       export function guardUnrestrictedScope(authz) {
         if (authz.allowedSubsidiaryIds === null) return null;
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 });
       }
     `)
+    // The route factory authenticates through the `@/lib/authz` alias, which
+    // the relative-only condition above never matches: without this edge the
+    // factory loads the real cookie session instead of the test session.
+    if (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route')) {
+      return { shortCircuit: true, url: sessionUrl }
+    }
     return next(specifier, context)
   },
 })
@@ -71,7 +82,9 @@ async function quoteCount(): Promise<number> {
 test('POST refuses a taxable amount wider than numeric(19,4) without writing evidence', async () => {
   const { org } = await fixture()
   try {
-    const result = await post({ taxableAmount: '99999999999999999999', currency: 'CAD', shipFrom: {}, shipTo: {} })
+    // The bodies below are provider-quote shaped (addresses, no rate); the
+    // required action label restores the provider path they were written for.
+    const result = await post({ action: 'providerQuote', taxableAmount: '99999999999999999999', currency: 'CAD', shipFrom: {}, shipTo: {} })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.equal(await quoteCount(), 0)
   } finally {
@@ -82,7 +95,7 @@ test('POST refuses a taxable amount wider than numeric(19,4) without writing evi
 test('POST refuses an impossible quotedOn without writing evidence', async () => {
   const { org } = await fixture()
   try {
-    const result = await post({ taxableAmount: '100', currency: 'CAD', shipFrom: {}, shipTo: {}, quotedOn: '2024-02-30' })
+    const result = await post({ action: 'providerQuote', taxableAmount: '100', currency: 'CAD', shipFrom: {}, shipTo: {}, quotedOn: '2024-02-30' })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.equal(await quoteCount(), 0)
   } finally {
@@ -116,7 +129,7 @@ test('PUT by a subsidiary-restricted setup manager is refused with the provider 
 test('POST still quotes a column-maximum amount with identical read-back', async () => {
   const { org } = await fixture()
   try {
-    const result = await post({ taxableAmount: '999999999999999.9999', currency: 'CAD', shipFrom: {}, shipTo: {} })
+    const result = await post({ action: 'providerQuote', taxableAmount: '999999999999999.9999', currency: 'CAD', shipFrom: {}, shipTo: {} })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     const rows = (await db.execute<{ taxable_amount: string; tax_amount: string }>(sql`
       select taxable_amount::text as taxable_amount, tax_amount::text as tax_amount

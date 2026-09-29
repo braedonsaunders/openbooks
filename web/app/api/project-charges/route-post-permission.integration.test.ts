@@ -29,6 +29,10 @@ const mockAuthz = `
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
+  export async function guardFeaturePermission(_permission, _featureKey) {
+    if (!state.authz) return new Response(null, { status: 403 })
+    return state.authz
+  }
   // The permission SETS under test are real data (a projects.manage-only set
   // versus one that also holds gl.post); only the check itself is doubled,
   // with the wildcard semantics the real check applies.
@@ -51,6 +55,15 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:project-charge-post-permission-authz", shortCircuit: true };
     }
+    // The route factory resolves its permission/feature gate lazily through
+    // the @/lib/feature-gates alias at request time, so the hook must serve
+    // the fixture session there too.
+    if (
+      specifier === "@/lib/feature-gates" &&
+      context.parentURL?.includes("/lib/api/route")
+    ) {
+      return { url: "mock:project-charge-post-permission-authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -63,7 +76,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?project-charge-post-permission-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -156,3 +168,8 @@ test("POST with gl.post flows through submission as before", async () => {
     await withBypass(() => dropScratchOrg(fixture.orgId));
   }
 });
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy gate imports run on every request, so the hook must
+// stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

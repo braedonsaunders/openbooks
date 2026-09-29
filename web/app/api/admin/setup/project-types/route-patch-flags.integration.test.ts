@@ -18,7 +18,10 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __projectTypeFlagsUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/setup/project-types/")) {
+    // The route factory imports the gate by @/ alias at request time, from
+    // web/lib/api/route.ts rather than the route directory; serve it the
+    // same intended session as the route's own import.
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/setup/project-types/"))) {
       return {
         shortCircuit: true,
         url:
@@ -67,12 +70,12 @@ test("project-type PATCH refuses non-boolean isActive without writing", async ()
 
     // The string "false" must not activate an archived type with a 200.
     const str = await PATCH(patchJson({ id, billingMethod: "time_and_materials", isActive: "false" }));
-    assert.equal(str.status, 400, JSON.stringify(await str.clone().json()));
+    assert.equal(str.status, 422, JSON.stringify(await str.clone().json()));
     assert.equal((await typeRow(org.orgId, id)).is_active, false);
 
     // The number 0 must not activate it either.
     const zero = await PATCH(patchJson({ id, billingMethod: "time_and_materials", isActive: 0 }));
-    assert.equal(zero.status, 400, JSON.stringify(await zero.clone().json()));
+    assert.equal(zero.status, 422, JSON.stringify(await zero.clone().json()));
     assert.equal((await typeRow(org.orgId, id)).is_active, false);
 
     // Control: a real boolean still writes.
@@ -98,12 +101,12 @@ test("project-type PATCH refuses a non-numeric sortOrder with a field error", as
         'time_and_materials', '{"billingProcedure":"standard","allowedBases":["time_selection"],"defaultBasis":"time_selection"}'::jsonb, '{}'::jsonb)`));
 
     const bad = await PATCH(patchJson({ id, billingMethod: "time_and_materials", sortOrder: "abc" }));
-    assert.equal(bad.status, 400, JSON.stringify(await bad.clone().json()));
+    assert.equal(bad.status, 422, JSON.stringify(await bad.clone().json()));
     assert.match(JSON.stringify(await bad.clone().json()), /sortOrder/i);
     assert.equal((await typeRow(org.orgId, id)).sort_order, 7);
 
     const frac = await PATCH(patchJson({ id, billingMethod: "time_and_materials", sortOrder: 1.5 }));
-    assert.equal(frac.status, 400, JSON.stringify(await frac.clone().json()));
+    assert.equal(frac.status, 422, JSON.stringify(await frac.clone().json()));
     assert.equal((await typeRow(org.orgId, id)).sort_order, 7);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

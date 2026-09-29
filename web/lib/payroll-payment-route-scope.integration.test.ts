@@ -8,8 +8,12 @@ const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-payment-route-scope")] = state;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../../../../../lib/feature-gates" &&
-        decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/runs/[id]/route.ts")) {
+    // The route factory imports the exact alias lazily at request time from
+    // its own module URL, so it never matches the route-file guard.
+    // Match the alias exactly so the factory gate uses this test's session.
+    if (specifier === "@/lib/feature-gates" ||
+        (specifier === "../../../../../lib/feature-gates" &&
+        decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/runs/[id]/route.ts"))) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-payment-route-scope')].gate}",
       ) };

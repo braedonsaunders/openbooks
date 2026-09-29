@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { payRunReadiness, payrollStatutoryRateGaps } from "./readiness.ts";
+import { payRunReadiness } from "./readiness.ts";
 import { CA_PACK_RATES } from "./canada/rates.ts";
 import {
   buildResolution,
@@ -698,12 +698,13 @@ test(
 );
 
 test(
-  "REGRESSION: a single-account org's stored blob resolves to the same numbers it always did",
+  "legacy settings blobs cannot silently determine scoped statutory rates",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     try {
-      // Exactly the shape a tenant configured before scoping existed carries.
+      // A legacy blob has no effective date, filing-account identity, or
+      // statutory-rate audit. It remains stored but cannot answer payroll.
       await db.execute(sql`
         update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
           payroll: {
@@ -714,20 +715,23 @@ test(
         })}::jsonb where id = ${org.orgId}`);
 
       const us = await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026);
-      assert.deepEqual(us.values("us_sui", { region: "MI", filingAccountId: null }), {
-        rate: "0.027", wageBase: "9500",
-      });
-      assert.equal(us.values("us_futa", { region: "MI" })!.rate, "0.006");
+      assert.equal(us.values("us_sui", { region: "MI", filingAccountId: null }), null);
+      assert.equal(us.values("us_futa", { region: "MI" }), null);
       const ca = await resolveStatutoryRates(org.orgId, CA_PACK_RATES, 2026);
-      assert.deepEqual(ca.values("ca_eht", { region: "ON" }), {
-        rate: "1.95", annualExemption: "1000000",
-      });
-      // And the blob is not silently promoted into rows: no migration to audit,
-      // nothing to reconcile, one writable home going forward.
+      assert.equal(ca.values("ca_eht", { region: "ON" }), null);
       assert.deepEqual(await listStatutoryRates(org.orgId), []);
-      // With the blob answering for the region the org pays in, there is no gap
-      // to nag about either.
-      assert.deepEqual(await payrollStatutoryRateGaps(org.orgId, "CA", 2026), []);
+
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const saved = await upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
+        region: "MI", filingAccountId: null, taxYear: 2026,
+        values: { rate: "0.031", wageBase: "9500" },
+      });
+      const configured = await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026);
+      assert.deepEqual(configured.values("us_sui", { region: "MI", filingAccountId: null }), saved.values);
+      assert.notEqual(saved.values.rate, "0.027", "the unaudited blob cannot override the scoped row");
+      assert.equal(configured.values("us_futa", { region: "MI" }), null);
+      assert.deepEqual((await listStatutoryRates(org.orgId)).map((row) => row.id), [saved.id]);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

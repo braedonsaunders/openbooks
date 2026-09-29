@@ -35,6 +35,13 @@ const hooks = registerHooks({
     if (specifier === "../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
+    // The factory authenticates string-feature routes inside the real
+    // feature gate, which reads its session from `./authz`: without this
+    // edge the gate loads the real cookie session instead of the test
+    // session. The gate itself stays real, so feature checks still apply.
+    if (specifier === "./authz" && (context.parentURL ?? "").includes("web/lib/feature-gates.ts")) {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -124,7 +131,14 @@ test(
 
       const changed = await POST(postRequest(key, { name: "Harbourview Renamed" }));
       assert.equal(changed.status, 409);
-      assert.deepEqual(await changed.json(), { error: "invalid_idempotency_key" });
+      // The route raises ProjectCreateConflict, which the factory renders
+      // with its machine-readable code and remedy — the bare invalid-key
+      // shape predates that refusal and no longer exists on this route.
+      assert.deepEqual(await changed.json(), {
+        error: "idempotency_key_conflict",
+        code: "idempotency_key_conflict",
+        remedy: "Close and reopen the project form to retry with a fresh idempotency key.",
+      });
 
       const placeholders = (
         await db.execute<{ n: number }>(sql`

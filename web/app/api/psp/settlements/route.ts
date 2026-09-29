@@ -30,6 +30,7 @@ import {
   isFeatureEnabled,
   subsidiaryFeatureEnabled,
 } from "../../../../lib/features";
+import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 import { exactMoney, isoDate } from "@/lib/api/json";
 const provider = z.enum(["stripe", "recurly", "chargebee"]);
@@ -138,10 +139,13 @@ const postBodySchema0 = z.discriminatedUnion("action", [
     apiKey: z.string().nullable().optional(),
   }),
   importBody,
-  z.strictObject({ action: z.literal("post"), batchId: z.uuid() }),
+  // A malformed batch id is refused as a tenant-opaque 404 by the handler
+  // below; the boundary only enforces the string shape so the id never
+  // reaches a uuid cast that dies as a storage 500.
+  z.strictObject({ action: z.literal("post"), batchId: z.string() }),
   z.strictObject({
     action: z.literal("reverse"),
-    batchId: z.uuid(),
+    batchId: z.string(),
     reversalDate: calendarDateShape,
     reason: z.string().trim().min(1).max(500),
   }),
@@ -298,6 +302,7 @@ export const POST = defineRoute({
           });
         }
         case "post": {
+          if (!isUuid(body.batchId)) return notFound("record");
           const posted = await postSettlementBatch(
             orgId,
             body.batchId,
@@ -307,6 +312,7 @@ export const POST = defineRoute({
           return NextResponse.json(posted);
         }
         case "reverse": {
+          if (!isUuid(body.batchId)) return notFound("record");
           // The reversal looks the date's open period up with ::date
           // comparisons: a non-calendar day would otherwise die in Postgres
           // with a raw driver failure, so require a real calendar date first.

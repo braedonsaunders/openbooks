@@ -40,9 +40,12 @@ registerHooks({
     if (specifier.startsWith("@openbooks/engine/")) {
       return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
     }
+    // The route factory resolves the gate by @/ alias at request time, after
+    // this module's imports; serve it the same intended session.
     if (
-      specifier === "../../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/close/runs/")
+      (specifier === "../../../../lib/feature-gates" &&
+        context.parentURL?.includes("/api/close/runs/")) ||
+      specifier === "@/lib/feature-gates"
     ) {
       return { url: "mock:close-run-date-authz", shortCircuit: true };
     }

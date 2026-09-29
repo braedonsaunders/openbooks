@@ -33,6 +33,12 @@ const hooks = registerHooks({
     if (specifier === "../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time, so the hook covers that alias
+    // in a separate branch: the analyzer reads one parent per branch.
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -45,7 +51,6 @@ const hooks = registerHooks({
 
 const postRouteUrl = "./route.ts?parties-create-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
@@ -119,7 +124,11 @@ test(
         postRequest(key, { displayName: "Acme Renamed", kind: "company" }),
       );
       assert.equal(changed.status, 409);
-      assert.deepEqual(await changed.json(), { error: "invalid_idempotency_key" });
+      assert.deepEqual(await changed.json(), {
+        error: "This idempotency key was already used for a different party create request. Close and reopen the drawer to try again with a fresh request.",
+        code: "idempotency_key_conflict",
+        remedy: "Close and reopen the drawer to try again with a fresh request.",
+      });
 
       // The create path never mints placeholder rows.
       const placeholders = (
@@ -154,7 +163,11 @@ test(
       routeState.authz = { user: { orgId: orgB.orgId, id: adminB }, allowedSubsidiaryIds: null };
       const claimed = await POST(postRequest(key, { displayName: "Acme Corp" }));
       assert.equal(claimed.status, 409);
-      assert.deepEqual(await claimed.json(), { error: "invalid_idempotency_key" });
+      assert.deepEqual(await claimed.json(), {
+        error: "This idempotency key was already used for a different party create request. Close and reopen the drawer to try again with a fresh request.",
+        code: "idempotency_key_conflict",
+        remedy: "Close and reopen the drawer to try again with a fresh request.",
+      });
 
       const leaked = (
         await db.execute<{ n: number }>(sql`
@@ -168,3 +181,8 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

@@ -13,8 +13,13 @@ import { stubModules } from '../testing/stub-modules.ts'
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __viewsAuditState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const viewsAuditAuthz = '\n      export async function guardPermission() {\n        const s = globalThis.__viewsAuditState;\n        return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set([\'reports.create\', \'reports.read\']) };\n      }\n    '
+// The factory reads the same test session through the `@/lib/authz` alias,
+// which the route-relative key above never matches: without the alias key
+// the factory loads the real cookie session instead of the test session.
 stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
-    '../../../../lib/authz': '\n      export async function guardPermission() {\n        const s = globalThis.__viewsAuditState;\n        return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set([\'reports.create\', \'reports.read\']) };\n      }\n    ',
+    '../../../../lib/authz': viewsAuditAuthz,
+    '@/lib/authz': viewsAuditAuthz,
   } });
 
 registerHooks({

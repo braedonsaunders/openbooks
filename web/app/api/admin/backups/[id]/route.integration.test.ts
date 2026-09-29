@@ -16,7 +16,10 @@ const storageStateKey = Symbol.for("openbooks.backup-delete-route-test");
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../lib/authz") {
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import.
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       return {
         url: "mock:backup-delete-route-authz",
         shortCircuit: true,

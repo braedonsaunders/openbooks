@@ -20,9 +20,13 @@ const state = {
 Object.assign(globalThis, { __reconcileLegacyOracleState: state });
 registerHooks({
   resolve(specifier, context, next) {
+    // The route factory imports the exact alias lazily at request time from
+    // its own module URL, so it never matches the route-directory guard.
+    // Match the alias exactly so the factory gate uses this test's session.
     if (
-      (specifier === "@/lib/feature-gates" || specifier.endsWith("/lib/feature-gates")) &&
-      context.parentURL?.includes("reconcile-legacy")
+      specifier === "@/lib/feature-gates" ||
+      ((specifier === "@/lib/feature-gates" || specifier.endsWith("/lib/feature-gates")) &&
+        context.parentURL?.includes("reconcile-legacy"))
     ) {
       return {
         shortCircuit: true,

@@ -24,6 +24,14 @@ registerHooks({
         "export async function guardPermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
       ) };
     }
+    // The counts route gates through the factory's "@/lib/feature-gates"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import.
+    if (specifier === "@/lib/feature-gates") {
+      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
+        "export async function guardFeaturePermission(){return {user:globalThis.__inventoryScopeAudit.user,allowedSubsidiaryIds:globalThis.__inventoryScopeAudit.scope}}",
+      ) };
+    }
     return next(specifier, context);
   },
 });

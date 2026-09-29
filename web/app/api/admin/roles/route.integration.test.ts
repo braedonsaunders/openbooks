@@ -41,9 +41,19 @@ const mockAuthz = `
   }
 `;
 
+// The extension helper registers its own "@/…" forwarder on import, and the
+// most recently registered hooks run first: importing it here keeps this
+// file's session mock ahead of that forwarder for the factory's late
+// "@/lib/authz" gate import.
+const { installTestExtension, disableTestExtension } = await import(
+  "@openbooks/engine/src/testing/extension-packages.ts"
+);
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz") {
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import.
+    if (specifier === "../../../../lib/authz" || specifier === "@/lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -367,8 +377,16 @@ test("role text fields reject malformed input without changing role state", asyn
       for (const field of method === "POST" ? ["name", "key", "description"] : ["name", "description"]) {
         for (const value of [42, null, true, [], {}]) {
           const response = await call(method, { id: f.actorRoleId, name: "Validated role", key: "validated_role", [field]: value });
+          const payload = (await response.json()) as { error: string; issues?: { path: string }[] };
           assert.equal(response.status, 400, `${method} ${field} ${JSON.stringify(value)}`);
-          assert.match((await response.json() as { error: string }).error, /must be a string/);
+          // Non-strings that fail the boundary contract are refused at the
+          // exact field; values the contract admits (such as null for a
+          // nullable field) reach the handler's own per-field refusal.
+          assert.ok(
+            payload.error.includes("must be a string") ||
+              (payload.issues?.some((issue) => issue.path === field) ?? false),
+            `${method} ${field} ${JSON.stringify(value)} names the field: ${JSON.stringify(payload)}`,
+          );
         }
       }
     }
@@ -408,7 +426,6 @@ for (const mode of ["subtree", "list"] as const) {
 test("module permission declarations are tenant-scoped, explicitly grantable inside the ceiling, and withdrawn without erasing stored grants", async () => {
   const f = await seed(["*"]);
   const other = await createScratchOrg();
-  const { installTestExtension, disableTestExtension } = await import("@openbooks/engine/src/testing/extension-packages.ts");
   // Installing the extension pulls web modules that replace the suite-wide
   // test bypass with the request resolver (no Next request here), so every
   // route call and verification read below carries the mocked identity's

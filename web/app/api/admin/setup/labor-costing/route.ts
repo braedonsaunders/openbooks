@@ -35,8 +35,12 @@ import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decim
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { notFound } from "@/lib/api/responses";
 
-const decimalText = (field: string, noun: string) => z.string().superRefine((value, ctx) => {
-  if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: decimalNullRefusal(field, noun, value, 4) });
+const decimalText = (field: string, noun: string) => z.unknown().transform((value, ctx) => {
+  if (typeof value !== "string" || canonicalDecimal(value, 4) === null) {
+    ctx.addIssue({ code: "custom", message: decimalNullRefusal(field, noun, value, 4) });
+    return z.NEVER;
+  }
+  return value;
 });
 const componentSchema = z.object({
   key: z.string().max(40).nullable().optional(), name: z.string().max(120).nullable().optional(),

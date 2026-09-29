@@ -95,7 +95,6 @@ const daemonUrl = "../../platform/sftp/daemon/route.ts?sftp-access-audit-test";
 const { PATCH: PLATFORM_PATCH } = (await import(daemonUrl)) as typeof import(
   "../../platform/sftp/daemon/route.ts"
 );
-hooks.deregister();
 
 const { db, env, withBypass, withBypassContext, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
@@ -544,3 +543,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

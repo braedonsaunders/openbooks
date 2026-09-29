@@ -81,10 +81,28 @@ function reset(permissions: string[] = ["reports.read", "reports.create"]): void
 }
 
 const root = pathToFileURL(process.cwd() + "/").href;
+// One mock session serves the view routes and the factory: the routes read
+// it through relative `/lib/authz` spellings, while the factory reads it
+// through the `@/lib/authz` alias, which the relative-only condition below
+// never matches.
+const viewGateUrl =
+  "data:text/javascript," +
+  encodeURIComponent(`
+    const state = globalThis[Symbol.for('openbooks.view-route-entity-gate-test')]
+    export async function guardPermission(){
+      return {
+        user: { orgId: 'org-1', id: 'user-1' },
+        permissions: new Set(state.permissions),
+      };
+    }
+  `);
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
+    }
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) {
+      return { shortCircuit: true, url: viewGateUrl };
     }
     if (specifier === "./features" && context.parentURL?.includes("report-authz")) {
       return {
@@ -97,20 +115,7 @@ registerHooks({
       };
     }
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/views/")) {
-      return {
-        shortCircuit: true,
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(`
-            const state = globalThis[Symbol.for('openbooks.view-route-entity-gate-test')]
-            export async function guardPermission(){
-              return {
-                user: { orgId: 'org-1', id: 'user-1' },
-                permissions: new Set(state.permissions),
-              };
-            }
-          `),
-      };
+      return { shortCircuit: true, url: viewGateUrl };
     }
     if (specifier.endsWith("/lib/views") && context.parentURL?.includes("/api/views/")) {
       return {

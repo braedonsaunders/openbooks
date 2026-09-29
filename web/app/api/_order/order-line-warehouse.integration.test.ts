@@ -18,6 +18,12 @@ const hooks = registerHooks({
     if (specifier === "../../../lib/feature-gates" && context.parentURL?.includes("/api/_order/handlers")) {
       return { url: "mock:order-line-warehouse-feature-gates", shortCircuit: true };
     }
+    if (
+      (specifier === "@/lib/feature-gates" && String(context.parentURL ?? "").includes("/lib/api/route")) ||
+      (specifier === "../../../../../lib/feature-gates" && String(context.parentURL ?? "").includes("assign-warehouse/route"))
+    ) {
+      return { url: "mock:order-line-warehouse-feature-gates", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -59,7 +65,7 @@ installTrustedTestDatabaseBypass();
 
 const { POST: assignSalesWarehouse } = await import("../sales-orders/[id]/assign-warehouse/route.ts");
 const { POST: assignPurchaseWarehouse } = await import("../purchase-orders/[id]/assign-warehouse/route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 
 interface Fixture {

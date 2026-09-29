@@ -30,7 +30,7 @@ const hooks = registerHooks({
     // the subsidiary-scope guards the routes call are the production
     // functions. Gates without an explicit scope default to unrestricted,
     // matching the pre-scope tests that never restricted the caller.
-    if (specifier === '../../../lib/authz' || specifier === '../../../../lib/authz') {
+    if (specifier === '../../../lib/authz' || specifier === '../../../../lib/authz' || (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) {
       const real = nextResolve(specifier, context).url
       const nextServer = nextResolve('next/server', context).url
       return module_(`
@@ -56,7 +56,6 @@ const { PATCH } = (await import(`../[id]/route.ts?account-warnings-${Date.now()}
 const { MASTER_BY_KEY, masterResource } = (await import(
   `../../../../lib/data-io/master-data-resources.ts?account-warnings-${Date.now()}`
 )) as typeof import('../../../../lib/data-io/master-data-resources.ts')
-hooks.deregister()
 
 const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -180,3 +179,6 @@ test(
     }
   },
 )
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister())

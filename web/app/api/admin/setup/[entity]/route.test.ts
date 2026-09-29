@@ -37,6 +37,12 @@ registerHooks({
     if (specifier === "../../../../../lib/authz" && entityRoute) {
       return { url: "mock:authz", shortCircuit: true };
     }
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import.
+    if (specifier === "@/lib/authz") {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

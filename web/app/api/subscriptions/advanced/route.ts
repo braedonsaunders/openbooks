@@ -23,17 +23,37 @@ import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
-const planComponentSchema = z.object({
-  componentKey: z.string().min(1), name: z.string().min(1), description: z.string().nullable().optional(),
-  quantity: z.string().optional(), unitPrice: z.string(), incomeAccountId: z.string().uuid().nullable().optional(),
-  itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), isOptional: z.boolean().optional(),
-});
+// Component items reach the handler with only transport shape enforced:
+// an omitted price, a mistyped quantity, or a non-boolean flag is refused
+// there with an indexed 422 naming the component, which a boundary schema
+// cannot do. Everything the handler does not name stays refused here, so no
+// previously rejected shape passes further than before: objects still need
+// their key and name, reference ids still need UUID shape, and primitives
+// only travel as far as the indexed object-shape refusal.
+const planComponentSchema = z.union([
+  z.object({
+    componentKey: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().nullable().optional(),
+    quantity: z.unknown().optional(),
+    unitPrice: z.unknown().optional(),
+    incomeAccountId: z.string().uuid().nullable().optional(),
+    itemId: z.string().uuid().nullable().optional(),
+    taxCodeId: z.string().uuid().nullable().optional(),
+    isOptional: z.unknown().optional(),
+  }),
+  z.null(),
+  z.number(),
+  z.string(),
+  z.boolean(),
+  z.array(z.unknown()),
+]);
 const periodCountSchema = z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/)]).nullable().optional();
 const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('createVersion'), planId: z.string().uuid(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), components: z.array(planComponentSchema).optional(), currency: z.string().nullable().optional(), interval: z.enum(['weekly', 'monthly', 'quarterly', 'annually']).optional(), intervalCount: z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/)]).optional(), billingTiming: z.enum(['advance', 'arrears']).optional(), changeSummary: z.string().nullable().optional(), name: z.string().nullable().optional(), description: z.string().nullable().optional() }),
   z.object({ action: z.literal('publishVersion'), versionId: z.string().uuid() }),
   z.object({ action: z.literal('activateLifecycle'), subscriptionId: z.string().uuid(), planVersionId: z.string().uuid(), termStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), trialEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), renewalPolicy: z.enum(['auto', 'manual', 'none']).optional(), renewalTermMonths: periodCountSchema, billFromUnbilledBoundary: z.boolean().nullable().optional() }),
-  z.object({ action: z.literal('amend'), subscriptionId: z.string().uuid(), type: z.enum(['add_component', 'remove_component', 'change_component', 'change_term', 'change_timing', 'renew', 'coterm']), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idempotencyKey: z.string().uuid(), quantity: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(), renewalTermMonths: periodCountSchema, reason: z.string().nullable().optional(), componentKey: z.string().nullable().optional(), name: z.string().nullable().optional(), description: z.string().nullable().optional(), incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), billingTiming: z.enum(['advance', 'arrears']).nullable().optional(), anchorSubscriptionId: z.string().uuid().nullable().optional() }),
+  z.object({ action: z.literal('amend'), subscriptionId: z.string().uuid(), type: z.enum(['add_component', 'remove_component', 'change_component', 'change_term', 'change_timing', 'renew', 'coterm']), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idempotencyKey: z.string().uuid(), quantity: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(), renewalTermMonths: periodCountSchema, reason: z.string().nullable().optional(), componentKey: z.unknown(), name: z.string().nullable().optional(), description: z.string().nullable().optional(), incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), billingTiming: z.enum(['advance', 'arrears']).nullable().optional(), anchorSubscriptionId: z.string().uuid().nullable().optional() }),
 ]);
 
 
@@ -67,6 +87,12 @@ export const POST = defineRoute({
   permission: 'ar.create',
   feature: 'advancedSubscriptions',
   body: POSTBodySchema1,
+  opaque: {
+    componentKey: "amendment keys are matched by name in the handler with an indexed 422",
+    quantity: "quantities are parsed to exact decimals in the handler with an indexed 422",
+    unitPrice: "an omitted price is refused in the handler with an indexed 422 naming the component",
+    isOptional: "flags are type-checked in the handler with an indexed 422 naming the component",
+  },
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;
 

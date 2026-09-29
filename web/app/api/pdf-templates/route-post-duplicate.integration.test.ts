@@ -32,8 +32,13 @@ const mockAuthz = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // tsx does not apply web/tsconfig.json paths when run from the repo
-    // root; map @/ to web/ explicitly (extension probing included).
-    if (specifier === "../../../lib/authz" && context.parentURL?.includes("pdf-templates")) {
+    // root; map @/ to web/ explicitly (extension probing included). The
+    // route factory resolves its session gate lazily through the @/lib/authz
+    // alias at request time, so that alias needs the same mapping.
+    if (
+      (specifier === "../../../lib/authz" && context.parentURL?.includes("pdf-templates")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:authz-post-duplicate", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -48,7 +53,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?pdf-template-post-duplicate-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
@@ -108,3 +112,8 @@ test(
     assert.equal(stored.rows[0]?.name, "Standard 2");
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

@@ -24,7 +24,11 @@ const virtual = (source: string) => ({
 
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../../../../lib/authz") {
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time, so the hook must cover that alias
+    // in addition to the route's relative import.
+    if (specifier === "../../../../lib/authz" ||
+        (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route"))) {
       return virtual(`
         export async function getAuthz() {
           const s = globalThis.__formPrefResolveGuardState;
@@ -41,7 +45,6 @@ const hooks = registerHooks({
 
 const form_pref_resolve_guardUrl = './route.ts?form-pref-resolve-guard'
 const { PUT } = (await import(form_pref_resolve_guardUrl)) as typeof import('./route.ts');
-hooks.deregister();
 
 const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
@@ -138,3 +141,8 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

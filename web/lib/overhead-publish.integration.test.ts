@@ -42,6 +42,17 @@ const routeHooks = registerHooks({
     ) {
       return { url: "mock:overhead-authz", shortCircuit: true };
     }
+    // The factory authenticates through the `@/lib/authz` alias, which the
+    // route-relative condition above never matches: without this edge the
+    // factory loads the real cookie session instead of the test session.
+    // The factory imports lazily at request time, so this edge must stay
+    // registered while tests run (see the deregistration below).
+    if (
+      specifier === "@/lib/authz" &&
+      context.parentURL?.includes("/lib/api/route")
+    ) {
+      return { url: "mock:overhead-authz", shortCircuit: true };
+    }
     if (
       specifier === "../../../../../lib/projects-gate" &&
       context.parentURL?.includes("setup/overhead/route.ts")
@@ -106,7 +117,11 @@ const overheadRouteUrl = new URL(
 const { POST: overheadRoutePost } = (await import(overheadRouteUrl)) as typeof import(
   "../app/api/admin/setup/overhead/route.ts"
 );
-routeHooks.deregister();
+// The factory resolves its session import lazily at request time, so the
+// hooks must stay registered while tests run: deregistering here would hand
+// later requests the real cookie session instead of the test session.
+// (Spawned subprocesses are separate processes and never observe the hooks.)
+test.after(() => routeHooks.deregister());
 
 test("manual overhead publishing preserves all four validated decimal places", async () => {
   routeState.authz = { user: { orgId: "org-test", id: "actor-test" } };
@@ -147,10 +162,16 @@ test(
         dropScratchOrg,
         seedFlowActors,
       } from "./engine/src/testing/fixtures.ts";
-      import { publishOverheadRates } from "./web/lib/overhead-publish.ts";
+      import { stubModules } from "./web/testing/stub-modules.ts";
       import { ScopeNotFoundError } from "./engine/src/organization/subsidiary-scope.ts";
 
       installTrustedTestDatabaseBypass();
+      // catalog-strings resolves its English catalog through bare next-intl
+      // at module load, whose production ESM has no headless entry: stub the
+      // UI-only translator seam before the publish module loads it. Real
+      // publish transactions and all rollback/audit assertions are unchanged.
+      stubModules({ intl: true, extra: { 'next-intl': 'export async function getTranslations(){return (key)=>key}export async function getMessages(){return {}}export async function getLocale(){return "en"}export function createTranslator(options){const messages=options.messages;const catalog=options.namespace?messages?.[options.namespace]:messages ?? {};return (key,values)=>{const parts=String(key).split(".");let template=catalog;for(const part of parts)template=template?.[part];if(typeof template!=="string")return String(key);if(!values)return template;let out=template;for(const name of Object.keys(values))out=out.split("{"+name+"}").join(String(values[name]));return out;}}' } });
+      const { publishOverheadRates } = await import("./web/lib/overhead-publish.ts");
       const org = await createScratchOrg();
       try {
         const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -227,10 +248,16 @@ test(
         dropScratchOrg,
         seedFlowActors,
       } from "./engine/src/testing/fixtures.ts";
-      import { publishOverheadRates } from "./web/lib/overhead-publish.ts";
+      import { stubModules } from "./web/testing/stub-modules.ts";
       import { ScopeNotFoundError } from "./engine/src/organization/subsidiary-scope.ts";
 
       installTrustedTestDatabaseBypass();
+      // catalog-strings resolves its English catalog through bare next-intl
+      // at module load, whose production ESM has no headless entry: stub the
+      // UI-only translator seam before the publish module loads it. Real
+      // publish transactions and all rollback/audit assertions are unchanged.
+      stubModules({ intl: true, extra: { 'next-intl': 'export async function getTranslations(){return (key)=>key}export async function getMessages(){return {}}export async function getLocale(){return "en"}export function createTranslator(options){const messages=options.messages;const catalog=options.namespace?messages?.[options.namespace]:messages ?? {};return (key,values)=>{const parts=String(key).split(".");let template=catalog;for(const part of parts)template=template?.[part];if(typeof template!=="string")return String(key);if(!values)return template;let out=template;for(const name of Object.keys(values))out=out.split("{"+name+"}").join(String(values[name]));return out;}}' } });
+      const { publishOverheadRates } = await import("./web/lib/overhead-publish.ts");
       const org = await createScratchOrg();
       try {
         const actorId = (await seedFlowActors(org.orgId)).adminId;

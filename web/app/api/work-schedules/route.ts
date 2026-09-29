@@ -18,7 +18,10 @@ import { notFound } from "@/lib/api/responses";
 const MAX_CYCLE_DAYS = 366
 
 const cycleDaySchema = z.strictObject({
-  dayIndex: z.number().int().min(0).max(365),
+  // Placeability belongs to parseCycleDays, which refuses an unplaceable row
+  // by name (a missing index must refuse, never land on day zero). The
+  // boundary only enforces the numeric shape.
+  dayIndex: z.number().optional(),
   hours: z.string().superRefine((value, ctx) => {
     if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: 'custom', message: 'hours must be a readable decimal amount' })
   }),

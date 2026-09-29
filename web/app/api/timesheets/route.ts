@@ -79,8 +79,8 @@ interface SaveBody {
   /**
    * The revision the client loaded (loadWeek returns it). When present and
    * stale, the save is refused with a named 409 instead of silently
-   * overwriting another editor's hours. The grid always sends it; saves
-   * that predate the fence omit it and keep the old behavior.
+   * overwriting another editor's hours. The grid sends it on every save;
+   * requests without one are refused at the body boundary.
    */
   expectedRevision: string;
 }

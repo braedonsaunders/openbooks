@@ -45,7 +45,14 @@ registerHooks({
         context,
       );
     }
-    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/payment-providers")) {
+    if (
+      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/payment-providers")) ||
+      // The route factory resolves its session gate through the "@/lib/authz"
+      // spelling at request time; it must see the same test session as the
+      // route file's relative import. Both spellings resolve to the same real
+      // module, so they share one double instance.
+      specifier === "@/lib/authz"
+    ) {
       // Re-export the REAL authz module and override only the session gate,
       // so scope guards under test (guardUnrestrictedScope, guardSubsidiaryScope)
       // are the production implementations, never test-double copies.
@@ -321,7 +328,18 @@ test("effective dating accepts only real calendar days in start-to-end order", a
     const badFrom = ["2026-02-30", "2026-13-01", "2026-00-10", "01/02/2026", "2026-1-1", "not-a-date"];
     for (const effectiveFrom of badFrom) {
       const res = await POST(postRequest(baseRule({ effectiveFrom, feeIncomeAccountId: f.revenueAccount })));
-      assert.equal(res.status, 422, `expected 422 for effectiveFrom ${effectiveFrom}`);
+      const body = (await res.json()) as { error?: string; issues?: { path: string }[] };
+      if (/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+        // Well-shaped but not a real calendar day: the handler refuses by name.
+        assert.equal(res.status, 422, `expected 422 for effectiveFrom ${effectiveFrom}: ${JSON.stringify(body)}`);
+      } else {
+        // Wrong shape: the boundary refuses at the exact field.
+        assert.equal(res.status, 400, `expected 400 for effectiveFrom ${effectiveFrom}: ${JSON.stringify(body)}`);
+        assert.ok(
+          body.issues?.some((issue) => issue.path.includes("effectiveFrom")),
+          `the refusal names the field: ${JSON.stringify(body)}`,
+        );
+      }
     }
     const badTo: [string, string][] = [
       ["2026-02-30", "2026-02-30"], // not a calendar day

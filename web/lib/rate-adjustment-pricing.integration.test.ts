@@ -45,9 +45,13 @@ test(
   async (t) => {
     const hooks = registerHooks({
       resolve(specifier, context, nextResolve) {
+        // The route factory resolves its session gate lazily through the
+        // @/lib/authz alias on every request, so the hook must cover that
+        // alias in addition to the route's relative import.
         if (
-          specifier === "../../../../../lib/authz" &&
-          context.parentURL?.includes("setup/payment-providers")
+          (specifier === "../../../../../lib/authz" &&
+            context.parentURL?.includes("setup/payment-providers")) ||
+          (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
         ) {
           return { url: "mock:payment-surcharge-authz", shortCircuit: true };
         }
@@ -66,7 +70,9 @@ test(
     const { POST } = (await import(routeUrl)) as typeof import(
       "../app/api/admin/setup/payment-providers/route.ts"
     );
-    hooks.deregister();
+    // The factory's lazy session-gate import runs on every request — including
+    // the subtests below — so the hook stays registered until this test ends.
+    t.after(() => hooks.deregister());
 
     const { db, withOrgTransaction } = await import("@openbooks/engine/src/platform/db.ts");
     const { sql } = await import("drizzle-orm");

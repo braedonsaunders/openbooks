@@ -32,6 +32,16 @@ registerHooks({
           return authz.allowedSubsidiaryIds === null ? null : new Response(JSON.stringify({error:'requires unrestricted subsidiary access'}), {status:403});
         }
       `);
+    // The route declares permission plus a feature key, so the route factory
+    // lazily imports `@/lib/feature-gates` at request time. Serve the same
+    // test session there; nothing else in this file changes.
+    if (specifier === "@/lib/feature-gates")
+      return virtual(`
+        export async function guardFeaturePermission() {
+          const s = globalThis.__subscriptionRaceState;
+          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['ar.create']), allowedSubsidiaryIds: s.allowedSubsidiaryIds };
+        }
+      `);
     if (specifier.endsWith("/lib/features"))
       return virtual("export async function isFeatureEnabled() { return true }");
     if (specifier.startsWith("@openbooks/engine/")) {

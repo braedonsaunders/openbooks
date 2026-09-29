@@ -15,7 +15,7 @@ const requestBodySchema = z.object({
   "allowedRoles": z.array(z.string().trim().min(1).max(100)).max(50).nullable().optional(),
   "description": z.string().nullable().optional(),
   "layout": z.json().optional(),
-  "name": z.string().trim().min(1).max(200).optional(),
+  "name": z.string({ error: "name must be a string" }).trim().min(1).max(200).optional(),
   "query": z.json().optional(),
   "scope": z.enum(["private", "shared"]).optional(),
 }).refine((body) => Object.keys(body).length > 0, "At least one view setting is required");
@@ -66,6 +66,7 @@ export const PATCH = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "id": z.string() }),
   body: requestBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ body, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz

@@ -13,7 +13,9 @@ Object.assign(globalThis, { __equipmentConcurrencyState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    // The route factory resolves the gate by @/ alias at request time; serve
+    // the same intended session for its literal as for the relative import.
+    if (specifier === '../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__equipmentConcurrencyState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };

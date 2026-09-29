@@ -26,7 +26,7 @@ const HIDDEN_PO_NUMBER = 'PO-HIDDEN-SCOPE-ZX'
  * Restricted AP callers must get the same not-found the inbox already applies:
  * a capture whose vendor or PO sits outside allowedSubsidiaryIds is
  * unreachable by id. Auto-resolve must not persist those associations.
- * A 36-hyphen bulk id is HTTP 404, never a uuid bind inside HTTP 200.
+ * A 36-hyphen bulk id is rejected as an invalid body before any uuid bind.
  */
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -150,12 +150,15 @@ test('a restricted caller cannot reach another entity’s capture by id', async 
   }
 })
 
-test('bulk actions refuse a 36-hyphen id as HTTP 404 not_found', async () => {
+test('bulk actions refuse a malformed id at the body boundary', async () => {
   const f = await fixture()
   try {
     const res = await f.asJson(await f.actions({ action: 'reject', ids: ['-'.repeat(36)] }))
-    assert.equal(res.status, 404)
-    assert.equal(res.body?.error, 'not_found')
+    assert.equal(res.status, 400)
+    const refusal = res.body as { error?: unknown; issues?: Array<{ path?: string; message?: string }> } | null
+    assert.ok(typeof refusal?.error === 'string' && refusal.error.length > 0)
+    assert.ok(refusal?.issues?.some((issue) => issue.path === 'ids.0' && Boolean(issue.message?.trim())),
+      'the refusal names the malformed capture id')
     assert.equal(res.body?.results, undefined)
   } finally {
     await f.close()

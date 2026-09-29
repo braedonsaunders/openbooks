@@ -16,6 +16,16 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:t
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    // The route declares permission plus a feature key, so the route factory
+    // lazily imports `@/lib/feature-gates` at request time. Serve the same
+    // test session there; nothing else in this file changes.
+    if (specifier === "@/lib/feature-gates")
+      return virtual(`
+        export async function guardFeaturePermission() {
+          const s = globalThis.__subscriptionPriceState;
+          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['ar.create']), allowedSubsidiaryIds: null };
+        }
+      `);
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {

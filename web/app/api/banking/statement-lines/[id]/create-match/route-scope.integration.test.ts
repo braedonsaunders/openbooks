@@ -19,9 +19,10 @@ Object.assign(globalThis, { __bankingMatchScopeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
 registerHooks({
   resolve(specifier, context, next) {
-    // The route imports the gate by relative path (not the @/ alias), so
-    // match its exact specifier; everything else resolves for real.
-    if (specifier === "../../../../../../lib/feature-gates") return virtual(`
+    // The route's helpers import the gate by relative path while the route
+    // factory resolves it by @/ alias at request time; match both exact
+    // specifiers with the intended session. Everything else resolves for real.
+    if (specifier === "../../../../../../lib/feature-gates" || specifier === "@/lib/feature-gates") return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__bankingMatchScopeState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowedSubsidiaryIds };

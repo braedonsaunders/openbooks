@@ -28,7 +28,10 @@ const hooks = registerHooks({
     // Re-export the REAL authz module and override only the session gate, so
     // the unrestricted-scope guard the route calls is the production
     // function. Gates without an explicit scope default to unrestricted.
-    if (specifier === "../../../../lib/authz") {
+    if (
+      specifier === "../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       const real = nextResolve(specifier, context).url;
       const nextServer = nextResolve("next/server", context).url;
       return module_(`
@@ -47,7 +50,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?account-group-audit-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
@@ -187,3 +189,6 @@ test("PATCH refuses org-wide classification rewrites to restricted callers", { s
     await dropScratchOrgReporting(org.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

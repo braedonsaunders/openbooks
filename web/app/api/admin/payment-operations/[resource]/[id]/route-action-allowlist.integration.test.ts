@@ -12,7 +12,10 @@ Object.assign(globalThis, { __payOpsPatchAllowlistState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../../../lib/authz') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import.
+    if (specifier === '../../../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__payOpsPatchAllowlistState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -84,7 +87,9 @@ test('mandate PATCH rejects an unknown status instead of storing it', async () =
   const { org, mandateId } = await fixture()
   try {
     const response = await patch('mandates', mandateId, { status: 'actvie' })
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(await response.clone().json())}`)
+    const body = (await response.clone().json()) as { error: string }
+    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(body)}`)
+    assert.match(body.error, /must be pending, active, suspended, revoked, or expired/)
     assert.equal(await mandateStatus(mandateId, org.orgId), 'active', 'refused write must leave the stored status alone')
   } finally {
     await dropScratchOrg(org.orgId)
@@ -106,7 +111,9 @@ test('schedule PATCH rejects an unknown action instead of storing it', async () 
   const { org, scheduleId } = await fixture()
   try {
     const response = await patch('schedules', scheduleId, { action: 'submit_for_approva' })
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(await response.clone().json())}`)
+    const body = (await response.clone().json()) as { error: string }
+    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(body)}`)
+    assert.match(body.error, /must be create_draft or submit_for_approval/)
     assert.equal(await scheduleAction(scheduleId, org.orgId), 'create_draft', 'refused write must leave the stored action alone')
   } finally {
     await dropScratchOrg(org.orgId)

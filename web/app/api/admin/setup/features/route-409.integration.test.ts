@@ -27,14 +27,19 @@ registerHooks({
       url: "data:text/javascript," + encodeURIComponent(source),
     });
     const parent = String(context.parentURL ?? "");
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import. Both spellings share one module instance.
+    const featuresAuthz = `
+      const state = globalThis[Symbol.for('openbooks.admin-features-409-integration')];
+      export async function guardPermission() { return state.authz; }
+    `;
     if (
-      specifier === "../../../../../lib/authz"
-      && parent.includes("/api/admin/setup/features/route.ts")
+      (specifier === "../../../../../lib/authz"
+        && parent.includes("/api/admin/setup/features/route.ts"))
+      || specifier === "@/lib/authz"
     ) {
-      return virtual(`
-        const state = globalThis[Symbol.for('openbooks.admin-features-409-integration')];
-        export async function guardPermission() { return state.authz; }
-      `);
+      return virtual(featuresAuthz);
     }
     if (specifier === "./request-org" && parent.includes("/web/lib/auth.ts")) {
       return virtual("export function setRequestOrg() {}");

@@ -78,7 +78,7 @@ export const PATCH = defineRoute({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
       description: z.string().trim().max(2000).nullable().optional(),
       layout: layoutBody.optional(),
-      allowedRoles: z.array(z.string().uuid("allowedRoles must contain role UUIDs")).nullable().optional(),
+      allowedRoles: z.array(z.string().uuid("allowedRoles must contain role UUIDs"), { error: "allowedRoles must be a list of UUID role ids" }).nullable().optional(),
     isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
     isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
     })

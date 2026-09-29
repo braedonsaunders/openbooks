@@ -11,7 +11,11 @@ Object.assign(globalThis, { __documentIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import. Identical sources share one module
+    // instance across both spellings.
+    if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__documentIdState;
         return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: [], allowedSubsidiaryIds: null };
@@ -37,11 +41,14 @@ async function fixture() {
 async function call(verb: 'GET' | 'PATCH' | 'DELETE', id: string): Promise<{ status: number; json: unknown }> {
   const handler = verb === 'GET' ? GET : verb === 'PATCH' ? PATCH : DELETE
   try {
+    // The PATCH body contract requires at least one field, so the probe
+    // carries a valid memo: the id check under test must see the request.
+    const probe = verb === 'PATCH' ? { memo: 'id probe' } : {}
     const response = await withOrgContext(state.orgId, () => handler(
       new Request(`http://documents.test/api/documents/${id}`, {
         method: verb,
         headers: { 'content-type': 'application/json' },
-        body: verb === 'GET' ? undefined : JSON.stringify({}),
+        body: verb === 'GET' ? undefined : JSON.stringify(probe),
       }),
       { params: Promise.resolve({ id }) },
     ))

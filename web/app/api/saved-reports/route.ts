@@ -8,7 +8,10 @@ import { uuidId } from "@/lib/api/json";
 
 const createBody = z.object({
   name: z.string().trim().min(1),
-  path: z.string().regex(/^\/reports(?:\/|$)/),
+  // The string check is load-bearing: the handler calls path.startsWith,
+  // which throws on a non-string. It carries the handler's message so the
+  // refusal names the remedy instead of the zod type error.
+  path: z.string({ error: "name and a /reports path required" }).regex(/^\/reports(?:\/|$)/),
   params: z.record(z.string(), z.string()).optional(),
 })
 const deleteBody = z.object({ id: uuidId })

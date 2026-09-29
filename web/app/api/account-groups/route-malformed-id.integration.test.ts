@@ -14,7 +14,8 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __accountGroupRouteUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/account-groups/")) {
+    if (specifier === "@/lib/authz" ||
+        (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/account-groups/"))) {
       return {
         shortCircuit: true,
         url:

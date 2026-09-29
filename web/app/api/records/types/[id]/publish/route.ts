@@ -12,8 +12,10 @@ import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
   "action": z.enum(["archive", "publish"]).optional(),
-  "reason": z.string().trim().min(1).max(2000),
-});
+  // An omitted reason reaches the named audit-trail refusal below; a
+  // supplied reason must still have the exact wire shape the reader returned.
+  "reason": z.string().trim().min(1).max(2000).optional(),
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 

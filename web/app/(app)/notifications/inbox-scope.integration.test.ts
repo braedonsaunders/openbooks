@@ -26,8 +26,9 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../lib/authz" &&
-      context.parentURL?.includes("/api/notifications/")
+      specifier === "@/lib/authz" ||
+      (specifier === "../../../lib/authz" &&
+        context.parentURL?.includes("/api/notifications/"))
     ) {
       return { url: "mock:notifications-scope-authz", shortCircuit: true };
     }
@@ -185,16 +186,14 @@ test("mark-read touches only the caller's own rows", { skip: !DB }, async () => 
       bob: await seedNotification(orgB.orgId, bob, "bob patchable"),
     }));
 
-    // Mallory names Alice's row and Bob's row: 404 with the named error,
-    // and the ownership check runs before any write, so both stay unread.
+    // Mallory names Alice's row and Bob's row: the standard non-disclosing
+    // record refusal runs before any write, so both stay unread.
     state.authz = authzFor(orgA.orgId, mallory, "Patch Mallory");
     const forbidden = await withOrgContext(orgA.orgId, () =>
       PATCH(patchRequest({ ids: [ids.alice, ids.bob] })),
     );
     assert.equal(forbidden.status, 404);
-    assert.deepEqual(await forbidden.json(), {
-      error: "some notifications are not yours — they may belong to someone else or no longer exist",
-    });
+    assert.deepEqual(await forbidden.json(), { error: "not_found" });
     assert.equal(await withBypass(() => readAt(ids.alice)), null);
     assert.equal(await withBypass(() => readAt(ids.bob)), null);
     assert.equal(await withBypass(() => readAt(ids.mallory)), null);

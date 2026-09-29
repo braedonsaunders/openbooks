@@ -43,7 +43,19 @@ for (const [label,body] of cases) {
       const before=(await db.execute(sql`select * from items where id=${id}`)).rows[0];
       const accepted=['explicit clear','valid edit','omitted finance'].includes(label);
       const response=await withOrgContext(org.orgId,()=>PATCH(new Request('http://audit.local/api/items/'+id,{method:'PATCH',body:JSON.stringify(body)}),{params:Promise.resolve({id})}));
-      assert.equal(response.status,accepted?200:422,JSON.stringify(await response.json()));
+      const payload = (await response.json()) as { error?: string; issues?: Array<{ path: string; message: string }> };
+      assert.equal(response.status,accepted?200:400,JSON.stringify(payload));
+      if (!accepted) {
+        const field = Object.keys(body)[0];
+        assert.equal(payload.issues?.length,1,`${label}: identify the rejected field`);
+        assert.equal(payload.issues?.[0]?.path,field,`${label}: name the rejected field`);
+        const refusal = payload.error;
+        assert.equal(refusal,payload.issues?.[0]?.message,`${label}: expose the field refusal`);
+        assert.ok(typeof refusal === 'string' && refusal.trim().length > 0,`${label}: provide a usable refusal`);
+        if (field === 'defaultRate' || field === 'defaultCost' || field === 'standaloneSellingPrice') {
+          assert.match(refusal,/decimal string.*precision/,`${label}: explain why JSON numbers are unsafe`);
+        }
+      }
       const after=(await db.execute(sql`select * from items where id=${id}`)).rows[0];
       if(!accepted) assert.deepEqual(after,before,'refused malformed input cannot change the item');
       else if(label==='explicit clear') {assert.equal(after?.default_rate,null);assert.equal(after?.default_cost,null);assert.equal(after?.income_account_id,null);}

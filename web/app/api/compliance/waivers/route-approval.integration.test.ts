@@ -73,7 +73,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { vendorComplianceStatus } = await import("@openbooks/engine/src/compliance/compliance.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 
 function authorize(orgId: string, actorId: string): void {

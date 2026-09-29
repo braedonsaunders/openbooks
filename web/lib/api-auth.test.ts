@@ -65,6 +65,12 @@ const hooks = registerHooks({
         return { url: new URL("./api/json.ts", import.meta.url).href, shortCircuit: true };
       }
     }
+    // The route factory resolves its permission/feature gate lazily through
+    // the @/lib/feature-gates alias at request time, so the hook must serve
+    // the fixture gate there too.
+    if (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:feature-gates", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -86,7 +92,9 @@ const { GET: openApiGET } = (await import(openApiRouteUrl)) as typeof import("..
 const { canApi, generateApiKey, resolveApiKeyAuth } = await import("./api-auth");
 const { validateSessionToken } = await import("./auth");
 const { sessionSigningInput } = await import("./auth-token-format.ts");
-hooks.deregister();
+// The factory's lazy feature-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());
 
 function jsonRequest(body: unknown, method: "POST" | "PATCH" = "POST"): Request {
   return new Request("http://openbooks.test/api/admin/api-keys", {
@@ -119,11 +127,11 @@ test("the canonical scope authority fails closed on empty, malformed, or non-cat
 
 test("POST refuses to mint a key whose scopes are omitted or empty", async () => {
   const omitted = await POST(jsonRequest({ name: "Omitted scopes" }));
-  assert.equal(omitted.status, 400);
+  assert.equal(omitted.status, 422);
   assert.match((await omitted.json()).error, /at least one scope is required/);
 
   const empty = await POST(jsonRequest({ name: "Empty scopes", scopes: [] }));
-  assert.equal(empty.status, 400);
+  assert.equal(empty.status, 422);
   assert.match((await empty.json()).error, /at least one scope is required/);
 
   const unknown = await POST(jsonRequest({ name: "Unknown scopes", scopes: ["not.a.permission"] }));
@@ -132,7 +140,7 @@ test("POST refuses to mint a key whose scopes are omitted or empty", async () =>
 
 test("PATCH refuses to clear a key's scopes to an empty set", async () => {
   const cleared = await PATCH(jsonRequest({ id: randomUUID(), scopes: [] }, "PATCH"));
-  assert.equal(cleared.status, 400);
+  assert.equal(cleared.status, 422);
   assert.match((await cleared.json()).error, /at least one scope is required/);
 
   // The only PATCH contract for narrowing is an explicit non-empty set; an

@@ -42,6 +42,28 @@ registerHooks({
           `),
       };
     }
+    // The route declares permission plus a feature key, so the route factory
+    // lazily imports `@/lib/feature-gates` — never the relative authz import
+    // above — from its own module URL. Serve the same test session there.
+    if (specifier === "@/lib/feature-gates") {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(`
+            const NextResponse = globalThis.__recognitionPreviewOracleNextResponse;
+            export async function guardFeaturePermission(permission){
+              if (!globalThis.__recognitionPreviewOracleState.permissions.has(permission)) {
+                return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 });
+              }
+              return {
+                user: globalThis.__recognitionPreviewOracleState.user,
+                allowedSubsidiaryIds: globalThis.__recognitionPreviewOracleState.allowed,
+              };
+            }
+          `),
+      };
+    }
     return next(specifier, context);
   },
 });

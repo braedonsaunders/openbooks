@@ -119,7 +119,6 @@ const hooks = registerHooks({
 
 const itemUrl = "./route.ts?sftp-schedule-run-ineligible-test";
 const { PATCH } = (await import(itemUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
@@ -375,3 +374,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

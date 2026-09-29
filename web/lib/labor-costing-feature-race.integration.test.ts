@@ -63,11 +63,20 @@ async function seedBooks(org: ScratchOrg, actorId: string) {
 // authorization helpers, tenant transactions, and financial services are native.
 const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.labor-feature-race")] = state;
+// One mock module serves both spellings so the route and the factory share
+// a single test session: the relative edge covers the route file, and the
+// alias edge covers the factory, which authenticates (and enforces the
+// unrestricted scope for settings saves) through `@/lib/authz`. The data:
+// URL stays inline in each branch (not a shared const) so the static wiring
+// check keeps reading both edges as shims.
+const raceAuthzSource = `export * from ${JSON.stringify(new URL("./authz.ts", import.meta.url).href)};
+   export async function guardPermission(){return globalThis[Symbol.for('openbooks.labor-feature-race')].gate}`;
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "../../../../../lib/authz" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/admin/setup/labor-costing/route.ts")) {
-    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-      `export * from ${JSON.stringify(new URL("./authz.ts", import.meta.url).href)};
-       export async function guardPermission(){return globalThis[Symbol.for('openbooks.labor-feature-race')].gate}`) };
+    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(raceAuthzSource) };
+  }
+  if (specifier === "@/lib/authz" && decodeURIComponent(context.parentURL ?? "").endsWith("/web/lib/api/route.ts")) {
+    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(raceAuthzSource) };
   }
   return next(specifier, context);
 } });
