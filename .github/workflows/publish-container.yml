@@ -187,7 +187,12 @@ jobs:
           void (async () => { try { await assertSafeRuntimeDatabaseRole(); }
           finally { await pool.end(); } })();"
       - name: Verify release policies
-        run: npm run verify:release:checks
+        run: |
+          npm run check:repository-artifacts
+          npm run check:dependencies
+          npm run check:container-security
+          npm run check:explicit-any
+          npm run typecheck:e2e
       - name: Run the release smoke set
         env:
           NODE_ENV: test
