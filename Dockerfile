@@ -28,7 +28,7 @@ RUN npm ci
 FROM deps AS build
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN cd web && NODE_OPTIONS=--max-old-space-size=3072 npx next build --webpack
+RUN cd web && NODE_OPTIONS=--max-old-space-size=5120 npx next build --webpack
 RUN npx esbuild scripts/bootstrap.ts \
       --bundle --platform=node --format=esm \
       --external:pg-native \

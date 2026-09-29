@@ -13,7 +13,7 @@ test('production page collection and generation stay within a single-worker budg
 
 test('the production image uses the bounded-heap Webpack build', () => {
   const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
-  assert.match(dockerfile, /RUN cd web && NODE_OPTIONS=--max-old-space-size=3072 npx next build --webpack/);
+  assert.match(dockerfile, /RUN cd web && NODE_OPTIONS=--max-old-space-size=5120 npx next build --webpack/);
 });
 
 test('the informational stats card does not start CI or mutate main on routine updates', () => {
