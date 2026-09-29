@@ -23,7 +23,12 @@ export const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const config = {
-  experimental: { cpus: 1, staticGenerationMaxConcurrency: 1 },
+  experimental: {
+    cpus: 1,
+    staticGenerationMaxConcurrency: 1,
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
   // Types are gated by CI's own `npm run typecheck -w web` job, and a release
   // needs that job green on the exact SHA. Type-checking again inside
   // `next build` duplicates it: ~3.3 GB and ~2.5 min in the same process that

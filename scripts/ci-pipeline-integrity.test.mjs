@@ -560,11 +560,6 @@ test('the release job does not re-run the suite, and fails closed without its fo
   const verify = topLevelBlock(publish.slice(publish.indexOf('\njobs:')), 'verify')
 
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
-  // Owner decision (audit finding 7.6): the documented `verify:release` gate
-  // runs the full suite; the suite-free fast path is `verify:release:quick`.
-  // The release JOB still never re-runs the suite — it runs
-  // `verify:release:checks` plus the merge-gate check pinned below — so the
-  // ~35-minute concern that motivated the old fast-default stands.
   assert.match(
     scripts['verify:release'],
     /npm test\b/,
@@ -580,6 +575,16 @@ test('the release job does not re-run the suite, and fails closed without its fo
     /npm test\b/,
     'verify:release:full must retain the suite so a full local verification is still available',
   )
+
+  const staticProof = stepAround(verify, 'Require passing static checks for the source commit')
+  assert.match(staticProof, /head_sha=\$\{SOURCE_COMMIT\}&status=success/)
+  assert.match(staticProof, /\.name == "test" and \.event == "push"/)
+  assert.match(staticProof, /exit 1/)
+  const policies = stepAround(verify, 'Verify release policies')
+  for (const policy of ['check:repository-artifacts', 'check:dependencies', 'check:container-security', 'check:explicit-any', 'typecheck:e2e']) {
+    assert.ok(policies.includes(`npm run ${policy}`), `release-specific policy ${policy} must still run`)
+  }
+  assert.doesNotMatch(policies, /verify:release:checks|npm run lint|npm run typecheck:scripts|npm run check:engine-boundaries|npm run check:source-path-references/)
 
   const smoke = stepAround(verify, 'Run the release smoke set')
   for (const file of [
