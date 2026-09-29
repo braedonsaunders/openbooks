@@ -154,7 +154,7 @@ jobs:
             break
           done <<< "$earlier"
           echo "No passing 'upgrade-rehearsal' run covers ${SOURCE_COMMIT}." >&2
-          echo "Start one with: git push origin \"${SOURCE_COMMIT}:refs/heads/upgrade-rehearsal/<name>\", then retry." >&2
+          echo "Start one from main with: gh workflow run upgrade-rehearsal.yml --ref main" >&2
           exit 1
       - name: Verify deployment workflow contracts
         run: node --test scripts/deploy-edge-workflow.test.mjs scripts/deploy-production-workflow.test.mjs
