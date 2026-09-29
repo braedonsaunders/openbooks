@@ -134,7 +134,7 @@ MIGRATION_TARGET=$(database_identity "$MIGRATION_URL")
 BYPASS_TARGET=$(database_identity "$BYPASS_URL")
 RUNTIME_TARGET=$(database_identity "$RUNTIME_URL")
 [[ "$MIGRATION_TARGET" == 10.0.0.85:5432/* ]] || {
-  echo "refusing to deploy: migration URL does not reach production PostgreSQL at 10.0.0.85:5432" >&2
+  echo "refusing to deploy: migration URL reaches $MIGRATION_TARGET rather than production PostgreSQL at 10.0.0.85:5432" >&2
   exit 1; }
 [ "$MIGRATION_TARGET" = "$BYPASS_TARGET" ] && [ "$MIGRATION_TARGET" = "$RUNTIME_TARGET" ] || {
   echo "refusing to deploy: runtime, bypass and migration URLs do not reach the same database" >&2
