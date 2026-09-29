@@ -586,6 +586,10 @@ test('the release job does not re-run the suite, and fails closed without its fo
   }
   assert.doesNotMatch(policies, /verify:release:checks|npm run lint|npm run typecheck:scripts|npm run check:engine-boundaries|npm run check:source-path-references/)
 
+  const upgradeProof = stepAround(verify, 'Require a passing upgrade rehearsal for this commit')
+  assert.match(upgradeProof, /gh workflow run upgrade-rehearsal\.yml --ref main/)
+  assert.doesNotMatch(upgradeProof, /refs\/heads\/upgrade-rehearsal/)
+
   const smoke = stepAround(verify, 'Run the release smoke set')
   for (const file of [
     'engine\\/src\\/platform\\/db-rls\\.integration\\.test\\.ts',
