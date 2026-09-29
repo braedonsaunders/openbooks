@@ -16,7 +16,9 @@ import {
 const postBodySchema0 = z.strictObject({
   employee: z.string().uuid("employee must be a valid id"),
   week: isoDate("week must be a valid calendar date"),
-  reason: z.string().trim().min(3, "A rejection reason is required").max(500, "Rejection reason is too long"),
+  // An omitted reason reaches the named refusal below; a supplied reason
+  // must still have the exact wire shape the reader returned.
+  reason: z.string().trim().min(3, "A rejection reason is required").max(500, "Rejection reason is too long").optional(),
 });
 
 export const runtime = "nodejs";

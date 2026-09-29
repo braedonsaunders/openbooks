@@ -32,6 +32,7 @@ type RemittanceFixture = {
   componentId: string;
   liabilityAccountId: string;
   scheduleId: string;
+  filingAccountId: string;
 };
 
 /** A deliberately small committed-payroll fixture for remittance race tests.
@@ -43,6 +44,14 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
   const liabilityAccountId = randomUUID();
   const componentId = randomUUID();
   const scheduleId = randomUUID();
+  const filingAccountId = randomUUID();
+  const filingAccount = await db.execute<{ id: string }>(sql`
+    insert into payroll_filing_accounts
+      (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
+    values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0088',
+      'Remittance fixture account', 'regular', true)
+    returning id`);
+  assert.equal(filingAccount.rows.length, 1, "remittance fixture must establish its historical filing account");
   await db.execute(sql`
     insert into accounts
       (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -51,10 +60,19 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
       (${liabilityAccountId}, ${org.orgId}, ${`23${componentId.slice(0, 2)}`},
        'Remittance liability', 'liability_current', false, true, false, false,
        '[]'::jsonb, '{}'::jsonb, true)`);
-  await db.execute(sql`
+  const vendorRole = await db.execute<{ party_id: string }>(sql`
     insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
     values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-    on conflict do nothing`);
+    returning party_id`);
+  assert.equal(vendorRole.rows.length, 1, "remittance fixture must establish its payee role");
+  const destination = await db.execute<{ id: string }>(sql`
+    update orgs
+       set settings = jsonb_set(
+         jsonb_set(coalesce(settings, '{}'::jsonb), '{payroll}',
+           coalesce(settings->'payroll', '{}'::jsonb)),
+         '{payroll,craRemittancePartyId}', to_jsonb(${org.vendorId}::text))
+     where id = ${org.orgId} returning id`);
+  assert.equal(destination.rows.length, 1, "remittance fixture must assign its CRA destination before billing");
   await db.execute(sql`
     insert into pay_components
       (id, org_id, code, name, kind, system_key, liability_account_id,
@@ -70,14 +88,24 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
     values
       (${scheduleId}, ${org.orgId}, 'Remittance race schedule', 'monthly', 12,
        '2026-01-31', 0, true, ${actorId}, ${actorId})`);
-  return { org, actorId, componentId, liabilityAccountId, scheduleId };
+  return { org, actorId, componentId, liabilityAccountId, scheduleId, filingAccountId };
+}
+
+function createFixtureRemittanceBill(
+  fixture: RemittanceFixture,
+  input: Omit<Parameters<typeof createRemittanceBill>[2], "filingAccountId">,
+) {
+  return createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+    ...input,
+    filingAccountId: fixture.filingAccountId,
+  });
 }
 
 async function addCommittedRemittanceAccrual(
   fixture: RemittanceFixture,
   input: { payDate: string; amount: string; employeeId?: string; snapshotPartyId?: string; subsidiaryId?: string | null },
 ): Promise<{ runDocumentId: string }> {
-  const { org, actorId, componentId, liabilityAccountId, scheduleId } = fixture;
+  const { org, actorId, componentId, liabilityAccountId, scheduleId, filingAccountId } = fixture;
   const employeeId = input.employeeId ?? randomUUID();
   // An explicit null subsidiary seeds a run document with no legal entity:
   // its accruals stay in the consolidated group only (hasEntitylessAccruals)
@@ -115,11 +143,12 @@ async function addCommittedRemittanceAccrual(
       (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
        periods_per_year, pay_date, tax_year, currency_code, gross,
        pensionable_earnings, insurable_earnings, net_pay, employer_cost,
-       vacation_accrued, factors, created_by, updated_by)
+       vacation_accrued, factors, filing_account_id, filing_account_source, created_by, updated_by)
     values
       (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 12,
        ${input.payDate}, 2026, 'CAD', ${input.amount}, ${input.amount},
        ${input.amount}, ${input.amount}, ${input.amount}, '0', '{}'::jsonb,
+       ${filingAccountId}, 'calculation',
        ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into pay_stub_lines
@@ -158,7 +187,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
         from: "2026-07-01",
         to: "2026-07-31",
@@ -202,7 +231,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
         from: "2026-07-01",
         to: "2026-07-31",
@@ -241,7 +270,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
         from: "2026-07-01",
         to: "2026-07-31",
@@ -288,7 +317,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
         from: "2026-07-01",
         to: "2026-07-31",
@@ -333,7 +362,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
         from: "2026-07-01",
         to: "2026-07-31",
@@ -383,7 +412,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
         from: "2026-07-01",
         to: "2026-07-31",
@@ -452,7 +481,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
         from: "2026-07-01",
         to: "2026-07-31",
@@ -522,6 +551,14 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
+      const filingAccountId = randomUUID();
+      const filingAccount = await db.execute<{ id: string }>(sql`
+        insert into payroll_filing_accounts
+          (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
+        values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0089',
+          'CRA remittance account', 'regular', true)
+        returning id`);
+      assert.equal(filingAccount.rows.length, 1, "CRA remittance must have a filing account before payroll calculation");
       const account = async (number: string, name: string, type: string) => {
         const id = randomUUID();
         await db.execute(sql`
@@ -536,10 +573,11 @@ test(
       const craPayable = await account("2310", "CRA payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       // org.vendorId (Acme Vendor) doubles as the CRA remittance vendor.
-      await db.execute(sql`
+      const vendorRole = await db.execute<{ party_id: string }>(sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        on conflict do nothing`);
+        returning party_id`);
+      assert.equal(vendorRole.rows.length, 1, "end-to-end CRA fixture must establish its payee role");
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
           payroll: {
@@ -574,9 +612,9 @@ test(
         insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                                country, province, pay_basis, federal_claim_code,
                                                provincial_claim_code, vacation_percent, vacation_method,
-                                               is_active, created_by, updated_by)
+                                               filing_account_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, ${remiEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
-                '4', 'accrue', true, ${actorId}, ${actorId})`);
+                '4', 'accrue', ${filingAccountId}, true, ${actorId}, ${actorId})`);
 
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -594,6 +632,7 @@ test(
       assert.equal(groups.length, 1);
       const cra = groups[0]!;
       assert.equal(cra.partyId, org.vendorId);
+      assert.equal(cra.filingAccount.id, filingAccountId, "the remittance uses the payroll calculation's filing account");
       assert.ok(!cra.components.some((c) => c.systemKey === "vacation_accrual"));
       const expectedTotal = sum([
         add(stub.factors.T!, stub.factors.TB ?? "0"),     // income tax
@@ -607,7 +646,7 @@ test(
 
       // Bill: draft vendor_bill debiting the liability account, marked for the period.
       const bill = await createRemittanceBill(org.orgId, actorId, {
-        partyId: org.vendorId, from: "2026-07-01", to: "2026-07-31",
+        partyId: org.vendorId, from: "2026-07-01", to: "2026-07-31", filingAccountId,
       });
       const billDoc = ((await db.execute<{
         status: string;
@@ -910,12 +949,12 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-01-15", amount: "10.00",
       });
-      await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
       });
 
       await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        createFixtureRemittanceBill(fixture, {
           partyId: fixture.org.vendorId, from: "2026-01-15", to: "2026-02-15",
         }),
         /overlaps 2026-01-01 – 2026-01-31/,
@@ -947,7 +986,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-01-15", amount: "10.00",
       });
-      const first = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const first = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
       });
       // A second accrual lands after the first bill: the same window now
@@ -955,7 +994,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-01-20", amount: "5.00",
       });
-      const second = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const second = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
       });
       assert.notEqual(second.documentId, first.documentId);
@@ -990,7 +1029,7 @@ test(
       );
       // Nothing left unbilled: an exact re-run keeps the duplicate refusal.
       await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        createFixtureRemittanceBill(fixture, {
           partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
         }),
         /already exists/,
@@ -1024,13 +1063,13 @@ test(
       // Neither the auto-resolved call nor the named-slice call may bill a
       // partial period as if it were whole.
       await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        createFixtureRemittanceBill(fixture, {
           partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
         }),
         /no legal entity/,
       );
       await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        createFixtureRemittanceBill(fixture, {
           partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
           subsidiaryId: fixture.org.subsidiaryId,
         }),
@@ -1063,7 +1102,7 @@ test(
         payDate: "2026-01-20", amount: "5.00", subsidiaryId: null,
       });
       await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        createFixtureRemittanceBill(fixture, {
           partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
         }),
         /no legal entity/,
@@ -1088,7 +1127,7 @@ test(
       });
       const group = groups.find((candidate) => candidate.partyId === fixture.org.vendorId)!;
       assert.equal(group.hasEntitylessAccruals, false);
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
       });
       const total = (await db.execute<{ total: string }>(sql`
@@ -1213,7 +1252,7 @@ test(
       assert.equal(doc.subsidiary_id, fixture.org.subsidiaryId);
       // Aligned, the posted run remits: its accruals now sit in the root's
       // slice instead of the entityless consolidated group.
-      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: fixture.org.date, to: fixture.org.date,
       });
       const total = (await db.execute<{ total: string }>(sql`
@@ -1302,7 +1341,7 @@ test(
           error instanceof PayrollError && /invalid from/.test(error.message),
       );
       await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        createFixtureRemittanceBill(fixture, {
           partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-13-01",
         }),
         (error: unknown) =>
@@ -1328,7 +1367,7 @@ test(
     // The fence is per (destination, filing account, entity): the fixture's
     // accruals post on the root subsidiary, so the holder takes the root's key.
     const key = remittanceFenceLockKey(fixture.org.orgId, {
-      partyId: fixture.org.vendorId, filingAccountId: null,
+      partyId: fixture.org.vendorId, filingAccountId: fixture.filingAccountId,
       subsidiaryId: fixture.org.subsidiaryId,
     });
     let release!: () => void;
@@ -1351,7 +1390,7 @@ test(
         payDate: "2026-01-15", amount: "10.00",
       });
       await lockReady;
-      const creating = createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const creating = createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
       });
       await waitForRemittanceFenceWaiter(key);
@@ -1411,7 +1450,7 @@ test(
 
       // The unbilled July accrual still bills to A after the vendor change,
       // and coverage records exactly the July line.
-      const billA = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const billA = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
       });
       const billTotal = (await db.execute<{ total: string }>(sql`
@@ -1450,7 +1489,7 @@ test(
       await addCommittedRemittanceAccrual(fixture, {
         payDate: "2026-07-15", amount: "100.00",
       });
-      const first = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+      const first = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
       });
       await submitAndReleaseIfUngated("vendor_bill", first.documentId, fixture.actorId);
@@ -1479,7 +1518,7 @@ test(
       // The July accruals still remit to A: there is nothing to bill to B,
       // so no second document is minted and no number is consumed.
       await assert.rejects(
-        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        createFixtureRemittanceBill(fixture, {
           partyId: vendorB, from: "2026-07-01", to: "2026-07-31",
         }),
         /nothing to remit to this vendor for the period/,
@@ -1514,10 +1553,11 @@ test(
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const craPayable = await account("2310", "CRA payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-      await db.execute(sql`
+      const vendorRole = await db.execute<{ party_id: string }>(sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        on conflict do nothing`);
+        returning party_id`);
+      assert.equal(vendorRole.rows.length, 1, "snapshot-payee fixture must establish its vendor role");
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
           payroll: {
@@ -1624,19 +1664,30 @@ test(
       const liabilityA = await account("2310", "CRA payable (old)", "liability_current");
       const liabilityB = await account("2311", "CRA payable (new)", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-      await db.execute(sql`
+      const filingAccountId = randomUUID();
+      const filingAccount = await db.execute<{ id: string }>(sql`
+        insert into payroll_filing_accounts
+          (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
+        values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0090',
+          'Historical liability account fixture', 'regular', true)
+        returning id`);
+      assert.equal(filingAccount.rows.length, 1, "historical-liability fixture must establish its filing account");
+      const vendorRole = await db.execute<{ party_id: string }>(sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        on conflict do nothing`);
-      await db.execute(sql`
+        returning party_id`);
+      assert.equal(vendorRole.rows.length, 1, "historical-liability fixture must establish its payee role");
+      const setup = await db.execute<{ id: string }>(sql`
         update orgs set settings = settings || ${JSON.stringify({
           payroll: {
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
             netPayAccountId: netPayable, cppPayableAccountId: liabilityA,
             eiPayableAccountId: liabilityA, taxPayableAccountId: liabilityA,
             vacationPayableAccountId: vacationPayable, wagesTo: "expense",
+            craRemittancePartyId: org.vendorId,
           },
-        })}::jsonb where id = ${org.orgId}`);
+        })}::jsonb where id = ${org.orgId} returning id`);
+      assert.equal(setup.rows.length, 1, "historical-liability fixture must configure its CRA destination");
       // Scratch orgs open July only; the second run pays in August.
       const calendar = (await db.execute<{ id: string }>(sql`
         select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
@@ -1676,9 +1727,9 @@ test(
         insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                                country, province, pay_basis, federal_claim_code,
                                                provincial_claim_code, vacation_percent, vacation_method,
-                                               is_active, created_by, updated_by)
+                                               filing_account_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, ${liabilityEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
-                '4', 'accrue', true, ${actorId}, ${actorId})`);
+                '4', 'accrue', ${filingAccountId}, true, ${actorId}, ${actorId})`);
       const postRun = async (periodStart: string, periodEnd: string) => {
         const run = await createPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart, periodEnd,
@@ -1731,7 +1782,7 @@ test(
       assert.equal(cmp(sumByAccount.get(liabilityB)!, august[0]!.total), 0);
 
       const bill = await createRemittanceBill(org.orgId, actorId, {
-        partyId: org.vendorId, from: "2026-07-01", to: "2026-08-31",
+        partyId: org.vendorId, from: "2026-07-01", to: "2026-08-31", filingAccountId,
       });
       const billLines = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id::text as account_id, amount::text as amount from document_lines

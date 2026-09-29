@@ -29,11 +29,12 @@ const module_ = (source: string): { shortCircuit: true; format: "module"; url: s
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // The two routes import the session gate by different relative paths.
-    // Re-export the REAL authz module and override only the session gate, so
-    // the subsidiary-scope guards under test are the production functions —
-    // a hand-copied guard double could only drift from the original.
+    // The routes and route factory import the session gate by relative and
+    // aliased paths. Re-export the real authz module and override only the
+    // session gate, leaving the subsidiary-scope guards under test as the
+    // production functions. A copied guard could only drift from the original.
     if (
+      specifier === "@/lib/authz" ||
       specifier === "../../../lib/authz" ||
       specifier === "../../../../lib/authz"
     ) {
@@ -57,7 +58,6 @@ const postRouteUrl = "./route.ts?reconcilable-currency-post";
 const patchRouteUrl = "./[id]/route.ts?reconcilable-currency-patch";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 const { PATCH, GET } = (await import(patchRouteUrl)) as typeof import("./[id]/route.ts");
-hooks.deregister();
 
 const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
@@ -313,3 +313,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

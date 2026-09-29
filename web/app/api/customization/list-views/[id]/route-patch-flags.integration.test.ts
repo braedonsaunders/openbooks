@@ -38,7 +38,13 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("customization/list-views")) {
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time, so the hook must cover that alias
+    // in addition to the route's relative import.
+    if (
+      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("customization/list-views")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -53,7 +59,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?list-view-patch-bool-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
@@ -145,3 +150,8 @@ test(
     assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

@@ -13,9 +13,13 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __rejectRouteState: state });
 registerHooks({
   resolve(specifier, context, next) {
+    // The route factory imports the exact alias lazily at request time from
+    // its own module URL, so it never matches the route-directory guard.
+    // Match the alias exactly so the factory gate uses this test's session.
     if (
-      specifier.endsWith("/lib/feature-gates") &&
-      context.parentURL?.includes("/api/timesheets/reject/")
+      specifier === "@/lib/feature-gates" ||
+      (specifier.endsWith("/lib/feature-gates") &&
+        context.parentURL?.includes("/api/timesheets/reject/"))
     ) {
       return {
         shortCircuit: true,

@@ -36,10 +36,11 @@ const DASHBOARD_FEATURE: Partial<Record<string, string>> = {
  * threshold to its stale value. Editing is gated on the same permission as
  * the Setup workspace.
  *
- * WRITE validation is strict per field (types, ranges, no unknown keys — a
- * named 422 otherwise), because the merge-and-clamp reader exists to stay
- * tolerant of legacy stored settings, not to silently rewrite what an admin
- * asked to save. READ stays tolerant: mergeConfig still clamps legacy blobs.
+ * WRITE validation rejects malformed bodies at the request boundary and
+ * invalid dashboard values with a named 422, because the merge-and-clamp
+ * reader exists to stay tolerant of legacy stored settings, not to silently
+ * rewrite what an admin asked to save. READ stays tolerant: mergeConfig still
+ * clamps legacy blobs.
  */
 async function dashboardFeatureRefusal(orgId: string, dashboard: string) {
   const featureKey = DASHBOARD_FEATURE[dashboard];
@@ -54,7 +55,7 @@ const dashboardBody = z.strictObject({
   expectedRevision: z.union([
     z.number().int().nonnegative(),
     z.string().regex(/^\d+$/, 'expectedRevision must be a non-negative integer').transform(Number),
-  ]).pipe(z.number().int().safe().nonnegative()),
+  ]).pipe(z.number().int().safe().nonnegative()).optional(),
   values: z.record(z.string(), z.union([z.number().finite(), z.string(), z.boolean()])),
 })
 
@@ -235,6 +236,8 @@ export const PUT = defineRoute({
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
 
+  // Missing revisions need the dashboard-specific reload remedy below;
+  // malformed supplied revisions are rejected by the body schema.
   const expectedRevision = parseRevision(body.expectedRevision);
   if (expectedRevision === null) {
     return NextResponse.json({ error: revisionRequired(dashboard) }, { status: 409 });

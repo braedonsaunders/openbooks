@@ -82,7 +82,6 @@ const routeUrl = "./route.ts?banking-rules-concurrency-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 const deleteRouteUrl = "./[id]/route.ts?banking-rules-delete-test";
 const { DELETE } = (await import(deleteRouteUrl)) as typeof import("./[id]/route.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
@@ -316,3 +315,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

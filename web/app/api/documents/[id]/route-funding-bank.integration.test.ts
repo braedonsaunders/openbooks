@@ -16,7 +16,11 @@ Object.assign(globalThis, { __fundingBankRoundTripState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import. Identical sources share one module
+    // instance across both spellings.
+    if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__fundingBankRoundTripState;
         return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };

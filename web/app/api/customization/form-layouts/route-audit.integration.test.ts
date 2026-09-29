@@ -33,7 +33,10 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith("lib/authz") && context.parentURL?.includes("customization/form-layouts")) {
+    if (
+      (specifier.endsWith("lib/authz") && context.parentURL?.includes("customization/form-layouts")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:form-layout-audit-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -50,7 +53,6 @@ const collectionUrl = "./route.ts?form-layout-audit-test";
 const { POST } = (await import(collectionUrl)) as typeof import("./route.ts");
 const memberUrl = "./[id]/route.ts?form-layout-audit-test";
 const member = (await import(memberUrl)) as typeof import("./[id]/route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { defaultFormLayout } = await import("@openbooks/customization");
@@ -135,3 +137,6 @@ test(
     assert.equal(deleteChanges.after, null);
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

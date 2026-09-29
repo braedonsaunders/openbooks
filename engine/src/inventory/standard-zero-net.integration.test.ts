@@ -22,6 +22,13 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "server-only") return virtual("export {}");
   if (specifier.endsWith("/lib/feature-gates") && parent.endsWith("/costing/route.ts")) return virtual(
     "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.standard-zero-net')].gate}");
+  // The route factory resolves both gates by @/ alias at request time, from
+  // web/lib/api/route.ts rather than the costing route. Serve its literals
+  // the same intended gate; the scope guard stays the real implementation.
+  if (specifier === "@/lib/feature-gates") return virtual(
+    "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.standard-zero-net')].gate}");
+  if (specifier === "@/lib/authz") return virtual(
+    `export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../web/lib/authz.ts", import.meta.url).href)}`);
   if (specifier === "@/lib/api/json") return next(new URL("../../../web/lib/api/json.ts", import.meta.url).href, context);
   return next(specifier, context);
 } });
@@ -33,7 +40,7 @@ async function profileRequest(org: ScratchOrg, varianceAccountId: string | null 
     from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
   return new Request(`http://localhost/api/items/${org.items.fifo}/costing`, {
     method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
-      costingMethod: "standard", tracking: "none", standardCost: "10", expectedUpdatedAt: revision,
+      costingMethod: "standard", tracking: "none", standardCost: "10", expectedUpdatedAt: revision, baseUnit: "ea",
       assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
       adjustmentAccountId: org.accounts.adjustment, varianceAccountId,
       recostingAuthorization: "Controller authorized normalization of open FIFO layers to standard cost",

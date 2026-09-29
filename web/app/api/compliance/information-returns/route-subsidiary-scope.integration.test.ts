@@ -70,7 +70,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?info-returns-scope";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
@@ -121,7 +120,10 @@ test("a malformed subsidiary id is a 400, never an org-wide filing", async () =>
     const response = await POST(postRequest(filingBody("nope")));
 
     assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), { error: "subsidiaryId must be a valid UUID" });
+    assert.deepEqual(await response.json(), {
+      error: "subsidiaryId must be a valid UUID",
+      issues: [{ message: "subsidiaryId must be a valid UUID", path: "subsidiaryId" }],
+    });
     assert.equal(await filingCount(org.orgId), 0);
   } finally {
     state.gate = null;
@@ -162,3 +164,6 @@ test("a well-formed id outside the org is a 404, not an org-wide filing", async 
     await dropScratchOrg(org.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

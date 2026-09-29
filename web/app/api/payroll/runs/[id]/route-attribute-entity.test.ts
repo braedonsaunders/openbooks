@@ -63,7 +63,6 @@ const hooks = registerHooks({
 // for these imports.
 const runUrl = "./route.ts?payroll-run-attribute-entity";
 const { POST: postRun } = (await import(runUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -221,3 +220,8 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy feature-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

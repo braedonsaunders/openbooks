@@ -115,6 +115,13 @@ registerHooks({
       authzRealUrl = nextResolve(specifier, context).url;
       return { url: "mock:authz", shortCircuit: true };
     }
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import. The route import above always resolves
+    // first, so the real-module URL for the scope-guard re-export is set.
+    if (specifier === "@/lib/authz") {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     // The route's own db import is wrapped, and so is the canonical
     // wage writer's (save-rate lives in
     // engine/src/projects/labor-cost-rates.ts): the fault seam follows
@@ -490,7 +497,13 @@ test("allowUnratedTime persists when explicitly set and rejects non-booleans", a
     const bad = await PUT(putRequest({
       settings: { mode: "off", hoursPerDay: "8", annualHours: "2080", components: [], allowUnratedTime: "yes" },
     }));
-    assert.equal(bad.status, 422);
+    // The boundary requires a boolean at the exact field.
+    const badBody = (await bad.json()) as { issues: { path: string }[] };
+    assert.equal(bad.status, 400, `expected 400, got ${bad.status}: ${JSON.stringify(badBody)}`);
+    assert.ok(
+      badBody.issues?.some((issue) => issue.path.includes("allowUnratedTime")),
+      `the refusal names the field: ${JSON.stringify(badBody)}`,
+    );
     // The rejected save left the stored opt-in exactly as it was.
     assert.equal((await storedPolicy(f.orgId))?.allowUnratedTime, true);
   } finally {
@@ -510,7 +523,8 @@ test("a malformed component rejects the whole save and persists nothing", async 
     };
 
     // Each payload used to be silently sanitized (bad entries dropped, rest
-    // saved) — now every one is a strict 422 with nothing written.
+    // saved) — now every one is refused at the request boundary with nothing
+    // written.
     const malformedComponents: unknown[] = [
       [{ kind: "annual_bonus", value: 5 }],
       [{ kind: "per_hour", value: -2 }],
@@ -524,17 +538,31 @@ test("a malformed component rejects the whole save and persists nothing", async 
         settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components },
         laborWip: f.wipAccount,
       }));
-      assert.equal(res.status, 422, `expected 422 for components ${JSON.stringify(components)}`);
+      assert.equal(res.status, 400, `expected 400 for components ${JSON.stringify(components)}`);
     }
 
-    // A JSON number is refused by name with the decimal-string remedy — the
-    // rounded IEEE-754 value must never look exact.
+    // A decimal-shaped string that is too precise keeps the named scale
+    // remedy at the boundary.
+    const precise = await PUT(putRequest({
+      settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [{ kind: "per_hour", value: "1.23456" }] },
+      laborWip: f.wipAccount,
+    }));
+    assert.equal(precise.status, 400);
+    assert.match(((await precise.json()) as { error: string }).error, /allows at most 4 decimal places/);
+
+    // A JSON number never reaches the decimal classifier: the boundary
+    // requires a string at the exact field, so the rounded IEEE-754 value
+    // can never look exact — and nothing is written.
     const numeric = await PUT(putRequest({
       settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [{ kind: "per_hour", value: 5 }] },
       laborWip: f.wipAccount,
     }));
-    assert.equal(numeric.status, 422);
-    assert.match(((await numeric.json()) as { error: string }).error, /decimal string/);
+    assert.equal(numeric.status, 400);
+    const numericBody = (await numeric.json()) as { issues: { path: string }[] };
+    assert.ok(
+      numericBody.issues?.some((issue) => issue.path.includes("components.0.value")),
+      `the refusal names the field: ${JSON.stringify(numericBody)}`,
+    );
 
     // Structural refusals around the component list itself.
     const tooMany = Array.from({ length: 21 }, (_, i) => ({ kind: "per_hour", value: i }));
@@ -544,7 +572,7 @@ test("a malformed component rejects the whole save and persists nothing", async 
       { mode: "sometimes", hoursPerDay: "8", annualHours: "2080", components: [] },
     ]) {
       const res = await PUT(putRequest({ settings }));
-      assert.equal(res.status, 422, `expected 422 for settings ${JSON.stringify(settings)}`);
+      assert.equal(res.status, 400, `expected 400 for settings ${JSON.stringify(settings)}`);
     }
 
     await assertNothingPersisted(f.orgId);
@@ -570,7 +598,13 @@ test("a valid save with an invalid control account persists NOTHING — not even
       settings: { mode: "post", hoursPerDay: "7.5", annualHours: "1900", components: [] },
       laborWip: "not-a-uuid",
     }));
-    assert.equal(badUuid.status, 422);
+    // The boundary requires a uuid at the exact account field.
+    const badUuidBody = (await badUuid.json()) as { issues: { path: string }[] };
+    assert.equal(badUuid.status, 400, `expected 400, got ${badUuid.status}: ${JSON.stringify(badUuidBody)}`);
+    assert.ok(
+      badUuidBody.issues?.some((issue) => issue.path.includes("laborWip")),
+      `the refusal names the field: ${JSON.stringify(badUuidBody)}`,
+    );
     await assertNothingPersisted(f.orgId);
 
     // An unknown or summary account must equally refuse the whole save.
@@ -951,7 +985,11 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
+    // The policy and the control accounts save together: the empty settings
+    // object intentionally chooses the defaults rather than resetting them
+    // by omission.
     const configured = await PUT(putRequest({
+      settings: {},
       laborWip: f.wipAccount,
       laborClearing: f.clearingAccount,
       payrollVariance: f.varianceAccount,

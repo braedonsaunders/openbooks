@@ -5,8 +5,8 @@
  * the second saves with the now-stale revision and must get a 409 naming
  * the reload — with the first editor's hours intact (nothing lost). A save
  * with the fresh revision succeeds. Saves that predate the fence (no
- * expectedRevision) keep the old behavior so existing clients are
- * unaffected.
+ * expectedRevision) are refused before any write so a client cannot bypass
+ * the lost-update fence.
  *
  * DB-owned: drives the real PUT twice-over with two sessions against one
  * scratch week, asserting status codes, the named error, and the stored
@@ -107,9 +107,18 @@ const row = (project: string, item: string, hours: string[]) => ({
 test('a stale weekly save gets a named 409 with nothing lost; a fresh save succeeds', async () => {
   const f = await fixture()
   try {
-    // Both editors open the same empty week; the first save establishes
-    // the revision the fence compares against.
-    const first = await f.save(f.editorA, { rows: [row(f.project, f.serviceItem, ['8', '', '', '', '', '', ''])] })
+    // Both editors open the same empty week; the first save uses the
+    // revision the server issued for that empty state.
+    session.user = asUser(f.editorA, f.org.orgId)
+    const opened = await withOrgContext(f.org.orgId, () =>
+      GET(new Request(`http://probe.local/api/timesheets?employee=${f.employee}&week=${WEEK}`)))
+    assert.equal(opened.status, 200)
+    const initialRevision = ((await opened.json()) as { revision?: unknown }).revision
+    assert.ok(typeof initialRevision === 'string' && initialRevision.length > 0)
+    const first = await f.save(f.editorA, {
+      expectedRevision: initialRevision,
+      rows: [row(f.project, f.serviceItem, ['8', '', '', '', '', '', ''])],
+    })
     assert.equal(first.status, 200)
     const r1 = ((await first.json()) as { revision?: unknown }).revision
     assert.ok(typeof r1 === 'string' && r1.length > 0, 'the save response carries the week revision')
@@ -157,11 +166,15 @@ test('a stale weekly save gets a named 409 with nothing lost; a fresh save succe
   }
 })
 
-test('saves without a revision keep the old behavior', async () => {
+test('saves without a revision refuse before changing the week', async () => {
   const f = await fixture()
   try {
     const res = await f.save(f.editorA, { rows: [row(f.project, f.serviceItem, ['8', '', '', '', '', '', ''])] })
-    assert.equal(res.status, 200)
+    assert.equal(res.status, 422)
+    const refusal = (await res.json()) as { error?: unknown; issues?: Array<{ path?: string; message?: string }> }
+    assert.ok(refusal.issues?.some((issue) => issue.path === 'expectedRevision' && Boolean(issue.message?.trim())),
+      'the refusal identifies the missing revision')
+    assert.deepEqual(await f.snapshot(), [], 'a revisionless save cannot write time')
   } finally {
     await f.close()
   }

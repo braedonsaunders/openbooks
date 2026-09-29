@@ -22,13 +22,13 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:t
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'next/navigation') return virtual('export function redirect() {}')
-    if (specifier === '../../../../../lib/authz') return virtual(`
+    if (specifier === '@/lib/authz' || specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__opportunityActivationState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    if (specifier === '@/lib/feature-gates' || specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__opportunityActivationState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -84,21 +84,17 @@ async function revision(id: string): Promise<string> {
   return row.revision
 }
 
-async function patch(id: string, body: Record<string, unknown>): Promise<{ status: number; json: unknown }> {
-  try {
-    const expectedUpdatedAt = await revision(id)
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://crm.test/api/crm/opportunities/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...body, expectedUpdatedAt }),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
-  } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
-  }
+async function patch(id: string, body: Record<string, unknown>): Promise<{ status: number; body: string }> {
+  const expectedUpdatedAt = await revision(id)
+  const response = await withOrgContext(state.orgId, () => PATCH(
+    new Request(`http://crm.test/api/crm/opportunities/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, expectedUpdatedAt }),
+    }),
+    { params: Promise.resolve({ id }) },
+  ))
+  return { status: response.status, body: await response.text() }
 }
 
 async function listedNumbers(orgId: string): Promise<string[]> {
@@ -123,7 +119,7 @@ test('closing an account-less titled opportunity activates it into the Status=Al
 
     // Drawer-shaped close: status + loss reason, no isActive flag.
     const saved = await patch(oppId, { statusId: closedLostId, winLossReason: 'Lost on price' })
-    assert.equal(saved.status, 200)
+    assert.equal(saved.status, 200, saved.body)
     const active = (await db.execute<{ is_active: boolean }>(sql`
       select is_active from crm_opportunities where id = ${oppId}`)).rows[0]!.is_active
     assert.equal(active, true, 'titled closed record activates without an account')
@@ -140,7 +136,7 @@ test('a placeholder-titled stub stays hidden after an open save', async () => {
   try {
     const oppId = await seedOpp(org.orgId, 'OPP-SIM-1', 'New opportunity', openId)
     const saved = await patch(oppId, { statusId: openId })
-    assert.equal(saved.status, 200)
+    assert.equal(saved.status, 200, saved.body)
     const active = (await db.execute<{ is_active: boolean }>(sql`
       select is_active from crm_opportunities where id = ${oppId}`)).rows[0]!.is_active
     assert.equal(active, false, 'untitled stub must not leak into the list')

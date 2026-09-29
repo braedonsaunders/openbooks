@@ -34,10 +34,17 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
+    if (
+      specifier === "./authz" &&
+      (String(context.parentURL ?? "").includes("lib/allocations-gate.ts") ||
+        String(context.parentURL ?? "").includes("/lib/feature-gates"))
+    ) {
       return { url: "mock:values-authz", shortCircuit: true };
     }
-    if (specifier.includes("lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/driver-values/")) return { url: "mock:values-authz", shortCircuit: true };
+    if (
+      (specifier.includes("lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/driver-values/")) ||
+      (specifier === "@/lib/authz" && String(context.parentURL ?? "").includes("/lib/api/route"))
+    ) return { url: "mock:values-authz", shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -52,7 +59,6 @@ const collectionUrl = "./route.ts?alloc-values";
 const itemUrl = "./[id]/route.ts?alloc-values";
 const collectionRoute = (await import(collectionUrl)) as typeof import("./route.ts");
 const itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
-hooks.deregister();
 
 const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -188,3 +194,6 @@ test("values writes need manage; reads 404 with feature off", async () => {
     await dropScratchOrg(org.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

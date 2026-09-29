@@ -17,40 +17,32 @@ interface CommitState {
 const commitState: CommitState = { authz: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[STATE_KEY] = commitState
 
+// One session for every spelling of the gate: the route imports it by
+// relative path while the route factory resolves the same module by @/
+// alias at request time. All three must serve the identical double.
+const commitAuthzSource = `
+  const state = globalThis[Symbol.for('openbooks.assistant-commit-scope-test')]
+  export async function guardPermission() {
+    return state.authz
+  }
+  export function can(authz, perm) {
+    return authz.permissions.has(perm)
+  }
+  export function subsidiaryScopeAllows(scope, subsidiaryId, opts = {}) {
+    if (scope === null) return true
+    if (subsidiaryId == null || subsidiaryId === '') return opts.orgWideNull === true
+    return scope.has(subsidiaryId)
+  }
+`
 stubModules({
   navigation: false,
   intl: false,
   authz: false,
   features: false,
   extra: {
-    "../../../../lib/authz": `
-      const state = globalThis[Symbol.for('openbooks.assistant-commit-scope-test')]
-      export async function guardPermission() {
-        return state.authz
-      }
-      export function can(authz, perm) {
-        return authz.permissions.has(perm)
-      }
-      export function subsidiaryScopeAllows(scope, subsidiaryId, opts = {}) {
-        if (scope === null) return true
-        if (subsidiaryId == null || subsidiaryId === '') return opts.orgWideNull === true
-        return scope.has(subsidiaryId)
-      }
-    `,
-    "../authz": `
-      const state = globalThis[Symbol.for('openbooks.assistant-commit-scope-test')]
-      export async function guardPermission() {
-        return state.authz
-      }
-      export function can(authz, perm) {
-        return authz.permissions.has(perm)
-      }
-      export function subsidiaryScopeAllows(scope, subsidiaryId, opts = {}) {
-        if (scope === null) return true
-        if (subsidiaryId == null || subsidiaryId === '') return opts.orgWideNull === true
-        return scope.has(subsidiaryId)
-      }
-    `,
+    "../../../../lib/authz": commitAuthzSource,
+    "../authz": commitAuthzSource,
+    "@/lib/authz": commitAuthzSource,
     "../../../../lib/assistant/proposals": `
       export function verifyProposal() {
         return true
@@ -79,8 +71,12 @@ type Fixture = {
   org: Awaited<ReturnType<typeof createScratchOrg>>
   actorId: string
   childSub: string
+  bankLabel: string
+  revenueLabel: string
 }
 
+// Preview lines carry the server-side "number · name" account label, so
+// resolve the scratch accounts' real labels rather than inventing text.
 async function makeFixture(): Promise<Fixture> {
   const org = await withBypass(async () => {
     const created = await createScratchOrg()
@@ -93,7 +89,19 @@ async function makeFixture(): Promise<Fixture> {
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${childSub}, ${org.created.orgId}, ${org.created.subsidiaryId}, 'Branch Co', 'CAD', 'CA')`)
   })
-  return { org: org.created, actorId: org.actors.adminId, childSub }
+  const label = async (id: string) =>
+    (await withBypass(() =>
+      db.execute<{ number: string; name: string }>(sql`select number, name from accounts where id = ${id} and org_id = ${org.created.orgId}`),
+    )).rows[0]!
+  const bank = await label(org.created.accounts.bank)
+  const revenue = await label(org.created.accounts.revenue)
+  return {
+    org: org.created,
+    actorId: org.actors.adminId,
+    childSub,
+    bankLabel: `${bank.number} · ${bank.name}`,
+    revenueLabel: `${revenue.number} · ${revenue.name}`,
+  }
 }
 
 function authzFor(fx: Fixture, allowed: Set<string> | null): CommitState['authz'] {
@@ -122,8 +130,8 @@ function commitBody(fx: Fixture) {
       documentDate: fx.org.date,
       memo: 'commit scope probe',
       lines: [
-        { accountId: fx.org.accounts.bank, description: null, amount: '10.00' },
-        { accountId: fx.org.accounts.revenue, description: null, amount: '-10.00' },
+        { accountId: fx.org.accounts.bank, accountLabel: fx.bankLabel, description: null, amount: '10.00' },
+        { accountId: fx.org.accounts.revenue, accountLabel: fx.revenueLabel, description: null, amount: '-10.00' },
       ],
     },
     confirmToken: `scope-probe-${randomUUID()}`,

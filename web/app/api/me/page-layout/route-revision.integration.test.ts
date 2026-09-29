@@ -36,6 +36,12 @@ registerHooks({
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("me/page-layout/route")) {
       return { url: "mock:page-layout-authz", shortCircuit: true };
     }
+    // Self-service routes authenticate through the factory, which reads the
+    // session from the `@/lib/authz` alias: without this edge the factory
+    // loads the real cookie session instead of the test session.
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:page-layout-authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

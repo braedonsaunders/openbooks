@@ -20,7 +20,11 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/…"
+    // spellings at request time; they must see the same test session as the
+    // route file's relative imports. Identical sources share one module
+    // instance across both spellings.
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__crmAccountMagnitudeState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };

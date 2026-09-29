@@ -25,6 +25,12 @@ registerHooks({
     ) {
       return { url: 'mock:record-type-lifecycle-authz', shortCircuit: true }
     }
+    // The route factory authenticates through the `@/lib/authz` alias, which
+    // the relative-only condition above never matches: without this edge the
+    // factory loads the real cookie session instead of the test session.
+    if (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route')) {
+      return { url: 'mock:record-type-lifecycle-authz', shortCircuit: true }
+    }
     if (context.parentURL?.startsWith('mock:') && (specifier.startsWith('@openbooks/') || specifier === 'next/server')) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url })
     }

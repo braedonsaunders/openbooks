@@ -14,7 +14,10 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __lienWaiverRouteUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/compliance/lien-waivers/")) {
+    // The route factory imports the gate by @/ alias at request time, from
+    // web/lib/api/route.ts rather than the route directory; serve it the
+    // same intended session as the route's own import.
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/compliance/lien-waivers/"))) {
       return {
         shortCircuit: true,
         url:

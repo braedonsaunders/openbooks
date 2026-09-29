@@ -26,6 +26,10 @@ const hooks = registerHooks({
     // The draft routes gate through guardFeaturePermission, which calls the
     // REAL guardPermission via web/lib's own './authz' specifier — intercept
     // that too, or the feature gate would resolve a real session.
+    // The factory reaches the fixture session through the real feature gate,
+    // which calls guardPermission via web/lib's own './authz' specifier — so
+    // that specifier stays intercepted for the whole file, not just the
+    // route import below.
     if (specifier === '../../../../lib/authz' ||
         (specifier === './authz' && (context.parentURL ?? '').includes('/web/lib/'))) {
       const real = nextResolve(specifier, context).url
@@ -49,7 +53,9 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
 const { POST } = await import('./route.ts')
-hooks.deregister()
+// The factory's lazy feature-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister())
 
 async function setup() {
   const org = await withBypassContext(() => (createScratchOrg()))

@@ -41,6 +41,12 @@ registerHooks({
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
+    // The route factory authenticates through the `@/lib/authz` alias, which
+    // the relative-only condition above never matches: without this edge the
+    // factory loads the real cookie session instead of the test session.
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

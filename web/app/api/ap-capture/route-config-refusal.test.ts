@@ -55,7 +55,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?ap-capture-config";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
@@ -101,3 +100,6 @@ test("a misconfigured endpoint surfaces its own message, never not-configured", 
     await dropScratchOrg(org.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

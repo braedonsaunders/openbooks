@@ -55,7 +55,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
       export const db = {
         async execute() {
-          return { rows: [{ id: '00000000-0000-0000-0000-000000000001', subsidiary_id: state.projectSubsidiary }] }
+          return { rows: [{ id: '11111111-1111-4111-8111-111111111111', subsidiary_id: state.projectSubsidiary }] }
         },
       }
     `,
@@ -87,11 +87,11 @@ const mockSources = new Map<string, string>([
       export async function upsertScheduleResource() {}
       export async function deleteScheduleCalendar(...args) {
         state.calendarArgs = args
-        if (args[2] === '00000000-0000-0000-0000-000000000002') throw new ScheduleError('calendar not found', 404)
+        if (args[2] === '22222222-2222-4222-8222-222222222222') throw new ScheduleError('calendar not found', 404)
       }
       export async function deleteScheduleResource(...args) {
         state.resourceArgs = args
-        if (args[2] === '00000000-0000-0000-0000-000000000002') throw new ScheduleError('resource not found', 404)
+        if (args[2] === '22222222-2222-4222-8222-222222222222') throw new ScheduleError('resource not found', 404)
       }
     `,
   ],
@@ -100,7 +100,11 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'next/server') return { url: 'mock:next-server', shortCircuit: true }
-    if (specifier === '../../../lib/authz') return { url: 'mock:authz', shortCircuit: true }
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time, so the hook must cover that alias
+    // in addition to the route's relative import.
+    if ((specifier === '../../../lib/authz' && (context.parentURL ?? '').includes('/api/project-schedule/')) ||
+      (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route'))) return { url: 'mock:authz', shortCircuit: true }
     if (specifier === '../../../lib/projects-gate') return { url: 'mock:feature-gate', shortCircuit: true }
     if (specifier === '../../../lib/project-schedule') return { url: 'mock:schedule', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
@@ -116,11 +120,13 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?project-schedule-route-regression'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister())
 
 const ORG_ID = '00000000-0000-0000-0000-000000000010'
-const PROJECT_A = '00000000-0000-0000-0000-000000000001'
-const FOREIGN_ID = '00000000-0000-0000-0000-000000000002'
+const PROJECT_A = '11111111-1111-4111-8111-111111111111'
+const FOREIGN_ID = '22222222-2222-4222-8222-222222222222'
 
 test('cross-project delete attempts fail closed with the authorized project boundary', async () => {
   state.authz = {

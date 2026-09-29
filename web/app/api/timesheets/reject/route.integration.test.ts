@@ -74,7 +74,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?timesheets-reject";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedActiveEmployment } = await import(
@@ -222,3 +221,8 @@ test("an empty rejection rolls the header stamp back instead of recording a reas
     await dropScratchOrg(org.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy gate imports run on every request, so the hook must
+// stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

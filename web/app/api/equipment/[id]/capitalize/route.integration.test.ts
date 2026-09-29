@@ -43,9 +43,14 @@ const mockEnsure = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The route factory resolves its permission/feature gate lazily through
+    // the @/lib/feature-gates alias at request time, so the hook must cover
+    // that alias in addition to the route's relative import.
     if (
-      specifier === "../../../../../lib/feature-gates"
-      && context.parentURL?.includes("/api/equipment/")
+      (specifier === "../../../../../lib/feature-gates"
+        && context.parentURL?.includes("/api/equipment/")) ||
+      (specifier === "@/lib/feature-gates"
+        && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:equipment-feature-gates", shortCircuit: true };
     }
@@ -79,7 +84,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?equipment-capitalization-concurrency-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -219,3 +223,8 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy feature-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

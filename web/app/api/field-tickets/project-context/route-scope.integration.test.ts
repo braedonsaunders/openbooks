@@ -21,6 +21,21 @@ const module_ = (source: string) => ({
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The route factory resolves its permission/feature gate lazily through
+    // the @/lib/feature-gates alias at request time, so the hook must serve
+    // the fixture session there too — not just on the route's relative
+    // authz import.
+    if (specifier === '@/lib/feature-gates' && (context.parentURL ?? '').includes('/lib/api/route')) {
+      return module_(`
+        export async function guardFeaturePermission() {
+          return {
+            user: { orgId: '00000000-0000-4000-8000-000000000001', id: '00000000-0000-4000-8000-000000000002' },
+            permissions: new Set(['time.read']),
+            allowedSubsidiaryIds: new Set([${JSON.stringify(SUB_A)}]),
+          };
+        }
+      `)
+    }
     if (specifier.endsWith('/lib/authz')) {
       const real = nextResolve(specifier, context).url
       return module_(`
@@ -61,7 +76,9 @@ const hooks = registerHooks({
 
 const { GET: projectContext } = await import('./route.ts')
 const { GET: itemRate } = await import('../item-rate/route.ts')
-hooks.deregister()
+// The factory's lazy gate imports run on every request, so the hook must
+// stay registered until the file's tests finish.
+test.after(() => hooks.deregister())
 
 test('project context hides another subsidiary before loading customer and task details', async () => {
   state.queries.length = 0

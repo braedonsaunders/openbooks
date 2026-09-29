@@ -28,7 +28,10 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith("/lib/feature-gates") && context.parentURL?.includes("/api/assets/")) {
+    if (
+      (specifier.endsWith("/lib/feature-gates") && context.parentURL?.includes("/api/assets/")) ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:asset-account-override-feature-gates", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -43,7 +46,6 @@ const hooks = registerHooks({
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 const { PATCH } = (await import("./[id]/route.ts")) as typeof import("./[id]/route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
@@ -197,3 +199,6 @@ for (const writer of writers) {
     }
   });
 }
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

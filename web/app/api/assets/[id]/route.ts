@@ -56,7 +56,9 @@ const nullableDate = (field: string) =>
 const nullableId = z.string().uuid("must be a valid id").nullable();
 const patchBodySchema0 = z
   .strictObject({
-    expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, "expectedUpdatedAt must be the asset revision"),
+    // Omitted or malformed tokens reach the named reload refusal below; the
+    // boundary only enforces the string shape.
+    expectedUpdatedAt: z.string().optional(),
     name: z.string().trim().min(1, "name cannot be empty").optional(),
     assetNumber: z.string().trim().max(80).optional(),
     description: z.string().nullable().optional(),

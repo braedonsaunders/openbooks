@@ -15,7 +15,11 @@ Object.assign(globalThis, { __budgetDimsState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/…"
+    // spellings at request time; they must see the same test session as the
+    // route file's relative imports. Identical sources share one module
+    // instance across both spellings.
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetDimsState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
@@ -60,8 +64,15 @@ test('copy_prior_actuals refuses a malformed dimension id instead of broadening 
       }),
       { params: Promise.resolve({ id: scenarioId }) },
     ))
-    const body = (await response.json()) as { error?: string }
-    assert.match(body.error ?? '', /invalid_department/, `malformed dimension must refuse by name: ${JSON.stringify(body)}`)
+    // The boundary requires a uuid at the exact dimension field (this route
+    // contracts 422 for body refusals); the refused copy must still change
+    // no revision and delete no lines.
+    const body = (await response.json()) as { error?: string; issues?: { path: string }[] }
+    assert.equal(response.status, 422, `malformed dimension must refuse: ${JSON.stringify(body)}`)
+    assert.ok(
+      body.issues?.some((issue) => issue.path.includes('departmentId')),
+      `malformed dimension must refuse by name: ${JSON.stringify(body)}`,
+    )
 
     const after = (await db.execute<{ revision: number; n: number }>(sql`
       select revision, (select count(*)::int from budget_lines where scenario_id = ${scenarioId} and org_id = ${org.orgId}) as n

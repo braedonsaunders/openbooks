@@ -11,7 +11,11 @@ Object.assign(globalThis, { __customPrefsIdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/authz') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import. Identical sources share one module
+    // instance across both spellings.
+    if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__customPrefsIdState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -64,7 +68,10 @@ test('form-preferences rejects a malformed layoutId instead of throwing', async 
   const org = await fixture()
   try {
     const result = await put(putForm, { recordType: 'vendor_bill', layoutId: 'not-a-uuid' })
-    assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+    // The boundary requires a valid id at the exact field; unknown ids still
+    // reach the handler's not-found contract below.
+    assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.match((result.json as { error?: string }).error ?? '', /must be a valid id/)
   } finally {
     await dropScratchOrg(org.orgId)
   }
@@ -74,7 +81,10 @@ test('list-preferences rejects a malformed viewId instead of throwing', async ()
   const org = await fixture()
   try {
     const result = await put(putList, { recordType: 'vendor_bill', viewId: 'not-a-uuid' })
-    assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+    // The boundary requires a valid id at the exact field; unknown ids still
+    // reach the handler's not-found contract below.
+    assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.match((result.json as { error?: string }).error ?? '', /must be a valid id/)
   } finally {
     await dropScratchOrg(org.orgId)
   }

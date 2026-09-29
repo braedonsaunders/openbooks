@@ -15,7 +15,10 @@ registerHooks({
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
     }
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/saved-reports/")) {
+    // The route factory imports the same alias lazily at request time from
+    // its own module URL, so it never matches the route-directory guard.
+    // Match the alias exactly so the factory gate uses this test's session.
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/saved-reports/"))) {
       return {
         shortCircuit: true,
         url:
@@ -53,5 +56,8 @@ test("DELETE answers a malformed id with 4xx, never a 500", async () => {
 test("POST answers a non-string path with 400, never a 500", async () => {
   const response = await POST(json("POST", { name: "Board pack", path: 42 }));
   assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: "name and a /reports path required" });
+  assert.deepEqual(await response.json(), {
+    error: "name and a /reports path required",
+    issues: [{ path: "path", message: "name and a /reports path required" }],
+  });
 });

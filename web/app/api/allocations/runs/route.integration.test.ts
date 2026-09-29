@@ -38,7 +38,11 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
+    if (
+      specifier === "./authz" &&
+      (String(context.parentURL ?? "").includes("lib/allocations-gate.ts") ||
+        String(context.parentURL ?? "").includes("/lib/feature-gates"))
+    ) {
       return { url: "mock:runs-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -65,7 +69,6 @@ const reverseRoute = (await import(reverseUrl)) as typeof import("./[id]/reverse
 const rerunRoute = (await import(rerunUrl)) as typeof import("./[id]/rerun/route.ts");
 const lineageUrl = "../lineage/route.ts?alloc-runs";
 const lineageRoute = (await import(lineageUrl)) as typeof import("../lineage/route.ts");
-hooks.deregister();
 
 const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -610,3 +613,6 @@ test("S3: lineage route scopes anchors and paginates", async () => {
     await dropScratchOrg(s.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

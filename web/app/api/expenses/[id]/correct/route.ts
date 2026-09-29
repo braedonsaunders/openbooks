@@ -15,8 +15,20 @@ import { type ExpenseCorrectionBody, createExpenseCorrectionDraft } from '../../
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 const POSTBodySchema1 = z.object({
-  amendmentReason: z.string().trim().min(1), expectedUpdatedAt: z.string().min(1),
-});
+  // Omitted values reach the named revision/reason refusals below; a
+  // narrower schema either 400s before them or silently drops submitted
+  // edits (memo, lines) while still answering 201. The correction draft
+  // runs the same validation the draft PATCH runs.
+  amendmentReason: z.string().trim().min(1).optional(),
+  expectedUpdatedAt: z.string().min(1).optional(),
+  documentDate: z.string().optional(),
+  memo: z.string().nullable().optional(),
+  partyId: z.string().nullable().optional(),
+  paymentCardId: z.string().nullable().optional(),
+  extraDims: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.unknown()).optional(),
+  lines: z.array(z.looseObject({})).optional(),
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 
@@ -39,6 +51,10 @@ export const POST = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: POSTBodySchema1,
+  opaque: {
+    extraDims: "segment dimensions are validated by name in prepareExpenseEdit",
+    custom: "custom values are validated against the live definitions in prepareExpenseEdit",
+  },
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;

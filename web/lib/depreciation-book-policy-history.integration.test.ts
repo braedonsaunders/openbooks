@@ -10,7 +10,10 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } fro
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __depreciationBookHistory: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/')) {
+  // The route factory imports the exact alias lazily at request time from
+  // its own module URL, so it never matches the route-directory guard.
+  // Match the alias exactly so the factory gate uses this test's session.
+  if (specifier === '@/lib/authz' || (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/'))) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__depreciationBookHistory.gate}' };
   }
   return next(specifier, context);

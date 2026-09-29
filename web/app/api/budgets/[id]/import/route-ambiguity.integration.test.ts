@@ -16,7 +16,11 @@ Object.assign(globalThis, { __budgetAmbiguityState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/…"
+    // spellings at request time; they must see the same test session as the
+    // route file's relative imports. Identical sources share one module
+    // instance across both spellings.
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__budgetAmbiguityState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };

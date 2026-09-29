@@ -25,7 +25,10 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/feature-gates") {
+    if (
+      specifier === "../../../../lib/feature-gates" ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:bank-import-csv-feature-gates", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -40,7 +43,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?bank-import-csv-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -228,3 +230,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

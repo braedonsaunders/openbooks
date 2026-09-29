@@ -33,7 +33,14 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead/route")) {
+    // The route factory resolves its session gate through the "@/lib/authz"
+    // spelling at request time; it must see the same test session as the
+    // route file's relative import. The identical source shares one module
+    // instance across both spellings.
+    if (
+      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead/route")) ||
+      specifier === "@/lib/authz"
+    ) {
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(mockAuthz)}` };
     }
     return nextResolve(specifier, context);

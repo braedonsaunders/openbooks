@@ -43,6 +43,12 @@ const hooks = registerHooks({
     if (specifier === "../../../../../lib/authz" && entityRoute) {
       return { url: "mock:authz", shortCircuit: true };
     }
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time: a separate branch, one parent
+    // per branch, so the static wiring check keeps reading both edges.
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -58,7 +64,6 @@ const { PATCH, POST } = (await import(routeUrl)) as typeof import("../app/api/ad
 const setupResourceUrl = "./data-io/setup-resources.ts?segment-hierarchy-contract-test";
 const { setupResource } = (await import(setupResourceUrl)) as typeof import("./data-io/setup-resources.ts");
 const { SETUP_ENTITY_BY_KEY } = await import("./setup/registry.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
@@ -490,3 +495,8 @@ test("segment value imports inherit storage scope enforcement and audit valid wr
     await dropScratchOrgReporting(f.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

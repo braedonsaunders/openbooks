@@ -10,7 +10,10 @@ import test from "node:test";
  */
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/runs/")) {
+    // The route factory imports the same alias lazily at request time from
+    // its own module URL, so it never matches the route-directory guard.
+    // Match the alias exactly so the factory gate uses this test's session.
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/runs/"))) {
       return {
         shortCircuit: true,
         url:

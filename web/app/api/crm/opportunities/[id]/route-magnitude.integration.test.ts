@@ -19,7 +19,11 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    // The route factory resolves its session gate through the "@/lib/…"
+    // spellings at request time; they must see the same test session as the
+    // route file's relative imports. Identical sources share one module
+    // instance across both spellings.
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__opportunityPatchMagnitudeState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -138,7 +142,7 @@ test('PATCH still saves a column-maximum line with identical read-back', async (
   const { org, statusId, itemId, oppId } = await fixture()
   try {
     const result = await patch(oppId, base(statusId, {
-      lines: [{ itemId, quantity: '1', unitPrice: '999999999999999.9999' }],
+      lines: [{ itemId, description: 'Column-maximum line', unit: 'each', quantity: '1', unitPrice: '999999999999999.9999' }],
     }))
     assert.equal(result.status, 200, JSON.stringify(result.json))
     const rows = (await withOrgContext(state.orgId, () => db.execute<{ unit_price: string; amount: string }>(sql`

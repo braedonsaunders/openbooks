@@ -24,7 +24,10 @@ async function seedAsset(org: ScratchOrg) {
 const state: { gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null };
 Object.assign(globalThis, { __assetEditControls: state });
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier.endsWith('/lib/feature-gates') && context.parentURL?.includes('/api/assets/')) {
+  // The route factory imports the exact alias lazily at request time from
+  // its own module URL, so it never matches the route-directory guard.
+  // Match the alias exactly so the factory gate uses this test's session.
+  if (specifier === '@/lib/feature-gates' || (specifier.endsWith('/lib/feature-gates') && context.parentURL?.includes('/api/assets/'))) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardFeaturePermission(){return globalThis.__assetEditControls.gate}' };
   }
   return next(specifier, context);

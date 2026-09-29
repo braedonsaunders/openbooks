@@ -14,7 +14,10 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningActiveFlagUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/")) {
+    // The route factory imports the gate by @/ alias at request time, from
+    // web/lib/api/route.ts rather than the route directory; serve it the
+    // same intended session as the route's own import.
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/dunning/"))) {
       return {
         shortCircuit: true,
         url:

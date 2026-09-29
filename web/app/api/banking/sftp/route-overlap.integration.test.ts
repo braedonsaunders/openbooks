@@ -81,7 +81,6 @@ const itemUrl = "./[id]/route.ts?sftp-root-overlap-test";
 const { PATCH } = (await import(itemUrl)) as typeof import(
   "./[id]/route.ts"
 );
-hooks.deregister();
 
 const { db, env, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
@@ -287,3 +286,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

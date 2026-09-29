@@ -37,7 +37,10 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("customization/form-layouts")) {
+    if (
+      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("customization/form-layouts")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -52,7 +55,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?form-layout-patch-bool-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
@@ -161,7 +163,10 @@ test(
       params: Promise.resolve({ id: LAYOUT_ID }),
     });
     assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /allowedRoles/);
+    assert.deepEqual(await res.json(), {
+      error: "allowedRoles must be a list of UUID role ids",
+      issues: [{ path: "allowedRoles", message: "allowedRoles must be a list of UUID role ids" }],
+    });
     assert.equal(await storedRoles(f.orgId), null);
   },
 );
@@ -228,3 +233,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

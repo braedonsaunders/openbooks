@@ -26,7 +26,10 @@ registerHooks({
     if (specifier === "@/lib/api/json") {
       return next(root + "web/lib/api/json.ts", context);
     }
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/schedules/")) {
+    // The route factory imports the same alias lazily at request time from
+    // its own module URL, so it never matches the route-directory guard.
+    // Match the alias exactly so the factory gate uses this test's session.
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/schedules/"))) {
       return {
         shortCircuit: true,
         url:
@@ -71,7 +74,9 @@ test("schedule autosave and delete answer a malformed id with 404", async () => 
     assert.equal(patched.status, 404, `PATCH ${id}`);
     assert.deepEqual(await patched.json(), { error: "not_found" });
 
-    const deleted = await DELETE(json("DELETE", {}), params(id));
+    // No body: the probe is the malformed id, and an empty object carries
+    // its own 400 at the boundary. The handler judges the id first.
+    const deleted = await DELETE(json("DELETE"), params(id));
     assert.equal(deleted.status, 404, `DELETE ${id}`);
     assert.deepEqual(await deleted.json(), { error: "not_found" });
   }

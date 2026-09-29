@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { registerHooks } from "node:module";
-import test, { type TestContext } from "node:test";
+import test, { after, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "pg";
 import { sql } from "drizzle-orm";
@@ -130,6 +130,11 @@ const routeHooks = registerHooks({
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }
+    // The route factory resolves the same gate by @/ alias, lazily at
+    // request time; serve it the same intended session.
+    if (specifier === "@/lib/feature-gates") {
+      return { url: "mock:feature-gates", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -149,7 +154,9 @@ const routeModuleHref = pathToFileURL(
   fileURLToPath(new URL("../../../web/app/api/banking/bank-feeds/[id]/route.ts", import.meta.url)),
 ).href;
 const { POST: syncRoutePOST, PATCH: syncRoutePATCH, DELETE: syncRouteDELETE } = (await import(routeModuleHref)) as unknown as SyncRouteModule;
-routeHooks.deregister();
+// The factory resolves the gate lazily on every request, so the hooks must
+// stay registered until the tests have run; release them after the file.
+after(() => routeHooks.deregister());
 
 interface FeedFixture {
   orgId: string;

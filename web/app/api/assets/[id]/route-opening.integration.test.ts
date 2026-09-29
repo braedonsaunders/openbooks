@@ -30,8 +30,9 @@ const mockFeatureGates = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/assets/")
+      (specifier === "../../../../lib/feature-gates" &&
+        context.parentURL?.includes("/api/assets/")) ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:asset-opening-feature-gates", shortCircuit: true };
     }
@@ -51,7 +52,6 @@ const {
   FIXED_ASSET_BASE_JOINS,
   FIXED_ASSET_BUILT_IN_EXPR,
 } = await import("../../../../lib/customization/entity-list-query/fixed-assets.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
@@ -273,3 +273,6 @@ test("the register list reads NBV as cost minus opening minus posted", async () 
     await dropScratchOrgReporting(fixture.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

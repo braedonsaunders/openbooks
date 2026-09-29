@@ -13,7 +13,9 @@ const requestBodySchema = z.object({
     order: z.array(z.string().max(64)).max(300).optional(),
     hidden: z.array(z.string().max(64)).max(300).optional(),
   }),
-  expectedRevision: z.string().nullable(),
+  // An omitted token reaches the named reload refusal below; a supplied
+  // token must still have the exact wire shape the reader returned.
+  expectedRevision: z.string().nullable().optional(),
 });
 
 

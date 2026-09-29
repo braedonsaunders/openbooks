@@ -34,7 +34,13 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("customization/form-layouts/route")) {
+    // The route factory resolves its session gate lazily through the
+    // @/lib/authz alias at request time, so the hook must cover that alias
+    // in addition to the route's relative import.
+    if (
+      (specifier === "../../../../lib/authz" && context.parentURL?.includes("customization/form-layouts/route")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -49,7 +55,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?form-layout-post-bool-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { defaultFormLayout } = await import("@openbooks/customization");
@@ -272,3 +277,8 @@ test(
     assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
   },
 );
+
+// Release the route doubles after every test in this file has run.
+// The factory's lazy session-gate import runs on every request, so the hook
+// must stay registered until the file's tests finish.
+test.after(() => hooks.deregister());

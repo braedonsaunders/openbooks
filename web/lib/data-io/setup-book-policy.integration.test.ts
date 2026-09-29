@@ -11,7 +11,8 @@ const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry.ts');
 
 const auth={gate:null as null|{user:{orgId:string,id:string}}};Object.assign(globalThis,{__bookPolicyProbe:auth});
 registerHooks({resolve(specifier,context,next){
- if(specifier.endsWith('/lib/authz')&&context.parentURL?.includes('/api/admin/setup/'))return{shortCircuit:true,url:'data:text/javascript,export async function guardPermission(){return globalThis.__bookPolicyProbe.gate}'};
+ // The route factory imports the exact alias lazily at request time from its own module URL, so it never matches the route-directory guard below: match it exactly so the factory gate uses this test's session.
+ if(specifier==='@/lib/authz'||(specifier.endsWith('/lib/authz')&&context.parentURL?.includes('/api/admin/setup/')))return{shortCircuit:true,url:'data:text/javascript,export async function guardPermission(){return globalThis.__bookPolicyProbe.gate}'};
  return next(specifier,context);
 }});
 const {PATCH}=await import('../../app/api/admin/setup/[entity]/route.ts');

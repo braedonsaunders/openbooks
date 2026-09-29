@@ -2,11 +2,21 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { PDFDocument } from "pdf-lib";
 import type { Authz } from "./authz";
 import { stubModules } from '../testing/stub-modules.ts'
 
-const state: { gate: Authz | null; reportResolutions: number } = { gate: null, reportResolutions: 0 };
+const state: { gate: Authz | null; reportResolutions: number; stubPdf: Buffer | null } = { gate: null, reportResolutions: 0, stubPdf: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-stub-outputs-scope")] = state;
+// The printable control needs real merged bytes without a Chromium renderer:
+// one minimal page built with the real pdf-lib. Per-stub rendering, record
+// resolution, template lookup, and the real PDFDocument.load/merge in
+// mergedRunStubsPdf all still run; only the Chromium seam is substituted.
+{
+  const doc = await PDFDocument.create();
+  doc.addPage();
+  state.stubPdf = Buffer.from(await doc.save());
+}
 // The run route imports the JSON boundary through the web `@/` alias, which
 // tsx resolves only under the web tsconfig. Map it to the real module so the
 // route under test runs its production body parsing.
@@ -47,6 +57,14 @@ const reportRunMock = "data:text/javascript," + encodeURIComponent(`
     return { title: 'mock-evidence', dateRangeLabel: '', summary: [], groups: [] };
   }
 `);
+// Only the Chromium renderer entry is substituted, and only for its importer
+// payroll-outputs: the stub returns the minimal valid PDF above, so the real
+// PDFDocument.load/merge still parses and merges every stubbed page.
+const rendererMock = "data:text/javascript," + encodeURIComponent(`
+  export async function mergeAndPrintPdf() {
+    return Buffer.from(globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].stubPdf);
+  }
+`);
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
@@ -55,9 +73,23 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "./report-run" && parent.endsWith("/web/lib/payroll-evidence.ts")) {
     return { shortCircuit: true, url: reportRunMock };
   }
+  if (specifier === "./pdf-templates/render" && parent.endsWith("/web/lib/payroll-outputs.ts")) {
+    return { shortCircuit: true, url: rendererMock };
+  }
   if (specifier === "../../../../lib/authz"
     && parent.endsWith("/api/documents/actions/route.ts")) {
     return { shortCircuit: true, url: authzMock };
+  }
+  // The factory authenticates through `@/` aliases the route-relative
+  // conditions above never match: the session-public document action reads
+  // its session from `@/lib/authz`, and the payroll run routes authenticate
+  // inside `@/lib/feature-gates`. Both stay parent-gated to the factory so
+  // no other importer can observe the test session.
+  if (specifier === "@/lib/authz" && parent.endsWith("/web/lib/api/route.ts")) {
+    return { shortCircuit: true, url: authzMock };
+  }
+  if (specifier === "@/lib/feature-gates" && parent.endsWith("/web/lib/api/route.ts")) {
+    return { shortCircuit: true, url: gateMock };
   }
   if (specifier === "../../../../../../lib/feature-gates"
     && parent.endsWith("/api/payroll/runs/[id]/stubs-pdf/route.ts")) {

@@ -30,7 +30,10 @@ const hooks = registerHooks({
     // Re-export the REAL authz module and override only the session gate, so
     // the account-subsidiary guards the route calls are the production
     // functions. Gates without an explicit scope default to unrestricted.
-    if (specifier === "../../../../../lib/authz") {
+    if (
+      specifier === "../../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       const real = nextResolve(specifier, context).url;
       const nextServer = nextResolve("next/server", context).url;
       return module_(`
@@ -49,7 +52,6 @@ const hooks = registerHooks({
 
 const routeUrl = new URL("./[id]/pins/route.ts?account-group-pins-test", import.meta.url).href;
 const { POST, DELETE } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
-hooks.deregister();
 
 const { withBypassContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
@@ -213,9 +215,10 @@ test(
       };
       const deniedB = await pin(accountB, scopeA);
       assert.equal(deniedB.status, 404);
-      // The pins route names the missing account (both hidden and absent
-      // flow through the same lock arm, so they stay indistinguishable).
-      assert.deepEqual(await deniedB.json(), { error: 'account not found' });
+      // Hidden and absent accounts answer the tenant-opaque not_found
+      // identically, so an out-of-scope account stays indistinguishable
+      // from a missing one.
+      assert.deepEqual(await deniedB.json(), { error: 'not_found' });
       const deniedShared = await pin(sharedAccount, scopeA);
       assert.equal(deniedShared.status, 403);
       assert.deepEqual(await deniedShared.json(), { error: 'requires unrestricted subsidiary access' });
@@ -243,3 +246,6 @@ test(
     }
   },
 );
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

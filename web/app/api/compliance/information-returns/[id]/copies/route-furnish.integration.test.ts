@@ -79,7 +79,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?ir-copies-furnish-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
@@ -317,3 +316,6 @@ test("the furnish POST for one recipient stamps only that copy", async () => {
     await dropScratchOrg(org.orgId);
   }
 });
+
+// Release the route doubles after every test in this file has run.
+test.after(() => hooks.deregister());

@@ -10,17 +10,28 @@ import test from 'node:test'
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __projectPatchMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+// The test session both the route and the real feature gate authenticate
+// against: the gate reads only the identity from `./authz` and keeps its
+// own feature check against the database.
+const sessionSource = `
+  export async function guardPermission() {
+    const s = globalThis.__projectPatchMagnitudeState;
+    return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
+  }
+`
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'next/navigation') return virtual('export function redirect() {}')
     if (specifier === '../../../../lib/authz') return virtual(`
-      export async function guardPermission() {
-        const s = globalThis.__projectPatchMagnitudeState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
+      ${sessionSource}
       export function guardSubsidiaryScope() { return null }
       export function subsidiariesInScope() { return true }
     `)
+    // The factory authenticates string-feature routes inside the real
+    // feature gate, which reads its session from `./authz`: without this
+    // edge the gate loads the real cookie session instead of the test
+    // session.
+    if (specifier === './authz' && (context.parentURL ?? '').includes('web/lib/feature-gates.ts')) return virtual(sessionSource)
     return next(specifier, context)
   },
 })
