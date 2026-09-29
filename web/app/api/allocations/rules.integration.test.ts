@@ -87,7 +87,7 @@ const targetsRoute = (await import(
 const testMatchRoute = (await import(
   new URL('./rules/[id]/test-match/route.ts?alloc-rules-test', import.meta.url).href
 )) as { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> }
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

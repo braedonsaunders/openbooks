@@ -25,7 +25,9 @@ const postBodySchema0 = z.strictObject({
   yearStart: isoDate("yearStart must be a valid calendar date").optional(),
   yearEnd: isoDate("yearEnd must be a valid calendar date").optional(),
   bookId: z.string().uuid("bookId must be a valid id").optional(),
-  subsidiaryId: z.string().uuid("subsidiaryId must be a valid id").optional(),
+  // A supplied subsidiary remains an ownership lookup: malformed and hidden
+  // identifiers share the same not-found response in the handler.
+  subsidiaryId: z.string().optional(),
 });
 
 export const runtime = "nodejs";

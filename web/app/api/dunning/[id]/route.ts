@@ -16,7 +16,7 @@ const stageSchema = z.object({
 });
 const gracePeriodDaysSchema = z.union([z.number().int().nonnegative(), z.string().regex(/^\d+$/), z.null()]);
 const PATCHBodySchema1 = z.object({
-  appliesToKind: z.literal('customer_invoice').optional(),
+  appliesToKind: z.union([z.string(), z.number(), z.null()]).optional(),
   gracePeriodDays: gracePeriodDaysSchema.optional(), isActive: z.boolean().optional(),
   minBalance: z.string().nullable().optional(), name: z.string().trim().min(1).optional(),
   replyTo: z.string().email().nullable().optional(), stages: z.array(stageSchema).optional(),

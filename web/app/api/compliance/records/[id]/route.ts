@@ -17,7 +17,7 @@ import { notFound } from "@/lib/api/responses";
 // Keep numeric text at the JSON boundary; optionalCoverageMoney below owns the
 // precise amount and column-width refusal for a well-formed update command.
 const requestMoney = z.string().nullable()
-const revisionField = z.number().int().safe().min(1, 'revision must be a positive certificate revision')
+const revisionField = z.number({ error: 'revision is required as a positive certificate revision' }).int().safe().min(1, 'revision must be a positive certificate revision')
 const updateRecordFields = {
   issuerName: z.string().trim().max(200).nullable().optional(),
   policyNumber: z.string().trim().max(200).nullable().optional(),

@@ -22,7 +22,7 @@ const itemParams = z.object({ id: z.string() })
 const costingBody = z.object({
   costingMethod: z.string(),
   tracking: z.string(),
-  recostingAuthorization: z.string().optional(), expectedUpdatedAt: z.string().nullable(),
+  recostingAuthorization: z.string().optional(), expectedUpdatedAt: z.union([z.string(), z.null()]).optional(),
   assetAccountId: uuidId, cogsAccountId: uuidId,
   adjustmentAccountId: nullableUuidId.optional(), varianceAccountId: nullableUuidId.optional(),
   receivedNotBilledAccountId: nullableUuidId.optional(), standardCost: z.union([exactMoney(), z.null()]).optional(),

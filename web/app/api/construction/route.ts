@@ -49,7 +49,7 @@ const payApplicationId = z
   .string()
   .uuid("payApplicationId must be a valid UUID");
 const optionalAccountId = z
-  .union([z.string().uuid("incomeAccountId must be a valid UUID"), z.null()])
+  .union([z.string().uuid("Income account must be a valid identifier"), z.null()])
   .optional();
 
 function moneyField(field: string) {
@@ -117,7 +117,7 @@ const postBodySchema0 = z.union([
     amount: moneyField("Change-order amount"),
     targetSovLineId: z
       .string()
-      .uuid("targetSovLineId must be a valid UUID")
+      .uuid("The target schedule line must be a valid identifier")
       .nullable()
       .optional(),
     incomeAccountId: optionalAccountId,
@@ -161,7 +161,7 @@ const postBodySchema0 = z.union([
       id: rowId,
       incomeAccountId: z
         .union([
-          z.string().uuid("incomeAccountId must be a valid UUID"),
+          z.string().uuid("Income account must be a valid identifier"),
           z.null(),
         ]),
     }),

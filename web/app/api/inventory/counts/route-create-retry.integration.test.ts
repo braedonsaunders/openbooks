@@ -13,7 +13,8 @@ const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<st
 Object.assign(globalThis, { __stockCountRetryAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
+    if ((specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) ||
+        (specifier === "./authz" && context.parentURL?.includes("/lib/feature-gates"))) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__stockCountRetryAudit.user,allowedSubsidiaryIds:globalThis.__stockCountRetryAudit.allowedSubsidiaryIds}}",
       ) };

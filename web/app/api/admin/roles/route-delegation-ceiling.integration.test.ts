@@ -40,7 +40,8 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz") {
+    if (specifier === "../../../../lib/authz" ||
+        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))) {
       return { url: "mock:delegation-roles-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);

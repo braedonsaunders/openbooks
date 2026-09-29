@@ -15,7 +15,7 @@ const Body = z.union([
 ], { error: "Send an empty object for ordinary completion, or a shortCloseReason of 5–500 characters." });
 
 export const POST = defineRoute({
-  permission: "items.post", feature: "manufacturing", params: Params, body: Body,
+  permission: "items.post", feature: "manufacturing", params: Params, body: Body, invalidBodyStatus: 422,
   handler: async ({ authz, params, body }) => manufacturingTransaction(authz.user.orgId, async () => {
     if (!can(authz, "manufacturing.manage")) {
       return Response.json({ error: "missing permission: manufacturing.manage" }, { status: 403 });

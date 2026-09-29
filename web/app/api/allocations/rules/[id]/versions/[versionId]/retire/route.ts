@@ -23,7 +23,7 @@ async function legacyPOST(
   if (ruleId instanceof NextResponse) return ruleId
   const versionParam = requireRuleId(versionId)
   if (versionParam instanceof NextResponse) return versionParam
-  const parsed = await parseJsonBody(req, bodyObjectSchema)
+  const parsed = await parseJsonBody(req, bodyObjectSchema, { status: 422 })
   if (!parsed.ok) return parsed.response
   const body = parsed.data
   try {

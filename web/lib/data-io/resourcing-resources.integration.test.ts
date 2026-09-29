@@ -13,7 +13,12 @@ async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const ids = await withBypassContext(async () => {
     const actorId = await createScratchUser(org.orgId, "Bench importer", "bench-importer");
-    assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId} returning id`)).rows.length, 1, "resourcing resource fixture feature setup updates one organization");
+    const grant = await db.execute(sql`
+      update app_roles set permissions = '["resourcing.read","resourcing.manage"]'::jsonb
+       where org_id = ${org.orgId} and key = 'bench-importer' returning id
+    `);
+    assert.equal(grant.rows.length, 1, "the resource importer fixture grants one actor both the list and write permissions");
+    assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"retainerBilling":true}'::jsonb) where id = ${org.orgId} returning id`)).rows.length, 1, "resourcing and retainer resource fixture feature setup updates one organization");
     const employee = randomUUID(), project = randomUUID();
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employee}, ${org.orgId}, 'person', 'Import', ${org.subsidiaryId}, true, '{}'::jsonb)`);
     await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${org.orgId}, ${employee}, 'Consultant', '2026-01-01', true)`);
@@ -35,7 +40,7 @@ test("assignment round-trip preserves validation and scope", enabled, async () =
   try {
     const res = assignmentPlanResource(f.org.orgId);
     const first = await res.write([row(f)], "upsert", ctx(f));
-    assert.deepEqual([first.created, first.updated, first.failed], [1, 0, 0]);
+    assert.deepEqual([first.created, first.updated, first.failed], [1, 0, 0], JSON.stringify(first.errors));
     const again = await res.write([row(f)], "upsert", ctx(f));
     assert.deepEqual([again.created, again.updated, again.failed], [0, 1, 0]);
     const noManage = await res.write([row(f)], "upsert", ctx(f, { permissions: new Set(["resourcing.read"]) }));

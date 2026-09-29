@@ -18,7 +18,8 @@ registerHooks({
     if (specifier === "@/lib/custom-record-report-catalog") {
       return next(root + "web/lib/custom-record-report-catalog.ts", context);
     }
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/")) {
+    if (specifier.endsWith("/lib/authz") && (context.parentURL?.includes("/api/reports/") ||
+        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")))) {
       return {
         shortCircuit: true,
         url:
@@ -70,6 +71,6 @@ test("definition read, autosave, delete, and export answer a malformed id with 4
     );
     assert.equal(exported.status, 404, `export ${id}`);
     const exportedBody = (await exported.json()) as { error: string };
-    assert.equal(exportedBody.error, "report not found", `export ${id} keeps its not-found shape`);
+    assert.equal(exportedBody.error, "not_found", `export ${id} keeps the same tenant-safe not-found shape as the other operations`);
   }
 });
