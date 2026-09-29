@@ -16,6 +16,35 @@ test('the production image uses isolated Webpack compilation within its heap bud
   assert.match(dockerfile, /^RUN cd web && NODE_OPTIONS=--max-old-space-size=6144 npx next build --webpack$/m);
 });
 
+test('production compilers bound module work without retaining a build cache', () => {
+  for (const nextRuntime of ['nodejs', 'edge', undefined]) {
+    const webpackConfig = {
+      context: new URL('../web', import.meta.url).pathname,
+      parallelism: 100,
+      cache: { type: 'filesystem', maxMemoryGenerations: Infinity },
+      resolve: { alias: { existing: 'preserved' } },
+    };
+    const result = config.webpack(webpackConfig, { dev: false, nextRuntime });
+    assert.equal(result, webpackConfig);
+    assert.equal(result.parallelism, 1);
+    assert.equal(result.cache, false);
+    assert.equal(result.resolve.alias.existing, 'preserved');
+    assert.match(result.resolve.alias['next-intl/config'], /i18n\/request\.ts$/);
+  }
+});
+
+test('development keeps its existing compiler concurrency and cache', () => {
+  const cache = { type: 'filesystem', maxMemoryGenerations: 0 };
+  const webpackConfig = {
+    context: new URL('../web', import.meta.url).pathname,
+    parallelism: 100,
+    cache,
+  };
+  const result = config.webpack(webpackConfig, { dev: true });
+  assert.equal(result.parallelism, 100);
+  assert.equal(result.cache, cache);
+});
+
 test('the informational stats card does not start CI or mutate main on routine updates', () => {
   const workflow = readFileSync(new URL('../.github/workflows/codeflow-card.yml', import.meta.url), 'utf8');
   assert.match(workflow, /on:\n\s+workflow_dispatch:/);

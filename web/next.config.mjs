@@ -29,6 +29,13 @@ const config = {
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
   },
+  webpack(webpackConfig, { dev }) {
+    if (!dev) {
+      webpackConfig.parallelism = 1;
+      webpackConfig.cache = false;
+    }
+    return webpackConfig;
+  },
   // Types are gated by CI's own `npm run typecheck -w web` job, and a release
   // needs that job green on the exact SHA. Type-checking again inside
   // `next build` duplicates it: ~3.3 GB and ~2.5 min in the same process that
