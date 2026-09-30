@@ -72,7 +72,7 @@ export function PageHeader({
         {actions ? (
           <div
             data-page-actions
-            className="flex max-w-full flex-wrap items-center justify-end gap-2 [&_[data-slot=button][data-variant=default]]:h-10 [&_[data-slot=button][data-variant=default]]:px-4"
+            className="flex max-w-full flex-wrap items-center justify-end gap-2 [&_[data-slot=button][data-variant=default]]:px-4"
           >
             {actions}
           </div>
