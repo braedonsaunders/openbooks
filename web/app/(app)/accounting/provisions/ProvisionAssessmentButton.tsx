@@ -41,7 +41,8 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
   }
   const closeGuard = useDirtyClose({ dirty: requestKey !== initialKey, busy, onClose: close,
     message: common('feedback.unsavedChanges'), confirmLabel: common('confirm.discardChanges') })
-  const needsEstimate = values.obligation === 'yes' && values.outflow === 'probable' && values.estimable === 'yes'
+  const construction = Boolean(identity?.projectId || values.project)
+  const needsEstimate = !construction && values.obligation === 'yes' && values.outflow === 'probable' && values.estimable === 'yes'
   const moneyInvalid = needsEstimate && (values.method === 'best_estimate'
     ? moneyFieldError(t('estimate'), 'a money amount', values.amount ?? '', 4, { required: true }) !== null
     : values.method === 'expected_value'
@@ -52,12 +53,13 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
     try {
       const entity = options.subsidiaries.find(row => row.id === values.subsidiary)
       const obligation = identity ?? { id: obligationId, name: values.name, subsidiaryId: values.subsidiary, currency: entity?.currency,
-        bookId: values.book, expenseAccountId: values.expense, liabilityAccountId: values.liability }
+        bookId: values.book, expenseAccountId: values.expense, liabilityAccountId: values.liability,projectId:values.project || null }
       const estimate: ProvisionEstimate | null = !needsEstimate ? null : values.method === 'best_estimate'
         ? { method: 'best_estimate', amount: values.amount ?? '' }
         : values.method === 'expected_value' ? { method: 'expected_value', outcomes: outcomes.map(({ amount, probability }) => ({ amount, probability })) }
         : { method: values.method === 'uniform_range' ? 'uniform_range' : 'no_better_estimate_range', minimum: values.minimum ?? '', maximum: values.maximum ?? '' }
       const response = await fetch('/api/accounting/provisions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        ...(construction ? {construction:{remainingCost:values.remainingCost,terminationAvailable:values.terminationAvailable==='yes',terminationCost:values.terminationAvailable==='yes' ? values.terminationCost : null,relatedAssetsReviewed:values.assetsReviewed==='yes',impairmentEvidence:values.impairmentEvidence}} : {}),
         obligation, effectiveOn: values.date, reason: values.reason, idempotencyKey: requestKey,
         assessment: { presentObligation: values.obligation === 'yes', outflow: values.outflow,
           reliablyEstimable: values.estimable === 'yes', evidence: values.evidence, discounting: values.discounting,
@@ -83,6 +85,7 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
         <p className="text-sm text-muted-foreground">{t('approvalHint')}</p>
         {identity ? <p className="font-medium">{identity.name} · {identity.currency}</p> : <>
           <div className="space-y-1"><Label htmlFor="provision-name">{t('name')}</Label><Input id="provision-name" value={values.name ?? ''} onChange={event => update('name', event.target.value)} maxLength={200} /></div>
+          {options.projects.length ? <>{picker('project',options.projects.filter(row=>!values.subsidiary || row.subsidiaryId===values.subsidiary))}<p className="text-sm text-muted-foreground">{t('projectHint')}</p></> : null}
           <div className="grid gap-3 sm:grid-cols-2">{picker('subsidiary', options.subsidiaries)}{picker('book', options.books)}
             {picker('expense', options.accounts.filter(row => ['expense', 'expense_other'].includes(row.type)))}
             {picker('liability', options.accounts.filter(row => ['liability_current_other', 'liability_long_term'].includes(row.type)))}</div>
@@ -94,6 +97,13 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
           </Select></div>
         </div>
         <div className="space-y-1"><Label htmlFor="provision-evidence">{t('evidence')}</Label><Textarea id="provision-evidence" value={values.evidence ?? ''} onChange={event => update('evidence', event.target.value)} maxLength={10000} /></div>
+        {construction ? <div className="space-y-3"><p className="text-sm text-muted-foreground">{t('forecastHint')}</p>
+          <MoneyInput value={values.remainingCost ?? ''} onChange={value=>update('remainingCost',value)} field={t('remainingCost')} ariaLabel={t('remainingCost')} required />
+          {yesNo('terminationAvailable')}
+          {values.terminationAvailable==='yes' ? <MoneyInput value={values.terminationCost ?? ''} onChange={value=>update('terminationCost',value)} field={t('terminationCost')} ariaLabel={t('terminationCost')} required /> : null}
+          {yesNo('assetsReviewed')}<Label htmlFor="provision-impairment-evidence">{t('impairmentEvidence')}</Label>
+          <Textarea id="provision-impairment-evidence" value={values.impairmentEvidence ?? ''} onChange={event=>update('impairmentEvidence',event.target.value)} maxLength={10000} />
+        </div> : null}
         {needsEstimate ? <>
           <div className="space-y-1"><Label htmlFor="provision-method">{t('method')}</Label><Select id="provision-method" value={values.method ?? 'best_estimate'} onChange={event => update('method', event.target.value)}>
             {(options.reportingFramework === 'ifrs' ? ['best_estimate', 'expected_value', 'uniform_range'] : ['best_estimate', 'no_better_estimate_range']).map(value => <option key={value} value={value}>{t(value)}</option>)}
@@ -107,7 +117,7 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
                 { key: 'remove', header: common('labels.actions'), cell: row => <Button variant="ghost" onClick={() => updateOutcomes(outcomes.filter(current => current.id !== row.id))}>{common('actions.remove')}</Button> },
               ]} />
             : <div className="grid gap-3 sm:grid-cols-2">{['minimum', 'maximum'].map(key => <MoneyInput key={key} value={values[key] ?? ''} onChange={value => update(key, value)} field={t(key)} ariaLabel={t(key)} required />)}</div>}
-        </> : <p className="text-sm text-muted-foreground">{t('unrecognizedHint')}</p>}
+        </> : !construction ? <p className="text-sm text-muted-foreground">{t('unrecognizedHint')}</p> : null}
         <div className="space-y-1"><Label htmlFor="provision-discounting">{t('discounting')}</Label><Select id="provision-discounting" value={values.discounting ?? ''} onChange={event => update('discounting', event.target.value)}>
           <option value="">{t('choose')}</option><option value="immaterial">{t('immaterial')}</option>
           {options.reportingFramework === 'ifrs' ? <option value="included_in_estimate">{t('included_in_estimate')}</option> : <option value="undiscounted">{t('undiscounted')}</option>}
@@ -115,7 +125,7 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
         <div className="space-y-1"><Label htmlFor="provision-discount-evidence">{t('discountEvidence')}</Label><Textarea id="provision-discount-evidence" value={values.discountEvidence ?? ''} onChange={event => update('discountEvidence', event.target.value)} maxLength={10000} /></div>
         <div className="space-y-1"><Label htmlFor="provision-reason">{t('reason')}</Label><Textarea id="provision-reason" value={values.reason ?? ''} onChange={event => update('reason', event.target.value)} maxLength={1000} /></div>
         {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
-        <div className="flex gap-2"><Button disabled={busy || moneyInvalid || !values.obligation || !values.estimable || !values.outflow || !values.discounting
+        <div className="flex gap-2"><Button disabled={busy || moneyInvalid || (construction && (!values.remainingCost || !values.terminationAvailable || values.assetsReviewed!=='yes' || (values.impairmentEvidence?.trim().length ?? 0)<20 || (values.terminationAvailable==='yes' && !values.terminationCost))) || !values.obligation || !values.estimable || !values.outflow || !values.discounting
           || (values.evidence?.trim().length ?? 0) < 20 || (values.discountEvidence?.trim().length ?? 0) < 20 || (values.reason?.trim().length ?? 0) < 8
           || (!identity && (!values.name?.trim() || !values.subsidiary || !values.book || !values.expense || !values.liability))} onClick={() => void save()}>{t('propose')}</Button>
           <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{common('actions.cancel')}</Button></div>

@@ -5,7 +5,7 @@
  * engine (`computeApplication`, `revisedScheduleValue`) and by the
  * cost-to-cost input method (`costToCostPercent`): all three are product code,
  * driven here with exact-amount fixtures. A contract that is expected to lose
- * money has no engine behind it — that requirement is a published gap.
+ * money is assessed through the governed provision approval and posting path.
  *
  * No text from any accounting standard appears in this file; each
  * `requirement` line is our own restatement of the cited paragraph.
@@ -16,6 +16,15 @@ import {
   revisedScheduleValue,
 } from "../../projects/construction-billing.ts";
 import { costToCostPercent } from "../../projects/revenue.ts";
+import { randomUUID } from 'node:crypto'
+import { sql } from 'drizzle-orm'
+import { db,withBypassContext,withOrgContext } from '../../platform/db.ts'
+import { postEntry } from '../../journal/post-entry.ts'
+import { seedFlowActors,seedApprovalFlow } from '../../testing/fixtures.ts'
+import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts'
+import { decideGate } from '../../flows/gates.ts'
+import { proposeProvisionAssessment,applyProvisionAssessment } from '../../provisions/assessments.ts'
+import { capture } from '../ledger-helpers.ts'
 import type { ConformanceCase } from "../types.ts";
 
 export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
@@ -224,8 +233,8 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
           "An estimated loss from a loss contingency is accrued when it is probable and reasonably estimable, which a priced construction contract that cannot cover its costs satisfies.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
+    support: "supported",
+    tier: "ledger",
     assertion:
       "The moment a contract is forecast to lose money, the entire expected loss is charged to profit or loss at once — it is never spread over the remaining term to flatter early periods.",
     facts: [
@@ -233,13 +242,42 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
       "Costs to complete are re-estimated at 950,000.00, so total cost will be 1,150,000.00 against 1,000,000.00 of revenue: a 150,000.00 loss.",
       "A provision of 150,000.00 is recognised immediately, in addition to the costs already incurred.",
     ],
-    gap: "No engine assesses construction contracts for expected losses: progress billing tracks completed value and billings, but nothing forecasts cost to complete, tests the contract for a loss, or posts a provision for it.",
     expected: {
+      entries:[{step:"loss-provision",lines:[{role:"provisionExpense",amount:"150000.0000"},{role:"provisionLiability",amount:"-150000.0000"}]}],
       values: {
         totalForecastCost: "1150000.0000",
         expectedLoss: "150000.0000",
         lossProvision: "150000.0000",
       },
+    },
+    run:async ctx=> {
+      const ledger=ctx.ledger!, projectId=randomUUID()
+      const actors=await withBypassContext(async()=> {
+        const actors=await seedFlowActors(ledger.orgId)
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${ledger.orgId}`)
+        await db.execute(sql`insert into projects(id,org_id,code,name,subsidiary_id,contract_value) values (${projectId},${ledger.orgId},'CONF-LOSS','Fixed-price construction',${ledger.subsidiaryId},1000000)`)
+        await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values
+          (${ledger.orgId},${actors.submitterId},'gl.manage','grant'),(${ledger.orgId},${actors.submitterId},'gl.post','grant'),(${ledger.orgId},${actors.submitterId},'projects.read','grant')`)
+        await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+        return actors
+      })
+      return withOrgContext(ledger.orgId,async()=> {
+        await postEntry(db,{orgId:ledger.orgId,bookId:ledger.bookId,subsidiaryId:ledger.subsidiaryId,entryNumber:'CONF-RESULTS',postingDate:ledger.date,periodId:ledger.periodId,origin:'manual',currency:'CAD',actorId:actors.submitterId,
+          lines:[{accountId:ctx.roles.provisionExpense,amount:'200000',projectId},{accountId:ctx.roles.revenue,amount:'-200000',projectId}]})
+        const id=await proposeProvisionAssessment(ledger.orgId,actors.submitterId,{
+          obligation:{id:randomUUID(),subsidiaryId:ledger.subsidiaryId,bookId:ledger.bookId,currency:'CAD',name:'Construction expected loss',expenseAccountId:ctx.roles.provisionExpense,liabilityAccountId:ctx.roles.provisionLiability,projectId},
+          effectiveOn:ledger.date,idempotencyKey:randomUUID(),reason:'Recognize the current supported contract loss in full',
+          assessment:{presentObligation:true,outflow:'probable',reliablyEstimable:true,evidence:'Approved contract and supported remaining direct and allocated cost forecast.',discounting:'immaterial',discountEvidence:'Work completes shortly and time value is immaterial.',estimate:null},
+          construction:{remainingCost:'950000',terminationAvailable:false,terminationCost:null,relatedAssetsReviewed:true,impairmentEvidence:'Related contract assets have been reviewed and no further impairment is required.'},
+        })
+        await submitFinancialChange(ledger.orgId,id,actors.submitterId)
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
+        let result:Record<string,unknown>={}
+        const entry=await capture(ctx,'loss-provision',async()=>{result=await applyProvisionAssessment(ledger.orgId,id,actors.submitterId)})
+        const forecast=result.construction as {totalForecastCost:string;expectedLoss:string}
+        return {entries:[entry],values:{totalForecastCost:forecast.totalForecastCost,expectedLoss:forecast.expectedLoss,lossProvision:String(result.liability)}}
+      })
     },
   },
 ];

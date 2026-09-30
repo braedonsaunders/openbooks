@@ -327,6 +327,14 @@
     "empty": "No provision obligations yet.",
     "noAssessments": "No assessment proposals yet.",
     "failed": "The provision assessment could not be recorded.",
-    "undiscounted": "Undiscounted settlement estimate"
+    "undiscounted": "Undiscounted settlement estimate",
+    "project": "Construction project (optional)",
+    "projectHint": "Choose a project only for its construction-loss forecast. The accounting identity must use the project’s legal entity.",
+    "forecastHint": "The assessment uses the agreed project contract value and posted costs and revenue. Review remaining direct and allocated costs; the engine provides for the remaining loss without charging losses already recognized twice.",
+    "remainingCost": "Remaining direct and allocated contract cost",
+    "terminationAvailable": "Can the contract be terminated?",
+    "terminationCost": "Supported termination cost",
+    "assetsReviewed": "Related assets reviewed and required impairments posted?",
+    "impairmentEvidence": "Related-asset impairment review evidence"
   }
 }

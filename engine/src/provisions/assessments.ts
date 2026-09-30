@@ -1,6 +1,9 @@
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction, type SqlExecutor } from '../platform/db.ts'
 import { lockActorCommandAuthority as authority } from '../organization/actor-command-authority.ts'
+import { constructionBasis, constructionSubject, measureConstructionLoss, type ConstructionForecast } from './construction.ts'
+import { actorHasPermission } from '../organization/actor-permissions.ts'
+import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts'
 import { isIsoCalendarDate } from '../platform/business-date.ts'
 import { orgReportingFramework, type ReportingFramework } from '../platform/reporting-framework.ts'
@@ -19,6 +22,7 @@ export type ProvisionIdentity = {
   currency: string
   expenseAccountId: string
   liabilityAccountId: string
+  projectId?: string | null
 }
 
 export interface ProvisionProposal {
@@ -27,6 +31,7 @@ export interface ProvisionProposal {
   reason: string
   idempotencyKey: string
   assessment: ProvisionAssessment
+  construction?: ConstructionForecast
 }
 
 
@@ -53,7 +58,10 @@ export async function provisionEditorOptions(orgId: string, actorId: string) {
         and is_active and not is_summary and type in ('expense','expense_other','liability_current_other','liability_long_term')
         order by number,name,id
     `)).rows
-    return { subsidiaries, books, accounts, reportingFramework: await framework(db, orgId) }
+    const projects = await actorHasPermission(db,orgId,actorId,'projects.read') && await lockAndCheckOrgFeature(db,orgId,'projects')
+      ? (await db.execute<{id:string;name:string;subsidiaryId:string}>(sql`select id,concat_ws(' — ',code,name) as name,subsidiary_id as "subsidiaryId" from projects
+        where org_id=${orgId} and is_active and contract_value is not null ${visibleEntity(sql`subsidiary_id`,allowed)} order by code,id`)).rows : []
+    return { subsidiaries, books, accounts, projects, reportingFramework: await framework(db, orgId) }
   })
 }
 
@@ -62,10 +70,11 @@ export async function readProvisionObligation(orgId: string, actorId: string, id
     const allowed = await authority(db, orgId, actorId, null, 'gl.read')
     const identity = (await db.execute<ProvisionIdentity>(sql`
       select id,subsidiary_id as "subsidiaryId",book_id as "bookId",name,currency,
-        expense_account_id as "expenseAccountId",liability_account_id as "liabilityAccountId"
+        expense_account_id as "expenseAccountId",liability_account_id as "liabilityAccountId",project_id as "projectId"
         from provision_obligations where org_id=${orgId} and id=${id} ${visibleEntity(sql`subsidiary_id`, allowed)}
     `)).rows[0]
     if (!identity) throw new ScopeNotFoundError()
+    if (identity.projectId) await constructionSubject(db,orgId,actorId,identity,true)
     const assessments = (await db.execute<{ id: string; effectiveOn: string; reason: string; status: string; assessment: ProvisionAssessment; result: Record<string, unknown> | null }>(sql`
       select id,effective_on::text as "effectiveOn",reason,status,payload->'assessment' as assessment,result
         from financial_changes where org_id=${orgId} and domain='provision' and subject_id=${id}
@@ -86,11 +95,11 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`provision:${orgId}:${identity.id}`},0))`)
   const prior = (await tx.execute<ProvisionIdentity>(sql`
     select id,subsidiary_id as "subsidiaryId",book_id as "bookId",name,currency,
-      expense_account_id as "expenseAccountId",liability_account_id as "liabilityAccountId"
+      expense_account_id as "expenseAccountId",liability_account_id as "liabilityAccountId",project_id as "projectId"
       from provision_obligations where org_id=${orgId} and id=${identity.id} for update
   `)).rows[0]
   if (prior) {
-    if (Object.keys(prior).some(key => prior[key as keyof ProvisionIdentity] !== identity[key as keyof ProvisionIdentity]))
+    if (Object.keys(prior).some(key => (prior[key as keyof ProvisionIdentity] ?? null) !== (identity[key as keyof ProvisionIdentity] ?? null)))
       throw new ProvisionError('The provision accounting identity differs from the original obligation — use its existing identity or create a separate obligation')
     return prior
   }
@@ -112,16 +121,16 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
       || !['liability_current_other', 'liability_long_term'].includes(accounts.find(a => a.id === identity.liabilityAccountId)?.type ?? ''))
     throw new ProvisionError('Choose distinct active posting expense and liability accounts for the provision')
   const inserted = await tx.execute(sql`insert into provision_obligations
-    (id,org_id,subsidiary_id,book_id,name,currency,expense_account_id,liability_account_id,created_by)
+    (id,org_id,subsidiary_id,book_id,name,currency,expense_account_id,liability_account_id,created_by,project_id)
     values (${identity.id},${orgId},${identity.subsidiaryId},${identity.bookId},${identity.name},${identity.currency},
-      ${identity.expenseAccountId},${identity.liabilityAccountId},${actorId}) returning id`)
+      ${identity.expenseAccountId},${identity.liabilityAccountId},${actorId},${identity.projectId ?? null}) returning id`)
   if (inserted.rows.length !== 1) throw new ProvisionError('The provision obligation could not be recorded — reload and retry')
   await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
     values (${orgId},'provision_obligations',${identity.id},'insert',${JSON.stringify({ before: null, after: identity })}::jsonb,${actorId})`)
   return identity
 }
 
-async function basis(tx: SqlExecutor, orgId: string, identity: ProvisionIdentity, effectiveOn: string) {
+async function basis(tx: SqlExecutor, orgId: string, actorId: string, identity: ProvisionIdentity, effectiveOn: string) {
   const reportingFramework = await framework(tx, orgId)
   const period = await resolveCoveringPeriod(tx, orgId, effectiveOn)
   if (!period) throw new ProvisionError('Create the regular accounting period covering the assessment date in the active posting calendar')
@@ -139,7 +148,8 @@ async function basis(tx: SqlExecutor, orgId: string, identity: ProvisionIdentity
      where line.org_id=${orgId} and entry.book_id=${identity.bookId} and line.subsidiary_id=${identity.subsidiaryId}
        and line.account_id=${identity.liabilityAccountId} and line.custom->>'provisionId'=${identity.id} and entry.status in ('posted','reversed')
   `)).rows[0]!.amount
-  return { identity, reportingFramework, periodId: period.id, balance: normalizeMoney(balance), events }
+  return { identity, reportingFramework, periodId: period.id, balance: normalizeMoney(balance), events,
+    construction:await constructionBasis(tx,orgId,actorId,identity,effectiveOn) }
 }
 
 /** A proposal and its immutable obligation commit together. Submission uses
@@ -153,15 +163,18 @@ export async function proposeProvisionAssessment(orgId: string, actorId: string,
   return withOrgTransaction(orgId, async () => {
     const tx = db
     await authority(tx, orgId, actorId, input.obligation.subsidiaryId, 'gl.manage')
-    const identity = await lockIdentity(tx, orgId, actorId, input.obligation, true)
-    const payload = { assessment: input.assessment, requiredSubsidiaryIds: [identity.subsidiaryId] }
+    const identity = await lockIdentity(tx, orgId, actorId, {...input.obligation,projectId:input.obligation.projectId ?? null}, true)
+    if (Boolean(identity.projectId) !== Boolean(input.construction)) throw new ProvisionError('A project obligation requires its construction forecast; generic provisions cannot carry an unrelated project forecast')
+    if (identity.projectId) await constructionSubject(tx,orgId,actorId,identity)
+    const payload = { assessment: input.assessment, ...(input.construction ? {construction:input.construction} : {}), requiredSubsidiaryIds: [identity.subsidiaryId] }
     const proposal = { orgId, subsidiaryId: identity.subsidiaryId, domain: 'provision' as const,
       subjectId: identity.id, operation: 'provision_assessment', effectiveOn: input.effectiveOn,
       reason: input.reason, actorId, idempotencyKey: input.idempotencyKey, payload }
     const prior = await existingFinancialChange(tx, proposal)
     if (prior) return prior
-    const beforeState = await basis(tx, orgId, identity, input.effectiveOn)
-    measureProvision(beforeState.reportingFramework, input.assessment)
+    const beforeState = await basis(tx, orgId, actorId, identity, input.effectiveOn)
+    measureProvision(beforeState.reportingFramework, beforeState.construction
+      ? measureConstructionLoss(beforeState.reportingFramework,beforeState.construction,input.construction!,input.assessment).assessment : input.assessment)
     return proposeFinancialChange(tx, { ...proposal, beforeState })
   })
 }
@@ -181,8 +194,9 @@ export async function applyProvisionAssessment(orgId: string, changeId: string, 
     if (!identity || identity.id !== change.subject_id || identity.subsidiaryId !== change.subsidiary_id)
       throw new ProvisionError('The assessment identity is incomplete — reject it and propose a new assessment')
     await lockIdentity(tx, orgId, actorId, identity, false)
+    if (identity.projectId) await constructionBasis(tx,orgId,actorId,identity,change.effective_on)
     if (change.status === 'applied') return change.result!
-    const beforeState = await basis(tx, orgId, identity, change.effective_on)
+    const beforeState = await basis(tx, orgId, actorId, identity, change.effective_on)
     try { assertFinancialChangeApproved(change, { domain: 'provision', subjectId: identity.id, beforeState }) }
     catch (error) { throw new ProvisionError(error instanceof Error ? error.message : 'Independent approval is required') }
     // A zero-delta review still changes reporting evidence. Closed-period
@@ -194,7 +208,8 @@ export async function applyProvisionAssessment(orgId: string, changeId: string, 
       if (error instanceof CloseError) throw new ProvisionError(`${error.message} — use an open assessment date or the controlled reopen workflow in Accounting → Close`)
       throw error
     }
-    const measurement = measureProvision(beforeState.reportingFramework, change.payload.assessment as ProvisionAssessment)
+    const construction = beforeState.construction ? measureConstructionLoss(beforeState.reportingFramework,beforeState.construction,change.payload.construction as ConstructionForecast,change.payload.assessment as ProvisionAssessment) : null
+    const measurement = {...measureProvision(beforeState.reportingFramework, construction?.assessment ?? change.payload.assessment as ProvisionAssessment),...(construction ? {construction} : {})}
     const delta = add(measurement.liability, neg(beforeState.balance))
     const posted = isZero(delta) ? null : await postEntry(tx, {
       orgId, bookId: identity.bookId, subsidiaryId: identity.subsidiaryId,
@@ -203,8 +218,8 @@ export async function applyProvisionAssessment(orgId: string, changeId: string, 
       idempotencyKey: `provision-assessment:${change.id}`,
       custom: { provisionId: identity.id, assessmentId: change.id, measurement },
       lines: [
-        { accountId: identity.expenseAccountId, amount: delta, custom: { provisionId: identity.id } },
-        { accountId: identity.liabilityAccountId, amount: neg(delta), custom: { provisionId: identity.id } },
+        { accountId: identity.expenseAccountId, amount: delta, projectId:identity.projectId ?? undefined, custom: { provisionId: identity.id } },
+        { accountId: identity.liabilityAccountId, amount: neg(delta), projectId:identity.projectId ?? undefined, custom: { provisionId: identity.id } },
       ],
     })
     const result = { ...measurement, priorLiability: beforeState.balance, currentPeriodCharge: delta, entryId: posted?.entryId ?? null }

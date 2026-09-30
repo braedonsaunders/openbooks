@@ -1,6 +1,6 @@
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
-import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { orgFeatureEnabled, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
@@ -16,6 +16,13 @@ import {
 import { runRecordFlows } from "./run.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+
+async function assertProjectProvisionFeature(orgId: string, subjectId: string, domain: string) {
+  if (domain !== 'provision') return
+  const project = (await db.execute<{project_id:string|null}>(sql`select project_id from provision_obligations where org_id=${orgId} and id=${subjectId}`)).rows[0]?.project_id
+  if (project && !await lockAndCheckOrgFeature(db,orgId,'projects'))
+    throw new Error('Turn on Projects in Company Settings → Features before submitting or approving this construction forecast')
+}
 
 export const FINANCIAL_CHANGE_SUBJECT_KIND = "financial_change";
 export const financialChangeSubjectProfile: FlowSubjectProfile = {
@@ -141,6 +148,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     if (row.status !== "pending") return;
     if (!ctx.userId || row.submitted_by === ctx.userId)
       throw new Error("an independent signed-in approver is required");
+    if (outcome === 'approved') await assertProjectProvisionFeature(ctx.orgId,row.subject_id,row.domain)
     // Manufacturing authority applies only when recording an approval. A
     // rejection must stay reachable for malformed or obsolete proposals, or
     // the live-proposal guard would strand the correction it exists to allow.
@@ -214,6 +222,7 @@ export async function submitFinancialChange(
       const row = await loadFinancialChange(tx, orgId, id);
       if (row.submitted_by !== actorId)
         throw new Error("only the proposer can submit this accounting event");
+      await assertProjectProvisionFeature(orgId,row.subject_id,row.domain)
       if (row.status !== "draft") return; // A retry reuses its existing routing/decision.
       const result = await runRecordFlows(
         { kind: "on_submit", source: "ui" },
