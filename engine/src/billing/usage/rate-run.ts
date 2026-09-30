@@ -13,7 +13,7 @@ import { requestDocumentVoid } from "../../ledger/document-void.ts";
 import { assertPeriodModulesOpen, CloseError } from "../../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../../periods/period-resolution.ts";
 import { isIsoCalendarDate } from "../../platform/business-date.ts";
-import { add, cmp, mulDecimalFactors, neg } from "../../money/money.ts";
+import { add, cmp, mulDecimalFactors } from "../../money/money.ts";
 import { parseMoney, parseQuantity, parseRate, subMoney, type Money, type Quantity, type Rate } from "../../money/brands.ts";
 import {
   acquireOrgFeatureGateLock,
@@ -22,6 +22,7 @@ import {
 } from "../../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { db, withOrg } from "../../platform/db.ts";
+import { prepaidRecognitionAdjustment } from '../../revenue/prepaid-breakage.ts';
 import { recordRecognitionEvent } from "../../revenue/recognition-events.ts";
 import { recordPrepaidDraw, reversePrepaidDraw, prepaidBalance } from "./prepaid.ts";
 import { listUsageRecordsForWindow, type UsageRecord } from "./records.ts";
@@ -896,7 +897,7 @@ async function persistPrepaidDraws(
       orgId,
       actorId,
       periodMonth,
-      amount: draw.amount,
+      amount: await prepaidRecognitionAdjustment(orgId,draw.grantId),
       description: `Usage draw for rating run ${runId}`,
       sourceReference: `usage-run:${runId}:grant:${draw.grantId}`,
     });
@@ -925,7 +926,7 @@ async function reverseRunPrepaidDraws(
       orgId,
       actorId,
       periodMonth: draw.periodMonth,
-      amount: neg(draw.amount),
+      amount: await prepaidRecognitionAdjustment(orgId,draw.grantId),
       description: `Usage draw reversal for rating run ${runId}`,
       sourceReference: `usage-run:${runId}:grant:${draw.grantId}:reversal`,
     });

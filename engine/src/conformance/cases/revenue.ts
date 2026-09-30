@@ -8,7 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../../platform/db.ts";
+import { db, withOrgContext,withBypassContext } from "../../platform/db.ts";
 import { add, fromUnits, toUnits } from "../../money/money.ts";
 import { parseMoney, parseQuantity, parseRate } from "../../money/brands.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
@@ -20,6 +20,10 @@ import {
   separateFinancingComponent,
 } from "../../revenue/recognition.ts";
 import { measureRevenueModificationGroup } from "../../revenue/contract-modification-measurement.ts";
+import { seedFlowActors,seedApprovalFlow } from '../../testing/fixtures.ts';
+import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts';
+import { decideGate } from '../../flows/gates.ts';
+import { proposeExpectedBreakage,applyExpectedBreakage } from '../../revenue/prepaid-breakage.ts';
 import { createPrepaidGrant } from "../../billing/usage/prepaid.ts";
 import { commitRateRun } from "../../billing/usage/rate-run.ts";
 import { createUsageMeter, ingestUsageRecords } from "../../billing/usage/records.ts";
@@ -961,18 +965,43 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           "Expected unexercised rights are recognised in line with the pattern of exercised rights when that estimate is supportable.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
+    support: "supported",
+    tier: "ledger",
     assertion:
-      "Expected breakage is not recognised in proportion to earlier customer use; the system waits for a breakage policy rather than silently estimating it.",
+      "An independently approved, entitled estimate is recognised proportionally as customer rights are exercised; amounts owed to third parties remain liabilities.",
     facts: [
       "Customers pay 100.00 for 100 usage credits, and 60 credits have been exercised by 2026-07-31.",
       "The entity expects total breakage of 20.00, so 80 credits are expected to be redeemed; 60 of those 80 have been exercised.",
       "The proportionate breakage revenue is 20.00 × 60 / 80 = 15.00, subject to entitlement and the variable-consideration constraint.",
     ],
-    gap:
-      "The billing and recognition services do not store a breakage estimate or recognise expected breakage in proportion to customer redemptions; they can only account for the right when its commitment window closes.",
-    expected: { values: { proportionalBreakageRevenue: "15.0000" } },
+    expected: {entries:[{step:'expected breakage',lines:[{role:'deferredRevenue',amount:'15.0000'},{role:'recognizedRevenue',amount:'-15.0000'}]}],values:{proportionalBreakageRevenue:'15.0000'}},
+    run:async ctx=> {
+      const ledger=ctx.ledger!,fixture=await createUsageCorpusFixture(ctx)
+      const actors=await withBypassContext(async()=> {
+        const actors=await seedFlowActors(ledger.orgId)
+        await db.execute(sql`update recognition_rules set method='usage' where org_id=${ledger.orgId} and id=(select recognition_rule_id from items where org_id=${ledger.orgId} and id=${ledger.items.service})`)
+        await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${actors.submitterId},'ar.post','grant')`)
+        await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+        return actors
+      })
+      return withOrgContext(ledger.orgId,async()=> {
+        await postConformanceDocument(ctx,{kind:'customer_invoice',number:'CONF-BREAKAGE',partyId:ledger.customerId,lines:[{itemId:ledger.items.service,accountId:ctx.roles.revenue,quantity:'1',unitPrice:'100',amount:'100'}]})
+        const source=(await db.execute<{id:string}>(sql`select line.id from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${ledger.orgId} and document.document_number='CONF-BREAKAGE'`)).rows[0]!
+        const grant=await createPrepaidGrant(ledger.orgId,ledger.actorId,{customerId:ledger.customerId,sourceDocumentLineId:source.id,amount:'100',currency:'CAD'})
+        await ingestCorpusUsage(ctx,fixture,'25')
+        const run=await commitRateRun(ledger.orgId,ledger.actorId,fixture.linkId,'2026-07-01','2026-07-31')
+        if(run.preview.prepaidDrawn!=='60.0000')throw new Error('the native usage run did not exercise sixty of prepaid rights')
+        const usage=await runRevenueRecognition(ledger.orgId,'2026-07-31',ledger.actorId)
+        if(usage.problems.length)throw new Error(usage.problems.join('; '))
+        const id=await proposeExpectedBreakage(ledger.orgId,actors.submitterId,{grantId:grant.id,effectiveOn:'2026-07-31',reason:'Recognize the supported expected breakage proportionally',idempotencyKey:randomUUID(),estimate:{method:'expected_proportional',expectedBreakage:'20',entitled:true,meetsReversalConstraint:true,thirdPartyObligation:false,evidence:'Redemption history supports twenty of expected breakage without significant reversal; legal review confirms entitlement and no unclaimed-property obligation.'}})
+        await submitFinancialChange(ledger.orgId,id,actors.submitterId)
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
+        const measurement=await applyExpectedBreakage(ledger.orgId,id,actors.submitterId)
+        const entry=await capture(ctx,'expected breakage',async()=>{const result=await runRevenueRecognition(ledger.orgId,'2026-07-31',ledger.actorId);if(result.problems.length)throw new Error(result.problems.join('; '))})
+        return {entries:[entry],values:{proportionalBreakageRevenue:String(measurement.target)}}
+      })
+    },
   },
 
   {

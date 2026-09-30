@@ -1,3 +1,4 @@
+import { refreshPrepaidBreakage,lockPrepaidRecognitionContract } from '../../revenue/prepaid-breakage.ts'
 import { sql } from "drizzle-orm";
 import { usagePrepaidDraws, type usagePrepaidGrants as UsagePrepaidGrantTable } from "@openbooks/schema";
 import { cmp } from "../../money/money.ts";
@@ -295,6 +296,7 @@ export async function recordPrepaidDraw(
     if (cmp(amount, "0") <= 0) {
       refuse("usage_prepaid_amount_invalid", "A prepaid draw amount must be greater than zero.", "Provide a positive draw amount within the grant's remaining balance.", "amount");
     }
+    await lockPrepaidRecognitionContract(orgId,grantId)
     const grant = (await db.execute<{ amount: string; expiresOn: string | null }>(sql`
       select g.amount::text as amount, g.expires_on::text as "expiresOn"
         from usage_prepaid_grants g
@@ -309,7 +311,7 @@ export async function recordPrepaidDraw(
       refuse(
         "usage_prepaid_grant_expired",
         `The prepaid grant expired on ${grant.expiresOn} and cannot fund this usage period.`,
-        "Use an unexpired prepaid grant for this usage period; expired balances remain liabilities until a breakage policy is available.",
+        "Use an unexpired prepaid grant for this usage period; expired balances remain liabilities until a supported, independently approved breakage assessment is applied through the Revenue contract.",
         "grant_id",
       );
     }
@@ -331,6 +333,7 @@ export async function recordPrepaidDraw(
         values (${orgId}, ${grantId}, ${runId}, ${periodMonth}, ${amount})
         returning ${DRAW_COLUMNS}`);
       if (inserted.rows.length !== 1) throw new Error("prepaid draw insert returned an unexpected row count");
+      await refreshPrepaidBreakage(orgId,grantId,periodMonth)
       return inserted.rows[0]!;
     } catch (error) {
       if (uniqueViolationFor(error, "usage_prepaid_draws_run_grant_period_unique")) {
@@ -350,6 +353,9 @@ export async function reversePrepaidDraw(
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const drawId = uuidText(drawIdInput, "draw_id");
+    const source = (await db.execute<{grant_id:string}>(sql`select grant_id from usage_prepaid_draws where org_id=${orgId} and id=${drawId}`)).rows[0]
+    if (!source) throw new ScopeNotFoundError()
+    await lockPrepaidRecognitionContract(orgId,source.grant_id)
     const original = (await db.execute<{
       id: string;
       grantId: string;
@@ -388,6 +394,7 @@ export async function reversePrepaidDraw(
       values (${orgId}, ${original.grantId}, ${original.runId}, ${original.periodMonth}, ${amount}, ${original.id})
       returning ${DRAW_COLUMNS}`);
     if (inserted.rows.length !== 1) throw new Error("prepaid draw reversal insert returned an unexpected row count");
+    await refreshPrepaidBreakage(orgId,original.grantId,original.periodMonth)
     return inserted.rows[0]!;
   });
 }

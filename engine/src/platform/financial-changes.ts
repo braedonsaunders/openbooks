@@ -19,6 +19,11 @@ export {
 export type FinancialChangeDomain =
   "lease" | "revenue" | "asset" | "consolidation" | "manufacturing" | "provision";
 
+export class FinancialChangeFeatureError extends Error {
+  readonly status = 422;
+  readonly name = 'FinancialChangeFeatureError';
+}
+
 export class FinancialChangeConflictError extends Error {
   readonly status = 409;
   readonly name = "FinancialChangeConflictError";

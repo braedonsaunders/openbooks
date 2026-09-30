@@ -1,3 +1,4 @@
+import { applyExpectedBreakage } from '@openbooks/engine/revenue'
 import { applyProvisionAssessment } from "@openbooks/engine/provisions";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
@@ -41,7 +42,7 @@ export const POST = defineRoute({
         );
       if (gate.domain === "revenue")
         return NextResponse.json(
-          await applyRevenueModification(
+          await (gate.operation==='expected_breakage_estimate' ? applyExpectedBreakage : applyRevenueModification)(
             gate.auth.user.orgId,
             id,
             gate.auth.user.id,

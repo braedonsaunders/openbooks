@@ -51,6 +51,7 @@
     "./tax": "./src/tax/public.ts",
     "./provisions": "./src/provisions/public.ts",
     "./inventory": "./src/inventory/public.ts",
-    "./inventory/contracts": "./src/inventory/public-contracts.ts"
+    "./inventory/contracts": "./src/inventory/public-contracts.ts",
+    "./revenue": "./src/revenue/public.ts"
   }
 }
