@@ -79,6 +79,7 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
   ],
   accounting: [
     { href: '/accounting', ns: 'accounting', key: 'home.title' },
+    { href: '/accounting/provisions', ns: 'accounting', key: 'provisions.title' },
     // Accounting events is the subsequent-measurement register, not a daily
     // strip destination. Propose from the source record; decide in Inbox;
     // open the register from Accounting → Period Close.

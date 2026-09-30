@@ -17,7 +17,12 @@ export {
 /** Workflow evidence only. Financial calculations and subject authorization
  * stay in their owning modules; the existing Flows engine owns decisions. */
 export type FinancialChangeDomain =
-  "lease" | "revenue" | "asset" | "consolidation" | "manufacturing";
+  "lease" | "revenue" | "asset" | "consolidation" | "manufacturing" | "provision";
+
+export class FinancialChangeConflictError extends Error {
+  readonly status = 409;
+  readonly name = "FinancialChangeConflictError";
+}
 
 /** The sole manufacturing operation admitted to the governed ledger. */
 export const MANUFACTURING_SCRAP_RESTATEMENT_OPERATION =
@@ -111,7 +116,7 @@ export async function existingFinancialChange(
     existing.submitted_by !== args.actorId ||
     canonicalJson(existing.payload) !== canonicalJson(args.payload)
   ) {
-    throw new Error(
+    throw new FinancialChangeConflictError(
       "request key already belongs to a different financial change",
     );
   }
@@ -205,6 +210,11 @@ export async function loadFinancialChangeSubjectLabel(
       `)
     ).rows[0];
     return row?.label ?? null;
+  }
+  if (domain === "provision") {
+    return (await tx.execute<{ label: string }>(sql`
+      select name as label from provision_obligations where org_id=${orgId} and id=${subjectId}
+    `)).rows[0]?.label ?? null;
   }
   if (domain === "manufacturing") {
     // Scrap subjects resolve through the manufacturing record views owned

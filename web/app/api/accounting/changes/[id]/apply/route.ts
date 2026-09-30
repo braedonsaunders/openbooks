@@ -1,3 +1,4 @@
+import { applyProvisionAssessment } from "@openbooks/engine/provisions";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
@@ -17,9 +18,11 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, params }) => {
     const { id } = await params,
-      gate = await authorizeChange(id);
+      gate = await authorizeChange(id, "apply");
     if (gate instanceof NextResponse) return gate;
     try {
+      if (gate.domain === "provision")
+        return NextResponse.json(await applyProvisionAssessment(gate.auth.user.orgId, id, gate.auth.user.id));
       if (gate.domain === "consolidation")
         return NextResponse.json(
           await (

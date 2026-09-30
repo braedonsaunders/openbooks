@@ -153,6 +153,9 @@ export type Role =
   | "fxRealizedGainLoss"
   | "fxUnrealizedGainLoss"
   | "loanPayable"
+  // Provisions and loss contingencies
+  | "provisionExpense"
+  | "provisionLiability"
   // Income tax
   | "incomeTaxExpense"
   | "incomeTaxPayable"
