@@ -61,7 +61,8 @@ test('the committed badge is exactly what the shared derivation produces', () =>
 })
 
 test('the badge names the corpus run it was derived from', () => {
-  const { badge } = loadArtefacts()
+  const { badge, conformance } = loadArtefacts()
+  assert.equal(badge.gitSha, conformance.gitSha, 'badge and corpus must name the same measured source tree')
   assert.match(
     String(badge.gitSha ?? ''),
     /^[0-9a-f]{40}$/,
