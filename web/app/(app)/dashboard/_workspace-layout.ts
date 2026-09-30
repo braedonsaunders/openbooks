@@ -36,10 +36,23 @@ export function financialDefaultLayout(role: RoleTier, workspace: DashboardWorks
   if (services && !compact && metrics.includes('kpi-gross-margin-mtd')) {
     metrics = metrics.map((id) => id === 'kpi-gross-margin-mtd' ? 'resourcing-pulse' : id)
   }
-  let panels = template.widgets.filter((cell) => !cell.id.startsWith('kpi-') && cell.id !== 'personal-actions')
-    .map((cell) => ({ ...cell, w: 6, h: cell.id === 'inbox-list' || cell.id === 'list-close-readiness' ? 3 : 4 }))
-  if (compact && role !== 'admin') panels = panels.slice(0, 2)
-  if (trading) panels = [...panels.filter((cell) => cell.id === 'list-top-vendors'), ...panels.filter((cell) => cell.id !== 'list-top-vendors')]
+  const panelIds: Record<RoleTier, string[]> = {
+    admin: ['inbox-list', 'list-close-readiness'],
+    controller: ['list-pending-approvals', 'list-close-readiness'],
+    accountant: ['personal-in-progress', 'list-recent-entries'],
+    approver: ['personal-inbox', 'list-pending-approvals'],
+    viewer: ['list-recent-entries'],
+  }
+  const selected = [...panelIds[role]]
+  if (!compact && role !== 'approver') {
+    if (trading && role !== 'viewer') selected.push('list-top-vendors')
+    if (services && role === 'viewer') selected.push('list-top-customers')
+    if (!selected.includes('list-recent-entries')) selected.push('list-recent-entries')
+  }
+  const panels = selected.map((id) => ({
+    id, x: 0, y: 0, w: 6,
+    h: role === 'admin' && (id === 'inbox-list' || id === 'list-close-readiness') ? 3 : 4,
+  }))
   const actions = role !== 'viewer' && role !== 'approver'
   return packDefaultLayout({
     widgets: [
