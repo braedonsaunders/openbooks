@@ -28,10 +28,8 @@ import type { TrueCostView } from './TrueCostView'
  *
  * Loader work is the `reports.read` gate, the `projects` feature gate, the
  * period query, and the reader's subsidiary fence handed straight to
- * `trueCostData`. The former /analytics/true-cost/planner route rendered
- * this same dashboard and now redirects to it — the interactive recovery
- * (absorption) and selling planning tabs live here, not on a separate
- * planner page.
+ * `trueCostData`. The interactive recovery (absorption) and selling planning
+ * tabs are part of this dashboard.
  */
 
 type ViewProps = Parameters<typeof TrueCostView>[0]

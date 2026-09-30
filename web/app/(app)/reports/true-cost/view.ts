@@ -33,9 +33,8 @@ import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report
  * recovery (absorption) and selling planning tabs — placed via the shared
  * `link-button` widget (the same widget the budget page uses for its manage
  * action). `link-button` renders no icon unless `iconKey` names one, so no
- * icon prop is passed. There is no separate planner page: the former
- * /analytics/true-cost/planner route rendered this same dashboard and now
- * redirects to it, so the report links to the planning that exists.
+ * icon prop is passed. The report links directly to the analytics dashboard
+ * that owns the recovery and selling planning tabs.
  */
 
 export interface TrueCostData {
