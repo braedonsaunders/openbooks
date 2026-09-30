@@ -76,6 +76,13 @@ function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly s
   return required.some((p) => permissionSetCovers(permissions, p))
 }
 
+/** General report access alone must not turn a people manager's home into an accounting dashboard. */
+export function hasFinancialWorkspace(authz: Authz): boolean {
+  if (hasAnyPermission(authz.permissions, ['gl.read', 'ar.read', 'ap.read'])) return true
+  const financialRole = authz.user.roles.some(({ key }) => ['admin', 'controller', 'accountant', 'approver', 'viewer'].includes(key))
+  return financialRole && hasAnyPermission(authz.permissions, ['reports.read', 'ap.approve'])
+}
+
 /**
  * HR-15 admin persona: admin.setup.manage, an hrm.*.manage grant, or
  * payroll.manage — what the actor HOLDS, never their role name. Shared

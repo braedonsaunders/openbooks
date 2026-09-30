@@ -6,6 +6,8 @@ import { TEAM_SIZES, COMPLEXITY_LEVELS } from '@/lib/workspace-profile'
 import { financialDefaultLayout, isShippedRoleLayout } from './_workspace-layout'
 import { packDefaultLayout, selectStoredDashboardLayout } from './_default-layout'
 import { clampToWidgetMinimums, DashboardLayoutInputSchema } from './_layout-input'
+import { hasFinancialWorkspace } from './_widget-access'
+import type { Authz } from '@/lib/authz'
 
 test('every industry, company size, complexity and financial role packs visible defaults into valid consecutive rows', () => {
   for (const industry of INDUSTRIES) for (const teamSize of TEAM_SIZES) for (const complexity of COMPLEXITY_LEVELS) for (const role of DASHBOARD_ROLE_KEYS) {
@@ -34,6 +36,9 @@ test('every industry, company size, complexity and financial role packs visible 
 })
 
 test('only unchanged seeded role templates follow product defaults; edited layouts remain tenant-owned', () => {
+  const manager = { user: { roles: [{ key: 'people_manager', name: 'People manager' }] }, permissions: new Set(['reports.read', 'hrm.team.read']) } as Authz
+  assert.equal(hasFinancialWorkspace(manager), false, 'general reports do not displace a people workspace')
+  assert.ok(hasFinancialWorkspace({ ...manager, permissions: new Set(['gl.read']) }), 'ledger readers receive the financial workspace')
   const seed = structuredClone(DEFAULT_DASHBOARD_LAYOUTS.admin)
   assert.ok(isShippedRoleLayout('admin', seed))
   seed.widgets[0]!.w = 4

@@ -10,7 +10,7 @@ import { INDUSTRIES } from '@/lib/industries'
 import { isComplexityLevel, isTeamSize } from '@/lib/workspace-profile'
 import { financialDefaultLayout, isShippedRoleLayout } from './_workspace-layout'
 import { selectStoredDashboardLayout } from './_default-layout'
-import { canSeeWidget } from './_widget-access'
+import { canSeeWidget, hasFinancialWorkspace } from './_widget-access'
 import { isFeatureEnabled } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
@@ -63,7 +63,7 @@ export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDe
   const roleDefault = await loadAssignedRoleDefault(authz)
   if (roleDefault) return roleDefault
   const role = getUserRoleTier(authz)
-  if (['gl.read', 'reports.read', 'ar.read', 'ap.read', 'ap.approve'].some((permission) => can(authz, permission))) {
+  if (hasFinancialWorkspace(authz)) {
     const result = await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${authz.user.orgId}`)
     const settings = result.rows[0]?.settings ?? {}
     const profile = settings.workspaceProfile as Record<string, unknown> | undefined
