@@ -64,8 +64,8 @@ test('purchasing vendor drilldown is a named button inside its table cell', asyn
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <CommitmentsTable rows={[{
-            partyId: 'party-1', name: 'Ada Supplies', openPoValue: 0, openPos: 0,
-            openBills: 1, billedOpen: 10, overdue: 0, oldestDue: null,
+            partyId: 'party-1', name: 'Ada Supplies', openPoValue: '0', openPos: 0,
+            openBills: 1, billedOpen: '10', overdue: '0', oldestDue: null,
           }]} />
         </MoneyProvider>
       </NextIntlClientProvider>,

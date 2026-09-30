@@ -22,7 +22,9 @@ import type { DirectoryItem } from '../../components/module-home/ui'
 import type { ModuleHomeTab } from '../../components/module-home/ui'
 import { loadMyLeave, type MyLeaveBalance } from './leave'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listQualifications } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts'
+import { listQualifications } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts';
+import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+import { isFeatureEnabled } from "../features";
 import type { ExplainPayTrace } from '@openbooks/engine/src/hrm/ai/explain-pay.ts'
 
 /**
@@ -161,7 +163,9 @@ async function meHasDocuments(authz: Authz): Promise<boolean> {
       listOwnDocuments({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
       listOwnExports({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
     ])
-    return (docs?.documents.length ?? 0) > 0 || (exports?.exports.length ?? 0) > 0
+    return (
+      (docs?.documents.length ?? 0) > 0 || (exports?.exports.length ?? 0) > 0
+    );
   } catch {
     return false
   }
@@ -198,7 +202,19 @@ function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {
     return { title: t('me.refusedTitle'), message: error.message }
   }
-  return null
+  return null;
+}
+
+function sectionRefusal(t: Catalog, error: unknown): MeRefusal {
+  return (
+    toRefusal(t, error) ?? {
+      title: t("me.refusedTitle"),
+      message:
+        error instanceof HrmQualificationError
+          ? error.message
+          : t("me.readFailed"),
+    }
+  );
 }
 
 export interface MeFact {
@@ -262,7 +278,8 @@ export interface MeOverviewData {
   balancesEmpty: string
   // HR-14 begin: the viewer's own certifications needing action.
   qualificationsTitle: string
-  qualifications: MeQualificationRow[]
+  qualifications: MeQualificationRow[];
+  qualificationsState: "loaded" | "disabled" | "unavailable";
   qualificationsEmpty: string
   qualificationsEmptyDescription: string
   qualificationsColumns: { type: string; expires: string; status: string }
@@ -424,7 +441,30 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       href: extension.href,
       label: t.has(extension.labelKey) ? t(extension.labelKey) : extension.labelKey,
       iconKey: extension.iconKey,
-    }))
+    }));
+    let qualificationsState: MeOverviewData["qualificationsState"] = "loaded";
+    let qualificationRefusal: MeRefusal | null = null;
+    let qualifications: Awaited<ReturnType<typeof listQualifications>> = [];
+    try {
+      if (!(await isFeatureEnabled(orgId, "hrmCertifications"))) {
+        qualificationsState = "disabled";
+      } else {
+        qualifications = (
+          await Promise.all(
+            profile.employments.map((summary) =>
+              listQualifications(db, {
+                orgId,
+                actorId: authz.user.id,
+                employmentId: summary.employmentId,
+              }),
+            ),
+          )
+        ).flat();
+      }
+    } catch (error) {
+      qualificationsState = "unavailable";
+      qualificationRefusal = sectionRefusal(t, error);
+    }
     return {
       ...base,
       refusal: null,
@@ -444,20 +484,18 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       steps: stepRows(t, steps.slice(0, 5)),
       requests: requestRows(t, requests.filter((row) => row.status === 'draft' || row.status === 'pending_approval').slice(0, 5)),
       balances: inbox?.balances ?? [],
-      // HR-14 begin: the viewer's own expiring and expired
-      // certifications across their employments, lapsed first. A
-      // refusal or an off-switch resolves to the empty state, never a
-      // blank panel — the empty copy says nothing needs action.
-      qualifications: (
-        await Promise.all(
-          profile.employments.map((summary) =>
-            listQualifications(db, { orgId, actorId: authz.user.id, employmentId: summary.employmentId }).catch(() => []),
-          ),
-        )
-      )
-        .flat()
+      qualificationsState,
+      ...(qualificationRefusal
+        ? {
+            qualificationsEmpty: qualificationRefusal.title,
+            qualificationsEmptyDescription: qualificationRefusal.message,
+          }
+        : {}),
+      qualifications: qualifications
         .filter((q) => q.status === 'expiring' || q.status === 'expired')
-        .sort((a, b) => (a.status === b.status ? (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') : a.status === 'expired' ? -1 : 1))
+        .sort((a, b) =>
+          a.status === b.status ? (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') : a.status === 'expired' ? -1 : 1,
+        )
         .slice(0, 5)
         .map((q) => ({
           id: q.id,
@@ -468,12 +506,12 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
             : q.status,
           statusVariant: qualificationVariant(q.status),
         })),
-      // HR-14 end
       extensions,
       hasExtensions: extensions.length > 0,
     }
   } catch (error) {
-    const refusal = toRefusal(t, error)
+    const refusal = toRefusal(t, error);
+    if (!refusal) throw error;
     return {
       ...base,
       refusal,
@@ -484,9 +522,8 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       steps: [],
       requests: [],
       balances: [],
-      // HR-14 begin
+      qualificationsState: "unavailable",
       qualifications: [],
-      // HR-14 end
       extensions: [],
       hasExtensions: false,
     }
@@ -793,7 +830,9 @@ export interface MeTeamData {
   changesEmpty: string
   owedTitle: string
   owedColumns: { employee: string; cycle: string; status: string; due: string }
-  owedReviews: MeTeamOwedRow[]
+  owedReviews: MeTeamOwedRow[];
+  owedState: "loaded" | "unavailable";
+  owedDescription: string;
   owedEmpty: string
   openReview: string
 }
@@ -857,14 +896,15 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       due: t('me.checklists.columns.due'),
     },
     owedEmpty: t('me.team.owedEmpty'),
+    owedDescription: "",
     openReview: t('me.team.openReview'),
   }
   try {
-    const [team, owed] = await Promise.all([
+    const [team, owedOutcome] = await Promise.all([
       getTeamView({ orgId, actorId: authz.user.id }),
-      // A report-less manager refuses inside getTeamView; the owed read
-      // answers empty on its own, so the refusal below still names NO_TEAM.
-      loadManagerOwedReviews({ orgId, actorId: authz.user.id }).catch(() => []),
+      loadManagerOwedReviews({ orgId, actorId: authz.user.id }).then((rows) => ({ rows, refusal: null }),
+        (error: unknown) => ({ rows: [], refusal: sectionRefusal(t, error) }),
+      ),
     ])
     const canOpenDrawer = can(authz, 'parties.read')
     const performanceOn = await mePerformanceOn(orgId)
@@ -944,7 +984,14 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         decideLabel: t('me.team.decideInApprovals'),
         decideHref: '/inbox',
       })),
-      owedReviews: owed.map((row) => ({
+      owedState: owedOutcome.refusal ? "unavailable" : "loaded",
+      ...(owedOutcome.refusal
+        ? {
+            owedEmpty: owedOutcome.refusal.title,
+            owedDescription: owedOutcome.refusal.message,
+          }
+        : {}),
+      owedReviews: owedOutcome.rows.map((row) => ({
         reviewId: row.reviewId,
         workerName: row.workerName,
         cycleName: row.cycleName,
@@ -956,7 +1003,8 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       })),
     }
   } catch (error) {
-    const refusal = toRefusal(t, error)
+    const refusal = toRefusal(t, error);
+    if (!refusal) throw error;
     return {
       ...base,
       refusal,
@@ -966,6 +1014,7 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       teamSteps: [],
       pendingLeave: [],
       pendingChanges: [],
+      owedState: "unavailable",
       owedReviews: [],
     }
   }

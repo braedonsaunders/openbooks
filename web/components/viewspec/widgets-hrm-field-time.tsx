@@ -2,19 +2,21 @@ import type { ComponentProps } from 'react'
 import { ClockControls } from '../field-time/ClockControls'
 import { CrewWorkspace } from '../field-time/CrewWorkspace'
 import { FieldTimeSetup } from '../field-time/FieldTimeSetup'
-import { str, type WidgetRenderer } from './widget-props'
+import { str, type WidgetRenderer } from './widget-props';
 
 /**
- * HR-20 field-time widget family: the clock island, the foreman crew
+ * Field-time widget family: the clock island, the foreman crew
  * workspace and the field-time setup surface (verbatim adapters only).
  * Split from widgets-hrm by responsibility — the composition test caps
- * a family file at 500 lines. Loader-resolved display data only, never
- * org or user ids; each island calls its own API routes.
+ * a family file at 500 lines. The clock carries a server-resolved owner
+ * fence; each island calls its own authorized API routes.
  */
 export const HRM_FIELD_TIME_WIDGETS = {
   /** The clock island: state card, primary action, picker sheet, offline queue. */
   'hrm-clock-controls': (props) => (
     <ClockControls
+      key={str(props, "ownerKey")}
+      ownerKey={str(props, "ownerKey") ?? ""}
       initial={(props.initial as ComponentProps<typeof ClockControls>['initial'])!}
       projects={(props.projects as ComponentProps<typeof ClockControls>['projects']) ?? []}
       tasks={(props.tasks as ComponentProps<typeof ClockControls>['tasks']) ?? []}

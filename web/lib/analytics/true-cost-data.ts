@@ -1,4 +1,5 @@
 import "server-only";
+import { toChartNumber } from "../chart-number";
 import { statementBookExpr } from "../gl-summary";
 import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
@@ -7,7 +8,11 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, cmp, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
+  DEFAULT_OVERHEAD_BASE_LABOR_RATE,
   deriveOverheadCategoryDeptRates,
+  deriveOverheadOverallRate,
+  deriveOverheadDisplayRate,
+  OverheadCalculationError,
   deriveOverheadDeptComposite,
   formatOverheadPublishRate,
   overheadPublishBlockers,
@@ -22,14 +27,10 @@ import {
   type RateFormat,
   type CompositeMethod,
   type AllocationBaseBundle,
-  type CompositeCategory,
-  calculateRate,
   formatRate,
-  calculateCompositeRate,
   calculateManualCategoryData,
   calculateDerivedCategoryData,
   calculateFormulaCategoryData,
-  getAllocationBaseValue,
 } from "./true-cost-engine";
 import { trueCostStrings, type TrueCostStrings } from "./true-cost-strings";
 import { englishCatalogMessage } from "./catalog-strings";
@@ -285,23 +286,12 @@ interface PriorBurdenSqlRow {
   billed_hours: TrueCostSqlNumeric;
 }
 
-/** Hours-weighted average labour cost rate (cascading composite base). */
-function employeesWeightedRate(rows: EmployeeRateSqlRow[]): number {
-  let wsum = 0, hsum = 0;
-  for (const r of rows) {
-    const rate = Number(r.rate ?? 0);
-    const hours = Number(r.hours ?? 0);
-    if (rate > 0 && hours > 0) { wsum += rate * hours; hsum += hours; }
-  }
-  return hsum > 0 ? wsum / hsum : 50;
-}
-
 export const DEFAULT_PROFILE: TrueCostProfile = {
   id: "default",
   name: "Default",
   color: "#3b82f6",
   compositeMethod: "sum",
-  baseLaborRate: 50,
+  baseLaborRate: DEFAULT_OVERHEAD_BASE_LABOR_RATE,
   fringeRate: 0.25,
   categorySettings: {},
   customCategories: [],
@@ -310,9 +300,9 @@ export const DEFAULT_PROFILE: TrueCostProfile = {
 
 /** Load the True Cost engine config and resolve the active profile (). */
 export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfileId: string; profiles: TrueCostProfile[]; profile: TrueCostProfile }> {
-  const r = (await db.execute(sql`
+  const r = await db.execute(sql`
     select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${orgId}
-  `));
+  `);
   const raw = r.rows[0]?.cfg as Partial<TrueCostConfig> | null;
   const profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw!.profiles.length
     ? raw!.profiles.map((p) => ({ ...DEFAULT_PROFILE, ...p, categorySettings: p.categorySettings ?? {}, customCategories: p.customCategories ?? [], baseOverrides: p.baseOverrides ?? {} }))
@@ -606,7 +596,7 @@ export async function trueCostData(
         hours: v.hours,
         cost: v.cost,
         rated_hours: v.rated,
-        rate: v.rated > 0 ? Number(v.cost) / v.rated : 0,
+        rate: v.rated > 0 ? toChartNumber(div(v.cost, v.ratedExact)) : 0,
       });
     }
   }
@@ -666,7 +656,7 @@ export async function trueCostData(
     const dept = r.department_id ?? "none";
     const billed = Number(r.billed_hours ?? 0);
     const total = Number(r.total_hours ?? 0);
-    const nonbill = Number(r.nonbill_cost ?? 0);
+    const nonbill = toChartNumber(String(r.nonbill_cost ?? 0));
     const billedExact = r.billed_hours_exact ?? normalizeMoney(String(r.billed_hours ?? 0));
     const totalExact = r.total_hours_exact ?? normalizeMoney(String(r.total_hours ?? 0));
     deptBilledExact.set(dept, add(deptBilledExact.get(dept) ?? "0.0000", billedExact));
@@ -714,7 +704,7 @@ export async function trueCostData(
     custom: { total: Object.values(profile.baseOverrides.custom ?? {}).reduce((s, v) => s + Number(v || 0), 0), byDept: profile.baseOverrides.custom ?? {} },
     monthCount,
   };
-  const periodData = { laborDollars: bases.laborDollars, directCost: bases.directCost, units: bases.units, monthCount };
+
 
   // ---- classify expense into burden categories --------------------------------
   const directLabor = new Set(
@@ -742,7 +732,7 @@ export async function trueCostData(
 
   for (const r of acctTranslated) {
     if (directLabor.has(r.account_id)) continue; // direct labour is not burden
-    const amount = Number(r.amount ?? 0);
+    const amount = toChartNumber(String(r.amount ?? 0));
     if (amount === 0) continue;
     // Exact twin: translated legs already sum in money strings, so this
     // validation is a no-op pass-through that fails closed on corruption.
@@ -864,7 +854,8 @@ export async function trueCostData(
     else for (const d of departmentsBase) md.set(d.id, (md.get(d.id) ?? 0) + cost * (billedShare.get(d.id) ?? 0));
   }
 
-  const totalOverhead = [...cats.values()].reduce((s, c) => s + Number(c.total), 0) + Number(timeTotalExact);
+  const totalOverheadExact = [...cats.values()].reduce((total, category) => add(total, category.total), timeTotalExact);
+  const totalOverhead = toChartNumber(totalOverheadExact);
   const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
 
   /**
@@ -891,10 +882,11 @@ export async function trueCostData(
     return byDept;
   };
 
-  // Exact per-category department rates for the shared publish contract,
-  // keyed by category id (per_hour categories only; other formats stay
-  // display-only and block publication through the gate below).
-  const exactRatesByCat = new Map<string, { rates: Record<string, string>; expenses: Record<string, string> }>();
+  // Preview and publication share exact category rates; non-hourly units
+  // remain explicitly blocked from the hourly publication card.
+  const exactRatesByCat = new Map<string, { rates: Record<string, string>;
+      overall: string;
+      expenses: Record<string, string> }>();
 
   // Apply the rate engine to one category's expense-by-dept: allocation
   // base × method → raw rate, then formatted per the category's rate format.
@@ -910,30 +902,65 @@ export async function trueCostData(
     const rateFormat = s.rateFormat ?? "per_hour";
     const includeInComposite = s.includeInComposite ?? true;
     const baseExact = baseExactFor(allocationBase);
-    const baseByDept: Record<string, number> = {};
     const byDept: Record<string, { amount: number; rate: number }> = {};
-    // Department rates come from the shared exact contract for per-hour
-    // categories (method-aware, no floats); other formats keep the legacy
-    // display division and block publication instead of publishing
-    // base-unit ratios as $/hr.
-    const exactRates = rateFormat === "per_hour"
-      ? deriveOverheadCategoryDeptRates({
+    const rateInput = {
         id, allocationMethod, allocationTiers: s.allocationTiers,
-        expenseByDept: expenseExactByDept, baseByDept: baseExact,
-      })
-      : null;
-    if (exactRates) exactRatesByCat.set(id, { rates: exactRates, expenses: expenseExactByDept });
+      allocationWeights: s.allocationWeights,
+      expenseByDept: expenseExactByDept, baseByDept: baseExact,
+      };
+    const rawDeptRates = deriveOverheadCategoryDeptRates(rateInput);
+    const exactRates: Record<string, string> = {};
+    const sumExact = (values: Record<string, string>) =>
+      Object.values(values).reduce(
+        (total, value) => add(total, value),
+        "0.0000",
+      );
+    const laborBase = baseExactFor("labor_dollars");
+    const costBase = baseExactFor("direct_cost");
+    const unitBase = baseExactFor("units");
+    const displayRate = (
+      rawRate: string,
+      expense: string,
+      deptId?: string,
+    )
+      : string => {
+      const value = deriveOverheadDisplayRate({
+        rawRate,
+        expense,
+        rateFormat,
+        laborDollars: deptId ? (laborBase[deptId] ?? "0") : sumExact(laborBase),
+        directCost: deptId ? (costBase[deptId] ?? "0") : sumExact(costBase),
+        units: deptId ? (unitBase[deptId] ?? "0") : sumExact(unitBase),
+      });
+      if (value === null)
+        throw new OverheadCalculationError(
+          `Category "${name}" cannot calculate ${rateFormat}${deptId ? ` for department "${deptId}"` : ""}: its base is missing or not positive. Check the category's allocation base and period before retrying.`,
+        );
+      return value;
+    };
     for (const d of departmentsBase) {
-      const amount = expenseByDept[d.id] ?? 0;
-      const deptBase = getAllocationBaseValue(allocationBase, bases, d.id);
-      baseByDept[d.id] = deptBase;
-      const exact = exactRates?.[d.id];
-      byDept[d.id] = { amount, rate: exact !== undefined ? Number(exact) : (deptBase > 0 ? amount / deptBase : 0) };
+      const exact = displayRate(
+        rawDeptRates[d.id] ?? "0.0000",
+        expenseExactByDept[d.id] ?? "0.0000",
+        d.id,
+      );
+      exactRates[d.id] = exact;
+      byDept[d.id] = { amount: expenseByDept[d.id] ?? 0, rate: toChartNumber(exact) };
     }
-    const rawRate = allocationMethod === "weighted"
-      ? calculateRate({ id, allocationMethod, allocationWeights: s.allocationWeights, allocationTiers: s.allocationTiers }, expenseByDept, baseByDept, allocationMethod)
-      : calculateRate({ id, allocationMethod, allocationTiers: s.allocationTiers }, total, getAllocationBaseValue(allocationBase, bases, "Overall"), allocationMethod);
-    const formatted = formatRate(rawRate, rateFormat, periodData, { totalExpense: total }, (value, options) => money(value, options));
+    const overallExpense = sumExact(expenseExactByDept);
+    const rawRateExact = deriveOverheadOverallRate(rateInput);
+    const overall = displayRate(rawRateExact, overallExpense);
+    exactRatesByCat.set(id, { rates: exactRates,
+      overall,
+      expenses: expenseExactByDept });
+    const rawRate = Number(rawRateExact);
+    const formatted = formatRate(
+      rawRateExact, rateFormat,
+      {
+        laborDollars: sumExact(laborBase),
+        directCost: sumExact(costBase),
+        units: { total: sumExact(unitBase) },
+      }, { totalExpense: overallExpense }, (value, options) => money(value, options));
     return {
       id, key, name, color, categoryType, match,
       totalAmount: total, rawRate, rate: formatted.value, rateDisplay: formatted.display,
@@ -948,7 +975,8 @@ export async function trueCostData(
     // Display numerics cross from exact through Number at this boundary; the
     // exact maps flow separately for accumulation and the per-hour contract.
     const expenseByDept = Object.fromEntries(Object.entries(exactByDept).map(([k, v]): [string, number] => [k, Number(v)]));
-    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, Number(c.total), [...c.accounts.values()].sort((a, b) => cmp(b.amount, a.amount)), exactByDept);
+    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept,
+        toChartNumber(c.total), [...c.accounts.values()].sort((a, b) => cmp(b.amount, a.amount)), exactByDept);
   }).filter((c) => c.totalAmount !== 0);
 
   // ---- native non-billable time category ---------------------------------------
@@ -986,18 +1014,24 @@ export async function trueCostData(
 
   // ---- composite rate via the configured method () ---
   const typedEmployeeRows = empTranslated;
-  const laborHoursSumForComposite = employeesWeightedRate(typedEmployeeRows);
-  const compositeCats: CompositeCategory[] = categories.map((c) => ({
-    id: c.id, rateValue: c.rate, totalExpense: c.totalAmount, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite,
-  }));
-  const composite = calculateCompositeRate(compositeCats, { method: profile.compositeMethod, baseLaborRate: profile.baseLaborRate }, { avgLaborRate: laborHoursSumForComposite });
-  const compositeRate = composite.value;
-
-  // Exact Overall/department labor averages for the cascading composite base:
-  // the hours-weighted cost rate each cascade runs over (Overall mirrors the
-  // float `employeesWeightedRate` above; departments mirror it per centre).
   const overallLaborRateExact =
-    overallLaborRatedExact === "0.0000" ? "50.0000" : div(overallLaborCostExact, overallLaborRatedExact);
+    overallLaborRatedExact === "0.0000"
+      ? quantizeOverheadMoney(profile.baseLaborRate)
+      : div(overallLaborCostExact, overallLaborRatedExact);
+  const compositeRateExact = deriveOverheadDeptComposite({
+    compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact,
+    categories: categories.map((category) => ({
+      id: category.id,
+      rate: exactRatesByCat.get(category.id)!.overall,
+      expense: Object.values(exactRatesByCat.get(category.id)!.expenses).reduce(
+        (total, value) => add(total, value),
+        "0.0000",
+      ),
+      rateFormat: category.rateFormat,
+      includeInComposite: category.includeInComposite,
+    })),
+  });
+  const compositeRate = Number(compositeRateExact);
   const deptLaborRateExact = (deptId: string): string => {
     const leg = deptLaborExact.get(deptId);
     if (!leg || leg.rated === "0.0000") return overallLaborRateExact;
@@ -1005,38 +1039,29 @@ export async function trueCostData(
   };
 
   const totalsByDept: Record<string, number> = {};
-  // Department composites run the SAME contract publication uses: the
-  // configured composite method over exact per-department category rates, so
-  // the Matrix preview can never disagree with the published card. A
-  // non-hourly included format blocks the contract (blending it into a $/hr
-  // card is a unit error): the preview falls back to the legacy display sum
-  // and records why publication will refuse.
+  // All preview composites use the exact contract. Non-hourly units still
+  // refuse publication to an hourly rate card.
   const publishBlockers = overheadPublishBlockers(
     categories.map((c) => ({ id: c.id, name: c.name, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite })),
   );
   const exactSupported = publishBlockers.length === 0;
   const departments: Dept[] = departmentsBase.map((d) => {
-    let composite: number;
-    let compositeExact = "";
-    if (exactSupported) {
-      const composite4 = deriveOverheadDeptComposite({
+    const composite4 = deriveOverheadDeptComposite({
         compositeMethod: profile.compositeMethod,
         baseLaborRate: deptLaborRateExact(d.id),
         categories: categories
-          .filter((c) => c.includeInComposite)
-          .map((c) => ({
-            id: c.id,
-            rate: exactRatesByCat.get(c.id)?.rates[d.id] ?? "0.0000",
-            expense: exactRatesByCat.get(c.id)?.expenses[d.id] ?? "0.0000",
-            rateFormat: "per_hour" as const,
-            includeInComposite: true,
-          })),
+          .map((category) => ({
+            id: category.id,
+            rate: exactRatesByCat.get(category.id)!.rates[d.id] ?? "0.0000",
+            expense: exactRatesByCat.get(category.id)!.expenses[d.id] ?? "0.0000",
+            rateFormat: category.rateFormat,
+            includeInComposite: category.includeInComposite,
+      })),
       });
-      compositeExact = formatOverheadPublishRate(composite4);
-      composite = Number(compositeExact);
-    } else {
-      composite = categories.filter((c) => c.includeInComposite).reduce((s, c) => s + (c.byDept[d.id]?.rate ?? 0), 0);
-    }
+    const compositeExact = exactSupported
+      ? formatOverheadPublishRate(composite4)
+      : "";
+    const composite = Number(exactSupported ? compositeExact : composite4);
     totalsByDept[d.id] = composite;
     return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, composite, compositeExact };
   });
@@ -1050,14 +1075,14 @@ export async function trueCostData(
 
   // ---- prior-window composite for the change chip (same classification) -----------
   const priorBilled = priorBilledHours;
-  let priorBurden = 0;
+  let priorBurdenExact = priorNonbillCost;
   const typedPriorRows = priorTranslated;
   for (const r of typedPriorRows) {
     if (directLabor.has(r.account_id)) continue;
-    if (burdenGroups.byAccount.has(r.account_id)) priorBurden += Number(r.amount ?? 0);
+    if (burdenGroups.byAccount.has(r.account_id))
+      priorBurdenExact = add(priorBurdenExact, String(r.amount ?? 0));
   }
-  priorBurden += Number(priorNonbillCost); // native time category
-  const priorComposite = priorBilled > 0 ? priorBurden / priorBilled : 0;
+  const priorComposite = priorBilled > 0 ? toChartNumber(div(priorBurdenExact, quantizeOverheadMoney(priorBilled))) : 0;
   const compositeRateChangePct = priorComposite > 0 ? ((compositeRate - priorComposite) / priorComposite) * 100 : null;
 
   // ---- monthly history + linear forecast ---------------------------------------------
@@ -1114,7 +1139,7 @@ export async function trueCostData(
   const employees: EmployeeRate[] = typedEmployeeRows
     .map((r) => ({
       id: r.id, name: strings.displayEmployeeName(r.name), deptId: r.dept_id, deptName: r.dept_name, title: r.title,
-      rate: Number(r.rate ?? 0), hours: Number(r.hours ?? 0),
+      rate: toChartNumber(String(r.rate ?? 0)), hours: Number(r.hours ?? 0),
     }))
     .filter((e) => e.rate > 0);
   const laborHoursSum = employees.reduce((s, e) => s + e.hours, 0);

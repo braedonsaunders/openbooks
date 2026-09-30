@@ -27,7 +27,7 @@
  * can never disagree with the published card):
  * - Per-department category rates honor the allocation method. `simple`
  *   divides exactly; `weighted` divides exactly per department (a department
- *   weight cancels within its own rate — the Overall weighted rate is the
+ *   positive weight cancels within its own rate — the Overall weighted rate is the
  *   base-and-weight-weighted mean of these department rates, pinned by test);
  *   `stepped` resolves the tier by the DEPARTMENT base and falls back to
  *   exact division outside every tier.
@@ -61,7 +61,7 @@ import type { Rate } from "../money/brands.ts";
 export type OverheadRateMethod = "simple" | "weighted" | "stepped";
 export type OverheadCompositeMethod = "sum" | "weighted" | "cascading";
 export type OverheadRateFormat =
-  | "per_hour"
+  "per_hour"
   | "percent_labor"
   | "percent_cost"
   | "per_fte"
@@ -73,7 +73,7 @@ export const OVERHEAD_RATE_INTERNAL_DECIMALS = 4;
 export const OVERHEAD_RATE_PUBLISH_DECIMALS = 2;
 
 const ZERO_4 = "0.0000";
-const DEFAULT_BASE_LABOR_RATE = "50.0000";
+export const DEFAULT_OVERHEAD_BASE_LABOR_RATE = "50.0000";
 
 export interface OverheadTier {
   min?: number | string;
@@ -85,6 +85,7 @@ export interface OverheadCategoryDeptInput {
   id: string;
   allocationMethod: OverheadRateMethod;
   allocationTiers?: OverheadTier[];
+  allocationWeights?: Record<string, number | string>;
   /** Exact money strings (GL-sourced) or `quantizeOverheadMoney` output. */
   expenseByDept: Record<string, string>;
   /** Decimal strings in the category's allocation-base units. */
@@ -282,10 +283,15 @@ export function deriveOverheadCategoryDeptRates(
     return out;
   }
   // simple: exact division. weighted: a department weight multiplies its own
-  // expense AND its own base, so it cancels — the per-department weighted
+  // expense AND its own base, so a positive weight cancels — the per-department weighted
   // rate IS the exact division (the Overall weighted headline is the
   // base-and-weight-weighted mean of these, pinned by test).
   for (const deptId of deptIds) {
+    if (input.allocationMethod === "weighted") {
+      const weight = quantizeOverheadMoney(input.allocationWeights?.[deptId] ?? 1);
+      if (cmp(weight, "0") < 0) throw new OverheadCalculationError(`Category "${input.id}" has a negative department weight. Correct the allocation weights before retrying.`);
+      if (cmp(weight, "0") === 0) { out[deptId] = ZERO_4 as Rate; continue; }
+    }
     const base = quantizeOverheadMoney(input.baseByDept[deptId] ?? "0");
     out[deptId] = (
       compareOverheadDecimals(base, "0") > 0
@@ -294,6 +300,92 @@ export function deriveOverheadCategoryDeptRates(
     ) as Rate;
   }
   return out;
+}
+
+/** Overall uses the same tier resolver as department rates, with exact weighted inputs. */
+export function deriveOverheadOverallRate(
+  input: OverheadCategoryDeptInput & {
+    allocationWeights?: Record<string, number | string>;
+  },
+): Rate {
+  let expense = ZERO_4;
+  let base = ZERO_4;
+  if (input.allocationMethod === "weighted") {
+    let numerator = 0n;
+    let denominator = 0n;
+    for (const id of new Set([
+      ...Object.keys(input.expenseByDept),
+      ...Object.keys(input.baseByDept),
+    ])) {
+      const weight = toUnits(
+        quantizeOverheadMoney(input.allocationWeights?.[id] ?? 1),
+      );
+      if (weight < 0n)
+        throw new OverheadCalculationError(
+          `Category "${input.id}" has a negative department weight. Correct the allocation weights before retrying.`,
+        );
+      numerator += toUnits(input.expenseByDept[id] ?? ZERO_4) * weight;
+      denominator +=
+        toUnits(quantizeOverheadMoney(input.baseByDept[id] ?? ZERO_4)) * weight;
+    }
+    return (
+      denominator > 0n
+        ? fromUnits(roundDiv(numerator * 10_000n, denominator))
+        : ZERO_4
+    ) as Rate;
+  }
+  for (const value of Object.values(input.expenseByDept))
+    expense = add(expense, value);
+  for (const value of Object.values(input.baseByDept))
+    base = add(base, quantizeOverheadMoney(value));
+  return deriveOverheadCategoryDeptRates({
+    ...input,
+    expenseByDept: { Overall: expense },
+    baseByDept: { Overall: base },
+  }).Overall!;
+}
+
+export class OverheadCalculationError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "OverheadCalculationError";
+  }
+}
+
+/** Null means an undefined ratio, never a fabricated denominator or zero rate. */
+export function deriveOverheadDisplayRate(input: {
+  rawRate: string;
+  expense: string;
+  rateFormat: OverheadRateFormat;
+  laborDollars?: string;
+  directCost?: string;
+  units?: string;
+  /** Annual hours per FTE; the existing model policy is 2080 unless supplied. */
+  annualFteHours?: string;
+}): string | null {
+  if (input.rateFormat === "per_hour") return input.rawRate;
+  if (input.rateFormat === "per_fte")
+    return fromUnits(
+      roundDiv(
+        toUnits(input.rawRate) * toUnits(input.annualFteHours ?? "2080"),
+        10_000n,
+      ),
+    );
+  const denominator =
+    input.rateFormat === "percent_labor"
+      ? input.laborDollars
+      : input.rateFormat === "percent_cost"
+        ? input.directCost
+        : input.units;
+  if (denominator === undefined || cmp(denominator, "0") <= 0) return null;
+  const multiplier = input.rateFormat === "per_unit" ? 1n : 100n;
+  return fromUnits(
+    roundDiv(
+      toUnits(input.expense) * 10_000n * multiplier,
+      toUnits(denominator),
+    ),
+  );
 }
 
 /**
@@ -320,7 +412,7 @@ export function deriveOverheadDeptComposite(input: OverheadDeptCompositeInput): 
       return fromUnits(roundDiv(weightedUnits, toUnits(expenseTotal))) as Rate;
     }
     case "cascading": {
-      const base = normalizeMoney(input.baseLaborRate ?? DEFAULT_BASE_LABOR_RATE);
+      const base = normalizeMoney(input.baseLaborRate ?? DEFAULT_OVERHEAD_BASE_LABOR_RATE);
       const baseUnits = toUnits(base);
       let running = baseUnits;
       const order = input.cascadeOrder ?? included.map((c) => c.id);

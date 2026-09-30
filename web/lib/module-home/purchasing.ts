@@ -2,7 +2,7 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { flowRates, translateFlows } from '../fx-presentation'
 import { openItems, parseISO, summariseSide, toISO } from '../cash/core'
 import { isFeatureEnabled } from '../features'
@@ -20,20 +20,20 @@ import { isFeatureEnabled } from '../features'
 export interface VendorExposureRow {
   partyId: string
   name: string
-  openPoValue: number
+  openPoValue: string
   openPos: number
   openBills: number
-  billedOpen: number
-  overdue: number
+  billedOpen: string
+  overdue: string
   oldestDue: string | null
 }
 
 export interface PurchasingHome {
-  apOutstanding: number
-  apOverdue: number
+  apOutstanding: string
+  apOverdue: string
   openBills: number
-  dueNext7: number
-  openPoValue: number
+  dueNext7: string
+  openPoValue: string
   openPos: number
   spend30d: number
   topExposure: VendorExposureRow[]
@@ -308,24 +308,24 @@ export async function purchasingHome(
   const billedByParty = new Map<string, {
     name: string
     openBills: number
-    billedOpen: number
-    overdue: number
+    billedOpen: string
+    overdue: string
     oldestDue: string | null
   }>()
   for (const it of apItems) {
     if (it.partyId == null) continue
-    const remaining = Number(it.remaining)
+    const remaining = String(it.remaining)
     const cur = billedByParty.get(it.partyId) ?? {
       name: String(it.partyName ?? 'Unspecified'),
       openBills: 0,
-      billedOpen: 0,
-      overdue: 0,
+      billedOpen: '0',
+      overdue: '0',
       oldestDue: null as string | null,
     }
-    if (remaining > 0) cur.openBills += 1
-    cur.billedOpen += remaining
+    if (cmp(remaining, '0') > 0) cur.openBills += 1
+    cur.billedOpen = add(cur.billedOpen, remaining)
     const due = it.dueDate ? toISO(it.dueDate) : null
-    if (due !== null && due < today) cur.overdue += remaining
+    if (due !== null && due < today) cur.overdue = add(cur.overdue, remaining)
     if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
     billedByParty.set(it.partyId, cur)
   }
@@ -336,15 +336,15 @@ export async function purchasingHome(
       return {
         partyId,
         name: String(b?.name ?? p?.name ?? 'Unspecified'),
-        openPoValue: Number(p?.value ?? 0),
+        openPoValue: p?.value ?? '0',
         openPos: p?.count ?? 0,
         openBills: Number(b?.openBills ?? 0),
-        billedOpen: Number(b?.billedOpen ?? 0),
-        overdue: Number(b?.overdue ?? 0),
+        billedOpen: b?.billedOpen ?? '0',
+        overdue: b?.overdue ?? '0',
         oldestDue: b?.oldestDue ?? null,
       }
     })
-    .sort((x, y) => y.billedOpen + y.openPoValue - (x.billedOpen + x.openPoValue))
+    .sort((x, y) => cmp(add(y.billedOpen, y.openPoValue), add(x.billedOpen, x.openPoValue)))
     .slice(0, 10)
 
   // Open-payables vitals straight off the shared summary, so the pulse ties
@@ -352,17 +352,17 @@ export async function purchasingHome(
   // minus current (the cockpit's own definition), the 7-day window and the
   // open-line count over the same as-of item set.
   const apSummary = summariseSide(apItems, parseISO(today), '0.0000', 0)
-  const apOutstanding = Number(apSummary.outstanding)
-  const apCurrent = Number(apSummary.buckets.find((b) => b.label === 'Current')?.amount ?? 0)
-  const apOverdue = apOutstanding > apCurrent ? apOutstanding - apCurrent : 0
+  const apOutstanding = apSummary.outstanding
+  const apCurrent = apSummary.buckets.find((b) => b.label === 'Current')?.amount ?? '0'
+  const apOverdue = cmp(apOutstanding, apCurrent) > 0 ? add(apOutstanding, mulDecimal(apCurrent, '-1')) : '0'
   let openBills = 0
-  let dueNext7 = 0
+  let dueNext7 = '0'
   for (const it of apItems) {
-    const remaining = Number(it.remaining)
-    if (!(remaining > 0)) continue
+    const remaining = String(it.remaining)
+    if (cmp(remaining, '0') <= 0) continue
     openBills += 1
     const due = it.dueDate ? toISO(it.dueDate) : null
-    if (due !== null && due >= today && due < in7) dueNext7 += remaining
+    if (due !== null && due >= today && due < in7) dueNext7 = add(dueNext7, remaining)
   }
   const badge = badgeRes.rows[0] ?? {}
   return {
@@ -370,7 +370,7 @@ export async function purchasingHome(
     apOverdue,
     openBills,
     dueNext7,
-    openPoValue: Number(po.total ?? 0),
+    openPoValue: po.total,
     openPos: Number(badge.open_pos ?? 0),
     spend30d,
     topExposure,

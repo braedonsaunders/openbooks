@@ -197,7 +197,7 @@ export async function payrollHome(
     `),
     // Active employees with no active payroll profile.
     db.execute(sql`
-      select p.id, p.display_name as name, count(*) over () as total
+      select p.id, p.display_name as name, count(*) over () as result_count
         from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
        where p.org_id = ${orgId} and p.is_active
@@ -211,7 +211,7 @@ export async function payrollHome(
     // Profiled employees with no wage effective today (one-table doctrine:
     // wages live in labor_cost_rates, employee scope).
     db.execute(sql`
-      select p.id, p.display_name as name, count(*) over () as total
+      select p.id, p.display_name as name, count(*) over () as result_count
         from employee_payroll_profiles pr
         join parties p on p.id = pr.employee_party_id and p.org_id = pr.org_id
        where pr.org_id = ${orgId} and pr.is_active
@@ -341,9 +341,9 @@ export async function payrollHome(
     totalRuns: Number(stats.total_runs ?? 0),
     exceptions: {
       missingProfiles: noProfileRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
-      missingProfilesTotal: Number(noProfileRes.rows[0]?.total ?? 0),
+      missingProfilesTotal: Number(noProfileRes.rows[0]?.result_count ?? 0),
       missingWages: noWageRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
-      missingWagesTotal: Number(noWageRes.rows[0]?.total ?? 0),
+      missingWagesTotal: Number(noWageRes.rows[0]?.result_count ?? 0),
     },
     missingSettings,
   }

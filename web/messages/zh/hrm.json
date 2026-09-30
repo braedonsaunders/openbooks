@@ -1165,6 +1165,7 @@
       "openSurveys": "待填调查"
     },
     "refusedTitle": "自助服务不可用",
+    "readFailed": "无法加载此部分。请刷新页面重试；如仍不可用，请联系管理员。",
     "overview": {
       "title": "我",
       "description": "您的雇佣、申请和余额 — 此处仅显示这些内容。",

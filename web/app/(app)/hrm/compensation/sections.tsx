@@ -1,3 +1,4 @@
+import { toChartNumber } from '../../../../lib/chart-number'
 import Link from 'next/link'
 import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
@@ -46,12 +47,12 @@ export function PlacementBar({
   if (min === null || target === null || max === null || rate === null) {
     return <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
   }
-  const lo = Number(min)
-  const hi = Number(max)
-  const at = Number(rate)
+  const lo = toChartNumber(min)
+  const hi = toChartNumber(max)
+  const at = toChartNumber(rate)
   const span = hi - lo > 0 ? hi - lo : 1
   const pct = Math.min(100, Math.max(0, ((at - lo) / span) * 100))
-  const targetPct = Math.min(100, Math.max(0, ((Number(target) - lo) / span) * 100))
+  const targetPct = Math.min(100, Math.max(0, ((toChartNumber(target) - lo) / span) * 100))
   return (
     <span className="flex min-w-28 flex-col gap-1" role="img" aria-label={label}>
       <span className="relative h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700">

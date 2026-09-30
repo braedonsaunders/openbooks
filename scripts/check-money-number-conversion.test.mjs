@@ -6,8 +6,11 @@ test("money conversion check catches decimal DTO amounts coerced to Number", () 
   const violations = scanMoneyNumberConversions(`
     function render(row) { return format.number(Number(row.rate)); }
     function label(entry) { return Intl.NumberFormat(locale).format(Number(entry['balance'])); }
+    function total(row) { const exact = row.netAmount; const coerce = Number; return Number((row.amount ?? 0) as string) + coerce(exact); }
+    function payment(row) { const { totalPayment: amount } = row; return Number(amount); }
+    function branded(amount: Money) { return Number(amount); }
   `, "web/components/money-fixture.tsx");
-  assert.deepEqual(violations.map(({ field }) => field), ["rate", "balance"]);
+  assert.deepEqual(violations.map(({ field }) => field), ["rate", "balance", null, null, null, null]);
 });
 
 test("money conversion check catches exact money arithmetic converted back to float", () => {

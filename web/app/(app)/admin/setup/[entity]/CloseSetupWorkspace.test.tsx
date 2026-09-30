@@ -220,3 +220,18 @@ test('report package remove controls have names that identify each report', asyn
     await unmount()
   }
 })
+
+test('reopen approval preserves an independent-approval refusal and releases the action', async () => {
+  const props = baseProps({ tab: 'periods', reopen: 'r1' })
+  props.reopenRequests = [{ id: 'r1', period_id: 'p1', book_id: 'b1', status: 'requested', reason: 'correct the closing entry', modules: ['gl'], period_name: 'January', book_name: 'Main', requester_name: 'Rae', approver_name: null }] as WorkspaceProps['reopenRequests']
+  const reason = 'a reopen request requires independent approval'
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ error: reason }, { status: 422 })) as typeof fetch
+  const { pushes, unmount } = await mountWorkspace(props)
+  try {
+    await act(async () => { clickButton(String(closeSetup.actions?.approve)).click(); await tick() })
+    assert.equal(document.querySelector('p[role="alert"]')?.textContent, reason)
+    assert.equal(clickButton(String(closeSetup.actions?.approve)).disabled, false)
+    assert.deepEqual(pushes, [])
+  } finally { await unmount(); globalThis.fetch = prior }
+})

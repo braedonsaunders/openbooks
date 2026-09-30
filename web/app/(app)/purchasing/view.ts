@@ -1,3 +1,4 @@
+import { cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import 'server-only'
 
 import { redirect } from 'next/navigation'
@@ -215,7 +216,7 @@ export async function loadPurchasing(
         return {
           value: String(data.badges.openBills),
           hint: t('home.directory.billsHint', { overdue: moneyCompact(data.apOverdue) }),
-          tone: data.apOverdue > 0 ? 'warning' : 'neutral',
+          tone: cmp(data.apOverdue, '0') > 0 ? 'warning' : 'neutral',
         }
       case '/payments':
         if (!grants.ap) return undefined
@@ -295,7 +296,7 @@ export async function loadPurchasing(
     apOutstanding: moneyCompact(data.apOutstanding),
     apOverdue: moneyCompact(data.apOverdue),
     dueNext7: moneyCompact(data.dueNext7),
-    apOverdueIsNegative: data.apOverdue > 0,
+    apOverdueIsNegative: cmp(data.apOverdue, '0') > 0,
     apHref: `/ap${subQs}`,
     trendTitle: t('home.trend.title'),
     trendHint: t('home.trend.hint'),
@@ -315,13 +316,13 @@ export function needsAttention(
   exposure: VendorExposureRow[],
   unpostedExpenses: number,
   t: T,
-  moneyCompact: (value: number) => string,
+  moneyCompact: (value: string | number) => string,
 ): AttentionItem[] {
   const items: AttentionItem[] = []
   for (const r of exposure) {
-    if (r.overdue > 0) {
+    if (cmp(r.overdue, '0') > 0) {
       items.push({
-        tone: r.overdue > r.billedOpen / 2 ? 'negative' : 'warning',
+        tone: cmp(r.overdue, mulDecimal(r.billedOpen, '0.5')) > 0 ? 'negative' : 'warning',
         text: t('home.attention.overdueVendor', { vendor: r.name, amount: moneyCompact(r.overdue) }),
         href: '/ap',
       })

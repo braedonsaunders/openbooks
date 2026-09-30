@@ -27,6 +27,7 @@ import {
   unsplitGroup as collapseDistributionGroup,
   type EntryDistributionCandidate,
 } from './allocations/distribution-groups'
+import { useEntryCandidates } from './allocations/use-entry-candidates'
 import { DistributionDialog, type DistributionDialogChild } from './allocations/DistributionDialog'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
 import { CustomFieldInput } from './custom-field-input'
@@ -1201,148 +1202,42 @@ export function DocumentDrawer({
   // hides everything, and the server refuses regardless of UI.
   const tAlloc = useTranslations('allocations')
   const distEditable = editable && !isTransfer && config.kind !== 'project_charge'
-  const [distOn, setDistOn] = useState(false)
-  const [distAuto, setDistAuto] = useState<EntryDistributionCandidate[]>([])
-  const [distLineMap, setDistLineMap] = useState<ReadonlyMap<string, EntryDistributionCandidate[]>>(new Map())
-  const [distLineFailed, setDistLineFailed] = useState<ReadonlySet<string>>(new Set())
   const [distApplying, setDistApplying] = useState(false)
   const [splitTarget, setSplitTarget] = useState<number | null>(null)
-  const distInflight = useRef(new Set<string>())
-  // Staged-key display names only: applied-rule names ride the read-path
-  // stamps (distribution_rule_name), never this cache.
-  const distNamesByKey = useRef(new Map<string, string>())
-
-  const distCoordKey = (row: LineRow): string =>
-    JSON.stringify([row.accountId, row.departmentId, row.projectId, row.locationId, row.classId])
-
-  const distParams = (extra: Record<string, string> = {}): string => {
-    const params = new URLSearchParams({
-      documentKind: config.kind,
-      documentDate: /^\d{4}-\d{2}-\d{2}$/.test(documentDate) ? documentDate : new Date().toISOString().slice(0, 10),
-      ...extra,
-    })
-    if (subsidiaryId) params.set('subsidiaryId', subsidiaryId)
-    return params.toString()
-  }
-
-  const cacheDistNames = (rules: EntryDistributionCandidate[]): void => {
-    for (const rule of rules) {
-      distNamesByKey.current.set(rule.ruleKey, rule.ruleName)
-    }
-  }
-
-  // Header-level presence check: which automatic rules are in effect.
+  const distContext = new URLSearchParams({ documentKind: config.kind, documentDate, ...(subsidiaryId ? { subsidiaryId } : {}) }).toString()
+  const dist = useEntryCandidates(distContext, distEditable && allocationsEntryEnabled !== false && /^\d{4}-\d{2}-\d{2}$/.test(documentDate))
+  const { key: distKey, cache: distLineMap, failed: distLineFailed, load: loadDistCandidates } = dist
+  const distOn = dist.on
+  const distAuto = dist.automatic
+  const distCoordinates = useCallback((row: LineRow): Record<string, string> => ({
+    accountId: row.accountId,
+    ...(row.departmentId ? { departmentId: row.departmentId } : {}),
+    ...(row.projectId ? { projectId: row.projectId } : {}),
+    ...(row.locationId ? { locationId: row.locationId } : {}),
+    ...(row.classId ? { classId: row.classId } : {}),
+  }), [])
+  const distCoordKey = useCallback((row: LineRow) => distKey(distCoordinates(row)), [distKey, distCoordinates])
+  const distLineSignature = distOn && distEditable
+    ? JSON.stringify([...new Set(rows.filter((row) => hasDrawerLineAccount(row) && groupIdOf(row) === null).map(distCoordKey))].sort())
+    : '[]'
   useEffect(() => {
-    let cancelled = false
-    const run = async (): Promise<void> => {
-      // The whole block runs async so the gate-off reset below never sets
-      // state synchronously in the effect body (cascading renders).
-      // A server-known off gate skips the probe entirely: the server must
-      // refuse entry-candidates when the feature is off, and firing that
-      // refusal litters the console on every drawer open.
-      if (allocationsEntryEnabled === false) {
-        if (!cancelled) {
-          setDistOn(false)
-          setDistAuto([])
-        }
-        return
-      }
-      if (!distEditable) {
-        if (!cancelled) {
-          setDistOn(false)
-          setDistAuto([])
-        }
-        return
-      }
-      try {
-        const res = await fetch(`/api/allocations/entry-candidates?${distParams()}`)
-        if (!res.ok) {
-          if (!cancelled) {
-            setDistOn(false)
-            setDistAuto([])
-          }
-          return
-        }
-        const body = (await res.json()) as { rules?: EntryDistributionCandidate[] }
-        const rules = Array.isArray(body.rules) ? body.rules : []
-        if (!cancelled) {
-          cacheDistNames(rules)
-          setDistOn(true)
-          setDistAuto(rules.filter((rule) => rule.applyPolicy === 'automatic'))
-        }
-      } catch {
-        if (!cancelled) {
-          setDistOn(false)
-          setDistAuto([])
-        }
-      }
-    }
-    void run()
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distEditable, config.kind, documentDate, subsidiaryId, allocationsEntryEnabled])
-
-  // Per-line candidates for account-named ungrouped rows, fetched lazily
-  // and cached by coordinate so typing in one row never storms the route.
-  // Candidates key off the account, not the amount: an amount-less row that
-  // already names its account stays eligible (the amount rides the
-  // signature only for change detection). Account-less rows are skipped —
-  // the save names their line and refuses — never fetched with a blank key.
-  const distLineSignature =
-    distOn && distEditable
-      ? rows
-          .filter((r) => hasDrawerLineAccount(r) && groupIdOf(r) === null)
-          .map((r) => `${distCoordKey(r)}@${r.amount}`)
-          .sort()
-          .join('|')
-      : ''
-  useEffect(() => {
-    if (!distLineSignature) return
+    const queries = JSON.parse(distLineSignature) as string[]
     const timer = setTimeout(() => {
-      const missing = new Map<string, LineRow>()
-      for (const row of rows) {
-        if (!hasDrawerLineAccount(row) || groupIdOf(row) !== null) continue
-        const key = distCoordKey(row)
-        if (distLineMap.has(key) || distLineFailed.has(key) || distInflight.current.has(key)) continue
-        if (!missing.has(key)) missing.set(key, row)
-      }
-      for (const [key, row] of missing) {
-        distInflight.current.add(key)
-        const params = distParams({
-          accountId: row.accountId,
-          ...(row.departmentId ? { departmentId: row.departmentId } : {}),
-          ...(row.projectId ? { projectId: row.projectId } : {}),
-          ...(row.locationId ? { locationId: row.locationId } : {}),
-          ...(row.classId ? { classId: row.classId } : {}),
-        })
-        void (async () => {
-          try {
-            const res = await fetch(`/api/allocations/entry-candidates?${params}`)
-            if (!res.ok) throw new Error(`candidates ${res.status}`)
-            const body = (await res.json()) as { rules?: EntryDistributionCandidate[] }
-            const rules = Array.isArray(body.rules) ? body.rules : []
-            cacheDistNames(rules)
-            setDistLineMap((prev) => new Map(prev).set(key, rules))
-          } catch {
-            setDistLineFailed((prev) => new Set(prev).add(key))
-          } finally {
-            distInflight.current.delete(key)
-          }
-        })()
+      for (const query of queries) {
+        if (!distLineMap.has(query) && !distLineFailed.has(query)) void loadDistCandidates(query).catch(() => {})
       }
     }, 250)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distLineSignature, distOn, distEditable])
-
-  const distNameByKey = (key: string): string | null => distNamesByKey.current.get(key) ?? null
-
-  const distSuggest = (row: LineRow): EntryDistributionCandidate | null => {
-    const found = distLineMap.get(distCoordKey(row))?.find((rule) => rule.applyPolicy === 'suggest')
-    return found ?? null
+  }, [distLineSignature, distLineMap, distLineFailed, loadDistCandidates])
+  const distNameByKey = (key: string): string | null => {
+    for (const rules of dist.cache.values()) {
+      const rule = rules.find((candidate) => candidate.ruleKey === key)
+      if (rule) return rule.ruleName
+    }
+    return null
   }
+  const distSuggest = (row: LineRow): EntryDistributionCandidate | null =>
+    dist.cache.get(distCoordKey(row))?.find((rule) => rule.applyPolicy === 'suggest') ?? null
 
   const stageDistributionKey = (index: number, ruleKey: string): void => {
     setRows((prev) => prev.map((r, j) => (j === index ? { ...r, distributionKey: ruleKey } : r)))
@@ -1359,51 +1254,27 @@ export function DocumentDrawer({
     setDistApplying(true)
     try {
       const staged = new Map<string, string>()
-      const missing = new Map<string, LineRow>()
       for (const row of rows) {
         if (!hasDrawerLineAccount(row) || groupIdOf(row) !== null || row.distributionKey) continue
         const key = distCoordKey(row)
-        const cached = distLineMap.get(key)?.filter((rule) => rule.applyPolicy === 'automatic')
-        if (cached && cached.length > 0) {
-          const winner = cached.find((rule) => rule.recommended) ?? cached[0]
-          if (winner) staged.set(key, winner.ruleKey)
-        } else if (!distLineFailed.has(key) && !distInflight.current.has(key)) {
-          if (!missing.has(key)) missing.set(key, row)
-        }
-      }
-      for (const [key, row] of missing) {
-        distInflight.current.add(key)
         try {
-          const params = distParams({
-            accountId: row.accountId,
-            ...(row.departmentId ? { departmentId: row.departmentId } : {}),
-            ...(row.projectId ? { projectId: row.projectId } : {}),
-            ...(row.locationId ? { locationId: row.locationId } : {}),
-            ...(row.classId ? { classId: row.classId } : {}),
-            policy: 'automatic',
-          })
-          const res = await fetch(`/api/allocations/entry-candidates?${params}`)
-          if (!res.ok) throw new Error(`candidates ${res.status}`)
-          const body = (await res.json()) as { rules?: EntryDistributionCandidate[] }
-          const rules = Array.isArray(body.rules) ? body.rules : []
-          cacheDistNames(rules)
-          setDistLineMap((prev) => new Map(prev).set(key, rules))
-          const winner = rules.find((rule) => rule.recommended) ?? rules[0]
+          // Explicit apply retries failed lookups. Fetch all policies so the
+          // automatic action cannot poison the suggestion cache.
+          const candidates = dist.cache.get(key) ?? await dist.load(key)
+          if (!dist.isCurrent()) return
+          const automatic = candidates.filter((rule) => rule.applyPolicy === 'automatic')
+          const winner = automatic.find((rule) => rule.recommended) ?? automatic[0]
           if (winner) staged.set(key, winner.ruleKey)
         } catch {
-          setDistLineFailed((prev) => new Set(prev).add(key))
-        } finally {
-          distInflight.current.delete(key)
+          if (!dist.isCurrent()) return
         }
       }
-      if (staged.size > 0) {
-        setRows((prev) =>
-          prev.map((r) => {
-            if (!hasDrawerLineAccount(r) || groupIdOf(r) !== null || r.distributionKey) return r
-            const key = staged.get(distCoordKey(r))
-            return key ? { ...r, distributionKey: key } : r
-          }),
-        )
+      if (dist.isCurrent() && staged.size > 0) {
+        setRows((prev) => prev.map((row) => {
+          if (!hasDrawerLineAccount(row) || groupIdOf(row) !== null || row.distributionKey) return row
+          const key = staged.get(distCoordKey(row))
+          return key ? { ...row, distributionKey: key } : row
+        }))
       }
     } finally {
       setDistApplying(false)
@@ -1537,7 +1408,7 @@ export function DocumentDrawer({
       onEditGroupTotal: (groupKey, total) => editDistGroupTotal(groupKey, total),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distOn, distEditable, rows, distLineMap])
+  }, [distOn, distEditable, rows, dist.cache])
 
   const calculatedTotals = useMemo<DocumentDrawerTotals | null>(() => {
     if (!editable) return null
@@ -3095,8 +2966,8 @@ export function DocumentDrawer({
             key={`${splitTarget}:${rows[splitTarget]!.amount}:${rows[splitTarget]!.distributionKey}`}
             open
             lineAmount={rows[splitTarget]!.amount || '0'}
-            candidates={distLineMap.get(distCoordKey(rows[splitTarget]!)) ?? []}
-            candidatesFailed={distLineFailed.has(distCoordKey(rows[splitTarget]!))}
+            candidates={dist.cache.get(distCoordKey(rows[splitTarget]!)) ?? []}
+            candidatesFailed={dist.failed.has(distCoordKey(rows[splitTarget]!))}
             accountOptions={accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
             codings={distCodings}
             initialRuleKey={rows[splitTarget]!.distributionKey || null}

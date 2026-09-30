@@ -1,4 +1,5 @@
 'use client'
+import { toChartNumber } from '../analytics/_ui/format'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -145,8 +146,8 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
                     xAxis: { type: 'category', data: data.monthlyTrends.map((m) => m.month) },
                     yAxis: { type: 'value', axisLabel: { formatter: (v: number) => money(v) } },
                     series: [
-                      { name: t('series.bills'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => Number(m.billAmount)), itemStyle: { color: '#6366f1' } },
-                      { name: t('series.expenses'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => Number(m.expenseAmount)), itemStyle: { color: '#ec4899' } },
+                      { name: t('series.bills'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => toChartNumber(m.billAmount)), itemStyle: { color: '#6366f1' } },
+                      { name: t('series.expenses'), type: 'bar', stack: 's', data: data.monthlyTrends.map((m) => toChartNumber(m.expenseAmount)), itemStyle: { color: '#ec4899' } },
                     ],
                   }}
                 />
@@ -194,7 +195,7 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
               className={paneCard}
               bodyClassName="min-h-0 p-3"
             >
-              <Donut data={topCats.map((c) => ({ name: c.categoryName, value: Number(c.currentAmount) }))} height="fill" />
+              <Donut data={topCats.map((c) => ({ name: c.categoryName, value: toChartNumber(c.currentAmount) }))} height="fill" />
             </Panel>
           </div>
         ) : (

@@ -1165,6 +1165,7 @@
       "openSurveys": "Offene Befragungen"
     },
     "refusedTitle": "Self-Service ist nicht verfügbar",
+    "readFailed": "Dieser Bereich konnte nicht geladen werden. Laden Sie die Seite erneut; bleibt er nicht verfügbar, wenden Sie sich an die Administration.",
     "overview": {
       "title": "Ich",
       "description": "Ihre Anstellung, Anfragen und Salden — sonst nichts steht hier.",

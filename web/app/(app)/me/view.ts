@@ -161,7 +161,10 @@ export function meSpec(data: MeOverviewData): PageSpec {
           }),
 // HR-14 begin: the viewer's own certifications needing action —
           // same shared table block as every other overview panel.
-          panel({
+          ...(data.qualificationsState === "disabled"
+            ? []
+            : [
+                panel({
             title: f('qualificationsTitle'),
             iconKey: 'clipboard-check',
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
@@ -185,8 +188,9 @@ export function meSpec(data: MeOverviewData): PageSpec {
               }),
             ],
           }),
-          // HR-14 end
-// HR-21 begin: own payslips with the Explain drawer. The trace
+              ]),
+
+          // HR-21 begin: own payslips with the Explain drawer. The trace
           // table and diff chips render from the deterministic service —
           // no LLM is needed for the drawer; assistant phrasing is optional.
           // Shown while payroll is on; the empty state covers stub-less staff.

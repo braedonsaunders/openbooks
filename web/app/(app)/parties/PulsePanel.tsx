@@ -1,4 +1,5 @@
 'use client'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 
 import {
   Building,
@@ -131,7 +132,7 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
             {money(aging.totalOpen)}
           </div>
           <div className="mt-2 text-xs">
-            {Number(aging.totalOverdue) > 0 ? (
+            {cmp(aging.totalOverdue, '0') > 0 ? (
               <span className="font-semibold text-rose-600 dark:text-rose-400">
                 {t('overdue', { amount: money(aging.totalOverdue) })}
               </span>
@@ -270,7 +271,7 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
               <span>{t('headroom')}</span>
               <span
                 className={cn(
-                  credit.remainingCredit !== null && Number(credit.remainingCredit) <= 0
+                  credit.remainingCredit !== null && cmp(credit.remainingCredit, '0') <= 0
                     ? 'text-rose-600 dark:text-rose-400'
                     : 'text-emerald-600 dark:text-emerald-400',
                 )}

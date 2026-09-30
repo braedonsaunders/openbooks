@@ -82,7 +82,11 @@ export function renderCell(
       return label ?? (raw ? String(raw) : '—')
     }
     case 'code':
-      return raw ? <span className="font-mono text-xs">{String(raw)}</span> : '—'
+      return raw ? (
+        <span className="font-mono text-xs">{String(raw)}</span>
+      ) : (
+        '—'
+      );
     case 'text':
     default:
       return raw == null || raw === '' ? '—' : String(raw)
@@ -100,8 +104,14 @@ export async function SetupEntitySection({
   hideHeader = false,
   rowParam = 'row',
   visibleRowIds,
+  renderColumn,
 }: {
-  entity: SetupEntity
+  entity: SetupEntity;
+  /** Server-side presentation slot; list querying and drawers remain shared. */
+  renderColumn?: (
+    column: SetupColumn,
+    row: Record<string, unknown>,
+  ) => React.ReactNode;
   orgId: string
   actorId?: string
   searchParams: Record<string, string | string[] | undefined>
@@ -180,14 +190,14 @@ export async function SetupEntitySection({
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
 
   const [rowsRes, countRes, refOptions] = await Promise.all([
-    (db.execute(sql`
+    db.execute(sql`
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
-    (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
+    db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
     loadRefOptions(entity, orgId, allowedSubsidiaryIds),
   ])
-  const rows = (rowsRes.rows)
+  const rows = rowsRes.rows;
   const total = Number(countRes.rows[0]?.n ?? 0)
 
   const refLabels: Record<string, Map<string, string>> = {}
@@ -197,14 +207,14 @@ export async function SetupEntitySection({
 
   const open = openRow
     ? openRow === 'new'
-      ? { creating: true, row: (null) }
+      ? { creating: true, row: null }
       : await (async () => {
-          const selected = ((await db.execute(sql`
+          const selected = await db.execute(sql`
             select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
              where ${sql.raw(idColumn)} = ${openRow}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
-             limit 1`)))
+             limit 1`)
           return { creating: false, row: selected.rows[0] ?? null }
         })()
     : null
@@ -306,7 +316,8 @@ export async function SetupEntitySection({
 
   return (
     <div className="space-y-4">
-      {!hideHeader ? <div className="flex items-start justify-between gap-3">
+      {!hideHeader ? (
+        <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {t(`entities.${entity.key}.title`)}
@@ -326,8 +337,11 @@ export async function SetupEntitySection({
             ) : null}
           </p>
         </div>
-        {canWriteEntity ? <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} rowParam={rowParam} /> : null}
-      </div> : null}
+        {canWriteEntity ? (
+            <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} rowParam={rowParam} />
+          ) : null}
+      </div>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t('searchPlaceholder')} />
@@ -342,7 +356,9 @@ export async function SetupEntitySection({
             options={filter.options.map((option) => ({ value: option.value, label: setupOptionLabel(option, t) }))}
           />
         ))}
-        {entity.hasActive ? <ShowInactivesToggle basePath={basePath} currentParams={sp} /> : null}
+        {entity.hasActive ? (
+          <ShowInactivesToggle basePath={basePath} currentParams={sp} />
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -371,10 +387,12 @@ export async function SetupEntitySection({
                         href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       >
-                        {renderCell(c, row, refLabels, t, locale)}
+                        {renderColumn?.(c, row) ??
+                          renderCell(c, row, refLabels, t, locale)}
                       </Link>
                     ) : (
-                      renderCell(c, row, refLabels, t, locale)
+                      (renderColumn?.(c, row) ??
+                      renderCell(c, row, refLabels, t, locale))
                     )}
                   </TableCell>
                 ))}
@@ -409,7 +427,9 @@ export async function SetupEntitySection({
           nestedTab={{
             key: 'schedule-rates',
             label: t('constructionRateEditor.tab'),
-            content: <ConstructionRateScheduleEditor row={open.row} scopeOptions={rateScheduleScopeOptions} initialData={rateScheduleEditorData} />,
+            content: (
+              <ConstructionRateScheduleEditor row={open.row} scopeOptions={rateScheduleScopeOptions} initialData={rateScheduleEditorData} />
+            ),
           }}
         />
       ) : open && canWriteEntity ? (

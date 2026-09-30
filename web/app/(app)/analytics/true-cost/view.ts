@@ -1,4 +1,5 @@
-import 'server-only'
+import 'server-only';
+import { OverheadCalculationError } from "@openbooks/engine/src/projects/overhead-rates.ts";
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
@@ -41,7 +42,8 @@ export interface TrueCostDashboardData {
   periodLabel: string
   reportHref: string
   reportLabel: string
-  data: ViewProps['data']
+  data: ViewProps['data'] | null;
+  refusal: string | null;
 }
 
 export async function loadTrueCost(sp: Record<string, string | undefined>): Promise<TrueCostDashboardData> {
@@ -55,13 +57,18 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
   // Insight sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use.
   const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
-  const strings = trueCostStrings((key, values) => tc(key, values), locale)
+  const strings = trueCostStrings((key, values) => tc(key, values), locale);
+  let refusal: string | null = null;
   const data = await trueCostData(
     authz.user.orgId,
     { from: period.from, to: period.to, label: period.label },
     authz.allowedSubsidiaryIds,
     strings,
-  )
+  ).catch((error: unknown) => {
+    if (!(error instanceof OverheadCalculationError)) throw error;
+    refusal = error.message;
+    return null;
+  })
 
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(sp)) if (value) query.set(key, value)
@@ -74,6 +81,7 @@ export async function loadTrueCost(sp: Record<string, string | undefined>): Prom
     reportHref: `/reports/true-cost${qs ? `?${qs}` : ''}`,
     reportLabel: t('openReport'),
     data,
+    refusal,
   }
 }
 
@@ -100,6 +108,13 @@ export function trueCostSpec(data: TrueCostDashboardData): PageSpec {
         },
       ),
     ],
-    body: [widgetBlock('true-cost-view', { data: data.data })],
+    body: data.data
+      ? [widgetBlock('true-cost-view', { data: data.data })]
+      : [
+          widgetBlock("empty-state", {
+            title: data.title,
+            description: data.refusal,
+          }),
+        ],
   })
 }

@@ -1,8 +1,10 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Button, Input, Label, Select } from '@openbooks/ui';
+import { chunkArray, readApiErrorMessage } from "../../lib/api-error";
+import { isUuid } from "../../lib/list-params";
 
 export interface ClockProject {
   id: string
@@ -31,30 +33,55 @@ interface QueuedEvent {
 
 const QUEUE_KEY = 'openbooks.field-clock-queue'
 
-function loadQueue(): QueuedEvent[] {
-  // Lazy state initializer (theme-provider precedent): the server has no
-  // store, so it reads empty; a returning offline worker hydrates with
-  // their queue and the banner renders client-side.
-  if (typeof window === 'undefined') return []
+function loadQueue(ownerKey: string): {
+  events: QueuedEvent[];
+  storageFailed: boolean;
+} {
+  if (typeof window === 'undefined') return { events: [], storageFailed: false };
   try {
-    const raw = localStorage.getItem(QUEUE_KEY)
-    const parsed = raw ? (JSON.parse(raw) as QueuedEvent[]) : []
-    return Array.isArray(parsed) ? parsed : []
+    const raw = localStorage.getItem(`${QUEUE_KEY}.${ownerKey}`);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (
+      !Array.isArray(parsed) ||
+      parsed.some(
+        (entry) =>
+          !entry ||
+          typeof entry.key !== "string" ||
+          entry.body?.ownerKey !== ownerKey,
+      )
+    ) {
+      return { events: [], storageFailed: true };
+    }
+    return { events: parsed, storageFailed: false };
   } catch {
-    return []
+    return { events: [], storageFailed: true };
   }
 }
 
-function storeQueue(queue: QueuedEvent[]) {
+function hasLegacyQueue(): boolean {
+  if (typeof window === "undefined") return false;
   try {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+    const raw = localStorage.getItem(QUEUE_KEY);
+    return !!raw && raw !== "[]";
   } catch {
-    // A full or blocked store keeps the queue in memory for the session.
+    return false;
   }
+}
+
+function exportLegacyQueue() {
+  const raw = localStorage.getItem(QUEUE_KEY);
+  if (!raw) return;
+  const url = URL.createObjectURL(
+    new Blob([raw], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "unassigned-clock-events.json";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function uuid(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.floor(Math.random() * 1e9)}`
+  return crypto.randomUUID();
 }
 
 /**
@@ -65,6 +92,7 @@ function uuid(): string {
  * org requires a photo.
  */
 export function ClockControls({
+  ownerKey,
   initial,
   projects,
   tasks,
@@ -73,6 +101,7 @@ export function ClockControls({
   geoHint,
   clockOutLabel,
 }: {
+  ownerKey: string;
   initial: ClockState
   projects: ClockProject[]
   tasks: ClockTask[]
@@ -91,10 +120,31 @@ export function ClockControls({
   const [error, setError] = useState<string | null>(null)
   const [photoId, setPhotoId] = useState<string | null>(null)
   const [photoBusy, setPhotoBusy] = useState(false)
-  const [queue, setQueue] = useState<QueuedEvent[]>(loadQueue)
+  const [loaded, setLoaded] = useState({ events: [] as QueuedEvent[], storageFailed: false });
+  const [ready, setReady] = useState(false);
+  const [queue, setQueue] = useState<QueuedEvent[]>([]);
+  const queueRef = useRef(queue);
+  const replayingRef = useRef(false);
+  const [storageFailed, setStorageFailed] = useState(loaded.storageFailed);
+  const [legacyQueue, setLegacyQueue] = useState(false)
   const [replaying, setReplaying] = useState(false)
   const [stale, setStale] = useState(false)
   const [search, setSearch] = useState('')
+  useEffect(() => {
+    let mounted = true
+    queueMicrotask(() => {
+      if (!mounted) return
+      const stored = loadQueue(ownerKey)
+      queueRef.current = stored.events
+      setLoaded(stored)
+      setQueue(stored.events)
+      setStorageFailed(stored.storageFailed)
+      setLegacyQueue(hasLegacyQueue())
+      setReady(true)
+    })
+    return () => { mounted = false }
+  }, [ownerKey])
+
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Refresh reports whether today's state could be re-read. A POST that is
@@ -116,13 +166,28 @@ export function ClockControls({
     }
   }, [])
 
+  const commitQueue = useCallback(
+    (next: QueuedEvent[]) => {
+      queueRef.current = next;
+      setQueue(next);
+      try {
+        // Never overwrite a stored queue that could not be read or validated.
+        if (loaded.storageFailed) {
+          setStorageFailed(true);
+          return;
+        }
+        localStorage.setItem(`${QUEUE_KEY}.${ownerKey}`, JSON.stringify(next));
+        setStorageFailed(false);
+      } catch {
+        setStorageFailed(true);
+      }
+    },
+    [ownerKey, loaded.storageFailed],
+  );
+
   const enqueue = useCallback((body: Record<string, unknown>) => {
-    setQueue((prev) => {
-      const next = [...prev, { key: uuid(), body }]
-      storeQueue(next)
-      return next
-    })
-  }, [])
+    commitQueue([...queueRef.current, { key: String(body.clientEventId), body }])
+  }, [commitQueue])
 
   const send = useCallback(
     async (body: Record<string, unknown>): Promise<boolean> => {
@@ -145,13 +210,11 @@ export function ClockControls({
           return true
         }
         if (!res.ok) {
-          if (!navigator.onLine) {
-            enqueue(body)
-            return true
-          }
-          const payload = (await res.json().catch(() => null)) as { error?: string } | null
-          setError(payload?.error ?? t('field.sendFailed'))
-          return false
+          // A server failure can arrive after commit; retry the same offline
+          // id instead of issuing a second event with a new id.
+          if (res.status >= 500) enqueue(body)
+          setError(await readApiErrorMessage(res, t('field.sendFailed')))
+          return res.status >= 500
         }
         // The POST is known-recorded from here: a refresh failure below
         // raises the stale notice and never re-enqueues this event.
@@ -192,8 +255,9 @@ export function ClockControls({
 
   const clock = useCallback(
     async (kind: 'clock_in' | 'clock_out' | 'break_start' | 'break_end' | 'switch') => {
-      const geo = await locate()
-      await send({
+      const geo = await locate();
+      const sent = await send({
+        ownerKey,
         kind,
         occurredAt: new Date().toISOString(),
         projectId: projectId || null,
@@ -202,43 +266,67 @@ export function ClockControls({
         geo,
         photoFileId: photoId,
         clientEventId: uuid(),
-      })
-      setSheetOpen(false)
+      });
+      if (sent) setSheetOpen(false)
     },
-    [locate, send, projectId, taskId, costCode, photoId],
+    [ownerKey, locate, send, projectId, taskId, costCode, photoId],
   )
 
   const replay = useCallback(async () => {
-    const pending = loadQueue()
-    if (pending.length === 0 || replaying) return
+    const pending = [...queueRef.current]
+    if (pending.length === 0 || replayingRef.current) return
+    replayingRef.current = true
     setReplaying(true)
     setError(null)
     setStale(false)
     try {
-      const res = await fetch('/api/time/clock', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ events: pending.map((entry) => entry.body) }),
-      })
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null
-        setError(payload?.error ?? t('field.sendFailed'))
-        return
+      for (const batch of chunkArray(pending, 200)) {
+        const res = await fetch('/api/time/clock', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ownerKey,
+            events: batch.map((entry) => entry.body),
+          }),
+        })
+        if (!res.ok) {
+          setError(await readApiErrorMessage(res, t('field.sendFailed')))
+          return
+        }
+        const payload = (await res.json()) as {
+          results?: Array<{ eventId?: string; error?: string }>
+        }
+        const results = Array.isArray(payload.results) ? payload.results : []
+        // Only an explicit recording acknowledges an event. Missing results,
+        // refusals and events added during this request remain pending.
+        const acknowledged = new Set(
+          batch
+            .filter(
+              (_, index) =>
+                isUuid(results[index]?.eventId) && !results[index]?.error,
+            )
+            .map((entry) => entry.key),
+        )
+        commitQueue(
+          queueRef.current.filter((entry) => !acknowledged.has(entry.key)),
+        )
+        if (acknowledged.size !== batch.length) {
+          setError(
+            results.find((result) => result?.error)?.error ??
+              t('field.sendFailed'),
+          )
+          return
+        }
       }
-      const payload = (await res.json()) as { results: Array<{ error?: string }> }
-      const failed = pending.filter((_, i) => payload.results[i]?.error)
-      storeQueue(failed)
-      setQueue(failed)
-      const firstError = payload.results.find((result) => result.error)?.error
-      if (firstError) setError(firstError)
       setStale(!(await refresh()))
     } catch {
       setError(t('field.sendFailed'))
     } finally {
+      replayingRef.current = false
       setReplaying(false)
     }
-  }, [replaying, refresh, t])
+  }, [ownerKey, commitQueue, refresh, t])
 
   const visibleProjects = search.trim()
     ? projects.filter((project) => `${project.code ?? ''} ${project.name}`.toLowerCase().includes(search.trim().toLowerCase()))
@@ -255,33 +343,38 @@ export function ClockControls({
             {[state.projectName, state.costCodeRef].filter(Boolean).join(' · ') || t('field.noProject')}
           </p>
         ) : null}
-        {state.onBreak ? <p className="mt-1 text-sm font-medium text-amber-600">{t('field.onBreak')}</p> : null}
+        {state.onBreak ? (
+          <p className="mt-1 text-sm font-medium text-amber-600">
+            {t('field.onBreak')}
+          </p>
+        ) : null}
         <div className="mt-4 flex flex-col gap-2">
           {state.clockedIn ? (
             <>
-              <Button disabled={busy} onClick={() => clock('clock_out')} className="w-full py-3 text-base">
+              <Button disabled={busy || !ready} onClick={() => clock('clock_out')} className="w-full py-3 text-base">
                 {busy ? t('field.working') : clockOutLabel}
               </Button>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  disabled={busy}
+                  disabled={busy || !ready}
                   onClick={() => clock(state.onBreak ? 'break_end' : 'break_start')}
                   className="flex-1"
                 >
                   {state.onBreak ? t('field.endBreak') : t('field.startBreak')}
                 </Button>
-                <Button variant="outline" disabled={busy} onClick={() => setSheetOpen(true)} className="flex-1">
+                <Button variant="outline" disabled={busy || !ready} onClick={() => setSheetOpen(true)} className="flex-1">
                   {t('field.switch')}
                 </Button>
               </div>
             </>
           ) : (
             <>
-              <Button disabled={busy} onClick={() => (projectId ? clock('clock_in') : setSheetOpen(true))} className="w-full py-3 text-base">
+              <Button disabled={busy || !ready} onClick={() =>
+                  projectId ? clock('clock_in') : setSheetOpen(true)} className="w-full py-3 text-base">
                 {busy ? t('field.working') : t('field.clockIn')}
               </Button>
-              <Button variant="outline" disabled={busy} onClick={() => setSheetOpen(true)} className="w-full">
+              <Button variant="outline" disabled={busy || !ready} onClick={() => setSheetOpen(true)} className="w-full">
                 {t('field.chooseProject')}
               </Button>
             </>
@@ -289,7 +382,9 @@ export function ClockControls({
         </div>
         {photoRequired ? (
           <div className="mt-3">
-            <Label htmlFor="field-clock-photo">{t('field.photoRequired')}</Label>
+            <Label htmlFor="field-clock-photo">
+              {t('field.photoRequired')}
+            </Label>
             <Input
               id="field-clock-photo"
               ref={fileRef}
@@ -341,12 +436,36 @@ export function ClockControls({
                 }
               }}
             />
-            {photoId ? <p className="mt-1 text-xs text-teal-700">{t('field.photoAttached')}</p> : null}
+            {photoId ? (
+              <p className="mt-1 text-xs text-teal-700">
+                {t('field.photoAttached')}
+              </p>
+            ) : null}
           </div>
         ) : null}
-        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{geoHint}</p>
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+          {geoHint}
+        </p>
       </div>
 
+      {legacyQueue ? (
+        <div role="alert" className="rounded-xl border border-amber-300 p-4">
+          <p>{t("field.legacyQueue")}</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              try {
+                exportLegacyQueue();
+              } catch {
+                setError(t("field.sendFailed"));
+              }
+            }}
+          >
+            {t("field.exportLegacyQueue")}
+          </Button>
+        </div>
+      ) : null}
+      {storageFailed ? <p role="alert">{t("field.storageFailed")}</p> : null}
       {queue.length > 0 ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950" role="status">
           <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
@@ -363,7 +482,7 @@ export function ClockControls({
           <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
             {t('field.staleState')}
           </p>
-          <Button variant="outline" disabled={busy} onClick={retryRefresh} className="mt-2">
+          <Button variant="outline" disabled={busy || !ready} onClick={retryRefresh} className="mt-2">
             {t('field.refreshNow')}
           </Button>
         </div>
@@ -377,7 +496,9 @@ export function ClockControls({
 
       {sheetOpen ? (
         <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900" role="dialog" aria-label={t('field.chooseProject')}>
-          <Label htmlFor="field-clock-search">{t('field.searchProjects')}</Label>
+          <Label htmlFor="field-clock-search">
+            {t('field.searchProjects')}
+          </Label>
           <Input id="field-clock-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('field.searchPlaceholder')} />
           <div className="mt-3 max-h-56 space-y-1 overflow-y-auto">
             {visibleProjects.map((project) => (
@@ -415,7 +536,7 @@ export function ClockControls({
           </div>
           <div className="mt-4 flex gap-2">
             <Button
-              disabled={busy || !projectId}
+              disabled={busy || !ready || !projectId}
               onClick={() => clock(state.clockedIn ? 'switch' : 'clock_in')}
               className="flex-1"
             >
