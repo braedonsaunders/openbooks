@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
@@ -424,22 +425,22 @@ export function RunDrawer({
 
         <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.instructionsTitle')}</h3><Input value={instructionQ} onChange={(e) => { setInstructionQ(e.target.value); setInstructionPage(1) }} placeholder={t('runDrawer.searchInstructions')} className="max-w-64" /></div>
         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <th className="px-3 py-2">{t('runDrawer.columns.payee')}</th>
-                <th className="px-3 py-2">{t('runDrawer.columns.payment')}</th>
-                <th className="px-3 py-2">{t('runDrawer.columns.bankDetails')}</th>
-                <th className="px-3 py-2">{tCommon('labels.status')}</th>
-                <th className="px-3 py-2 text-right">{tCommon('labels.amount')}</th>
-                <th className="px-3 py-2 text-right">{tCommon('labels.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                <SharedTableHead className="px-3 py-2">{t('runDrawer.columns.payee')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{t('runDrawer.columns.payment')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{t('runDrawer.columns.bankDetails')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{tCommon('labels.status')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right">{tCommon('labels.amount')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right">{tCommon('labels.actions')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {shownInstructions.map((i) => (
-                <tr key={i.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
-                  <td className="px-3 py-2">{i.payee}</td>
-                  <td className="px-3 py-2 font-mono text-[13px] font-semibold">
+                <SharedTableRow key={i.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-3 py-2">{i.payee}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 font-mono text-[13px] font-semibold">
                     {i.payment_document_id ? (
                       <Link
                         href={(`${paymentBasePath}?payment=${i.payment_document_id}`)}
@@ -450,8 +451,8 @@ export function RunDrawer({
                     ) : (
                       '—'
                     )}
-                  </td>
-                  <td className="px-3 py-2">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     {i.status === 'cancelled' ? (
                       <span className="text-slate-400">—</span>
                     ) : blockerByInstruction.has(i.id) ? (
@@ -459,20 +460,20 @@ export function RunDrawer({
                     ) : (
                       <Badge variant="success">{t('runDrawer.bankApproved')}</Badge>
                     )}
-                  </td>
-                  <td className="px-3 py-2">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     <Badge variant={INSTRUCTION_VARIANT[i.status] ?? 'secondary'}>
                       {INSTRUCTION_STATUS_KEYS.includes(i.status)
                         ? t(`runDrawer.instructionStatus.${i.status}`)
                         : i.status}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{money(i.amount, { currency: i.currency })}</td>
-                  <td className="px-3 py-2 text-right">{['sent', 'settled'].includes(i.status) ? <Button size="sm" variant="outline" onClick={() => { setOutcomeInstruction(i); setOutcomeStatus(i.status === 'settled' ? 'settled' : 'settled'); setEffectiveOn(i.settlement_effective_on ?? today); setBankReference(i.bank_reference ?? ''); setReturnCode(i.return_code ?? ''); setReturnReason(i.return_reason ?? '') }}>{t('runDrawer.recordOutcome')}</Button> : null}</td>
-                </tr>
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-right tabular-nums">{money(i.amount, { currency: i.currency })}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-right">{['sent', 'settled'].includes(i.status) ? <Button size="sm" variant="outline" onClick={() => { setOutcomeInstruction(i); setOutcomeStatus(i.status === 'settled' ? 'settled' : 'settled'); setEffectiveOn(i.settlement_effective_on ?? today); setBankReference(i.bank_reference ?? ''); setReturnCode(i.return_code ?? ''); setReturnReason(i.return_reason ?? '') }}>{t('runDrawer.recordOutcome')}</Button> : null}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
         {instructionPages > 1 ? <div className="flex items-center justify-end gap-2"><Button size="sm" variant="outline" disabled={instructionPage <= 1} onClick={() => setInstructionPage((p) => p - 1)}>{tCommon('actions.previous')}</Button><span className="text-xs text-slate-500">{instructionPage} / {instructionPages}</span><Button size="sm" variant="outline" disabled={instructionPage >= instructionPages} onClick={() => setInstructionPage((p) => p + 1)}>{tCommon('actions.next')}</Button></div> : null}
 

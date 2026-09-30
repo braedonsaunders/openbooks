@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { formatTicketHours } from '@/lib/format'
@@ -1115,29 +1116,29 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-                  <th className="py-1 pr-2 font-medium">{t('editor.crew.employee')}</th>
-                  <th className="py-1 pr-2 font-medium">{t('editor.crew.laborItem')}</th>
-                  {projectTasks.length > 0 ? <th className="py-1 pr-2 font-medium">{t('editor.crew.task')}</th> : null}
+            <SharedTable className="w-full min-w-[680px] text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
+                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.crew.employee')}</SharedTableHead>
+                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.crew.laborItem')}</SharedTableHead>
+                  {projectTasks.length > 0 ? <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.crew.task')}</SharedTableHead> : null}
                   {days.map((d) => {
                     const l = dayLabel(d)
                     return (
-                      <th key={d} className="px-1 py-1 text-center font-medium">
+                      <SharedTableHead key={d} className="px-1 py-1 text-center font-medium">
                         <div>{l.dow}</div>
                         <div className="font-normal text-slate-400">{l.dom}</div>
-                      </th>
+                      </SharedTableHead>
                     )
                   })}
-                  <th className="py-1 pl-2 text-right font-medium">{t('editor.crew.rowTotal')}</th>
-                  {editable && <th className="w-8" />}
-                </tr>
-              </thead>
-              <tbody>
+                  <SharedTableHead className="py-1 pl-2 text-right font-medium">{t('editor.crew.rowTotal')}</SharedTableHead>
+                  {editable && <SharedTableHead className="w-8" />}
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {grid.map((row, i) => (
-                  <tr key={i} className="border-t border-slate-100 align-top dark:border-slate-800">
-                    <td className="min-w-40 py-1.5 pr-2">
+                  <SharedTableRow key={i} className="border-t border-slate-100 align-top dark:border-slate-800">
+                    <SharedTableCell className="min-w-40 py-1.5 pr-2">
                       {editable ? (
                         <SearchSelect
                           options={props.employees.map((emp) => ({ value: emp.id, label: emp.name }))}
@@ -1152,8 +1153,8 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                       ) : (
                         <span className="text-sm">{props.employees.find((e) => e.id === row.employeePartyId)?.name ?? '—'}</span>
                       )}
-                    </td>
-                    <td className="min-w-36 py-1.5 pr-2">
+                    </SharedTableCell>
+                    <SharedTableCell className="min-w-36 py-1.5 pr-2">
                       {editable ? (
                         <SearchSelect
                           options={[{ value: '', label: '—' }, ...props.laborItems.map((it) => ({ value: it.id, label: it.name }))]}
@@ -1168,9 +1169,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                       ) : (
                         <span className="text-xs text-slate-500">{props.laborItems.find((x) => x.id === row.itemId)?.name ?? '—'}</span>
                       )}
-                    </td>
+                    </SharedTableCell>
                     {projectTasks.length > 0 ? (
-                      <td className="min-w-40 py-1.5 pr-2">
+                      <SharedTableCell className="min-w-40 py-1.5 pr-2">
                         {editable ? (
                           <SearchSelect
                             options={[{ value: '', label: '—' }, ...projectTasks.map((task) => ({
@@ -1192,10 +1193,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                             {projectTasks.find((task) => task.id === row.projectTaskId)?.name ?? '—'}
                           </span>
                         )}
-                      </td>
+                      </SharedTableCell>
                     ) : null}
                     {days.map((d) => (
-                      <td key={d} className="px-1 py-1.5">
+                      <SharedTableCell key={d} className="px-1 py-1.5">
                         <div className="flex flex-col gap-0.5">
                           {gridTimeTypes.map((tt) => {
                             const k = `${tt.id}|${d}`
@@ -1227,11 +1228,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                             )
                           })}
                         </div>
-                      </td>
+                      </SharedTableCell>
                     ))}
-                    <td className="py-1.5 pl-2 text-right text-sm font-medium tabular-nums">{formatTicketHours(rowHours(row))}</td>
+                    <SharedTableCell className="py-1.5 pl-2 text-right text-sm font-medium tabular-nums">{formatTicketHours(rowHours(row))}</SharedTableCell>
                     {editable && (
-                      <td className="py-1.5 text-right">
+                      <SharedTableCell className="py-1.5 text-right">
                         <button
                           type="button"
                           aria-label={t('editor.crew.removeRow')}
@@ -1243,24 +1244,24 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                         >
                           <Trash2 size={13} />
                         </button>
-                      </td>
+                      </SharedTableCell>
                     )}
-                  </tr>
+                  </SharedTableRow>
                 ))}
                 {grid.length > 0 && (
-                  <tr className="border-t border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                    <td className="py-1.5 pr-2 font-medium">{t('editor.crew.dayTotals')}</td>
-                    <td />
-                    {projectTasks.length > 0 ? <td /> : null}
+                  <SharedTableRow className="border-t border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    <SharedTableCell className="py-1.5 pr-2 font-medium">{t('editor.crew.dayTotals')}</SharedTableCell>
+                    <SharedTableCell />
+                    {projectTasks.length > 0 ? <SharedTableCell /> : null}
                     {days.map((d) => (
-                      <td key={d} className="px-1 py-1.5 text-center tabular-nums">{dayHours(d) > 0 ? formatTicketHours(dayHours(d)) : '·'}</td>
+                      <SharedTableCell key={d} className="px-1 py-1.5 text-center tabular-nums">{dayHours(d) > 0 ? formatTicketHours(dayHours(d)) : '·'}</SharedTableCell>
                     ))}
-                    <td className="py-1.5 pl-2 text-right font-semibold tabular-nums">{formatTicketHours(totalHours)}</td>
-                    {editable && <td />}
-                  </tr>
+                    <SharedTableCell className="py-1.5 pl-2 text-right font-semibold tabular-nums">{formatTicketHours(totalHours)}</SharedTableCell>
+                    {editable && <SharedTableCell />}
+                  </SharedTableRow>
                 )}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </div>
           {editable && (
             <Button
@@ -1390,29 +1391,29 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
           {ticket.lines.length === 0 ? (
             !editable ? <p className="py-3 text-center text-sm text-slate-400">{t('editor.lines.empty')}</p> : null
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-                  <th className="py-1 pr-2 font-medium">{t('editor.lines.item')}</th>
-                  <th className="py-1 pr-2 font-medium">{t('editor.lines.description')}</th>
-                  <th className="py-1 pr-2 text-right font-medium">{t('editor.lines.quantity')}</th>
-                  <th className="py-1 pr-2 text-right font-medium">{t('editor.lines.rate')}</th>
-                  <th className="py-1 pr-2 text-right font-medium">{t('editor.lines.amount')}</th>
-                  {editable && <th className="w-8" />}
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
+                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.lines.item')}</SharedTableHead>
+                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.lines.description')}</SharedTableHead>
+                  <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.lines.quantity')}</SharedTableHead>
+                  <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.lines.rate')}</SharedTableHead>
+                  <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.lines.amount')}</SharedTableHead>
+                  {editable && <SharedTableHead className="w-8" />}
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {ticket.lines.map((l) => (
-                  <tr key={l.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="py-1.5 pr-2"><div>{l.item_name ?? '—'}</div>{l.equipment_name ? <div className="text-xs text-slate-500">{l.equipment_name}</div> : null}</td>
-                    <td className="py-1.5 pr-2 text-slate-500"><div>{l.description ?? '—'}</div>{l.rate_components?.length ? <div className="text-xs">{l.rate_components.map((component) => `${Number(component.quantity)} ${component.unitName}`).join(' + ')}</div> : null}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">
+                  <SharedTableRow key={l.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <SharedTableCell className="py-1.5 pr-2"><div>{l.item_name ?? '—'}</div>{l.equipment_name ? <div className="text-xs text-slate-500">{l.equipment_name}</div> : null}</SharedTableCell>
+                    <SharedTableCell className="py-1.5 pr-2 text-slate-500"><div>{l.description ?? '—'}</div>{l.rate_components?.length ? <div className="text-xs">{l.rate_components.map((component) => `${Number(component.quantity)} ${component.unitName}`).join(' + ')}</div> : null}</SharedTableCell>
+                    <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">
                       {Number(l.quantity)} {l.rate_components?.length === 1 ? l.rate_components[0]!.unitName : (l.unit ?? '')}
-                    </td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{money(l.bill_rate ?? l.unit_price)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{money(l.bill_amount ?? l.amount)}</td>
+                    </SharedTableCell>
+                    <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">{money(l.bill_rate ?? l.unit_price)}</SharedTableCell>
+                    <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">{money(l.bill_amount ?? l.amount)}</SharedTableCell>
                     {editable && (
-                      <td className="py-1.5 text-right">
+                      <SharedTableCell className="py-1.5 text-right">
                         <button
                           type="button"
                           aria-label={t('editor.lines.remove')}
@@ -1421,12 +1422,12 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                         >
                           <Trash2 size={13} />
                         </button>
-                      </td>
+                      </SharedTableCell>
                     )}
-                  </tr>
+                  </SharedTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           )}
           {editable ? (
             <Button
@@ -1448,19 +1449,19 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.tasks.hint')}</p>
             </div>
             <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-                  <tr><th className="px-3 py-2">{t('editor.tasks.code')}</th><th className="px-3 py-2">{t('editor.tasks.task')}</th><th className="px-3 py-2">{tCommon('labels.status')}</th><th className="px-3 py-2 text-right">{t('editor.tasks.estimatedHours')}</th></tr>
-                </thead>
-                <tbody>{projectTasks.map((task) => (
-                  <tr key={task.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="px-3 py-2 font-mono text-xs">{task.code || '—'}</td>
-                    <td className="px-3 py-2">{task.name}</td>
-                    <td className="px-3 py-2 capitalize text-slate-500">{task.status.replaceAll('_', ' ')}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{task.estimatedHours ?? '—'}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                  <SharedTableRow><SharedTableHead className="px-3 py-2">{t('editor.tasks.code')}</SharedTableHead><SharedTableHead className="px-3 py-2">{t('editor.tasks.task')}</SharedTableHead><SharedTableHead className="px-3 py-2">{tCommon('labels.status')}</SharedTableHead><SharedTableHead className="px-3 py-2 text-right">{t('editor.tasks.estimatedHours')}</SharedTableHead></SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>{projectTasks.map((task) => (
+                  <SharedTableRow key={task.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <SharedTableCell className="px-3 py-2 font-mono text-xs">{task.code || '—'}</SharedTableCell>
+                    <SharedTableCell className="px-3 py-2">{task.name}</SharedTableCell>
+                    <SharedTableCell className="px-3 py-2 capitalize text-slate-500">{task.status.replaceAll('_', ' ')}</SharedTableCell>
+                    <SharedTableCell className="px-3 py-2 text-right tabular-nums">{task.estimatedHours ?? '—'}</SharedTableCell>
+                  </SharedTableRow>
+                ))}</SharedTableBody>
+              </SharedTable>
             </div>
           </section>
         ) : null}

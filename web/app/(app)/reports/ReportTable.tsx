@@ -13,7 +13,7 @@ import { cn } from '@openbooks/ui'
  */
 export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="min-w-0 w-full max-w-full overflow-x-auto">
       <table
         className={cn('w-full border-collapse text-sm tabular-nums', className)}
         {...props}
@@ -28,6 +28,10 @@ export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSec
 
 export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return <tbody className={className} {...props} />
+}
+
+export function TableFooter({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+  return <tfoot className={className} {...props} />
 }
 
 export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {

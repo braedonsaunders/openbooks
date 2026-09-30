@@ -1,35 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
+import React from 'react'
 
-const require = createRequire(import.meta.url)
-const reactUrl = pathToFileURL(require.resolve('react')).href
-
-const { registerHooks } = await import('node:module')
-// @openbooks/ui resolves to the main checkout via the worktree's symlinked
-// root node_modules, so render the panel against minimal stubs: the contract
-// under test is the table's own cell classes, not the ui primitives.
-const uiStub = `import{createElement as h}from'${reactUrl}';
-const passthrough=(tag)=>({children,...rest})=>h(tag,rest,children);
-export const Button=passthrough('button');
-export const Card=({children,className})=>h('div',{className},children);
-export const Input=(props)=>h('input',props);
-export const Label=({children})=>h('label',null,children);
-export const Select=({children,...rest})=>h('select',rest,children);
-export const Badge=({children})=>h('span',null,children);
-export const Alert=({children})=>(children??null);
-export const AlertDescription=({children})=>(children??null);
-export const Skeleton=()=>null;`
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') {
-      return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(uiStub)}` }
-    }
-    return next(specifier, context)
-  },
-})
-
+// The test loader compiles workspace UI with the classic JSX runtime.
+Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('@/components/money-provider')

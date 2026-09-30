@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
@@ -105,16 +106,16 @@ export function ResultsGrid({ result, filter }: { result: QueryResult; filter: s
 
   return (
     <div className="h-full overflow-auto">
-      <table className="w-full border-collapse text-[13px]">
-        <thead className="sticky top-0 z-10">
-          <tr className="bg-slate-50 dark:bg-slate-900">
-            <th className="w-12 border-b border-slate-200 px-2 py-2 text-right font-medium text-slate-400 tabular-nums dark:border-slate-800 dark:text-slate-500">
+      <SharedTable className="w-full border-collapse text-[13px]">
+        <SharedTableHeader className="sticky top-0 z-10">
+          <SharedTableRow className="bg-slate-50 dark:bg-slate-900">
+            <SharedTableHead className="w-12 border-b border-slate-200 px-2 py-2 text-right font-medium text-slate-400 tabular-nums dark:border-slate-800 dark:text-slate-500">
               #
-            </th>
+            </SharedTableHead>
             {result.columns.map((c) => {
               const active = sortCol === c
               return (
-                <th
+                <SharedTableHead
                   key={c}
                   onClick={() => toggleSort(c)}
                   className={cn(
@@ -135,25 +136,25 @@ export function ResultsGrid({ result, filter }: { result: QueryResult; filter: s
                       <ChevronsUpDown size={13} className="shrink-0 text-slate-300 opacity-0 group-hover:opacity-100 dark:text-slate-600" />
                     )}
                   </span>
-                </th>
+                </SharedTableHead>
               )
             })}
-          </tr>
-        </thead>
-        <tbody>
+          </SharedTableRow>
+        </SharedTableHeader>
+        <SharedTableBody>
           {sorted.map((row, i) => (
-            <tr
+            <SharedTableRow
               key={i}
               className="border-b border-slate-100 last:border-0 odd:bg-white even:bg-slate-50/40 hover:bg-teal-50/50 dark:border-slate-800/60 dark:odd:bg-slate-950 dark:even:bg-slate-900/30 dark:hover:bg-teal-950/20"
             >
-              <td className="px-2 py-1.5 text-right align-top font-mono text-[11px] text-slate-300 tabular-nums dark:text-slate-600">
+              <SharedTableCell className="px-2 py-1.5 text-right align-top font-mono text-[11px] text-slate-300 tabular-nums dark:text-slate-600">
                 {i + 1}
-              </td>
+              </SharedTableCell>
               {result.columns.map((c) => {
                 const v = row[c]
                 const isNull = v === null || v === undefined
                 return (
-                  <td
+                  <SharedTableCell
                     key={c}
                     className={cn(
                       'max-w-[28rem] truncate px-3 py-1.5 align-top',
@@ -162,20 +163,20 @@ export function ResultsGrid({ result, filter }: { result: QueryResult; filter: s
                     title={isNull ? 'NULL' : cellText(v)}
                   >
                     {isNull ? <span className="text-slate-300 dark:text-slate-600">∅</span> : cellText(v)}
-                  </td>
+                  </SharedTableCell>
                 )
               })}
-            </tr>
+            </SharedTableRow>
           ))}
           {sorted.length === 0 ? (
-            <tr>
-              <td colSpan={result.columns.length + 1} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+            <SharedTableRow>
+              <SharedTableCell colSpan={result.columns.length + 1} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                 {t('noFilterMatch')}
-              </td>
-            </tr>
+              </SharedTableCell>
+            </SharedTableRow>
           ) : null}
-        </tbody>
-      </table>
+        </SharedTableBody>
+      </SharedTable>
     </div>
   )
 }

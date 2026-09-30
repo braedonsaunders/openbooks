@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
@@ -132,45 +133,45 @@ export function TaxPoolsView({
               <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
                 {regimes.find((item) => item.code === result.regime)?.name ?? result.regime} · {result.taxYear}
               </p>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-800">
-                    <th className="px-3 py-2 text-left font-medium">{t('taxPools.columns.class')}</th>
-                    <th className={col}>{t('taxPools.columns.opening')}</th>
-                    <th className={col}>{t('taxPools.columns.additions')}</th>
-                    <th className={col}>{t('taxPools.columns.dispositions')}</th>
-                    <th className={col}>{t('taxPools.columns.allowance')}</th>
-                    <th className={col}>{t('taxPools.columns.closing')}</th>
-                    <th className={col}>{t('taxPools.columns.recapture')}</th>
-                    <th className={col}>{t('taxPools.columns.terminalLoss')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-800">
+                    <SharedTableHead className="px-3 py-2 text-left font-medium">{t('taxPools.columns.class')}</SharedTableHead>
+                    <SharedTableHead className={col}>{t('taxPools.columns.opening')}</SharedTableHead>
+                    <SharedTableHead className={col}>{t('taxPools.columns.additions')}</SharedTableHead>
+                    <SharedTableHead className={col}>{t('taxPools.columns.dispositions')}</SharedTableHead>
+                    <SharedTableHead className={col}>{t('taxPools.columns.allowance')}</SharedTableHead>
+                    <SharedTableHead className={col}>{t('taxPools.columns.closing')}</SharedTableHead>
+                    <SharedTableHead className={col}>{t('taxPools.columns.recapture')}</SharedTableHead>
+                    <SharedTableHead className={col}>{t('taxPools.columns.terminalLoss')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {result.lines.map((l) => (
-                    <tr key={l.classCode} className="border-b border-slate-100 dark:border-slate-900">
-                      <td className="px-3 py-2">
+                    <SharedTableRow key={l.classCode} className="border-b border-slate-100 dark:border-slate-900">
+                      <SharedTableCell className="px-3 py-2">
                         <span className="font-medium">{l.classCode}</span>
                         <span className="ml-2 text-slate-500">{l.className}</span>
-                      </td>
-                      <td className={col}>{fmt(l.openingBalance)}</td>
-                      <td className={col}>{fmt(l.additions)}</td>
-                      <td className={col}>{fmt(l.dispositions)}</td>
-                      <td className={`${col} font-semibold`}>{fmt(l.allowance)}</td>
-                      <td className={col}>{fmt(l.closingBalance)}</td>
-                      <td className={col}>{decimalCmp(l.recapture, '0') !== 0 ? fmt(l.recapture) : '—'}</td>
-                      <td className={col}>{decimalCmp(l.terminalLoss, '0') !== 0 ? fmt(l.terminalLoss) : '—'}</td>
-                    </tr>
+                      </SharedTableCell>
+                      <SharedTableCell className={col}>{fmt(l.openingBalance)}</SharedTableCell>
+                      <SharedTableCell className={col}>{fmt(l.additions)}</SharedTableCell>
+                      <SharedTableCell className={col}>{fmt(l.dispositions)}</SharedTableCell>
+                      <SharedTableCell className={`${col} font-semibold`}>{fmt(l.allowance)}</SharedTableCell>
+                      <SharedTableCell className={col}>{fmt(l.closingBalance)}</SharedTableCell>
+                      <SharedTableCell className={col}>{decimalCmp(l.recapture, '0') !== 0 ? fmt(l.recapture) : '—'}</SharedTableCell>
+                      <SharedTableCell className={col}>{decimalCmp(l.terminalLoss, '0') !== 0 ? fmt(l.terminalLoss) : '—'}</SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                  <tr className="font-semibold text-slate-900 dark:text-slate-100">
-                    <td className="px-3 py-2">{t('taxPools.totals')}</td>
-                    <td className={col} colSpan={3}></td>
-                    <td className={col}>{fmt(result.totals.allowance)}</td>
-                    <td className={col}></td>
-                    <td className={col}>{decimalCmp(result.totals.recapture, '0') !== 0 ? fmt(result.totals.recapture) : '—'}</td>
-                    <td className={col}>{decimalCmp(result.totals.terminalLoss, '0') !== 0 ? fmt(result.totals.terminalLoss) : '—'}</td>
-                  </tr>
-                </tbody>
-              </table>
+                  <SharedTableRow className="font-semibold text-slate-900 dark:text-slate-100">
+                    <SharedTableCell className="px-3 py-2">{t('taxPools.totals')}</SharedTableCell>
+                    <SharedTableCell className={col} colSpan={3}></SharedTableCell>
+                    <SharedTableCell className={col}>{fmt(result.totals.allowance)}</SharedTableCell>
+                    <SharedTableCell className={col}></SharedTableCell>
+                    <SharedTableCell className={col}>{decimalCmp(result.totals.recapture, '0') !== 0 ? fmt(result.totals.recapture) : '—'}</SharedTableCell>
+                    <SharedTableCell className={col}>{decimalCmp(result.totals.terminalLoss, '0') !== 0 ? fmt(result.totals.terminalLoss) : '—'}</SharedTableCell>
+                  </SharedTableRow>
+                </SharedTableBody>
+              </SharedTable>
             </CardContent>
           </Card>
         )

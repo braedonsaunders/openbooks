@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -583,14 +584,14 @@ function OpeningBalancesYearView({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full min-w-max text-sm">
-          <thead className="bg-slate-50 text-left dark:bg-slate-900">
-            <tr>
-              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+        <SharedTable className="w-full min-w-max text-sm">
+          <SharedTableHeader className="bg-slate-50 text-left dark:bg-slate-900">
+            <SharedTableRow>
+              <SharedTableHead className="sticky left-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                 {text('employee', 'Employee')}
-              </th>
+              </SharedTableHead>
               {visibleFields.map((field) => (
-                <th
+                <SharedTableHead
                   key={field.key}
                   className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
                 >
@@ -600,10 +601,10 @@ function OpeningBalancesYearView({
                       : field.label}
                     <FieldHelp help={field.help} />
                   </span>
-                </th>
+                </SharedTableHead>
               ))}
               {visiblePrograms.map((program) => (
-                <th
+                <SharedTableHead
                   key={program.key}
                   className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
                 >
@@ -611,10 +612,10 @@ function OpeningBalancesYearView({
                     {program.label}
                     <FieldHelp help={program.help} />
                   </span>
-                </th>
+                </SharedTableHead>
               ))}
               {visibleSuiStates.map((sui) => (
-                <th
+                <SharedTableHead
                   key={sui.key}
                   className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
                 >
@@ -622,10 +623,10 @@ function OpeningBalancesYearView({
                     {sui.label}
                     <FieldHelp help={sui.help} />
                   </span>
-                </th>
+                </SharedTableHead>
               ))}
               {visibleAccountPrograms.map((program) => (
-                <th
+                <SharedTableHead
                   key={`account:${program.key}`}
                   className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
                 >
@@ -633,10 +634,10 @@ function OpeningBalancesYearView({
                     {program.label}
                     <FieldHelp help={program.help} />
                   </span>
-                </th>
+                </SharedTableHead>
               ))}
               {components.map((component, index) => (
-                <th
+                <SharedTableHead
                   key={component.componentId}
                   className={cn(
                     'px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300',
@@ -659,27 +660,27 @@ function OpeningBalancesYearView({
                       }
                     />
                   </span>
-                </th>
+                </SharedTableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.length === 0 && (
-              <tr>
-                <td
+              <SharedTableRow>
+                <SharedTableCell
                   colSpan={visibleFields.length + visiblePrograms.length + visibleSuiStates.length + visibleAccountPrograms.length + components.length + 1}
                   className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   {text('empty', 'No employees have an active payroll profile yet.')}
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             )}
             {rows.map((row) => (
-              <tr
+              <SharedTableRow
                 key={row.employeePartyId}
                 className={cn(row.locked && 'bg-slate-50/60 dark:bg-slate-900/40')}
               >
-                <td className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap dark:bg-slate-950">
+                <SharedTableCell className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap dark:bg-slate-950">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-slate-800 dark:text-slate-100">
                       {row.employeeName}
@@ -706,7 +707,7 @@ function OpeningBalancesYearView({
                       </span>
                     )}
                   </div>
-                </td>
+                </SharedTableCell>
                 {visibleFields.map((field) => {
                   // Unknown country applies to every pack's columns (see the
                   // packs set above): the row's pack is gone with its profile,
@@ -714,7 +715,7 @@ function OpeningBalancesYearView({
                   // money the engine still reads.
                   const applies = row.country == null || field.packs.includes(row.country)
                   return (
-                    <td key={field.key} className="px-2 py-1.5 text-right">
+                    <SharedTableCell key={field.key} className="px-2 py-1.5 text-right">
                       {applies ? (
                         <MoneyInput
                           ariaLabel={`${row.employeeName} — ${field.label}`}
@@ -732,7 +733,7 @@ function OpeningBalancesYearView({
                       ) : (
                         <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
                       )}
-                    </td>
+                    </SharedTableCell>
                   )
                 })}
                 {visiblePrograms.map((program) => {
@@ -741,7 +742,7 @@ function OpeningBalancesYearView({
                   // defaulting to any country's.
                   const applies = row.country == null || program.packs.includes(row.country)
                   return (
-                    <td key={program.key} className="px-2 py-1.5 text-right">
+                    <SharedTableCell key={program.key} className="px-2 py-1.5 text-right">
                       {applies ? (
                         <MoneyInput
                           ariaLabel={`${row.employeeName} — ${program.label}`}
@@ -759,7 +760,7 @@ function OpeningBalancesYearView({
                       ) : (
                         <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
                       )}
-                    </td>
+                    </SharedTableCell>
                   )
                 })}
                 {visibleSuiStates.map((sui) => {
@@ -768,7 +769,7 @@ function OpeningBalancesYearView({
                   // than defaulting to any country's.
                   const applies = row.country == null || sui.packs.includes(row.country)
                   return (
-                    <td key={sui.key} className="px-2 py-1.5 text-right">
+                    <SharedTableCell key={sui.key} className="px-2 py-1.5 text-right">
                       {applies ? (
                         <MoneyInput
                           ariaLabel={`${row.employeeName} — ${sui.label}`}
@@ -786,14 +787,14 @@ function OpeningBalancesYearView({
                       ) : (
                         <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
                       )}
-                    </td>
+                    </SharedTableCell>
                   )
                 })}
                 {visibleAccountPrograms.map((program) => {
                   const applies = (row.country == null || row.country === program.country)
                   const key = `account:${program.key}`
                   return (
-                    <td key={key} className="px-2 py-1.5 text-right">
+                    <SharedTableCell key={key} className="px-2 py-1.5 text-right">
                       {applies ? (
                         <MoneyInput
                           ariaLabel={`${row.employeeName} — ${program.label}`}
@@ -809,11 +810,11 @@ function OpeningBalancesYearView({
                       ) : (
                         <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
                       )}
-                    </td>
+                    </SharedTableCell>
                   )
                 })}
                 {components.map((component, index) => (
-                  <td
+                  <SharedTableCell
                     key={component.componentId}
                     className={cn(
                       'px-2 py-1.5 text-right',
@@ -833,12 +834,12 @@ function OpeningBalancesYearView({
                       disabled={row.locked || !canManage || !component.capped || saving}
                       className="w-32 text-right tabular-nums"
                     />
-                  </td>
+                  </SharedTableCell>
                 ))}
-              </tr>
+              </SharedTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </div>
     </div>
   )

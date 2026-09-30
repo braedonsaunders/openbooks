@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import {
@@ -105,36 +106,36 @@ function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showR
   const money0 = (n: number) => fmtMoney(n)
   return (
     <div className="max-h-128 overflow-y-auto">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-white dark:bg-slate-900">
-          <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
-            <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
-            <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
-            <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
-            <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-            <th className="px-4 py-2 text-center font-medium">{t('table.flag')}</th>
-            {showReason ? <th className="px-4 py-2 text-left font-medium">{t('table.reason')}</th> : null}
-            <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <SharedTable className="w-full text-sm">
+        <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+          <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+            <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.date')}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.document')}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.party')}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.currency')}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.amount')}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.flag')}</SharedTableHead>
+            {showReason ? <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.reason')}</SharedTableHead> : null}
+            <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.risk')}</SharedTableHead>
+          </SharedTableRow>
+        </SharedTableHeader>
+        <SharedTableBody>
           {items.length ? items.map((f, i) => (
-            <tr key={`${f.docId}-${f.flagType}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-              <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{f.date}</td>
-              <td className="px-4 py-2"><DocCell f={f} /></td>
-              <td className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={f.partyName}>{f.partyName || '—'}</td>
-              <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{f.currency}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(f.amount)}</td>
-              <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', FLAG_BADGE_CLS[f.flagType])}>{t(`flag.${f.flagType}`)}</span></td>
-              {showReason ? <td className="max-w-72 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={f.reason}>{f.reason}</td> : null}
-              <td className="px-4 py-2 text-right"><RiskPill score={f.riskScore} /></td>
-            </tr>
+            <SharedTableRow key={`${f.docId}-${f.flagType}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+              <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{f.date}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2"><DocCell f={f} /></SharedTableCell>
+              <SharedTableCell className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={f.partyName}>{f.partyName || '—'}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{f.currency}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(f.amount)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', FLAG_BADGE_CLS[f.flagType])}>{t(`flag.${f.flagType}`)}</span></SharedTableCell>
+              {showReason ? <SharedTableCell className="max-w-72 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={f.reason}>{f.reason}</SharedTableCell> : null}
+              <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={f.riskScore} /></SharedTableCell>
+            </SharedTableRow>
           )) : (
-            <tr><td colSpan={showReason ? 8 : 7} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.nothingFlagged')}</td></tr>
+            <SharedTableRow><SharedTableCell colSpan={showReason ? 8 : 7} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.nothingFlagged')}</SharedTableCell></SharedTableRow>
           )}
-        </tbody>
-      </table>
+        </SharedTableBody>
+      </SharedTable>
     </div>
   )
 }
@@ -357,30 +358,30 @@ function BenfordTab({ data }: { data: SentinelData }) {
             />
           </Panel>
           <Panel title={t('panels.digitDetail')} icon={ListOrdered} hint={t('panels.digitDetailHint')} bodyClassName="p-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.digit')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.count')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('chart.observed')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('chart.expected')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.deviation')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.digit')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.count')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.amount')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('chart.observed')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('chart.expected')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.deviation')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {b1.digits.map((d) => (
                   <InteractiveTableRow key={d.digit} onClick={() => setDrill({ digit: d.digit, dim: '1d' })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-                    <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{(d.observed * 100).toFixed(2)}%</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-400">{(d.expected * 100).toFixed(2)}%</td>
-                    <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', d.isAnomaly ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400')}>{d.deviationPct > 0 ? '+' : ''}{d.deviationPct.toFixed(1)}%</td>
+                    <SharedTableCell className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{(d.observed * 100).toFixed(2)}%</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{(d.expected * 100).toFixed(2)}%</SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', d.isAnomaly ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400')}>{d.deviationPct > 0 ? '+' : ''}{d.deviationPct.toFixed(1)}%</SharedTableCell>
                   </InteractiveTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </Panel>
         </div>
       ) : null}
@@ -411,26 +412,26 @@ function BenfordTab({ data }: { data: SentinelData }) {
           </Panel>
           {b2.anomalies.length ? (
             <Panel title={t('panels.anomalousPairs')} icon={AlertTriangle} bodyClassName="p-0">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.digits')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.count')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.deviation')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.digits')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.count')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.amount')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.deviation')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {b2.anomalies.slice(0, 15).map((d) => (
-                    <tr key={d.digit} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</td>
-                      <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', 'text-rose-600 dark:text-rose-400')}>{d.deviationPct > 0 ? '+' : ''}{d.deviationPct.toFixed(0)}%</td>
-                    </tr>
+                    <SharedTableRow key={d.digit} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="px-4 py-2 font-bold text-slate-800 dark:text-slate-200">{d.digit}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{num(d.count)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(d.amount)}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', 'text-rose-600 dark:text-rose-400')}>{d.deviationPct > 0 ? '+' : ''}{d.deviationPct.toFixed(0)}%</SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </Panel>
           ) : null}
         </div>
@@ -489,28 +490,28 @@ function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: numb
         ) : data.documents.length === 0 ? (
           <p className="p-6 text-center text-sm text-slate-400">{t('drill.noDocuments', { digit })}</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.date')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.document')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.party')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.currency')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.amount')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {data.documents.map((d, k) => (
-                <tr key={k} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                  <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(d.date)}</td>
-                  <td className="px-4 py-1.5"><TxnLink entryId={d.entryId ?? ''} docKind={d.docKind} docId={d.docId} className="font-medium text-slate-700 hover:text-teal-600 dark:text-slate-200 dark:hover:text-teal-400">{d.docNumber || d.docKind}</TxnLink></td>
-                  <td className="max-w-48 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={d.partyName ?? undefined}>{d.partyName || '—'}</td>
-                  <td className="px-4 py-1.5 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{d.currency ?? '—'}</td>
-                  <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(d.amount)}</td>
-                </tr>
+                <SharedTableRow key={k} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                  <SharedTableCell className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(d.date)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-1.5"><TxnLink entryId={d.entryId ?? ''} docKind={d.docKind} docId={d.docId} className="font-medium text-slate-700 hover:text-teal-600 dark:text-slate-200 dark:hover:text-teal-400">{d.docNumber || d.docKind}</TxnLink></SharedTableCell>
+                  <SharedTableCell className="max-w-48 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={d.partyName ?? undefined}>{d.partyName || '—'}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-1.5 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{d.currency ?? '—'}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(d.amount)}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         )}
       </div>
     </Drawer>
@@ -564,34 +565,34 @@ function AnalysisTab({ data }: { data: SentinelData }) {
           </p>
           <Panel title={t('panels.rsfAnomalies', { count: num(data.rsf.total) })} icon={Scale} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.secondLargest')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('flag.rsf')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.date')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.document')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.currency')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.amount')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.secondLargest')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('flag.rsf')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.risk')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {data.rsf.items.map((r, i) => (
-                    <tr key={`${r.docId}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{r.date}</td>
-                      <td className="px-4 py-2"><DocCell f={r} /></td>
-                      <td className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={r.partyName}>{r.partyName}</td>
-                      <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{r.currency}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(r.amount)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(r.secondLargest)}</td>
-                      <td className="px-4 py-2 text-right font-bold tabular-nums text-amber-600 dark:text-amber-400">{r.rsf.toFixed(1)}×</td>
-                      <td className="px-4 py-2 text-right"><RiskPill score={r.riskScore} /></td>
-                    </tr>
+                    <SharedTableRow key={`${r.docId}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{r.date}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2"><DocCell f={r} /></SharedTableCell>
+                      <SharedTableCell className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={r.partyName}>{r.partyName}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{r.currency}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(r.amount)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(r.secondLargest)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-amber-600 dark:text-amber-400">{r.rsf.toFixed(1)}×</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={r.riskScore} /></SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
           </Panel>
         </div>
@@ -605,34 +606,34 @@ function AnalysisTab({ data }: { data: SentinelData }) {
           </p>
           <Panel title={t('panels.zscoreAnomalies', { count: num(data.zscore.total) })} icon={Sigma} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.partyAvg')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.z')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.date')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.document')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.party')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.currency')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.amount')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.partyAvg')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.z')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.risk')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {data.zscore.items.map((z, i) => (
-                    <tr key={`${z.docId}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{z.date}</td>
-                      <td className="px-4 py-2"><DocCell f={z} /></td>
-                      <td className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={z.partyName}>{z.partyName}</td>
-                      <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{z.currency}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(z.amount)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(z.vendorAvg)}</td>
-                      <td className="px-4 py-2 text-right font-bold tabular-nums text-sky-600 dark:text-sky-400">{z.zScore.toFixed(1)}σ</td>
-                      <td className="px-4 py-2 text-right"><RiskPill score={z.riskScore} /></td>
-                    </tr>
+                    <SharedTableRow key={`${z.docId}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{z.date}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2"><DocCell f={z} /></SharedTableCell>
+                      <SharedTableCell className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={z.partyName}>{z.partyName}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{z.currency}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(z.amount)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(z.vendorAvg)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-sky-600 dark:text-sky-400">{z.zScore.toFixed(1)}σ</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={z.riskScore} /></SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
           </Panel>
         </div>
@@ -697,23 +698,23 @@ function DetectionTab({ data }: { data: SentinelData }) {
           </div>
           <Panel title={t('panels.potentialDuplicates')} icon={Copy} hint={t('panels.duplicatesHint')} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.members')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.span')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.confidence')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.members')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.currency')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.amount')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.span')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.confidence')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.risk')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {data.duplicates.groups.map((g: DuplicateGroup) => (
-                    <tr key={g.groupId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="max-w-44 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={g.partyName}>{g.partyName}</td>
-                      <td className="px-4 py-2">
+                    <SharedTableRow key={g.groupId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="max-w-44 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={g.partyName}>{g.partyName}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2">
                         <span className="flex flex-wrap gap-1.5">
                           {g.members.slice(0, 8).map((m) => (
                             <TxnLink key={m.docId} entryId={m.docId} docKind={g.kind} docId={m.docId} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:text-slate-300 dark:hover:text-teal-400">
@@ -724,16 +725,16 @@ function DetectionTab({ data }: { data: SentinelData }) {
                           {g.members.length > 8 ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.members.length - 8 })}</span> : null}
                         </span>
                         {g.sameReference && g.members[0]?.reference ? <span className="mt-1 block text-[10px] text-slate-400">{t('duplicates.sharedReference', { reference: g.members[0].reference })}</span> : null}
-                      </td>
-                      <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{g.currency}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(g.amount)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('duplicates.spanDays', { days: num(g.dateSpanDays) })}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(g.confidence * 100)}%</td>
-                      <td className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></td>
-                    </tr>
+                      </SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{g.currency}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(g.amount)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('duplicates.spanDays', { days: num(g.dateSpanDays) })}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(g.confidence * 100)}%</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
           </Panel>
         </div>
@@ -787,26 +788,26 @@ function DetectionTab({ data }: { data: SentinelData }) {
           </p>
           {data.ghosts.length ? (
             <Panel title={t('panels.ghostMatches', { count: data.ghosts.length })} icon={Ghost} bodyClassName="p-0">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.employee')}</th>
-                    <th className="px-4 py-2 text-center font-medium">{t('table.match')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.employee')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.match')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.risk')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {data.ghosts.map((g, i) => (
-                    <tr key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{g.vendorName}</td>
-                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{g.employeeName}</td>
-                      <td className="px-4 py-2 text-center"><Badge variant={g.matchType === 'name' ? 'warning' : 'destructive'}>{g.matchType}</Badge></td>
-                      <td className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></td>
-                    </tr>
+                    <SharedTableRow key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{g.vendorName}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-slate-600 dark:text-slate-300">{g.employeeName}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-center"><Badge variant={g.matchType === 'name' ? 'warning' : 'destructive'}>{g.matchType}</Badge></SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </Panel>
           ) : (
             <Panel title={t('panels.ghostVendors')} icon={Ghost}><p className="py-6 text-center text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={18} className="mx-auto mb-1.5" />{t('empty.noGhostMatches')}</p></Panel>
@@ -827,38 +828,38 @@ function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillT
   return (
     <Panel title={t('panels.vendorRiskRollup')} icon={ShieldAlert} hint={t('panels.vendorRiskHint')} bodyClassName="p-0">
       <div className="max-h-144 overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-white dark:bg-slate-900">
-            <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+            <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
               <SortTh label={t('table.party')} col="partyName" align="left" defaultDir="asc" />
               <SortTh label={t('table.flags')} col="flagCount" />
               <SortTh label={t('table.flaggedAmount')} col="totalAmount" />
-              <th className="px-4 py-2 text-left font-medium">{t('table.flagTypes')}</th>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.flagTypes')}</SharedTableHead>
               <SortTh label={t('table.riskScore')} col="compositeScore" />
-            </tr>
-          </thead>
-          <tbody>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {sorted.map((v, i) => (
               <InteractiveTableRow
                 key={`${v.partyId}-${i}`}
                 onClick={v.partyId ? () => onDrill({ kind: 'party', id: v.partyId!, name: v.partyName, sub: t('vendors.drillSub', { flags: v.flagCount, amount: money0(v.totalAmount) }) }) : undefined}
                 className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', v.partyId && 'cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30')} noAnimate
               >
-                <td className="max-w-56 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={v.partyName}>{v.partyName}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{v.flagCount}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalAmount)}</td>
-                <td className="px-4 py-2">
+                <SharedTableCell className="max-w-56 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={v.partyName}>{v.partyName}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{v.flagCount}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalAmount)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2">
                   <span className="flex flex-wrap gap-1">
                     {v.flagTypes.map((ft) => (
                       <span key={ft} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', FLAG_BADGE_CLS[ft as FlaggedDoc['flagType']] ?? 'bg-slate-100 text-slate-600')}>{(FLAGGED_TYPES as readonly string[]).includes(ft) ? t(`flag.${ft}`) : ft}</span>
                     ))}
                   </span>
-                </td>
-                <td className="px-4 py-2 text-right"><RiskPill score={v.compositeScore} /></td>
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right"><RiskPill score={v.compositeScore} /></SharedTableCell>
               </InteractiveTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </div>
     </Panel>
   )
@@ -883,28 +884,28 @@ function AuditTab({ data }: { data: SentinelData }) {
       </p>
       <Panel title={t('panels.highRiskAudit')} icon={History} bodyClassName="p-0">
         <div className="max-h-128 overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('table.when')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.table')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.action')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.change')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.when')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.table')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.action')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.change')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {a.events.length ? a.events.map((e) => (
-                <tr key={e.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{e.at.slice(0, 16).replace('T', ' ')}</td>
-                  <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{e.tableName}</td>
-                  <td className="px-4 py-2 text-center"><Badge variant={e.action.toLowerCase() === 'delete' ? 'destructive' : 'secondary'}>{e.action}</Badge></td>
-                  <td className="max-w-96 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.summary}>{e.summary || '—'}</td>
-                </tr>
+                <SharedTableRow key={e.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{e.at.slice(0, 16).replace('T', ' ')}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{e.tableName}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><Badge variant={e.action.toLowerCase() === 'delete' ? 'destructive' : 'secondary'}>{e.action}</Badge></SharedTableCell>
+                  <SharedTableCell className="max-w-96 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.summary}>{e.summary || '—'}</SharedTableCell>
+                </SharedTableRow>
               )) : (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.noAuditEvents')}</td></tr>
+                <SharedTableRow><SharedTableCell colSpan={4} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.noAuditEvents')}</SharedTableCell></SharedTableRow>
               )}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       </Panel>
     </div>

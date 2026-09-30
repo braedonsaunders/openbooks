@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { LineChart, Cog, Stethoscope, Table2, TriangleAlert } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -170,31 +171,31 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
         <Panel title="Monthly Forecast Detail" icon={Table2} bodyClassName="p-0">
           <div className="max-h-72 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Month</th>
-                  <th className="px-4 py-2 text-right font-medium">Forecast</th>
-                  <th className="px-4 py-2 text-right font-medium">Low</th>
-                  <th className="px-4 py-2 text-right font-medium">High</th>
-                  <th className="px-4 py-2 text-right font-medium">Conf.</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">Month</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">Forecast</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">Low</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">High</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">Conf.</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {result.values.map((v, i) => {
                   const outOfDomain = breach.breached && i >= breach.firstIndex
                   return (
-                    <tr key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{outOfDomain ? `⚠ ${futLabels[i]}` : futLabels[i]}</td>
-                      <td className={`px-4 py-2 text-right font-medium tabular-nums ${outOfDomain ? 'text-amber-700 dark:text-amber-300' : 'text-slate-800 dark:text-slate-200'}`}>{fmtMoney(v)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i]!)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i]!)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{confidence}%</td>
-                    </tr>
+                    <SharedTableRow key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{outOfDomain ? `⚠ ${futLabels[i]}` : futLabels[i]}</SharedTableCell>
+                      <SharedTableCell className={`px-4 py-2 text-right font-medium tabular-nums ${outOfDomain ? 'text-amber-700 dark:text-amber-300' : 'text-slate-800 dark:text-slate-200'}`}>{fmtMoney(v)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i]!)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i]!)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{confidence}%</SharedTableCell>
+                    </SharedTableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </div>
           {breach.breached ? (
             <p className="px-4 py-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">

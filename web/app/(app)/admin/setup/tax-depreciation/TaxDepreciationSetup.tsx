@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -129,23 +130,23 @@ export function TaxDepreciationSetup({
             <p className="text-sm text-slate-500 dark:text-slate-400">{t('assignmentsDescription')}</p>
           </div>
           <Card><CardContent className="overflow-x-auto pt-6">
-            <table className="w-full min-w-[42rem] text-sm">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800">
-                <th className="px-3 py-2 text-left font-medium">{t('assetCategory')}</th>
-                {regimes.map((regime) => <th key={regime.code} className="px-3 py-2 text-left font-medium">{regime.name}</th>)}
-              </tr></thead>
-              <tbody>{categories.map((category) => (
-                <tr key={category.id} className="border-b border-slate-100 dark:border-slate-900">
-                  <td className="px-3 py-2 font-medium">{category.name}</td>
-                  {regimes.map((regime) => <td key={regime.code} className="px-3 py-2">
+            <SharedTable className="w-full min-w-[42rem] text-sm">
+              <SharedTableHeader><SharedTableRow className="border-b border-slate-200 dark:border-slate-800">
+                <SharedTableHead className="px-3 py-2 text-left font-medium">{t('assetCategory')}</SharedTableHead>
+                {regimes.map((regime) => <SharedTableHead key={regime.code} className="px-3 py-2 text-left font-medium">{regime.name}</SharedTableHead>)}
+              </SharedTableRow></SharedTableHeader>
+              <SharedTableBody>{categories.map((category) => (
+                <SharedTableRow key={category.id} className="border-b border-slate-100 dark:border-slate-900">
+                  <SharedTableCell className="px-3 py-2 font-medium">{category.name}</SharedTableCell>
+                  {regimes.map((regime) => <SharedTableCell key={regime.code} className="px-3 py-2">
                     <Select value={assignments[`${category.id}:${regime.code}`] ?? ''} onChange={(event) => assign(category.id, regime.code, event.target.value)}>
                       <option value="">{t('notAssigned')}</option>
                       {regime.classes.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}
                     </Select>
-                  </td>)}
-                </tr>
-              ))}</tbody>
-            </table>
+                  </SharedTableCell>)}
+                </SharedTableRow>
+              ))}</SharedTableBody>
+            </SharedTable>
           </CardContent></Card>
         </section>
       ) : null}

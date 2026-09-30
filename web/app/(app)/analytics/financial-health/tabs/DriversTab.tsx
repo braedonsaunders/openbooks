@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { Search, TrendingUp, TrendingDown } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { HealthData, DriverRow } from '../../../../../lib/analytics/health-data'
@@ -44,28 +45,28 @@ function DriverPanel({ title, icon: Icon, rows, onDrill }: { title: string; icon
       ) : (
         <>
           <DivergingBar labels={top.map((d) => d.name)} values={top.map((d) => toChartNumber(d.change))} height={Math.max(180, top.length * 26)} />
-          <table className="mt-3 w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="py-1.5 text-left font-medium">Account</th>
-                <th className="py-1.5 text-right font-medium">Current</th>
-                <th className="py-1.5 text-right font-medium">Δ</th>
-                <th className="py-1.5 text-right font-medium">Δ %</th>
-                <th className="py-1.5 text-right font-medium">Contrib.</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="mt-3 w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="py-1.5 text-left font-medium">Account</SharedTableHead>
+                <SharedTableHead className="py-1.5 text-right font-medium">Current</SharedTableHead>
+                <SharedTableHead className="py-1.5 text-right font-medium">Δ</SharedTableHead>
+                <SharedTableHead className="py-1.5 text-right font-medium">Δ %</SharedTableHead>
+                <SharedTableHead className="py-1.5 text-right font-medium">Contrib.</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {top.map((d) => (
                 <InteractiveTableRow key={d.id} onClick={() => onDrill(d.id, d.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-                  <td className="py-1.5 text-slate-700 dark:text-slate-300">{d.name}</td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</td>
-                  <td className={cn('py-1.5 text-right tabular-nums', cmp(d.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.changePct === null ? '—' : fmtPct(d.changePct)}</td>
-                  <td className="py-1.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{fmtPct(d.contribution)}</td>
+                  <SharedTableCell className="py-1.5 text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
+                  <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</SharedTableCell>
+                  <SharedTableCell className={cn('py-1.5 text-right tabular-nums', cmp(d.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</SharedTableCell>
+                  <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.changePct === null ? '—' : fmtPct(d.changePct)}</SharedTableCell>
+                  <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{fmtPct(d.contribution)}</SharedTableCell>
                 </InteractiveTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </>
       )}
     </Panel>

@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -103,10 +104,10 @@ export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: Fi
           </div>
         ) : null}
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400"><th className="px-3 py-2">{t('line')}</th><th className="px-3 py-2">{t('lineDescription')}</th><th className="px-3 py-2 text-right">{t('amount')}</th></tr></thead>
-            <tbody>{filing.boxes.map((box) => <tr key={box.lineCode} className="border-t border-slate-100 dark:border-slate-800"><td className="px-3 py-2 font-mono text-xs">{box.lineCode}</td><td className="px-3 py-2">{box.label}</td><td className="px-3 py-2 text-right tabular-nums">{formatDecimal(locale, box.value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>)}</tbody>
-          </table>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader><SharedTableRow className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400"><SharedTableHead className="px-3 py-2">{t('line')}</SharedTableHead><SharedTableHead className="px-3 py-2">{t('lineDescription')}</SharedTableHead><SharedTableHead className="px-3 py-2 text-right">{t('amount')}</SharedTableHead></SharedTableRow></SharedTableHeader>
+            <SharedTableBody>{filing.boxes.map((box) => <SharedTableRow key={box.lineCode} className="border-t border-slate-100 dark:border-slate-800"><SharedTableCell className="px-3 py-2 font-mono text-xs">{box.lineCode}</SharedTableCell><SharedTableCell className="px-3 py-2">{box.label}</SharedTableCell><SharedTableCell className="px-3 py-2 text-right tabular-nums">{formatDecimal(locale, box.value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</SharedTableCell></SharedTableRow>)}</SharedTableBody>
+          </SharedTable>
         </div>
         <p className="break-all text-xs text-slate-400 dark:text-slate-500">{t('hash', { hash: filing.snapshot_hash })}</p>
       </div>

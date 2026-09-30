@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useState } from 'react'
 import { Network, PieChart, BarChart3 } from 'lucide-react'
 import { cn, EmptyState } from '@openbooks/ui'
@@ -59,32 +60,32 @@ export function SegmentsTab({ data }: { data: HealthData }) {
           <div className="lg:col-span-2">
             <Panel title="Segment Performance" icon={Network} bodyClassName="p-0">
               <div className="max-h-[28rem] overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                    <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                      <th className="w-6 px-2 py-2" />
-                      <th className="px-3 py-2 text-left font-medium">Segment</th>
-                      <th className="px-3 py-2 text-right font-medium">Revenue</th>
-                      <th className="px-3 py-2 text-right font-medium">Share</th>
-                      <th className="px-3 py-2 text-right font-medium">GM %</th>
-                      <th className="px-3 py-2 text-right font-medium">Op %</th>
-                      <th className="px-3 py-2 text-right font-medium">YoY</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <SharedTable className="w-full text-sm">
+                  <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                    <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                      <SharedTableHead className="w-6 px-2 py-2" />
+                      <SharedTableHead className="px-3 py-2 text-left font-medium">Segment</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right font-medium">Revenue</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right font-medium">Share</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right font-medium">GM %</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right font-medium">Op %</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right font-medium">YoY</SharedTableHead>
+                    </SharedTableRow>
+                  </SharedTableHeader>
+                  <SharedTableBody>
                     {rows.map((r) => (
-                      <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                        <td className="px-2 py-2"><span className={cn('inline-block h-2 w-2 rounded-full', HEALTH_DOT[r.health])} /></td>
-                        <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                        <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(r.revenue, { compact: true })}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtPct(r.grossMarginPct)}</td>
-                        <td className={cn('px-3 py-2 text-right tabular-nums', r.operatingMarginPct >= 0 ? 'text-slate-600 dark:text-slate-300' : 'text-red-600 dark:text-red-400')}>{fmtPct(r.operatingMarginPct)}</td>
-                        <td className={cn('px-3 py-2 text-right tabular-nums', (r.yoyPct ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.yoyPct === null ? '—' : fmtPct(r.yoyPct)}</td>
-                      </tr>
+                      <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                        <SharedTableCell className="px-2 py-2"><span className={cn('inline-block h-2 w-2 rounded-full', HEALTH_DOT[r.health])} /></SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(r.revenue, { compact: true })}</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtPct(r.grossMarginPct)}</SharedTableCell>
+                        <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', r.operatingMarginPct >= 0 ? 'text-slate-600 dark:text-slate-300' : 'text-red-600 dark:text-red-400')}>{fmtPct(r.operatingMarginPct)}</SharedTableCell>
+                        <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', (r.yoyPct ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.yoyPct === null ? '—' : fmtPct(r.yoyPct)}</SharedTableCell>
+                      </SharedTableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </SharedTableBody>
+                </SharedTable>
               </div>
             </Panel>
           </div>

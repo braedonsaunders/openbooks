@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -980,28 +981,28 @@ export function PaymentDrawer({
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      {editable ? <th className="w-10 px-3 py-2" aria-label={t('columns.apply')} /> : null}
-                      <th className="px-3 py-2">{t('columns.document')}</th>
-                      <th className="px-3 py-2">{t('columns.due')}</th>
-                      <th className="px-3 py-2 text-right">{t('columns.original')}</th>
-                      <th className="px-3 py-2 text-right">{t('columns.appliedToDate')}</th>
-                      <th className="px-3 py-2 text-right">{t('columns.open')}</th>
-                      <th className="min-w-56 px-3 py-2 text-right">{t('columns.apply')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <SharedTable className="w-full text-sm">
+                  <SharedTableHeader>
+                    <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      {editable ? <SharedTableHead className="w-10 px-3 py-2" aria-label={t('columns.apply')} /> : null}
+                      <SharedTableHead className="px-3 py-2">{t('columns.document')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2">{t('columns.due')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right">{t('columns.original')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right">{t('columns.appliedToDate')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right">{t('columns.open')}</SharedTableHead>
+                      <SharedTableHead className="min-w-56 px-3 py-2 text-right">{t('columns.apply')}</SharedTableHead>
+                    </SharedTableRow>
+                  </SharedTableHeader>
+                  <SharedTableBody>
                     {displayedOpenItems.map((item) => {
                       const checked = allocs[item.lineId] !== undefined
                       const invalid = !rowValid(item)
                       return (
-                        <tr
+                        <SharedTableRow
                           key={item.lineId}
                           className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
                         >
-                          {editable ? <td className="px-3 py-2">
+                          {editable ? <SharedTableCell className="px-3 py-2">
                             <input
                               type="checkbox"
                               className="h-4 w-4 accent-teal-600"
@@ -1009,8 +1010,8 @@ export function PaymentDrawer({
                               onChange={() => toggle(item)}
                               aria-label={t('applyAriaLabel', { document: item.documentNumber ?? item.entryNumber })}
                             />
-                          </td> : null}
-                          <td className="px-3 py-2">
+                          </SharedTableCell> : null}
+                          <SharedTableCell className="px-3 py-2">
                             <span className="font-mono text-[13px] font-semibold">
                               {item.documentNumber ?? item.entryNumber}
                             </span>
@@ -1018,14 +1019,14 @@ export function PaymentDrawer({
                               {kindLabel(item.documentKind)}
                               {item.referenceNumber ? ` · ${item.referenceNumber}` : ''}
                             </span>
-                          </td>
-                          <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{item.dueDate ?? '—'}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{money(item.transactionAmount, { currency: item.currency })}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                          </SharedTableCell>
+                          <SharedTableCell className="px-3 py-2 text-slate-600 dark:text-slate-300">{item.dueDate ?? '—'}</SharedTableCell>
+                          <SharedTableCell className="px-3 py-2 text-right tabular-nums">{money(item.transactionAmount, { currency: item.currency })}</SharedTableCell>
+                          <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
                             {money(item.transactionApplied, { currency: item.currency })}
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium tabular-nums">{money(item.transactionOpen, { currency: item.currency })}</td>
-                          <td className="px-3 py-2">
+                          </SharedTableCell>
+                          <SharedTableCell className="px-3 py-2 text-right font-medium tabular-nums">{money(item.transactionOpen, { currency: item.currency })}</SharedTableCell>
+                          <SharedTableCell className="px-3 py-2">
                             {checked ? (
                               editable ? <div className="space-y-2">
                                 <div>
@@ -1104,12 +1105,12 @@ export function PaymentDrawer({
                                 </div>
                               )
                             ) : null}
-                          </td>
-                        </tr>
+                          </SharedTableCell>
+                        </SharedTableRow>
                       )
                     })}
-                  </tbody>
-                </table>
+                  </SharedTableBody>
+                </SharedTable>
               </div>
             )}
             {editable && hasInvalidRow ? (
@@ -1125,21 +1126,21 @@ export function PaymentDrawer({
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      <th className="px-3 py-2">{t('columns.document')}</th>
-                      <th className="px-3 py-2">{t('columns.due')}</th>
-                      <th className="px-3 py-2">{t('columns.appliedOn')}</th>
-                      <th className="px-3 py-2 text-right">{t('columns.original')}</th>
-                      <th className="px-3 py-2 text-right">{t('columns.applied')}</th>
-                      <th className="px-3 py-2">{t('columns.rateEvidence')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <SharedTable className="w-full text-sm">
+                  <SharedTableHeader>
+                    <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      <SharedTableHead className="px-3 py-2">{t('columns.document')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2">{t('columns.due')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2">{t('columns.appliedOn')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right">{t('columns.original')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right">{t('columns.applied')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2">{t('columns.rateEvidence')}</SharedTableHead>
+                    </SharedTableRow>
+                  </SharedTableHeader>
+                  <SharedTableBody>
                     {applied.map((a) => (
-                      <tr key={a.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
-                        <td className="px-3 py-2">
+                      <SharedTableRow key={a.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
+                        <SharedTableCell className="px-3 py-2">
                           <span className="font-mono text-[13px] font-semibold">
                             {a.target_document_number ?? a.target_entry_number}
                           </span>
@@ -1147,22 +1148,22 @@ export function PaymentDrawer({
                             {kindLabel(a.target_document_kind)}
                             {a.target_reference_number ? ` · ${a.target_reference_number}` : ''}
                           </span>
-                        </td>
-                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{a.target_due_date ?? '—'}</td>
-                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{a.applied_on}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{money(a.target_transaction_original, { currency: a.target_transaction_currency })}</td>
-                        <td className="px-3 py-2 text-right font-medium tabular-nums">
+                        </SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-slate-600 dark:text-slate-300">{a.target_due_date ?? '—'}</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-slate-600 dark:text-slate-300">{a.applied_on}</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-right tabular-nums">{money(a.target_transaction_original, { currency: a.target_transaction_currency })}</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-right font-medium tabular-nums">
                           <div>{money(a.target_transaction_amount, { currency: a.target_transaction_currency })}</div>
                           {a.source_transaction_currency !== a.target_transaction_currency ? <div className="text-xs font-normal text-slate-500">{money(a.source_transaction_amount, { currency: a.source_transaction_currency })}</div> : null}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-slate-500">
+                        </SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-xs text-slate-500">
                           <div className="font-mono">{a.settlement_rate}</div>
                           <div>{a.settlement_rate_reference}</div>
-                        </td>
-                      </tr>
+                        </SharedTableCell>
+                      </SharedTableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </SharedTableBody>
+                </SharedTable>
               </div>
             )}
           </div>

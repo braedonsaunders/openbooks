@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { cn, Drawer, Input } from '@openbooks/ui'
@@ -226,44 +227,44 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
             <GroupedBar labels={data.monthly.map((m) => monthLabel(m.month))} height={260} series={[{ name: 'Amount', data: data.monthly.map((m) => toChartNumber(m.amount)), color: '#0d9488' }]} />
           </div>
         ) : view === 'breakdown' ? (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-6 py-2 text-left font-medium">{data.mode === 'account' ? 'Party' : 'Document Type'}</th>
-                <th className="px-3 py-2 text-right font-medium">Count</th>
-                <th className="px-3 py-2 text-right font-medium">Amount</th>
-                <th className="px-6 py-2 text-right font-medium">Share</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-6 py-2 text-left font-medium">{data.mode === 'account' ? 'Party' : 'Document Type'}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right font-medium">Count</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right font-medium">Amount</SharedTableHead>
+                <SharedTableHead className="px-6 py-2 text-right font-medium">Share</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {data.breakdown.map((b) => (
-                <tr key={b.name} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-6 py-2.5 text-slate-700 dark:text-slate-300">{data.mode === 'party' ? kindLabel(b.name) : b.name}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{b.count}</td>
-                  <td className="px-3 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(b.amount)}</td>
-                  <td className="px-6 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{compareMoney(absoluteMoney(data.total), '0.0000') > 0 ? formatExactPercent(divideMoney(absoluteMoney(b.amount), absoluteMoney(data.total)), 1) : '—'}</td>
-                </tr>
+                <SharedTableRow key={b.name} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-6 py-2.5 text-slate-700 dark:text-slate-300">{data.mode === 'party' ? kindLabel(b.name) : b.name}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{b.count}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(b.amount)}</SharedTableCell>
+                  <SharedTableCell className="px-6 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{compareMoney(absoluteMoney(data.total), '0.0000') > 0 ? formatExactPercent(divideMoney(absoluteMoney(b.amount), absoluteMoney(data.total)), 1) : '—'}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         ) : filtered.length === 0 ? (
           <p className="px-6 py-8 text-center text-sm text-slate-400">{query ? 'No transactions match your search.' : 'No transactions in this period.'}</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-6 py-2 text-left font-medium">Date</th>
-                <th className="px-3 py-2 text-left font-medium">Document</th>
-                <th className="px-3 py-2 text-left font-medium">{data.mode === 'account' ? 'Party' : 'Type'}</th>
-                <th className="px-3 py-2 text-left font-medium">Memo</th>
-                <th className="px-6 py-2 text-right font-medium">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-6 py-2 text-left font-medium">Date</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-left font-medium">Document</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-left font-medium">{data.mode === 'account' ? 'Party' : 'Type'}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-left font-medium">Memo</SharedTableHead>
+                <SharedTableHead className="px-6 py-2 text-right font-medium">Amount</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {pageRows.map((e, i) => (
-                <tr key={`${e.entryId ?? e.docId}-${i}`} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                  <td className="px-6 py-2 text-xs whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.date)}</td>
-                  <td className="px-3 py-2">
+                <SharedTableRow key={`${e.entryId ?? e.docId}-${i}`} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                  <SharedTableCell className="px-6 py-2 text-xs whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.date)}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     {e.entryId || e.docId ? (
                       <TxnLink entryId={e.entryId ?? ''} docKind={e.docKind} docId={e.docId} className="font-medium text-slate-700 group-hover:text-teal-700 dark:text-slate-200 dark:group-hover:text-teal-300">
                         {e.docNumber || kindLabel(e.docKind)}
@@ -271,14 +272,14 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
                     ) : (
                       <span className="text-slate-500 dark:text-slate-400">{e.docNumber || '—'}</span>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{data.mode === 'account' ? e.label : kindLabel(e.docKind)}</td>
-                  <td className="max-w-48 truncate px-3 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.memo}>{e.memo || '—'}</td>
-                  <td className={cn('px-6 py-2 text-right font-medium tabular-nums', compareMoney(e.amount, '0.0000') < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200')}>{money(e.amount)}</td>
-                </tr>
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{data.mode === 'account' ? e.label : kindLabel(e.docKind)}</SharedTableCell>
+                  <SharedTableCell className="max-w-48 truncate px-3 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.memo}>{e.memo || '—'}</SharedTableCell>
+                  <SharedTableCell className={cn('px-6 py-2 text-right font-medium tabular-nums', compareMoney(e.amount, '0.0000') < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200')}>{money(e.amount)}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         )}
       </div>
 

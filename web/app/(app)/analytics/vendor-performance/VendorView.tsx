@@ -1,5 +1,6 @@
 'use client'
 
+import { TableHead as SharedTableHead, Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info, Download } from 'lucide-react'
@@ -53,9 +54,9 @@ function SortHeaderCell<K extends string>({
   onSort: (k: K) => void
 }) {
   return (
-    <th className="px-4 py-2 text-right font-medium">
+    <SharedTableHead className="px-4 py-2 text-right font-medium">
       {k ? <button type="button" onClick={() => onSort(k)} className={cn('hover:text-slate-700 dark:hover:text-slate-300', sort === k && 'text-teal-600 dark:text-teal-400')}>{label}</button> : label}
-    </th>
+    </SharedTableHead>
   )
 }
 
@@ -174,30 +175,30 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
         <div className="lg:col-span-2">
           <Panel title={t('panels.paymentBehaviour')} icon={ClipboardList} bodyClassName="p-0">
             <div className="max-h-[30rem] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
                     <SortHeaderCell label={t('table.spend')} k="spend" sort={sort} onSort={setSort} />
                     <SortHeaderCell label={t('table.paid')} sort={sort} onSort={setSort} />
                     <SortHeaderCell label={t('table.avgDays')} k="avgDaysToPay" sort={sort} onSort={setSort} />
                     <SortHeaderCell label={t('table.onTime')} k="onTimePct" sort={sort} onSort={setSort} />
                     <SortHeaderCell label={t('table.lateSpend')} k="lateSpend" sort={sort} onSort={setSort} />
-                  </tr>
-                </thead>
-                <tbody>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {rows.map((r) => (
                     <InteractiveTableRow key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-                      <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.paidBills}</td>
-                      <td className={cn('px-4 py-2 text-right tabular-nums', (r.avgDaysToPay ?? 0) > 45 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300')}>{r.avgDaysToPay === null ? '—' : t('days', { days: Math.round(r.avgDaysToPay) })}</td>
-                      <td className={cn('px-4 py-2 text-right font-medium tabular-nums', (r.onTimePct ?? 0) >= 0.6 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.lateSpend > 0 ? money(r.lateSpend) : '—'}</td>
+                      <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.paidBills}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.avgDaysToPay ?? 0) > 45 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300')}>{r.avgDaysToPay === null ? '—' : t('days', { days: Math.round(r.avgDaysToPay) })}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', (r.onTimePct ?? 0) >= 0.6 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.lateSpend > 0 ? money(r.lateSpend) : '—'}</SharedTableCell>
                     </InteractiveTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
           </Panel>
         </div>
@@ -228,34 +229,34 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
       </div>
       <Panel title={t('panels.scorecard')} icon={Star} hint={t('panels.scorecardHint')} bodyClassName="p-0">
         <div className="max-h-[32rem] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.spend')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.tier')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.bills')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.yoy')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.onTime')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.score')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.grade')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.tier')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.bills')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.yoy')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.onTime')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.score')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.grade')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {rows.map((r) => (
                 <InteractiveTableRow key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</td>
-                  <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.bills}</td>
-                  <td className={cn('px-4 py-2 text-right tabular-nums', (r.yoyPct ?? 0) <= 0 ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400')}>{r.yoyPct === null ? '—' : fmtPct(r.yoyPct)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</td>
-                  <td className="px-4 py-2 text-right font-bold tabular-nums text-slate-800 dark:text-slate-200">{Math.round(r.score)}</td>
-                  <td className="px-4 py-2 text-center"><span className={cn('rounded px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.grade])}>{r.grade}</span></td>
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.spend)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.bills}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (r.yoyPct ?? 0) <= 0 ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400')}>{r.yoyPct === null ? '—' : fmtPct(r.yoyPct)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right font-bold tabular-nums text-slate-800 dark:text-slate-200">{Math.round(r.score)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.grade])}>{r.grade}</span></SharedTableCell>
                 </InteractiveTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       </Panel>
     </div>
@@ -344,34 +345,34 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
       }
     >
       <div className="max-h-[32rem] overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-white dark:bg-slate-900">
-            <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+            <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
               <SortHeaderCell label={t('table.spend')} k="spend" sort={sort} onSort={setSort} />
               <SortHeaderCell label={t('table.share')} sort={sort} onSort={setSort} />
               <SortHeaderCell label={t('table.bills')} k="bills" sort={sort} onSort={setSort} />
               <SortHeaderCell label={t('kpi.avgBill')} k="avgBill" sort={sort} onSort={setSort} />
               <SortHeaderCell label={t('table.onTime')} sort={sort} onSort={setSort} />
               <SortHeaderCell label={t('table.score')} k="score" sort={sort} onSort={setSort} />
-              <th className="px-4 py-2 text-center font-medium">{t('table.tier')}</th>
-            </tr>
-          </thead>
-          <tbody>
+              <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.tier')}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {rows.map((r) => (
               <InteractiveTableRow key={r.id} onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-                <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.spend)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.bills}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.avgBill)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</td>
-                <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-700 dark:text-slate-300">{Math.round(r.score)}</td>
-                <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></td>
+                <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.spend)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(r.sharePct)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.bills}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.avgBill)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.onTimePct === null ? '—' : fmtPct(r.onTimePct)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-700 dark:text-slate-300">{Math.round(r.score)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
               </InteractiveTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </div>
     </Panel>
   )

@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { ListOrdered } from 'lucide-react'
@@ -61,43 +62,43 @@ export function CashTimeline({
           <span>{t.rich('timeline.spillBanner', { amount: money(deferredBeyondHorizon), strong: (chunks: ReactNode) => <span className="font-semibold">{chunks}</span> })}</span>
         </p>
       ) : null}
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-          <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">{t('cols.week')}</th>
-            <th className="px-3 py-2 text-right font-medium">{t('cols.in')}</th>
-            <th className="px-3 py-2 text-right font-medium">{t('cols.out')}</th>
-            {hasCats ? <th className="px-3 py-2 text-right font-medium">{t('timeline.otherIn')}</th> : null}
-            {hasCats ? <th className="px-3 py-2 text-right font-medium">{t('timeline.otherOut')}</th> : null}
-            {scheduling ? <th className="px-3 py-2 text-right font-medium">{t('timeline.deferred')}</th> : null}
-            <th className="px-3 py-2 text-right font-medium">{t('cols.net')}</th>
-            <th className="px-4 py-2 text-right font-medium">{t('cols.ending')}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <SharedTable className="w-full text-sm">
+        <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+          <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+            <SharedTableHead className="px-4 py-2 text-left font-medium">{t('cols.week')}</SharedTableHead>
+            <SharedTableHead className="px-3 py-2 text-right font-medium">{t('cols.in')}</SharedTableHead>
+            <SharedTableHead className="px-3 py-2 text-right font-medium">{t('cols.out')}</SharedTableHead>
+            {hasCats ? <SharedTableHead className="px-3 py-2 text-right font-medium">{t('timeline.otherIn')}</SharedTableHead> : null}
+            {hasCats ? <SharedTableHead className="px-3 py-2 text-right font-medium">{t('timeline.otherOut')}</SharedTableHead> : null}
+            {scheduling ? <SharedTableHead className="px-3 py-2 text-right font-medium">{t('timeline.deferred')}</SharedTableHead> : null}
+            <SharedTableHead className="px-3 py-2 text-right font-medium">{t('cols.net')}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cols.ending')}</SharedTableHead>
+          </SharedTableRow>
+        </SharedTableHeader>
+        <SharedTableBody>
           {weeks.map((w) => (
             <InteractiveTableRow
               key={w.weekStart}
               onClick={() => open(w)}
               className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate
             >
-              <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
+              <SharedTableCell className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                 {w.label}
                 <span className="ml-2 text-[11px] font-normal text-slate-400 dark:text-slate-500">
                   {w.arCount + w.apCount > 0 ? t('timeline.txns', { count: w.arCount + w.apCount }) : ''}
                 </span>
-              </td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{compareMoney(w.inflow, '0.0000') > 0 ? money(w.inflow) : '—'}</td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{compareMoney(w.outflow, '0.0000') > 0 ? money(w.outflow) : '—'}</td>
-              {hasCats ? <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600/80 dark:text-emerald-400/80">{compareMoney(w.dynamicInflow, '0.0000') > 0 ? money(w.dynamicInflow) : '—'}</td> : null}
-              {hasCats ? <td className="px-3 py-2.5 text-right tabular-nums text-red-600/80 dark:text-red-400/80">{compareMoney(w.dynamicOutflow, '0.0000') > 0 ? money(w.dynamicOutflow) : '—'}</td> : null}
-              {scheduling ? <td className="px-3 py-2.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{compareMoney(w.deferredOut, '0.0000') > 0 ? money(w.deferredOut) : '—'}</td> : null}
-              <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', compareMoney(w.net, '0.0000') >= 0 ? 'text-slate-800 dark:text-slate-200' : 'text-red-600 dark:text-red-400')}>{money(w.net)}</td>
-              <td className={cn('px-4 py-2.5 text-right font-bold tabular-nums', compareMoney(w.endingCash, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(w.endingCash)}</td>
+              </SharedTableCell>
+              <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{compareMoney(w.inflow, '0.0000') > 0 ? money(w.inflow) : '—'}</SharedTableCell>
+              <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{compareMoney(w.outflow, '0.0000') > 0 ? money(w.outflow) : '—'}</SharedTableCell>
+              {hasCats ? <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-emerald-600/80 dark:text-emerald-400/80">{compareMoney(w.dynamicInflow, '0.0000') > 0 ? money(w.dynamicInflow) : '—'}</SharedTableCell> : null}
+              {hasCats ? <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-red-600/80 dark:text-red-400/80">{compareMoney(w.dynamicOutflow, '0.0000') > 0 ? money(w.dynamicOutflow) : '—'}</SharedTableCell> : null}
+              {scheduling ? <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{compareMoney(w.deferredOut, '0.0000') > 0 ? money(w.deferredOut) : '—'}</SharedTableCell> : null}
+              <SharedTableCell className={cn('px-3 py-2.5 text-right font-medium tabular-nums', compareMoney(w.net, '0.0000') >= 0 ? 'text-slate-800 dark:text-slate-200' : 'text-red-600 dark:text-red-400')}>{money(w.net)}</SharedTableCell>
+              <SharedTableCell className={cn('px-4 py-2.5 text-right font-bold tabular-nums', compareMoney(w.endingCash, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(w.endingCash)}</SharedTableCell>
             </InteractiveTableRow>
           ))}
-        </tbody>
-      </table>
+        </SharedTableBody>
+      </SharedTable>
 
       {flyout ? <CashWeekFlyout week={flyout.week} initialSide={flyout.side} categories={categories} weekIndex={weeks.indexOf(flyout.week)} horizonWeeks={horizonWeeks} selectedSubsidiaryIds={selectedSubsidiaryIds} canPayRun={canPayRun} canCollectionRun={canCollectionRun} onClose={() => setFlyout(null)} /> : null}
     </>

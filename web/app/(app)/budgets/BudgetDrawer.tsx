@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell, TableFooter as SharedTableFooter } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -664,27 +665,27 @@ export function BudgetDrawer({
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto border-y border-slate-200 dark:border-slate-800">
-            <table className={viewMode === 'monthly' ? 'w-full min-w-[1050px] border-collapse text-sm' : 'w-full min-w-[520px] border-collapse text-sm'}>
-              <thead className="bg-slate-50 dark:bg-slate-950/50"><tr>
-                <th className="sticky left-0 z-10 min-w-60 border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-medium dark:border-slate-800 dark:bg-slate-950">{t('workspace.account')}</th>
-                {viewMode === 'monthly' ? initial.periods.map((period) => <th key={period.id} className="min-w-28 px-2 py-2 text-right font-medium">{period.name}</th>) : null}
-                <th className="min-w-32 border-l border-slate-200 px-2 py-2 text-right font-medium dark:border-slate-800">{t('workspace.annualTotal')}</th>
-              </tr></thead>
-              <tbody>{initial.accounts.length ? initial.accounts.map((account) => {
+            <SharedTable className={viewMode === 'monthly' ? 'w-full min-w-[1050px] border-collapse text-sm' : 'w-full min-w-[520px] border-collapse text-sm'}>
+              <SharedTableHeader className="bg-slate-50 dark:bg-slate-950/50"><SharedTableRow>
+                <SharedTableHead className="sticky left-0 z-10 min-w-60 border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-medium dark:border-slate-800 dark:bg-slate-950">{t('workspace.account')}</SharedTableHead>
+                {viewMode === 'monthly' ? initial.periods.map((period) => <SharedTableHead key={period.id} className="min-w-28 px-2 py-2 text-right font-medium">{period.name}</SharedTableHead>) : null}
+                <SharedTableHead className="min-w-32 border-l border-slate-200 px-2 py-2 text-right font-medium dark:border-slate-800">{t('workspace.annualTotal')}</SharedTableHead>
+              </SharedTableRow></SharedTableHeader>
+              <SharedTableBody>{initial.accounts.length ? initial.accounts.map((account) => {
                 const annual = initial.periods.reduce((sum, period) => {
                   try { return sum + budgetToUnits(values[cellKey(account.id, period.id, sliceSubsidiaryId)] ?? '0') } catch { return sum }
                 }, 0n)
-                return <tr key={account.id} className="border-t border-slate-100 dark:border-slate-800/70">
-                  <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900"><span className="font-mono text-xs text-slate-500">{account.number}</span><span className="ml-2 font-medium">{account.name}</span></td>
+                return <SharedTableRow key={account.id} className="border-t border-slate-100 dark:border-slate-800/70">
+                  <SharedTableCell className="sticky left-0 z-10 border-r border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900"><span className="font-mono text-xs text-slate-500">{account.number}</span><span className="ml-2 font-medium">{account.name}</span></SharedTableCell>
                   {viewMode === 'monthly' ? initial.periods.map((period) => {
                     const key = cellKey(account.id, period.id, sliceSubsidiaryId)
-                    return <td key={period.id} className="px-2 py-1.5 text-right tabular-nums" onContextMenu={(event) => openCellMenu(event, account.id, period.id)}>{editable ? <Input className="h-8 min-w-24 text-right tabular-nums" inputMode="decimal" value={values[key] ?? ''} onChange={(event) => queueCell({ accountId: account.id, periodId: period.id, amount: event.target.value })} onBlur={() => void flushCells()} aria-label={`${account.name} ${period.name}`} /> : money(values[key] ?? '0')}</td>
+                    return <SharedTableCell key={period.id} className="px-2 py-1.5 text-right tabular-nums" onContextMenu={(event) => openCellMenu(event, account.id, period.id)}>{editable ? <Input className="h-8 min-w-24 text-right tabular-nums" inputMode="decimal" value={values[key] ?? ''} onChange={(event) => queueCell({ accountId: account.id, periodId: period.id, amount: event.target.value })} onBlur={() => void flushCells()} aria-label={`${account.name} ${period.name}`} /> : money(values[key] ?? '0')}</SharedTableCell>
                   }) : null}
-                  <td className="border-l border-slate-200 px-2 py-1.5 text-right font-medium tabular-nums dark:border-slate-800" onContextMenu={(event) => openCellMenu(event, account.id)}>{editable ? <div className="flex items-center justify-end gap-1"><Input className="h-8 min-w-28 text-right font-medium tabular-nums" inputMode="decimal" value={annualDrafts[account.id] ?? budgetFromUnits(annual)} onChange={(event) => { setAnnualDrafts((current) => ({ ...current, [account.id]: event.target.value })); setSaveState('dirty') }} onBlur={(event) => commitAnnual(account.id, event.target.value)} aria-label={`${account.name} ${t('workspace.annualTotal')}`} /><Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={t('workspace.rowActions', { account: account.name })} onClick={(event) => openRowMenu(event.currentTarget, account.id)}><MoreHorizontal size={15} /></Button></div> : money(budgetFromUnits(annual))}</td>
-                </tr>
-              }) : <tr><td colSpan={viewMode === 'monthly' ? initial.periods.length + 2 : 2} className="px-4 py-10 text-center text-slate-500">{t('workspace.emptyAccounts')}</td></tr>}</tbody>
-              <tfoot><tr className="border-t border-slate-200 bg-slate-50 font-semibold dark:border-slate-800 dark:bg-slate-950/50"><td className="sticky left-0 border-r border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">{t('workspace.sliceTotal')}</td><td colSpan={viewMode === 'monthly' ? initial.periods.length + 1 : 1} className="px-3 py-2 text-right tabular-nums">{money(budgetFromUnits(pageTotalUnits))}</td></tr></tfoot>
-            </table>
+                  <SharedTableCell className="border-l border-slate-200 px-2 py-1.5 text-right font-medium tabular-nums dark:border-slate-800" onContextMenu={(event) => openCellMenu(event, account.id)}>{editable ? <div className="flex items-center justify-end gap-1"><Input className="h-8 min-w-28 text-right font-medium tabular-nums" inputMode="decimal" value={annualDrafts[account.id] ?? budgetFromUnits(annual)} onChange={(event) => { setAnnualDrafts((current) => ({ ...current, [account.id]: event.target.value })); setSaveState('dirty') }} onBlur={(event) => commitAnnual(account.id, event.target.value)} aria-label={`${account.name} ${t('workspace.annualTotal')}`} /><Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={t('workspace.rowActions', { account: account.name })} onClick={(event) => openRowMenu(event.currentTarget, account.id)}><MoreHorizontal size={15} /></Button></div> : money(budgetFromUnits(annual))}</SharedTableCell>
+                </SharedTableRow>
+              }) : <SharedTableRow><SharedTableCell colSpan={viewMode === 'monthly' ? initial.periods.length + 2 : 2} className="px-4 py-10 text-center text-slate-500">{t('workspace.emptyAccounts')}</SharedTableCell></SharedTableRow>}</SharedTableBody>
+              <SharedTableFooter><SharedTableRow className="border-t border-slate-200 bg-slate-50 font-semibold dark:border-slate-800 dark:bg-slate-950/50"><SharedTableCell className="sticky left-0 border-r border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">{t('workspace.sliceTotal')}</SharedTableCell><SharedTableCell colSpan={viewMode === 'monthly' ? initial.periods.length + 1 : 1} className="px-3 py-2 text-right tabular-nums">{money(budgetFromUnits(pageTotalUnits))}</SharedTableCell></SharedTableRow></SharedTableFooter>
+            </SharedTable>
           </div>
           <Pagination basePath={pathname} currentParams={currentParams} total={initial.totalAccounts} page={initial.page} perPage={initial.perPage} pageParamKey="budgetPage" />
         </CardContent>

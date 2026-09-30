@@ -1,4 +1,5 @@
 'use client'
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { toChartNumber } from '../analytics/_ui/format'
 
 import { useState } from 'react'
@@ -207,32 +208,32 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
               className={paneCard}
               bodyClassName="min-h-0 overflow-y-auto p-0"
             >
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.employee')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.spend')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.reports')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.change')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.employee')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.reports')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.change')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {data.topSpenders.map((sp) => (
                     <InteractiveTableRow
                       key={sp.employeeId}
                       onClick={() => setDrill({ kind: 'party', id: sp.employeeId, name: sp.employeeName })}
                       className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)} noAnimate
                     >
-                      <td className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={sp.employeeName}>{sp.employeeName}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(sp.totalSpend)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-400">{sp.reportCount}</td>
-                      <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', sp.changePct > 20 ? 'text-rose-600 dark:text-rose-400' : sp.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>
+                      <SharedTableCell className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={sp.employeeName}>{sp.employeeName}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(sp.totalSpend)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{sp.reportCount}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', sp.changePct > 20 ? 'text-rose-600 dark:text-rose-400' : sp.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>
                         {sp.changePct > 0 ? '+' : ''}{pct1(sp.changePct)}
-                      </td>
+                      </SharedTableCell>
                     </InteractiveTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </Panel>
 
             <Panel
@@ -242,32 +243,32 @@ export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
               className={paneCard}
               bodyClassName="min-h-0 overflow-y-auto p-0"
             >
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.category')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.current')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.prior')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.change')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.category')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.current')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.prior')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.change')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {data.categories.map((c) => (
                     <InteractiveTableRow
                       key={c.categoryId}
                       onClick={() => setDrill({ kind: 'account', id: c.categoryId, name: c.categoryName })}
                       className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', drillRow)} noAnimate
                     >
-                      <td className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={c.categoryName}>{c.categoryName}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(c.currentAmount)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(c.priorAmount)}</td>
-                      <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', c.changePct > 10 ? 'text-rose-600 dark:text-rose-400' : c.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>
+                      <SharedTableCell className="max-w-40 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={c.categoryName}>{c.categoryName}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(c.currentAmount)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(c.priorAmount)}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', c.changePct > 10 ? 'text-rose-600 dark:text-rose-400' : c.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500')}>
                         {c.changePct > 0 ? '+' : ''}{pct1(c.changePct)}
-                      </td>
+                      </SharedTableCell>
                     </InteractiveTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </Panel>
           </div>
         )}

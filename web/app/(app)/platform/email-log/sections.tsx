@@ -1,10 +1,8 @@
-import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { ServerPagedTable } from '../../../../components/server-paged-table'
+import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { Pagination } from '../../../../components/pagination'
-import { PerPageSelect } from '../../../../components/per-page-select'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
-import { SortTh } from '../../../../components/sortable-th'
 import { asDate } from '../../../../lib/platform-console'
 import type { PlatformEmail } from '../../../../lib/platform-admin'
 import { ViewerDateTime } from '../../../../components/viewer-format'
@@ -86,96 +84,24 @@ export function EmailLogList({
 }) {
   const filtered = currentParams.q !== undefined || status !== undefined
   return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            title="Email log"
-            description="Delivery evidence across every organization."
-            back={{ href: '/platform', label: 'Back to platform' }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search subject, recipient, or organization…" />
-            <FilterChips
-              basePath={basePath}
-              currentParams={currentParams}
-              paramKey="status"
-              label="Status"
-              options={STATUSES.map((value) => ({
-                value,
-                label: value === 'queued'
-                  ? 'Queued'
-                  : value === 'sent'
-                    ? 'Sent'
-                    : value === 'failed'
-                      ? 'Failed'
-                      : value === 'suppressed'
-                        ? 'Suppressed'
-                        : 'Uncertain',
-                count: Number(statusCounts[value] ?? 0),
-              }))}
-            />
-            <PerPageSelect basePath={basePath} currentParams={currentParams} perPage={perPage} />
-          </div>
-        </>
-      }
-    >
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortTh basePath={basePath} currentParams={currentParams} column="subject" sort={sort} dir={dir}>
-                  Subject
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="organization" sort={sort} dir={dir}>
-                  Organization
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="recipient" sort={sort} dir={dir}>
-                  Recipient
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="status" sort={sort} dir={dir}>
-                  Status
-                </SortTh>
-                <TableHead>Delivery</TableHead>
-                <SortTh basePath={basePath} currentParams={currentParams} column="created" sort={sort} dir={dir}>
-                  Logged
-                </SortTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">
-                    {filtered ? 'No deliveries match these filters.' : 'No deliveries logged yet.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <EmailSubjectCell subject={row.subject} category={row.categoryKey ?? ''} />
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">{row.orgName}</TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {row.recipientPrimary ?? row.recipients[0] ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{row.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <EmailEvidenceCell summary={row.provider ?? 'unknown provider'} error={row.errorMessage ?? ''} />
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                      <ViewerDateTime value={asDate(row.createdAt) ?? new Date()} />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
+    <ListPageLayout header={<PageHeader title="Email log" description="Delivery evidence across every organization." back={{ href: '/platform', label: 'Back to platform' }} />}>
+      <div className="space-y-5">
+
+        <ServerPagedTable
+          rows={rows} rowKey={(row) => row.id}
+          total={total} page={page} perPage={perPage}
+          basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
+          empty={filtered ? 'No deliveries match these filters.' : 'No deliveries logged yet.'}
+          toolbar={<><SearchInput placeholder="Search subject, recipient, or organization…" /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label="Status" options={STATUSES.map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1), count: Number(statusCounts[value] ?? 0) }))} /></>}
+          columns={[
+          { key: 'subject', header: 'Subject', sortKey: 'subject', cell: (row) => <EmailSubjectCell subject={row.subject} category={row.categoryKey ?? ''} /> },
+          { key: 'organization', header: 'Organization', sortKey: 'organization', cell: (row) => row.orgName },
+          { key: 'recipient', header: 'Recipient', sortKey: 'recipient', cell: (row) => row.recipientPrimary ?? row.recipients[0] ?? '—' },
+          { key: 'status', header: 'Status', sortKey: 'status', cell: (row) => <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{row.status}</Badge> },
+          { key: 'delivery', header: 'Delivery', cell: (row) => <EmailEvidenceCell summary={row.provider ?? 'unknown provider'} error={row.errorMessage ?? ''} /> },
+          { key: 'created', header: 'Logged', sortKey: 'created', cell: (row) => asDate(row.createdAt) ? <ViewerDateTime value={asDate(row.createdAt)!} /> : '—' },
+        ]}
+        />
       </div>
     </ListPageLayout>
   )

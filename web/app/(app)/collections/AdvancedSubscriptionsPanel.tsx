@@ -1,5 +1,6 @@
 "use client";
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Alert, AlertDescription, Badge, Button, Card, Input, Label, Select, Skeleton } from "@openbooks/ui";
@@ -99,13 +100,13 @@ export function AdvancedSubscriptionsPanel() {
           <Badge variant="secondary">{t("publishedCount", { count: versions.filter((v) => v.status === "published").length })}</Badge>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground"><tr><th className="py-1">{t("colVersion")}</th><th>{t("colEffective")}</th><th>{t("colTiming")}</th><th>{t("colComponents")}</th><th></th></tr></thead>
-            <tbody>
-              {versions.map((version) => <tr key={version.id} className="border-t align-top"><td className="py-2"><span className="font-medium">{version.name}</span> <Badge variant={version.status === "published" ? "default" : "secondary"}>v{version.versionNumber} {version.status}</Badge></td><td>{version.effectiveFrom}</td><td>{timingLabel(version.billingTiming)}</td><td>{version.components.map((c) => c.name).join(", ")}</td><td className="text-right">{version.status === "draft" && <Button size="sm" variant="ghost" disabled={busy} onClick={async () => { if (await post({ action: "publishVersion", versionId: version.id })) setMessage(t("publishedMessage", { name: version.name, version: version.versionNumber })); }}>{t("publish")}</Button>}</td></tr>)}
-              {!versions.length && <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">{t("noVersions")}</td></tr>}
-            </tbody>
-          </table>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("colVersion")}</SharedTableHead><SharedTableHead>{t("colEffective")}</SharedTableHead><SharedTableHead>{t("colTiming")}</SharedTableHead><SharedTableHead>{t("colComponents")}</SharedTableHead><SharedTableHead></SharedTableHead></SharedTableRow></SharedTableHeader>
+            <SharedTableBody>
+              {versions.map((version) => <SharedTableRow key={version.id} className="border-t align-top"><SharedTableCell className="py-2"><span className="font-medium">{version.name}</span> <Badge variant={version.status === "published" ? "default" : "secondary"}>v{version.versionNumber} {version.status}</Badge></SharedTableCell><SharedTableCell>{version.effectiveFrom}</SharedTableCell><SharedTableCell>{timingLabel(version.billingTiming)}</SharedTableCell><SharedTableCell>{version.components.map((c) => c.name).join(", ")}</SharedTableCell><SharedTableCell className="text-right">{version.status === "draft" && <Button size="sm" variant="ghost" disabled={busy} onClick={async () => { if (await post({ action: "publishVersion", versionId: version.id })) setMessage(t("publishedMessage", { name: version.name, version: version.versionNumber })); }}>{t("publish")}</Button>}</SharedTableCell></SharedTableRow>)}
+              {!versions.length && <SharedTableRow><SharedTableCell colSpan={5} className="py-4 text-center text-muted-foreground">{t("noVersions")}</SharedTableCell></SharedTableRow>}
+            </SharedTableBody>
+          </SharedTable>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <Field label={t("basePlan")}><Select value={versionForm.planId} onChange={(e) => setVersionForm({ ...versionForm, planId: e.target.value })}><option value="">{t("choosePlan")}</option>{plans.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
@@ -148,7 +149,7 @@ export function AdvancedSubscriptionsPanel() {
           {amendForm.type === "coterm" && <Field label={t("anchorSubscription")}><Select value={amendForm.anchorSubscriptionId} onChange={(e) => setAmendForm({ ...amendForm, anchorSubscriptionId: e.target.value })}><option value="">{t("choose")}</option>{subscriptions.filter((s) => s.id !== amendForm.subscriptionId && lifecycleIds.has(s.id) && (!amendmentSubscription || s.customerName === amendmentSubscription.customerName)).map((s) => <option key={s.id} value={s.id}>{s.planName}</option>)}</Select></Field>}
         </div>
         <Button className="mt-3" size="sm" disabled={busy || !amendForm.subscriptionId} onClick={async () => { const result = await post({ action: "amend", ...amendForm, idempotencyKey: crypto.randomUUID(), renewalTermMonths: Number(amendForm.renewalTermMonths || 12) }); if (result) { setMessage(t("amendmentApplied")); } }}>{t("applyAmendment")}</Button>
-        <div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-muted-foreground"><tr><th className="py-1">{t("colNumber")}</th><th>{t("colSubscription")}</th><th>{t("colChange")}</th><th>{t("colEffective")}</th><th>{t("colReason")}</th></tr></thead><tbody>{amendments.map((a) => <tr key={a.id} className="border-t"><td className="py-2">{a.amendmentNumber}</td><td>{subscriptions.find((s) => s.id === a.subscriptionId)?.planName ?? t("subscriptionFallback")}</td><td>{changeTypeLabel(a.amendmentType)}</td><td>{a.effectiveOn}</td><td>{a.reason ?? "—"}</td></tr>)}{!amendments.length && <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">{t("noAmendments")}</td></tr>}</tbody></table></div>
+        <div className="mt-4 overflow-x-auto"><SharedTable className="w-full text-sm"><SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("colNumber")}</SharedTableHead><SharedTableHead>{t("colSubscription")}</SharedTableHead><SharedTableHead>{t("colChange")}</SharedTableHead><SharedTableHead>{t("colEffective")}</SharedTableHead><SharedTableHead>{t("colReason")}</SharedTableHead></SharedTableRow></SharedTableHeader><SharedTableBody>{amendments.map((a) => <SharedTableRow key={a.id} className="border-t"><SharedTableCell className="py-2">{a.amendmentNumber}</SharedTableCell><SharedTableCell>{subscriptions.find((s) => s.id === a.subscriptionId)?.planName ?? t("subscriptionFallback")}</SharedTableCell><SharedTableCell>{changeTypeLabel(a.amendmentType)}</SharedTableCell><SharedTableCell>{a.effectiveOn}</SharedTableCell><SharedTableCell>{a.reason ?? "—"}</SharedTableCell></SharedTableRow>)}{!amendments.length && <SharedTableRow><SharedTableCell colSpan={5} className="py-4 text-center text-muted-foreground">{t("noAmendments")}</SharedTableCell></SharedTableRow>}</SharedTableBody></SharedTable></div>
       </Card>
     </div>
   );

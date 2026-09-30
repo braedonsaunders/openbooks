@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -562,18 +563,18 @@ export function ImportWizard() {
             </div>
           )}
           <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">{t('import.sourceColumn')}</th>
-                  <th className="px-3 py-2">{t('import.targetField')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+                <SharedTableRow>
+                  <SharedTableHead className="px-3 py-2">{t('import.sourceColumn')}</SharedTableHead>
+                  <SharedTableHead className="px-3 py-2">{t('import.targetField')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {headers.map((h) => (
-                  <tr key={h} className="border-t border-border">
-                    <td className="px-3 py-2 font-mono text-xs">{h}</td>
-                    <td className="px-3 py-2">
+                  <SharedTableRow key={h} className="border-t border-border">
+                    <SharedTableCell className="px-3 py-2 font-mono text-xs">{h}</SharedTableCell>
+                    <SharedTableCell className="px-3 py-2">
                       <Select
                         value={mapping[h] ?? ''}
                         onChange={(e) => { invalidateInputs(); setMapping((prev) => ({ ...prev, [h]: e.target.value })) }}
@@ -587,11 +588,11 @@ export function ImportWizard() {
                           </option>
                         ))}
                       </Select>
-                    </td>
-                  </tr>
+                    </SharedTableCell>
+                  </SharedTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </div>
         </div>
       )}
@@ -676,29 +677,29 @@ function ErrorTable({
   return (
     <div className={`overflow-hidden rounded-lg border ${frame}`}>
       {title && <div className={`px-3 py-2 text-xs font-semibold uppercase ${head}`}>{title}</div>}
-      <table className="w-full text-sm">
-        <thead className={`text-left text-xs uppercase ${head}`}>
-          <tr>
-            <th className="w-16 px-3 py-2">{t('import.row')}</th>
-            <th className="px-3 py-2">{t('import.message')}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <SharedTable className="w-full text-sm">
+        <SharedTableHeader className={`text-left text-xs uppercase ${head}`}>
+          <SharedTableRow>
+            <SharedTableHead className="w-16 px-3 py-2">{t('import.row')}</SharedTableHead>
+            <SharedTableHead className="px-3 py-2">{t('import.message')}</SharedTableHead>
+          </SharedTableRow>
+        </SharedTableHeader>
+        <SharedTableBody>
           {errors.map((e, i) => (
-            <tr key={i} className={`border-t ${rowLine}`}>
-              <td className="px-3 py-2 tabular-nums">{e.row}</td>
-              <td className="px-3 py-2">
+            <SharedTableRow key={i} className={`border-t ${rowLine}`}>
+              <SharedTableCell className="px-3 py-2 tabular-nums">{e.row}</SharedTableCell>
+              <SharedTableCell className="px-3 py-2">
                 {e.field && (
                   <Badge variant="outline" className="mr-2">
                     {e.field}
                   </Badge>
                 )}
                 {e.message}
-              </td>
-            </tr>
+              </SharedTableCell>
+            </SharedTableRow>
           ))}
-        </tbody>
-      </table>
+        </SharedTableBody>
+      </SharedTable>
     </div>
   )
 }

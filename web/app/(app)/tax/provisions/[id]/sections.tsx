@@ -1,5 +1,6 @@
 "use client"
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { Badge } from "@openbooks/ui"
 
 // Single implementation shared by the page and the widget registry: the native page imports
@@ -20,18 +21,7 @@ export interface ProvisionSummary {
   value: string
 }
 
-/**
- * Rate reconciliation — the ASC 740 headline disclosure.
- *
- * A widget, not a `table` block: the native markup is a bare hand-rolled
- * `<table>` (no card, no hover, no dividers, nonstandard header cells with
- * no padding class) with muted-colour percent cells and a top-bordered bold
- * total row. The ViewSpec table block offers only the two real table
- * variants the app has, so this one stays a component and the spec places
- * it inside its own section (the admin-users precedent).
- *
- * Money and percents arrive loader-formatted — never format here.
- */
+/** Native record cells and actions compose the shared table primitives. */
 export function ProvisionReconSection({
   title,
   pretaxLabel,
@@ -54,34 +44,34 @@ export function ProvisionReconSection({
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
       <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h2>
-      <table className="mt-3 w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-            <th className="py-1" />
-            <th className="py-1 text-right">{amountLabel}</th>
-            <th className="py-1 text-right">{percentLabel}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="text-slate-500 dark:text-slate-400">
-            <td className="py-1.5">{pretaxLabel}</td>
-            <td className="py-1.5 text-right tabular-nums">{pretaxAmount}</td>
-            <td className="py-1.5 text-right tabular-nums text-slate-400">{enactedRateText}</td>
-          </tr>
+      <SharedTable className="mt-3 w-full text-sm">
+        <SharedTableHeader>
+          <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
+            <SharedTableHead className="py-1" />
+            <SharedTableHead className="py-1 text-right">{amountLabel}</SharedTableHead>
+            <SharedTableHead className="py-1 text-right">{percentLabel}</SharedTableHead>
+          </SharedTableRow>
+        </SharedTableHeader>
+        <SharedTableBody>
+          <SharedTableRow className="text-slate-500 dark:text-slate-400">
+            <SharedTableCell className="py-1.5">{pretaxLabel}</SharedTableCell>
+            <SharedTableCell className="py-1.5 text-right tabular-nums">{pretaxAmount}</SharedTableCell>
+            <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400">{enactedRateText}</SharedTableCell>
+          </SharedTableRow>
           {steps.map((step) => (
-            <tr
+            <SharedTableRow
               key={step.key}
               className={step.isTotal ? 'border-t border-slate-200 font-semibold dark:border-slate-700' : ''}
             >
-              <td className="py-1.5">{step.isTotal ? step.totalLabel : step.label}</td>
-              <td className="py-1.5 text-right tabular-nums">{step.amount}</td>
-              <td className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
+              <SharedTableCell className="py-1.5">{step.isTotal ? step.totalLabel : step.label}</SharedTableCell>
+              <SharedTableCell className="py-1.5 text-right tabular-nums">{step.amount}</SharedTableCell>
+              <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
                 {step.percent != null ? `${step.percent}%` : '—'}
-              </td>
-            </tr>
+              </SharedTableCell>
+            </SharedTableRow>
           ))}
-        </tbody>
-      </table>
+        </SharedTableBody>
+      </SharedTable>
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
         {summaries.map((s) => (
           <ProvisionSummaryPair key={s.label} label={s.label} value={s.value} />
@@ -110,12 +100,7 @@ export interface ProvisionDifference {
   taxEffect: string
 }
 
-/**
- * Measured temporary differences — same doctrine as the recon section: the
- * hand-rolled `<table>` is not one of the two real table variants, and the
- * conditional pair (rows vs the italic empty note) cannot cross a spec `when`
- * when the difference COLUMN headers must survive the empty state.
- */
+/** Native record cells and actions compose the shared table primitives. */
 export function ProvisionDifferencesSection({
   title,
   emptyNote,
@@ -133,31 +118,31 @@ export function ProvisionDifferencesSection({
       {differences.length === 0 ? (
         <p className="mt-3 text-sm text-slate-400 italic">{emptyNote}</p>
       ) : (
-        <table className="mt-3 w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-              <th className="py-1">{columns.item}</th>
-              <th className="py-1 text-right">{columns.bookBasis}</th>
-              <th className="py-1 text-right">{columns.taxBasis}</th>
-              <th className="py-1 text-right">{columns.difference}</th>
-              <th className="py-1 text-right">{columns.effect}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <SharedTable className="mt-3 w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
+              <SharedTableHead className="py-1">{columns.item}</SharedTableHead>
+              <SharedTableHead className="py-1 text-right">{columns.bookBasis}</SharedTableHead>
+              <SharedTableHead className="py-1 text-right">{columns.taxBasis}</SharedTableHead>
+              <SharedTableHead className="py-1 text-right">{columns.difference}</SharedTableHead>
+              <SharedTableHead className="py-1 text-right">{columns.effect}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {differences.map((d) => (
-              <tr key={d.id} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="py-1.5">
+              <SharedTableRow key={d.id} className="border-t border-slate-100 dark:border-slate-800">
+                <SharedTableCell className="py-1.5">
                   <span className="block">{d.description}</span>
                   <span className="text-xs text-slate-400">{d.categorySourceLabel}</span>
-                </td>
-                <td className="py-1.5 text-right tabular-nums">{d.bookBasis}</td>
-                <td className="py-1.5 text-right tabular-nums">{d.taxBasis}</td>
-                <td className="py-1.5 text-right tabular-nums">{d.difference}</td>
-                <td className="py-1.5 text-right tabular-nums">{d.taxEffect}</td>
-              </tr>
+                </SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.bookBasis}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.taxBasis}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.difference}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.taxEffect}</SharedTableCell>
+              </SharedTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       )}
     </section>
   )

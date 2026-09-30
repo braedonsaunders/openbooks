@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 // Confirm card for a drafted (proposed) write. The
 // draft tool returns a signed proposal in its output; this renders the
@@ -110,38 +111,38 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
             {proposal.preview.memo}
           </p>
         ) : null}
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
-              <th className="pb-1 text-left font-medium">{t('proposal.account')}</th>
-              <th className="pb-1 text-right font-medium">{t('proposal.debit')}</th>
-              <th className="pb-1 text-right font-medium">{t('proposal.credit')}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
+              <SharedTableHead className="pb-1 text-left font-medium">{t('proposal.account')}</SharedTableHead>
+              <SharedTableHead className="pb-1 text-right font-medium">{t('proposal.debit')}</SharedTableHead>
+              <SharedTableHead className="pb-1 text-right font-medium">{t('proposal.credit')}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {lines.map((l, i) => {
               const amountSign = decimalCmp(l.amount, '0')
               return (
-                <tr key={i} className="border-t border-teal-100 dark:border-teal-900/30">
-                  <td className="py-1 pr-2 text-slate-700 dark:text-slate-200">
+                <SharedTableRow key={i} className="border-t border-teal-100 dark:border-teal-900/30">
+                  <SharedTableCell className="py-1 pr-2 text-slate-700 dark:text-slate-200">
                     {l.accountLabel}
                     {l.description ? (
                       <span className="block text-xs text-slate-500 dark:text-slate-400">
                         {l.description}
                       </span>
                     ) : null}
-                  </td>
-                  <td className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                  </SharedTableCell>
+                  <SharedTableCell className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
                     {amountSign > 0 ? money(l.amount) : ''}
-                  </td>
-                  <td className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                  </SharedTableCell>
+                  <SharedTableCell className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
                     {amountSign < 0 ? money(decimalNeg(l.amount)) : ''}
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               )
             })}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
 
         {state === 'done' && result ? (
           <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">

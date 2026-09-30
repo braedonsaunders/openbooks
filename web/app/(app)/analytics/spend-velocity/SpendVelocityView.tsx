@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { countLabel } from '@/lib/format'
@@ -219,26 +220,26 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
             </Panel>
           </div>
           <Panel title={t('panels.highestVelocity')} icon={Flame} bodyClassName="p-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.account')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.spend')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.velocity')}</th>
-                  <th className="px-4 py-2 text-center font-medium">{t('table.trend')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.account')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.trend')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {byVelocity.map((a) => (
                   <InteractiveTableRow key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
-                    <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</td>
-                    <td className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></td>
-                    <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TREND_BADGE_CLS[a.trend])}>{t(`trend.${a.trend}`)}</span></td>
+                    <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.name}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TREND_BADGE_CLS[a.trend])}>{t(`trend.${a.trend}`)}</span></SharedTableCell>
                   </InteractiveTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </Panel>
         </div>
 
@@ -342,60 +343,60 @@ function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
       <div className="lg:col-span-7">
         <Panel title={t('panels.accountVelocity')} icon={Layers} actions={<Badge>{data.accountVelocity.length}</Badge>} bodyClassName="p-0">
           <div className="max-h-128 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.account')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.spend')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.billsExp')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.velocity')}</th>
-                  <th className="px-4 py-2 text-center font-medium">{t('table.accel')}</th>
-                  <th className="px-4 py-2 text-left font-medium">{t('table.sparkline')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.account')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.billsExp')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.accel')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.sparkline')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {data.accountVelocity.map((a) => (
                   <InteractiveTableRow key={a.id} onClick={() => onDrill({ kind: 'account', id: a.id, name: a.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
-                    <td className="px-4 py-2">
+                    <SharedTableCell className="px-4 py-2">
                       <p className="font-medium text-slate-800 dark:text-slate-200">{a.name}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">{t('row.txnsMonths', { txns: a.transactionCount, months: a.monthCount })}</p>
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</td>
-                    <td className="px-4 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{a.billPct}% / {a.expensePct}%</td>
-                    <td className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></td>
-                    <td className="px-4 py-2 text-center"><Accel a={a.acceleration} /></td>
-                    <td className="px-4 py-2"><Spark values={a.monthlyAmounts} /></td>
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.totalSpend)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{a.billPct}% / {a.expensePct}%</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center"><Accel a={a.acceleration} /></SharedTableCell>
+                    <SharedTableCell className="px-4 py-2"><Spark values={a.monthlyAmounts} /></SharedTableCell>
                   </InteractiveTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </div>
         </Panel>
       </div>
       <div className="lg:col-span-5">
         <Panel title={t('panels.vendorDrillDown')} icon={UserRound} actions={<Badge variant="secondary">{data.vendorVelocity.length}</Badge>} bodyClassName="p-0">
           <div className="max-h-128 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.spend')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.velocity')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.vendor')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.spend')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {data.vendorVelocity.map((v) => (
                   <InteractiveTableRow key={v.id} onClick={() => onDrill({ kind: 'vendor', id: v.id, name: v.name })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
-                    <td className="px-4 py-2">
+                    <SharedTableCell className="px-4 py-2">
                       <p className="font-medium text-slate-800 dark:text-slate-200">{v.name}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">{t('row.txns', { txns: v.transactionCount })}</p>
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalSpend)}</td>
-                    <td className="px-4 py-2 text-right"><VelocityPill v={v.velocity} /></td>
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalSpend)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={v.velocity} /></SharedTableCell>
                   </InteractiveTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </div>
         </Panel>
       </div>
@@ -450,36 +451,36 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
         <button type="button" onClick={() => setSelected('all')} className="text-xs text-teal-600 hover:underline dark:text-teal-400">{t('clearFilter', { key: selected })}</button>
       ) : undefined} bodyClassName="p-0">
         <div className="max-h-104 overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('table.detector')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.item')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.severity')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.impact')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.details')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.detector')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.item')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.severity')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.impact')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.details')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {alerts.length ? alerts.map((a, i) => (
                 <InteractiveTableRow
                   key={i}
                   onClick={a.accountId ? () => onDrill({ kind: 'account', id: a.accountId!, name: a.item }) : a.vendorId ? () => onDrill({ kind: 'vendor', id: a.vendorId!, name: a.item }) : undefined}
                   className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', (a.accountId || a.vendorId) && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40')} noAnimate
                 >
-                  <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{a.label}</td>
-                  <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.item}</td>
-                  <td className="px-4 py-2 text-center">
+                  <SharedTableCell className="px-4 py-2 text-slate-500 dark:text-slate-400">{a.label}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">{a.item}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center">
                     <Badge variant={a.severity === 'Critical' ? 'destructive' : a.severity === 'High' ? 'warning' : 'secondary'}>{t(`severity.${a.severity.toLowerCase()}`)}</Badge>
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.impact)}</td>
-                  <td className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">{a.details}</td>
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(a.impact)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-xs text-slate-400 dark:text-slate-500">{a.details}</SharedTableCell>
                 </InteractiveTableRow>
               )) : (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.noAlerts')}{selected !== 'all' ? t('empty.forDetector') : ''}</td></tr>
+                <SharedTableRow><SharedTableCell colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.noAlerts')}{selected !== 'all' ? t('empty.forDetector') : ''}</SharedTableCell></SharedTableRow>
               )}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       </Panel>
       <p className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">
@@ -567,37 +568,37 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         }
       >
         <div className="max-h-128 overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('table.account')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.current')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.prior')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.change')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.velocity')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.projected')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.trend')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.account')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.current')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.prior')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.change')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.projected')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.trend')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {rows.map((a) => (
                 <InteractiveTableRow key={a.accountId} onClick={() => onDrill({ kind: 'account', id: a.accountId, name: a.accountName })} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
-                  <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">
+                  <SharedTableCell className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">
                     {a.accountName}
                     {a.isNew ? <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">{t('newBadge')}</span> : null}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.currentAmount)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{money0(a.priorAmount)}</td>
-                  <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', (a.changePct ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (a.changePct ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.currentAmount)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{money0(a.priorAmount)}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', (a.changePct ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (a.changePct ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
                     {a.changePct == null ? '—' : <>{a.changePct > 0 ? '+' : ''}{pct1(a.changePct)}</>}
-                  </td>
-                  <td className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money0(a.projectedAmount)}</td>
-                  <td className="px-4 py-2"><Spark values={a.monthlyTrend} /></td>
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money0(a.projectedAmount)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2"><Spark values={a.monthlyTrend} /></SharedTableCell>
                 </InteractiveTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       </Panel>
     </div>
@@ -673,32 +674,32 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
         </Panel>
       </div>
       <Panel title={t('panels.monthlySummary')} icon={BarChart3} bodyClassName="p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <th className="px-4 py-2 text-left font-medium">{t('table.month')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('table.totalSpend')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('table.priorYear')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('table.yoyChange')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('table.velocity')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('table.txns')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('table.vendors')}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.month')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.totalSpend')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.priorYear')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.yoyChange')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.velocity')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.txns')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.vendors')}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {trends.map((m) => (
-              <tr key={m.month} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                <td className="px-4 py-2 font-medium tabular-nums text-slate-800 dark:text-slate-200">{m.month}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(m.totalAmount)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-400">{m.priorYearAmount ? money0(m.priorYearAmount) : '—'}</td>
-                <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', m.yoyChange > 0 ? 'text-rose-600 dark:text-rose-400' : m.yoyChange < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>{m.priorYearAmount ? `${m.yoyChange > 0 ? '+' : ''}${pct1(m.yoyChange)}` : '—'}</td>
-                <td className="px-4 py-2 text-right"><VelocityPill v={m.velocity} /></td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-400">{countLabel(m.transactionCount, locale)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-400">{m.vendorCount}</td>
-              </tr>
+              <SharedTableRow key={m.month} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                <SharedTableCell className="px-4 py-2 font-medium tabular-nums text-slate-800 dark:text-slate-200">{m.month}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(m.totalAmount)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{m.priorYearAmount ? money0(m.priorYearAmount) : '—'}</SharedTableCell>
+                <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', m.yoyChange > 0 ? 'text-rose-600 dark:text-rose-400' : m.yoyChange < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>{m.priorYearAmount ? `${m.yoyChange > 0 ? '+' : ''}${pct1(m.yoyChange)}` : '—'}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right"><VelocityPill v={m.velocity} /></SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{countLabel(m.transactionCount, locale)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{m.vendorCount}</SharedTableCell>
+              </SharedTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </Panel>
     </div>
   )

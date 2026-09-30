@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -295,38 +296,38 @@ export function RateBookAssignmentSection({
 
       {assignments.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-              <tr>
-                <th className="px-3 py-2 font-medium">{t('rateBook')}</th>
-                <th className="px-3 py-2 font-medium">{t('effectiveFrom')}</th>
-                <th className="px-3 py-2 font-medium">{t('effectiveTo')}</th>
-                <th className="px-3 py-2 font-medium">{t('dateBasis')}</th>
-                <th className="px-3 py-2 font-medium">{common('labels.status')}</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <SharedTableRow>
+                <SharedTableHead className="px-3 py-2 font-medium">{t('rateBook')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">{t('effectiveFrom')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">{t('effectiveTo')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">{t('dateBasis')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">{common('labels.status')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2" />
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {assignments.map((a) => (
-                <tr key={a.id} className="border-t border-slate-100 dark:border-slate-800/60">
-                  <td className="px-3 py-2">{a.rate_book_name} <span className="text-slate-400">· {a.currency}</span></td>
-                  <td className="px-3 py-2 tabular-nums">{a.effective_from ? String(a.effective_from).slice(0, 10) : '—'}</td>
-                  <td className="px-3 py-2 tabular-nums">{a.effective_to ? String(a.effective_to).slice(0, 10) : '—'}</td>
-                  <td className="px-3 py-2">{t(`dateBasisOptions.${a.date_basis}`)}</td>
-                  <td className="px-3 py-2">
+                <SharedTableRow key={a.id} className="border-t border-slate-100 dark:border-slate-800/60">
+                  <SharedTableCell className="px-3 py-2">{a.rate_book_name} <span className="text-slate-400">· {a.currency}</span></SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 tabular-nums">{a.effective_from ? String(a.effective_from).slice(0, 10) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 tabular-nums">{a.effective_to ? String(a.effective_to).slice(0, 10) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">{t(`dateBasisOptions.${a.date_basis}`)}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     <Badge variant={a.is_active ? 'success' : 'outline'}>
                       {a.is_active ? common('status.active') : common('status.inactive')}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2 text-right">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-right">
                     {a.rate_version_id && canOpenPricing ? <Link href={pricingHref(a.rate_version_id) as never} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('openPricing')}</Link> : null}
                     {canEditAssignments ? <button type="button" onClick={() => startEdit(a)} disabled={busy} className="ml-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{common('actions.edit')}</button> : null}
                     {canEditAssignments ? <button type="button" onClick={() => remove(a.id)} disabled={busy} className="ml-3 text-xs font-medium text-red-600 hover:underline dark:text-red-400">{common('actions.delete')}</button> : null}
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       ) : !form ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('empty')}</p>

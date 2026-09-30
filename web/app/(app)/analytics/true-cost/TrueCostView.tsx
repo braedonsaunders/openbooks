@@ -1,4 +1,5 @@
 'use client'
+import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell, TableHeader as SharedTableHeader, TableHead as SharedTableHead } from "../../reports/ReportTable"
 import { toChartNumber } from '../_ui/format'
 
 import { useMemo, useState } from 'react'
@@ -330,23 +331,23 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
       {isExpense ? (
       <div className="border-b border-slate-100 dark:border-slate-800">
         <p className="px-4 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('accountsPanel.included', { count: cat.accounts.length })}</p>
-        <table className="w-full text-sm">
-          <tbody>
+        <SharedTable className="w-full text-sm">
+          <SharedTableBody>
             {cat.accounts.map((a) => (
-              <tr key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                <td className="px-4 py-2">
+              <SharedTableRow key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                <SharedTableCell className="px-4 py-2">
                   <button type="button" onClick={() => onDrillAccount({ kind: 'account', id: a.id, name: a.name, sub: a.number ? t('drill.accountSub', { number: a.number }) : undefined })} className="text-left text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400" title={t('accountsPanel.viewTransactions')}>
                     {a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}
                     {a.name}
                   </button>
-                </td>
-                <td className="px-2 py-2 text-center">
+                </SharedTableCell>
+                <SharedTableCell className="px-2 py-2 text-center">
                   {a.pinned
                     ? <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-950/50 dark:text-teal-400"><Pin size={9} />{t('accountsPanel.pinned')}</span>
                     : <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('accountsPanel.rule')}</span>}
-                </td>
-                <td className="px-2 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.amount)}</td>
-                <td className="py-2 pl-1 pr-3 text-right">
+                </SharedTableCell>
+                <SharedTableCell className="px-2 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.amount)}</SharedTableCell>
+                <SharedTableCell className="py-2 pl-1 pr-3 text-right">
                   <span className="inline-flex items-center gap-1">
                     <Select
                       value=""
@@ -365,11 +366,11 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
                       <button type="button" disabled={busy} title={t('accountsPanel.unpinTitle')} onClick={() => run(() => unpinAccount(cat.id, a.id))} className="rounded-md border border-slate-200 px-1.5 py-1 text-[10px] text-slate-500 hover:text-rose-500 dark:border-slate-700">{t('accountsPanel.unpin')}</button>
                     ) : null}
                   </span>
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </div>
       ) : null}
 
@@ -439,28 +440,28 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
           <p className="border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
             {t('cellFlyout.expenseMath', { direct: money0(taggedSum), dept: dept.name, allocated: money0(allocatedSum), share: percent(deptShare * 100, 1), billed: Math.round(dept.billedHours) })}
           </p>
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('cellFlyout.colAccount')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('cellFlyout.colDeptTagged')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('cellFlyout.colAllocated')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('cellFlyout.colTotal')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('cellFlyout.colRateHr')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('cellFlyout.colAccount')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colDeptTagged')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colAllocated')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colTotal')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cellFlyout.colRateHr')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {rows.map(({ a, tagged, allocated, total }) => (
-                <tr key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{compareMoney(tagged, '0') !== 0 ? money0(tagged) : '—'}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-400">{compareMoney(allocated, '0') !== 0 ? money0(allocated) : '—'}</td>
-                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? toChartNumber(div(total, String(dept.billedHours))) : 0)}</td>
-                </tr>
+                <SharedTableRow key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{compareMoney(tagged, '0') !== 0 ? money0(tagged) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400">{compareMoney(allocated, '0') !== 0 ? money0(allocated) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? toChartNumber(div(total, String(dept.billedHours))) : 0)}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </>
       ) : (
         <p className="px-4 py-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
@@ -506,41 +507,41 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
         }
         bodyClassName="p-0"
       >
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <th className="px-4 py-2 text-left font-medium">{t('deptFlyout.colCategory')}</th>
-              <th className="px-4 py-2 text-left font-medium">{t('cards.type')}</th>
-              <th className="px-4 py-2 text-left font-medium">{t('cards.base')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('cards.accounts')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('deptFlyout.colExpense')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('deptFlyout.colRate')}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('deptFlyout.colCategory')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('cards.type')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('cards.base')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('cards.accounts')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('deptFlyout.colExpense')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 text-right font-medium">{t('deptFlyout.colRate')}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {data.categories.map((c) => (
               <InteractiveTableRow key={c.id} onClick={() => openCat(c.id)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40" noAnimate>
-                <td className="px-4 py-2.5">
+                <SharedTableCell className="px-4 py-2.5">
                   <span className="flex items-center gap-2.5">
                     <span className="grid h-7 w-7 place-items-center rounded-lg" style={{ backgroundColor: `${c.color ?? FALLBACK}22`, color: c.color ?? FALLBACK }}><Layers size={13} /></span>
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </span>
-                </td>
-                <td className="px-4 py-2.5"><span className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-950/50 dark:text-sky-400" style={{ borderLeft: `3px solid ${c.color ?? FALLBACK}` }}>{categoryTypeLabel(c.categoryType)}</span></td>
-                <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500">{t(`bases.${c.allocationBase}`)}</td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.categoryType === 'expense' ? whole(c.accounts.length) : '—'}</td>
-                <td className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300">{money0(c.totalAmount)}</td>
-                <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{rate(c.rate)}</td>
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5"><span className="rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium capitalize text-sky-700 dark:bg-sky-950/50 dark:text-sky-400" style={{ borderLeft: `3px solid ${c.color ?? FALLBACK}` }}>{categoryTypeLabel(c.categoryType)}</span></SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-xs text-slate-400 dark:text-slate-500">{t(`bases.${c.allocationBase}`)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.categoryType === 'expense' ? whole(c.accounts.length) : '—'}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-700 dark:text-slate-300">{money0(c.totalAmount)}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{rate(c.rate)}</SharedTableCell>
               </InteractiveTableRow>
             ))}
-            <tr className="bg-slate-50/70 font-semibold dark:bg-slate-800/40">
-              <td className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{t('deptFlyout.composite')}</td>
-              <td /><td /><td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{whole(data.kpis.overheadAccounts)}</td>
-              <td className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-800 dark:text-slate-200">{money0(data.kpis.totalOverhead)}</td>
-              <td className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(data.kpis.compositeRate)}</td>
-            </tr>
-          </tbody>
-        </table>
+            <SharedTableRow className="bg-slate-50/70 font-semibold dark:bg-slate-800/40">
+              <SharedTableCell className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{t('deptFlyout.composite')}</SharedTableCell>
+              <SharedTableCell /><SharedTableCell /><SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500">{whole(data.kpis.overheadAccounts)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-slate-800 dark:text-slate-200">{money0(data.kpis.totalOverhead)}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2.5 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(data.kpis.compositeRate)}</SharedTableCell>
+            </SharedTableRow>
+          </SharedTableBody>
+        </SharedTable>
       </Panel>
 
       {data.unassigned.length ? (
@@ -553,13 +554,13 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
               </Link>
             </p>
           ) : null}
-          <table className="w-full text-sm">
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableBody>
               {data.unassigned.map((a) => (
-                <tr key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-amber-700 dark:text-amber-400">{money0(a.amount)}</td>
-                  <td className="w-52 px-4 py-1.5 text-right">
+                <SharedTableRow key={a.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{a.number ? <span className="mr-2 text-xs tabular-nums text-slate-400">{a.number}</span> : null}{a.name}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-amber-700 dark:text-amber-400">{money0(a.amount)}</SharedTableCell>
+                  <SharedTableCell className="w-52 px-4 py-1.5 text-right">
                     <Select
                       value=""
                       disabled={busy}
@@ -573,16 +574,16 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </Select>
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               ))}
-              <tr className="bg-amber-50/60 font-semibold dark:bg-amber-950/20">
-                <td className="px-4 py-2 text-amber-800 dark:text-amber-300">{t('categories.notInComposite')}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-amber-800 dark:text-amber-300">{money0(data.unassigned.reduce((s, a) => add(s, a.amount), '0.0000'))}</td>
-                <td />
-              </tr>
-            </tbody>
-          </table>
+              <SharedTableRow className="bg-amber-50/60 font-semibold dark:bg-amber-950/20">
+                <SharedTableCell className="px-4 py-2 text-amber-800 dark:text-amber-300">{t('categories.notInComposite')}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-right tabular-nums text-amber-800 dark:text-amber-300">{money0(data.unassigned.reduce((s, a) => add(s, a.amount), '0.0000'))}</SharedTableCell>
+                <SharedTableCell />
+              </SharedTableRow>
+            </SharedTableBody>
+          </SharedTable>
         </Panel>
       ) : null}
     </div>
@@ -628,31 +629,31 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
       bodyClassName="p-0"
     >
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <th className="px-4 py-2 text-left font-medium">{t('deptFlyout.colCategory')}</th>
-              <th className="px-3 py-2 text-left font-medium">{t('cards.base')}</th>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+              <SharedTableHead className="px-4 py-2 text-left font-medium">{t('deptFlyout.colCategory')}</SharedTableHead>
+              <SharedTableHead className="px-3 py-2 text-left font-medium">{t('cards.base')}</SharedTableHead>
               {data.departments.map((d) => (
-                <th key={d.id} className="whitespace-nowrap px-3 py-2 text-right font-medium">{d.name}</th>
+                <SharedTableHead key={d.id} className="whitespace-nowrap px-3 py-2 text-right font-medium">{d.name}</SharedTableHead>
               ))}
-              <th className="px-4 py-2 text-right font-bold">{t('matrix.colOverall')}</th>
-            </tr>
-          </thead>
-          <tbody>
+              <SharedTableHead className="px-4 py-2 text-right font-bold">{t('matrix.colOverall')}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {data.categories.map((c) => (
-              <tr key={c.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                <td className="whitespace-nowrap px-4 py-2">
+              <SharedTableRow key={c.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                <SharedTableCell className="whitespace-nowrap px-4 py-2">
                   <span className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: c.color ?? FALLBACK }} />
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </span>
-                </td>
-                <td className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">{t('matrix.cellBase')}</td>
+                </SharedTableCell>
+                <SharedTableCell className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">{t('matrix.cellBase')}</SharedTableCell>
                 {data.departments.map((d) => {
                   const r = c.byDept[d.id]?.rate ?? 0
                   return (
-                    <td key={d.id} className="p-0 text-right">
+                    <SharedTableCell key={d.id} className="p-0 text-right">
                       <button
                         type="button"
                         onClick={() => onDrill({ catId: c.id, deptId: d.id })}
@@ -661,22 +662,22 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
                       >
                         {rate(r)}
                       </button>
-                    </td>
+                    </SharedTableCell>
                   )
                 })}
-                <td className="bg-slate-50/70 px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:bg-slate-800/40 dark:text-slate-200">{rate(c.rate)}</td>
-              </tr>
+                <SharedTableCell className="bg-slate-50/70 px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:bg-slate-800/40 dark:text-slate-200">{rate(c.rate)}</SharedTableCell>
+              </SharedTableRow>
             ))}
-            <tr className="border-t-2 border-slate-200 bg-slate-50/70 font-bold dark:border-slate-700 dark:bg-slate-800/40">
-              <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{t('matrix.totalBurden')}</td>
-              <td />
+            <SharedTableRow className="border-t-2 border-slate-200 bg-slate-50/70 font-bold dark:border-slate-700 dark:bg-slate-800/40">
+              <SharedTableCell className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{t('matrix.totalBurden')}</SharedTableCell>
+              <SharedTableCell />
               {data.departments.map((d) => (
-                <td key={d.id} className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{rate(data.totals.byDept[d.id] ?? 0)}</td>
+                <SharedTableCell key={d.id} className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{rate(data.totals.byDept[d.id] ?? 0)}</SharedTableCell>
               ))}
-              <td className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{rate(data.totals.overall)}</td>
-            </tr>
-          </tbody>
-        </table>
+              <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{rate(data.totals.overall)}</SharedTableCell>
+            </SharedTableRow>
+          </SharedTableBody>
+        </SharedTable>
       </div>
       <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
         {t('matrix.footnote')}
@@ -835,25 +836,25 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
             </div>
             <div className="border-t border-slate-100 dark:border-slate-800">
               <p className="bg-slate-50/70 px-4 py-2 text-xs font-semibold text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">{t('absorption.contributionByDept')}</p>
-              <table className="w-full text-sm">
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableBody>
                   {data.departments.map((d) => {
                     const contribution = k.gapPerHour * d.billedHours
                     const pct = Math.abs(k.gap) > 0 ? (Math.abs(contribution) / Math.abs(k.gap)) * 100 : 0
                     return (
-                      <tr key={d.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                        <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{d.name}</td>
-                        <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('absorption.hrsShort', { count: Math.round(d.billedHours) })}</td>
-                        <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(d.composite)}</td>
-                        <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', contribution < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{contribution < 0 ? '−' : '+'}{money(Math.abs(contribution))}</td>
-                        <td className="w-40 px-4 py-2">
+                      <SharedTableRow key={d.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                        <SharedTableCell className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
+                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('absorption.hrsShort', { count: Math.round(d.billedHours) })}</SharedTableCell>
+                        <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(d.composite)}</SharedTableCell>
+                        <SharedTableCell className={cn('px-4 py-2 text-right font-semibold tabular-nums', contribution < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>{contribution < 0 ? '−' : '+'}{money(Math.abs(contribution))}</SharedTableCell>
+                        <SharedTableCell className="w-40 px-4 py-2">
                           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.min(100, pct)}%` }} /></div>
-                        </td>
-                      </tr>
+                        </SharedTableCell>
+                      </SharedTableRow>
                     )
                   })}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
           </Panel>
         </>

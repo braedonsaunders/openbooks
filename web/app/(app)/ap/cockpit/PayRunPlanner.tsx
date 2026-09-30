@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -104,8 +105,8 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
         {payable.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('empty')}</p>
         ) : (
-          <table className="w-full text-sm">
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableBody>
               {payable.map((e) => {
                 const on = selected.has(e.id)
                 return (
@@ -114,20 +115,20 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
                     className="group cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
                     onClick={() => toggle(e.id)} noAnimate
                   >
-                    <td className="w-9 py-2 pl-4">
+                    <SharedTableCell className="w-9 py-2 pl-4">
                       <input type="checkbox" readOnly checked={on} className="h-4 w-4 accent-teal-600" aria-label={e.partyName} />
-                    </td>
-                    <td className="py-2">
+                    </SharedTableCell>
+                    <SharedTableCell className="py-2">
                       <span className="font-medium text-slate-700 dark:text-slate-200">{e.partyName}</span>
                       {e.daysOverdue > 0 ? <Badge variant="warning" className="ml-1.5 text-[10px]">{e.daysOverdue}d</Badge> : null}
-                    </td>
-                    <td className="py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{e.dueDate ? fmtDate(e.dueDate) : '—'}</td>
-                    <td className="py-2 pr-4 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(e.amount)}</td>
+                    </SharedTableCell>
+                    <SharedTableCell className="py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{e.dueDate ? fmtDate(e.dueDate) : '—'}</SharedTableCell>
+                    <SharedTableCell className="py-2 pr-4 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(e.amount)}</SharedTableCell>
                   </InteractiveTableRow>
                 )
               })}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         )}
       </div>
 

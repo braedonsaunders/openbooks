@@ -1,5 +1,6 @@
 "use client";
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -241,34 +242,34 @@ export function ArCockpit({
                     {customerQuery || customerStatus ? t("noCustomerMatch") : t("noReceivables")}
                   </p>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                      <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                        <th className="px-4 py-2 text-left font-medium">
+                  <SharedTable className="w-full text-sm">
+                    <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                      <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                        <SharedTableHead className="px-4 py-2 text-left font-medium">
                           {t("customer")}
-                        </th>
-                        <th className="px-3 py-2 text-right font-medium">
+                        </SharedTableHead>
+                        <SharedTableHead className="px-3 py-2 text-right font-medium">
                           {t("overdueCol")}
-                        </th>
-                        <th className="px-4 py-2 text-right font-medium">
+                        </SharedTableHead>
+                        <SharedTableHead className="px-4 py-2 text-right font-medium">
                           {t("openCol")}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                        </SharedTableHead>
+                      </SharedTableRow>
+                    </SharedTableHeader>
+                    <SharedTableBody>
                       {visibleCustomers.map((c) => (
-                        <tr
+                        <SharedTableRow
                           key={c.partyId ?? c.partyName}
                           className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
                         >
-                          <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                          <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">
                             {c.partyId ? (
                               <TableDrilldownButton onActivate={() => setEntity({ id: c.partyId!, name: c.partyName })}>
                                 {c.partyName}
                               </TableDrilldownButton>
                             ) : c.partyName}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">
+                          </SharedTableCell>
+                          <SharedTableCell className="px-3 py-2 text-right tabular-nums">
                             {compareMoney(c.overdue, '0.0000') > 0 ? (
                               <span className="text-red-600 dark:text-red-400">
                                 {moneyCompact(c.overdue)}
@@ -278,14 +279,14 @@ export function ArCockpit({
                                 —
                               </span>
                             )}
-                          </td>
-                          <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                          </SharedTableCell>
+                          <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">
                             {money(c.amount)}
-                          </td>
-                        </tr>
+                          </SharedTableCell>
+                        </SharedTableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </SharedTableBody>
+                  </SharedTable>
                 )}
               </div>
               <Pagination

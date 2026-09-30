@@ -1,3 +1,4 @@
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../reports/ReportTable"
 import { cn } from '@openbooks/ui'
 import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
@@ -97,33 +98,33 @@ export function HealthHero({
           ))}
         </div>
       </div>
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-          <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">{ratioLabels.ratio}</th>
-            <th className="px-3 py-2 text-right font-medium">{ratioLabels.value}</th>
-            <th className="px-3 py-2 text-right font-medium">{ratioLabels.benchmark}</th>
-            <th className="px-4 py-2 text-center font-medium">{ratioLabels.grade}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <SharedTable className="w-full text-sm">
+        <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+          <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+            <SharedTableHead className="px-4 py-2 text-left font-medium">{ratioLabels.ratio}</SharedTableHead>
+            <SharedTableHead className="px-3 py-2 text-right font-medium">{ratioLabels.value}</SharedTableHead>
+            <SharedTableHead className="px-3 py-2 text-right font-medium">{ratioLabels.benchmark}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-center font-medium">{ratioLabels.grade}</SharedTableHead>
+          </SharedTableRow>
+        </SharedTableHeader>
+        <SharedTableBody>
           {ratios.map((r) => (
-            <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-              <td className="px-4 py-2">
+            <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+              <SharedTableCell className="px-4 py-2">
                 <span className="font-medium text-slate-700 dark:text-slate-200">{r.label}</span>
                 <span className="ml-2 hidden text-xs text-slate-400 sm:inline dark:text-slate-500">{r.calc}</span>
-              </td>
-              <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">{r.value}</td>
-              <td className="px-3 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{r.benchmark}</td>
-              <td className="px-4 py-2 text-center">
+              </SharedTableCell>
+              <SharedTableCell className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">{r.value}</SharedTableCell>
+              <SharedTableCell className="px-3 py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{r.benchmark}</SharedTableCell>
+              <SharedTableCell className="px-4 py-2 text-center">
                 <span className={cn('inline-block w-8 rounded-full py-0.5 text-[11px] font-bold', scoreClass(r.score, 'chip'))}>
                   {r.grade}
                 </span>
-              </td>
-            </tr>
+              </SharedTableCell>
+            </SharedTableRow>
           ))}
-        </tbody>
-      </table>
+        </SharedTableBody>
+      </SharedTable>
       {showFullAnalysisLink ? (
         <div className="border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
           <Link

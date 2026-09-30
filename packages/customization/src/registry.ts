@@ -1051,6 +1051,25 @@ const BUDGET_SCENARIO: RecordTypeMeta = {
   ],
 };
 
+const HRM_PROCESS_TEMPLATE: RecordTypeMeta = {
+  key: "hrm_process_template", labelKey: "hrm.processes.templates.title", category: "entity",
+  featureKey: "hrm", supportsForms: false, customFieldLineTable: null,
+  headerFields: [], lineFields: [], defaultSort: { sortKey: "name", dir: "asc" },
+  listColumns: [
+    { key: "name", labelKey: "hrm.processes.templates.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "kind", labelKey: "hrm.processes.templates.kind", kind: "text", sortable: true, sortKey: "kind" },
+    { key: "scope", labelKey: "hrm.processes.templates.scope", kind: "text" },
+    { key: "step_count", labelKey: "hrm.processes.templates.steps", kind: "text", sortable: true, sortKey: "steps" },
+    { key: "status", labelKey: "hrm.processes.templates.status", kind: "status", sortable: true, sortKey: "status" },
+  ],
+  listFilters: [
+    { key: "kind", labelKey: "hrm.processes.templates.kind", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["onboarding", "offboarding", "transfer"].map((value) => ({ value, labelKey: `hrm.processes.templates.kinds.${value}` })) },
+    { key: "status", labelKey: "hrm.processes.templates.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["active", "retired"].map((value) => ({ value, labelKey: `hrm.processes.templates.${value}` })) },
+  ],
+};
+
 const LEASE_AGREEMENT: RecordTypeMeta = {
   key: "lease_agreement", labelKey: "accounting.lifecycle.lease_agreement", category: "entity",
   featureKey: "fixedAssets", supportsForms: false, customFieldLineTable: null,
@@ -2293,6 +2312,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   INVENTORY_ONHAND,
   INVENTORY_MOVEMENT,
   BUDGET_SCENARIO,
+  HRM_PROCESS_TEMPLATE,
   LEASE_AGREEMENT,
   FINANCIAL_CHANGE,
   REVENUE_CONTRACT,
