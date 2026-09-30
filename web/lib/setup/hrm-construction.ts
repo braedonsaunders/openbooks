@@ -33,7 +33,6 @@ export const CONSTRUCTION_CLASSIFICATIONS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmConstructionCompliance',
   rehomed: true, // section on the HRM Compliance page
-  rehomedTo: '/hrm/compliance',
   iconKey: 'hard-hat',
   orgScoped: true,
   actorCols: true,
@@ -63,7 +62,6 @@ export const CONSTRUCTION_RATE_SCHEDULES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmConstructionCompliance',
   rehomed: true, // section on the HRM Compliance page
-  rehomedTo: '/hrm/compliance',
   iconKey: 'table-properties',
   orgScoped: true,
   actorCols: true,
@@ -94,7 +92,6 @@ export const CONSTRUCTION_COMP_CLASSES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmConstructionCompliance',
   rehomed: true, // section on the HRM Compliance page
-  rehomedTo: '/hrm/compliance',
   iconKey: 'shield-plus',
   orgScoped: true,
   actorCols: true,
@@ -123,7 +120,6 @@ export const CONSTRUCTION_PER_DIEM_POLICIES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmConstructionCompliance',
   rehomed: true, // section on the HRM Compliance page
-  rehomedTo: '/hrm/compliance',
   iconKey: 'wallet',
   orgScoped: true,
   actorCols: true,
@@ -156,7 +152,6 @@ export const CONSTRUCTION_RATIO_RULES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmConstructionCompliance',
   rehomed: true, // section on the HRM Compliance page
-  rehomedTo: '/hrm/compliance',
   iconKey: 'scale',
   orgScoped: true,
   actorCols: true,

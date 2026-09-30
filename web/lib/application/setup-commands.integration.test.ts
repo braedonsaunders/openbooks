@@ -94,7 +94,7 @@ test('get_company_settings reads the caller org through the shared settings comm
     assert.equal((view as { org: { name: string } }).org.name, await orgName(orgA.orgId))
     assert.equal((view as { accounting: { baseCurrency: string } }).accounting.baseCurrency.length, 3)
     assert.equal(typeof (view as { features: Record<string, boolean> }).features, 'object')
-    assert.equal(view.href, '/admin/settings')
+    assert.equal(view.href, '/admin/setup/company')
     // Cross-org isolation: the same tool under org B's actor returns org B, never org A.
     const foreign = await callTool(orgB, tool, adminB, {})
     assert.equal((foreign as { org: { name: string } }).org.name, await orgName(orgB.orgId))

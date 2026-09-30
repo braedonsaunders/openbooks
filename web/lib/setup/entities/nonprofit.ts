@@ -22,7 +22,6 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
     orderBy: 'set_at',
     hasActive: false,
     rehomed: true, // lives as a section on the Nonprofit module
-    rehomedTo: '/nonprofit/setup',
     featureKey: 'fundAccounting',
     command: { name: 'setFramework', permission: 'funds.manage', feature: 'fundAccounting' },
     columns: [
@@ -54,7 +53,6 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
     orderBy: 'from_fund_id, to_fund_id',
     hasActive: true,
     rehomed: true, // lives as a section on the Nonprofit module
-    rehomedTo: '/nonprofit/setup',
     featureKey: 'fundAccounting',
     command: { name: 'setFundPair', permission: 'funds.manage', feature: 'fundAccounting' },
     columns: [
@@ -86,7 +84,6 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
     orderBy: 'effective_from',
     hasActive: false,
     rehomed: true, // lives as a section on the Nonprofit module
-    rehomedTo: '/nonprofit/setup',
     featureKey: 'functionalExpenses',
     command: { name: 'setFunctionalMapping', permission: 'funds.manage', feature: 'functionalExpenses' },
     columns: [

@@ -833,7 +833,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
           })),
         },
         features: Object.fromEntries(FEATURES.map((f) => [f.key, featureEnabled(features, f.key)])),
-        href: "/admin/settings",
+        href: "/admin/setup/company",
       };
     },
   }),

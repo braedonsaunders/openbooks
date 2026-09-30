@@ -50,7 +50,7 @@ const listSetupEntitiesTool: AssistantToolDef = {
     );
     return {
       ok: true,
-      data: { total: SETUP_ENTITIES.length, truncated, href: "/admin/setup", items },
+      data: { total: SETUP_ENTITIES.length, truncated, href: "/admin/setup/readiness", items },
     };
   },
 };

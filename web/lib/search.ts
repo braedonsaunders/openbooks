@@ -423,9 +423,7 @@ type SearchJournalEntryRow = {
  * gl.read-only caller cannot pull AP/other subledger memos by number.
  * Unlinked entries resolve under the journal gate alone (no owning module
  * exists to gate them through). The org + subsidiary doorway applies on
- * every arm. Hits link through the entry compatibility redirect
- * (/journal/[id]), which lands document-backed entries in their drawer and
- * native ones in the ledger flyout.
+ * every arm. Hits open the shared journal-entry drawer directly.
  */
 async function searchJournalEntries(
   orgId: string,
@@ -482,7 +480,7 @@ async function searchJournalEntries(
     type: 'transaction',
     title: `Journal ${row.entry_number}`,
     subtitle: row.memo || undefined,
-    href: `/journal/${row.id}`,
+    href: `/journal?journalEntry=${row.id}`,
     iconKey: 'journal',
     badge: row.status && row.status !== 'posted' ? row.status : undefined,
   }))

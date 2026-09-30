@@ -2,11 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F4T-18 behaviour coverage (unit partition, module doubles, no database):
-// a bookmarked /admin/setup/<key> for a rehomed entity redirects to the
-// home the registry records, carrying the ?movedFrom notice; an unknown
-// key still 404s. Authz is a fabricated manager — permission logic itself
-// is proven by the scope suite, not doubled here.
+// Rehomed and unknown setup entities have no standalone page.
 registerHooks({
   resolve(specifier, context, next) {
 
@@ -51,40 +47,9 @@ registerHooks({
 
 const { loadSetupEntity } = await import('./view.ts')
 
-async function redirectHref(key: string, sp: Record<string, string | string[] | undefined> = {}): Promise<string> {
-  try {
-    await loadSetupEntity(key, sp)
-  } catch (error) {
-    if ((error as { digest?: string }).digest === 'NEXT_REDIRECT') {
-      return (error as { href: string }).href
-    }
-    throw error
+test('rehomed and unknown setup keys refuse standalone pages', async () => {
+  for (const key of ['hrm-action-reasons', 'tax-regimes', 'pay-schedules', 'no-such-entity']) {
+    await assert.rejects(loadSetupEntity(key, {}), (error: unknown) =>
+      (error as { digest?: string }).digest === 'NEXT_NOT_FOUND', key)
   }
-  throw new Error(`${key} did not redirect`)
-}
-
-test('a rehomed key redirects to its registry home with the notice', async () => {
-  assert.equal(
-    await redirectHref('hrm-action-reasons'),
-    '/hrm/change-requests?reasons=1&movedFrom=setup-entity',
-  )
-  assert.equal(
-    await redirectHref('tax-regimes'),
-    '/admin/setup/tax-depreciation?tab=regimes&movedFrom=setup-entity',
-  )
-})
-
-test('the redirect keeps reader params with the home address winning', async () => {
-  const href = await redirectHref('pay-schedules', { q: 'weekly' })
-  assert.equal(href, '/admin/setup/payroll?q=weekly&tab=schedules&movedFrom=setup-entity')
-})
-
-test('an unknown key still 404s', async () => {
-  try {
-    await loadSetupEntity('no-such-entity', {})
-  } catch (error) {
-    assert.equal((error as { digest?: string }).digest, 'NEXT_NOT_FOUND')
-    return
-  }
-  throw new Error('an unknown setup key did not 404')
 })

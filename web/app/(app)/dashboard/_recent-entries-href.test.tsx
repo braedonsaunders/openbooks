@@ -17,15 +17,8 @@ const dashboardEn = JSON.parse(
   readFileSync(join(dir, '..', '..', '..', 'messages', 'en', 'dashboard.json'), 'utf8'),
 );
 
-// Every "Recent journal entries" row must resolve through the posted-entry
-// route (/journal/[id]), which redirects each entry to the drawer that owns
-// it (source-document drawer for subledger postings, journal drawer for
-// manual journals, txn drawer for GL-native entries). The old href built
-// /journal?entry=<ENTRY id>, but ?entry= drives the manual-journal drawer
-// over DOCUMENT ids of kind 'journal' only (loadJournalDoc), so subledger
-// postings opened nothing (dead links) and even manual-journal rows missed
-// (entry id never equals the doc id). (Was .)
-test('recent journal entries link through the posted-entry route, not the manual-journal drawer param', async () => {
+// Posted entry identifiers open the shared journal-entry drawer directly.
+test('recent journal entries open the shared journal-entry drawer', async () => {
   const data = {
     recentEntries: [
       {
@@ -54,7 +47,7 @@ test('recent journal entries link through the posted-entry route, not the manual
   )
   try {
     const rowHrefs = [...host.querySelectorAll('li a')].map((a) => a.getAttribute('href'))
-    assert.deepEqual(rowHrefs, ['/journal/entry-posted-1', '/journal/entry-subledger-9'])
+    assert.deepEqual(rowHrefs, ['/journal?journalEntry=entry-posted-1', '/journal?journalEntry=entry-subledger-9'])
     assert.ok(
       rowHrefs.every((href) => !href?.includes('?entry=')),
       'no row may link through the manual-journal drawer param',

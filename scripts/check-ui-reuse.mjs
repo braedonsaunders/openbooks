@@ -58,7 +58,7 @@ const ENTITY_SOURCES_PATH = "web/lib/list/entity-sources.ts";
  */
 export const TABLE_CEILING = 67;
 export const DIALOG_WINDOW_CEILING = 12;
-export const BESPOKE_PAGE_CEILING = 28;
+export const BESPOKE_PAGE_CEILING = 17;
 
 const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView"];
 const LIST_KEY_PROPS = ["source", "entity", "recordType"];

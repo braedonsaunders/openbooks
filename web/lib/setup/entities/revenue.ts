@@ -51,7 +51,6 @@ export const REVENUE_ENTITIES: SetupEntity[] = [
     key: 'fair-value-prices',
     table: 'fair_value_prices',
     rehomed: true, // lives as a section on the item record (dated SSPs)
-    rehomedTo: '/items',
     actorCols: true,
     groupKey: 'revenue',
     featureKey: 'revenueRecognition',

@@ -118,7 +118,7 @@ export async function loadInventory(
         active: view === 'movements',
       },
       {
-        href: '/inventory/counts',
+        href: '/inventory?inventoryView=counts',
         label: t('view.counts'),
         active: false,
       },

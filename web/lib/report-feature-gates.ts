@@ -24,7 +24,6 @@ export const REPORT_PATH_FEATURE_GATES: ReadonlyArray<{
   // lib/feature-gates requireFeatureEnabled
   { prefix: '/reports/budget', feature: 'budgets' },
   { prefix: '/reports/orders', feature: 'orders' },
-  { prefix: '/reports/lot-recall', feature: 'inventory' },
   { prefix: '/reports/availability', feature: 'warehousing' },
   { prefix: '/reports/replenishment', feature: 'warehousing' },
   { prefix: '/reports/resourcing', feature: 'resourcing' },

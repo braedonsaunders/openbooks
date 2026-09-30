@@ -1,10 +1,8 @@
 import 'server-only'
 
-import { redirect } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
-import { featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
-import { movedUrl } from '../../../../../lib/moved-redirect'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 
 /**
  * Company Settings → Payment Providers, split into a loader and a spec.
@@ -26,10 +24,7 @@ export async function loadPaymentProviders(
   sp?: Record<string, string | string[] | undefined>,
 ): Promise<PaymentProvidersData> {
   const authz = await requirePermission('admin.setup.manage')
-  const features = await resolvedFeatureState(authz.user.orgId)
-  // Payment providers need Online payments: send the reader to the Features
-  // page and say why on arrival, instead of landing silently.
-  if (!featureEnabled(features, 'onlinePayments')) redirect(movedUrl('/admin/setup/features', 'payment-providers', sp))
+  await requireFeatureEnabled(authz.user.orgId, 'onlinePayments')
   return {}
 }
 

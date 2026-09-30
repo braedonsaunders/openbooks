@@ -55,7 +55,6 @@ export const PAYROLL_HOLIDAYS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'payroll',
   rehomed: true, // subtab of the Payroll setup workspace, beside the calendar
-  rehomedTo: '/admin/setup/payroll?tab=holidays',
   iconKey: 'calendar',
   orgScoped: true,
   actorCols: true,

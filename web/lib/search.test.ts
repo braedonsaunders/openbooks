@@ -735,15 +735,15 @@ test('exact document numbers bypass the candidate cap and order first', async ()
 
 // Journal entries were unindexed — an exact JE number searched
 // total zero because only documents was queried. Entries surface inside the
-// transactions group through the entry compatibility redirect.
-test('journal entries are indexed and link through the entry redirect', async () => {
+// transactions group through the shared journal-entry drawer.
+test('journal entries are indexed and open the shared entry drawer', async () => {
   reset({ entries: [JE_POSTED] })
   const response = await globalSearch(authz('gl.read'), 'JE-26188661')
   const hits = transactionHits(response)
   const hit = hits.find((candidate) => candidate.id === 'je-posted')
   assert.ok(hit, 'the exact journal entry must surface')
   assert.equal(hit.title, 'Journal JE-26188661')
-  assert.equal(hit.href, '/journal/je-posted')
+  assert.equal(hit.href, '/journal?journalEntry=je-posted')
   assert.equal(hit.iconKey, 'journal')
   assert.equal(hit.subtitle, 'je-posted:memo:confidential')
 

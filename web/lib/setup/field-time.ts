@@ -20,7 +20,6 @@ export const PROJECT_GEOFENCES_ENTITY: SetupEntity = {
   groupKey: 'projects',
   featureKey: 'fieldTime',
   rehomed: true, // section on the project page
-  rehomedTo: '/projects',
   iconKey: 'map-pin',
   orgScoped: true,
   actorCols: true,
@@ -49,7 +48,6 @@ export const TIME_KIOSKS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'fieldTime',
   rehomed: true, // section on the Timesheets setup surface
-  rehomedTo: '/time/setup',
   iconKey: 'tablet',
   orgScoped: true,
   actorCols: true,

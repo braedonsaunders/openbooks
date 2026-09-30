@@ -538,7 +538,7 @@ const getFieldTicket: AssistantToolDef = {
             ? null
             : { name: signatures.customer.name, at: signatures.customer.at, comment: signatures.customer.comment ?? null },
         },
-        href: `/field-tickets/${a.ticketId}`,
+        href: `/field-tickets?ticket=${a.ticketId}`,
       },
     };
   },

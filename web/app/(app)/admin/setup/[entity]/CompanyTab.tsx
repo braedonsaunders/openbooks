@@ -10,7 +10,7 @@ import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 
 /**
  * Company & Accounting settings, rendered as the Setup "Company" tab. This is
- * the former /admin/settings page (which now redirects here). Loads the org's
+ * the native company configuration workspace. Loads the organization's
  * current values and the postable accounts for the control-account pickers,
  * then hands them to the existing client form (which PUTs to /api/admin/settings).
  */
