@@ -36,7 +36,16 @@ test('every industry, company size, complexity and financial role packs visible 
 })
 
 test('only unchanged seeded role templates follow product defaults; edited layouts remain tenant-owned', () => {
-  const manager = { user: { roles: [{ key: 'people_manager', name: 'People manager' }] }, permissions: new Set(['reports.read', 'hrm.team.read']) } as Authz
+  const manager: Authz = {
+    user: {
+      id: 'manager', email: 'manager@example.test', name: 'People manager',
+      roles: [{ key: 'people_manager', name: 'People manager' }],
+      orgId: 'organization', envKind: 'sandbox', productionOrgId: 'organization',
+      isSuperAdmin: false, homeUserId: 'manager', homeOrgId: 'organization',
+    },
+    permissions: new Set(['reports.read', 'hrm.team.read']),
+    allowedSubsidiaryIds: null,
+  }
   assert.equal(hasFinancialWorkspace(manager), false, 'general reports do not displace a people workspace')
   assert.ok(hasFinancialWorkspace({ ...manager, permissions: new Set(['gl.read']) }), 'ledger readers receive the financial workspace')
   const seed = structuredClone(DEFAULT_DASHBOARD_LAYOUTS.admin)
