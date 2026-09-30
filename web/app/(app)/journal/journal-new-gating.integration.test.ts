@@ -144,12 +144,15 @@ test('journal New hides without gl.post and shows with it', async () => {
   }
 })
 
-test('?entryNew=1 opens nothing without gl.post', async () => {
+test('New journal navigation uses the explicit drawer flag and requires gl.post', async () => {
   const f = await fixture()
   try {
     const readerPage = await f.load(f.reader, { entryNew: '1', mode: 'edit' })
     assert.strictEqual(readerPage.drawerOpen, false)
     assert.strictEqual(readerPage.drawer, null)
+    const obsoleteSelection = await f.load(f.poster, { entry: 'new' })
+    assert.strictEqual(obsoleteSelection.drawerOpen, false)
+    assert.strictEqual(obsoleteSelection.drawer, null)
   } finally {
     await f.close()
   }

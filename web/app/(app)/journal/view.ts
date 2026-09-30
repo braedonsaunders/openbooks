@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -56,20 +55,14 @@ export async function loadJournal(
   const canCreate = can(authz, 'gl.post') && (allowedSubsidiaries === null || allowedSubsidiaries.size > 0)
   const scopeUnavailable = can(authz, 'gl.post') && allowedSubsidiaries !== null && allowedSubsidiaries.size === 0
 
-  // ?entry= drives the manual-journal drawer over DOCUMENT ids;
-  // posted-entry links to /journal/[id] are a separate, untouched surface.
+  // ?entry= selects a manual-journal document; posted entries open through
+  // the shared journal-entry drawer.
   const entryParam = pickString(sp.entry)
   // Unsaved-create: ?entryNew=1 opens an editable drawer on no persisted
   // row. The loader ships pickers plus an empty payload; opening writes
   // nothing, Cancel writes nothing, and the drawer's explicit Save is the
   // single idempotent POST. Gated on gl.post like the draft flow was.
   const creating = pickString(sp.entryNew) === '1' && canCreate
-  if (entryParam === 'new') {
-    // The legacy deep link minted a server-side draft on GET. It now lands
-    // on the same unsaved drawer the New button opens — still zero writes.
-    redirect(canCreate ? '/journal?entryNew=1&mode=edit' : '/journal')
-  }
-
   const draftsView = pickString(sp.journalTab) === 'drafts'
   const [draftCount, openJournal, pickers, postedCount] = await Promise.all([
     db.execute<{ n: string }>(sql`
