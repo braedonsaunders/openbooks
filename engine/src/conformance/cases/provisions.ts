@@ -2,7 +2,7 @@
  * Accounting changes approval path and the real posting kernel. */
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '../../platform/db.ts'
+import { db,  withOrgContext } from '../../platform/db.ts'
 import { seedFlowActors, seedApprovalFlow } from '../../testing/fixtures.ts'
 import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts'
 import { decideGate } from '../../flows/gates.ts'
@@ -12,7 +12,7 @@ import type { CaseContext, ConformanceCase } from '../types.ts'
 
 async function approvedAssessment(ctx: CaseContext) {
   const ledger = ctx.ledger!
-  const actors = await withBypassContext(async () => {
+  const actors = await withOrgContext(ledger.orgId, async () => {
     const actors = await seedFlowActors(ledger.orgId)
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${ledger.orgId}`)
     await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values

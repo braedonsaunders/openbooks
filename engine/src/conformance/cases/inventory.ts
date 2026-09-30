@@ -8,7 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "../../platform/db.ts";
+import { db,  withOrgContext } from "../../platform/db.ts";
 import { fromUnits, toUnits } from "../../money/money.ts";
 import { applyInventoryIssuesForInvoice } from "../../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../../inventory/documents-purchasing.ts";
@@ -703,7 +703,7 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
     },
     run: async ctx => {
       const ledger = ctx.ledger!;
-      await withBypassContext(async () => {
+      await withOrgContext(ledger.orgId, async () => {
         await db.execute(sql`update item_inventory_profiles set asset_account_id=${ctx.roles.finishedGoodsInventory} where org_id=${ledger.orgId} and item_id=${ledger.items.assembly}`);
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${ledger.actorId},'items.post','grant')`);
       });

@@ -41,14 +41,15 @@ controlled change with custom-field, allocation, audit and flow evidence.
   acyclic internal static imports. Financial transaction bodies must not be
   split merely to meet the size threshold.
 - `check:engine-boundaries` enforces module ownership, declared dependencies and
-  non-growth of the two pre-existing cross-module cycles. Internal operation
-  DAGs do not imply that those wider cycles have disappeared.
+  an acyclic cross-module graph. Internal operation DAGs and the module graph
+  are both enforced; retired cycle pins cannot be restored.
 - Mutation targets follow the moved financial policies; historical mutation
   reports remain historical rather than being rewritten as current evidence.
 
 Changes that alter financial results, refusal conditions, lock ordering or
-posted history require separate behavioral proof. The revenue modification,
-lease remeasurement and lease termination conformance gaps remain open.
+posted history require separate behavioral proof. The conformance register and its source-pinned published evidence state each
+capability's supported scope; historical measurements do not establish
+coverage for later financial changes.
 
 ## Widget composition
 
@@ -69,8 +70,8 @@ family limits and the absence of reverse imports.
 
 The full database-mode run at `1d6e4fec443071149393ad5545e13fdc1a55d311`
 measured all 32 configured targets, sampling up to 25 mutants per target with
-240-second timeouts. The atomic publisher accepted the report: 539 assertion
-kills, 129 survivors, 3 timeouts, zero errors, zero skipped mutants (671 measured).
+240-second timeouts. The atomic publisher accepted the report: 536 assertion
+kills, 132 survivors, 3 timeouts, zero errors, zero skipped mutants (671 measured).
 Every existing and inherited floor passed, including when timeout credit is
 excluded. This is sampled regression evidence, not complete branch coverage or
 an independent accounting certification.

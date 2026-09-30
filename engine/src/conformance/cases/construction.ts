@@ -18,7 +18,7 @@ import {
 import { costToCostPercent } from "../../projects/revenue.ts";
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db,withBypassContext,withOrgContext } from '../../platform/db.ts'
+import { db,withOrgContext } from '../../platform/db.ts'
 import { postEntry } from '../../journal/post-entry.ts'
 import { seedFlowActors,seedApprovalFlow } from '../../testing/fixtures.ts'
 import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts'
@@ -252,7 +252,7 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
     },
     run:async ctx=> {
       const ledger=ctx.ledger!, projectId=randomUUID()
-      const actors=await withBypassContext(async()=> {
+      const actors=await withOrgContext(ledger.orgId, async()=> {
         const actors=await seedFlowActors(ledger.orgId)
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${ledger.orgId}`)
         await db.execute(sql`insert into projects(id,org_id,code,name,subsidiary_id,contract_value) values (${projectId},${ledger.orgId},'CONF-LOSS','Fixed-price construction',${ledger.subsidiaryId},1000000)`)
