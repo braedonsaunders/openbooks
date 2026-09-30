@@ -162,5 +162,23 @@
     "propose": "Create approval proposal",
     "proposeFailed": "Contract modification could not be proposed",
     "saveFailed": "Modification failed"
+  },
+  "breakage": {
+    "title": "Assess expected breakage",
+    "choose": "Choose…",
+    "hint": "Propose an independently approved estimate. Expected breakage follows exercised rights through the native usage schedule. A supported remote-use assessment measures the remaining rights. Expiry alone does not earn revenue; amounts owed under unclaimed-property law remain liabilities.",
+    "grant": "Prepaid grant",
+    "date": "Assessment date",
+    "amount": "Expected total breakage",
+    "entitled": "Entitled to the unexercised amount?",
+    "constraint": "Supported under the significant-reversal constraint?",
+    "thirdParty": "Amount owed to a third party or under unclaimed-property law?",
+    "evidence": "Entitlement, estimation and legal evidence",
+    "reason": "Assessment reason",
+    "failed": "The breakage proposal could not be saved",
+    "propose": "Propose for approval",
+    "method": "Recognition assessment",
+    "expected_proportional": "Expected breakage in proportion to exercised rights",
+    "remaining_use_remote": "Further customer use is assessed as remote"
   }
 }

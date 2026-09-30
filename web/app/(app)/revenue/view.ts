@@ -1,3 +1,4 @@
+import { breakageGrantOptions } from '@openbooks/engine/revenue'
 import "server-only";
 
 import { getTranslations } from "next-intl/server";
@@ -68,6 +69,7 @@ export async function loadRevenue(
     contractId && isUuid(contractId)
       ? await loadContract(contractId, orgId, authz.allowedSubsidiaryIds)
       : null;
+  if (openContract && canRun) openContract.prepaidGrants=await breakageGrantOptions(orgId,authz.user.id,openContract.contract.id)
   const requestedReturn = pickString(sp.drawerReturn);
 
   const drawer: ContractDrawerProps | null = openContract

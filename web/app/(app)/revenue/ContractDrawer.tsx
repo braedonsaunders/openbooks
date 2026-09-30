@@ -13,6 +13,7 @@ import {
   UrlDrawer,
 } from "@openbooks/ui";
 import { add, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { PrepaidBreakageButton } from './PrepaidBreakageButton'
 import { CancelRecognitionButton } from "./CancelRecognitionButton";
 import { ReconcileLegacyButton } from "./ReconcileLegacyButton";
 import { RunRecognitionButton } from "./RunRecognitionButton";
@@ -132,6 +133,7 @@ export function ContractDrawer({
             options={modificationOptions}
           />
         ) : null}
+        {canRun && payload.prepaidGrants?.length ? <PrepaidBreakageButton grants={payload.prepaidGrants} /> : null}
         {payload.changes?.length ? (
           <section className="space-y-2">
             <h3 className="font-semibold">{t("drawer.eventsTitle")}</h3>

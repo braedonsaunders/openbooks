@@ -1,3 +1,4 @@
+import type { breakageGrantOptions } from '@openbooks/engine/revenue'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
@@ -67,6 +68,7 @@ export interface ContractPayload {
     sourceInvoiceNumber: string | null;
   };
   obligations: ObligationRow[];
+  prepaidGrants?: Awaited<ReturnType<typeof breakageGrantOptions>>;
   changes?: { id: string; operation: string; effective_on: string; status: string }[];
 }
 
