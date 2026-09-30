@@ -34,6 +34,8 @@ const EXTRA_ACCOUNTS: readonly [Role, string, string, string][] = [
   ["disposalGainLoss", "7100", "Gain or Loss on Disposal", "expense_other"],
   ["fxUnrealizedGainLoss", "7020", "Unrealized FX Gain or Loss", "expense_other"],
   ["loanPayable", "2800", "Foreign Currency Loan", "liability_long_term"],
+  ["provisionExpense", "6930", "Provision Expense", "expense"],
+  ["provisionLiability", "2710", "Provision Liability", "liability_current_other"],
   ["incomeTaxExpense", "8000", "Income Tax Expense", "expense_other"],
   ["incomeTaxPayable", "2400", "Income Tax Payable", "liability_current_other"],
   ["deferredTaxAsset", "1600", "Deferred Tax Asset", "asset_other"],

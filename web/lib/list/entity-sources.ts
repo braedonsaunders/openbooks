@@ -344,7 +344,41 @@ export interface EntityQuickFilter {
   loadOptions?: (orgId: string, allowedSubsidiaryIds?: Set<string> | null) => Promise<EntityQuickFilterOption[]>
 }
 
+const provisionJoins = sql`join subsidiaries sub on sub.org_id=p.org_id and sub.id=p.subsidiary_id
+  join accounting_books book on book.org_id=p.org_id and book.id=p.book_id
+  left join lateral (select coalesce(sum(-line.amount),0) as balance from journal_lines line
+    join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
+    where line.org_id=p.org_id and entry.book_id=p.book_id and line.subsidiary_id=p.subsidiary_id
+      and line.account_id=p.liability_account_id and line.custom->>'provisionId'=p.id::text
+      and entry.status in ('posted','reversed')) gl on true
+  left join lateral (select fc.id,fc.effective_on,fc.result from financial_changes fc where fc.org_id=p.org_id
+    and fc.domain='provision' and fc.subject_id=p.id and fc.status='applied'
+    order by fc.effective_on desc,fc.applied_at desc,fc.id desc limit 1) review on true`
+const provisionStatus = sql`case when review.id is null then 'unassessed'
+  when review.result->>'recognized'='true' then 'recognized' else 'contingent' end`
+
 const SOURCES: Record<string, EntityListSource> = {
+  provision_obligation: {
+    recordType: 'provision_obligation', table: 'provision_obligations', alias: 'p', readPermission: 'gl.read', currencyField: 'currency',
+    baseJoins: provisionJoins, countJoins: provisionJoins,
+    builtInExpr: { name: sql`p.name`, subsidiary: sql`sub.name`, book: sql`book.name`, currency: sql`p.currency`,
+      balance: sql`gl.balance`, reviewed_on: sql`review.effective_on`, status: provisionStatus },
+    sorts: { name: sql`p.name`, subsidiary: sql`sub.name`, book: sql`book.name`, balance: sql`gl.balance`, reviewed_on: sql`review.effective_on`, status: provisionStatus },
+    defaultSort: sql`p.name`, statusExpr: provisionStatus, quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId, allowed) => {
+      const parts = [sql`p.org_id=${orgId}`, subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed === undefined ? new Set<string>() : allowed)]
+      for (const filter of view.filters) {
+        if (filter.key === 'status') pushNonprofitStatusFilter(parts, filter, provisionStatus, ['unassessed', 'recognized', 'contingent'])
+        else parts.push(sql`and false`)
+      }
+      if (adhoc.q) parts.push(sql`and p.name ilike ${`%${adhoc.q}%`}`)
+      if (adhoc.filters?.status) parts.push(sql`and ${provisionStatus}=${adhoc.filters.status}`)
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'provision', basePath: '/accounting/provisions',
+    statusVariant: (_row, value) => value === 'unassessed' ? 'warning' : 'outline',
+  },
+
   hrm_process_template: {
     recordType: 'hrm_process_template', table: 'hrm_process_templates', alias: 't',
     readPermission: 'hrm.process.manage',

@@ -48,6 +48,7 @@
   "exports": {
     "./documents": "./src/ledger/public.ts",
     "./src/*": "./src/*",
-    "./tax": "./src/tax/public.ts"
+    "./tax": "./src/tax/public.ts",
+    "./provisions": "./src/provisions/public.ts"
   }
 }

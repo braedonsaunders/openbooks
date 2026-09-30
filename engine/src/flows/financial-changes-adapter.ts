@@ -31,7 +31,7 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
       key: "domain",
       label: "Accounting domain",
       type: "enum",
-      options: ["lease", "revenue", "asset", "consolidation", "manufacturing"].map((value) => ({
+      options: ["lease", "revenue", "asset", "consolidation", "manufacturing", "provision"].map((value) => ({
         value,
         label: value,
       })),

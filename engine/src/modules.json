@@ -144,6 +144,7 @@
         "composition",
         "consolidation",
         "country-tax-packs",
+        "flows",
         "hrm",
         "inventory",
         "journal",
@@ -154,6 +155,7 @@
         "payroll",
         "platform",
         "projects",
+        "provisions",
         "resourcing",
         "revenue",
         "sales",
@@ -684,6 +686,16 @@
         "scheduling",
         "scripting",
         "sync"
+      ]
+    },
+    "provisions": {
+      "description": "Governed recognition and periodic measurement of provisions and loss contingencies.",
+      "dependsOn": [
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform"
       ]
     }
   },

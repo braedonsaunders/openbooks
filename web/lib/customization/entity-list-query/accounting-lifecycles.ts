@@ -10,6 +10,7 @@ const AWAITING_STATUSES = ["draft", "pending", "approved"] as const;
 export function financialChangeSubjectExpr(alias: "fc"): SQL {
   const a = sql.identifier(alias);
   return sql`coalesce(
+    (select p.name from provision_obligations p where p.org_id=${a}.org_id and p.id=${a}.subject_id),
     (select nullif(concat_ws(' — ', la.lease_number, nullif(btrim(la.description), '')), '')
        from lease_agreements la
       where la.org_id = ${a}.org_id and la.id = ${a}.subject_id),

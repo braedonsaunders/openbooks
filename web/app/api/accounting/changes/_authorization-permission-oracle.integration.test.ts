@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 
 /**
- * H-FINCHANGE: the domain permission must be checked BEFORE the row lookup.
+ * The domain permission must be checked BEFORE the row lookup.
  * A caller holding none of the change-family permissions (assets.manage,
  * ar.post, close.run) gets the same uniform 404 for an existing change and
  * a missing id — never a 403 naming the needed permission. Submit, apply
@@ -44,7 +44,7 @@ registerHooks({
   },
 });
 
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
@@ -94,6 +94,26 @@ test("financial-change oracle: no family permission sees existing and missing id
     assert.ok(wrongDomainMissing instanceof NextResponse);
     assert.equal(wrongDomainMissing.status, 404);
     assert.deepEqual(await wrongDomainMissing.json(), { error: "change not found" });
+    const obligationId = randomUUID(), provisionId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into provision_obligations
+        (id,org_id,subsidiary_id,book_id,name,currency,expense_account_id,liability_account_id,created_by)
+        values (${obligationId},${org.orgId},${org.subsidiaryId},${org.bookId},'Settlement claim','CAD',${org.accounts.cogs},${org.accounts.withholding},${adminId})`);
+      await db.execute(sql`insert into financial_changes
+        (id,org_id,subsidiary_id,domain,subject_id,operation,effective_on,reason,idempotency_key,payload,before_state,submitted_by,created_by,updated_by)
+        values (${provisionId},${org.orgId},${org.subsidiaryId},'provision',${obligationId},'provision_assessment',${org.date},'Assess settlement claim',${`key-${provisionId}`},
+          ${JSON.stringify({requiredSubsidiaryIds:[org.subsidiaryId]})}::jsonb,'{}'::jsonb,${adminId},${adminId},${adminId})`);
+    });
+    await withOrgContext(org.orgId, async () => {
+      state.permissions = new Set<string>(["gl.manage"]);
+      assert.ok(!((await authorizeChange(provisionId, "submit")) instanceof NextResponse));
+      const cannotPost = await authorizeChange(provisionId, "apply");
+      assert.ok(cannotPost instanceof NextResponse); assert.equal(cannotPost.status, 404);
+      state.permissions = new Set<string>(["gl.post"]);
+      assert.ok(!((await authorizeChange(provisionId, "apply")) instanceof NextResponse));
+      const cannotSubmit = await authorizeChange(provisionId, "submit");
+      assert.ok(cannotSubmit instanceof NextResponse); assert.equal(cannotSubmit.status, 404);
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }

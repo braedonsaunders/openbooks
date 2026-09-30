@@ -32,7 +32,7 @@ export default async function AccountingEvents({
   const auth = await getAuthz();
   if (!auth) redirect("/login");
   const domains = can(auth, "gl.read")
-    ? ["lease", "asset", "revenue", "consolidation"]
+    ? ["lease", "asset", "revenue", "consolidation", "provision"]
     : [
         ...(can(auth, "assets.read") ? ["lease", "asset"] : []),
         ...(can(auth, "ar.read") ? ["revenue"] : []),
@@ -90,7 +90,9 @@ export default async function AccountingEvents({
     references.map((r) => [r.id, r.label]),
   );
   const permission =
-    row?.domain === "revenue"
+    row?.domain === "provision"
+      ? "gl.post"
+      : row?.domain === "revenue"
       ? "ar.post"
       : row?.domain === "consolidation"
         ? "close.run"
@@ -252,7 +254,7 @@ export default async function AccountingEvents({
                   id={row.id}
                   status={row.status}
                   canSubmit={
-                    can(auth, permission) && row.submitted_by === auth.user.id
+                    can(auth, row.domain === "provision" ? "gl.manage" : permission) && row.submitted_by === auth.user.id
                   }
                   canApply={can(auth, permission)}
                 />

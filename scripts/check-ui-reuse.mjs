@@ -18,8 +18,8 @@
  *   rule2  `<dialog`, `window.confirm(`, `window.prompt(` or `window.alert(`
  *          in the same scopes. Blocking browser dialogs are replaced by the
  *          shared promptDialog flow in web/lib/prompt.tsx.
- *   rule3  a page.tsx under web/app/(app) that does not import ModuleView
- *          (web/components/viewspec/module-view.tsx). Pages that genuinely
+ *   rule3  a page.tsx under web/app/(app) that neither imports ModuleView nor renders a native registered list
+ *          (web/components/viewspec/module-view.tsx). Native registered lists are shared compositions. Pages that genuinely
  *          own a custom shell are listed, never silently bespoke.
  *   rule4  a PagedTable / RecordListView / EntityListView element passing a
  *          `source`, `entity` or `recordType` string literal that is not
@@ -58,7 +58,7 @@ const ENTITY_SOURCES_PATH = "web/lib/list/entity-sources.ts";
  */
 export const TABLE_CEILING = 1;
 export const DIALOG_WINDOW_CEILING = 0;
-export const BESPOKE_PAGE_CEILING = 17;
+export const BESPOKE_PAGE_CEILING = 13;
 
 const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView"];
 const LIST_KEY_PROPS = ["source", "entity", "recordType"];
@@ -221,7 +221,7 @@ export function scanText(path, text, registeredKeys = new Set()) {
     if (violations.length > 50) break;
   }
   if (/(^|\/)page\.tsx$/.test(path) && path.startsWith("web/app/(app)/")) {
-    if (!/^\s*import\s[^;]*\bModuleView\b/m.test(stripped)) {
+    if (!/^\s*import\s[^;]*\bModuleView\b/m.test(stripped) && !/<(?:EntityListView|RecordListView)(?=[\s/>])/.test(stripped)) {
       violations.push({ rule: "bespoke-page", path, line: 1 });
     }
   }
@@ -381,7 +381,7 @@ export function main() {
   const sections = [
     ["tables", tablePaths, allowlist.tables, "raw <table>. Compose the shared table layer (PagedTable / RecordListView / EntityListView for lists, the ReportTable primitives for reports, Table in @openbooks/ui) instead of a lowercase <table>"],
     ["dialogWindow", dialogPaths, allowlist.dialogWindow, "<dialog> or window.confirm/prompt/alert. Route the confirmation through the shared promptDialog flow in web/lib/prompt.tsx"],
-    ["bespokePages", bespokePaths, allowlist.bespokePages, "page.tsx without a ModuleView import. Render ModuleView from web/components/viewspec/module-view.tsx"],
+    ["bespokePages", bespokePaths, allowlist.bespokePages, "page.tsx without ModuleView or a native registered list. Compose the shared page machinery"],
   ];
   for (const [name, paths, entries, remedy] of sections) {
     const { fresh, stale } = reconcileFiles(paths, entries);

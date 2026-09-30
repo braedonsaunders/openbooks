@@ -1051,6 +1051,23 @@ const BUDGET_SCENARIO: RecordTypeMeta = {
   ],
 };
 
+const PROVISION_OBLIGATION: RecordTypeMeta = {
+  key: "provision_obligation", labelKey: "accounting.provisions.title", category: "entity",
+  supportsForms: false, customFieldLineTable: null, headerFields: [], lineFields: [],
+  defaultSort: { sortKey: "name", dir: "asc" },
+  listColumns: [
+    { key: "name", labelKey: "accounting.provisions.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "subsidiary", labelKey: "accounting.provisions.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary" },
+    { key: "book", labelKey: "accounting.provisions.book", kind: "text", sortable: true, sortKey: "book" },
+    { key: "currency", labelKey: "common.labels.currency", kind: "text" },
+    { key: "balance", labelKey: "accounting.provisions.liability", kind: "amount", sortable: true, sortKey: "balance" },
+    { key: "reviewed_on", labelKey: "accounting.provisions.reviewedOn", kind: "date", sortable: true, sortKey: "reviewed_on" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+  ],
+  listFilters: [{ key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+    options: ["unassessed", "recognized", "contingent"].map(value => ({ value, labelKey: `accounting.provisions.${value}` })) }],
+};
+
 const HRM_PROCESS_TEMPLATE: RecordTypeMeta = {
   key: "hrm_process_template", labelKey: "hrm.processes.templates.title", category: "entity",
   featureKey: "hrm", supportsForms: false, customFieldLineTable: null,
@@ -1121,7 +1138,7 @@ const FINANCIAL_CHANGE: RecordTypeMeta = {
         {value:"applied",labelKey:"accounting.lifecycle.queueApplied"},
       ]},
     {key:"domain",labelKey:"accounting.lifecycle.domain",kind:"select",operators:OPERATORS_BY_KIND.select,
-      options: ["lease","asset","revenue","consolidation"].map(value=>({value,labelKey:`accounting.lifecycle.domains.${value}`}))},
+      options: ["lease","asset","revenue","consolidation","provision"].map(value=>({value,labelKey:`accounting.lifecycle.domains.${value}`}))},
     {key:"operation",labelKey:"accounting.lifecycle.operation",kind:"select",operators:OPERATORS_BY_KIND.select,
       options: FINANCIAL_CHANGE_OPERATIONS.map(value=>({value,labelKey:`accounting.lifecycle.operations.${value}`}))},
     {key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,
@@ -2313,6 +2330,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   INVENTORY_MOVEMENT,
   BUDGET_SCENARIO,
   HRM_PROCESS_TEMPLATE,
+  PROVISION_OBLIGATION,
   LEASE_AGREEMENT,
   FINANCIAL_CHANGE,
   REVENUE_CONTRACT,

@@ -3,7 +3,7 @@
   "tables": [
     {
       "path": "web/app/(app)/reports/ReportTable.tsx",
-      "reason": "Report-engine table primitive itself: the shared report table every report view composes instead of a raw table."
+      "reason": "Shared report table primitive: the single owner of native report table markup."
     }
   ],
   "dialogWindow": [],
@@ -13,16 +13,8 @@
       "reason": "Error/gate page outside the module shell; no ModuleView spec applies."
     },
     {
-      "path": "web/app/(app)/accounting/changes/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
-    },
-    {
       "path": "web/app/(app)/admin/apps/preview/[id]/page.tsx",
       "reason": "Administration console page with its own shell, outside module navigation."
-    },
-    {
-      "path": "web/app/(app)/assets/leases/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
     },
     {
       "path": "web/app/(app)/close/posting-periods/page.tsx",
@@ -31,14 +23,6 @@
     {
       "path": "web/app/(app)/feature-required/page.tsx",
       "reason": "Error/gate page outside the module shell; no ModuleView spec applies."
-    },
-    {
-      "path": "web/app/(app)/hrm/processes/templates/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
-    },
-    {
-      "path": "web/app/(app)/inventory/page.tsx",
-      "reason": "Inventory module home composing EntityListView directly with its own header tabs."
     },
     {
       "path": "web/app/(app)/page.tsx",

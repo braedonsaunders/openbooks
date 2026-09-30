@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@openbooks/ui";
 const fieldKeys = new Set([
+  'identity', 'name', 'id', 'subsidiaryId', 'currency', 'expenseAccountId', 'liabilityAccountId', 'presentObligation', 'outflow', 'reliablyEstimable', 'evidence', 'discounting', 'discountEvidence', 'estimate', 'method', 'amount', 'outcomes', 'probability', 'minimum', 'maximum', 'reportingFramework', 'periodId', 'balance', 'events', 'recognized', 'liability', 'estimatedSettlement', 'disclosureRequired', 'priorLiability', 'currentPeriodCharge', 'entryId', 'requiredSubsidiaryIds',
   'existingId', 'existingObligationIds', 'ssp', 'standaloneSellingPrice', 'recognitionRuleId',
   'deferredAccountId', 'recognizedAccountId', 'totalAmount', 'catchUp', 'priorRecognized',
   'targetRecognized', 'remaining', 'netCredits', 'newTotal', 'pool',

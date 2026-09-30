@@ -9,12 +9,13 @@ import { getAuthz, can } from "@/lib/authz";
 import { isFeatureEnabled } from "@/lib/features";
 import { isUuid } from "@/lib/list-params";
 export const changeAuthority = {
+  provision: { permission: "gl.manage", applyPermission: "gl.post", feature: null },
   lease: { permission: "assets.manage", feature: "fixedAssets" },
   asset: { permission: "assets.manage", feature: "fixedAssets" },
   revenue: { permission: "ar.post", feature: "revenueRecognition" },
   consolidation: { permission: "close.run", feature: "multiSubsidiary" },
 } as const;
-export async function authorizeChange(id: string) {
+export async function authorizeChange(id: string, intent: "submit" | "apply" = "submit") {
   const auth = await getAuthz();
   if (!auth)
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -27,7 +28,7 @@ export async function authorizeChange(id: string) {
   try {
     assertAnyPermission(
       (permission) => can(auth, permission),
-      Object.values(changeAuthority).map((entry) => entry.permission),
+      Object.values(changeAuthority).flatMap((entry) => [entry.permission, ...("applyPermission" in entry ? [entry.applyPermission] : [])]),
     );
   } catch (error) {
     if (error instanceof ScopeNotFoundError)
@@ -56,9 +57,9 @@ export async function authorizeChange(id: string) {
   // Wrong-domain callers learn nothing either: the domain-specific
   // permission fails closed with the same uniform 404, so an ar.post-only
   // caller cannot distinguish an existing lease change from a missing id.
-  if (!can(auth, policy.permission))
+  if (!policy || !can(auth, intent === "apply" && "applyPermission" in policy ? policy.applyPermission : policy.permission))
     return NextResponse.json({ error: "change not found" }, { status: 404 });
-  if (!(await isFeatureEnabled(auth.user.orgId, policy.feature)))
+  if (policy.feature && !(await isFeatureEnabled(auth.user.orgId, policy.feature)))
     return NextResponse.json(
       {
         error:

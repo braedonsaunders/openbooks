@@ -57,6 +57,8 @@ test('bespoke page fires without a ModuleView import', () => {
     [],
   )
   assert.deepEqual(rules('web/app/(app)/x/view.tsx', 'export function V() { return <p>hi</p> }'), [])
+  assert.deepEqual(rules('web/app/(app)/x/page.tsx', 'import { EntityListView } from "e"; export default function X() { return <p>hi</p> }'), ['bespoke-page'])
+  assert.deepEqual(rules('web/app/(app)/x/page.tsx', 'import { EntityListView } from "e"; export default function X() { return <EntityListView recordType="customer" /> }'), [])
 })
 
 test('unregistered list keys fire and name the key', () => {
@@ -89,7 +91,7 @@ test('registered keys derive from both list registries', () => {
 test('allow-list sections stay within their shrink-only ceilings', () => {
   assert.equal(TABLE_CEILING, 1)
   assert.equal(DIALOG_WINDOW_CEILING, 0)
-  assert.equal(BESPOKE_PAGE_CEILING, 17)
+  assert.equal(BESPOKE_PAGE_CEILING, 13)
   const allowlist = loadAllowlist()
   assert.ok(allowlist.tables.length <= TABLE_CEILING)
   assert.ok(allowlist.dialogWindow.length <= DIALOG_WINDOW_CEILING)

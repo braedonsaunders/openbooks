@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 
 /**
  * The organisation's financial reporting framework. It decides the questions
@@ -18,10 +18,14 @@ import { db } from "./db.ts";
  */
 export type ReportingFramework = "us_gaap" | "ifrs";
 
-export async function orgReportingFramework(orgId: string): Promise<ReportingFramework> {
-  const r = (await db.execute<{ rf: string | null }>(sql`
+export async function orgReportingFramework(orgId: string, options: {
+  runner?: SqlExecutor;
+  requireConfigured?: boolean;
+  lock?: boolean;
+} = {}): Promise<ReportingFramework> {
+  const r = (await (options.runner ?? db).execute<{ rf: string | null }>(sql`
     select settings->>'reportingFramework' as rf
-      from orgs where id = ${orgId}
+      from orgs where id = ${orgId} ${options.lock ? sql`for share` : sql``}
   `));
   const row = r.rows[0];
   // A missing org row is a caller bug (wrong id, wrong tenant), never a
@@ -31,6 +35,9 @@ export async function orgReportingFramework(orgId: string): Promise<ReportingFra
     throw new Error(
       `organization ${orgId} not found — cannot resolve its financial reporting framework`,
     );
+  }
+  if (options.requireConfigured && row.rf !== "ifrs" && row.rf !== "us_gaap") {
+    throw new Error("Choose the financial reporting framework in Company Settings before assessing a provision");
   }
   // 0033 backfills every persisted organization and setup writes the policy
   // for new ones. Keep the historical default for a persisted row whose

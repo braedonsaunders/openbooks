@@ -545,6 +545,10 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting', subgroup: 'close', requiredPermission: 'gl.read',
   },
   {
+    key: 'provisions', href: '/accounting/provisions', label: 'Provisions and contingencies', iconKey: 'journal',
+    group: 'accounting', subgroup: 'close', requiredPermission: 'gl.read',
+  },
+  {
     // Nonprofit workspace home — the fund-accounting cockpit. Funds and
     // releases live as tabs on this page behind fundAccounting; the single
     // nav entry stays with the parent switch.
@@ -1036,6 +1040,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'tax-provisions',
     'close',
     'accounting-changes',
+    'provisions',
     'nonprofit',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],
