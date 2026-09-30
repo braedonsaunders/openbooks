@@ -27,6 +27,15 @@ export async function strandedWorkFindings(orgId: string, staleOnOrBefore: strin
        terminal_failed_at is not null or
        (updated_at < ${staleOnOrBefore}::date and next_attempt_at <= now()))
     union all
+    select id, 'email_log', null::uuid, coalesce(category_key, 'email'), status,
+           case when jsonb_typeof(meta->'attempts') = 'array'
+             then jsonb_array_length(meta->'attempts') else 0 end,
+           status = 'uncertain', updated_at::text
+      from email_log
+     where org_id = ${orgId} and (
+       status = 'uncertain' or
+       (status in ('queued','failed') and updated_at < ${staleOnOrBefore}::date))
+    union all
     select id, 'report_runs', definition_id, 'report_generation', status, attempt_count,
            terminal_failed_at is not null, updated_at::text
       from report_runs
@@ -55,9 +64,11 @@ export async function strandedWorkFindings(orgId: string, staleOnOrBefore: strin
       attempts: row.attempts, lastActivity: row.lastActivity,
       href: row.surface === "posting_effects" && row.subjectId
         ? `/close?txn=${encodeURIComponent(row.subjectId)}` : "/close",
-      remedy: row.surface === "posting_effects"
-        ? "Review the document's posting-effects failure and use the controlled retry action with a reason."
-        : "Review the recorded failure and repair the owning worker or delivery configuration. Report generation can be requested again from its report; inspect delivery evidence before sending another email.",
+      remedy: row.surface === "email_log" && row.status === "uncertain"
+        ? "Reconcile the recorded delivery attempt against the provider's acceptance evidence before sending another email. An uncertain outcome does not authorize a resend."
+        : row.surface === "posting_effects"
+          ? "Review the document's posting-effects failure and use the controlled retry action with a reason."
+          : "Review the recorded failure and repair the owning worker or delivery configuration. Report generation can be requested again from its report; inspect delivery evidence before sending another email.",
     },
     evidence: [{
       kind: "durable_work", sourceType: row.surface, sourceId: row.id,
