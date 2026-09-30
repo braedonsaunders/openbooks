@@ -47,7 +47,9 @@
         "engine/src/sync/allocation.test.ts",
         "engine/src/sync/link-currency.test.ts",
         "engine/src/sync/applications.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "Application reconciliation locks persisted open items, writes settlement allocations and recomputes stored balances; neighboring allocation and currency helpers do not execute these database effects."
     },
     {
       "path": "engine/src/payments-core/payment-document-lock.ts",
@@ -264,7 +266,9 @@
         "engine/src/assets/depreciation-conventions.test.ts",
         "engine/src/assets/depreciation-bounds.test.ts",
         "engine/src/assets/depreciation.integration.test.ts"
-      ]
+      ],
+      "needsDb": true,
+      "needsDbReason": "Schedule construction resolves locked asset policy, book, calendar and carrying value and persists schedule lines; pure depreciation formula tests cannot measure those reads and writes."
     },
     {
       "path": "engine/src/ledger/posting-document.ts",

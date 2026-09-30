@@ -8,6 +8,7 @@ import {
   type ContinuousCloseDetectorPolicy,
 } from "./continuous-close-config.ts";
 import { absoluteUnits, classifyUnmatchedBankActivity, moneyAbs } from "./measure.ts";
+import { strandedWorkFindings } from "./stranded-work.ts";
 import type { AgentFinding } from "./types.ts";
 
 /**
@@ -207,5 +208,9 @@ export async function accountingFindings(
     }
   }
 
+  const strandedPolicy = byKey.get("stranded_background_work");
+  if (strandedPolicy?.enabled) {
+    findings.push(...await strandedWorkFindings(orgId, addCalendarDays(today, -strandedPolicy.parameters.staleAfterDays!)));
+  }
   return findings;
 }

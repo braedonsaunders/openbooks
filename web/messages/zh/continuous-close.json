@@ -218,6 +218,10 @@
     "unmapped_payroll_component": {
       "title": "未分配薪酬项目",
       "description": "某薪酬项目缺少过账科目或汇缴对象。"
+    },
+    "stranded_background_work": {
+      "title": "Stranded background work",
+      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
     }
   },
   "summary": {

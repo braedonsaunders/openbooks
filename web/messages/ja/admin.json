@@ -1405,6 +1405,10 @@
         "unmapped_payroll_component": {
           "description": "記帳マッピングがない給与項目です。",
           "title": "未マッピング給与項目"
+        },
+        "stranded_background_work": {
+          "title": "Stranded background work",
+          "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
         }
       },
       "accounting": {

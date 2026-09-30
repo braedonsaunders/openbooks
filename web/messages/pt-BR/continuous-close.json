@@ -218,6 +218,10 @@
     "unmapped_payroll_component": {
       "title": "Componente sem atribuição",
       "description": "Um componente de remuneração não tem contas de lançamento nem responsável pelo recolhimento."
+    },
+    "stranded_background_work": {
+      "title": "Stranded background work",
+      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
     }
   },
   "summary": {

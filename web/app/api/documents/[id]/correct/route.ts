@@ -1,33 +1,21 @@
-import { z } from 'zod';
+import { documentCorrectionBodySchema } from '@/lib/api/document-edit-schema';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import {
-  DocumentVoidError,
-  requestDocumentVoid,
-} from '@openbooks/engine/src/ledger/document-void.ts'
+import { DocumentVoidError, DocumentEditError, type DocumentEditInput } from '@openbooks/engine/documents'
 import { can, getAuthz, guardSubsidiaryScope, subsidiariesInScope } from '../../../../../lib/authz'
 import { createPermission, DOC_KINDS, postPermission } from "../../../../../lib/document-kinds.ts";
 import { canReadDocumentKind } from "../../../../../lib/flow-subject-authz.ts";
-import { lockedDocumentScopeDenied } from "../../../../../lib/document-scope.ts";
-import { createPostedCorrectionDraft, runPostedCorrectionDraftFlows, isDocKindEnabled } from "../../../../../lib/documents.ts";
-import { DocumentEditError } from "../../../../../../engine/src/records/document-edit-policy.ts";
-import { type DocumentEditInput } from "../../../../../../engine/src/ledger/document-input.ts";
+import { correctPostedDocumentWithEditor, runPostedCorrectionDraftFlows, isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({
-  amendmentReason: z.string().trim().min(1), subsidiaryId: z.string().uuid().nullable().optional(),
-});
-
-
-
 export const runtime = 'nodejs'
 
 export const POST = defineRoute({
   public: 'session',
-  body: POSTBodySchema1,
+  body: documentCorrectionBodySchema,
   handler: async ({ request: _req, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = await getAuthz()
@@ -84,25 +72,8 @@ export const POST = defineRoute({
         // its lineage back with it, so the source can never be left carrying a
         // correction edge while it is still posted.
         outcome = await withOrgTransaction(authz.user.orgId, async () => {
-          // Locked scope recheck: a rehome that landed after the precheck
-          // must not let this unit correct-and-void another subsidiary's
-          // document. The replacement draft and the controlled void below
-          // share this transaction, so the lock covers both.
-          const relocked = await lockedDocumentScopeDenied(authz, id)
-          // DocumentEditError (not the void error) so the refusal keeps the
-          // uniform missing shape — no extra code field to tell it apart.
-          if (relocked) throw new DocumentEditError(404, 'not found')
-          const replacement = await createPostedCorrectionDraft(id, body, {
-            orgId: authz.user.orgId,
-            userId: authz.user.id,
-            source: 'posted_correction',
-          }, { deferFlows: true })
-          const result = await requestDocumentVoid({
-            documentId: id,
-            orgId: authz.user.orgId,
-            actorId: authz.user.id,
-            reason: body.amendmentReason ?? '',
-            source: 'ui',
+          const { replacement, voidResult: result } = await correctPostedDocumentWithEditor(id, body, {
+            orgId: authz.user.orgId, userId: authz.user.id, source: 'posted_correction',
           })
           return { replacement, result }
         })

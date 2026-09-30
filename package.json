@@ -92,7 +92,7 @@
     "verify:release:quick": "npm run check:repository-artifacts && npm run check:engine-boundaries && npm run check:source-path-references && npm run check:dependencies && npm run check:container-security && npm run check:explicit-any && npm run lint && npm run typecheck:e2e && npm run typecheck --workspaces --if-present && npm run typecheck:scripts && npm -w web run build",
     "verify:release:full": "npm run check:repository-artifacts && npm run check:engine-boundaries && npm run check:source-path-references && npm run check:dependencies && npm run check:container-security && npm run check:explicit-any && npm run lint && npm run typecheck:e2e && npm run typecheck --workspaces --if-present && npm run typecheck:scripts && npm test && npm -w web run build",
     "verify:release:checks": "npm run check:repository-artifacts && npm run check:engine-boundaries && npm run check:source-path-references && npm run check:dependencies && npm run check:container-security && npm run check:explicit-any && npm run lint && npm run typecheck:e2e && npm run typecheck:scripts",
-    "check:engine-boundaries": "node scripts/check-engine-boundaries.mjs",
+    "check:engine-boundaries": "node scripts/check-engine-boundaries.mjs && npm run check:engine-public-api",
     "check:source-path-references": "node scripts/check-source-path-references.mjs",
     "check:civil-date-validation": "node scripts/check-civil-date-validation.mjs",
     "check:test-loc-budget": "node scripts/check-test-loc-budget.mjs",
@@ -103,7 +103,8 @@
     "check:scratch-org-lease-shape": "node scripts/check-scratch-org-lease-shape.mjs",
     "check:test-bypass-scope": "node scripts/check-test-bypass-scope.mjs",
     "check:ledger-journal-writes": "node scripts/check-ledger-journal-writes.mjs",
-    "check:ui-reuse": "node scripts/check-ui-reuse.mjs"
+    "check:ui-reuse": "node scripts/check-ui-reuse.mjs",
+    "check:engine-public-api": "node scripts/check-engine-public-api.mjs"
   },
   "allowScripts": {
     "@parcel/watcher@2.5.6": true,

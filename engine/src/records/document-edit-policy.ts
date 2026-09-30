@@ -141,12 +141,9 @@ export function validateCorrectionReason(value: string | undefined | null): stri
  * optional metadata on a correction edge; the database refuses any row without
  * them (document_links_reversal_evidence CHECK) and submission of the
  * replacement stays gated on the linked void either way
- * (engine/src/flows/submit.ts). The web draft path
- * (web/lib/documents.ts createPostedCorrectionDraft, used by the
- * documents/[id]/correct and expenses/[id]/correct routes) is the
- * correction writer and records this same evidence itself on the
- * reversal edge. Fails closed: an edge without admissible evidence
- * cannot be constructed here at all.
+ * (engine/src/flows/submit.ts). The engine correction command records this
+ * evidence in the same transaction as its retained replacement draft.
+ * Fails closed: an edge without admissible evidence cannot be constructed.
  *
  * Exercised directly by engine policy tests and web compatibility tests.
  */

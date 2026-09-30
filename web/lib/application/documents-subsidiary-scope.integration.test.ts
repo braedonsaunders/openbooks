@@ -46,6 +46,9 @@ test("a restricted actor cannot re-home a correction into an out-of-scope subsid
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Restricted corrector", "restricted_corrector"));
+    await withBypassContext(() => db.execute(sql`update app_roles
+      set permissions = '["ap.create","ap.post"]'::jsonb
+      where org_id = ${org.orgId} and key = 'restricted_corrector'`));
     const hidden = randomUUID();
     await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`));
     // The scratch fixture opens only 2026-07; the correction's void dates its

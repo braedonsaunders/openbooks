@@ -218,6 +218,10 @@
     "unmapped_payroll_component": {
       "title": "未割当の給与項目",
       "description": "給与項目に記帳勘定または納付先がありません。"
+    },
+    "stranded_background_work": {
+      "title": "Stranded background work",
+      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
     }
   },
   "summary": {

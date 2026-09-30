@@ -215,6 +215,10 @@
     "unmapped_payroll_component": {
       "title": "Unmapped payroll component",
       "description": "A pay component misses posting accounts or its remittance party."
+    },
+    "stranded_background_work": {
+      "title": "Stranded background work",
+      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
     }
   },
   "summary": {

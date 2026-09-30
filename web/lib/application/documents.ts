@@ -4,18 +4,18 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   DocumentVoidError,
   requestDocumentVoid,
-} from "@openbooks/engine/src/ledger/document-void.ts";
+} from "@openbooks/engine/documents";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { postDocument } from "@openbooks/engine/documents";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
-import { controlDeps, loadDocument } from "@openbooks/engine/src/ledger/document-service.ts";
-import { DocumentEditError } from "@openbooks/engine/src/records/document-edit-policy.ts";
-import type { DocumentEditInput } from "@openbooks/engine/src/ledger/document-input.ts";
+import { controlDeps, loadDocument } from "@openbooks/engine/documents";
+import { DocumentEditError } from "@openbooks/engine/documents";
+import type { DocumentEditInput } from "@openbooks/engine/documents";
 import { createPermission, postPermission, DOC_KINDS } from "../document-kinds";
-// The remaining editor dependency is deliberate: correction writes still compose
-// custom fields, tax, allocations, audit and flows in the shared web edit service.
-import { createPostedCorrectionDraft, runPostedCorrectionDraftFlows, isDocKindEnabled } from "../documents.ts";
+// Form-specific editing remains in the shared editor adapter; the engine owns
+// the correction transaction, source checks and retained correction evidence.
+import { correctPostedDocumentWithEditor, runPostedCorrectionDraftFlows, isDocKindEnabled } from "../documents.ts";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import {
@@ -365,43 +365,17 @@ export async function correctPostedDocument(
     request: { documentId: input.documentId, correction: input.correction },
     execute: async () => {
       try {
-        const lockedHeader = await lockDocumentHeader(context, input.documentId);
-        if (!DOC_KINDS[lockedHeader.kind]) {
-          throw new ApplicationError(
-            "unsupported_operation",
-            "this transaction type uses a dedicated correction workflow",
-            422,
-          );
-        }
-        assertApplicationPermission(context, createPermission(lockedHeader.kind));
-        assertApplicationPermission(context, postPermission(lockedHeader.kind));
-        // A completed idempotency key must replay even after the first attempt
-        // voided the source. Fresh executions still enforce the posted guard;
-        // executeIdempotent never invokes this callback for a replay.
-        if (lockedHeader.status !== "posted") {
-          throw invalidInput("only a posted transaction can be corrected");
-        }
-        const replacement = await createPostedCorrectionDraft(
+        // The engine locks and rechecks the source, grants and feature state.
+        // Completed idempotency keys replay without invoking this callback.
+        const { replacement, voidResult } = await correctPostedDocumentWithEditor(
           input.documentId,
           input.correction,
-          {
-            orgId: context.authz.user.orgId,
-            userId: context.authz.user.id,
-            source: context.source,
-          },
-          { deferFlows: true },
+          { orgId: context.authz.user.orgId, userId: context.authz.user.id, source: context.source },
         );
-        const voidResult = await requestDocumentVoid({
-          documentId: input.documentId,
-          orgId: context.authz.user.orgId,
-          actorId: context.authz.user.id,
-          reason: input.correction.amendmentReason ?? "",
-          source: context.source,
-        });
         // Approval routing is part of the idempotent command. Flow runs, gates,
         // and deferred effects must commit with the correction and void so a
         // failed dispatch rolls the command back and a replay cannot skip it.
-        await runPostedCorrectionDraftFlows(replacement.id, lockedHeader.kind, {
+        await runPostedCorrectionDraftFlows(replacement.id, replacement.kind, {
           orgId: context.authz.user.orgId,
           userId: context.authz.user.id,
           source: context.source,

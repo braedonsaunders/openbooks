@@ -51,7 +51,11 @@
     "item_missing_tax_code": { "title": "Artículo sin código fiscal", "description": "Un artículo activo no tiene código fiscal asignado." },
     "project_missing_cost_budget": { "title": "Proyecto sin presupuesto de costos", "description": "Un proyecto activo no tiene líneas de presupuesto." },
     "budget_scenario_without_lines": { "title": "Escenario sin líneas", "description": "Un escenario aprobado o presentado no contiene líneas." },
-    "unmapped_payroll_component": { "title": "Componente de nómina sin asignar", "description": "A un componente le faltan cuentas de contabilización o su tercero de pago." }
+    "unmapped_payroll_component": { "title": "Componente de nómina sin asignar", "description": "A un componente le faltan cuentas de contabilización o su tercero de pago." },
+    "stranded_background_work": {
+      "title": "Stranded background work",
+      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+    }
   },
   "summary": { "records": "{count, plural, one {# registro} other {# registros}}", "review": "Revise la evidencia de respaldo" },
   "reports": { "title": "Informes de agentes", "description": "Abra un resumen generado o expórtelo como PDF.", "search": "Buscar informes…", "empty": "Ningún informe generado coincide con estos filtros." },

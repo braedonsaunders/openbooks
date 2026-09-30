@@ -205,21 +205,21 @@ export const FX_SETTLEMENT_CASES: readonly ConformanceCase[] = [
         reference: "IAS 21.32",
         kind: "requirement",
         requirement:
-          "Exchange differences on a monetary item that forms part of the reporting entity's net investment in a foreign operation are recognised in other comprehensive income, not in profit or loss.",
+          "Qualifying net-investment exchange differences remain in profit or loss in separate statements and move to other comprehensive income in statements that include the foreign operation through consolidation.",
       },
     ],
     support: "not-implemented",
     tier: "computation",
     assertion:
-      "A long-term intercompany balance that is in substance part of a net investment in a foreign operation has its exchange differences recognised in other comprehensive income until the investment is disposed of.",
+      "A qualifying long-term intercompany balance retains profit-or-loss treatment in separate statements and has its exchange differences recognised in other comprehensive income in consolidated statements until disposal.",
     facts: [
       "A CAD parent holds a USD subsidiary financed by a long-term intercompany loan with no planned settlement.",
       "The loan is designated part of the net investment in the foreign operation.",
       "At the closing rate the loan carries an exchange difference of CAD 500.00.",
-      "The required outcome is a CAD 500.00 movement in other comprehensive income, with nothing in profit or loss.",
+      "The consolidated outcome is a CAD 500.00 movement in other comprehensive income, with nothing in consolidated profit or loss; separate statements retain profit-or-loss treatment.",
     ],
     gap:
-      "The product has no net-investment designation for intercompany monetary items: every monetary exchange difference the revaluation engine computes is offset to the profit-or-loss unrealized gain/loss account, and there is no other-comprehensive-income reserve for foreign-operation differences in the ledger.",
+      "The product has no net-investment designation for intercompany monetary items: separate-statement revaluation correctly uses profit or loss, but consolidation has no qualifying designation and reclassification path to an OCI reserve.",
     expected: {
       values: { ociMovement: "500.0000", profitOrLossMovement: "0.0000" },
     },

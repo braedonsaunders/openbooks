@@ -143,8 +143,10 @@ entry-level bookkeeping and want lasting control of their software and data.
 
 ### Verify the accounting, don't take our word for it
 
-Three things are published, refreshed from CI on every commit to `main`, and
-reproducible from a clean checkout:
+Three verification artifacts are published after a successful, explicitly
+dispatched comprehensive run on `main`, and are reproducible from a clean
+checkout. Each result identifies the source commit it measured; an older result
+does not establish that a later commit passed:
 
 - **[TRUST.md](TRUST.md)** — every ledger invariant that is checked
   continuously: global balance, per-entry balance, document total against the
