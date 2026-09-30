@@ -19,6 +19,7 @@ import type { FlowSubjectAdapter } from "./types.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 async function assertAccountingSubjectFeatures(orgId: string, subjectId: string, domain: string, operation: string) {
+  if (domain==='sales' && !await lockAndCheckOrgFeature(db,orgId,'dropShipping')) throw new FinancialChangeFeatureError('Turn on Drop Shipping in Company Settings → Features before submitting or approving a control assessment')
   if (domain==='revenue' && operation==='expected_breakage_estimate' && (!await lockAndCheckOrgFeature(db,orgId,'usageBilling') || !await lockAndCheckOrgFeature(db,orgId,'revenueRecognition')))
     throw new FinancialChangeFeatureError('Turn on Usage Billing and Revenue Recognition in Company Settings → Features before submitting or approving a breakage estimate')
   if (domain !== 'provision') return
@@ -41,7 +42,7 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
       key: "domain",
       label: "Accounting domain",
       type: "enum",
-      options: ["lease", "revenue", "asset", "consolidation", "manufacturing", "provision"].map((value) => ({
+      options: ["lease", "revenue", "asset", "consolidation", "manufacturing", "provision", "sales"].map((value) => ({
         value,
         label: value,
       })),

@@ -2,6 +2,7 @@
  * Inbox, emails, and source-record history use these so they cannot drift
  * from each other. This is not ASC 250 / IAS 8 "Accounting Changes". */
 export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
+  drop_ship_control_assessment: "Drop-ship control assessment",
   expected_breakage_estimate: "Expected prepaid breakage estimate",
   provision_assessment: "Provision assessment",
   modification: "Lease modification",
@@ -18,6 +19,7 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
 };
 
 export const FINANCIAL_CHANGE_DOMAIN_LABELS: Record<string, string> = {
+  sales: "Sales agency",
   provision: "Provision and contingency",
   lease: "Lessee lease",
   asset: "Fixed asset",

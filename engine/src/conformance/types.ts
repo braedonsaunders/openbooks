@@ -121,6 +121,7 @@ export type Role =
   | "ap"
   | "bank"
   // Revenue
+  | "vendorPassThrough"
   | "revenue"
   | "deferredRevenue"
   | "recognizedRevenue"

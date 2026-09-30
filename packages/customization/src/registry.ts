@@ -1103,7 +1103,7 @@ const LEASE_AGREEMENT: RecordTypeMeta = {
     options: ["draft","active","terminated","complete"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
 };
 
-const FINANCIAL_CHANGE_OPERATIONS = [
+const FINANCIAL_CHANGE_OPERATIONS = ["drop_ship_control_assessment",
   "modification",
   "remeasurement",
   "termination",
@@ -1138,7 +1138,7 @@ const FINANCIAL_CHANGE: RecordTypeMeta = {
         {value:"applied",labelKey:"accounting.lifecycle.queueApplied"},
       ]},
     {key:"domain",labelKey:"accounting.lifecycle.domain",kind:"select",operators:OPERATORS_BY_KIND.select,
-      options: ["lease","asset","revenue","consolidation","provision"].map(value=>({value,labelKey:`accounting.lifecycle.domains.${value}`}))},
+      options: ["lease","asset","revenue","consolidation","provision","sales"].map(value=>({value,labelKey:`accounting.lifecycle.domains.${value}`}))},
     {key:"operation",labelKey:"accounting.lifecycle.operation",kind:"select",operators:OPERATORS_BY_KIND.select,
       options: FINANCIAL_CHANGE_OPERATIONS.map(value=>({value,labelKey:`accounting.lifecycle.operations.${value}`}))},
     {key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,

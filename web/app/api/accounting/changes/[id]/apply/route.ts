@@ -1,3 +1,4 @@
+import { applyDropShipAssessment } from '@openbooks/engine/inventory'
 import { applyExpectedBreakage } from '@openbooks/engine/revenue'
 import { applyProvisionAssessment } from "@openbooks/engine/provisions";
 import { z } from "zod";
@@ -22,6 +23,7 @@ export const POST = defineRoute({
       gate = await authorizeChange(id, "apply");
     if (gate instanceof NextResponse) return gate;
     try {
+      if (gate.domain === "sales") return NextResponse.json(await applyDropShipAssessment(gate.auth.user.orgId,id,gate.auth.user.id));
       if (gate.domain === "provision")
         return NextResponse.json(await applyProvisionAssessment(gate.auth.user.orgId, id, gate.auth.user.id));
       if (gate.domain === "consolidation")

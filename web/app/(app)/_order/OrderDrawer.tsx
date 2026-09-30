@@ -24,6 +24,7 @@ import { promptDialog } from '../../../lib/prompt'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
+import { DropShipAssessmentButton } from './DropShipAssessmentButton'
 import { OrderBackorders } from './OrderBackorders'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
@@ -432,6 +433,8 @@ export function OrderDrawer({
   returnAuthorizations = false,
   dropShipping = false,
   dropShipLines = [],
+  canAssessDropShip = false,
+  dropShipLiabilityAccounts = [],
   dropShipVendors = [],
   canRouteDropShip = false,
   canCreateDropShipPurchaseOrder = false,
@@ -478,6 +481,8 @@ export function OrderDrawer({
   pickLists?: boolean
   returnAuthorizations?: boolean
   dropShipping?: boolean
+  canAssessDropShip?: boolean
+  dropShipLiabilityAccounts?: {id:string;label:string}[]
   dropShipLines?: DropShipRoute[]
   dropShipVendors?: Opt[]
   canRouteDropShip?: boolean
@@ -1504,6 +1509,8 @@ export function OrderDrawer({
                 ) : null}
               </>
             ) : null}
+            {dropShipping && canAssessDropShip && kind==='sales_order' && isApproved && dropShipRoutes.some(route=>route.purchaseOrderLineId) ?
+              <DropShipAssessmentButton lines={dropShipRoutes.filter(route=>route.purchaseOrderLineId).map(route=>({id:route.salesOrderLineId,label:String(order.lines.find(line=>line.id===route.salesOrderLineId)?.description || route.salesOrderLineId)}))} accounts={dropShipLiabilityAccounts} /> : null}
             {dropShipping && canCreateDropShipPurchaseOrder && kind === 'sales_order' && isApproved
               && dropShipRoutes.some((row) => row.purchaseOrderLineId === null) ? (
               <div className="flex items-center gap-2">

@@ -54,6 +54,8 @@ export interface KernelLine {
 }
 
 export interface PostingDeps {
+  /** Authoritative approved agency allocations; resolved by the posting coordinator. */
+  agencyByLine?: Map<string,{accountId:string;vendorAmount:string}>;
   /** Historical replay: bypass source-imported period locks, never user locks. */
   migration?: boolean;
   /** org-level control accounts (from orgs.settings.controlAccounts). */

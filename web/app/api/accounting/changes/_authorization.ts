@@ -9,6 +9,7 @@ import { getAuthz, can } from "@/lib/authz";
 import { isFeatureEnabled } from "@/lib/features";
 import { isUuid } from "@/lib/list-params";
 export const changeAuthority = {
+  sales: {permission:"ar.post",feature:"dropShipping"},
   provision: { permission: "gl.manage", applyPermission: "gl.post", feature: null },
   lease: { permission: "assets.manage", feature: "fixedAssets" },
   asset: { permission: "assets.manage", feature: "fixedAssets" },

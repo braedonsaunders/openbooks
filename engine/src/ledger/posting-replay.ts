@@ -1,3 +1,4 @@
+import { resolveAgencyPosting } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -125,6 +126,7 @@ export async function regenerateGlImpactTx(
       taxComponentsByLine: await resolveTaxComponents(tx, doc.id, doc.orgId),
     };
   }
+  deps = { ...deps, agencyByLine: await resolveAgencyPosting(tx, doc.orgId, doc.id) };
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = {
       ...deps,

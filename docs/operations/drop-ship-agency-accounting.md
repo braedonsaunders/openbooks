@@ -1,0 +1,11 @@
+# Drop-ship principal and agent accounting
+
+An agent arranges for the vendor to provide the specified goods. A principal controls those goods before they transfer to the customer. Direct shipment alone does not determine the accounting presentation.
+
+On an approved sales order, route the goods and create the paired purchase order. Approve the purchase order, then choose **Assess principal or agent** on the sales-order drawer. Record the contractual control evidence, effective date and reason. An agent assessment also selects an active vendor pass-through liability account permitted for the legal entity. Submit the proposal through the Accounting events worklist, obtain independent approval through Flows, and apply it before approving invoices, bills or vendor shipment confirmations.
+
+The native customer invoice for an assessed agent splits billed consideration between fee income and the vendor pass-through liability. The native vendor bill debits that liability and credits AP. Both documents retain their AR/AP parties and order-line provenance. Vendor shipment confirmation creates no inventory movement or cost entry for the agent. Invoice recognition requires confirmed vendor-shipped quantities. Partial invoices use cumulative exact allocation; immutable evidence records each allocated vendor amount.
+
+Use the native order conversion actions to create invoices and bills. A changed item, unit, quantity, party, currency, legal entity, price or contractual source is refused before posting. This path currently admits arrangements with no tax on the paired goods and no item recognition rule; it refuses a separately taxed or deferred obligation rather than guessing how its consideration should be presented. Retain the separate tax and revenue assessment for those arrangements.
+
+An applied judgment cannot reinterpret posted history. Correct invoices and bills through their controlled document reversal workflow and use a new order for a changed contractual arrangement. Reverse billed documents before reversing a vendor shipment and its paired fulfillment. A zero-cost agency confirmation remains reversible from its frozen approval evidence even after Drop Shipping is turned off. Turning the feature off preserves assessments, allocations and journal history.
