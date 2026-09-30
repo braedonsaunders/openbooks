@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
@@ -12,7 +12,7 @@ import {
 } from "../platform/db.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { loadCatalog } from "../sandbox/catalog.ts";
-import { autopilotRunToEnd, provisionRun } from "../sim/runner.ts";
+import { autopilotRunToEnd, provisionRun, loadRun, verify } from "../sim/runner.ts";
 import { wipeSimOrg } from "../sim/world.ts";
 import { reconcileDocumentSequences } from "../records/numbering.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
@@ -22,6 +22,9 @@ import {
   runProvisioningStage,
 } from "./provisioning-failures.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { DEMO_DATA_VERSION, installDemoScenarios, verifyDemoScenarios } from "./install-scenarios.ts";
+import { sampleCompanyFeatures } from "./features.ts";
+import { verifyAndRegisterDemoAccounting } from "./accounting.ts";
 
 export { SampleCompanyError, SampleCompanyPreconditionError } from "./provisioning-failures.ts";
 export {
@@ -192,7 +195,7 @@ async function templateCandidates(profileId: string): Promise<Array<{ id: string
     const result = (await db.execute<{ id: string }>(sql`
       select o.id
         from orgs o
-       where o.env_kind in ('production', 'sandbox')
+       where o.env_kind in ('production', 'sandbox', 'preview')
          and o.settings->>'simProfile' = ${profileId}
          and (
            (
@@ -331,9 +334,62 @@ export async function prepareAllSampleCompanyTemplates(): Promise<PrepareSampleC
   // Deliberately serial: simulator provisioning is DB-intensive, and each
   // completed profile is independently durable and resumable by rerunning.
   for (const profile of SAMPLE_COMPANY_PROFILES) {
-    prepared.push(await prepareSampleCompanyTemplate(profile.industryKey));
+    prepared.push(await prepareIndustryDemo(profile.industryKey));
   }
   return prepared;
+}
+
+/** Install the complete native feature scenarios before a source is cloned. */
+export async function prepareIndustryDemo(industryKey: string): Promise<PrepareSampleCompanyResult> {
+  const prepared = await prepareSampleCompanyTemplate(industryKey);
+  await installDemoScenarios(prepared.templateOrgId, industryKey);
+  const verified = await verifyDemoScenarios(prepared.templateOrgId, industryKey);
+  if (!verified.ready) throw new SampleCompanyError(`Demo coverage is incomplete: ${verified.missing.join(", ")}. Prepare the industry template again after resolving its missing native records.`);
+  await verifyAndRegisterDemoAccounting(prepared.templateOrgId);
+  const source = await templateRowForOrg(prepared.templateOrgId);
+  if (!source) throw new SampleCompanyError("The prepared master demo could not be read back.");
+  return { ...prepared, coverage: { documents: source.documents, postedEntries: source.postedEntries, parties: source.parties, periods: source.periods, adminRoles: source.adminRoles } };
+}
+
+/** Resume a maintainer build whose durable manifest survived interruption. */
+export async function resumeSampleTemplate(runDir: string): Promise<PrepareSampleCompanyResult> {
+  const { manifest } = loadRun(runDir);
+  const profile = SAMPLE_COMPANY_PROFILES.find((entry) => entry.profileId === manifest.profileId);
+  if (!profile || manifest.seed !== SAMPLE_TEMPLATE_SEED) throw new SampleCompanyError("The run is not a built-in industry demo build.");
+  const lockKey = `openbooks:sample-template:${profile.profileId}`;
+  const client = await pool.connect();
+  let lockHealthy = true;
+  const lockError = () => { lockHealthy = false; };
+  client.on("error", lockError);
+  try {
+    await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [lockKey]);
+    const permitted = await withOrgContext(manifest.orgId, async () => {
+      const row = (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id=${manifest.orgId}`)).rows[0];
+      const attempt = row?.settings.sampleTemplateAttempt as Record<string, unknown> | undefined;
+      return row?.settings.simHarness === true && row.settings.simProfile === profile.profileId && attempt?.profileId === profile.profileId && attempt?.seed === manifest.seed
+        && (attempt.runDir === undefined || (typeof attempt.runDir === "string" && resolve(attempt.runDir) === resolve(runDir)));
+    });
+    if (!permitted) throw new SampleCompanyError("The interrupted company no longer matches its synthetic demo build; inspect the run and tenant before retrying.");
+    // Recheck the recorded day before advancing. A crash can follow its business
+    // writes but precede its end-of-day oracle; completion must never skip that check.
+    const check = await verify(runDir);
+    if (!check.pass) throw new SampleCompanyError(`Demo verification failed on ${check.simDate}; resolve the reported invariants before resuming.`);
+    const completed = await runSimulatorThroughTransientDatabaseFailures(runDir);
+    if (completed.status !== "completed" || completed.defects.length) throw new SampleCompanyError("The resumed demo did not complete its accounting checks.");
+    if (!lockHealthy) throw new SampleCompanyError("The demo build lock was lost; retry resume before registering its source.");
+    await markSimulationOraclePassed(manifest.orgId, profile.profileId);
+    const template = await templateRowForOrg(manifest.orgId);
+    if (!template) throw new SampleCompanyError("The resumed demo company could not be read back.");
+    assertTemplateCoverage(template);
+    await markTemplate(template, profile.profileId);
+    await clearTemplateAttempt(manifest.orgId);
+    if (!lockHealthy) throw new SampleCompanyError("The demo build lock was lost during registration; run prepare for this industry before cloning its source.");
+  } finally {
+    client.off("error", lockError);
+    if (lockHealthy) await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
+    client.release(lockHealthy ? undefined : new Error("demo build lock connection lost"));
+  }
+  return prepareIndustryDemo(profile.industryKey);
 }
 
 async function templateRowForOrg(orgId: string): Promise<(TemplateRow & { envKind: string }) | null> {
@@ -700,15 +756,25 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
   const [templates, existing] = await Promise.all([
     // bypass: cross-org-by-design — sample templates are discovered among every organization of the installation.
     withBypassContext(async () => {
-      const result = (await db.execute<{ profile: string }>(sql`
-        select distinct o.settings->'sampleTemplate'->>'profileId' as profile
+      const result = (await db.execute<{ id: string; profile: string; industry: string }>(sql`
+        select o.id, o.settings->'demoData'->>'industryKey' as industry, o.settings->'sampleTemplate'->>'profileId' as profile
           from orgs o
-         where o.env_kind in ('production', 'sandbox')
+         where o.env_kind in ('production', 'sandbox', 'preview')
            and coalesce((o.settings->'sampleTemplate'->>'enabled')::boolean, false)
+           and o.settings->'demoData'->>'version' = ${String(DEMO_DATA_VERSION)}
+           and o.settings->'demoData'->'accountingVerification'->>'version' = ${String(DEMO_DATA_VERSION)}
+           and o.settings->'demoData'->'accountingVerification'->>'status' = 'passed'
            and o.settings->'sampleTemplate'->>'profileId' in ${SAMPLE_COMPANY_PROFILES.map((profile) => profile.profileId)}
            and not (o.settings ? 'sampleCompany')
       `));
-      return new Set(result.rows.map((row) => row.profile));
+      return result.rows;
+    }).then(async (candidates) => {
+      const ready = new Set<string>();
+      for (const candidate of candidates) {
+        const verified = await verifyDemoScenarios(candidate.id, candidate.industry);
+        if (verified.ready) ready.add(candidate.profile);
+      }
+      return ready;
     }),
     // bypass: user-keyed-lookup — finds this person's sample companies across the organizations they can reach.
     withBypassContext(async () => {
@@ -763,14 +829,16 @@ export interface SampleCompanyTemplateDeps {
  * Durably mark a template attempt org immediately after provisioning, so a
  * simulator, oracle, or coverage failure later cannot strand an anonymous
  * org: the next generation finds this marker and either adopts the org (it
- * passed the oracle and registered) or removes it before provisioning.
+ * passed the oracle and registered), resumes a preserved checkpoint, or removes
+ * an older attempt without a checkpoint before provisioning.
  */
-async function stampTemplateAttempt(orgId: string, profileId: string): Promise<void> {
+async function stampTemplateAttempt(orgId: string, profileId: string, runDir: string): Promise<void> {
   const attempt = {
     version: 1,
     profileId,
     seed: SAMPLE_TEMPLATE_SEED,
     stage: "provisioned",
+    runDir,
     attemptedAt: new Date().toISOString(),
   };
   const stamped = (await withOrgContext(orgId, () => db.execute(sql`
@@ -800,9 +868,9 @@ async function clearTemplateAttempt(orgId: string): Promise<void> {
 }
 
 /**
- * Attempts that never registered and can never be adopted (no passing
- * oracle): remove each through the sim-org deletion path before provisioning
- * so retries never accumulate a second org. When the environment refuses the
+ * Refuse a second build while a durable checkpoint awaits resume. Older
+ * attempts without a checkpoint are removed through the sim-org deletion path
+ * before provisioning so retries never accumulate a second org. When the environment refuses the
  * wipe, refuse BEFORE provisioning rather than strand another org — the
  * error names the attempt and its remedy and passes the stage wrapper
  * untouched as a known 409 refusal.
@@ -813,8 +881,8 @@ async function sweepStaleTemplateAttempts(
 ): Promise<void> {
   // bypass: cross-org-by-design — stale template attempts are swept across every organization of the installation.
   const stale = await withBypassContext(async () => {
-    const result = (await db.execute<{ id: string }>(sql`
-      select id from orgs
+    const result = (await db.execute<{ id: string; runDir: string | null }>(sql`
+      select id, settings->'sampleTemplateAttempt'->>'runDir' as "runDir" from orgs
        where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}
          and settings->'sampleTemplateAttempt'->>'seed' = ${SAMPLE_TEMPLATE_SEED}
          and coalesce(settings->'sampleTemplateOracle'->>'status', '') <> 'passed'
@@ -825,6 +893,12 @@ async function sweepStaleTemplateAttempts(
   });
   const stuck: string[] = [];
   for (const attempt of stale) {
+    if (attempt.runDir) {
+      throw new SampleCompanyResumeRequiredError(
+        `An interrupted industry demo build exists for organization ${attempt.id}. Resume its preserved checkpoint with ` +
+        `\`node scripts/sample-companies.mjs resume --run-dir ${JSON.stringify(attempt.runDir)}\` before preparing this industry again.`,
+      );
+    }
     try {
       await wipe(attempt.id);
     } catch (error) {
@@ -876,6 +950,7 @@ export async function generateTemplate(
   // that never registered must be gone before a fresh org is provisioned.
   await sweepStaleTemplateAttempts(profileId, wipe);
   const runsRoot = mkdtempSync(join(tmpdir(), "openbooks-sample-template-"));
+  let preserveCheckpoint = false;
   try {
     const window = generationWindow();
     const provisioned = await provisionRun({
@@ -886,7 +961,7 @@ export async function generateTemplate(
       runsRoot,
       sampleTemplateAttempt: { profileId, seed: SAMPLE_TEMPLATE_SEED },
     });
-    await stampTemplateAttempt(provisioned.orgId, profileId);
+    await stampTemplateAttempt(provisioned.orgId, profileId, provisioned.runDir);
     try {
       const manifest = await simulate(provisioned.runDir);
       if (manifest.status !== "completed" || manifest.defects.length > 0) {
@@ -901,17 +976,36 @@ export async function generateTemplate(
       await clearTemplateAttempt(provisioned.orgId);
       return generated;
     } catch (error) {
+      if (isTransientDatabaseFailure(error)) {
+        preserveCheckpoint = true;
+        throw new SampleCompanyResumeRequiredError(
+          `The industry demo build lost its database connection. Its checkpoint and tenant ${provisioned.orgId} are preserved. ` +
+          `Restore database access, then run \`node scripts/sample-companies.mjs resume --run-dir ${JSON.stringify(provisioned.runDir)}\`.`,
+          { cause: error },
+        );
+      }
       // The wipe either succeeds (rethrow the original failure) or throws
       // the stranded org and its remedy — never a second stranded org.
-      await compensateTemplateAttempt(profileId, provisioned.orgId, wipe, error);
+      try {
+        await compensateTemplateAttempt(profileId, provisioned.orgId, wipe, error);
+      } catch (cleanupError) {
+        preserveCheckpoint = true;
+        throw new SampleCompanyResumeRequiredError(
+          `The industry demo build could not complete or remove its synthetic tenant ${provisioned.orgId}. ` +
+          `Its checkpoint is preserved at ${provisioned.runDir}; restore access and use the resume command to verify the recorded accounting state before continuing.`,
+          { cause: cleanupError },
+        );
+      }
       throw error;
     }
   } finally {
-    // This exact path is created by mkdtemp above and contains only ephemeral
-    // simulator manifests/checkpoints. The accounting tenant remains in Postgres.
-    rmSync(runsRoot, { recursive: true, force: true });
+    // A failed connection leaves a resumable checkpoint; completed or compensated
+    // runs no longer need their temporary simulator files.
+    if (!preserveCheckpoint) rmSync(runsRoot, { recursive: true, force: true });
   }
 }
+
+class SampleCompanyResumeRequiredError extends SampleCompanyPreconditionError {}
 
 function isTransientDatabaseFailure(error: unknown): boolean {
   let current: unknown = error;
@@ -938,6 +1032,7 @@ async function runOperationThroughTransientDatabaseFailures<T>(
     try {
       return await operation();
     } catch (error) {
+      if (error instanceof SampleCompanyResumeRequiredError) throw error;
       if (!isTransientDatabaseFailure(error) || attempt >= maximumAttempts) throw error;
       const delayMs = attempt * 1_000;
       console.error(
@@ -1095,7 +1190,7 @@ async function finalizePreview(args: FinalizeSampleCompanyArgs): Promise<void> {
       delete settings.simHarness;
       delete settings.sampleTemplate;
       settings.industry = args.input.industryKey;
-      settings.features = { ...args.input.features };
+      settings.features = sampleCompanyFeatures(args.input.industryKey);
       settings.workspaceProfile = {
         teamSize: "small",
         complexity: "growing",
@@ -1378,7 +1473,7 @@ export async function createSampleCompany(
   // Step seams: every stage is injectable for tests; production always
   // uses the real pipeline.
   const prepareTemplate = deps.prepareTemplate
-    ?? ((industryKey: string) => prepareSampleCompanyTemplate(industryKey));
+    ?? ((industryKey: string) => prepareIndustryDemo(industryKey));
   const finalizeCompany = deps.finalizeCompany
     ?? ((step: FinalizeSampleCompanyArgs) => finalizePreview(step));
   const reconcileNumbering = deps.reconcileNumbering

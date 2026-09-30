@@ -46,6 +46,7 @@
     "typecheck": "tsc --noEmit"
   },
   "exports": {
+    "./sample-companies": "./src/sample-companies/public.ts",
     "./documents": "./src/ledger/public.ts",
     "./src/*": "./src/*",
     "./tax": "./src/tax/public.ts",

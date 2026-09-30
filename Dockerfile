@@ -47,6 +47,14 @@ RUN npx esbuild scripts/worker-entry.mts \
       --banner:js="import { createRequire as openbooksCreateRequire } from 'node:module'; const require = openbooksCreateRequire(import.meta.url);" \
       --outfile=/out/worker.mjs
 RUN node --check /out/worker.mjs
+# Deterministic master demos are prepared explicitly by installation operators.
+# The same source is used by the setup wizard when a master is not yet present.
+RUN npx esbuild engine/src/sample-companies/cli.ts \
+      --bundle --platform=node --format=esm \
+      --external:pg-native --external:jsdom \
+      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
+      --outfile=/out/sample-companies.mjs
+RUN node --check /out/sample-companies.mjs
 
 # --- runtime ------------------------------------------------------------------
 FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS runtime
@@ -103,6 +111,7 @@ ENV NODE_ENV=production \
 # node_modules + web/server.js + web/.next live inside it.
 COPY --chown=node:node --from=build /app/web/.next/standalone ./
 COPY --chown=node:node --from=build /app/web/.next/static ./web/.next/static
+COPY --chown=node:node --from=build /out/sample-companies.mjs ./scripts/sample-companies.mjs
 COPY --chown=node:node --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
 COPY --chown=node:node --from=build /out/worker.mjs ./scripts/worker.mjs
 # The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
