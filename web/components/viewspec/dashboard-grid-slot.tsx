@@ -3,6 +3,7 @@ import 'server-only'
 import { getAuthz } from '../../lib/authz'
 import { loadDashboardLayout } from '../../app/(app)/dashboard/_load-layout'
 import { canSeeWidget } from '../../app/(app)/dashboard/_widget-access'
+import { packDefaultLayout } from '../../app/(app)/dashboard/_default-layout'
 import { WIDGETS } from '../../app/(app)/dashboard/_widget-registry'
 import { resolveAllowedWidgetIds } from '../../app/(app)/dashboard/widget-features'
 import { loadDashboardView } from '../../app/(app)/dashboard/_edit-canvas'
@@ -41,9 +42,10 @@ export async function DashboardGridSlot() {
   const authz = await getAuthz()
   if (!authz) return null
 
-  const { layout, role, hiddenQuickActionIds } = await loadDashboardLayout(authz)
+  const { layout, role, hiddenQuickActionIds, isSystemDefault } = await loadDashboardLayout(authz)
   const allowedWidgetIds = await resolveAllowedWidgetIds(authz)
-  const widgets = layout.widgets.filter((w) =>
+  const defaultActionsVisible = layout.quickActions?.some((action) => !hiddenQuickActionIds.includes(action.id)) !== false
+  const widgets = layout.widgets.filter((widget) => !isSystemDefault || widget.id !== 'personal-actions' || defaultActionsVisible).filter((w) =>
     w.id in WIDGETS ? allowedWidgetIds.has(w.id) : canSeeWidget(authz, w.id),
   )
   const visibleLayout = { ...layout, widgets }
@@ -56,7 +58,7 @@ export async function DashboardGridSlot() {
 
   return (
     <DashboardGrid
-      initialLayout={renderedLayout}
+      initialLayout={isSystemDefault ? packDefaultLayout(renderedLayout) : renderedLayout}
       nodes={nodes}
       role={role}
       mode="view"

@@ -115,10 +115,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     labelKey: 'quickActions.title',
     descriptionKey: 'catalog.quickActions',
     defaultSize: { w: 12, h: 3 },
-    // Four columns is the narrowest card that shows two full-width action
-    // labels side by side; four rows the shortest that shows the six default
-    // actions without scrolling.
-    minSize: { w: 4, h: 4 },
+    // Wide defaults use a compact action row; narrow custom cards scroll.
+    minSize: { w: 4, h: 2 },
   },
   // HR-15 persona-home tiles (readers in _persona.ts, cases in
   // _widget-views.tsx). Personal tiles are own/team-scoped reads, so they
@@ -130,8 +128,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     category: 'personal',
     labelKey: 'widgets.inboxList',
     descriptionKey: 'catalog.inboxList',
-    defaultSize: { w: 6, h: 5 },
-    minSize: { w: 4, h: 4 },
+    defaultSize: { w: 6, h: 3 },
+    minSize: { w: 4, h: 3 },
   },
   'pay-tile': {
     id: 'pay-tile',
@@ -196,8 +194,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     category: 'personal',
     labelKey: 'widgets.teamApprovals',
     descriptionKey: 'catalog.teamApprovals',
-    defaultSize: { w: 6, h: 5 },
-    minSize: { w: 4, h: 4 },
+    defaultSize: { w: 6, h: 3 },
+    minSize: { w: 4, h: 3 },
   },
   'team-steps': {
     id: 'team-steps',
@@ -237,8 +235,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     category: 'admin',
     labelKey: 'widgets.adminAttention',
     descriptionKey: 'catalog.adminAttention',
-    defaultSize: { w: 6, h: 5 },
-    minSize: { w: 4, h: 4 },
+    defaultSize: { w: 6, h: 3 },
+    minSize: { w: 4, h: 3 },
   },
   'workflow-errors': {
     id: 'workflow-errors',
@@ -408,8 +406,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     category: 'kpi',
     labelKey: 'widgets.closeReadiness',
     descriptionKey: 'catalog.closeReadiness',
-    defaultSize: { w: 6, h: 5 },
-    minSize: { w: 4, h: 4 },
+    defaultSize: { w: 6, h: 3 },
+    minSize: { w: 4, h: 3 },
     rolesShown: ['admin', 'controller', 'accountant'],
   },
 }

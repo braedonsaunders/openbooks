@@ -281,10 +281,11 @@ export function DashboardGrid({
     [mode],
   )
 
-  const nodeFor = (id: string) =>
+  const nodeFor = (id: string, flow = false) =>
     id === 'personal-actions' && quickActionsSaveAction ? (
       <QuickActions
         key={quickActionsStateKey(initialLayout.quickActions)}
+        flow={flow}
         actions={initialLayout.quickActions}
         saveAction={quickActionsSaveAction}
         hiddenActionIds={hiddenQuickActionIds}
@@ -295,20 +296,15 @@ export function DashboardGrid({
 
   if (mode === 'view' && viewport !== 'desktop') {
     const ordered = [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
-    if (viewport === 'phone') {
-      return (
-        <div className="space-y-4">
-          {ordered.map((w) => (
-            <div key={w.id}>{nodeFor(w.id) ?? null}</div>
-          ))}
-        </div>
-      )
-    }
     return (
-      <div className="columns-2 gap-4">
+      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
         {ordered.map((w) => (
-          <div key={w.id} className="mb-4 break-inside-avoid">
-            {nodeFor(w.id) ?? null}
+          <div
+            key={w.id}
+            className={w.id === 'personal-actions' || w.w === 12 ? 'sm:col-span-2' : 'min-w-0'}
+            style={w.id === 'personal-actions' ? undefined : { height: w.h * ROW_HEIGHT + (w.h - 1) * MARGIN[1] }}
+          >
+            {nodeFor(w.id, true) ?? null}
           </div>
         ))}
       </div>

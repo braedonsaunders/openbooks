@@ -21,10 +21,12 @@ export function QuickActions({
   actions,
   saveAction,
   hiddenActionIds,
+  flow = false,
 }: {
   actions?: QuickAction[] | null
   saveAction?: SaveQuickActionsAction
   hiddenActionIds?: readonly string[]
+  flow?: boolean
 }) {
   const t = useTranslations('dashboard')
   const hidden = new Set(hiddenActionIds)
@@ -34,7 +36,7 @@ export function QuickActions({
   const [editorOpen, setEditorOpen] = useState(false)
   const visibleItems = visibleQuickActions(items, hidden)
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  const density = useTileDensity(bodyRef, visibleItems.length)
+  const density = useTileDensity(bodyRef, visibleItems.length, flow)
 
   return (
     <div className="@container flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -76,14 +78,14 @@ export function QuickActions({
           <div
             ref={bodyRef}
             data-density={density}
-            className="@container grid h-full min-h-0 content-start gap-2 overflow-y-auto p-2.5"
+            className={`@container grid min-h-0 content-start gap-2 p-2.5 ${flow ? "h-auto" : "h-full overflow-y-auto"}`}
             // Container-driven, never viewport-driven. Before measurement the
             // CSS `auto-fit` packs ~11rem tiles across the card's width; once
             // useTileDensity has measured the box it pins the column count and
             // row height that fill the card best (see its doc). Rows scroll
             // rather than squash when the card is shorter than its actions.
             style={{
-              gridTemplateColumns: 'repeat(var(--qa-cols, auto-fit), minmax(min(100%, var(--qa-min, 11rem)), 1fr))',
+              gridTemplateColumns: flow ? 'repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr))' : 'repeat(var(--qa-cols, auto-fit), minmax(min(100%, var(--qa-min, 11rem)), 1fr))',
               gridAutoRows: 'var(--qa-row, 2.75rem)',
             }}
           >
@@ -131,11 +133,11 @@ const TILE_WIDE = 320 // wider than this a tile reads as a bar, not a button
  * row cannot fit every action, the tightest grid the width allows shows as
  * many as possible and the rest scroll.
  */
-function useTileDensity(ref: React.RefObject<HTMLDivElement | null>, count: number): TileDensity {
+function useTileDensity(ref: React.RefObject<HTMLDivElement | null>, count: number, flow: boolean): TileDensity {
   const [density, setDensity] = useState<TileDensity>('compact')
   useEffect(() => {
     const el = ref.current
-    if (!el || typeof ResizeObserver === 'undefined') return
+    if (flow || !el || typeof ResizeObserver === 'undefined') return
     const measure = () => {
       const { width, height } = el.getBoundingClientRect()
       if (width <= 0 || height <= 0 || count === 0) return
@@ -172,7 +174,7 @@ function useTileDensity(ref: React.RefObject<HTMLDivElement | null>, count: numb
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [ref, count])
+  }, [ref, count, flow])
   return density
 }
 
@@ -209,14 +211,14 @@ function ActionTile({ action, index, density }: { action: QuickAction; index: nu
         <Icon size={comfortable ? 17 : 14} />
       </span>
       <span
-        className={`min-w-0 flex-1 truncate text-left leading-snug font-medium transition-colors ${comfortable ? 'text-sm' : 'text-[13px]'} ${tone.label}`}
+        className={`line-clamp-2 min-w-0 flex-1 text-left font-medium transition-colors ${comfortable ? 'text-sm leading-snug' : 'text-[12px] leading-[14px]'} ${tone.label}`}
       >
         {quickActionLabel(action, t)}
       </span>
-      <ArrowUpRight
+      {comfortable ? <ArrowUpRight
         size={14}
         className={`shrink-0 translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 ${tone.arrow}`}
-      />
+      /> : null}
     </>
   )
 
