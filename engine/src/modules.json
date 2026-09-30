@@ -538,9 +538,21 @@
     "sample-companies": {
       "description": "Sample company generators.",
       "dependsOn": [
+        "billing",
+        "close",
         "composition",
+        "flows",
+        "golden",
+        "inventory",
+        "ledger",
+        "money",
+        "nonprofit",
+        "organization",
+        "payroll",
         "platform",
+        "property",
         "records",
+        "sales",
         "sandbox",
         "sim"
       ]

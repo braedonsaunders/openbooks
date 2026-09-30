@@ -9,9 +9,9 @@ import {
   createSampleCompany,
   sampleCompanyProvisioningBody,
   sampleCompanyStatuses,
-} from '@openbooks/engine/src/sample-companies/service.ts'
+  sampleCompanyFeatures,
+} from '@openbooks/engine/sample-companies'
 import { can } from '../../../../lib/authz'
-import { FEATURES, featureRequirements } from '../../../../lib/features'
 import { INDUSTRY_BY_KEY } from '../../../../lib/industries'
 
 export const runtime = 'nodejs'
@@ -23,29 +23,6 @@ function canManageSampleCompanies(authz: Parameters<typeof can>[0]): boolean {
   return can(authz, 'data.import') || can(authz, 'admin.setup.manage')
 }
 
-function industryFeatureSet(industryKey: string): Record<string, boolean> {
-  const industry = INDUSTRY_BY_KEY.get(industryKey)
-  if (!industry) throw new SampleCompanyError(`unknown industry: ${industryKey}`)
-  const features = Object.fromEntries(
-    FEATURES.map((feature) => [
-      feature.key,
-      industry.features[feature.key] ?? feature.defaultEnabled,
-    ]),
-  )
-  // The Features switchboard's parent/dependency hierarchy also governs
-  // sample tenants. Normalize to a fixed point before persisting the clone.
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const feature of FEATURES) {
-      if (featureRequirements(feature).some((required) => !features[required]) && features[feature.key]) {
-        features[feature.key] = false
-        changed = true
-      }
-    }
-  }
-  return features
-}
 
 export const GET = defineRoute({
   public: 'session',
@@ -71,7 +48,7 @@ export const POST = defineRoute({
       memberUserId: gate.user.homeUserId,
       sourceOrgId: gate.user.orgId,
       memberName: gate.user.name,
-      features: industryFeatureSet(body.industry),
+      features: sampleCompanyFeatures(body.industry),
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {

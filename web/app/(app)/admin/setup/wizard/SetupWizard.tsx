@@ -42,6 +42,7 @@ import { cn } from '@openbooks/ui'
 import type { IndustryDef } from '@/lib/industries'
 import { countryOptions } from '@/lib/countries'
 import { currencyOptions } from '@/lib/iso-currencies'
+import { enterOrg } from '@/lib/sandbox-session'
 import { readApiErrorMessage } from '@/lib/api-error'
 import {
   recommendWorkspaceFeatures,
@@ -171,6 +172,7 @@ export function SetupWizard(props: {
   const [toggles, setToggles] = useState<Record<ToggleKey, boolean>>(props.initial.features)
   const [featureChoices, setFeatureChoices] = useState<Record<string, boolean>>(props.initial.allFeatures)
   const [includeSampleCompany, setIncludeSampleCompany] = useState(false)
+  const [sampleOrgId, setSampleOrgId] = useState<string | null>(null)
   const installablePacks = props.payrollPacks ?? []
   const [payrollPack, setPayrollPack] = useState<PayrollPack>(initialPayrollPack(installablePacks))
   const countries = useMemo(() => countryOptions(locale), [locale])
@@ -313,6 +315,9 @@ export function SetupWizard(props: {
               : await readApiErrorMessage(sample, t('launch.sample.error')),
           )
         }
+        const installed = await sample.json() as { orgId?: unknown }
+        if (typeof installed.orgId !== 'string') throw new Error(t('launch.sample.error'))
+        setSampleOrgId(installed.orgId)
       }
       // Keep the next action available until the operator chooses a destination.
       setStepIdx(steps.indexOf('done'))
@@ -593,7 +598,7 @@ export function SetupWizard(props: {
           {t('rhythm.optional')}
         </label>
       )}
-      {step === 'done' && <DoneStep t={t} bookStart={bookStart} actions={(props.launchActions ?? []).filter((action) => action !== 'statement' || featureChoices.banking)} onNavigate={(href) => {
+      {step === 'done' && <DoneStep t={t} sampleOrgId={sampleOrgId} bookStart={bookStart} actions={(props.launchActions ?? []).filter((action) => action !== 'statement' || featureChoices.banking)} onNavigate={(href) => {
         router.push(href)
         router.refresh()
       }} />}
@@ -1472,9 +1477,10 @@ function ApplyingStep({ t }: { t: ReturnType<typeof useTranslations<'admin.setup
   )
 }
 
-function DoneStep({ t, bookStart, actions, onNavigate }: {
+function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
   t: ReturnType<typeof useTranslations<'admin.setup.wizard'>>
   bookStart: BookStart
+  sampleOrgId: string | null
   actions: SetupLaunchAction[]
   onNavigate: (href: string) => void
 }) {
@@ -1484,7 +1490,7 @@ function DoneStep({ t, bookStart, actions, onNavigate }: {
   }
   const preferred: SetupLaunchAction = bookStart === 'migrate' ? 'migrate' : 'invoice'
   const ordered = [preferred, ...actions.filter((action) => action !== preferred)]
-    .filter((action) => actions.includes(action))
+    .filter((action) => actions.includes(action) && !(sampleOrgId && action === 'demo'))
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <motion.div
@@ -1518,6 +1524,11 @@ function DoneStep({ t, bookStart, actions, onNavigate }: {
         {t('done.description')}
       </motion.p>
       <div className="mt-6 flex w-full max-w-md flex-col gap-3">
+        {sampleOrgId && <form action={enterOrg.bind(null, sampleOrgId, '/')}>
+          <button type="submit" className="w-full rounded-lg border border-teal-600 bg-teal-600 px-4 py-3 text-sm font-medium text-white hover:bg-teal-700">
+            {t('done.actions.demo')}
+          </button>
+        </form>}
         {ordered.map((action, index) => (
           <button key={action} type="button" onClick={() => onNavigate(destinations[action])}
             className={cn('rounded-lg border px-4 py-3 text-sm font-medium', index === 0

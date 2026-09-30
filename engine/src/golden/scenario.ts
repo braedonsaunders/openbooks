@@ -581,8 +581,8 @@ export async function runScenario(
   const bookBal = await all<{ code: string; s: string }>(sql`
     select b.code, coalesce(sum(l.amount), 0)::text as s
       from accounting_books b
-      left join journal_entries e on e.book_id = b.id and e.status in ('posted','reversed')
-      left join journal_lines l on l.entry_id = e.id
+      left join journal_entries e on e.org_id = ${orgId} and e.book_id = b.id and e.status in ('posted','reversed')
+      left join journal_lines l on l.org_id = ${orgId} and l.entry_id = e.id
      where b.org_id = ${orgId}
      group by b.code`);
   const worstBook = bookBal.reduce(
@@ -762,7 +762,7 @@ export async function runScenario(
   const docTie = await one<{ bad: string; skipped: string }>(sql`
     with docs as (
       select d.id, abs(d.total * d.fx_rate) as ht,
-             (select count(*) from document_lines dl where dl.document_id = d.id) as nlines
+             (select count(*) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id) as nlines
         from documents d
        -- Live entries only: the header tie is asserted on documents that stand posted today.
        where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
@@ -781,7 +781,7 @@ export async function runScenario(
     acct_nets as (
       select d.id, abs(d.ht - abs(sum(l.amount))) as acct_gap
         from docs d
-        join journal_lines l on l.entry_id = (select posted_entry_id from documents where id = d.id)
+        join journal_lines l on l.org_id = ${orgId} and l.entry_id = (select posted_entry_id from documents where org_id = ${orgId} and id = d.id)
        group by d.id, d.ht, l.account_id
     ),
     acct_min as (
@@ -796,7 +796,7 @@ export async function runScenario(
              acct_min.g as g_acct,
              d.ht, d.nlines, legs.nopen
         from docs d
-        join legs on legs.entry_id = (select posted_entry_id from documents where id = d.id)
+        join legs on legs.entry_id = (select posted_entry_id from documents where org_id = ${orgId} and id = d.id)
         left join acct_min on acct_min.id = d.id
     )
     select count(*) filter (
@@ -810,7 +810,7 @@ export async function runScenario(
     const worstDocs = await all<{ document_number: string; kind: string }>(sql`
       with docs as (
         select d.id, d.document_number, d.kind, abs(d.total * d.fx_rate) as ht,
-               (select count(*) from document_lines dl where dl.document_id = d.id) as nlines
+               (select count(*) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id) as nlines
           from documents d
          -- Live entries only: the worst-offender list reads the same documents the tie count above reads.
          where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
@@ -829,7 +829,7 @@ export async function runScenario(
       acct_nets as (
         select d.id, abs(d.ht - abs(sum(l.amount))) as acct_gap
           from docs d
-          join journal_lines l on l.entry_id = (select posted_entry_id from documents where id = d.id)
+          join journal_lines l on l.org_id = ${orgId} and l.entry_id = (select posted_entry_id from documents where org_id = ${orgId} and id = d.id)
          group by d.id, d.ht, l.account_id
       ),
       acct_min as (
@@ -837,7 +837,7 @@ export async function runScenario(
       )
       select d.document_number, d.kind
         from docs d
-        join legs on legs.entry_id = (select posted_entry_id from documents where id = d.id)
+        join legs on legs.entry_id = (select posted_entry_id from documents where org_id = ${orgId} and id = d.id)
         left join acct_min on acct_min.id = d.id
        where not (d.ht < 0.005 and legs.nopen = 0)
          and least(coalesce(case when legs.nopen > 0 then abs(d.ht - abs(legs.osum)) end, 1e18),
@@ -1209,7 +1209,9 @@ export async function runScenario(
     if (!foreign) {
       rlsDetail += "; no foreign-org rows anywhere on this cluster — live probe vacuous, catalog-only";
     } else {
-      const tableProbe = await probeTableIsolation(orgId, foreign.id);
+      // The isolation probe owns a separate read-only transaction so its
+      // temporary role cannot change the accounting snapshot's write scope.
+      const tableProbe = await withOrgContext(orgId, () => probeTableIsolation(orgId, foreign.id));
       // The governed view scopes by its own temp-table tenant context, which
       // the app-pool scope above does not establish — reading the view there
       // returns empty with or without isolation, a vacuous proof. Read it the

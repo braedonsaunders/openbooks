@@ -15,6 +15,8 @@ const failuresUrl = new URL(
   import.meta.url,
 ).href
 
+const featuresUrl = new URL('../../../../../engine/src/sample-companies/features.ts', import.meta.url).href
+
 const mockSources = new Map<string, string>([
   [
     'mock:authz',
@@ -31,23 +33,15 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:features',
-    `
-      export const FEATURES = [{ key: 'projects', defaultEnabled: true }]
-      export function featureRequirements() {
-        return []
-      }
-    `,
-  ],
-  [
     'mock:industries',
     `
-      export const INDUSTRY_BY_KEY = new Map([['sim_atlas', { features: {} }]])
+      export const INDUSTRY_BY_KEY = new Map([['manufacturing', { features: {} }]])
     `,
   ],
   [
-    '@openbooks/engine/src/sample-companies/service.ts',
+    '@openbooks/engine/sample-companies',
     `
+      export { sampleCompanyFeatures } from '${featuresUrl}'
       export {
         SampleCompanyError,
         SampleCompanyProvisioningError,
@@ -81,7 +75,7 @@ const mockSources = new Map<string, string>([
 // (request) and returning { ok: true } unconditionally would hollow every
 // malformed-body case behind it, and the real boundary loads cleanly.
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/sample-companies/service.ts', '@openbooks/engine/src/sample-companies/service.ts'],
+  ['@openbooks/engine/sample-companies', '@openbooks/engine/sample-companies'],
 ])
 
 const hooks = registerHooks({
@@ -89,7 +83,6 @@ const hooks = registerHooks({
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     if (specifier.endsWith('lib/authz')) return { url: 'mock:authz', shortCircuit: true }
-    if (specifier.endsWith('lib/features')) return { url: 'mock:features', shortCircuit: true }
     if (specifier.endsWith('lib/industries')) return { url: 'mock:industries', shortCircuit: true }
     return nextResolve(specifier, context)
   },
@@ -118,7 +111,7 @@ test('a clone-stage database failure returns the named stage refusal without SQL
   routeState.calls = []
   routeState.failClone = true
   try {
-    const response = await post({ industry: 'sim_atlas' })
+    const response = await post({ industry: 'manufacturing' })
     assert.equal(response.status, 500)
     const body = (await response.json()) as Record<string, unknown>
     assert.equal(body.error, 'sample-company-clone-failed')
@@ -139,7 +132,7 @@ test('a clone-stage database failure returns the named stage refusal without SQL
 
 test('a successful provision still returns the new company', async () => {
   routeState.calls = []
-  const response = await post({ industry: 'sim_atlas' })
+  const response = await post({ industry: 'manufacturing' })
   assert.equal(response.status, 200)
   const body = (await response.json()) as Record<string, unknown>
   assert.equal(body.ok, true)

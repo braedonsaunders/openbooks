@@ -47,6 +47,7 @@ stubModules({ navigation: "export function useRouter(){return globalThis.__wizar
 registerHooks({
   resolve(specifier, context, next) {
 
+    if (specifier.endsWith("sandbox-session")) return { shortCircuit: true, url: "data:text/javascript,export async function enterOrg(orgId,returnTo){globalThis.__wizardEnteredOrg={orgId,returnTo}}" };
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -400,4 +401,37 @@ test("review badges click-through defaults and spares deliberate choices", async
     !currencyRow.textContent?.includes("Default"),
     "a deliberately changed value must not wear the default badge",
   );
+});
+
+
+test("optional industry data installs a separate workspace and offers direct entry", async (t) => {
+  const { host, root } = mount();
+  const requests: { url: string; body: Record<string, unknown> }[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : {} });
+    return Response.json(String(input) === '/api/data/sample-companies' ? { ok: true, orgId: '00000000-0000-4000-8000-000000000003' } : { ok: true });
+  }) as typeof fetch;
+  t.after(async () => { globalThis.fetch = prior; await act(async () => { root.unmount(); }); host.remove(); });
+  await renderWizard(host, root);
+  await cont(); await cont();
+  const industry = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Manufacturing'))!;
+  await act(async () => { industry.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+  await tick();
+  await cont(); await cont(); await cont();
+  const sample = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Create an industry sample company'));
+  assert.ok(sample, 'launch offers the optional industry sample');
+  assert.equal(sample.getAttribute('aria-pressed'), 'false');
+  await act(async () => { sample.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+  await tick(); await cont();
+  await act(async () => { buttonsNamed('Set up my books')[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+  await tick(STEP_WAIT); await tick(STEP_WAIT);
+  const installation = requests.filter((request) => request.url === '/api/data/sample-companies');
+  assert.equal(installation.length, 1);
+  assert.deepEqual(installation[0]!.body, { industry: 'manufacturing' });
+  const enter = document.querySelector('form button[type="submit"]');
+  assert.ok(enter, 'completion offers the server-authorized workspace entry action');
+  assert.match(enter.textContent ?? '', /sample|demo|Explore/i);
+  assert.equal(buttonsNamed(enter.textContent!.trim()).length, 1, 'completion offers one demo entry action');
+  assert.ok(buttonsNamed('Create your first invoice')[0], 'the live-company next action remains available');
 });

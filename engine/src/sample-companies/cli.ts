@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import {
+  createSampleCompany,
   prepareAllSampleCompanyTemplates,
-  prepareSampleCompanyTemplate,
+  prepareIndustryDemo,
+  resumeSampleTemplate,
   promoteExistingSampleTemplate,
   sampleCompanyStatuses,
 } from "./service.ts";
-import { SAMPLE_COMPANY_BY_INDUSTRY } from "./catalog.ts";
-import { pool } from "../platform/db.ts";
+import { sampleCompanyFeatures } from "./features.ts";
+import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
+import { pool, longPool } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
 // Company builds post: install the engine seams first.
@@ -31,6 +34,25 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "install") {
+    const memberUserId = valueAfter("--member-user");
+    const sourceOrgId = valueAfter("--source-org");
+    const memberName = valueAfter("--member-name");
+    if (!memberUserId || !sourceOrgId || !memberName) throw new Error("install requires --member-user UUID --source-org UUID --member-name NAME");
+    const industry = valueAfter("--industry");
+    if (industry && !SAMPLE_COMPANY_BY_INDUSTRY.has(industry)) throw new Error(`unknown industry: ${industry}`);
+    const profiles = industry ? [SAMPLE_COMPANY_BY_INDUSTRY.get(industry)!] : SAMPLE_COMPANY_PROFILES;
+    for (const profile of profiles) line(await createSampleCompany({ industryKey: profile.industryKey, memberUserId, sourceOrgId, memberName, features: sampleCompanyFeatures(profile.industryKey) }));
+    return;
+  }
+
+  if (command === "resume") {
+    const runDir = valueAfter("--run-dir");
+    if (!runDir) throw new Error("resume requires --run-dir PATH");
+    line(await resumeSampleTemplate(runDir));
+    return;
+  }
+
   if (command === "promote") {
     const industry = valueAfter("--industry");
     const sourceOrgId = valueAfter("--source-org");
@@ -50,13 +72,13 @@ async function main(): Promise<void> {
   }
 
   if (command !== "prepare") {
-    throw new Error("usage: npm -w engine run samples -- inventory | prepare [--industry KEY] | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
+    throw new Error("usage: npm -w engine run samples -- inventory | prepare [--industry KEY] | install --member-user UUID --source-org UUID --member-name NAME [--industry KEY] | resume --run-dir PATH | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
   }
 
   const industry = valueAfter("--industry");
   if (industry) {
     if (!SAMPLE_COMPANY_BY_INDUSTRY.has(industry)) throw new Error(`unknown industry: ${industry}`);
-    line(await prepareSampleCompanyTemplate(industry));
+    line(await prepareIndustryDemo(industry));
     return;
   }
 
@@ -70,4 +92,5 @@ main()
   })
   .finally(async () => {
     await pool.end();
+    await longPool.end();
   });
