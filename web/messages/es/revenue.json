@@ -162,5 +162,23 @@
     "propose": "Crear propuesta de aprobación",
     "proposeFailed": "No se pudo proponer la modificación del contrato",
     "saveFailed": "Modificación fallida"
+  },
+  "breakage": {
+    "title": "Evaluar derechos prepagados no ejercidos esperados",
+    "choose": "Elegir…",
+    "hint": "Proponga una estimación aprobada de forma independiente. Los derechos no ejercidos esperados siguen los derechos ejercidos mediante el calendario nativo de uso. Una evaluación justificada de uso futuro remoto mide los derechos restantes. La caducidad por sí sola no genera ingresos; los importes adeudados conforme a la legislación de bienes no reclamados siguen siendo pasivos.",
+    "grant": "Asignación prepagada",
+    "date": "Fecha de evaluación",
+    "amount": "Total esperado de derechos no ejercidos",
+    "entitled": "¿Existe derecho al importe no ejercido?",
+    "constraint": "¿Está justificado conforme a la restricción de reversión significativa?",
+    "thirdParty": "¿Importe adeudado a un tercero o conforme a la legislación de bienes no reclamados?",
+    "evidence": "Evidencia de derecho, estimación y fundamento legal",
+    "reason": "Motivo de la evaluación",
+    "failed": "No se pudo guardar la propuesta de derechos no ejercidos",
+    "propose": "Proponer para aprobación",
+    "method": "Evaluación del reconocimiento",
+    "expected_proportional": "Derechos no ejercidos esperados en proporción a los derechos ejercidos",
+    "remaining_use_remote": "El uso adicional del cliente se considera remoto"
   }
 }

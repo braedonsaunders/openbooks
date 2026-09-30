@@ -360,7 +360,7 @@ test('workflow-only pushes skip the matrices because the release proves itself',
   assert.match(scope, /0000000000000000000000000000000000000000/)
   assert.match(scope, /git cat-file -e "\$base\^\{commit\}"/)
   assert.match(scope, /package-lock\\\.json/)
-  assert.doesNotMatch(scope, /\\\.github\/workflows\//)
+  assert.doesNotMatch(scope, /\.github\/workflows\//)
 
   // The expensive matrices are gated on manual dispatch; the cheap gate never is.
   for (const job of ['unit', 'database', 'simulation']) {

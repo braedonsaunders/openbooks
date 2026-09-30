@@ -18,7 +18,7 @@ registerHooks({
     // second db pool without the test bypass). Pin them to this checkout —
     // the same modules a real install resolves — process-wide, so the
     // readers under test and their transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/")) {
+    if (specifier.startsWith("@openbooks/engine/src/")) {
       return nextResolve(
         new URL(`../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
         context,

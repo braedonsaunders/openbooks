@@ -162,5 +162,23 @@
     "propose": "Genehmigungsvorschlag erstellen",
     "proposeFailed": "Vertragsänderung konnte nicht vorgeschlagen werden",
     "saveFailed": "Änderung fehlgeschlagen"
+  },
+  "breakage": {
+    "title": "Erwartete nicht ausgeübte Rechte beurteilen",
+    "choose": "Auswählen…",
+    "hint": "Schlagen Sie eine unabhängig genehmigte Schätzung vor. Erwartete nicht ausgeübte Rechte folgen den ausgeübten Rechten über den nativen Nutzungsplan. Eine belegte Beurteilung einer unwahrscheinlichen weiteren Nutzung bewertet die verbleibenden Rechte. Ablauf allein begründet keinen Erlös; nach dem Recht über nicht beanspruchtes Vermögen geschuldete Beträge bleiben Verbindlichkeiten.",
+    "grant": "Vorausbezahlte Zuteilung",
+    "date": "Beurteilungsdatum",
+    "amount": "Erwarteter Gesamtbetrag nicht ausgeübter Rechte",
+    "entitled": "Anspruch auf den nicht ausgeübten Betrag?",
+    "constraint": "Durch die Beschränkung erheblicher Erlösrücknahmen gedeckt?",
+    "thirdParty": "Betrag an Dritte oder nach dem Recht über nicht beanspruchtes Vermögen geschuldet?",
+    "evidence": "Anspruchs-, Schätzungs- und Rechtsnachweise",
+    "reason": "Beurteilungsgrund",
+    "failed": "Der Vorschlag zu nicht ausgeübten Rechten konnte nicht gespeichert werden",
+    "propose": "Zur Genehmigung vorschlagen",
+    "method": "Ansatzbeurteilung",
+    "expected_proportional": "Erwartete nicht ausgeübte Rechte proportional zu ausgeübten Rechten",
+    "remaining_use_remote": "Weitere Kundennutzung wird als unwahrscheinlich beurteilt"
   }
 }

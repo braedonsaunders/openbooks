@@ -316,5 +316,19 @@
     "noOptions": "Nenhuma opção definida",
     "selectRecord": "Selecionar um registro…",
     "loadFailed": "Não foi possível carregar os registros"
+  },
+  "nativeGoodsTax": {
+    "title": "Tributos canadenses sobre bens",
+    "manual": "Perfis tributários explícitos por linha",
+    "automatic": "Tributação nativa de bens",
+    "help": "Somente para bens comuns integralmente tributáveis. Selecione a província legal de entrega ou retirada conforme os termos de envio, não o endereço de cobrança. Perfis manuais e substituições têm precedência. O servidor verifica a entidade vendedora, os registros vigentes e as contas tributárias configuradas antes de salvar.",
+    "province": "Província legal de entrega",
+    "delivery": "Modalidade de entrega",
+    "delivered_or_made_available": "Entregue ou disponibilizado",
+    "supplier_arranged_shipping": "Envio ao destino organizado pelo fornecedor",
+    "recipient_collection": "O destinatário retira os bens",
+    "evidence": "Evidências contratuais de entrega e tributação",
+    "incomplete": "Informe a província, pelo menos 20 caracteres de evidências e valores válidos nas linhas antes de salvar; a prévia tributária permanece indisponível até ser possível calcular a operação.",
+    "previewUnavailable": "Prévia tributária indisponível — complete a avaliação da operação e os valores das linhas"
   }
 }

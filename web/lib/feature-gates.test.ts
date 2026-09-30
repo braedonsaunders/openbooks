@@ -19,7 +19,7 @@ const APP_SEGMENT = 'app/(app)'
 // listed here; a helper that does not gate must never be added.
 // A factory route (`defineRoute`) names its feature key and the factory
 // answers 404 while that feature is off.
-const GATE = /defineRoute\(\{[\s\S]*?\bfeature: (['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
+const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
 
 const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))
@@ -179,6 +179,15 @@ test('every API route serving a feature consults a gate', () => {
       const files = routeFilesUnder(dir)
       assert.ok(files.length > 0, `${key}: no route handlers found under ${dir} — stale mapping?`)
       for (const file of files) {
+        // Disabling new net-investment assessments must not prevent a
+        // controlled correction of already-posted OCI. The route still
+        // requires close.run and the native approval lifecycle.
+        if (file === 'app/api/consolidation/net-investment-changes/[id]/reverse/route.ts') {
+          const correction = read(file)
+          assert.match(correction, /permission:\s*['"]close\.run['"]/, 'correction retains its permission boundary')
+          assert.match(correction, /feature:\s*\{none:["']Correcting posted OCI remains available when its creation features are disabled["']\}/)
+          continue
+        }
         if (!GATE.test(read(file))) ungated.push(`${key} → ${file}`)
       }
     }

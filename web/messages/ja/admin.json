@@ -52,7 +52,7 @@
         "title": "アプリ",
         "description": "アプリパッケージを構築・インストール — サンドボックス化されたフロントエンドと統制されたバックエンド"
       },
-  "sandboxes": {
+      "sandboxes": {
         "title": "環境",
         "description": "本番の分離されたサンドボックスコピーを作成、更新、昇格"
       },
@@ -395,7 +395,12 @@
   },
   "roles": {
     "metaTitle": "ロール",
-    "named": {"production":{"name":"製造担当","description":"製造マスターと現場作業を管理し、在庫の計上はできますが取消権限はありません。"}},
+    "named": {
+      "production": {
+        "name": "製造担当",
+        "description": "製造マスターと現場作業を管理し、在庫の計上はできますが取消権限はありません。"
+      }
+    },
     "title": "ロール",
     "description": "ユーザーに割り当てる権限の束です。組み込みロールはアプリに付属しています。より細かい制御が必要な場合はカスタムロールを作成してください。",
     "manageUsers": "ユーザーを管理",
@@ -1407,8 +1412,8 @@
           "title": "未マッピング給与項目"
         },
         "stranded_background_work": {
-          "title": "Stranded background work",
-          "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+          "title": "停止したバックグラウンド処理",
+          "description": "永続化された転記、スケジュール、レポート生成、メール処理が恒久的に失敗するか、設定された期限を超過しています。統制された復旧の前に保持された証拠を確認してください。"
         }
       },
       "accounting": {
@@ -2505,8 +2510,16 @@
       "saveFailed": "構成を保存できませんでした。"
     },
     "entities": {
-      "usage-meters": { "title": "使用量メーター", "singular": "使用量メーター", "description": "請求対象の使用量を収集する単位と集計方法を定義します。" },
-      "usage-rating-plans": { "title": "使用量料金プラン", "singular": "使用量料金プラン", "description": "使用量料金プランの通貨とライフサイクルを設定します。" },
+      "usage-meters": {
+        "title": "使用量メーター",
+        "singular": "使用量メーター",
+        "description": "請求対象の使用量を収集する単位と集計方法を定義します。"
+      },
+      "usage-rating-plans": {
+        "title": "使用量料金プラン",
+        "singular": "使用量料金プラン",
+        "description": "使用量料金プランの通貨とライフサイクルを設定します。"
+      },
       "warehouses": {
         "title": "倉庫",
         "singular": "倉庫",
@@ -2658,8 +2671,16 @@
         "title": "品目レート表",
         "description": "設備およびその他の品目料金に使用する顧客別、プロジェクト別、組織別のレート表です。"
       },
-      "price-levels": { "title": "価格レベル", "singularTitle": "価格レベル", "description": "小売、卸売、パートナー、原価基準の再利用可能な価格レベル。" },
-      "customer-price-level-assignments": { "title": "顧客価格レベル", "singularTitle": "顧客価格レベル", "description": "顧客に割り当てる発効日付き既定価格レベル。" },
+      "price-levels": {
+        "title": "価格レベル",
+        "singularTitle": "価格レベル",
+        "description": "小売、卸売、パートナー、原価基準の再利用可能な価格レベル。"
+      },
+      "customer-price-level-assignments": {
+        "title": "顧客価格レベル",
+        "singularTitle": "顧客価格レベル",
+        "description": "顧客に割り当てる発効日付き既定価格レベル。"
+      },
       "item-rate-book-assignments": {
         "title": "レート表の割り当て",
         "description": "顧客またはプロジェクトに適用する発効日付きレート表を選択します。"
@@ -2677,9 +2698,31 @@
         "singular": "在庫ロケーション",
         "description": "ロケーションディメンション配下の物理的なビン、ゾーン、および倉庫。"
       },
-      "mfg-scrap-reasons": {"title":"スクラップ理由","singular":"スクラップ理由","description":"作業者がスクラップを報告するためのコードです。各理由を、製品原価に吸収する通常損失、または当期費用にする異常損失に分類します。"},
-      "mfg-item-policies": {"title":"品目別製造ポリシー","singular":"品目別製造ポリシー","description":"各品目の計画・補充方法を定義します。製造・購入・移送の区分、リードタイム、安全在庫、発注単位、計画スクラップを設定します。"},
-      "manufacturing-policies": {"title":"製造ポリシー","singular":"製造ポリシー","description":"資材不足、完成許容差、異常スクラップを製造計画でどのように扱うかを設定します。","shortage":"資材不足ポリシー","warn":"警告してリリースを許可","refuse":"資材不足時はリリースを拒否","tolerance":"完成許容差 (%)","threshold":"異常スクラップ承認しきい値","thresholdHelp":"承認が不要な場合は空欄にします。","save":"ポリシーを保存","saving":"ポリシーを保存中…","saved":"製造ポリシーを保存しました","failed":"製造ポリシーを保存できませんでした。"},
+      "mfg-scrap-reasons": {
+        "title": "スクラップ理由",
+        "singular": "スクラップ理由",
+        "description": "作業者がスクラップを報告するためのコードです。各理由を、製品原価に吸収する通常損失、または当期費用にする異常損失に分類します。"
+      },
+      "mfg-item-policies": {
+        "title": "品目別製造ポリシー",
+        "singular": "品目別製造ポリシー",
+        "description": "各品目の計画・補充方法を定義します。製造・購入・移送の区分、リードタイム、安全在庫、発注単位、計画スクラップを設定します。"
+      },
+      "manufacturing-policies": {
+        "title": "製造ポリシー",
+        "singular": "製造ポリシー",
+        "description": "資材不足、完成許容差、異常スクラップを製造計画でどのように扱うかを設定します。",
+        "shortage": "資材不足ポリシー",
+        "warn": "警告してリリースを許可",
+        "refuse": "資材不足時はリリースを拒否",
+        "tolerance": "完成許容差 (%)",
+        "threshold": "異常スクラップ承認しきい値",
+        "thresholdHelp": "承認が不要な場合は空欄にします。",
+        "save": "ポリシーを保存",
+        "saving": "ポリシーを保存中…",
+        "saved": "製造ポリシーを保存しました",
+        "failed": "製造ポリシーを保存できませんでした。"
+      },
       "item-inventory-profiles": {
         "title": "品目原価計算",
         "description": "品目ごとの原価計算方法、在庫勘定、追跡、および標準原価。"
@@ -3080,8 +3123,7 @@
         "description": "保持ルール：期限に応じて匿名化または削除。",
         "singularTitle": "保持ルール",
         "title": "保持ルール"
-      }
-    ,
+      },
       "item-identifiers": {
         "title": "商品識別子",
         "singular": "商品識別子",
@@ -3137,7 +3179,11 @@
       "compoundOnPrevious": "前の税要素に複利適用",
       "roundingScale": "税額の丸め桁数",
       "isActive": "有効",
-      "pricingMethod": "価格方式", "percentage": "割合", "costBasis": "原価基準", "isBase": "基本レベル", "priceLevelId": "価格レベル",
+      "pricingMethod": "価格方式",
+      "percentage": "割合",
+      "costBasis": "原価基準",
+      "isBase": "基本レベル",
+      "priceLevelId": "価格レベル",
       "isPrimary": "主要帳簿",
       "country": "国",
       "region": "地域",
@@ -3509,8 +3555,7 @@
       "retroThreshold": "遡及しきい値",
       "cohortKey": "コホート",
       "biasTerms": "配慮語句",
-      "reviewMonths": "レビュー周期（月）"
-    ,
+      "reviewMonths": "レビュー周期（月）",
       "customerSku": "顧客品番"
     },
     "fieldHelp": {
@@ -3643,8 +3688,16 @@
         "empty-bin": "空き棚",
         "bulk-zone": "バルクゾーン"
       },
-      "priceLevelMethod": { "explicit": "明示マトリクス価格", "markupDiscount": "マークアップ / 割引", "costPlus": "原価加算" },
-      "priceCostBasis": { "itemCost": "品目原価", "standardCost": "標準在庫原価", "averageCost": "平均在庫原価" },
+      "priceLevelMethod": {
+        "explicit": "明示マトリクス価格",
+        "markupDiscount": "マークアップ / 割引",
+        "costPlus": "原価加算"
+      },
+      "priceCostBasis": {
+        "itemCost": "品目原価",
+        "standardCost": "標準在庫原価",
+        "averageCost": "平均在庫原価"
+      },
       "timeClassification": {
         "regular": "通常",
         "overtime": "時間外",
@@ -3778,8 +3831,15 @@
         "transit": "輸送中",
         "quarantine": "検疫"
       },
-      "manufacturingScrap": {"normal":"通常スクラップ","abnormal":"異常スクラップ"},
-      "manufacturingSupplyMethod": {"make":"製造","buy":"購入","transfer":"拠点間移動"},
+      "manufacturingScrap": {
+        "normal": "通常スクラップ",
+        "abnormal": "異常スクラップ"
+      },
+      "manufacturingSupplyMethod": {
+        "make": "製造",
+        "buy": "購入",
+        "transfer": "拠点間移動"
+      },
       "complianceCategory": {
         "bond": "保証金",
         "insurance": "保険",
@@ -3882,7 +3942,8 @@
         "alimony": "扶養料（F2）",
         "none": "税引後",
         "pensionF": "年金（RPP/RRSP、係数F）",
-        "unionDues": "組合費（U1）"
+        "unionDues": "組合費（U1）",
+        "pensionFBonus": "非定期給与からの年金控除（RPP/RRSP、係数F3）"
       },
       "sourceKind": {
         "builtin": "組込",
@@ -4123,8 +4184,7 @@
         "department": "部門",
         "paySchedule": "給与サイクル",
         "jobLevel": "職位"
-      }
-    ,
+      },
       "identifierKind": {
         "gtin": "GTIN",
         "upc": "UPC",
@@ -4778,7 +4838,6 @@
         "taxPosition": "税務方針"
       },
       "rhythm": {
-        "optional": "取引量と締めの頻度を今すぐ設定する（任意）",
         "activity": {
           "high": {
             "description": "自動化と継続監視は最初から用意すべきです。",
@@ -4812,22 +4871,23 @@
         "closeQuestion": "帳簿を正式に締めて報告する頻度は？",
         "description": "件数により自動化の効き方が変わります。決算サイクルによりOpenBooksが前に出すべき定型が変わります。",
         "note": "開始時の好みであり制限ではありません。件数が少なくても記帳の整合性や決算統制を弱めることはありません。",
-        "title": "経理のリズムを設定"
+        "title": "経理のリズムを設定",
+        "optional": "取引量と締めの頻度を今すぐ設定する（任意）"
       },
       "applying": {
         "description": "勘定科目表を作成し、機能を設定して管理口座をマッピングしています。",
         "title": "帳簿を設定しています…"
       },
       "done": {
+        "description": "ワークスペースの設定が完了しました。次の操作を選択してください。残りの設定はチェックリストで確認できます。",
+        "title": "開始ワークスペースの準備ができました",
         "actions": {
           "invoice": "最初の請求書を作成",
           "migrate": "QuickBooks、Xeroなどからインポート",
           "statement": "銀行明細をインポート",
           "demo": "別のデモ会社を試す",
           "readiness": "設定チェックリストを続ける"
-        },
-        "description": "ワークスペースの設定が完了しました。次の操作を選択してください。残りの設定はチェックリストで確認できます。",
-        "title": "開始ワークスペースの準備ができました"
+        }
       },
       "industries": {
         "accounting_firm": {
@@ -5368,7 +5428,6 @@
       "title": "出荷処理",
       "description": "倉庫在庫から受注をピッキング・梱包・出荷します。"
     },
-
     "dropShipping": {
       "title": "ドロップシッピング",
       "description": "商品を自社倉庫に受け入れず、仕入先から顧客へ直接出荷して販売注文を履行します。"
@@ -5628,9 +5687,20 @@
       "manifest": "マニフェスト",
       "purged": "削除済み（{reason}）・{when}",
       "retention": "保持",
-    "kinds": { "manual": "手動", "scheduled": "スケジュール済み" },
-    "statuses": { "queued": "待機中", "running": "実行中", "completed": "完了", "failed": "失敗" },
-    "reasons": { "rotated": "ローテーション", "deleted": "削除" },
+      "kinds": {
+        "manual": "手動",
+        "scheduled": "スケジュール済み"
+      },
+      "statuses": {
+        "queued": "待機中",
+        "running": "実行中",
+        "completed": "完了",
+        "failed": "失敗"
+      },
+      "reasons": {
+        "rotated": "ローテーション",
+        "deleted": "削除"
+      },
       "rowsTables": "{rows}行・{tables}テーブル",
       "sha256": "SHA-256",
       "size": "サイズ",
@@ -5908,7 +5978,7 @@
     "sending": "送信中…",
     "testSent": "{provider} 経由でテストを送信しました ({messageId})",
     "testFailed": "テストメールを送信できませんでした",
-    "providers":     {
+    "providers": {
       "resend": {
         "label": "Resend",
         "secretLabel": "API キー",

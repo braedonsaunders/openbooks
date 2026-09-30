@@ -8,5 +8,20 @@
     "emptyDescription": "Erstellen Sie einen Kundenauftrag oder wandeln Sie einen aus einem Angebot um.",
     "newButton": "Neuer Kundenauftrag",
     "createDraftFailed": "Kundenauftragsentwurf konnte nicht erstellt werden"
+  },
+  "agency": {
+    "title": "Prinzipal- oder Agentenrolle beurteilen",
+    "hint": "Beurteilen Sie, ob das Unternehmen die bezeichneten Waren vor der Übertragung kontrolliert. Holen Sie eine unabhängige Genehmigung ein, bevor Sie den Versand bestätigen oder eine Kunden- oder Lieferantenrechnung genehmigen. Ein Agent weist seine Vermittlungsgebühr aus und führt den Lieferantenanspruch als durchlaufende Verbindlichkeit.",
+    "line": "Zugeordnete Kundenauftragszeile",
+    "choose": "Auswählen…",
+    "date": "Gültigkeitsdatum",
+    "control": "Kontrolliert das Unternehmen diese Waren vor der Übertragung an den Kunden?",
+    "principal": "Ja — Prinzipal, Bruttoumsatz",
+    "agent": "Nein — Agent, Nettovermittlungsgebühr",
+    "account": "Konto für durchlaufende Lieferantenverbindlichkeiten",
+    "evidence": "Vertragliche Kontrollnachweise",
+    "reason": "Beurteilungsgrund",
+    "propose": "Genehmigungsvorschlag vorbereiten",
+    "failed": "Die Kontrollbeurteilung konnte nicht vorbereitet werden"
   }
 }

@@ -143,7 +143,7 @@
         "description": "Ejecute consultas controladas por permisos para análisis e integración",
         "title": "Consola de consultas"
       },
-  "sandboxes": {
+      "sandboxes": {
         "description": "Cree, actualice y promueva copias sandbox aisladas de producción",
         "title": "Entornos"
       }
@@ -442,7 +442,12 @@
   },
   "roles": {
     "metaTitle": "Roles",
-    "named": {"production":{"name":"Producción","description":"Administra datos maestros y el trabajo de planta; puede contabilizar inventario, pero no revertirlo."}},
+    "named": {
+      "production": {
+        "name": "Producción",
+        "description": "Administra datos maestros y el trabajo de planta; puede contabilizar inventario, pero no revertirlo."
+      }
+    },
     "title": "Roles",
     "description": "Conjuntos de permisos que se asignan a los usuarios. Los roles integrados vienen incluidos con la aplicación; cree roles personalizados para un control más detallado.",
     "manageUsers": "Administrar usuarios",
@@ -1410,8 +1415,8 @@
           "description": "Componentes de nómina sin asignación de contabilización."
         },
         "stranded_background_work": {
-          "title": "Stranded background work",
-          "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+          "title": "Trabajo de fondo bloqueado",
+          "description": "Las tareas duraderas de contabilización, programación, generación de informes o correo han fallado permanentemente o superado el plazo configurado. Revise la evidencia conservada antes de una recuperación controlada."
         }
       },
       "accounting": {
@@ -2385,8 +2390,16 @@
       }
     },
     "entities": {
-      "usage-meters": { "title": "Medidores de uso", "singular": "Medidor de uso", "description": "Defina las unidades y la agregación para recopilar el uso facturable." },
-      "usage-rating-plans": { "title": "Planes de tarifas de uso", "singular": "Plan de tarifas de uso", "description": "Configure la moneda y el ciclo de vida de los planes de tarifas de uso." },
+      "usage-meters": {
+        "title": "Medidores de uso",
+        "singular": "Medidor de uso",
+        "description": "Defina las unidades y la agregación para recopilar el uso facturable."
+      },
+      "usage-rating-plans": {
+        "title": "Planes de tarifas de uso",
+        "singular": "Plan de tarifas de uso",
+        "description": "Configure la moneda y el ciclo de vida de los planes de tarifas de uso."
+      },
       "warehouses": {
         "title": "Almacenes",
         "singular": "Almacén",
@@ -2529,8 +2542,16 @@
         "title": "Libros de tarifas de artículos",
         "description": "Libros por cliente, proyecto y organización para equipos y otros cargos de artículos."
       },
-      "price-levels": { "title": "Niveles de precio", "singularTitle": "Nivel de precio", "description": "Niveles reutilizables minoristas, mayoristas, de socios y basados en costos." },
-      "customer-price-level-assignments": { "title": "Niveles de cliente", "singularTitle": "Nivel de cliente", "description": "Niveles predeterminados con vigencia asignados a clientes." },
+      "price-levels": {
+        "title": "Niveles de precio",
+        "singularTitle": "Nivel de precio",
+        "description": "Niveles reutilizables minoristas, mayoristas, de socios y basados en costos."
+      },
+      "customer-price-level-assignments": {
+        "title": "Niveles de cliente",
+        "singularTitle": "Nivel de cliente",
+        "description": "Niveles predeterminados con vigencia asignados a clientes."
+      },
       "item-rate-book-assignments": {
         "title": "Asignaciones de libros de tarifas",
         "description": "Elija el libro con vigencia aplicable a un cliente o proyecto."
@@ -2548,9 +2569,31 @@
         "singular": "Ubicación de stock",
         "description": "Contenedores, zonas y almacenes físicos bajo la dimensión de ubicaciones."
       },
-      "mfg-scrap-reasons": {"title":"Motivos de desecho","singular":"Motivos de desecho","description":"Códigos que usa el personal para informar mermas; cada motivo se clasifica como normal (absorbido en el costo del producto) o anormal (registrado como gasto del período)."},
-      "mfg-item-policies": {"title":"Políticas de fabricación por artículo","singular":"Políticas de fabricación por artículo","description":"Define cómo se planifica y abastece cada artículo: fabricar, comprar o transferir, con plazo de entrega, existencias de seguridad, múltiplos de pedido y merma prevista."},
-      "manufacturing-policies": {"title":"Políticas de fabricación","singular":"Políticas de fabricación","description":"Defina cómo la planificación de fabricación gestiona faltantes de materiales, tolerancias de finalización y desechos anormales.","shortage":"Política de faltantes de material","warn":"Advertir y permitir la liberación","refuse":"Rechazar la liberación si faltan materiales","tolerance":"Tolerancia de finalización (%)","threshold":"Umbral de aprobación para desechos anormales","thresholdHelp":"Déjelo en blanco si no se requiere aprobación.","save":"Guardar políticas","saving":"Guardando políticas…","saved":"Políticas de fabricación guardadas","failed":"No se pudieron guardar las políticas de fabricación."},
+      "mfg-scrap-reasons": {
+        "title": "Motivos de desecho",
+        "singular": "Motivos de desecho",
+        "description": "Códigos que usa el personal para informar mermas; cada motivo se clasifica como normal (absorbido en el costo del producto) o anormal (registrado como gasto del período)."
+      },
+      "mfg-item-policies": {
+        "title": "Políticas de fabricación por artículo",
+        "singular": "Políticas de fabricación por artículo",
+        "description": "Define cómo se planifica y abastece cada artículo: fabricar, comprar o transferir, con plazo de entrega, existencias de seguridad, múltiplos de pedido y merma prevista."
+      },
+      "manufacturing-policies": {
+        "title": "Políticas de fabricación",
+        "singular": "Políticas de fabricación",
+        "description": "Defina cómo la planificación de fabricación gestiona faltantes de materiales, tolerancias de finalización y desechos anormales.",
+        "shortage": "Política de faltantes de material",
+        "warn": "Advertir y permitir la liberación",
+        "refuse": "Rechazar la liberación si faltan materiales",
+        "tolerance": "Tolerancia de finalización (%)",
+        "threshold": "Umbral de aprobación para desechos anormales",
+        "thresholdHelp": "Déjelo en blanco si no se requiere aprobación.",
+        "save": "Guardar políticas",
+        "saving": "Guardando políticas…",
+        "saved": "Políticas de fabricación guardadas",
+        "failed": "No se pudieron guardar las políticas de fabricación."
+      },
       "item-inventory-profiles": {
         "title": "Costeo de artículos",
         "description": "Método de costeo, cuentas de inventario, seguimiento y costo estándar por artículo."
@@ -2960,8 +3003,7 @@
         "description": "Reglas de conservación: anonimizar o eliminar según calendario.",
         "singularTitle": "Regla de conservación",
         "title": "Reglas de conservación"
-      }
-    ,
+      },
       "item-identifiers": {
         "title": "Identificadores de artículos",
         "singular": "Identificador de artículo",
@@ -3017,7 +3059,11 @@
       "compoundOnPrevious": "Componer sobre componentes anteriores",
       "roundingScale": "Decimales de redondeo fiscal",
       "isActive": "Activo",
-      "pricingMethod": "Método de precio", "percentage": "Porcentaje", "costBasis": "Base de costo", "isBase": "Nivel base", "priceLevelId": "Nivel de precio",
+      "pricingMethod": "Método de precio",
+      "percentage": "Porcentaje",
+      "costBasis": "Base de costo",
+      "isBase": "Nivel base",
+      "priceLevelId": "Nivel de precio",
       "isPrimary": "Libro principal",
       "country": "País",
       "region": "Región",
@@ -3389,8 +3435,7 @@
       "retroThreshold": "Umbral retroactivo",
       "cohortKey": "Cohorte",
       "biasTerms": "Términos sensibles",
-      "reviewMonths": "Cadencia (meses)"
-    ,
+      "reviewMonths": "Cadencia (meses)",
       "customerSku": "Número de pieza del cliente"
     },
     "fieldHelp": {
@@ -3523,8 +3568,16 @@
         "empty-bin": "Hueco vacío",
         "bulk-zone": "Zona a granel"
       },
-      "priceLevelMethod": { "explicit": "Precios matriciales explícitos", "markupDiscount": "Aumento / descuento", "costPlus": "Costo más margen" },
-      "priceCostBasis": { "itemCost": "Costo del artículo", "standardCost": "Costo estándar de inventario", "averageCost": "Costo promedio de inventario" },
+      "priceLevelMethod": {
+        "explicit": "Precios matriciales explícitos",
+        "markupDiscount": "Aumento / descuento",
+        "costPlus": "Costo más margen"
+      },
+      "priceCostBasis": {
+        "itemCost": "Costo del artículo",
+        "standardCost": "Costo estándar de inventario",
+        "averageCost": "Costo promedio de inventario"
+      },
       "timeClassification": {
         "regular": "Regular",
         "overtime": "Horas extra",
@@ -3653,8 +3706,15 @@
         "transit": "Tránsito",
         "quarantine": "Cuarentena"
       },
-      "manufacturingScrap": {"normal":"Desecho normal","abnormal":"Desecho anormal"},
-      "manufacturingSupplyMethod": {"make":"Fabricar","buy":"Comprar","transfer":"Transferir entre ubicaciones"},
+      "manufacturingScrap": {
+        "normal": "Desecho normal",
+        "abnormal": "Desecho anormal"
+      },
+      "manufacturingSupplyMethod": {
+        "make": "Fabricar",
+        "buy": "Comprar",
+        "transfer": "Transferir entre ubicaciones"
+      },
       "overheadMethod": {
         "three_year_average": "Promedio de tres años (histórico)",
         "live": "En vivo (recalculado de costos reales)",
@@ -3838,7 +3898,8 @@
         "alimony": "Pensión alimenticia (F2)",
         "none": "Después de impuestos",
         "pensionF": "Pensión (RPP/RRSP, factor F)",
-        "unionDues": "Cuotas sindicales (U1)"
+        "unionDues": "Cuotas sindicales (U1)",
+        "pensionFBonus": "Pensión sobre remuneración no periódica (RPP/RRSP, factor F3)"
       },
       "payrollProgramType": {
         "caRp": "Programa de nómina de la CRA (RP)",
@@ -4003,8 +4064,7 @@
         "department": "Departamento",
         "paySchedule": "Calendario de nómina",
         "jobLevel": "Nivel"
-      }
-    ,
+      },
       "identifierKind": {
         "gtin": "GTIN",
         "upc": "UPC",
@@ -4622,7 +4682,6 @@
         }
       },
       "rhythm": {
-        "optional": "Configurar ahora el volumen y la frecuencia de cierre (opcional)",
         "title": "Defina su ritmo contable",
         "description": "El volumen cambia cuánto ayuda la automatización. La cadencia de cierre cambia qué rutinas debe mostrarle OpenBooks.",
         "activityQuestion": "¿Cuánto movimiento gestiona aproximadamente cada mes?",
@@ -4656,7 +4715,8 @@
             "description": "Cadencia mínima de cierre formal; la conciliación habitual sigue siendo importante."
           }
         },
-        "note": "Son preferencias iniciales, no límites. OpenBooks nunca debilitará la integridad de los apuntes ni los controles de cierre porque el movimiento sea bajo."
+        "note": "Son preferencias iniciales, no límites. OpenBooks nunca debilitará la integridad de los apuntes ni los controles de cierre porque el movimiento sea bajo.",
+        "optional": "Configurar ahora el volumen y la frecuencia de cierre (opcional)"
       },
       "launch": {
         "title": "Dé forma a su puesta en marcha",
@@ -4737,15 +4797,15 @@
         "description": "Creando su plan contable, configurando funciones y asignando cuentas de control."
       },
       "done": {
+        "title": "Su espacio inicial está listo",
+        "description": "Su espacio está configurado. Elija la siguiente acción; la lista muestra los pasos pendientes.",
         "actions": {
           "invoice": "Crear su primera factura",
           "migrate": "Importar desde QuickBooks, Xero u otro sistema",
           "statement": "Importar un extracto bancario",
           "demo": "Explorar una empresa de demostración separada",
           "readiness": "Continuar con la lista de configuración"
-        },
-        "title": "Su espacio inicial está listo",
-        "description": "Su espacio está configurado. Elija la siguiente acción; la lista muestra los pasos pendientes."
+        }
       },
       "industries": {
         "general_business": {
@@ -5228,7 +5288,6 @@
       "title": "Preparación de pedidos",
       "description": "Prepare, empaquete y envíe pedidos de venta desde las existencias del almacén."
     },
-
     "dropShipping": {
       "title": "Envío directo",
       "description": "Completa pedidos de venta directamente desde un proveedor sin recibir la mercancía en tu almacén."
@@ -5525,9 +5584,20 @@
       "manifest": "Manifiesto",
       "purged": "purgada ({reason}) · {when}",
       "retention": "Retención",
-    "kinds": { "manual": "A petición", "scheduled": "Programada" },
-    "statuses": { "queued": "En cola", "running": "En curso", "completed": "Completada", "failed": "Fallida" },
-    "reasons": { "rotated": "rotada", "deleted": "eliminada" },
+      "kinds": {
+        "manual": "A petición",
+        "scheduled": "Programada"
+      },
+      "statuses": {
+        "queued": "En cola",
+        "running": "En curso",
+        "completed": "Completada",
+        "failed": "Fallida"
+      },
+      "reasons": {
+        "rotated": "rotada",
+        "deleted": "eliminada"
+      },
       "rowsTables": "{rows} filas · {tables} tablas",
       "sha256": "SHA-256",
       "size": "Tamaño",
@@ -5908,7 +5978,7 @@
     "sending": "Enviando…",
     "testSent": "Prueba enviada vía {provider} ({messageId})",
     "testFailed": "No se pudo enviar el correo de prueba",
-    "providers":     {
+    "providers": {
       "resend": {
         "label": "Resend",
         "secretLabel": "Clave de API",

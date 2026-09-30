@@ -16,8 +16,17 @@
     "counts": "Comptages"
   },
   "bom": {
-    "columns": { "effectiveFrom": "En vigueur à partir du", "effectiveTo": "En vigueur jusqu'au", "operationSeq": "Séquence d'opération", "scrapPct": "Rebut %", "isByproduct": "Type de ligne" },
-    "values": { "component": "Composant", "byproduct": "Coproduit" },
+    "columns": {
+      "effectiveFrom": "En vigueur à partir du",
+      "effectiveTo": "En vigueur jusqu'au",
+      "operationSeq": "Séquence d'opération",
+      "scrapPct": "Rebut %",
+      "isByproduct": "Type de ligne"
+    },
+    "values": {
+      "component": "Composant",
+      "byproduct": "Coproduit"
+    },
     "refusals": {
       "effectivityOverlap": "Le composant {component} présente des périodes de validité qui se chevauchent {windows}. Modifiez les dates ou choisissez une autre opération ou désignation de coproduit si nécessaire.",
       "invalidDate": "Saisissez une date réelle au format AAAA-MM-JJ.",
@@ -46,7 +55,9 @@
     "count": "Inventaire",
     "assembly_build": "Assemblage",
     "assembly_consume": "Consommation d'assemblage",
-    "return": "Retour"
+    "return": "Retour",
+    "assembly_disassembly": "Démontage d’assemblage",
+    "assembly_recovery": "Composant récupéré"
   },
   "drawer": {
     "title": "Mouvement de stock",
@@ -58,7 +69,9 @@
       "adjust": "Ajuster",
       "transfer": "Transférer",
       "build": "Assembler",
-      "landed": "Coût de revient"
+      "landed": "Coût de revient",
+      "disassemble": "Démonter le stock",
+      "reverse": "Contrepasser le mouvement"
     },
     "hint": {
       "receive": "Ajouter du stock au coût (DR stock / CR contrepartie).",
@@ -66,7 +79,9 @@
       "adjust": "Corriger la quantité en stock via le compte d'ajustement.",
       "transfer": "Déplacer du stock entre deux emplacements à son coût porté.",
       "build": "Consommer les composants selon la nomenclature et produire le produit fini au coût.",
-      "landed": "Capitaliser le fret/les droits sur les couches en stock d’un article."
+      "landed": "Capitaliser le fret/les droits sur les couches en stock d’un article.",
+      "disassemble": "Récupérez les composants d’une fabrication enregistrée. La récupération utilise la nomenclature et les preuves de coût d’origine ; les rebuts et autres écarts de coût sont comptabilisés dans le compte d’ajustement ou d’écart configuré.",
+      "reverse": "Ajoutez une contrepassation contrôlée. Tous les mouvements d’une opération d’assemblage sont contrepassés ensemble ; contrepasser d’abord les opérations en aval."
     },
     "selectItem": "Sélectionner un article",
     "selectLocation": "Sélectionner un emplacement",
@@ -88,7 +103,13 @@
     "bases": {
       "value": "Par valeur",
       "quantity": "Par quantité"
-    }
+    },
+    "sourceMovement": "Mouvement source",
+    "selectSourceMovement": "Rechercher par article, emplacement, date ou identifiant de mouvement",
+    "loadMovementsFailed": "Les mouvements sources n’ont pas pu être chargés",
+    "moreMovements": "Charger davantage de mouvements sources",
+    "movementReason": "Motif de cette opération",
+    "reversed": "Opération de stock contrepassée"
   },
   "advanced": {
     "errors": {
@@ -223,13 +244,13 @@
       "selectStockLocation": "Choisir un emplacement de stock…",
       "selectLot": "Lot (si suivi)…",
       "missingFields": "Choisissez un emplacement, une filiale, une date et au moins une ligne.",
-    "lineMissingItem": "Ligne {line} : choisir un article.",
-    "lineMissingStockLocation": "Ligne {line} : choisir un emplacement de stock.",
-    "noStockLocations": "Cet emplacement n'a encore aucun emplacement de stock.",
-    "manageStockLocations": "Configurer les emplacements de stock",
-    "needsCosting": "{count, plural, one {# article actif n'a} other {# articles actifs n'ont}} pas encore de profil de coût et ne peut pas encore être compté. Ajoutez le profil sur la fiche article.",
-    "openItems": "Ouvrir les articles",
-    "needsCostingNoGrant": "Vous devez disposer de l'accès de gestion des articles pour ajouter des profils de coût.",
+      "lineMissingItem": "Ligne {line} : choisir un article.",
+      "lineMissingStockLocation": "Ligne {line} : choisir un emplacement de stock.",
+      "noStockLocations": "Cet emplacement n'a encore aucun emplacement de stock.",
+      "manageStockLocations": "Configurer les emplacements de stock",
+      "needsCosting": "{count, plural, one {# article actif n'a} other {# articles actifs n'ont}} pas encore de profil de coût et ne peut pas encore être compté. Ajoutez le profil sur la fiche article.",
+      "openItems": "Ouvrir les articles",
+      "needsCostingNoGrant": "Vous devez disposer de l'accès de gestion des articles pour ajouter des profils de coût.",
       "lines": "Lignes à compter",
       "addLine": "Ajouter une ligne",
       "removeLine": "Retirer"

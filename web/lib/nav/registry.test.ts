@@ -89,8 +89,9 @@ test('default workspaces follow the approved journey-oriented information archit
     DEFAULT_NAV_ORDER.accounting.slice(5, 7),
     ['leases', 'budgets'],
   )
-  assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(-2), [
+  assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(-3), [
     'accounting-changes',
+    'provisions',
     'nonprofit',
   ])
   assert.deepEqual(

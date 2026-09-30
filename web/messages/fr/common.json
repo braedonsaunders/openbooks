@@ -316,5 +316,19 @@
     "noOptions": "Aucune option définie",
     "selectRecord": "Sélectionner un enregistrement…",
     "loadFailed": "Impossible de charger les enregistrements"
+  },
+  "nativeGoodsTax": {
+    "title": "Taxes canadiennes sur les biens",
+    "manual": "Profils fiscaux explicites par ligne",
+    "automatic": "Fiscalité native des biens",
+    "help": "Pour les biens ordinaires entièrement taxables uniquement. Sélectionnez la province légale de livraison ou de collecte selon les conditions d’expédition, et non l’adresse de facturation. Les profils manuels et dérogations sont prioritaires. Le serveur vérifie l’entité vendeuse, les inscriptions en vigueur et les comptes fiscaux configurés avant l’enregistrement.",
+    "province": "Province légale de livraison",
+    "delivery": "Modalités de livraison",
+    "delivered_or_made_available": "Livré ou mis à disposition",
+    "supplier_arranged_shipping": "Expédition à destination organisée par le fournisseur",
+    "recipient_collection": "Collecte des biens par le destinataire",
+    "evidence": "Preuves contractuelles de livraison et de taxabilité",
+    "incomplete": "Renseignez la province, au moins 20 caractères de justificatifs et des montants de ligne valides avant l’enregistrement ; l’aperçu fiscal reste indisponible tant que la fourniture ne peut pas être chiffrée.",
+    "previewUnavailable": "Aperçu fiscal indisponible — complétez l’évaluation de la fourniture et les montants des lignes"
   }
 }

@@ -162,5 +162,23 @@
     "propose": "Créer une proposition d'approbation",
     "proposeFailed": "La modification du contrat n'a pas pu être proposée",
     "saveFailed": "Échec de la modification"
+  },
+  "breakage": {
+    "title": "Évaluer les droits prépayés non exercés attendus",
+    "choose": "Choisir…",
+    "hint": "Proposez une estimation soumise à une approbation indépendante. Les droits non exercés attendus suivent les droits exercés via l’échéancier natif d’utilisation. Une évaluation étayée d’utilisation très peu probable mesure les droits restants. L’expiration seule ne génère aucun produit ; les montants dus au titre des biens non réclamés restent des passifs.",
+    "grant": "Attribution prépayée",
+    "date": "Date de l’évaluation",
+    "amount": "Total attendu des droits non exercés",
+    "entitled": "Droit au montant non exercé ?",
+    "constraint": "Étayé au regard de la contrainte de reprise significative ?",
+    "thirdParty": "Montant dû à un tiers ou au titre des biens non réclamés ?",
+    "evidence": "Justificatifs du droit, de l’estimation et du traitement juridique",
+    "reason": "Motif de l’évaluation",
+    "failed": "La proposition relative aux droits non exercés n’a pas pu être enregistrée",
+    "propose": "Proposer pour approbation",
+    "method": "Évaluation de la comptabilisation",
+    "expected_proportional": "Droits non exercés attendus proportionnels aux droits exercés",
+    "remaining_use_remote": "Toute utilisation supplémentaire par le client est jugée très peu probable"
   }
 }

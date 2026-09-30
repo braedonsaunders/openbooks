@@ -220,8 +220,8 @@
       "description": "Einem Lohnbestandteil fehlen Buchungskonten oder der Abführungsempfänger."
     },
     "stranded_background_work": {
-      "title": "Stranded background work",
-      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+      "title": "Blockierte Hintergrundaufträge",
+      "description": "Dauerhafte Buchungs-, Planungs-, Berichts- oder E-Mail-Aufträge sind endgültig fehlgeschlagen oder länger als die konfigurierte Frist überfällig. Prüfen Sie die aufbewahrten Nachweise vor einer kontrollierten Wiederaufnahme."
     }
   },
   "summary": {

@@ -6,6 +6,55 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.26] - 2026-09-30
+
+### Accounting and operational controls
+
+- Add governed provision recognition and reassessment, including supported
+  construction-contract loss forecasts and independent approval.
+- Add native prepaid-rights breakage assessments, sales-agency accounting,
+  partial assembly disassembly and controlled reversals, and consolidated
+  net-investment FX attribution with correction lineage.
+- Select registered Canadian goods taxes through native invoices and bind
+  filing identity to the applicable registration. Add Canadian cumulative
+  withholding with verified opening history and bonus pension deductions.
+- Preserve atomic document corrections, exact overhead allocation, business
+  clock ownership, and durable evidence for uncertain email deliveries and
+  failed background work.
+
+### Workspaces and demonstration companies
+
+- Provide 11 verified industry demonstration masters, isolated demo copies,
+  explicit capability coverage, idempotent native scenarios, and guarded
+  provisioning that refuses an unverified source.
+- Consolidate operational lists, journal drawers, setup child collections,
+  shared table rendering, and role-sensitive dashboard defaults. Essentials
+  workspaces prioritize everyday bookkeeping and setup actions.
+- Compose Inbox search and filters in the standard list header. Navigation,
+  Inbox tabs, and Home share unfiltered personal approvals and task totals,
+  including signatures and unread notices. Failed task sources remain named.
+- Complete the shipped locale catalogs for the new accounting controls.
+
+### Verification and upgrades
+
+- Require per-file test-registration receipts derived from actual registered
+  test counts, including failed, skipped and pending tests. Empty or unloadable
+  selected files fail verification.
+- Scope conformance setup to its tenant and distinguish caught-error
+  serialization from safe validation messages. Update dependency protections
+  for glob expansion, URI parsing and IP-address validation.
+- Align accounting, architecture and mutation documentation with measured
+  evidence and declared capability limits. Passing conformance cases prove
+  their stated scope; they do not certify every accounting standard.
+
+This release includes forward schema migrations. Back up the database and
+retain the matching data key before upgrading. Run the read-only migration
+preflight and resolve its named refusals. The reference release rehearses
+representative populated upgrades before publishing scanned, attested images;
+production deployment backs up first, applies migrations, then updates both
+web and worker services. An application rollback must remain compatible with
+the migrated schema; do not reverse schema changes by deleting tenant data.
+
 ## [0.1.0-alpha.25.3] - 2026-09-29
 
 The corrected alpha.25 release preserves existing organization role

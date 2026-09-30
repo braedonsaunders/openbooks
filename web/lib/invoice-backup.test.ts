@@ -7,7 +7,7 @@ import { toUnits } from '../../engine/src/money/money.ts'
 // allocator can be exercised directly without starting a Next.js server.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@openbooks/')) {
+    if (specifier.startsWith('@openbooks/engine/src/') || specifier.startsWith('@openbooks/schema/src/')) {
       const [packageName, ...packagePath] = specifier.slice('@openbooks/'.length).split('/')
       if (packageName !== 'engine' && packageName !== 'schema') {
         // Workspace packages declare their own subpath exports (networking's

@@ -16,8 +16,17 @@
     "counts": "盘点"
   },
   "bom": {
-    "columns": { "effectiveFrom": "生效日期", "effectiveTo": "失效日期", "operationSeq": "工序顺序", "scrapPct": "报废率 %", "isByproduct": "行类型" },
-    "values": { "component": "组件", "byproduct": "副产品" },
+    "columns": {
+      "effectiveFrom": "生效日期",
+      "effectiveTo": "失效日期",
+      "operationSeq": "工序顺序",
+      "scrapPct": "报废率 %",
+      "isByproduct": "行类型"
+    },
+    "values": {
+      "component": "组件",
+      "byproduct": "副产品"
+    },
     "refusals": {
       "effectivityOverlap": "组件 {component} 的生效期间 {windows} 存在重叠。请调整日期，或在适用时指定不同的工序或副产品类型。",
       "invalidDate": "请输入 YYYY-MM-DD 格式的真实日历日期。",
@@ -46,7 +55,9 @@
     "count": "盘点",
     "assembly_build": "组装生产",
     "assembly_consume": "组装领用",
-    "return": "退回"
+    "return": "退回",
+    "assembly_disassembly": "装配件拆解",
+    "assembly_recovery": "回收组件"
   },
   "drawer": {
     "title": "库存变动",
@@ -58,7 +69,9 @@
       "adjust": "调整",
       "transfer": "调拨",
       "build": "组装生产",
-      "landed": "到岸成本"
+      "landed": "到岸成本",
+      "disassemble": "拆解库存",
+      "reverse": "冲销移动"
     },
     "hint": {
       "receive": "按成本入库（借 库存 / 贷 对方科目）。",
@@ -66,7 +79,9 @@
       "adjust": "针对调整科目修正在库数量。",
       "transfer": "按结转成本在两个库位之间调拨库存。",
       "build": "按物料清单领用组件，并按成本产出成品。",
-      "landed": "将运费/关税资本化计入物料的在库成本层。"
+      "landed": "将运费/关税资本化计入物料的在库成本层。",
+      "disassemble": "从已记录的生产中回收组件。回收使用原始物料清单及成本证据；报废和其他成本差额计入配置的调整或差异科目。",
+      "reverse": "追加受控冲销。一次装配操作的所有移动一并冲销；请先冲销后续操作。"
     },
     "selectItem": "选择物料",
     "selectLocation": "选择库位",
@@ -88,7 +103,13 @@
     "bases": {
       "value": "按价值",
       "quantity": "按数量"
-    }
+    },
+    "sourceMovement": "来源移动",
+    "selectSourceMovement": "按物料、库位、日期或移动编号搜索",
+    "loadMovementsFailed": "无法加载来源移动",
+    "moreMovements": "加载更多来源移动",
+    "movementReason": "本次操作原因",
+    "reversed": "库存操作已冲销"
   },
   "advanced": {
     "errors": {
@@ -223,13 +244,13 @@
       "selectStockLocation": "选择库位…",
       "selectLot": "批次（如管理）…",
       "missingFields": "请选择地点、子公司、日期并至少添加一行。",
-    "lineMissingItem": "第{line}行：请选择物料。",
-    "lineMissingStockLocation": "第{line}行：请选择库位。",
-    "noStockLocations": "此地点尚无库位。",
-    "manageStockLocations": "设置库位",
-    "needsCosting": "{count, plural, other {有 # 个有效物料没有成本档案，暂时无法盘点。请在物料记录中添加档案。}}",
-    "openItems": "打开物料",
-    "needsCostingNoGrant": "添加成本档案需要物料管理权限。",
+      "lineMissingItem": "第{line}行：请选择物料。",
+      "lineMissingStockLocation": "第{line}行：请选择库位。",
+      "noStockLocations": "此地点尚无库位。",
+      "manageStockLocations": "设置库位",
+      "needsCosting": "{count, plural, other {有 # 个有效物料没有成本档案，暂时无法盘点。请在物料记录中添加档案。}}",
+      "openItems": "打开物料",
+      "needsCostingNoGrant": "添加成本档案需要物料管理权限。",
       "lines": "待盘点行",
       "addLine": "添加行",
       "removeLine": "移除"

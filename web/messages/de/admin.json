@@ -52,7 +52,7 @@
         "title": "Apps",
         "description": "App-Pakete erstellen und installieren — ein isoliertes Frontend plus ein kontrolliertes Backend"
       },
-  "sandboxes": {
+      "sandboxes": {
         "title": "Umgebungen",
         "description": "Isolierte Sandbox-Kopien der Produktion erstellen, aktualisieren und hochstufen"
       },
@@ -395,7 +395,12 @@
   },
   "roles": {
     "metaTitle": "Rollen",
-    "named": {"production":{"name":"Produktion","description":"Verwaltet Fertigungsstammdaten und Werkstattarbeit, darf Bestände buchen, aber nicht stornieren."}},
+    "named": {
+      "production": {
+        "name": "Produktion",
+        "description": "Verwaltet Fertigungsstammdaten und Werkstattarbeit, darf Bestände buchen, aber nicht stornieren."
+      }
+    },
     "title": "Rollen",
     "description": "Bündel von Berechtigungen, die Sie Benutzern zuweisen. Integrierte Rollen werden mit der App geliefert; erstellen Sie benutzerdefinierte Rollen für alles Feinkörnigere.",
     "manageUsers": "Benutzer verwalten",
@@ -1407,8 +1412,8 @@
           "title": "Nicht zugeordnete Lohnbestandteile"
         },
         "stranded_background_work": {
-          "title": "Stranded background work",
-          "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+          "title": "Blockierte Hintergrundaufträge",
+          "description": "Dauerhafte Buchungs-, Planungs-, Berichts- oder E-Mail-Aufträge sind endgültig fehlgeschlagen oder länger als die konfigurierte Frist überfällig. Prüfen Sie die aufbewahrten Nachweise vor einer kontrollierten Wiederaufnahme."
         }
       },
       "accounting": {
@@ -2505,8 +2510,16 @@
       "saveFailed": "Die Konfiguration konnte nicht gespeichert werden."
     },
     "entities": {
-      "usage-meters": { "title": "Nutzungsmesser", "singular": "Nutzungsmesser", "description": "Legen Sie Einheiten und Aggregation für abrechenbare Nutzung fest." },
-      "usage-rating-plans": { "title": "Nutzungstarifpläne", "singular": "Nutzungstarifplan", "description": "Legen Sie Währung und Lebenszyklus von Nutzungstarifplänen fest." },
+      "usage-meters": {
+        "title": "Nutzungsmesser",
+        "singular": "Nutzungsmesser",
+        "description": "Legen Sie Einheiten und Aggregation für abrechenbare Nutzung fest."
+      },
+      "usage-rating-plans": {
+        "title": "Nutzungstarifpläne",
+        "singular": "Nutzungstarifplan",
+        "description": "Legen Sie Währung und Lebenszyklus von Nutzungstarifplänen fest."
+      },
       "warehouses": {
         "title": "Lager",
         "singular": "Lager",
@@ -2658,8 +2671,16 @@
         "title": "Artikel-Satzbücher",
         "description": "Satzbücher nach Kunde, Projekt und Organisation für Geräte und andere Artikelverrechnungen."
       },
-      "price-levels": { "title": "Preisstufen", "singularTitle": "Preisstufe", "description": "Wiederverwendbare Handels-, Großhandels-, Partner- und kostenbasierte Preisstufen." },
-      "customer-price-level-assignments": { "title": "Kundenpreisstufen", "singularTitle": "Kundenpreisstufe", "description": "Datierte Standardpreisstufen je Kunde." },
+      "price-levels": {
+        "title": "Preisstufen",
+        "singularTitle": "Preisstufe",
+        "description": "Wiederverwendbare Handels-, Großhandels-, Partner- und kostenbasierte Preisstufen."
+      },
+      "customer-price-level-assignments": {
+        "title": "Kundenpreisstufen",
+        "singularTitle": "Kundenpreisstufe",
+        "description": "Datierte Standardpreisstufen je Kunde."
+      },
       "item-rate-book-assignments": {
         "title": "Satzbuchzuordnungen",
         "description": "Legen Sie fest, welches zeitlich gültige Satzbuch für einen Kunden oder ein Projekt gilt."
@@ -2677,9 +2698,31 @@
         "singular": "Lagerort",
         "description": "Physische Behälter, Zonen und Lager unter der Standortdimension."
       },
-      "mfg-scrap-reasons": {"title":"Ausschussgründe","singular":"Ausschussgründe","description":"Codes, mit denen Beschäftigte Ausschuss melden; jeder Grund wird als normal (in die Produktkosten eingerechnet) oder abnormal (im Zeitraum als Aufwand erfasst) klassifiziert."},
-      "mfg-item-policies": {"title":"Fertigungsartikelrichtlinien","singular":"Fertigungsartikelrichtlinien","description":"Legt fest, wie jeder Artikel geplant und beschafft wird: fertigen, einkaufen oder umlagern, einschließlich Wiederbeschaffungszeit, Sicherheitsbestand, Bestellmengenvielfachen und geplantem Ausschuss."},
-      "manufacturing-policies": {"title":"Fertigungseinstellungen","singular":"Fertigungseinstellungen","description":"Legen Sie fest, wie die Fertigungsplanung mit Materialengpässen, Fertigstellungstoleranzen und ungewöhnlichem Ausschuss umgeht.","shortage":"Materialengpassrichtlinie","warn":"Warnen und die Freigabe fortsetzen","refuse":"Freigabe bei Engpässen verweigern","tolerance":"Fertigstellungstoleranz (%)","threshold":"Genehmigungsgrenze für ungewöhnlichen Ausschuss","thresholdHelp":"Leer lassen, wenn keine Genehmigung erforderlich ist.","save":"Einstellungen speichern","saving":"Einstellungen werden gespeichert…","saved":"Fertigungseinstellungen gespeichert","failed":"Fertigungseinstellungen konnten nicht gespeichert werden."},
+      "mfg-scrap-reasons": {
+        "title": "Ausschussgründe",
+        "singular": "Ausschussgründe",
+        "description": "Codes, mit denen Beschäftigte Ausschuss melden; jeder Grund wird als normal (in die Produktkosten eingerechnet) oder abnormal (im Zeitraum als Aufwand erfasst) klassifiziert."
+      },
+      "mfg-item-policies": {
+        "title": "Fertigungsartikelrichtlinien",
+        "singular": "Fertigungsartikelrichtlinien",
+        "description": "Legt fest, wie jeder Artikel geplant und beschafft wird: fertigen, einkaufen oder umlagern, einschließlich Wiederbeschaffungszeit, Sicherheitsbestand, Bestellmengenvielfachen und geplantem Ausschuss."
+      },
+      "manufacturing-policies": {
+        "title": "Fertigungseinstellungen",
+        "singular": "Fertigungseinstellungen",
+        "description": "Legen Sie fest, wie die Fertigungsplanung mit Materialengpässen, Fertigstellungstoleranzen und ungewöhnlichem Ausschuss umgeht.",
+        "shortage": "Materialengpassrichtlinie",
+        "warn": "Warnen und die Freigabe fortsetzen",
+        "refuse": "Freigabe bei Engpässen verweigern",
+        "tolerance": "Fertigstellungstoleranz (%)",
+        "threshold": "Genehmigungsgrenze für ungewöhnlichen Ausschuss",
+        "thresholdHelp": "Leer lassen, wenn keine Genehmigung erforderlich ist.",
+        "save": "Einstellungen speichern",
+        "saving": "Einstellungen werden gespeichert…",
+        "saved": "Fertigungseinstellungen gespeichert",
+        "failed": "Fertigungseinstellungen konnten nicht gespeichert werden."
+      },
       "item-inventory-profiles": {
         "title": "Artikelkalkulation",
         "description": "Kalkulationsmethode, Bestandskonten, Nachverfolgung und Standardkosten je Artikel."
@@ -3080,8 +3123,7 @@
         "description": "Aufbewahrungsregeln: anonymisieren oder löschen nach Frist.",
         "singularTitle": "Aufbewahrungsregel",
         "title": "Aufbewahrungsregeln"
-      }
-    ,
+      },
       "item-identifiers": {
         "title": "Artikelkennungen",
         "singular": "Artikelkennung",
@@ -3137,7 +3179,11 @@
       "compoundOnPrevious": "Auf vorherige Komponenten aufschlagen",
       "roundingScale": "Steuer-Rundungsstellen",
       "isActive": "Aktiv",
-      "pricingMethod": "Preismethode", "percentage": "Prozentsatz", "costBasis": "Kostenbasis", "isBase": "Basisstufe", "priceLevelId": "Preisstufe",
+      "pricingMethod": "Preismethode",
+      "percentage": "Prozentsatz",
+      "costBasis": "Kostenbasis",
+      "isBase": "Basisstufe",
+      "priceLevelId": "Preisstufe",
       "isPrimary": "Primäres Buch",
       "country": "Land",
       "region": "Region",
@@ -3509,8 +3555,7 @@
       "retroThreshold": "Rückrechnungsschwelle",
       "cohortKey": "Kohorte",
       "biasTerms": "Sprachliste",
-      "reviewMonths": "Prüfrhythmus (Monate)"
-    ,
+      "reviewMonths": "Prüfrhythmus (Monate)",
       "customerSku": "Kundenteilenummer"
     },
     "fieldHelp": {
@@ -3643,8 +3688,16 @@
         "empty-bin": "Leerer Lagerplatz",
         "bulk-zone": "Blockzone"
       },
-      "priceLevelMethod": { "explicit": "Explizite Matrixpreise", "markupDiscount": "Aufschlag / Rabatt", "costPlus": "Kosten plus" },
-      "priceCostBasis": { "itemCost": "Artikelkosten", "standardCost": "Standardlagerkosten", "averageCost": "Durchschnittliche Lagerkosten" },
+      "priceLevelMethod": {
+        "explicit": "Explizite Matrixpreise",
+        "markupDiscount": "Aufschlag / Rabatt",
+        "costPlus": "Kosten plus"
+      },
+      "priceCostBasis": {
+        "itemCost": "Artikelkosten",
+        "standardCost": "Standardlagerkosten",
+        "averageCost": "Durchschnittliche Lagerkosten"
+      },
       "timeClassification": {
         "regular": "Regulär",
         "overtime": "Überstunden",
@@ -3778,8 +3831,15 @@
         "transit": "Transit",
         "quarantine": "Quarantäne"
       },
-      "manufacturingScrap": {"normal":"Normaler Ausschuss","abnormal":"Ungewöhnlicher Ausschuss"},
-      "manufacturingSupplyMethod": {"make":"Selbst fertigen","buy":"Kaufen","transfer":"Zwischen Lagerorten umlagern"},
+      "manufacturingScrap": {
+        "normal": "Normaler Ausschuss",
+        "abnormal": "Ungewöhnlicher Ausschuss"
+      },
+      "manufacturingSupplyMethod": {
+        "make": "Selbst fertigen",
+        "buy": "Kaufen",
+        "transfer": "Zwischen Lagerorten umlagern"
+      },
       "complianceCategory": {
         "bond": "Bürgschaft",
         "insurance": "Versicherung",
@@ -3882,7 +3942,8 @@
         "alimony": "Unterhalt (F2)",
         "none": "Nach Steuern",
         "pensionF": "Pension (RPP/RRSP, Faktor F)",
-        "unionDues": "Gewerkschaftsbeiträge (U1)"
+        "unionDues": "Gewerkschaftsbeiträge (U1)",
+        "pensionFBonus": "Altersvorsorge aus nicht periodischem Entgelt (RPP/RRSP, Faktor F3)"
       },
       "sourceKind": {
         "builtin": "Integriert",
@@ -4123,8 +4184,7 @@
         "department": "Abteilung",
         "paySchedule": "Lohnturnus",
         "jobLevel": "Karrierestufe"
-      }
-    ,
+      },
       "identifierKind": {
         "gtin": "GTIN",
         "upc": "UPC",
@@ -4778,7 +4838,6 @@
         "taxPosition": "Steuerposition"
       },
       "rhythm": {
-        "optional": "Transaktionsvolumen und Abschlussrhythmus jetzt konfigurieren (optional)",
         "activity": {
           "high": {
             "description": "Automatisierung und laufende Überwachung sollten von Anfang an bereit sein.",
@@ -4812,22 +4871,23 @@
         "closeQuestion": "Wie oft möchten Sie die Bücher formal abschließen und berichten?",
         "description": "Volumen verändert, wie sehr Automatisierung hilft. Der Abschlussrhythmus verändert, welche Routinen OpenBooks Ihnen vorlegen sollte.",
         "note": "Dies sind Startpräferenzen, keine Grenzen. OpenBooks wird Buchungsintegrität oder Abschlusskontrollen niemals schwächen, weil die Bewegung gering ist.",
-        "title": "Ihren Buchhaltungsrhythmus setzen"
+        "title": "Ihren Buchhaltungsrhythmus setzen",
+        "optional": "Transaktionsvolumen und Abschlussrhythmus jetzt konfigurieren (optional)"
       },
       "applying": {
         "description": "Erstellt Ihren Kontenplan, konfiguriert Funktionen und ordnet Kontrollkonten zu.",
         "title": "Ihre Bücher werden eingerichtet …"
       },
       "done": {
+        "description": "Ihr Arbeitsbereich ist eingerichtet. Wählen Sie die nächste Aktion; die Checkliste zeigt die verbleibenden Schritte.",
+        "title": "Ihr Startarbeitsbereich ist bereit",
         "actions": {
           "invoice": "Erste Rechnung erstellen",
           "migrate": "Aus QuickBooks, Xero oder einem anderen System importieren",
           "statement": "Kontoauszug importieren",
           "demo": "Ein separates Demounternehmen erkunden",
           "readiness": "Mit der Einrichtungsliste fortfahren"
-        },
-        "description": "Ihr Arbeitsbereich ist eingerichtet. Wählen Sie die nächste Aktion; die Checkliste zeigt die verbleibenden Schritte.",
-        "title": "Ihr Startarbeitsbereich ist bereit"
+        }
       },
       "industries": {
         "accounting_firm": {
@@ -5368,7 +5428,6 @@
       "title": "Auftragsabwicklung",
       "description": "Kundenaufträge aus dem Lagerbestand kommissionieren, verpacken und versenden."
     },
-
     "dropShipping": {
       "title": "Direktversand",
       "description": "Kundenaufträge direkt durch Lieferanten erfüllen, ohne Waren im eigenen Lager zu erfassen."
@@ -5628,9 +5687,20 @@
       "manifest": "Manifest",
       "purged": "gelöscht ({reason}) · {when}",
       "retention": "Aufbewahrung",
-    "kinds": { "manual": "Manuell", "scheduled": "Geplant" },
-    "statuses": { "queued": "In Warteschlange", "running": "Wird ausgeführt", "completed": "Abgeschlossen", "failed": "Fehlgeschlagen" },
-    "reasons": { "rotated": "rotiert", "deleted": "gelöscht" },
+      "kinds": {
+        "manual": "Manuell",
+        "scheduled": "Geplant"
+      },
+      "statuses": {
+        "queued": "In Warteschlange",
+        "running": "Wird ausgeführt",
+        "completed": "Abgeschlossen",
+        "failed": "Fehlgeschlagen"
+      },
+      "reasons": {
+        "rotated": "rotiert",
+        "deleted": "gelöscht"
+      },
       "rowsTables": "{rows} Zeilen · {tables} Tabellen",
       "sha256": "SHA-256",
       "size": "Größe",
@@ -5908,7 +5978,7 @@
     "sending": "Wird gesendet…",
     "testSent": "Test über {provider} gesendet ({messageId})",
     "testFailed": "Die Test-E-Mail konnte nicht gesendet werden",
-    "providers":     {
+    "providers": {
       "resend": {
         "label": "Resend",
         "secretLabel": "API-Schlüssel",

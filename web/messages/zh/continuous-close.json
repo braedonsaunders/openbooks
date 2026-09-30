@@ -220,8 +220,8 @@
       "description": "某薪酬项目缺少过账科目或汇缴对象。"
     },
     "stranded_background_work": {
-      "title": "Stranded background work",
-      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+      "title": "受阻后台任务",
+      "description": "持久化过账、调度、报告生成或邮件任务已永久失败或逾期超过配置时限。受控恢复前，请审核保留的证据。"
     }
   },
   "summary": {

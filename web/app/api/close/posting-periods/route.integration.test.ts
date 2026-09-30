@@ -38,7 +38,7 @@ registerHooks({
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier.startsWith("@openbooks/engine/")) {
+    if (specifier.startsWith("@openbooks/engine/src/")) {
       const webMarker = context.parentURL?.lastIndexOf("/web/") ?? -1;
       if (webMarker === -1) return nextResolve(specifier, context);
       return nextResolve(

@@ -214,7 +214,7 @@ test("edit mode without gl.post offers no Save", async (t) => {
     });
     host.remove();
   });
-  await openActions();
+  assert.equal(buttonsNamed("Actions").length, 0, "a read-only new journal exposes no mutation menu");
   assert.equal(buttonsNamed("Save").length, 0, "no Save without gl.post, even in the editor");
 });
 

@@ -16,8 +16,17 @@
     "counts": "カウント"
   },
   "bom": {
-    "columns": { "effectiveFrom": "有効開始日", "effectiveTo": "有効終了日", "operationSeq": "作業順序", "scrapPct": "仕損率 %", "isByproduct": "明細種別" },
-    "values": { "component": "構成品", "byproduct": "副産物" },
+    "columns": {
+      "effectiveFrom": "有効開始日",
+      "effectiveTo": "有効終了日",
+      "operationSeq": "作業順序",
+      "scrapPct": "仕損率 %",
+      "isByproduct": "明細種別"
+    },
+    "values": {
+      "component": "構成品",
+      "byproduct": "副産物"
+    },
     "refusals": {
       "effectivityOverlap": "構成品 {component} の有効期間 {windows} が重複しています。日付を修正するか、必要に応じて異なる作業順序または副産物区分を指定してください。",
       "invalidDate": "実在する日付を YYYY-MM-DD 形式で入力してください。",
@@ -46,7 +55,9 @@
     "count": "棚卸",
     "assembly_build": "組立生産",
     "assembly_consume": "組立消費",
-    "return": "返品"
+    "return": "返品",
+    "assembly_disassembly": "組立品の分解",
+    "assembly_recovery": "回収部品"
   },
   "drawer": {
     "title": "在庫変動",
@@ -58,7 +69,9 @@
       "adjust": "調整",
       "transfer": "移動",
       "build": "組立を生産",
-      "landed": "付帯費用"
+      "landed": "付帯費用",
+      "disassemble": "在庫を分解",
+      "reverse": "移動を反対仕訳"
     },
     "hint": {
       "receive": "原価で在庫を追加します(借方 在庫 / 貸方 相手勘定)。",
@@ -66,7 +79,9 @@
       "adjust": "調整勘定に対して手持数量を修正します。",
       "transfer": "簿価のまま2つの拠点間で在庫を移動します。",
       "build": "部品表(BOM)に従って構成部品を消費し、完成品を原価で生産します。",
-      "landed": "運賃や関税を品目の手持在庫レイヤーに資産計上します。"
+      "landed": "運賃や関税を品目の手持在庫レイヤーに資産計上します。",
+      "disassemble": "記録済み製造から部品を回収します。回収には元の部品表と原価証拠を使用し、廃棄やその他の原価差額は設定済みの調整・差異勘定に転記します。",
+      "reverse": "統制された反対仕訳を追加します。組立処理内の全移動をまとめて取り消します。先に後続の処理を取り消してください。"
     },
     "selectItem": "品目を選択",
     "selectLocation": "拠点を選択",
@@ -88,7 +103,13 @@
     "bases": {
       "value": "金額按分",
       "quantity": "数量按分"
-    }
+    },
+    "sourceMovement": "元の移動",
+    "selectSourceMovement": "品目、場所、日付、移動IDで検索",
+    "loadMovementsFailed": "元の移動を読み込めませんでした",
+    "moreMovements": "元の移動をさらに読み込む",
+    "movementReason": "この処理の理由",
+    "reversed": "在庫処理を取消済み"
   },
   "advanced": {
     "errors": {
@@ -223,13 +244,13 @@
       "selectStockLocation": "保管場所を選択…",
       "selectLot": "ロット（管理対象のみ）…",
       "missingFields": "ロケーション、子会社、日付、明細を1件以上指定してください。",
-    "lineMissingItem": "行{line}: 品目を選択してください。",
-    "lineMissingStockLocation": "行{line}: 保管場所を選択してください。",
-    "noStockLocations": "このロケーションにはまだ保管場所がありません。",
-    "manageStockLocations": "保管場所を設定する",
-    "needsCosting": "{count, plural, one {原価プロファイルのない有効な品目が # 件あり、まだカウントできません。} other {原価プロファイルのない有効な品目が # 件あり、まだカウントできません。}}品目レコードでプロファイルを追加してください。",
-    "openItems": "品目を開く",
-    "needsCostingNoGrant": "原価プロファイルを追加するには品目管理アクセスが必要です。",
+      "lineMissingItem": "行{line}: 品目を選択してください。",
+      "lineMissingStockLocation": "行{line}: 保管場所を選択してください。",
+      "noStockLocations": "このロケーションにはまだ保管場所がありません。",
+      "manageStockLocations": "保管場所を設定する",
+      "needsCosting": "{count, plural, one {原価プロファイルのない有効な品目が # 件あり、まだカウントできません。} other {原価プロファイルのない有効な品目が # 件あり、まだカウントできません。}}品目レコードでプロファイルを追加してください。",
+      "openItems": "品目を開く",
+      "needsCostingNoGrant": "原価プロファイルを追加するには品目管理アクセスが必要です。",
       "lines": "カウント対象明細",
       "addLine": "明細を追加",
       "removeLine": "削除"

@@ -316,5 +316,19 @@
     "noOptions": "Keine Optionen definiert",
     "selectRecord": "Datensatz auswählen…",
     "loadFailed": "Datensätze konnten nicht geladen werden"
+  },
+  "nativeGoodsTax": {
+    "title": "Kanadische Warensteuer",
+    "manual": "Explizite Steuerprofile je Zeile",
+    "automatic": "Native Warenbesteuerung",
+    "help": "Nur für gewöhnliche, vollständig steuerpflichtige Waren. Wählen Sie die gesetzlich maßgebliche Liefer- oder Abholprovinz gemäß den Versandbedingungen, nicht die Rechnungsadresse. Manuelle Profile und Überschreibungen haben Vorrang. Der Server prüft vor dem Speichern die verkaufende Rechtseinheit, zeitlich gültige Registrierungen und konfigurierte Steuerkonten.",
+    "province": "Gesetzlich maßgebliche Lieferprovinz",
+    "delivery": "Liefervereinbarung",
+    "delivered_or_made_available": "Geliefert oder bereitgestellt",
+    "supplier_arranged_shipping": "Vom Lieferanten organisierter Versand zum Bestimmungsort",
+    "recipient_collection": "Abholung durch den Empfänger",
+    "evidence": "Vertragliche Nachweise zur Lieferung und Steuerpflicht",
+    "incomplete": "Geben Sie vor dem Speichern die Provinz, mindestens 20 Zeichen Nachweise und gültige Zeilenbeträge an; die Steuervorschau bleibt gesperrt, bis die Lieferung bewertet werden kann.",
+    "previewUnavailable": "Steuervorschau nicht verfügbar — Lieferbeurteilung und Zeilenbeträge vervollständigen"
   }
 }

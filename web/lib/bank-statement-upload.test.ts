@@ -235,6 +235,12 @@ const mockSources = new Map<string, string>([
       export function Label() { return null }
       export function Select() { return null }
       export function Textarea() { return null }
+      export function Table() { return null }
+      export function TableBody() { return null }
+      export function TableCell() { return null }
+      export function TableHead() { return null }
+      export function TableHeader() { return null }
+      export function TableRow() { return null }
     `,
   ],
 ])

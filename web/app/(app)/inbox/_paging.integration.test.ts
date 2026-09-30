@@ -34,7 +34,7 @@ registerScopedHooks({
     if (specifier === "@/lib/money-server" && context.parentURL?.includes("/inbox/")) {
       return { url: "mock:approvals-paging-money", shortCircuit: true };
     }
-    if (specifier.startsWith("@openbooks/engine/")) {
+    if (specifier.startsWith("@openbooks/engine/src/")) {
       const root = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 1);
       return nextResolve(
         new URL(`engine/${specifier.slice("@openbooks/engine/".length)}`, root).href,

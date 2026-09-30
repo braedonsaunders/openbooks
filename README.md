@@ -194,7 +194,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.17` image digest in
+2. resolves and records the official `0.1.0-alpha.26` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -803,13 +803,15 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.21` is the current community preview. It keeps the
-version-tag release path. This release adds the human-resources module
-(recruiting, performance, benefits, leave, and employee self-service on one
-effective-dated employment record), widens payroll to fourteen installable
-countries with prior-year US federal editions, adds cycle counting and a tax
-pack installation registry that reports drift, and repairs two connection
-leaks in the database layer. See the changelog for the areas touched.
+`v0.1.0-alpha.26` is the current community preview. This release expands
+native provision, construction-loss, prepaid-rights breakage, assembly
+recovery, sales-agency, net-investment FX, Canadian goods-tax and cumulative
+payroll workflows. It also adds verified industry demonstration companies,
+consolidates shared list and setup components, and aligns personal inbox
+counts across navigation, Inbox and Home. The version-tag release path
+requires financial smoke checks, representative upgrade rehearsals, scanned
+and attested images, and backup-first deployment. See the changelog for
+capability scope and upgrade requirements.
 
 Good uses today:
 

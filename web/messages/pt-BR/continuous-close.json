@@ -220,8 +220,8 @@
       "description": "Um componente de remuneração não tem contas de lançamento nem responsável pelo recolhimento."
     },
     "stranded_background_work": {
-      "title": "Stranded background work",
-      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+      "title": "Trabalho em segundo plano bloqueado",
+      "description": "Tarefas duráveis de contabilização, agendamento, geração de relatórios ou e-mail falharam permanentemente ou ultrapassaram o prazo configurado. Revise as evidências preservadas antes de uma recuperação controlada."
     }
   },
   "summary": {

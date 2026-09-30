@@ -8,5 +8,20 @@
     "emptyDescription": "Crie um pedido de venda ou converta um a partir de um orçamento.",
     "newButton": "Novo pedido de venda",
     "createDraftFailed": "Não foi possível criar um pedido de venda rascunho"
+  },
+  "agency": {
+    "title": "Avaliar a função de principal ou agente",
+    "hint": "Avalie se a empresa controla os bens especificados antes da transferência. Obtenha aprovação independente antes de confirmar o envio ou aprovar uma fatura de cliente ou fornecedor. Um agente reconhece sua comissão de intermediação e mantém o direito do fornecedor como um passivo de repasse.",
+    "line": "Linha vinculada do pedido de venda",
+    "choose": "Escolher…",
+    "date": "Data de vigência",
+    "control": "A empresa controla esses bens antes da transferência ao cliente?",
+    "principal": "Sim — principal, receita bruta",
+    "agent": "Não — agente, comissão líquida de intermediação",
+    "account": "Conta de passivo de repasse ao fornecedor",
+    "evidence": "Evidências contratuais de controle",
+    "reason": "Motivo da avaliação",
+    "propose": "Preparar proposta de aprovação",
+    "failed": "Não foi possível preparar a avaliação de controle"
   }
 }

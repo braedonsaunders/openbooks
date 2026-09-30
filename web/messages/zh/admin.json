@@ -52,7 +52,7 @@
         "title": "应用",
         "description": "构建并安装应用包——沙箱化前端加受治理的后端"
       },
-  "sandboxes": {
+      "sandboxes": {
         "title": "环境",
         "description": "创建、刷新并提升与生产隔离的沙箱副本"
       },
@@ -395,7 +395,12 @@
   },
   "roles": {
     "metaTitle": "角色",
-    "named": {"production":{"name":"生产","description":"管理制造主数据和车间作业，可过账库存，但无权冲销。"}},
+    "named": {
+      "production": {
+        "name": "生产",
+        "description": "管理制造主数据和车间作业，可过账库存，但无权冲销。"
+      }
+    },
     "title": "角色",
     "description": "你分配给用户的权限集合。内置角色随应用提供；如需更细粒度的控制，可创建自定义角色。",
     "manageUsers": "管理用户",
@@ -1410,8 +1415,8 @@
           "description": "无过账映射的工资组成项目。"
         },
         "stranded_background_work": {
-          "title": "Stranded background work",
-          "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+          "title": "受阻后台任务",
+          "description": "持久化过账、调度、报告生成或邮件任务已永久失败或逾期超过配置时限。受控恢复前，请审核保留的证据。"
         }
       },
       "accounting": {
@@ -2430,8 +2435,16 @@
       "saveFailed": "无法保存配置。"
     },
     "entities": {
-      "usage-meters": { "title": "用量计量器", "singular": "用量计量器", "description": "定义收集可计费用量所使用的单位和聚合方式。" },
-      "usage-rating-plans": { "title": "用量费率计划", "singular": "用量费率计划", "description": "配置用量费率计划的币种和生命周期。" },
+      "usage-meters": {
+        "title": "用量计量器",
+        "singular": "用量计量器",
+        "description": "定义收集可计费用量所使用的单位和聚合方式。"
+      },
+      "usage-rating-plans": {
+        "title": "用量费率计划",
+        "singular": "用量费率计划",
+        "description": "配置用量费率计划的币种和生命周期。"
+      },
       "warehouses": {
         "title": "仓库",
         "singular": "仓库",
@@ -2625,8 +2638,16 @@
         "title": "物料费率表",
         "description": "用于设备及其他物料收费的客户、项目和组织费率表。"
       },
-      "price-levels": { "title": "价格级别", "singularTitle": "价格级别", "description": "可复用的零售、批发、合作伙伴及成本基础价格级别。" },
-      "customer-price-level-assignments": { "title": "客户价格级别", "singularTitle": "客户价格级别", "description": "分配给客户的带生效日期默认价格级别。" },
+      "price-levels": {
+        "title": "价格级别",
+        "singularTitle": "价格级别",
+        "description": "可复用的零售、批发、合作伙伴及成本基础价格级别。"
+      },
+      "customer-price-level-assignments": {
+        "title": "客户价格级别",
+        "singularTitle": "客户价格级别",
+        "description": "分配给客户的带生效日期默认价格级别。"
+      },
       "item-rate-book-assignments": {
         "title": "费率表分配",
         "description": "选择适用于客户或项目的生效日期费率表。"
@@ -2644,9 +2665,31 @@
         "singular": "库存地点",
         "description": "地点维度下的实体货位、区域和仓库。"
       },
-      "mfg-scrap-reasons": {"title":"报废原因","singular":"报废原因","description":"操作员用于报告报废的代码；每个原因分为正常报废（计入产品成本）或异常报废（计入当期费用）。"},
-      "mfg-item-policies": {"title":"物料制造策略","singular":"物料制造策略","description":"定义每种物料的计划和供应方式：自制、采购或调拨，并设置提前期、安全库存、订货倍数和计划损耗。"},
-      "manufacturing-policies": {"title":"制造策略","singular":"制造策略","description":"设置制造计划对物料短缺、完工容差和异常报废的处理方式。","shortage":"物料短缺策略","warn":"发出警告并允许释放","refuse":"物料不足时拒绝释放","tolerance":"完工容差 (%)","threshold":"异常报废审批阈值","thresholdHelp":"无需审批时请留空。","save":"保存策略","saving":"正在保存策略…","saved":"制造策略已保存","failed":"无法保存制造策略。"},
+      "mfg-scrap-reasons": {
+        "title": "报废原因",
+        "singular": "报废原因",
+        "description": "操作员用于报告报废的代码；每个原因分为正常报废（计入产品成本）或异常报废（计入当期费用）。"
+      },
+      "mfg-item-policies": {
+        "title": "物料制造策略",
+        "singular": "物料制造策略",
+        "description": "定义每种物料的计划和供应方式：自制、采购或调拨，并设置提前期、安全库存、订货倍数和计划损耗。"
+      },
+      "manufacturing-policies": {
+        "title": "制造策略",
+        "singular": "制造策略",
+        "description": "设置制造计划对物料短缺、完工容差和异常报废的处理方式。",
+        "shortage": "物料短缺策略",
+        "warn": "发出警告并允许释放",
+        "refuse": "物料不足时拒绝释放",
+        "tolerance": "完工容差 (%)",
+        "threshold": "异常报废审批阈值",
+        "thresholdHelp": "无需审批时请留空。",
+        "save": "保存策略",
+        "saving": "正在保存策略…",
+        "saved": "制造策略已保存",
+        "failed": "无法保存制造策略。"
+      },
       "item-inventory-profiles": {
         "title": "物料成本核算",
         "description": "每种物料的成本核算方法、库存科目、跟踪和标准成本。"
@@ -3005,8 +3048,7 @@
         "description": "保留规则：到期匿名化或删除。",
         "singularTitle": "保留规则",
         "title": "保留规则"
-      }
-    ,
+      },
       "item-identifiers": {
         "title": "商品标识符",
         "singular": "商品标识符",
@@ -3068,7 +3110,11 @@
       "compoundOnPrevious": "基于前序税项复合计算",
       "roundingScale": "税额舍入小数位",
       "isActive": "启用",
-      "pricingMethod": "定价方式", "percentage": "百分比", "costBasis": "成本基础", "isBase": "基础级别", "priceLevelId": "价格级别",
+      "pricingMethod": "定价方式",
+      "percentage": "百分比",
+      "costBasis": "成本基础",
+      "isBase": "基础级别",
+      "priceLevelId": "价格级别",
       "isPrimary": "主账簿",
       "country": "国家/地区",
       "region": "地区",
@@ -3434,8 +3480,7 @@
       "retroThreshold": "追溯阈值",
       "cohortKey": "分组",
       "biasTerms": "敏感措辞",
-      "reviewMonths": "评审周期（月）"
-    ,
+      "reviewMonths": "评审周期（月）",
       "customerSku": "客户商品编号"
     },
     "fieldHelp": {
@@ -3568,8 +3613,16 @@
         "empty-bin": "空库位",
         "bulk-zone": "批量区"
       },
-      "priceLevelMethod": { "explicit": "显式矩阵价格", "markupDiscount": "加价 / 折扣", "costPlus": "成本加成" },
-      "priceCostBasis": { "itemCost": "物料成本", "standardCost": "标准库存成本", "averageCost": "平均库存成本" },
+      "priceLevelMethod": {
+        "explicit": "显式矩阵价格",
+        "markupDiscount": "加价 / 折扣",
+        "costPlus": "成本加成"
+      },
+      "priceCostBasis": {
+        "itemCost": "物料成本",
+        "standardCost": "标准库存成本",
+        "averageCost": "平均库存成本"
+      },
       "payFrequency": {
         "weekly": "每周",
         "biweekly": "每两周",
@@ -3590,7 +3643,8 @@
         "none": "税后",
         "pensionF": "养老金（RPP/RRSP，系数 F）",
         "unionDues": "工会会费（U1）",
-        "alimony": "赡养费（F2）"
+        "alimony": "赡养费（F2）",
+        "pensionFBonus": "非定期薪酬的养老金扣除（RPP/RRSP，F3因子）"
       },
       "timeClassification": {
         "regular": "正常工时",
@@ -3758,8 +3812,15 @@
         "transit": "在途",
         "quarantine": "隔离区"
       },
-      "manufacturingScrap": {"normal":"正常报废","abnormal":"异常报废"},
-      "manufacturingSupplyMethod": {"make":"自制","buy":"采购","transfer":"地点间调拨"},
+      "manufacturingScrap": {
+        "normal": "正常报废",
+        "abnormal": "异常报废"
+      },
+      "manufacturingSupplyMethod": {
+        "make": "自制",
+        "buy": "采购",
+        "transfer": "地点间调拨"
+      },
       "overheadMethod": {
         "three_year_average": "三年平均（历史）",
         "live": "实时（按实际成本重算）",
@@ -4048,8 +4109,7 @@
         "department": "部门",
         "paySchedule": "发薪周期",
         "jobLevel": "职级"
-      }
-    ,
+      },
       "identifierKind": {
         "gtin": "GTIN",
         "upc": "UPC",
@@ -4632,7 +4692,6 @@
         }
       },
       "rhythm": {
-        "optional": "现在配置交易量和结账频率（可选）",
         "title": "设定核算节奏",
         "description": "业务量决定自动化有多大帮助。结账频率决定 OpenBooks 应把哪些例行工作摆到您面前。",
         "activityQuestion": "每月大概处理多少业务？",
@@ -4666,7 +4725,8 @@
             "description": "最低正式结账频率；日常对账依然重要。"
           }
         },
-        "note": "这些是起始偏好，不是限制。OpenBooks 绝不因业务量小而放松过账完整性或结账管控。"
+        "note": "这些是起始偏好，不是限制。OpenBooks 绝不因业务量小而放松过账完整性或结账管控。",
+        "optional": "现在配置交易量和结账频率（可选）"
       },
       "launch": {
         "title": "规划上线",
@@ -4747,15 +4807,15 @@
         "description": "正在创建会计科目表、配置功能、映射统驭科目。"
       },
       "done": {
+        "title": "起始工作区已就绪",
+        "description": "工作区已配置。请选择下一步操作；设置清单会记录剩余步骤。",
         "actions": {
           "invoice": "创建第一张发票",
           "migrate": "从 QuickBooks、Xero 或其他系统导入",
           "statement": "导入银行对账单",
           "demo": "探索独立的演示公司",
           "readiness": "继续完成设置清单"
-        },
-        "title": "起始工作区已就绪",
-        "description": "工作区已配置。请选择下一步操作；设置清单会记录剩余步骤。"
+        }
       },
       "industries": {
         "general_business": {
@@ -5236,7 +5296,6 @@
       "title": "订单履行",
       "description": "从仓库库存中拣货、包装并发运销售订单。"
     },
-
     "dropShipping": {
       "title": "供应商直发",
       "description": "由供应商直接履行销售订单，无需将货物接收入库。"
@@ -5537,9 +5596,20 @@
       "sha256": "SHA-256",
       "retention": "保留",
       "actionsSr": "操作",
-    "kinds": { "manual": "手动", "scheduled": "计划任务" },
-    "statuses": { "queued": "排队中", "running": "运行中", "completed": "已完成", "failed": "失败" },
-    "reasons": { "rotated": "轮换", "deleted": "已删除" },
+      "kinds": {
+        "manual": "手动",
+        "scheduled": "计划任务"
+      },
+      "statuses": {
+        "queued": "排队中",
+        "running": "运行中",
+        "completed": "已完成",
+        "failed": "失败"
+      },
+      "reasons": {
+        "rotated": "轮换",
+        "deleted": "已删除"
+      },
       "rowsTables": "{rows} 行 · {tables} 个表",
       "purged": "已清除（{reason}）· {when}",
       "kept": "保留",
@@ -5908,7 +5978,7 @@
     "sending": "发送中…",
     "testSent": "已通过{provider}发送测试 ({messageId})",
     "testFailed": "测试邮件发送失败",
-    "providers":     {
+    "providers": {
       "resend": {
         "label": "Resend",
         "secretLabel": "API 密钥",
