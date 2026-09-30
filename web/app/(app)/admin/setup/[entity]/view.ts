@@ -2,7 +2,7 @@ import 'server-only'
 import { loadExtensionSettingRows } from '../../../../../lib/setup/extension-settings'
 import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announcements'
 
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { decimalLabel } from '../../../../../lib/format'
@@ -187,7 +187,7 @@ export async function loadSetupEntity(
   }
 
   const baseEntity = isCompany || isPeriodClose || isFxProvider ? undefined : SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!isCompany && !isPeriodClose && !isFxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.rehomed)) {
+  if (!isCompany && !isPeriodClose && !isFxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || baseEntity.rehomed)) {
     notFound()
   }
   const features = await resolvedFeatureState(orgId)
