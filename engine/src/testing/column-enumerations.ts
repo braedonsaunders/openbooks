@@ -100,6 +100,12 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
+    file: "engine/src/sample-companies/install-scenarios.ts",
+    sites: [
+      { stance: "feeds-a-write", note: "native demo record validation permits only writable columns; generated columns are excluded before constructing inserts or updates" },
+    ],
+  },
+  {
     file: "engine/src/sandbox/catalog.ts",
     sites: [
       { stance: "feeds-a-write", note: "the clone's copy column list; generated columns are never named in `insert into t (cols)`" },

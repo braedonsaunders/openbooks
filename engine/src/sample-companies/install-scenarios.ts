@@ -99,6 +99,7 @@ async function tableColumns(tx: SqlExecutor, tables: string[]): Promise<Map<stri
   const result = await tx.execute<{ table_name: string; column_name: string }>(sql`
     select table_name, column_name from information_schema.columns
      where table_schema='public' and table_name in (${sql.join(tables.map((table) => sql`${table}`), sql`, `)})
+       and is_generated = 'NEVER'
   `);
   const columns = new Map<string, Set<string>>();
   for (const row of result.rows) {
@@ -113,7 +114,7 @@ async function insertRecord(tx: SqlExecutor, record: DemoRecord, columns: Set<st
   const values = Object.entries(record.values).filter(([key]) => {
     // These audit columns are absent on a few native extension/link tables.
     if ((key === "created_by" || key === "updated_by") && !columns.has(key)) return false;
-    if (!columns.has(key)) throw new SampleCompanyError(`Demo schema is missing ${record.table}.${key}; upgrade the database before installing demo data.`);
+    if (!columns.has(key)) throw new SampleCompanyError(`The demo schema has no writable ${record.table}.${key}; use a compatible demo definition and database schema before installing demo data.`);
     return true;
   });
   const existing = await tx.execute(sql`
