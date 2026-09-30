@@ -1,3 +1,4 @@
+import { provisionProjectVisibility } from '@openbooks/engine/provisions'
 import { financialChangeSubjectExpr, lifecycleWhere } from "../customization/entity-list-query/accounting-lifecycles";
 import 'server-only'
 import { accountListBalanceDrill } from '../account-balance-drill'
@@ -366,7 +367,7 @@ const SOURCES: Record<string, EntityListSource> = {
     sorts: { name: sql`p.name`, subsidiary: sql`sub.name`, book: sql`book.name`, balance: sql`gl.balance`, reviewed_on: sql`review.effective_on`, status: provisionStatus },
     defaultSort: sql`p.name`, statusExpr: provisionStatus, quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
     where: (view, adhoc, orgId, allowed) => {
-      const parts = [sql`p.org_id=${orgId}`, subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed === undefined ? new Set<string>() : allowed)]
+      const parts = [sql`p.org_id=${orgId}`,sql`and ${provisionProjectVisibility()}`, subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed === undefined ? new Set<string>() : allowed)]
       for (const filter of view.filters) {
         if (filter.key === 'status') pushNonprofitStatusFilter(parts, filter, provisionStatus, ['unassessed', 'recognized', 'contingent'])
         else parts.push(sql`and false`)

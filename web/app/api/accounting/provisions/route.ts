@@ -13,8 +13,9 @@ const estimate = z.discriminatedUnion('method', [
   z.object({ method: z.literal('no_better_estimate_range'), minimum: exactMoney(), maximum: exactMoney() }).strict(),
 ])
 const bodySchema = z.object({
-    obligation: z.object({ id: uuidId, subsidiaryId: uuidId, bookId: uuidId, name: z.string().trim().min(1).max(200), currency: z.string().regex(/^[A-Z]{3}$/), expenseAccountId: uuidId, liabilityAccountId: uuidId }).strict(),
+    obligation: z.object({ id: uuidId, subsidiaryId: uuidId, bookId: uuidId, name: z.string().trim().min(1).max(200), currency: z.string().regex(/^[A-Z]{3}$/), expenseAccountId: uuidId, liabilityAccountId: uuidId, projectId: uuidId.nullable().optional() }).strict(),
     effectiveOn: isoDate(), reason: z.string().trim().min(8).max(1000), idempotencyKey: z.string().min(1).max(120),
+    construction: z.object({remainingCost:exactMoney(),terminationAvailable:z.boolean(),terminationCost:exactMoney().nullable(),relatedAssetsReviewed:z.boolean(),impairmentEvidence:z.string().trim().min(20).max(10000)}).strict().optional(),
     assessment: z.object({ presentObligation: z.boolean(), outflow: z.enum(['probable', 'possible', 'remote']), reliablyEstimable: z.boolean(), evidence: z.string().trim().min(20).max(10000), discounting: z.enum(['immaterial', 'included_in_estimate', 'undiscounted']), discountEvidence: z.string().trim().min(20).max(10000), estimate: estimate.nullable() }).strict(),
   }).strict()
 const options: PermissionRouteOptions<undefined, typeof bodySchema> = {
