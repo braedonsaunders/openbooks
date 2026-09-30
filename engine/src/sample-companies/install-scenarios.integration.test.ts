@@ -40,6 +40,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
              (select count(*)::int from documents where org_id=${world.orgId}) as documents
     `)).rows[0]);
     const before = await snapshot();
+    assert.ok(before, "installation snapshot must return its counts");
     assert.equal((await installDemoScenarios(world.orgId, profile.industryKey)).inserted, 0);
     assert.deepEqual(await snapshot(), before, "a retry must neither post again nor claim another material change");
     if (profile.industryKey === "general_business") {
@@ -53,6 +54,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       await installDemoScenarios(world.orgId, profile.industryKey);
       assert.equal((await verifyDemoScenarios(world.orgId, profile.industryKey)).ready, true);
       const repaired = await snapshot();
+      assert.ok(repaired, "configuration repair snapshot must return its counts");
       assert.equal(repaired.entries, before.entries, "configuration repair must not duplicate posting");
       assert.equal(repaired.documents, before.documents);
       assert.equal(repaired.audits, Number(before.audits) + 1, "configuration repair records its material change");

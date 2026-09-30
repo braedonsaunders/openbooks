@@ -10,6 +10,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
+const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
 const { withBypassContext, db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -139,25 +140,25 @@ test('payment pulse open ties to AP open payables across time boundaries', { ski
         const items = await openItems(org.orgId, 'ap', '2026-09-17')
         const house = summariseSide(items, grid.asOf, '0', 0)
         assert.equal(
-          home.apOutstanding,
-          Number(house.outstanding),
+          toUnits(home.apOutstanding),
+          toUnits(house.outstanding),
           `pulse open (${home.apOutstanding}) must tie to AP outstanding (${house.outstanding})`,
         )
-        assert.equal(home.apOutstanding, 4000, 'open = overdue bill + future-paid bill; future-posted excluded')
-        assert.equal(home.apOverdue, 1000, 'only the past-due bill is overdue')
+        assert.equal(toUnits(home.apOutstanding), toUnits('4000'), 'open = overdue bill + future-paid bill; future-posted excluded')
+        assert.equal(toUnits(home.apOverdue), toUnits('1000'), 'only the past-due bill is overdue')
         // The hero roster groups the SAME as-of item set as the
         // pulse — one page, one Talent figure. The old live aggregate gated
         // on the cached open_balance (which the seed never decrements), so
         // it showed the future-posted bill and dropped the future-paid one.
         assert.equal(home.topExposure.length, 1, 'single vendor row for the single seeded vendor')
         const hero = home.topExposure[0]!
-        assert.equal(hero.billedOpen, 4000, 'hero billed-open ties the pulse open')
-        assert.equal(hero.overdue, 1000, 'hero overdue ties the pulse overdue')
+        assert.equal(toUnits(hero.billedOpen), toUnits('4000'), 'hero billed-open ties the pulse open')
+        assert.equal(toUnits(hero.overdue), toUnits('1000'), 'hero overdue ties the pulse overdue')
         assert.equal(hero.openBills, 2, 'hero counts the two as-of-open bills, not the future-posted one')
         assert.equal(hero.oldestDue, '2026-09-01', 'hero oldest-due is the overdue bill')
         assert.equal(
-          home.topExposure.reduce((sum, row) => sum + row.billedOpen, 0),
-          home.apOutstanding,
+          home.topExposure.reduce((sum, row) => sum + toUnits(row.billedOpen), 0n),
+          toUnits(home.apOutstanding),
           'hero billed-open foots to the pulse outstanding',
         )
       })
