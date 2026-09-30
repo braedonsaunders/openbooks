@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { add, cmp, div, fromUnits, mulDecimal, mulPercent, toUnits } from "../../money/money.ts";
+import { add, cmp, div, fromUnits, mulDecimal, mulPercent, neg, toUnits } from "../../money/money.ts";
 import { certificateCount, type ResolvedCertificate } from "../certificates.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers CA_EMPLOYEE_FACTS, so every read below resolves
@@ -11,6 +11,7 @@ import { calculateTp1015 } from "./quebec/tp1015.ts";
 import { qcRatesForPayDate } from "./quebec/rates.ts";
 import { ratesForPayDate, type Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { cumulativeHistory } from "./cumulative-history.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 
@@ -37,6 +38,10 @@ export function t4127OntarioDependantInputs(
  * live beside their engines.
  */
 export const CA_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  F:"Periodic pension deductions", F2:"Alimony deducted at source",U1:"Periodic union dues",F3:"Pension deductions from a bonus",
+  CA_PE:"Periodic pensionable earnings",CA_IE:"Periodic EI insurable earnings",CA_QPIP_PE:"Periodic QPIP insurable earnings",
+  CA_BPE:"Bonus pensionable earnings",CA_BIE:"Bonus EI insurable earnings",CA_BQPIP:"Bonus QPIP insurable earnings",
+  CA_T_BASE:"Periodic income tax excluding additional tax",
   B: "Bonus / non-periodic pay this period",
   I: "Periodic income this period",
   PI: "Pensionable earnings this period",
@@ -64,6 +69,7 @@ export type CanadaYtdRow = {
   /** Employer QPIP has its own annual maximum, so it needs its own YTD. */
   qpip_employer: string;
   non_periodic: string;
+  pension_deductions_bonus:string;
   f5b: string;
   qc_csb: string;
 };
@@ -103,6 +109,9 @@ export async function employeeYtd(
       coalesce((select ${sql.raw(qpipEmployerColumn)} from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'QPIP_ER')::numeric), 0) as qpip_employer,
+      coalesce((select non_periodic_pension_deductions_ytd from payroll_opening_balances
+                 where org_id=${orgId} and employee_party_id=${employeePartyId} and tax_year=${taxYear}),0)
+      + coalesce(sum((s.factors->>'F3')::numeric),0) as pension_deductions_bonus,
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as non_periodic,
@@ -167,11 +176,17 @@ export async function computeCaStatutory(
     ? div(fromUnits(annualEligibleShares - eligibleAnnualFtqShares), String(P))
     : requestedFondactionSharesPerPeriod;
 
+  const cumulative=await cumulativeHistory(ctx);
   const t4127Input: T4127Input = {
+    averaging:cumulative?.averaging,
+    pensionableNonPeriodic:ctx.pensionableNonPeriodic,
+    insurableNonPeriodic:ctx.insurableNonPeriodic,
+    qpipNonPeriodic:ctx.programNonPeriodicBases?.qpip,
     payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
     income, nonPeriodic, pensionable, insurable, qpipInsurable,
     pensionDeductions: deduction("pension_f"),
     alimonyDeductions: deduction("alimony"),
+    nonPeriodicPensionDeductions:deduction("pension_f_bonus"),
     unionDues: deduction("union_dues"),
     labourFundsCreditFederal: region === "QC"
       ? mulPercent(
@@ -197,7 +212,9 @@ export async function computeCaStatutory(
     ytd: {
       cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip, qpipEmployer: ytd.qpip_employer,
       pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
+      nonPeriodicPensionDeductions:ytd.pension_deductions_bonus,
       nonPeriodicCppEnhancedDeductions: ytd.f5b,
+      ...(cumulative?.bonusYtd??{}),
     },
   };
   const statutory = calculateT4127(t4127Input);
@@ -235,6 +252,11 @@ export async function computeCaStatutory(
     ...statutory.factors,
     ...qcFactors,
     B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
+    F:deduction("pension_f"),F2:deduction("alimony"),U1:deduction("union_dues"),F3:deduction("pension_f_bonus"),
+    CA_PE:add(pensionable,neg(ctx.pensionableNonPeriodic??"0")),CA_IE:add(insurable,neg(ctx.insurableNonPeriodic??"0")),
+    CA_QPIP_PE:add(qpipInsurable,neg(ctx.programNonPeriodicBases?.qpip??"0")),
+    CA_BPE:ctx.pensionableNonPeriodic??"0",CA_BIE:ctx.insurableNonPeriodic??"0",CA_BQPIP:ctx.programNonPeriodicBases?.qpip??"0",
+    CA_T_BASE:add(statutory.periodicTax,neg(t4127Input.additionalTaxPerPeriod??"0")),
     QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
     ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
     ...(cmp(ehtEarnings, "0") > 0 ? { EHT: ehtAmount, EHT_EARN: ehtEarnings } : {}),

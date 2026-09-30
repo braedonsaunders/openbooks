@@ -8,7 +8,7 @@ Object.assign(globalThis, { __payrollCertificatesState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    if ((specifier === '../../../../lib/feature-gates' || specifier === '@/lib/feature-gates')) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__payrollCertificatesState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
@@ -30,6 +30,7 @@ async function fixture() {
     const org = await createScratchOrg()
     state.orgId = org.orgId
     state.actorId = await createScratchUser(org.orgId, 'Payroll clerk', 'admin')
+    await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${state.actorId},'payroll.manage','grant')`)
     const scheduleId = randomUUID()
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -118,6 +119,10 @@ test('certificate rows validate purely from the pack declaration', async () => {
       assert.equal(response.status, 422, await response.clone().text())
       assert.match(((await response.json()) as { error: string }).error, /non.cumulative|checkbox/)
     }
+    const canadian=await employee(org.orgId,scheduleId,'Canadian withholding election','CA','ON')
+    const invalidWindow=await post({employeePartyId:canadian,country:'CA',certificateKey:'ca_t4127_method',effectiveFrom:'2026-01-01',answers:{method:'option2',reason:'Employer elected cumulative withholding for uneven pay',window_start:'2026-02-30'}})
+    assert.equal(invalidWindow.status,422)
+    assert.match(((await invalidWindow.json()) as {error:string}).error,/real date in YYYY-MM-DD.*correct the date before saving/)
     const invalidDate = await post({
       ...base, certificateKey: 'gb_tax_code_notice', answers: { tax_code: '1257L' }, effectiveFrom: '2026-02-31',
     })

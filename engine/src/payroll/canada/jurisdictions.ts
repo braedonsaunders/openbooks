@@ -262,9 +262,24 @@ function provincialCertificate(province: string): PayrollCertificate {
   };
 }
 
+/** Employer election under the CRA guide, retained through the same dated
+ * and audited record editor as withholding notices. It is not an employee tax form. */
+const CA_METHOD:PayrollCertificate={
+  protectCommittedHistory:true,key:"ca_t4127_method",form:"CRA T4127",label:"Employer withholding method election",scope:{level:"country"},purpose:"withholding",
+  citation:"CRA T4127 Chapter 5 — cumulative averaging and Special Situations",
+  summary:"Record the employer’s elected method, reset date and verified carry-in history. The effective date starts a new averaging window; contribution ceilings continue for the whole calendar year.",
+  storage:"certificate_rows",fields:[
+    {key:"reason",label:"Reason and supporting record",kind:"code",required:true,minLength:8,maxLength:2000,help:"Explain the employer’s method election or reset, and identify any verified imported-history report. Kept with the dated audit evidence."},
+    {key:"method",label:"Withholding method",kind:"choice",required:true,choices:[{value:"option1",label:"Option 1 — periodic"},{value:"option2",label:"Option 2 — cumulative averaging"}],help:"Absent election uses the periodic method. Option 2 projects accumulated income over elapsed scheduled periods."},
+    {key:"window_start",label:"Averaging window starts (YYYY-MM-DD)",kind:"code",format:"iso_date",help:"Optional earlier window start for complete imported history. Leave blank to reset on this record’s effective date. A new calendar year resets the window automatically."},
+    {key:"opening_history_through",label:"Imported averaging history through (YYYY-MM-DD)",kind:"code",format:"iso_date",help:"Set only when continuing the prior provider’s averaging window. Enter the last included pay date and complete the Canada averaging fields in Payroll → Opening Balances."},
+    {key:"opening_history_complete",label:"Imported averaging history has been verified",kind:"flag",help:"Confirm that every averaging opening field, including genuine zero amounts, matches the prior provider’s report for this window. Annual CPP/EI opening balances remain separate."},
+  ]
+};
+
 const CA_CERTIFICATES: PayrollPackCertificates = {
   country: "CA",
-  certificates: [TD1, ...CA_PROVINCES.filter((p) => p !== "ZZ").map(provincialCertificate)],
+  certificates: [TD1, CA_METHOD, ...CA_PROVINCES.filter((p) => p !== "ZZ").map(provincialCertificate)],
 };
 
 // ===========================================================================

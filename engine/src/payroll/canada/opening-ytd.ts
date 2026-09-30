@@ -40,11 +40,29 @@ import type { PayrollOpeningYtdField } from "../pack-types.ts";
  * exactly the prior provider's amounts.
  */
 export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
+  {key:"nonPeriodicPensionDeductionsYtd",column:"non_periodic_pension_deductions_ytd",label:"Pension deductions from bonuses before adoption (F4)",help:"RPP/RRSP deductions already taken from non-periodic pay before adoption. Calendar-year bonus history, separate from the averaging window.",ceilingKey:"nonPeriodicYtd"},
+  {key:"caAvgIncome",column:"ca_avg_income",label:"Averaging window — Periodic taxable income",help:"Verified periodic taxable income from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgPensionF",column:"ca_avg_pension_f",label:"Averaging window — Periodic pension deductions (F)",help:"Verified periodic pension deductions (f) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgAlimony",column:"ca_avg_alimony",label:"Averaging window — Alimony deducted (F2)",help:"Verified alimony deducted (f2) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgUnionDues",column:"ca_avg_union_dues",label:"Averaging window — Periodic union dues (U1)",help:"Verified periodic union dues (u1) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgF5A",column:"ca_avg_f5_a",label:"Averaging window — Enhanced CPP deductions on periodic pay (F5A)",help:"Verified enhanced cpp deductions on periodic pay (f5a) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgPe",column:"ca_avg_pe",label:"Averaging window — Periodic pensionable earnings",help:"Verified periodic pensionable earnings from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgIe",column:"ca_avg_ie",label:"Averaging window — Periodic EI insurable earnings",help:"Verified periodic ei insurable earnings from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgQpip",column:"ca_avg_qpip",label:"Averaging window — Periodic QPIP insurable earnings",help:"Verified periodic qpip insurable earnings from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgBonusPe",column:"ca_avg_bonus_pe",label:"Averaging window — Bonus pensionable earnings",help:"Verified bonus pensionable earnings from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgBonusIe",column:"ca_avg_bonus_ie",label:"Averaging window — Bonus EI insurable earnings",help:"Verified bonus ei insurable earnings from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgBonusQpip",column:"ca_avg_bonus_qpip",label:"Averaging window — Bonus QPIP insurable earnings",help:"Verified bonus qpip insurable earnings from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgTaxM",column:"ca_avg_tax_m",label:"Averaging window — Periodic income tax excluding additional tax (M)",help:"Verified periodic income tax excluding additional tax (m) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgTaxM1",column:"ca_avg_tax_m1",label:"Averaging window — Bonus income tax (M1)",help:"Verified bonus income tax (m1) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgBonus",column:"ca_avg_bonus",label:"Averaging window — Non-periodic taxable income (B1)",help:"Verified non-periodic taxable income (b1) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgF4",column:"ca_avg_f4",label:"Averaging window — Pension deductions from bonuses (F4)",help:"Verified pension deductions from bonuses (f4) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+  {key:"caAvgF5B",column:"ca_avg_f5_b",label:"Averaging window — Enhanced CPP deductions from bonuses (F5B)",help:"Verified enhanced cpp deductions from bonuses (f5b) from the elected averaging window through the imported-history date. Excludes amounts outside this window. Confirm the complete history in the employer withholding method record."},
+
   {
     key: "cpp2BonusYtd",
     column: "cpp2_bonus_ytd",
-    label: "CPP2 bonus contributions",
-    help: "Second additional CPP contributions withheld on lump-sum payments before adoption (T4127 factor F5B year-to-date).",
+    label: "Enhanced CPP deductions from bonuses",
+    help: "Enhanced CPP deductions applied to lump-sum payments before adoption (T4127 factor F5B year-to-date).",
     ceilingKey: "nonPeriodicYtd",
   },
   {

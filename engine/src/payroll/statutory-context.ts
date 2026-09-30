@@ -203,6 +203,8 @@ export interface PayrollStatutoryComputeContext {
    * bit-identical); the engine always provides it.
    */
   pensionableNonPeriodic?: string;
+  insurableNonPeriodic?:string;
+  programNonPeriodicBases?:Record<string,string>;
   /**
    * Each base above less the deduction lines carrying a treatment the pack
    * declares as reducing that base (`reduceTaxBases` over the pack's
