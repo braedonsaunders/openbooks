@@ -232,6 +232,7 @@ const PAY_STATUTORY_EXEMPTION_CATEGORIES = [
 const PAY_TAX_TREATMENTS = [
   { value: 'none', labelKey: 'options.payTaxTreatment.none' },
   { value: 'pension_f', labelKey: 'options.payTaxTreatment.pensionF' },
+  { value: 'pension_f_bonus', labelKey: 'options.payTaxTreatment.pensionFBonus' },
   { value: 'union_dues', labelKey: 'options.payTaxTreatment.unionDues' },
   { value: 'alimony', labelKey: 'options.payTaxTreatment.alimony' },
   // Every pack-declared treatment key must appear here too: the write path

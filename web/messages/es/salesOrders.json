@@ -8,5 +8,20 @@
     "emptyDescription": "Cree una orden de venta o convierta una desde una cotización.",
     "newButton": "Nueva orden de venta",
     "createDraftFailed": "No se pudo crear un borrador de orden de venta"
+  },
+  "agency": {
+    "title": "Evaluar la función de principal o agente",
+    "hint": "Evalúe si la empresa controla los bienes especificados antes de transferirlos. Obtenga aprobación independiente antes de confirmar el envío o aprobar una factura de cliente o proveedor. Un agente registra su comisión de intermediación y mantiene el derecho del proveedor como un pasivo de tránsito.",
+    "line": "Línea de pedido de venta vinculada",
+    "choose": "Elegir…",
+    "date": "Fecha de vigencia",
+    "control": "¿Controla la empresa estos bienes antes de transferirlos al cliente?",
+    "principal": "Sí — principal, ingresos brutos",
+    "agent": "No — agente, comisión neta de intermediación",
+    "account": "Cuenta de pasivo de tránsito del proveedor",
+    "evidence": "Evidencia contractual del control",
+    "reason": "Motivo de la evaluación",
+    "propose": "Preparar propuesta de aprobación",
+    "failed": "No se pudo preparar la evaluación del control"
   }
 }

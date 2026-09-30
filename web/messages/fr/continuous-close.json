@@ -3,62 +3,237 @@
   "title": "Clôture continue",
   "description": "Surveille en continu la préparation à la clôture et présente les exceptions comptables et financières étayées par des preuves.",
   "search": "Rechercher des constats…",
-  "tabs": { "ariaLabel": "Sections de la clôture continue", "findings": "Constats", "reports": "Rapports" },
-  "agents": { "accounting": "Comptabilité", "finance": "Finance", "forensics": "Forensique", "collections": "Recouvrement", "payables": "Comptes fournisseurs", "reconciliation": "Rapprochement bancaire", "hygiene": "Hygiène des données", "tax": "Fiscalité", "payroll": "Paie", "projects": "Projets", "cash": "Trésorerie" },
-  "metrics": { "active": "Actifs", "critical": "Critiques", "accounting": "Constats comptables", "finance": "Constats financiers", "collections": "Constats de recouvrement", "payables": "Constats de paiements", "reconciliation": "Constats de rapprochement", "hygiene": "Constats d’hygiène", "forensics": "Constats forensiques" },
-  "filters": { "agent": "Agent", "severity": "Gravité" },
-  "severity": { "info": "Information", "warning": "Avertissement", "critical": "Critique" },
-  "status": { "open": "Ouvert", "in_review": "En cours d’examen", "resolved": "Résolu", "dismissed": "Écarté" },
-  "table": { "finding": "Constat", "agent": "Agent", "severity": "Gravité", "materiality": "Importance relative", "detected": "Dernière détection" },
+  "tabs": {
+    "ariaLabel": "Sections de la clôture continue",
+    "findings": "Constats",
+    "reports": "Rapports"
+  },
+  "agents": {
+    "accounting": "Comptabilité",
+    "finance": "Finance",
+    "forensics": "Forensique",
+    "collections": "Recouvrement",
+    "payables": "Comptes fournisseurs",
+    "reconciliation": "Rapprochement bancaire",
+    "hygiene": "Hygiène des données",
+    "tax": "Fiscalité",
+    "payroll": "Paie",
+    "projects": "Projets",
+    "cash": "Trésorerie"
+  },
+  "metrics": {
+    "active": "Actifs",
+    "critical": "Critiques",
+    "accounting": "Constats comptables",
+    "finance": "Constats financiers",
+    "collections": "Constats de recouvrement",
+    "payables": "Constats de paiements",
+    "reconciliation": "Constats de rapprochement",
+    "hygiene": "Constats d’hygiène",
+    "forensics": "Constats forensiques"
+  },
+  "filters": {
+    "agent": "Agent",
+    "severity": "Gravité"
+  },
+  "severity": {
+    "info": "Information",
+    "warning": "Avertissement",
+    "critical": "Critique"
+  },
+  "status": {
+    "open": "Ouvert",
+    "in_review": "En cours d’examen",
+    "resolved": "Résolu",
+    "dismissed": "Écarté"
+  },
+  "table": {
+    "finding": "Constat",
+    "agent": "Agent",
+    "severity": "Gravité",
+    "materiality": "Importance relative",
+    "detected": "Dernière détection"
+  },
   "findings": {
-    "unmatched_bank_activity": { "title": "Activité bancaire non appariée", "description": "Des opérations du relevé bancaire ne sont toujours pas appariées à des écritures du grand livre." },
-    "reconciliation_difference": { "title": "Écart de rapprochement", "description": "Un rapprochement bancaire en cours ne concorde pas avec le solde du relevé." },
-    "stale_accounting_documents": { "title": "Documents comptables en attente", "description": "Des documents comptables brouillons ou en attente dépassent l’âge configuré." },
-    "forensic_weekend_postings": { "title": "Dépense comptabilisée le week-end", "description": "Un document de dépense a été comptabilisé un week-end." },
-    "forensic_round_dollar": { "title": "Dépense en chiffre rond", "description": "Un document de dépense porte un montant en milliers ronds." },
-    "forensic_threshold_trap": { "title": "Montant juste sous le seuil", "description": "Un document de dépense se situe juste sous un seuil d’approbation rond." },
-    "forensic_duplicate_bills": { "title": "Facture possiblement en double", "description": "Deux documents fournisseurs partagent tiers, nature et montant à quelques jours d’intervalle." },
-    "tax_missing_codes": { "title": "Documents sans code fiscal", "description": "Des documents comptabilisés ont des lignes non taxées invisibles pour la déclaration." },
-    "tax_missing_registration": { "title": "Immatriculation fiscale manquante", "description": "Un formulaire n’a aucun numéro d’immatriculation au dossier." },
-    "tax_return_blocked": { "title": "Déclaration bloquée", "description": "Une déclaration configurée ne peut pas être calculée." },
-    "tax_unlocked_period": { "title": "Période fiscale non verrouillée", "description": "La dernière période terminée n’a aucun verrou fiscal fermé." },
-    "payroll_remittance_due": { "title": "Versement à échoir", "description": "Des retenues sont dues et aucune facture ne les couvre." },
-    "payroll_unknown_accounts": { "title": "Compte de paie inconnu", "description": "Une paie validée a des attributions sans compte destinataire." },
-    "payroll_missing_elections": { "title": "Choix légaux manquants", "description": "Des employés n’ont aucun choix de retenues au dossier." },
-    "payroll_yearend_gaps": { "title": "Manque de fin d’année", "description": "Une exigence des feuillets n’est pas remplie." },
-    "project_negative_margin": { "title": "Marge de projet négative", "description": "Un projet fonctionne à perte." },
-    "project_budget_overrun": { "title": "Dépassement de budget du projet", "description": "Le coût plus les engagements a dépassé le budget approuvé." },
-    "project_stale_unbilled": { "title": "Travail non facturé ancien", "description": "Du travail facturable reste non facturé après le seuil." },
-    "cash_low_balance": { "title": "Trésorerie basse", "description": "La trésorerie bancaire est sous le plancher." },
-    "cash_bill_crunch": { "title": "Vague de factures", "description": "Les factures proches dépassent la trésorerie disponible." },
-    "cash_forecast_shortfall": { "title": "Manque prévu", "description": "La prévision de trésorerie passe sous zéro." },
-    "missing_approved_budget": { "title": "Aucun budget approuvé", "description": "Le suivi financier ne peut pas comparer les résultats réels, car aucun budget approuvé n’est disponible." },
-    "unfavorable_budget_variance": { "title": "Écart budgétaire défavorable", "description": "Les résultats réels sont sensiblement inférieurs au budget approuvé." },
-    "period_revenue_decline": { "title": "Baisse du chiffre d’affaires", "description": "Le chiffre d’affaires a diminué de façon importante par rapport à la période comptable achevée précédente." },
-    "gross_margin_decline": { "title": "Baisse de la marge brute", "description": "La marge brute a reculé au-delà du seuil configuré par rapport à la période achevée précédente." },
-    "overdue_customer_balance": { "title": "Client en retard", "description": "Un client porte des arriérés et rejoint la liste d’appels prioritaire." },
-    "broken_payment_promise": { "title": "Promesse de paiement non tenue", "description": "Une facture a dépassé sa date de paiement prévue sans paiement." },
-    "credit_hold_candidate": { "title": "Candidat au blocage de crédit", "description": "Les arriérés anciens justifient d’exiger un prépaiement sur les nouvelles commandes." },
-    "duplicate_bills": { "title": "Factures en double", "description": "Deux factures partagent tiers, nature et montant dans la fenêtre de doublons." },
-    "bills_due_before_payrun": { "title": "Factures dues avant paiement", "description": "Des factures ouvertes arrivent à échéance dans l’horizon de paiement." },
-    "early_pay_discount_opportunity": { "title": "Escompte pour paiement anticipé", "description": "Des factures ouvertes se trouvent dans une fenêtre d’escompte active." },
-    "bills_missing_approval": { "title": "Factures sans approbation", "description": "Des factures stagnent en brouillon ou en attente après la fenêtre d’obsolescence." },
-    "bank_line_match_candidate": { "title": "Appariement bancaire probable", "description": "Une ligne non rapprochée a un appariement probable avec une écriture." },
-    "stale_reconciliation": { "title": "Rapprochement périmé", "description": "Une session en cours est sans activité après la fenêtre d’obsolescence." },
-    "never_reconciled_account": { "title": "Compte jamais rapproché", "description": "Un compte rapprochable a une activité mais jamais eu de session." },
-    "control_account_type_mismatch": { "title": "Compte de contrôle mal typé", "description": "Un compte porte des écritures ouvertes ou un nom qui contredit sa nature." },
-    "duplicate_party_identity": { "title": "Tiers en double", "description": "Deux tiers partagent un nom normalisé ou une identité fiscale." },
-    "item_missing_tax_code": { "title": "Article sans code fiscal", "description": "Un article actif n’a aucun code fiscal attribué." },
-    "project_missing_cost_budget": { "title": "Projet sans budget de coûts", "description": "Un projet actif n’a aucune ligne budgétaire." },
-    "budget_scenario_without_lines": { "title": "Scénario sans lignes", "description": "Un scénario approuvé ou soumis ne contient aucune ligne." },
-    "unmapped_payroll_component": { "title": "Composante de paie non affectée", "description": "Une composante manque de comptes d’imputation ou de son tiers de versement." },
+    "unmatched_bank_activity": {
+      "title": "Activité bancaire non appariée",
+      "description": "Des opérations du relevé bancaire ne sont toujours pas appariées à des écritures du grand livre."
+    },
+    "reconciliation_difference": {
+      "title": "Écart de rapprochement",
+      "description": "Un rapprochement bancaire en cours ne concorde pas avec le solde du relevé."
+    },
+    "stale_accounting_documents": {
+      "title": "Documents comptables en attente",
+      "description": "Des documents comptables brouillons ou en attente dépassent l’âge configuré."
+    },
+    "forensic_weekend_postings": {
+      "title": "Dépense comptabilisée le week-end",
+      "description": "Un document de dépense a été comptabilisé un week-end."
+    },
+    "forensic_round_dollar": {
+      "title": "Dépense en chiffre rond",
+      "description": "Un document de dépense porte un montant en milliers ronds."
+    },
+    "forensic_threshold_trap": {
+      "title": "Montant juste sous le seuil",
+      "description": "Un document de dépense se situe juste sous un seuil d’approbation rond."
+    },
+    "forensic_duplicate_bills": {
+      "title": "Facture possiblement en double",
+      "description": "Deux documents fournisseurs partagent tiers, nature et montant à quelques jours d’intervalle."
+    },
+    "tax_missing_codes": {
+      "title": "Documents sans code fiscal",
+      "description": "Des documents comptabilisés ont des lignes non taxées invisibles pour la déclaration."
+    },
+    "tax_missing_registration": {
+      "title": "Immatriculation fiscale manquante",
+      "description": "Un formulaire n’a aucun numéro d’immatriculation au dossier."
+    },
+    "tax_return_blocked": {
+      "title": "Déclaration bloquée",
+      "description": "Une déclaration configurée ne peut pas être calculée."
+    },
+    "tax_unlocked_period": {
+      "title": "Période fiscale non verrouillée",
+      "description": "La dernière période terminée n’a aucun verrou fiscal fermé."
+    },
+    "payroll_remittance_due": {
+      "title": "Versement à échoir",
+      "description": "Des retenues sont dues et aucune facture ne les couvre."
+    },
+    "payroll_unknown_accounts": {
+      "title": "Compte de paie inconnu",
+      "description": "Une paie validée a des attributions sans compte destinataire."
+    },
+    "payroll_missing_elections": {
+      "title": "Choix légaux manquants",
+      "description": "Des employés n’ont aucun choix de retenues au dossier."
+    },
+    "payroll_yearend_gaps": {
+      "title": "Manque de fin d’année",
+      "description": "Une exigence des feuillets n’est pas remplie."
+    },
+    "project_negative_margin": {
+      "title": "Marge de projet négative",
+      "description": "Un projet fonctionne à perte."
+    },
+    "project_budget_overrun": {
+      "title": "Dépassement de budget du projet",
+      "description": "Le coût plus les engagements a dépassé le budget approuvé."
+    },
+    "project_stale_unbilled": {
+      "title": "Travail non facturé ancien",
+      "description": "Du travail facturable reste non facturé après le seuil."
+    },
+    "cash_low_balance": {
+      "title": "Trésorerie basse",
+      "description": "La trésorerie bancaire est sous le plancher."
+    },
+    "cash_bill_crunch": {
+      "title": "Vague de factures",
+      "description": "Les factures proches dépassent la trésorerie disponible."
+    },
+    "cash_forecast_shortfall": {
+      "title": "Manque prévu",
+      "description": "La prévision de trésorerie passe sous zéro."
+    },
+    "missing_approved_budget": {
+      "title": "Aucun budget approuvé",
+      "description": "Le suivi financier ne peut pas comparer les résultats réels, car aucun budget approuvé n’est disponible."
+    },
+    "unfavorable_budget_variance": {
+      "title": "Écart budgétaire défavorable",
+      "description": "Les résultats réels sont sensiblement inférieurs au budget approuvé."
+    },
+    "period_revenue_decline": {
+      "title": "Baisse du chiffre d’affaires",
+      "description": "Le chiffre d’affaires a diminué de façon importante par rapport à la période comptable achevée précédente."
+    },
+    "gross_margin_decline": {
+      "title": "Baisse de la marge brute",
+      "description": "La marge brute a reculé au-delà du seuil configuré par rapport à la période achevée précédente."
+    },
+    "overdue_customer_balance": {
+      "title": "Client en retard",
+      "description": "Un client porte des arriérés et rejoint la liste d’appels prioritaire."
+    },
+    "broken_payment_promise": {
+      "title": "Promesse de paiement non tenue",
+      "description": "Une facture a dépassé sa date de paiement prévue sans paiement."
+    },
+    "credit_hold_candidate": {
+      "title": "Candidat au blocage de crédit",
+      "description": "Les arriérés anciens justifient d’exiger un prépaiement sur les nouvelles commandes."
+    },
+    "duplicate_bills": {
+      "title": "Factures en double",
+      "description": "Deux factures partagent tiers, nature et montant dans la fenêtre de doublons."
+    },
+    "bills_due_before_payrun": {
+      "title": "Factures dues avant paiement",
+      "description": "Des factures ouvertes arrivent à échéance dans l’horizon de paiement."
+    },
+    "early_pay_discount_opportunity": {
+      "title": "Escompte pour paiement anticipé",
+      "description": "Des factures ouvertes se trouvent dans une fenêtre d’escompte active."
+    },
+    "bills_missing_approval": {
+      "title": "Factures sans approbation",
+      "description": "Des factures stagnent en brouillon ou en attente après la fenêtre d’obsolescence."
+    },
+    "bank_line_match_candidate": {
+      "title": "Appariement bancaire probable",
+      "description": "Une ligne non rapprochée a un appariement probable avec une écriture."
+    },
+    "stale_reconciliation": {
+      "title": "Rapprochement périmé",
+      "description": "Une session en cours est sans activité après la fenêtre d’obsolescence."
+    },
+    "never_reconciled_account": {
+      "title": "Compte jamais rapproché",
+      "description": "Un compte rapprochable a une activité mais jamais eu de session."
+    },
+    "control_account_type_mismatch": {
+      "title": "Compte de contrôle mal typé",
+      "description": "Un compte porte des écritures ouvertes ou un nom qui contredit sa nature."
+    },
+    "duplicate_party_identity": {
+      "title": "Tiers en double",
+      "description": "Deux tiers partagent un nom normalisé ou une identité fiscale."
+    },
+    "item_missing_tax_code": {
+      "title": "Article sans code fiscal",
+      "description": "Un article actif n’a aucun code fiscal attribué."
+    },
+    "project_missing_cost_budget": {
+      "title": "Projet sans budget de coûts",
+      "description": "Un projet actif n’a aucune ligne budgétaire."
+    },
+    "budget_scenario_without_lines": {
+      "title": "Scénario sans lignes",
+      "description": "Un scénario approuvé ou soumis ne contient aucune ligne."
+    },
+    "unmapped_payroll_component": {
+      "title": "Composante de paie non affectée",
+      "description": "Une composante manque de comptes d’imputation ou de son tiers de versement."
+    },
     "stranded_background_work": {
-      "title": "Stranded background work",
-      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+      "title": "Travaux de fond bloqués",
+      "description": "Des opérations durables de comptabilisation, de planification, de génération de rapports ou de messagerie ont échoué définitivement ou dépassé le délai configuré. Examinez les preuves conservées avant une reprise contrôlée."
     }
   },
-  "summary": { "records": "{count, plural, one {# enregistrement} other {# enregistrements}}", "review": "Examiner les preuves à l’appui" },
-  "reports": { "title": "Rapports des agents", "description": "Ouvrez une synthèse générée ou exportez-la en PDF.", "search": "Rechercher des rapports…", "empty": "Aucun rapport généré ne correspond à ces filtres." },
+  "summary": {
+    "records": "{count, plural, one {# enregistrement} other {# enregistrements}}",
+    "review": "Examiner les preuves à l’appui"
+  },
+  "reports": {
+    "title": "Rapports des agents",
+    "description": "Ouvrez une synthèse générée ou exportez-la en PDF.",
+    "search": "Rechercher des rapports…",
+    "empty": "Aucun rapport généré ne correspond à ces filtres."
+  },
   "narrative": {
     "title": "Dernière synthèse de l’agent",
     "agent": "Générée par {agent}",
@@ -80,11 +255,103 @@
     "recommendations": "Mesures recommandées",
     "evidenceNotice": "L’analyse générée par le modèle repose sur les enregistrements liés et demeure soumise à révision."
   },
-  "empty": { "title": "Aucun constat pour le moment", "description": "Activez un agent et lancez sa première analyse. Les situations corrigées sont automatiquement résolues lors des analyses suivantes.", "action": "Configurer les agents" },
-  "details": { "materiality": "Importance relative", "confidence": "Confiance", "lastDetected": "Dernière détection", "summary": "Résumé", "evidence": "Preuves à l’appui", "noEvidence": "Ce constat repose sur un prérequis manquant; aucun enregistrement source n’est donc disponible.", "dismissalReason": "Motif du rejet" },
-  "fields": { "account": "Compte", "count": "Enregistrements", "oldestDate": "Date la plus ancienne", "throughDate": "Rapproché jusqu’au", "difference": "Écart", "budget": "Budget", "budgetAmount": "Montant budgété", "actual": "Réel", "variance": "Écart", "period": "Périodes", "revenueChange": "Variation du chiffre d’affaires", "marginChange": "Variation de la marge", "points": "points" },
-  "evidence": { "bank_transaction": "Opération bancaire", "document": "Document comptable", "reconciliation": "Rapprochement", "budget_variance": "Écart budgétaire", "period_comparison": "Comparaison de périodes", "account_mismatch": "Détail d'incohérence de compte", "accounting_period": "Période comptable", "broken_promise": "Promesse de paiement non tenue", "cash_balance": "Solde de trésorerie", "cash_crunch": "Tension de trésorerie", "cash_forecast": "Prévision de trésorerie", "credit_hold_case": "Dossier de blocage crédit", "discount_bill": "Facture à escompte", "duplicate_bill_pair": "Paire de factures en double", "duplicate_party": "Tiers en double", "employee": "Employé", "empty_scenario": "Scénario budgétaire vide", "match_candidate": "Candidat au rapprochement", "overdue_invoice": "Facture en retard", "pay_run": "Cycle de paie", "payment_behaviour": "Comportement de paiement", "payrun_bill": "Facture du cycle de paie", "project_budget": "Budget de projet", "project_margin": "Marge de projet", "project_unbilled": "Travaux non facturés", "remittance_group": "Groupe de versements", "stalled_bill": "Facture bloquée", "tax_return": "Déclaration fiscale", "tax_return_form": "Formulaire fiscal", "unbudgeted_project": "Projet sans budget", "unmapped_component": "Composante de paie non mappée", "unreconciled_activity": "Opérations non rapprochées", "untaxed_item": "Article non taxé", "customerless_invoice": "Facture sans client", "remittance_gap": "Écart de versement des retenues sur la paie" },
-  "actions": { "settings": "Paramètres des agents", "startReview": "Commencer l’examen", "resolve": "Résoudre", "dismiss": "Écarter", "reopen": "Rouvrir", "openSource": "Ouvrir la source", "cancel": "Annuler", "confirmDismiss": "Écarter le constat" },
-  "dismiss": { "title": "Écarter ce constat", "description": "Indiquez pourquoi ce résultat valide du détecteur ne doit plus figurer dans la file active.", "placeholder": "Motif du rejet" },
-  "feedback": { "review": "Constat mis en examen.", "resolve": "Constat résolu.", "dismiss": "Constat écarté.", "reopen": "Constat rouvert.", "actionFailed": "Le constat n’a pas pu être mis à jour.", "errors": {"invalid_transition": "Cette action n'est plus disponible pour ce constat. Actualisez pour voir son statut actuel.", "reason_required": "Un motif est requis pour écarter ce constat.", "conflict": "Quelqu'un vient de mettre à jour ce constat. Actualisez puis réessayez.", "forbidden": "Vous n'avez pas l'autorisation de modifier ce constat.", "not_found": "Ce constat n'existe plus. Actualisez la liste."}, "recorded": "Commentaire enregistré.", "wasHelpful": "Ce constat était-il utile?", "helpful": "Utile", "notHelpful": "Inutile" }
+  "empty": {
+    "title": "Aucun constat pour le moment",
+    "description": "Activez un agent et lancez sa première analyse. Les situations corrigées sont automatiquement résolues lors des analyses suivantes.",
+    "action": "Configurer les agents"
+  },
+  "details": {
+    "materiality": "Importance relative",
+    "confidence": "Confiance",
+    "lastDetected": "Dernière détection",
+    "summary": "Résumé",
+    "evidence": "Preuves à l’appui",
+    "noEvidence": "Ce constat repose sur un prérequis manquant; aucun enregistrement source n’est donc disponible.",
+    "dismissalReason": "Motif du rejet"
+  },
+  "fields": {
+    "account": "Compte",
+    "count": "Enregistrements",
+    "oldestDate": "Date la plus ancienne",
+    "throughDate": "Rapproché jusqu’au",
+    "difference": "Écart",
+    "budget": "Budget",
+    "budgetAmount": "Montant budgété",
+    "actual": "Réel",
+    "variance": "Écart",
+    "period": "Périodes",
+    "revenueChange": "Variation du chiffre d’affaires",
+    "marginChange": "Variation de la marge",
+    "points": "points"
+  },
+  "evidence": {
+    "bank_transaction": "Opération bancaire",
+    "document": "Document comptable",
+    "reconciliation": "Rapprochement",
+    "budget_variance": "Écart budgétaire",
+    "period_comparison": "Comparaison de périodes",
+    "account_mismatch": "Détail d'incohérence de compte",
+    "accounting_period": "Période comptable",
+    "broken_promise": "Promesse de paiement non tenue",
+    "cash_balance": "Solde de trésorerie",
+    "cash_crunch": "Tension de trésorerie",
+    "cash_forecast": "Prévision de trésorerie",
+    "credit_hold_case": "Dossier de blocage crédit",
+    "discount_bill": "Facture à escompte",
+    "duplicate_bill_pair": "Paire de factures en double",
+    "duplicate_party": "Tiers en double",
+    "employee": "Employé",
+    "empty_scenario": "Scénario budgétaire vide",
+    "match_candidate": "Candidat au rapprochement",
+    "overdue_invoice": "Facture en retard",
+    "pay_run": "Cycle de paie",
+    "payment_behaviour": "Comportement de paiement",
+    "payrun_bill": "Facture du cycle de paie",
+    "project_budget": "Budget de projet",
+    "project_margin": "Marge de projet",
+    "project_unbilled": "Travaux non facturés",
+    "remittance_group": "Groupe de versements",
+    "stalled_bill": "Facture bloquée",
+    "tax_return": "Déclaration fiscale",
+    "tax_return_form": "Formulaire fiscal",
+    "unbudgeted_project": "Projet sans budget",
+    "unmapped_component": "Composante de paie non mappée",
+    "unreconciled_activity": "Opérations non rapprochées",
+    "untaxed_item": "Article non taxé",
+    "customerless_invoice": "Facture sans client",
+    "remittance_gap": "Écart de versement des retenues sur la paie"
+  },
+  "actions": {
+    "settings": "Paramètres des agents",
+    "startReview": "Commencer l’examen",
+    "resolve": "Résoudre",
+    "dismiss": "Écarter",
+    "reopen": "Rouvrir",
+    "openSource": "Ouvrir la source",
+    "cancel": "Annuler",
+    "confirmDismiss": "Écarter le constat"
+  },
+  "dismiss": {
+    "title": "Écarter ce constat",
+    "description": "Indiquez pourquoi ce résultat valide du détecteur ne doit plus figurer dans la file active.",
+    "placeholder": "Motif du rejet"
+  },
+  "feedback": {
+    "review": "Constat mis en examen.",
+    "resolve": "Constat résolu.",
+    "dismiss": "Constat écarté.",
+    "reopen": "Constat rouvert.",
+    "actionFailed": "Le constat n’a pas pu être mis à jour.",
+    "errors": {
+      "invalid_transition": "Cette action n'est plus disponible pour ce constat. Actualisez pour voir son statut actuel.",
+      "reason_required": "Un motif est requis pour écarter ce constat.",
+      "conflict": "Quelqu'un vient de mettre à jour ce constat. Actualisez puis réessayez.",
+      "forbidden": "Vous n'avez pas l'autorisation de modifier ce constat.",
+      "not_found": "Ce constat n'existe plus. Actualisez la liste."
+    },
+    "recorded": "Commentaire enregistré.",
+    "wasHelpful": "Ce constat était-il utile?",
+    "helpful": "Utile",
+    "notHelpful": "Inutile"
+  }
 }

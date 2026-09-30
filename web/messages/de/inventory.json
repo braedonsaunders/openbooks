@@ -16,8 +16,17 @@
     "counts": "Zählungen"
   },
   "bom": {
-    "columns": { "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "operationSeq": "Arbeitsgangfolge", "scrapPct": "Ausschuss %", "isByproduct": "Positionstyp" },
-    "values": { "component": "Komponente", "byproduct": "Nebenprodukt" },
+    "columns": {
+      "effectiveFrom": "Gültig ab",
+      "effectiveTo": "Gültig bis",
+      "operationSeq": "Arbeitsgangfolge",
+      "scrapPct": "Ausschuss %",
+      "isByproduct": "Positionstyp"
+    },
+    "values": {
+      "component": "Komponente",
+      "byproduct": "Nebenprodukt"
+    },
     "refusals": {
       "effectivityOverlap": "Komponente {component} hat sich überschneidende Gültigkeitszeiträume {windows}. Passen Sie die Daten an oder verwenden Sie bei Bedarf einen anderen Arbeitsgang oder Positionstyp.",
       "invalidDate": "Geben Sie ein gültiges Kalenderdatum im Format JJJJ-MM-TT ein.",
@@ -46,7 +55,9 @@
     "count": "Zählung",
     "assembly_build": "Baugruppenfertigung",
     "assembly_consume": "Baugruppenverbrauch",
-    "return": "Rückgabe"
+    "return": "Rückgabe",
+    "assembly_disassembly": "Demontage einer Baugruppe",
+    "assembly_recovery": "Zurückgewonnene Komponente"
   },
   "drawer": {
     "title": "Lagerbewegung",
@@ -58,7 +69,9 @@
       "adjust": "Anpassen",
       "transfer": "Umlagern",
       "build": "Baugruppe fertigen",
-      "landed": "Einstandskosten"
+      "landed": "Einstandskosten",
+      "disassemble": "Bestand demontieren",
+      "reverse": "Bewegung stornieren"
     },
     "hint": {
       "receive": "Bestand zu Kosten zubuchen (Soll Lager / Haben Gegenkonto).",
@@ -66,7 +79,9 @@
       "adjust": "Vorhandene Menge gegen das Anpassungskonto korrigieren.",
       "transfer": "Bestand zwischen zwei Standorten zum fortgeführten Wert umlagern.",
       "build": "Komponenten gemäß Stückliste verbrauchen und das Fertigerzeugnis zu Kosten produzieren.",
-      "landed": "Fracht/Zoll auf die vorhandenen Bestandsschichten eines Artikels aktivieren."
+      "landed": "Fracht/Zoll auf die vorhandenen Bestandsschichten eines Artikels aktivieren.",
+      "disassemble": "Gewinnen Sie Komponenten einer erfassten Fertigung zurück. Die Rückgewinnung verwendet die ursprüngliche Stückliste und Kostennachweise; Ausschuss und weitere Kostendifferenzen werden auf das konfigurierte Anpassungs- oder Abweichungskonto gebucht.",
+      "reverse": "Fügen Sie eine kontrollierte Gegenbuchung hinzu. Alle Bewegungen eines Montagevorgangs werden gemeinsam storniert; stornieren Sie zuerst nachgelagerte Vorgänge."
     },
     "selectItem": "Artikel auswählen",
     "selectLocation": "Standort auswählen",
@@ -88,7 +103,13 @@
     "bases": {
       "value": "Nach Wert",
       "quantity": "Nach Menge"
-    }
+    },
+    "sourceMovement": "Quellbewegung",
+    "selectSourceMovement": "Nach Artikel, Lagerort, Datum oder Bewegungskennung suchen",
+    "loadMovementsFailed": "Quellbewegungen konnten nicht geladen werden",
+    "moreMovements": "Weitere Quellbewegungen laden",
+    "movementReason": "Grund für diesen Vorgang",
+    "reversed": "Bestandsvorgang storniert"
   },
   "advanced": {
     "errors": {
@@ -223,13 +244,13 @@
       "selectStockLocation": "Lagerort wählen…",
       "selectLot": "Charge (falls geführt)…",
       "missingFields": "Wähle Standort, Gesellschaft, Datum und mindestens eine Zeile.",
-    "lineMissingItem": "Zeile {line}: Artikel wählen.",
-    "lineMissingStockLocation": "Zeile {line}: Lagerort wählen.",
-    "noStockLocations": "Dieser Standort hat noch keine Lagerorte.",
-    "manageStockLocations": "Lagerorte einrichten",
-    "needsCosting": "{count, plural, one {# aktiver Artikel hat} other {# aktive Artikel haben}} noch kein Bestandsbewertungsprofil und kann noch nicht gezählt werden. Fügen Sie das Profil im Artikeldatensatz hinzu.",
-    "openItems": "Artikel öffnen",
-    "needsCostingNoGrant": "Sie benötigen Zugriff auf die Artikelverwaltung, um Bewertungsprofile hinzuzufügen.",
+      "lineMissingItem": "Zeile {line}: Artikel wählen.",
+      "lineMissingStockLocation": "Zeile {line}: Lagerort wählen.",
+      "noStockLocations": "Dieser Standort hat noch keine Lagerorte.",
+      "manageStockLocations": "Lagerorte einrichten",
+      "needsCosting": "{count, plural, one {# aktiver Artikel hat} other {# aktive Artikel haben}} noch kein Bestandsbewertungsprofil und kann noch nicht gezählt werden. Fügen Sie das Profil im Artikeldatensatz hinzu.",
+      "openItems": "Artikel öffnen",
+      "needsCostingNoGrant": "Sie benötigen Zugriff auf die Artikelverwaltung, um Bewertungsprofile hinzuzufügen.",
       "lines": "Zu zählende Zeilen",
       "addLine": "Zeile hinzufügen",
       "removeLine": "Entfernen"

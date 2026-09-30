@@ -1,3 +1,4 @@
+// source-pin-contract: Production Docker build limits and informational workflow triggers are deployment configuration contracts read from their authoritative files.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';

@@ -8,5 +8,20 @@
     "emptyDescription": "Créez une commande client, ou convertissez-en une à partir d’une soumission.",
     "newButton": "Nouvelle commande client",
     "createDraftFailed": "Impossible de créer une commande client brouillon"
+  },
+  "agency": {
+    "title": "Évaluer le rôle de principal ou de mandataire",
+    "hint": "Évaluez si l’entreprise contrôle les biens spécifiés avant leur transfert. Obtenez une approbation indépendante avant de confirmer l’expédition ou d’approuver une facture client ou fournisseur. Un mandataire comptabilise ses honoraires d’intermédiation et la part due au fournisseur comme un passif de transit.",
+    "line": "Ligne de commande client appariée",
+    "choose": "Choisir…",
+    "date": "Date d’effet",
+    "control": "L’entreprise contrôle-t-elle ces biens avant leur transfert au client ?",
+    "principal": "Oui — principal, chiffre d’affaires brut",
+    "agent": "Non — mandataire, honoraires nets d’intermédiation",
+    "account": "Compte de passif de transit fournisseur",
+    "evidence": "Preuves contractuelles du contrôle",
+    "reason": "Motif de l’évaluation",
+    "propose": "Préparer une proposition d’approbation",
+    "failed": "L’évaluation du contrôle n’a pas pu être préparée"
   }
 }

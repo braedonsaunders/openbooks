@@ -195,5 +195,6 @@
   "tabs": {
     "prepare": "Preparar una declaración",
     "history": "Declaraciones anteriores"
-  }
+  },
+  "registration": "Registro para declaraciones"
 }

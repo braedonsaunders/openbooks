@@ -7,7 +7,7 @@ import test from "node:test";
 registerHooks({
   resolve(specifier, context, nextResolve) {
 
-    if (specifier.startsWith("@openbooks/engine/")) {
+    if (specifier.startsWith("@openbooks/engine/src/")) {
       return nextResolve(
         new URL(`../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
         context,

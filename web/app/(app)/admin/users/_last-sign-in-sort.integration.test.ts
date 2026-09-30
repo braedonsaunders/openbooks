@@ -37,7 +37,7 @@ registerHooks({
     // Worktree node_modules symlinks to the main checkout's install: pin
     // bare self-imports to this checkout (same modules a real install
     // resolves) so the loader and its transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/")) {
+    if (specifier.startsWith("@openbooks/engine/src/")) {
       const root = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 1);
       return nextResolve(
         new URL(`engine/${specifier.slice("@openbooks/engine/".length)}`, root).href,

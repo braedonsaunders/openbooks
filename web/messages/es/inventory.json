@@ -16,8 +16,17 @@
     "counts": "Conteos"
   },
   "bom": {
-    "columns": { "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "operationSeq": "Secuencia de operación", "scrapPct": "% de merma", "isByproduct": "Tipo de línea" },
-    "values": { "component": "Componente", "byproduct": "Subproducto" },
+    "columns": {
+      "effectiveFrom": "Vigente desde",
+      "effectiveTo": "Vigente hasta",
+      "operationSeq": "Secuencia de operación",
+      "scrapPct": "% de merma",
+      "isByproduct": "Tipo de línea"
+    },
+    "values": {
+      "component": "Componente",
+      "byproduct": "Subproducto"
+    },
     "refusals": {
       "effectivityOverlap": "El componente {component} tiene períodos de vigencia superpuestos {windows}. Ajusta las fechas o usa una operación o designación de subproducto distinta cuando corresponda.",
       "invalidDate": "Introduce una fecha real con el formato AAAA-MM-DD.",
@@ -46,7 +55,9 @@
     "count": "Conteo",
     "assembly_build": "Ensamblaje",
     "assembly_consume": "Consumo de ensamblaje",
-    "return": "Devolución"
+    "return": "Devolución",
+    "assembly_disassembly": "Desmontaje de ensamblaje",
+    "assembly_recovery": "Componente recuperado"
   },
   "drawer": {
     "title": "Movimiento de inventario",
@@ -58,7 +69,9 @@
       "adjust": "Ajustar",
       "transfer": "Trasladar",
       "build": "Ensamblar",
-      "landed": "Costo de importación"
+      "landed": "Costo de importación",
+      "disassemble": "Desmontar existencias",
+      "reverse": "Revertir movimiento"
     },
     "hint": {
       "receive": "Agregar stock al costo (DR inventario / CR contrapartida).",
@@ -66,7 +79,9 @@
       "adjust": "Corregir la cantidad en existencia contra la cuenta de ajuste.",
       "transfer": "Mover stock entre dos ubicaciones a su costo registrado.",
       "build": "Consumir componentes según la lista de materiales y producir el artículo terminado al costo.",
-      "landed": "Capitalizar flete/aranceles sobre las capas en existencia de un artículo."
+      "landed": "Capitalizar flete/aranceles sobre las capas en existencia de un artículo.",
+      "disassemble": "Recupere componentes de una fabricación registrada. La recuperación utiliza la lista de materiales y la evidencia de costes originales; los desechos y otras diferencias de coste se contabilizan en la cuenta de ajuste o variación configurada.",
+      "reverse": "Añada una reversión controlada. Todos los movimientos de una operación de ensamblaje se revierten conjuntamente; revierta primero las operaciones posteriores."
     },
     "selectItem": "Seleccionar un artículo",
     "selectLocation": "Seleccionar una ubicación",
@@ -88,7 +103,13 @@
     "bases": {
       "value": "Por valor",
       "quantity": "Por cantidad"
-    }
+    },
+    "sourceMovement": "Movimiento fuente",
+    "selectSourceMovement": "Buscar por artículo, ubicación, fecha o identificador de movimiento",
+    "loadMovementsFailed": "No se pudieron cargar los movimientos fuente",
+    "moreMovements": "Cargar más movimientos fuente",
+    "movementReason": "Motivo de esta operación",
+    "reversed": "Operación de inventario revertida"
   },
   "advanced": {
     "errors": {
@@ -223,13 +244,13 @@
       "selectStockLocation": "Elige ubicación de stock…",
       "selectLot": "Lote (si se gestiona)…",
       "missingFields": "Elige ubicación, filial, fecha y al menos una línea.",
-    "lineMissingItem": "Línea {line}: elige un artículo.",
-    "lineMissingStockLocation": "Línea {line}: elige una ubicación de stock.",
-    "noStockLocations": "Esta ubicación aún no tiene ubicaciones de stock.",
-    "manageStockLocations": "Configurar ubicaciones de stock",
-    "needsCosting": "{count, plural, one {# artículo activo no tiene} other {# artículos activos no tienen}} perfil de costeo y aún no se puede contar. Agregue el perfil en el registro del artículo.",
-    "openItems": "Abrir artículos",
-    "needsCostingNoGrant": "Necesita acceso de gestión de artículos para agregar perfiles de costeo.",
+      "lineMissingItem": "Línea {line}: elige un artículo.",
+      "lineMissingStockLocation": "Línea {line}: elige una ubicación de stock.",
+      "noStockLocations": "Esta ubicación aún no tiene ubicaciones de stock.",
+      "manageStockLocations": "Configurar ubicaciones de stock",
+      "needsCosting": "{count, plural, one {# artículo activo no tiene} other {# artículos activos no tienen}} perfil de costeo y aún no se puede contar. Agregue el perfil en el registro del artículo.",
+      "openItems": "Abrir artículos",
+      "needsCostingNoGrant": "Necesita acceso de gestión de artículos para agregar perfiles de costeo.",
       "lines": "Líneas a contar",
       "addLine": "Añadir línea",
       "removeLine": "Quitar"

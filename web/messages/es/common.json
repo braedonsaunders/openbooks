@@ -316,5 +316,19 @@
     "noOptions": "No hay opciones definidas",
     "selectRecord": "Seleccionar un registro…",
     "loadFailed": "No se pudieron cargar los registros"
+  },
+  "nativeGoodsTax": {
+    "title": "Impuestos canadienses sobre bienes",
+    "manual": "Perfiles fiscales explícitos por línea",
+    "automatic": "Fiscalidad nativa de bienes",
+    "help": "Solo para bienes ordinarios totalmente gravados. Seleccione la provincia legal de entrega o recogida según las condiciones de envío, no la dirección de facturación. Los perfiles manuales y las anulaciones tienen prioridad. El servidor comprueba la entidad vendedora, los registros vigentes y las cuentas fiscales configuradas antes de guardar.",
+    "province": "Provincia legal de entrega",
+    "delivery": "Modalidad de entrega",
+    "delivered_or_made_available": "Entregado o puesto a disposición",
+    "supplier_arranged_shipping": "Envío a destino organizado por el proveedor",
+    "recipient_collection": "El destinatario recoge los bienes",
+    "evidence": "Evidencia contractual de entrega y sujeción fiscal",
+    "incomplete": "Complete la provincia, al menos 20 caracteres de evidencia y los importes válidos de las líneas antes de guardar; la vista previa fiscal no estará disponible hasta poder calcular la operación.",
+    "previewUnavailable": "Vista previa fiscal no disponible — complete la evaluación de la operación y los importes de las líneas"
   }
 }

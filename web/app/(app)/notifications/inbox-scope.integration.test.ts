@@ -34,7 +34,7 @@ registerHooks({
     }
     // node_modules is shared with the main checkout: pin bare self-imports
     // to this checkout so the route and the test share one db context.
-    if (specifier.startsWith("@openbooks/engine/")) {
+    if (specifier.startsWith("@openbooks/engine/src/")) {
       const root = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 1);
       return nextResolve(
         new URL(`engine/${specifier.slice("@openbooks/engine/".length)}`, root).href,

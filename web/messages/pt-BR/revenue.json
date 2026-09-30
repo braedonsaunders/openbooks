@@ -162,5 +162,23 @@
     "propose": "Criar proposta de aprovação",
     "proposeFailed": "Não foi possível propor a modificação do contrato",
     "saveFailed": "Falha na modificação"
+  },
+  "breakage": {
+    "title": "Avaliar direitos pré-pagos não exercidos esperados",
+    "choose": "Escolher…",
+    "hint": "Proponha uma estimativa com aprovação independente. Os direitos não exercidos esperados acompanham os direitos exercidos pelo cronograma nativo de uso. Uma avaliação fundamentada de uso futuro remoto mensura os direitos restantes. O vencimento por si só não gera receita; valores devidos segundo a legislação de bens não reclamados permanecem como passivos.",
+    "grant": "Concessão pré-paga",
+    "date": "Data da avaliação",
+    "amount": "Total esperado de direitos não exercidos",
+    "entitled": "Existe direito ao valor não exercido?",
+    "constraint": "Fundamentado conforme a restrição de reversão significativa?",
+    "thirdParty": "Valor devido a terceiro ou segundo a legislação de bens não reclamados?",
+    "evidence": "Evidências de direito, estimativa e fundamento legal",
+    "reason": "Motivo da avaliação",
+    "failed": "Não foi possível salvar a proposta de direitos não exercidos",
+    "propose": "Propor para aprovação",
+    "method": "Avaliação de reconhecimento",
+    "expected_proportional": "Direitos não exercidos esperados em proporção aos direitos exercidos",
+    "remaining_use_remote": "O uso adicional pelo cliente é considerado remoto"
   }
 }

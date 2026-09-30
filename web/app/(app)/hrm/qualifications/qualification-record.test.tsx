@@ -17,6 +17,7 @@ registerHooks({
 })
 const { NextIntlClientProvider } = await import('next-intl')
 const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
+const { PromptRoot } = await import('../../../../lib/prompt')
 const { QualificationDrawer } = await import('./QualificationDrawer')
 // tsx compiles JSX classic: the island never imports React, so the test bridges it.
 Object.assign(globalThis, { React })
@@ -59,6 +60,10 @@ async function mount(
   Object.defineProperty(globalThis, 'window', { value: dom.window, configurable: true, writable: true })
   Object.defineProperty(globalThis, 'document', { value: dom.window.document, configurable: true, writable: true })
   Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
+  const priorFrame = globalThis.requestAnimationFrame
+  const priorCancel = globalThis.cancelAnimationFrame
+  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 0) as unknown as number
+  globalThis.cancelAnimationFrame = (id) => clearTimeout(id)
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   // jsdom ships no matchMedia; the UI kit only asks it for responsive tweaks.
   const win = dom.window as unknown as { matchMedia?: (query: string) => unknown }
@@ -93,6 +98,7 @@ async function mount(
     root.render(
       <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages, ui: uiMessages }}>
         <BusinessDateProvider today="2026-09-24">
+          <PromptRoot />
           <QualificationDrawer
             qualificationId={drawerProps?.qualificationId ?? null}
             recordOpen={drawerProps?.recordOpen ?? true}
@@ -134,6 +140,8 @@ async function mount(
       Object.defineProperty(globalThis, 'document', { value: previous.document, configurable: true, writable: true })
       Object.defineProperty(globalThis, 'navigator', { value: previous.navigator, configurable: true, writable: true })
       Object.defineProperty(globalThis, 'fetch', { value: previous.fetch, configurable: true, writable: true })
+      globalThis.requestAnimationFrame = priorFrame
+      globalThis.cancelAnimationFrame = priorCancel
       dom.window.close()
     },
   }
@@ -329,16 +337,26 @@ test('renew navigates to the renewed row, preserving the other params', async ()
   try {
     await flushAsync()
     // The renewal date comes from the operator prompt, never the browser day.
-    const win = g.window as unknown as { prompt?: (message: string, def?: string) => string | null }
-    win.prompt = () => '2026-09-20'
     await act(async () => {
       const renew = [...m.document.querySelectorAll('button')].find((b) => b.textContent === 'Renew')
       assert.ok(renew, 'Renew renders for the manage grant')
       m.click(renew!)
     })
+    await act(async () => {
+      const input = m.document.querySelector<HTMLInputElement>('[role="dialog"][aria-labelledby="prompt-title"] input')
+      assert.ok(input, 'renewal opens the shared prompt')
+      assert.equal(input.value, '2026-09-24', 'the server business day supplies the default')
+      m.setInput(input, '2026-09-20')
+    })
+    await act(async () => {
+      const form = m.document.querySelector('[role="dialog"][aria-labelledby="prompt-title"] form')
+      assert.ok(form)
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
+    })
     await flushAsync()
     const pushes = (g.__qualPushes ?? []) as string[]
     assert.equal(pushes.length, 1, 'renewal navigates exactly once')
+    assert.equal(m.calls.find((c) => c.method === 'POST' && c.url.endsWith('/renew'))?.body?.issuedOn, '2026-09-20', 'the operator date reaches the renewal write')
     assert.ok(pushes[0]!.includes('qualification=q-2'), `the drawer keys on the new id: ${pushes[0]}`)
     assert.ok(!pushes[0]!.includes('qualification=q-1'), 'the old id leaves the URL')
     const rereads = m.calls.filter((c) => c.url === '/api/hrm/qualifications/q-2')

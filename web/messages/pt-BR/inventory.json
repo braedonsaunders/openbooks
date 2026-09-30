@@ -16,8 +16,17 @@
     "counts": "Contagens"
   },
   "bom": {
-    "columns": { "effectiveFrom": "Vigente a partir de", "effectiveTo": "Vigente até", "operationSeq": "Sequência da operação", "scrapPct": "% de refugo", "isByproduct": "Tipo de linha" },
-    "values": { "component": "Componente", "byproduct": "Subproduto" },
+    "columns": {
+      "effectiveFrom": "Vigente a partir de",
+      "effectiveTo": "Vigente até",
+      "operationSeq": "Sequência da operação",
+      "scrapPct": "% de refugo",
+      "isByproduct": "Tipo de linha"
+    },
+    "values": {
+      "component": "Componente",
+      "byproduct": "Subproduto"
+    },
     "refusals": {
       "effectivityOverlap": "O componente {component} tem períodos de vigência sobrepostos {windows}. Ajuste as datas ou use outra operação ou classificação de subproduto quando necessário.",
       "invalidDate": "Informe uma data real no formato AAAA-MM-DD.",
@@ -46,7 +55,9 @@
     "count": "Contagem",
     "assembly_build": "Montagem de conjunto",
     "assembly_consume": "Consumo de conjunto",
-    "return": "Devolução"
+    "return": "Devolução",
+    "assembly_disassembly": "Desmontagem de conjunto",
+    "assembly_recovery": "Componente recuperado"
   },
   "drawer": {
     "title": "Movimentação de estoque",
@@ -58,7 +69,9 @@
       "adjust": "Ajustar",
       "transfer": "Transferir",
       "build": "Montar conjunto",
-      "landed": "Custo de importação"
+      "landed": "Custo de importação",
+      "disassemble": "Desmontar estoque",
+      "reverse": "Reverter movimentação"
     },
     "hint": {
       "receive": "Adiciona estoque ao custo (DB estoque / CR contrapartida).",
@@ -66,7 +79,9 @@
       "adjust": "Corrige a quantidade disponível contra a conta de ajuste.",
       "transfer": "Move estoque entre dois locais pelo custo carregado.",
       "build": "Consome os componentes conforme a BOM e produz o produto acabado ao custo.",
-      "landed": "Capitaliza frete/imposto sobre as camadas de estoque disponível de um item."
+      "landed": "Capitaliza frete/imposto sobre as camadas de estoque disponível de um item.",
+      "disassemble": "Recupere componentes de uma fabricação registrada. A recuperação usa a lista de materiais e as evidências de custo originais; sucata e outras diferenças de custo são contabilizadas na conta de ajuste ou variação configurada.",
+      "reverse": "Acrescente uma reversão controlada. Todas as movimentações de uma operação de montagem são revertidas juntas; reverta primeiro as operações posteriores."
     },
     "selectItem": "Selecione um item",
     "selectLocation": "Selecione um local",
@@ -88,7 +103,13 @@
     "bases": {
       "value": "Por valor",
       "quantity": "Por quantidade"
-    }
+    },
+    "sourceMovement": "Movimentação de origem",
+    "selectSourceMovement": "Pesquisar por item, local, data ou identificador da movimentação",
+    "loadMovementsFailed": "Não foi possível carregar as movimentações de origem",
+    "moreMovements": "Carregar mais movimentações de origem",
+    "movementReason": "Motivo desta operação",
+    "reversed": "Operação de estoque revertida"
   },
   "advanced": {
     "errors": {
@@ -223,13 +244,13 @@
       "selectStockLocation": "Escolha o local de estoque…",
       "selectLot": "Lote (quando rastreado)…",
       "missingFields": "Escolha local, subsidiária, data e pelo menos uma linha.",
-    "lineMissingItem": "Linha {line}: escolha um item.",
-    "lineMissingStockLocation": "Linha {line}: escolha um local de estoque.",
-    "noStockLocations": "Este local ainda não tem locais de estoque.",
-    "manageStockLocations": "Configurar locais de estoque",
-    "needsCosting": "{count, plural, one {# item ativo não tem} other {# itens ativos não têm}} perfil de custo e ainda não pode ser contado. Adicione o perfil no registro do item.",
-    "openItems": "Abrir itens",
-    "needsCostingNoGrant": "Você precisa de acesso de gerenciamento de itens para adicionar perfis de custo.",
+      "lineMissingItem": "Linha {line}: escolha um item.",
+      "lineMissingStockLocation": "Linha {line}: escolha um local de estoque.",
+      "noStockLocations": "Este local ainda não tem locais de estoque.",
+      "manageStockLocations": "Configurar locais de estoque",
+      "needsCosting": "{count, plural, one {# item ativo não tem} other {# itens ativos não têm}} perfil de custo e ainda não pode ser contado. Adicione o perfil no registro do item.",
+      "openItems": "Abrir itens",
+      "needsCostingNoGrant": "Você precisa de acesso de gerenciamento de itens para adicionar perfis de custo.",
       "lines": "Linhas a contar",
       "addLine": "Adicionar linha",
       "removeLine": "Remover"

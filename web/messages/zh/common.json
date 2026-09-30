@@ -316,5 +316,19 @@
     "noOptions": "未定义选项",
     "selectRecord": "选择一条记录…",
     "loadFailed": "无法加载记录"
+  },
+  "nativeGoodsTax": {
+    "title": "加拿大商品税",
+    "manual": "明确指定的行税务配置",
+    "automatic": "原生商品税计算",
+    "help": "仅适用于普通、全额应税商品。根据运输条款选择法定交付或提货省份，而非账单地址。手动配置和覆盖设置优先。保存前，服务器会检查销售法人、有效日期内的税务登记和已配置的税务科目。",
+    "province": "法定交付省份",
+    "delivery": "交付安排",
+    "delivered_or_made_available": "已交付或可供提取",
+    "supplier_arranged_shipping": "供应商安排运往目的地",
+    "recipient_collection": "收货人自行提货",
+    "evidence": "合同交付及应税性证据",
+    "incomplete": "保存前请填写省份、至少20个字符的证据和有效行金额；在能够计算该供应前，税额预览不可用。",
+    "previewUnavailable": "税额预览不可用 — 请完成供应评估及行金额"
   }
 }

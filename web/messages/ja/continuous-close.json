@@ -220,8 +220,8 @@
       "description": "給与項目に記帳勘定または納付先がありません。"
     },
     "stranded_background_work": {
-      "title": "Stranded background work",
-      "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
+      "title": "停止したバックグラウンド処理",
+      "description": "永続化された転記、スケジュール、レポート生成、メール処理が恒久的に失敗するか、設定された期限を超過しています。統制された復旧の前に保持された証拠を確認してください。"
     }
   },
   "summary": {

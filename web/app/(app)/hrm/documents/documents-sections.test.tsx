@@ -94,7 +94,7 @@ registerHooks({
         return {
           shortCircuit: true,
           format: "module",
-          url: "data:text/javascript,export async function isFeatureEnabled() { return false; } export async function subsidiaryFeatureEnabled() { return false; }",
+          url: "data:text/javascript,export async function isFeatureEnabled() { return false; } export async function subsidiaryFeatureEnabled() { return false; } export async function resolvedFeatureState() { return {}; }",
         };
       }
       // Re-export the real module and override only the DB-backed option
