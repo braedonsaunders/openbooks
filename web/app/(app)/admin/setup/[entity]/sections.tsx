@@ -30,6 +30,7 @@ import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
 import { FxProviderPage } from './FxProviderPage'
 import { SetupDrawer } from './SetupDrawer'
+import { setupRecordTabs } from './SetupEntitySection'
 import { TaxReturnBoxesTab, type TaxReturnBoxRow } from './TaxReturnBoxesTab'
 import { TaxRatesTab, type TaxRateRow } from './TaxRatesTab'
 import { SegmentValuesTab, type SegmentValueRow } from './SegmentValuesTab'
@@ -140,7 +141,7 @@ export async function SetupDrawerSlot({
   const { orgId } = authz.user
 
   const baseEntity = SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!baseEntity || baseEntity.nestedUnder || baseEntity.rehomed) return null
+  if (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || baseEntity.rehomed) return null
   const features = await resolvedFeatureState(orgId)
   // One authoritative gate admits the drawer — never a local OR over featureKey.
   if (!resolveSetupEntityGate(baseEntity, features).enabled) return null
@@ -165,6 +166,10 @@ export async function SetupDrawerSlot({
     valueRow: undefined,
     segValQ: undefined,
     segValPage: undefined,
+    childRow: undefined,
+    childQ: undefined,
+    childPage: undefined,
+    childShowInactive: undefined,
   })
 
   if (entity.dataSource === 'extension-settings') {
@@ -214,7 +219,13 @@ export async function SetupDrawerSlot({
           return { creating: false, row, members }
         })()
     : null
-  if (!open) return null
+  if (!open || (!open.creating && !open.row)) return null
+
+  const childTabs = setupRecordTabs({
+    entity, row: open.row, orgId, actorId: authz.user.id, sp,
+    basePath: `/admin/setup/${entity.key}`, canManage: true,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds, features, t,
+  })
 
   const taxCodeRow = entity.key === 'tax-codes' ? open?.row : null
   const taxReturnRow = entity.key === 'tax-return-forms' ? open?.row : null
@@ -448,6 +459,7 @@ export async function SetupDrawerSlot({
   return (
     <>
       <SetupDrawer
+        key={`${entity.key}:${String(open.row?.[idColumn] ?? 'new')}`}
         entity={entity}
         row={open.row}
         members={open.members}
@@ -466,6 +478,7 @@ export async function SetupDrawerSlot({
           label: t('entities.segment-values.title'),
           content: segValTabContent,
         } : undefined}
+        nestedTabs={childTabs}
       />
 
       {segValOpen && segmentDefRow ? (

@@ -4492,7 +4492,7 @@
       },
       "step3": {
         "cta": "Configurar el nexo",
-        "description": "Registre dónde la empresa está registrada para recaudar y remitir, su frecuencia de declaración y la declaración que presenta.",
+        "description": "Abra una jurisdicción y use su pestaña Nexo fiscal para registrar el número de registro, la frecuencia de presentación, el formulario y las fechas de vigencia.",
         "stat": "{count, plural, =0 {Aún ningún registro} one {# registro} other {# registros}}",
         "title": "Declare su nexo"
       },

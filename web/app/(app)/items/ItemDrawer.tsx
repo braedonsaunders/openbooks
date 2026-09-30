@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
   BadgePercent,
@@ -170,6 +170,7 @@ export function ItemDrawer({
   initialPricingView = 'landing',
   configuredPricingViews = [],
   createMode = false,
+  recordTabs = [],
 }: {
   payload: ItemPayload
   accounts: AccountOpt[]
@@ -202,10 +203,14 @@ export function ItemDrawer({
   configuredPricingViews?: readonly PricingView[]
   /** True for `?item=new`: the payload is in-memory and Save performs POST. */
   createMode?: boolean
+  /** Server-rendered configuration collections scoped to this persisted item. */
+  recordTabs?: { key: string; label: string; content: ReactNode }[]
 }) {
   const t = useTranslations('items')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const it = payload.item
   const requestIdRef = useRef<string | null>(null)
 
@@ -489,7 +494,7 @@ export function ItemDrawer({
   ]))
 
   const tabs = useMemo(
-    () => resolveFormTabs(effectiveLayout)
+    () => [...resolveFormTabs(effectiveLayout)
       .filter((placement) => placement.visible)
       .filter((placement) => placement.key !== 'costing' || (inventoryCosting && INVENTORY_KINDS.has(kind)))
       .filter((placement) => placement.key !== 'revenue' || fairValuePrices)
@@ -501,12 +506,26 @@ export function ItemDrawer({
             ? placement.key.replace(/^tab_/, '').replace(/_/g, ' ')
             : t(`drawer.tabs.${placement.key}`)
         ),
-      })),
-    [effectiveLayout, inventoryCosting, fairValuePrices, kind, t],
+      })), ...recordTabs.map((recordTab) => ({ ...recordTab, groupIds: [] as string[] }))],
+    [effectiveLayout, inventoryCosting, fairValuePrices, kind, t, recordTabs],
   )
-  const activeTab = tabs.find((candidate) => candidate.key === tab) ?? tabs[0] ?? null
+  const requestedRecordTab = searchParams.get('itemSetup')
+  const selectedTab = recordTabs.some((candidate) => candidate.key === requestedRecordTab) ? requestedRecordTab : tab
+  const activeTab = tabs.find((candidate) => candidate.key === selectedTab) ?? tabs[0] ?? null
   const activeTabKey = activeTab?.key ?? tab
   const choosingKind = createMode && createStep === 'kind'
+
+  function selectTab(key: string) {
+    setTab(key)
+    const recordTab = recordTabs.some((candidate) => candidate.key === key)
+    if (!recordTab && !requestedRecordTab) return
+    const next = new URLSearchParams(searchParams.toString())
+    if (recordTab) next.set('itemSetup', key)
+    else next.delete('itemSetup')
+    for (const param of ['recordRow', 'recordQ', 'recordPage', 'recordShowInactive']) next.delete(param)
+    const query = next.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
 
   function renderItemField(placement: HeaderFieldPlacement): React.ReactNode {
     const label = placement.labelOverride?.trim() || undefined
@@ -586,7 +605,7 @@ export function ItemDrawer({
         </span>
       }
       description={choosingKind ? t('drawer.chooseKindDescription') : mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
-      subtabs={choosingKind ? undefined : <DrawerTabStrip tabs={tabs} activeKey={activeTabKey} onSelect={setTab} ariaLabel={tCommon('auditTrail.ariaLabel')} />}
+      subtabs={choosingKind ? undefined : <DrawerTabStrip tabs={tabs} activeKey={activeTabKey} onSelect={selectTab} ariaLabel={tCommon('auditTrail.ariaLabel')} />}
       headerActions={
         <>
           {choosingKind ? (
@@ -669,6 +688,7 @@ export function ItemDrawer({
           </div>
         ) : null}
 
+        {!choosingKind && recordTabs.find((recordTab) => recordTab.key === activeTabKey)?.content}
         {!choosingKind && activeTabKey === 'overview' ? <HeaderFields layout={createOverviewLayout} editable={editable} renderField={renderItemField} /> : null}
 
         {!choosingKind && activeTabKey === 'pricing' && pricingView === 'landing' ? (

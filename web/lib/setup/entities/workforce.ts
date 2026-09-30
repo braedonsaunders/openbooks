@@ -502,6 +502,7 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     // labor_cost_rates (employee > job title > trade > department >
     // subsidiary > plan default, latest effective_from within a scope).
     key: 'entitlement-plan-limits',
+    parentRecords: [{ entityKey: 'entitlement-plans', fieldKey: 'planId' }],
     table: 'entitlement_plan_limits',
     singularTitleKey: 'entities.entitlement-plan-limits.singular',
     groupKey: 'workforce',
@@ -545,6 +546,10 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     // vacation ladder at 5/10/15/20/25/30 years. A tier targets EXACTLY one of
     // a plan (raising its accrual value) or a pay component (eligibility on).
     key: 'entitlement-service-tiers',
+    parentRecords: [
+      { entityKey: 'entitlement-plans', fieldKey: 'planId' },
+      { entityKey: 'pay-components', fieldKey: 'componentId' },
+    ],
     table: 'entitlement_service_tiers',
     singularTitleKey: 'entities.entitlement-service-tiers.singular',
     groupKey: 'workforce',

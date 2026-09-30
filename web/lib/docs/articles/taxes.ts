@@ -46,8 +46,9 @@ filing.
 
 ## Tax Nexus
 
-**Taxes → Tax Nexus** records where the business is **registered** to
-collect and remit tax:
+Open a record under **Taxes → Tax Jurisdictions**, then choose its **Tax Nexus**
+tab to record where the business is **registered** to collect and remit tax.
+Each registration belongs to that jurisdiction and records:
 
 - the **jurisdiction** you are registered in;
 - the government **registration number**;

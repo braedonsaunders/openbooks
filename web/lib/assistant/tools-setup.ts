@@ -9,6 +9,7 @@ import {
   SETUP_ENTITY_BY_KEY,
   resolveSetupEntityGate,
   setupEntityForFeatureState,
+  setupEntityHref,
   toSnake,
 } from "../setup/registry";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -42,6 +43,7 @@ const listSetupEntitiesTool: AssistantToolDef = {
         table: e.table,
         rehomed: e.rehomed ?? false,
         nestedUnder: e.nestedUnder ?? null,
+        parentRecords: e.parentRecords ?? [],
         featureKey: e.featureKey ?? null,
         // One authoritative gate reports the enabled state — never a local check.
         enabled: resolveSetupEntityGate(e, features).enabled,
@@ -86,7 +88,7 @@ const listSetupRecordsTool: AssistantToolDef = {
     if (entity.dataSource === 'extension-settings') {
       const rows = (authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId)).filter((row) => !a.query || Object.values(row).some((value) => String(value).toLowerCase().includes(a.query!.toLowerCase())));
       return { ok: true, data: { entityKey: entity.key, total: rows.length, returned: Math.min(rows.length, limit), truncated: rows.length > limit,
-        href: `/admin/setup/${entity.key}`, items: rows.slice(0, limit) } };
+        href: setupEntityHref(entity), items: rows.slice(0, limit) } };
     }
     const idColumn = entity.idColumn ?? "id";
     const columnKeys = entity.columns.map((c) => toSnake(c.key));
@@ -118,7 +120,7 @@ const listSetupRecordsTool: AssistantToolDef = {
         total,
         returned: rowsRes.rows.length,
         truncated: total > rowsRes.rows.length,
-        href: `/admin/setup/${entity.key}`,
+        href: setupEntityHref(entity),
         items: rowsRes.rows.map((row) => ({
           id: row[idColumn],
           ...Object.fromEntries(entity.columns.map((c) => [c.key, row[toSnake(c.key)]])),

@@ -5,6 +5,7 @@ import { COSTING_METHODS, INVENTORY_TRACKING, STOCK_LOCATION_KINDS } from '../op
 export const INVENTORY_ENTITIES: SetupEntity[] = [
   {
     key: 'item-identifiers',
+    parentRecords: [{ entityKey: 'items', fieldKey: 'itemId' }],
     table: 'item_identifiers',
     singularTitleKey: 'entities.item-identifiers.singular',
     actorCols: true,
@@ -35,6 +36,7 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
   },
   {
     key: 'customer-item-refs',
+    parentRecords: [{ entityKey: 'items', fieldKey: 'itemId' }],
     table: 'customer_item_refs',
     singularTitleKey: 'entities.customer-item-refs.singular',
     actorCols: true,

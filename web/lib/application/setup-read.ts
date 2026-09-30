@@ -42,6 +42,7 @@ export async function listSetupEntities(context: ApplicationContext) {
       table: entity.table,
       rehomed: entity.rehomed ?? false,
       nestedUnder: entity.nestedUnder ?? null,
+      parentRecords: entity.parentRecords ?? [],
       featureKey: entity.featureKey ?? null,
       // One authoritative gate admits the catalog — never a local check over featureKey.
       enabled: resolveSetupEntityGate(entity, features).enabled,

@@ -36,6 +36,7 @@ export const TAX_ENTITIES: SetupEntity[] = [
   },
   {
     key: 'tax-registrations',
+    parentRecords: [{ entityKey: 'tax-jurisdictions', fieldKey: 'jurisdictionId' }],
     table: 'tax_registrations',
     singularTitleKey: 'entities.tax-registrations.singularTitle',
     actorCols: true,

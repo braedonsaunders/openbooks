@@ -1,13 +1,8 @@
 import type { SetupEntity } from './types'
 
 /**
- * Setup-registry descriptors for the HR leave taxonomy (0194).
- *
- * Lives in its own module only so the entries can be reviewed as one change;
- * both are ordinary registry entities and MUST be spread into SETUP_ENTITIES
- * in registry.ts — that is what wires the generic list view
- * (admin/setup/[entity]), the create/edit drawer, and the generic CRUD API
- * (api/admin/setup/[entity]).
+ * Leave types and their time-entitlement policies share the setup registry
+ * and CRUD API. Policies are managed inside their owning leave type.
  *
  * What these screens are, and are NOT:
  *
@@ -73,6 +68,7 @@ export const LEAVE_TYPES_ENTITY: SetupEntity = {
 
 export const LEAVE_POLICIES_ENTITY: SetupEntity = {
   key: 'leave-policies',
+  parentRecords: [{ entityKey: 'leave-types', fieldKey: 'leaveTypeId' }],
   table: 'hrm_leave_policies',
   groupKey: 'workforce',
   featureKey: 'hrm',

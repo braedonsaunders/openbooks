@@ -270,7 +270,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'inventory-action-drawer': { props: ['accounts', 'items', 'stockLocations', 'subsidiaries'] },
   'invite-user': { props: ['allRoles'] },
   'invoicing-setup-workspace': { props: [], open: true },
-  'item-drawer': { props: ['drawer'] },
+  'item-drawer': { props: ['drawer', 'sp'] },
   'items-header-actions': { props: ['showNew', 'tabs', 'wrap'] },
   'journal-drafts': { props: ['drafts', 'heading'] },
   'journal-drawer': { props: ['drawer'] },

@@ -292,7 +292,7 @@ export function itemsSpec(data: ItemsData): PageSpec {
           recordType: 'item',
           sp: data.currentParams,
           emptyAction: data.canManage ? newItem : null,
-          drawer: data.drawer ? { widget: 'item-drawer', props: { drawer: data.drawer } } : null,
+          drawer: data.drawer ? { widget: 'item-drawer', props: { drawer: data.drawer, sp: data.currentParams } } : null,
         }),
         when: f('onCatalog'),
       },

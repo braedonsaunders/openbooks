@@ -72,7 +72,7 @@ export async function loadTaxSetup(
       step3Title: t('step3.title'),
       step3Description: t('step3.description'),
       step3Stat: t('step3.stat', { count: registrations.rows[0]?.n ?? 0 }),
-      step3Href: '/admin/setup/tax-registrations',
+      step3Href: '/admin/setup/tax-jurisdictions?setupTab=tax-registrations',
       step3Cta: t('step3.cta'),
     },
   }

@@ -253,6 +253,9 @@ export interface SetupEntity {
    *  remain available to the shared CRUD API but do not render as standalone
    *  setup-rail pages. */
   nestedUnder?: string
+  /** Record-owned collections have no independent setup page. Multiple entries
+   *  describe mutually exclusive owners, such as a plan OR a pay component. */
+  parentRecords?: { entityKey: string; fieldKey: string; valueKey?: string }[]
   /** Re-homed onto an operational record/module (e.g. Inventory, Items,
    *  customer/project drawers). Still served by the shared CRUD API and
    *  embeddable via <SetupEntitySection>, but hidden from the setup rail and

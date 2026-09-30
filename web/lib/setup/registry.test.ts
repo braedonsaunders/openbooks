@@ -10,6 +10,7 @@ import {
   resolveSetupEntityGate,
   setupEntitiesByGroup,
   setupEntityForFeatureState,
+  setupEntityHref,
   setupFieldVisible,
   type SetupEntity,
   type SetupField,
@@ -26,7 +27,7 @@ test('agents is a first-party setup group served by custom pages, not generic en
   assert.deepEqual(claimed.map((entity) => entity.key), [])
 })
 
-test('tax rates and return boxes are nested under their owning records', () => {
+test('record-owned setup collections leave the rail and declare their parent bindings', () => {
   const taxRates = SETUP_ENTITY_BY_KEY.get('tax-rates')
   const taxBoxes = SETUP_ENTITY_BY_KEY.get('tax-report-lines')
   assert.ok(taxRates)
@@ -41,6 +42,34 @@ test('tax rates and return boxes are nested under their owning records', () => {
   assert.ok(visibleTaxKeys?.includes('tax-return-forms'))
   assert.ok(!visibleTaxKeys?.includes('tax-rates'))
   assert.ok(!visibleTaxKeys?.includes('tax-report-lines'))
+  const owners: Record<string, string[]> = {
+    'tax-registrations': ['tax-jurisdictions'],
+    'benefit-plan-levels': ['benefit-plans'],
+    'leave-policies': ['leave-types'],
+    'hrm-competencies': ['hrm-competency-frameworks'],
+    'customer-price-level-assignments': ['price-levels'],
+    'item-identifiers': ['items'],
+    'customer-item-refs': ['items'],
+    'tax-pool-classes': ['tax-regimes'],
+    'tax-first-year-rules': ['tax-regimes'],
+    'entitlement-plan-limits': ['entitlement-plans'],
+    'entitlement-service-tiers': ['entitlement-plans', 'pay-components'],
+  }
+  const visibleKeys = [...setupEntitiesByGroup().values()].flat().map((entity) => entity.key)
+  for (const [key, parents] of Object.entries(owners)) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)!
+    assert.deepEqual(entity.parentRecords?.map((binding) => binding.entityKey), parents, key)
+    assert.ok(!visibleKeys.includes(key), `${key} must be opened through its owner`)
+    for (const binding of entity.parentRecords ?? []) {
+      const field = entity.fields.find((candidate) => candidate.key === binding.fieldKey)
+      assert.ok(field, `${key}: parent binding must name a declared field`)
+      assert.ok(SETUP_ENTITY_BY_KEY.has(binding.entityKey) || binding.entityKey === 'items', `${key}: owner must exist`)
+    }
+  }
+  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('tax-registrations')!), '/admin/setup/tax-jurisdictions?setupTab=tax-registrations')
+  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('item-identifiers')!), '/items?itemSetup=item-identifiers')
+  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('tax-pool-classes')!), '/admin/setup/tax-depreciation?tab=regimes&setupTab=tax-pool-classes')
+  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('entitlement-plan-limits')!), '/admin/setup/payroll?tab=entitlements&setupTab=entitlement-plan-limits')
 })
 
 test('re-homed entities stay in the CRUD registry but leave the setup rail', () => {
@@ -69,9 +98,7 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
     assert.ok(!allVisible.includes(key), `${key} must not appear in the setup rail`)
   }
 
-  // The three moved entities stay out; the group's current members are the
-  // newer rail entities (scan identifiers, customer part numbers).
-  assert.deepEqual(byGroup.get('inventory')?.map((entity) => entity.key), ['item-identifiers', 'customer-item-refs'])
+  assert.deepEqual(byGroup.get('inventory')?.map((entity) => entity.key), [])
   assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories'])
 })
 

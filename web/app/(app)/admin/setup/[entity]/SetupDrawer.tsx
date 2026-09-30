@@ -95,6 +95,7 @@ export function SetupDrawer({
   initialValues,
   fixedValues,
   nestedTab,
+  nestedTabs = [],
   stacked = false,
 }: {
   entity: SetupEntity
@@ -105,6 +106,7 @@ export function SetupDrawer({
   initialValues?: Record<string, unknown>
   fixedValues?: Record<string, unknown>
   nestedTab?: { key: string; label: string; content: ReactNode }
+  nestedTabs?: { key: string; label: string; content: ReactNode }[]
   stacked?: boolean
 }) {
   const t = useTranslations('admin.setup')
@@ -142,15 +144,21 @@ export function SetupDrawer({
     setFieldError(null)
     setForm((f) => ({ ...f, [key]: value }))
   }
-  const nestedTabActive = !creating && nestedTab != null && searchParams.get('setupTab') === nestedTab.key
+  const recordTabs = nestedTab ? [nestedTab, ...nestedTabs] : nestedTabs
+  const activeNestedTab = !creating ? recordTabs.find((tab) => searchParams.get('setupTab') === tab.key) : undefined
+  const nestedTabActive = activeNestedTab !== undefined
 
   function selectTab(key: 'details' | string) {
     const next = new URLSearchParams(searchParams.toString())
+    if (key !== next.get('setupTab')) {
+      for (const param of ['childRow', 'childQ', 'childPage', 'childShowInactive']) next.delete(param)
+    }
     if (key === 'details') {
       next.delete('setupTab')
       next.delete('boxRow')
       next.delete('rateRow')
       next.delete('valueRow')
+      next.delete('childRow')
     } else {
       next.set('setupTab', key)
     }
@@ -334,13 +342,13 @@ export function SetupDrawer({
       beforeClose={confirmDiscard}
       stacked={stacked}
       title={creating ? t('drawer.newTitle', { name: entityTitle }) : t('drawer.editTitle', { name: entityTitle })}
-      subtabs={!creating && nestedTab ? (
+      subtabs={!creating && recordTabs.length > 0 ? (
         <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('drawer.tabs.ariaLabel')}>
           {[
             { key: 'details', label: t('drawer.tabs.details') },
-            { key: nestedTab.key, label: nestedTab.label },
+            ...recordTabs,
           ].map((tab) => {
-            const active = tab.key === 'details' ? !nestedTabActive : nestedTabActive
+            const active = tab.key === 'details' ? !nestedTabActive : activeNestedTab?.key === tab.key
             return (
               <button
                 key={tab.key}
@@ -362,12 +370,12 @@ export function SetupDrawer({
         </nav>
       ) : undefined}
       headerActions={
-        !nestedTabActive ? <Button disabled={busy} onClick={save}>
+        !nestedTabActive && !entity.readOnly ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
         </Button> : undefined
       }
       footer={
-        nestedTabActive ? undefined : !creating && !entity.hasActive && entity.allowDelete !== false ? (
+        nestedTabActive ? undefined : !entity.readOnly && !creating && !entity.hasActive && entity.allowDelete !== false ? (
           <button
             type="button"
             onClick={remove}
@@ -381,7 +389,7 @@ export function SetupDrawer({
         )
       }
     >
-      {nestedTabActive ? nestedTab?.content : <>
+      {nestedTabActive ? activeNestedTab?.content : <>
       {entity.key === "subsidiary-ownership-interests" && row && row.method === "full" ? <div className="mb-4"><LossOfControlButton interestId={String(row.id)} /></div> : null}
       {fieldError ? (
         <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
@@ -401,7 +409,7 @@ export function SetupDrawer({
               value={form[field.key]}
               onChange={(v) => set(field.key, v)}
               creating={creating}
-              forceLocked={Object.hasOwn(fixedValues ?? {}, field.key)}
+              forceLocked={Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)}
               refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
               formValues={form}
               t={t}

@@ -14,29 +14,12 @@ import type {
   TaxDepreciationSetupTabs,
 } from './sections'
 
-/**
- * The tax-depreciation setup workspace, split into a loader and a spec.
- *
- * Four mutually exclusive bodies behind one `?tab=` param — the payroll
- * precedent. The overview body is a client component (pack install and
- * assignment Selects are fetch flows plus useState a spec cannot name), so
- * it renders through a WHOLE-COMPONENT slot: the loader resolves every prop
- * the page passed `TaxDepreciationSetup` (company country, packs,
- * installed codes, regime groups, category assignments) to presentation-ready
- * data, and the slot re-derives nothing — the props are data, not
- * capabilities. The three registry-backed tabs (`regimes`, `classes`,
- * `first-year`) arrive through the already-registered `setup-section` slot,
- * which re-derives org id, entry and manage gate from the session.
- *
- * The loader copies the native page VERBATIM: the `admin.setup.manage`
- * gate, the `fixedAssets` feature gate, the tab fallback to `overview`, the
- * four queries, and the `classes.rows.reduce` regime-grouping.
- */
+/** Tax depreciation installs regimes and manages each regime's classes and
+ *  first-year rules inside its record drawer. Category assignments remain on
+ *  the overview, with the registry-backed regime list on its own tab. */
 
 const ENTITY_BY_TAB = {
   regimes: 'tax-regimes',
-  classes: 'tax-pool-classes',
-  'first-year': 'tax-first-year-rules',
 } as const
 type Tab = 'overview' | keyof typeof ENTITY_BY_TAB
 
@@ -71,15 +54,13 @@ export async function loadTaxDepreciationSetup(
   // exist, so an entity tab the registry dropped would 404 in SetupDrawer —
   // same belt-and-braces `available` filter the payroll page uses.
   const available: readonly Tab[] = (
-    ['overview', 'regimes', 'classes', 'first-year'] as Tab[]
+    ['overview', 'regimes'] as Tab[]
   ).filter((key) => key === 'overview' || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key]))
   const active: Tab = available.includes(tab) ? tab : 'overview'
   const tabHref = (key: Tab): string => `/admin/setup/tax-depreciation?tab=${key}`
   const tabs: TaxDepreciationSetupData['tabs'] = [
     { key: 'overview', href: tabHref('overview'), label: t('tabs.overview'), active: active === 'overview' },
     { key: 'regimes', href: tabHref('regimes'), label: t('tabs.regimes'), active: active === 'regimes' },
-    { key: 'classes', href: tabHref('classes'), label: t('tabs.classes'), active: active === 'classes' },
-    { key: 'first-year', href: tabHref('first-year'), label: t('tabs.firstYear'), active: active === 'first-year' },
   ]
 
   // The four overview queries, copied verbatim. The native page awaits them
@@ -172,10 +153,9 @@ export function taxDepreciationSetupSpec(data: TaxDepreciationSetupData): PageSp
           ...widgetBlock('tax-depreciation-overview', { overview: data.overview }),
           when: f('onOverview'),
         },
-        // The three registry-entity tabs share the `setup-section` SLOT
+        // The regime list shares the `setup-section` slot
         // (already registered): the slot re-derives org id, entry and manage
-        // gate from the session. `onEntityTab` covers regimes, classes and
-        // first-year — the flags are mutually exclusive, so exactly one
+        // gate from the session. The flags are mutually exclusive, so exactly one
         // block ever reads `entityKey`.
         {
           ...widgetBlock('setup-section', {

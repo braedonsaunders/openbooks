@@ -60,12 +60,9 @@ const ENTITY_BY_TAB = {
   schedules: 'pay-schedules',
   components: 'pay-components',
   union: 'union-agreements',
-  // Entitlement plans (pay banks) and their two configuration surfaces: the
-  // scoped caps, and the service-based schedules that raise a plan's accrual
-  // rate or flip a pay component's eligibility on.
+  // Entitlement plans own their scoped caps and service schedules. Pay
+  // components own their eligibility schedules in their record drawers.
   entitlements: 'entitlement-plans',
-  limits: 'entitlement-plan-limits',
-  service: 'entitlement-service-tiers',
 } as const
 
 const TABS = [
@@ -78,7 +75,7 @@ const TABS = [
   // employment attribute (engine/src/payroll/work-schedules.ts) that several
   // jurisdictions' statutory holiday pay is computed FROM.
   'workSchedules',
-  'entitlements', 'limits', 'service', 'derived', 'derivedPreview',
+  'entitlements', 'derived', 'derivedPreview',
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
   'holidays', 'holidayCalendar',
@@ -94,7 +91,7 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
   { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
   { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
-  { key: 'entitlements', tabs: ['entitlements', 'limits', 'service'] },
+  { key: 'entitlements', tabs: ['entitlements'] },
   { key: 'payday', tabs: ['payday'] },
 ]
 
@@ -281,10 +278,10 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
           ...widgetBlock('payroll-schedules-tab', {}),
           when: f('onWorkSchedules'),
         },
-        // Seven registry-entity tabs share the `setup-section` SLOT
+        // Registry entity tabs share the `setup-section` slot
         // (already registered): the slot re-derives org id, entry and
         // manage gate from the session. `onEntityTab` covers filing,
-        // schedules, components, union, entitlements, limits and service —
+        // schedules, components, union and entitlements —
         // the flags are mutually exclusive, so exactly one block ever reads
         // `entityKey`.
         {
