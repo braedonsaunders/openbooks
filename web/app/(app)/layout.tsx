@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { SetupRedirectNotice } from './admin/setup/RedirectNotice'
 import { getTranslations } from 'next-intl/server'
 import { AppShell } from '../../components/app-shell'
 import { PageSkeleton } from '../../components/page-skeleton'
@@ -114,13 +113,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {authz.user.envKind !== 'production' && (
               <SandboxBanner name={authz.user.sandboxName} kind={authz.user.envKind} />
             )}
-            {/* Alias-redirect notices (?movedFrom=) render here so every
-              destination shows the reason — a rehomed setup entity lands
-              outside the setup workspace, where the setup layout's own
-              notice never renders. Null without a known source. */}
-            <Suspense fallback={null}>
-              <SetupRedirectNotice />
-            </Suspense>
             {/* Page content streams behind the skeleton so the shell
               (sidebar/header) paints before slow page loaders resolve.
               Every ModuleView page renders inside {children}, so this one

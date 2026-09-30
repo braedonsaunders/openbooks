@@ -290,27 +290,7 @@
       "reason": "Administration console page with its own shell, outside module navigation."
     },
     {
-      "path": "web/app/(app)/admin/settings/page.tsx",
-      "reason": "Administration console page with its own shell, outside module navigation."
-    },
-    {
-      "path": "web/app/(app)/admin/setup/page.tsx",
-      "reason": "Administration console page with its own shell, outside module navigation."
-    },
-    {
-      "path": "web/app/(app)/admin/super/page.tsx",
-      "reason": "Administration console page with its own shell, outside module navigation."
-    },
-    {
-      "path": "web/app/(app)/analytics/true-cost/planner/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
-    },
-    {
       "path": "web/app/(app)/assets/leases/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
-    },
-    {
-      "path": "web/app/(app)/assets/tax-pools/page.tsx",
       "reason": "Bespoke workflow page with its own shell rather than the module list shell."
     },
     {
@@ -322,28 +302,16 @@
       "reason": "Error/gate page outside the module shell; no ModuleView spec applies."
     },
     {
-      "path": "web/app/(app)/field-tickets/[id]/page.tsx",
-      "reason": "Detail route with a bespoke shell (drawer/page) rather than the module list shell."
-    },
-    {
       "path": "web/app/(app)/hrm/processes/templates/page.tsx",
       "reason": "Bespoke workflow page with its own shell rather than the module list shell."
-    },
-    {
-      "path": "web/app/(app)/inventory/counts/page.tsx",
-      "reason": "Legacy bookmark redirecting to the inventory list shell; no content of its own."
     },
     {
       "path": "web/app/(app)/inventory/page.tsx",
       "reason": "Inventory module home composing EntityListView directly with its own header tabs."
     },
     {
-      "path": "web/app/(app)/journal/[id]/page.tsx",
-      "reason": "Detail route with a bespoke shell (drawer/page) rather than the module list shell."
-    },
-    {
       "path": "web/app/(app)/page.tsx",
-      "reason": "Authenticated landing redirect; no module content to render through ModuleView."
+      "reason": "Native application entry point composes the shared DashboardPage renderer."
     },
     {
       "path": "web/app/(app)/platform/access/page.tsx",
@@ -355,10 +323,6 @@
     },
     {
       "path": "web/app/(app)/platform/feedback/page.tsx",
-      "reason": "Platform operations console page with its own shell, outside module navigation."
-    },
-    {
-      "path": "web/app/(app)/platform/organizations/page.tsx",
       "reason": "Platform operations console page with its own shell, outside module navigation."
     },
     {
@@ -379,14 +343,6 @@
     },
     {
       "path": "web/app/(app)/projects/duplicates/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
-    },
-    {
-      "path": "web/app/(app)/reports/lot-recall/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
-    },
-    {
-      "path": "web/app/(app)/timesheets/entry/page.tsx",
       "reason": "Bespoke workflow page with its own shell rather than the module list shell."
     }
   ]

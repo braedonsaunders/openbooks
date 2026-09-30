@@ -170,7 +170,7 @@ const assetTaxPools: AssistantToolDef = {
           recapture: money(r.recapture),
           terminalLoss: money(r.terminalLoss),
         })),
-        href: "/assets/tax-pools",
+        href: "/assets?tab=tax-depreciation",
       },
     };
   },

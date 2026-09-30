@@ -23,7 +23,6 @@ export const QUALIFICATION_TYPES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmCertifications',
   rehomed: true, // section on the HRM Qualifications page
-  rehomedTo: '/hrm/qualifications',
   iconKey: 'badge-check',
   orgScoped: true,
   actorCols: true,
@@ -58,7 +57,6 @@ export const QUALIFICATION_SETTINGS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmCertifications',
   rehomed: true, // section on the HRM Qualifications page
-  rehomedTo: '/hrm/qualifications',
   iconKey: 'settings',
   orgScoped: true,
   actorCols: true,

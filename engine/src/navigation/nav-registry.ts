@@ -789,7 +789,7 @@ export const NAV_MODULES: NavModule[] = [
   },
   {
     key: 'admin-setup',
-    href: '/admin/setup',
+    href: '/admin/setup/readiness',
     label: 'Company Setup',
     iconKey: 'wrench',
     group: 'settings',

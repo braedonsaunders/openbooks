@@ -158,7 +158,6 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
-    rehomedTo: '/admin/setup/payroll?tab=filing',
     iconKey: 'landmark',
     orgScoped: true,
     actorCols: true,
@@ -258,7 +257,6 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
-    rehomedTo: '/admin/setup/payroll?tab=schedules',
     iconKey: 'calendar',
     orgScoped: true,
     actorCols: true,
@@ -291,7 +289,6 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
-    rehomedTo: '/admin/setup/payroll?tab=components',
     iconKey: 'coins',
     orgScoped: true,
     actorCols: true,
@@ -420,7 +417,6 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
-    rehomedTo: '/admin/setup/payroll?tab=union',
     iconKey: 'users',
     orgScoped: true,
     actorCols: true,
@@ -451,7 +447,6 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
-    rehomedTo: '/admin/setup/payroll?tab=entitlements',
     iconKey: 'coins',
     orgScoped: true,
     actorCols: true,
@@ -512,7 +507,6 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
-    rehomedTo: '/admin/setup/payroll?tab=limits',
     iconKey: 'gauge',
     orgScoped: true,
     actorCols: true,
@@ -556,7 +550,6 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
-    rehomedTo: '/admin/setup/payroll?tab=service',
     iconKey: 'calendar',
     orgScoped: true,
     actorCols: true,

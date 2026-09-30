@@ -23,8 +23,8 @@ import { existsSync, readFileSync } from 'node:fs'
 export function pageSource(path: string): string {
   const parts = [readFileSync(path, 'utf8')]
   const view = path.replace(/page\.tsx$/, 'view.ts')
-  // Not every page has one: nine routes are bare redirects, and a handful of
-  // pages predate the split. A missing sibling is normal, not an error.
+  // Pages that compose another native page or predate the split may have no
+  // sibling view.
   if (view !== path && existsSync(view)) parts.push(readFileSync(view, 'utf8'))
   return parts.join('\n')
 }

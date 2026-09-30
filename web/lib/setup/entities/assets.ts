@@ -41,7 +41,6 @@ export const ASSET_ENTITIES: SetupEntity[] = [
     // nz_pool). Add a jurisdiction the engine doesn't ship, or shadow a built-in.
     key: 'tax-regimes',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
-    rehomedTo: '/admin/setup/tax-depreciation?tab=regimes',
     table: 'tax_regimes',
     singularTitleKey: 'entities.tax-regimes.singularTitle',
     actorCols: true,
@@ -74,7 +73,6 @@ export const ASSET_ENTITIES: SetupEntity[] = [
     // recapture/terminal behavior). Org rows override the built-in class table.
     key: 'tax-pool-classes',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
-    rehomedTo: '/admin/setup/tax-depreciation?tab=classes',
     table: 'tax_pool_classes',
     singularTitleKey: 'entities.tax-pool-classes.singularTitle',
     actorCols: true,
@@ -115,7 +113,6 @@ export const ASSET_ENTITIES: SetupEntity[] = [
     // expensing) — legislatively volatile, so config not code.
     key: 'tax-first-year-rules',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
-    rehomedTo: '/admin/setup/tax-depreciation?tab=first-year',
     table: 'tax_first_year_rules',
     singularTitleKey: 'entities.tax-first-year-rules.singularTitle',
     actorCols: true,
@@ -147,7 +144,6 @@ export const ASSET_ENTITIES: SetupEntity[] = [
     // an asset category's Default method.
     key: 'depreciation-methods',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
-    rehomedTo: '/admin/setup/depreciation?tab=methods',
     table: 'depreciation_methods',
     actorCols: true,
     groupKey: 'assets',
@@ -176,7 +172,6 @@ export const ASSET_ENTITIES: SetupEntity[] = [
     // runs a different method than the primary posting book).
     key: 'depreciation-book-policies',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
-    rehomedTo: '/admin/setup/depreciation?tab=books',
     table: 'depreciation_book_policies',
     actorCols: true,
     groupKey: 'assets',

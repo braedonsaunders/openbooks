@@ -65,7 +65,6 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
     table: 'stock_locations',
     singularTitleKey: 'entities.stock-locations.singular',
     rehomed: true, // lives as a tab on the Inventory module
-    rehomedTo: '/inventory?inventoryView=locations',
     actorCols: true,
     groupKey: 'inventory',
     featureKey: 'inventory',
@@ -94,7 +93,6 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
     key: 'item-inventory-profiles',
     table: 'item_inventory_profiles',
     rehomed: true, // lives as a Costing section on the item record
-    rehomedTo: '/items',
     // One profile per item (item_inventory_profiles_item_id_unique), so the
     // item is the import identity: re-imports dedupe instead of stacking a
     // second profile no UI can display.
@@ -137,7 +135,6 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
     key: 'bom-components',
     table: 'bom_components',
     rehomed: true, // lives as a tab on the Inventory module
-    rehomedTo: '/inventory?inventoryView=bom',
     actorCols: true,
     groupKey: 'inventory',
     featureKey: 'inventory',

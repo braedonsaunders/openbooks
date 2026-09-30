@@ -17,7 +17,6 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'clipboard-check',
     rehomed: true, // unified template + step drawer on /hrm/processes/templates
-    rehomedTo: '/hrm/processes/templates',
     orgScoped: true,
     orderBy: 'kind, name',
     hasActive: true,
@@ -57,7 +56,6 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'list-checks',
     rehomed: true, // nested inside the process-template drawer
-    rehomedTo: '/hrm/processes/templates',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
@@ -112,7 +110,6 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'list-checks',
     rehomed: true, // one builder page per pipeline
-    rehomedTo: '/admin/setup/hiring-pipelines',
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
@@ -135,7 +132,6 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'list-checks',
     rehomed: true, // edited inside the pipeline builder
-    rehomedTo: '/admin/setup/hiring-pipelines',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
@@ -184,7 +180,6 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'star',
     rehomed: true, // one builder page per template
-    rehomedTo: '/admin/setup/review-templates',
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
@@ -208,7 +203,6 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'list-checks',
     rehomed: true, // edited inside the template builder
-    rehomedTo: '/admin/setup/review-templates',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
@@ -243,7 +237,6 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'list-checks',
     rehomed: true, // edited inside the template builder
-    rehomedTo: '/admin/setup/review-templates',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,

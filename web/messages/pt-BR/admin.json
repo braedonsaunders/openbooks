@@ -4833,13 +4833,6 @@
       "benefitCosts": "Custos e rateio",
       "benefitComponents": "Componentes de folha"
     },
-    "redirectNotice": {
-      "title": "Você foi redirecionado",
-      "settingsBody": "/admin/settings agora fica aqui, em Configuração da empresa — atualize seu favorito.",
-      "indexBody": "A configuração agora abre na lista de go-live — comece aqui.",
-      "providersBody": "Provedores de pagamento precisam do recurso Pagamentos on-line — ative-o aqui para continuar.",
-      "entityBody": "Esta página de configuração mudou para o seu módulo — atualize seu favorito."
-    },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"
     },

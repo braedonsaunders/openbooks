@@ -1213,7 +1213,7 @@ const continuousCloseFindings: AssistantToolDef = {
           summary: row.summary,
           evidenceCount: row.evidence_count,
           lastDetectedAt: row.last_detected_at,
-          href: `/continuous-close?item=${row.id}`,
+          href: `/agents?item=${row.id}`,
         })),
       },
     };
@@ -1271,7 +1271,7 @@ const getContinuousCloseFinding: AssistantToolDef = {
         ...row,
         evidence: evidence.rows,
         evidenceTruncated: evidence.rows.length === 100,
-        href: `/continuous-close?item=${findingId}`,
+        href: `/agents?item=${findingId}`,
       },
     };
   },

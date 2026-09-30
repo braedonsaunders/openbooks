@@ -148,7 +148,6 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     key: 'item-rate-books',
     table: 'item_rate_books',
     rehomed: true, // lives as a tab on the Items catalog module
-    rehomedTo: '/items',
     actorCols: true,
     groupKey: 'billing',
     featureKey: 'projects',
@@ -176,7 +175,6 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     key: 'item-rate-book-assignments',
     table: 'item_rate_book_assignments',
     rehomed: true, // lives on the customer & project records as an override section
-    rehomedTo: '/parties',
     actorCols: true,
     groupKey: 'billing',
     featureKey: 'projects',

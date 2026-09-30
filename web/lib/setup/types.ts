@@ -258,11 +258,6 @@ export interface SetupEntity {
    *  embeddable via <SetupEntitySection>, but hidden from the setup rail and
    *  404s as a standalone /admin/setup page — it has one home elsewhere. */
   rehomed?: boolean
-  /** The home a bookmarked /admin/setup/<key> redirects to, with the
-   *  ?movedFrom notice. Required on every rehomed entry: a rehomed entity
-   *  without a recorded home is a 404 with no way back. May carry the
-   *  section address (e.g. '/admin/setup/payroll?tab=schedules'). */
-  rehomedTo?: string
   /** Optional-feature gate (web/lib/features.ts key). When the feature is off,
    *  this entity is hidden from the setup rail and 404s as a standalone page. */
   featureKey?: string

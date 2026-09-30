@@ -412,7 +412,7 @@ export async function loadQualificationsPage(
     canManage,
     recordHref: href({ ...baseParams({}), record: 'new' }),
     recordLabel: t('qualifications.record'),
-    settingsHref: '/admin/setup?section=hrm-qualifications',
+    settingsHref: '/hrm/qualifications',
     settingsLabel: t('qualifications.settings'),
     tiles: [
       { iconKey: 'clock', accent: 'amber', label: t('qualifications.tiles.expiring'), value: String(counts.expiring), tone: 'warn' as const },

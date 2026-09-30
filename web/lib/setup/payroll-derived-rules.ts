@@ -46,7 +46,6 @@ export const PAY_DERIVED_RULES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'payroll',
   rehomed: true, // subtab of the Payroll setup workspace, beside its preview
-  rehomedTo: '/admin/setup/payroll?tab=derived',
   iconKey: 'coins',
   orgScoped: true,
   actorCols: true,

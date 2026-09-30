@@ -560,7 +560,7 @@ function RecentEntriesList({
               // that owns it (source-document, journal, or txn drawer).
               // ?entry= drives the manual-journal drawer over DOCUMENT ids
               // only, so entry ids linked there opened nothing.
-              href={`/journal/${e.id}`}
+              href={`/journal?journalEntry=${e.id}`}
               className="flex items-center justify-between gap-2 px-4 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
             >
               <div className="min-w-0">
