@@ -8,19 +8,10 @@ const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadDashboardLayout } = await import('./_load-layout')
 const { DEFAULT_DASHBOARD_LAYOUTS } = await import('@openbooks/schema')
-const { personaDefaultLayout } = await import('./_persona-layout')
-const { isFeatureEnabled } = await import('@/lib/features')
-const { qualificationSourceAvailable } = await import('@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts')
-
-/** Persona-default expectation under the scratch org's real feature flags. */
-async function expectedAdminDefault(orgId: string) {
-  const [payroll, hrm, announcements, quals] = await Promise.all([
-    isFeatureEnabled(orgId, 'payroll'),
-    isFeatureEnabled(orgId, 'hrm'),
-    isFeatureEnabled(orgId, 'homeAnnouncements'),
-    qualificationSourceAvailable(),
-  ])
-  return personaDefaultLayout('admin', { payroll, hrm, announcements, quals })
+const { financialDefaultLayout } = await import('./_workspace-layout')
+/** Scratch administrators receive the general financial workspace default. */
+function expectedAdminDefault() {
+  return financialDefaultLayout('admin', {})
 }
 
 type Authz = Parameters<typeof loadDashboardLayout>[0]
@@ -56,8 +47,7 @@ async function storeLayout(orgId: string, userId: string, layout: unknown, sourc
  * Self-heal on read: the pre-fix quick-actions save persisted `{widgets: []}`
  * for tenants with no stored row. That row must fall back to the default
  * layout — never a blank dashboard. The next save overwrites the bad row.
- * HR-15: the fallback is the persona default (admin here — the harness
- * grants everything), not the tier default.
+ * The fallback uses the current financial workspace composition.
  */
 test('stored empty grid falls back to the default layout', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
@@ -66,7 +56,7 @@ test('stored empty grid falls back to the default layout', { skip: !env.OPENBOOK
     await storeLayout(org.orgId, authz.user.id, { widgets: [], quickActions: [] })
     const loaded = await loadDashboardLayout(authz)
     // HR-15: the persona default under this org's real flags.
-    const expected = await expectedAdminDefault(org.orgId)
+    const expected = expectedAdminDefault()
     assert.deepEqual(loaded.layout.widgets, expected.widgets)
     assert.equal(loaded.isCustomised, false)
   } finally {
@@ -80,8 +70,8 @@ test('malformed stored layout falls back to the default layout', { skip: !env.OP
     const authz = await adminAuthz(org.orgId, 'Bad Shape')
     await storeLayout(org.orgId, authz.user.id, { widgets: 'nope', quickActions: 'also-nope' })
     const loaded = await loadDashboardLayout(authz)
-    // HR-15: persona default, same flags as above.
-    const expected = await expectedAdminDefault(org.orgId)
+    // Current product default, rather than the malformed saved snapshot.
+    const expected = expectedAdminDefault()
     assert.deepEqual(loaded.layout.widgets, expected.widgets)
     assert.equal(loaded.isCustomised, false)
   } finally {

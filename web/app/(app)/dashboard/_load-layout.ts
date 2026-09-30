@@ -6,12 +6,15 @@ import {
 } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'
 import { can } from '@/lib/authz'
-import { essentialsWorkspace } from '@/lib/workspace-presentation'
-import { essentialsDefaultLayout } from './_essentials-layout'
+import { INDUSTRIES } from '@/lib/industries'
+import { isComplexityLevel, isTeamSize } from '@/lib/workspace-profile'
+import { financialDefaultLayout, isShippedRoleLayout } from './_workspace-layout'
+import { selectStoredDashboardLayout } from './_default-layout'
 import { canSeeWidget } from './_widget-access'
 import { isFeatureEnabled } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
+  DEFAULT_QUICK_ACTIONS,
   hiddenCuratedQuickActionIds,
 } from './_quick-actions-shared'
 import {
@@ -23,11 +26,11 @@ import { resolvePersona } from './_persona'
 import { personaDefaultLayout } from './_persona-layout'
 import { widgetFeatureOn } from './widget-features'
 import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
-import { DashboardLayoutInputSchema, clampToWidgetMinimums } from './_layout-input'
 
 type DashboardDefault = {
   layout: DashboardLayoutData
   sourceKey: string
+  isSystemDefault: boolean
 }
 
 async function loadAssignedRoleDefault(
@@ -48,7 +51,9 @@ async function loadAssignedRoleDefault(
      limit 1
   `)
   if (!res.rows[0]) return null
+  if (isShippedRoleLayout(res.rows[0].role_key, res.rows[0].layout)) return null
   return {
+    isSystemDefault: false,
     layout: res.rows[0].layout,
     sourceKey: dashboardSourceKeyForRole(res.rows[0].role_key),
   }
@@ -57,16 +62,25 @@ async function loadAssignedRoleDefault(
 export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDefault> {
   const roleDefault = await loadAssignedRoleDefault(authz)
   if (roleDefault) return roleDefault
-  if (can(authz, 'gl.read') && await essentialsWorkspace(authz.user.orgId)) {
-    const layout = essentialsDefaultLayout()
+  const role = getUserRoleTier(authz)
+  if (['gl.read', 'reports.read', 'ar.read', 'ap.read', 'ap.approve'].some((permission) => can(authz, permission))) {
+    const result = await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${authz.user.orgId}`)
+    const settings = result.rows[0]?.settings ?? {}
+    const profile = settings.workspaceProfile as Record<string, unknown> | undefined
+    const industry = INDUSTRIES.find((candidate) => candidate.key === settings.industry)
+    const layout = financialDefaultLayout(role, {
+      complexity: isComplexityLevel(profile?.complexity) ? profile.complexity : undefined,
+      teamSize: isTeamSize(profile?.teamSize) ? profile.teamSize : undefined,
+      industryCategory: industry?.category,
+    })
     layout.widgets = layout.widgets.filter((widget) => canSeeWidget(authz, widget.id))
     layout.quickActions = layout.quickActions?.filter((action) => {
       const definition = CURATED_QUICK_ACTIONS.find((candidate) => candidate.id === action.id)
       return definition != null && (!definition.requiredPermission || can(authz, definition.requiredPermission))
     })
-    return { layout, sourceKey: 'workspace:essentials' }
+    return { layout, sourceKey: `workspace:${role}`, isSystemDefault: true }
   }
-  // HR-15 persona defaults: employee always, manager by reports or
+  // Personal defaults: employee always, manager by reports or
   // approval grant, admin by manage grants — what the actor holds, never
   // their role name. Gated tiles join only when their source is live; the
   // flags resolve through the single widget-feature map, so the keys live
@@ -79,9 +93,15 @@ export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDe
     widgetFeatureOn(orgId, 'announcements-card'),
     qualificationSourceAvailable(),
   ])
+  const layout = personaDefaultLayout(persona, { payroll, hrm, announcements, quals })
+  layout.quickActions = DEFAULT_QUICK_ACTIONS.filter((action) => {
+    const definition = CURATED_QUICK_ACTIONS.find((candidate) => candidate.id === action.id)
+    return definition != null && (!definition.requiredPermission || can(authz, definition.requiredPermission))
+  })
   return {
-    layout: personaDefaultLayout(persona, { payroll, hrm, announcements, quals }),
+    layout,
     sourceKey: `persona:${persona}`,
+    isSystemDefault: true,
   }
 }
 
@@ -105,6 +125,7 @@ export async function loadDashboardLayout(
   layout: DashboardLayoutData
   role: RoleTier
   isCustomised: boolean
+  isSystemDefault: boolean
   hiddenQuickActionIds: string[]
 }> {
   const role = getUserRoleTier(authz)
@@ -120,32 +141,5 @@ export async function loadDashboardLayout(
      limit 1
   `)
 
-  const row = res.rows[0]
-  // A customized layout is the tenant's own: it survives default changes
-  // (HR-15 persona defaults included). Only an uncustomized row whose
-  // source no longer matches falls forward to the fresh default.
-  if (!row || (row.source_role !== fallback.sourceKey && !row.is_customised)) {
-    return { layout: fallback.layout, role, isCustomised: false, hiddenQuickActionIds }
-  }
-  // Fail-safe read: a stored layout the registry cannot honor — malformed, or
-  // an empty grid left by the pre-fix quick-actions save — falls back to the
-  // default, never a blank dashboard or a render crash. No write-back: the
-  // tenant's next save overwrites the bad row, which is the self-heal.
-  const parsed = DashboardLayoutInputSchema.safeParse(row.layout)
-  if (!parsed.success || parsed.data.widgets.length === 0) {
-    return { layout: fallback.layout, role, isCustomised: false, hiddenQuickActionIds }
-  }
-  const storedQuickActions =
-    typeof row.layout === 'object' && row.layout !== null && 'quickActions' in row.layout
-      ? row.layout.quickActions
-      : undefined
-  return {
-    layout: {
-      widgets: clampToWidgetMinimums(parsed.data.widgets),
-      ...(Array.isArray(storedQuickActions) ? { quickActions: storedQuickActions } : {}),
-    },
-    role,
-    isCustomised: row.is_customised,
-    hiddenQuickActionIds,
-  }
+  return { ...selectStoredDashboardLayout(fallback, res.rows[0]), role, hiddenQuickActionIds }
 }

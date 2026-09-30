@@ -2,6 +2,7 @@ import 'server-only'
 
 import { getAuthz } from '../../lib/authz'
 import { loadDashboardLayout } from '../../app/(app)/dashboard/_load-layout'
+import { packDefaultLayout } from '../../app/(app)/dashboard/_default-layout'
 import { WIDGETS } from '../../app/(app)/dashboard/_widget-registry'
 import { canSeeWidget } from '../../app/(app)/dashboard/_widget-access'
 import { resolveAllowedWidgetIds } from '../../app/(app)/dashboard/widget-features'
@@ -32,18 +33,20 @@ export async function DashboardEditSlot() {
   const authz = await getAuthz()
   if (!authz) return null
 
-  const { layout, role, hiddenQuickActionIds } = await loadDashboardLayout(authz)
+  const { layout, role, hiddenQuickActionIds, isSystemDefault } = await loadDashboardLayout(authz)
   // One resolved set drives the pruned layout, the palette/addability, and
   // the canvas below: a feature-off tile is neither shown, offered, nor
   // rendered. Registry ids resolve through the set; insight-card UUIDs and
   // app tiles carry no single feature key and keep canSeeWidget.
   const allowedWidgetIds = await resolveAllowedWidgetIds(authz)
-  const visibleLayout = {
+  const defaultActionsVisible = layout.quickActions?.some((action) => !hiddenQuickActionIds.includes(action.id)) !== false
+  const filteredLayout = {
     ...layout,
-    widgets: layout.widgets.filter((w) =>
+    widgets: layout.widgets.filter((widget) => !isSystemDefault || widget.id !== 'personal-actions' || defaultActionsVisible).filter((w) =>
       w.id in WIDGETS ? allowedWidgetIds.has(w.id) : canSeeWidget(authz, w.id),
     ),
   }
+  const visibleLayout = isSystemDefault ? packDefaultLayout(filteredLayout) : filteredLayout
   const { nodes, libraryCards, apps } = await loadDashboardEditCanvas(authz, visibleLayout, {
     allowedWidgetIds,
   })
