@@ -2,13 +2,58 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, schema } from "../platform/db.ts";
+import { eq } from "drizzle-orm";
+import { postEntry } from "../journal/post-entry.ts";
+import { transferCorrectionApplications } from "./posting-replay-applications.ts";
 import { postDocument } from "./posting-document.ts";
 import { PostingError, type PostingDeps } from "../journal/posting-contracts.ts";
 import { regenerateGlImpactTx } from "./posting-replay.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("source correction refuses transaction-currency over-allocation before changing settlement evidence", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Settlement Controller", "admin");
+  try {
+    const post = (entryNumber: string, amount: string, txnAmount: string, fxRate: string) => postEntry(db, {
+      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+      entryNumber, postingDate: org.date, periodId: org.periodId, origin: "manual", actorId,
+      currency: "USD", lines: [
+        { accountId: org.accounts.ap, partyId: org.vendorId, isOpenItem: true, amount, txnAmount, fxRate },
+        { accountId: org.accounts.bank, amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`,
+          txnAmount: txnAmount.startsWith("-") ? txnAmount.slice(1) : `-${txnAmount}`, fxRate },
+      ],
+    });
+    const source = await post("FX-PAYMENT", "125.0000", "100.0000", "1.25");
+    const target = await post("FX-PAYABLE", "-125.0000", "-100.0000", "1.25");
+    // The corrected rate preserves functional capacity but reduces USD
+    // capacity: 100 USD of settlement cannot fit onto an 80 USD payment.
+    const replacement = await post("FX-PAYMENT-CORRECTED", "125.0000", "80.0000", "1.5625");
+    const application = (await db.insert(schema.applications).values({
+      orgId: org.orgId, fromLineId: source.lines[0]!.id, toLineId: target.lines[0]!.id,
+      amount: "125.0000", sourceAmount: "125.0000",
+      sourceTransactionAmount: "100.0000", sourceTransactionCurrency: "USD",
+      targetTransactionAmount: "100.0000", targetTransactionCurrency: "USD",
+      settlementRate: "1", settlementRateSource: "same_currency",
+      settlementRateReference: "USD payment against USD payable", appliedOn: org.date,
+      createdBy: actorId, updatedBy: actorId,
+    }).returning())[0]!;
+    const existing = await db.select().from(schema.journalLines).where(eq(schema.journalLines.entryId, source.entryId));
+    const replacementLines = await db.select().from(schema.journalLines).where(eq(schema.journalLines.entryId, replacement.entryId));
+    await assert.rejects(db.transaction(tx => transferCorrectionApplications(tx, {
+      orgId: org.orgId, documentId: randomUUID(), documentNumber: "FX-PAYMENT",
+      existing, replacementLines, activeApplications: [application], actorId,
+      requestId: randomUUID(), reason: "Correct the payment exchange-rate evidence",
+    })), (error: unknown) => error instanceof PostingError
+      && /FX-PAYMENT.*transaction amount.*unapply the settlements before correcting/.test(error.message));
+    const retained = await db.select().from(schema.applications).where(eq(schema.applications.orgId, org.orgId));
+    assert.deepEqual(retained, [application]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "authorized source correction retains an idempotent original-reversal-replacement ledger chain",

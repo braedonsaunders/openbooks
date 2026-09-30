@@ -4,9 +4,14 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**85 passing · 0 failing · 7 gaps · 0 not run**
+**98 passing · 0 failing · 8 gaps · 0 not run**
 
-Commit `71bb38d0e18decf2e923c756351ec55f9e4f1ce1` · 2026-09-22T14:47:26.098Z
+Commit `1eb274ef821b472920bfd5268f0ea930e303dd7b` · 2026-09-30T00:27:49.124Z
+
+| Partition | Passed | Failed | Gaps | Not run |
+| --- | --- | --- | --- | --- |
+| computation | 64 | 0 | 7 | 0 |
+| ledger | 34 | 0 | 1 | 0 |
 
 ## AL DOR
 
@@ -36,12 +41,30 @@ Commit `71bb38d0e18decf2e923c756351ec55f9e4f1ce1` · 2026-09-22T14:47:26.098Z
 | **Re-running recognition for a period recognises nothing further**<br><sub>Running the recognition process twice for the same period does not double-recognise revenue — a control an auditor tests directly when the process is automated or re-run after a correction.</sub> | ASC 606 606-10-25-27 | PASS | Implemented |
 | **Each revenue line becomes a tracked performance obligation**<br><sub>The system creates and retains an identified performance obligation for each distinct promise, which is the record an auditor inspects when testing the completeness of the revenue schedule.</sub> | ASC 606 606-10-25-14<br>IFRS 15.22 | PASS | Implemented |
 | **Variable consideration is constrained to the amount not subject to significant reversal**<br><sub>A contingent bonus is estimated by the stated method, the constraint caps what enters the transaction price, and the held-back amount is carried explicitly — so revenue can never include consideration management has judged subject to significant reversal.</sub> | ASC 606 606-10-32-11<br>ASC 606 606-10-32-8<br>IFRS 15.56 | PASS | Implemented |
+| **Hosted-service usage is allocated to the month that supplied it**<br><sub>The July usage is rated from its published bands, billed as a July invoice, and posts to receivables and usage revenue without a deferred balance.</sub> | ASC 606 606-10-25-14–15; 606-10-32-39–41; 606-10-55-18<br>IFRS 15.22–23; IFRS 15.84–86; IFRS 15.B16 | PASS | Implemented |
+| **A licence royalty is earned as the customer uses the intellectual property**<br><sub>The rating kernel produces no amount before a licence is used and prices the first 4 uses at 3.25 each when that use occurs.</sub> | ASC 606 606-10-55-65<br>IFRS 15.B63 | PASS | Implemented |
+| **A usage prepayment remains a liability until the month's usage is drawn**<br><sub>The prepaid invoice credits deferred revenue, and the rating run's 2026-07 draw drives the recognition run to release the same amount in July.</sub> | ASC 606 606-10-45-2; 606-10-32-39–41<br>IFRS 15.106; IFRS 15.84–86 | PASS | Implemented |
+| **A minimum usage commitment closes against the usage in its monthly window**<br><sub>The rating kernel measures the 5.00 usage against the 10.00 monthly minimum and computes the 5.00 shortfall for the window that ends on 2026-07-31.</sub> | ASC 606 606-10-55-48<br>IFRS 15.B46 | PASS | Implemented |
+| **Expected breakage is recognised in proportion to customer redemptions**<br><sub>Expected breakage is not recognised in proportion to earlier customer use; the system waits for a breakage policy rather than silently estimating it.</sub> | ASC 606 606-10-55-48<br>IFRS 15.B46 | GAP | Not implemented |
 | **A significant financing component is separated from revenue**<br><sub>Revenue on a contract paid materially in arrears is measured at the cash selling price — the promised amount discounted at the rate a separate financing would carry — and the difference accretes as interest, year by year, landing exactly on the billed amount.</sub> | ASC 606 606-10-32-15<br>IFRS 15.60 | PASS | Implemented |
 | **A change in the progress estimate is caught up in the current period**<br><sub>Revising the estimated progress restates the cumulative target and books only the delta in the current period — an upward revision recognises more, a downward revision reverses what was already recognised, and prior periods are never restated.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
 | **A contract modification is assessed as a separate contract or as part of the existing one**<br><sub>Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | PASS | Implemented |
+| **A drop-ship principal reports the customer sale and vendor cost gross**<br><sub>When the distributor controls the good before it reaches the customer, the customer invoice records gross revenue and the vendor shipment records its cost separately as cost of goods sold.</sub> | ASC 606 606-10-55-36 to 55-40<br>IFRS 15.B34-B38 | PASS | Implemented |
+| **A drop-ship agent reports only its arranging fee**<br><sub>When the distributor never controls the vendor's good and only arranges delivery, its revenue is the contracted fee rather than the full amount charged to the customer.</sub> | ASC 606 606-10-55-36 to 55-40<br>IFRS 15.B34-B38 | GAP | Not implemented |
 | **A progress application measures work done, withholds retainage, and states the amount due**<br><sub>Each schedule line reports what was completed this period, the retainage held back on it, and the net now due — and the application's totals are exactly the sum of its lines, so nothing is lost between the detail and the invoice.</sub> | ASC 606 606-10-25-27<br>IFRS 15.35 | PASS | Implemented |
 | **An approved change order revises the contract value but never below work already billed**<br><sub>Additions and deductions move the schedule line's capacity by exactly the change amount — but a deduction that would erase already-billed work is refused, so billed revenue can never be stranded without a contract value behind it.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | PASS | Implemented |
 | **Cost-to-cost measures progress by the share of budget consumed**<br><sub>Progress is the exact share of budget consumed — a quarter of the budget spent is 25% complete — capped at 100% when costs overrun, and zero when there is no budget or no cost yet, so an unbudgeted project can never report phantom progress.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
+| **A weekly hours drawdown preserves cents across calendar months**<br><sub>Billable work is priced at its invoiceable amount, allocated to the cent, and assigned to the calendar month in which the work occurred.</sub> | ASC 606 606-10-55-18<br>IFRS 15.B16 | PASS | Implemented |
+
+### ASC 606 — shortfalls
+
+**rev-expected-breakage-estimation — Expected breakage is recognised in proportion to customer redemptions**
+
+> The billing and recognition services do not store a breakage estimate or recognise expected breakage in proportion to customer redemptions; they can only account for the right when its commitment window closes.
+
+**rev-drop-ship-agent-net — A drop-ship agent reports only its arranging fee**
+
+> Drop-ship accounting currently records a distributor's customer invoice gross and its vendor cost as cost of goods sold. It has no principal-versus-agent assessment or net-fee recognition path for an entity that never controls the good before transfer.
 
 ## ASC 740
 
@@ -67,6 +90,16 @@ Commit `71bb38d0e18decf2e923c756351ec55f9e4f1ce1` · 2026-09-22T14:47:26.098Z
 | **A US GAAP operating lease reports a single straight-line lease cost**<br><sub>A lease meeting no finance criterion classifies as operating under US GAAP and charges one flat amount to operating expense each year — while still carrying the asset and liability on the balance sheet, the liability unwinding on the interest method and the right-of-use asset absorbing the difference.</sub> | ASC 842 842-20-25-6<br>ASC 842 842-10-25-2 | PASS | Implemented |
 | **A change in the lease payments or term remeasures the liability and the right-of-use asset**<br><sub>Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.</sub> | ASC 842 842-10-35-4<br>IFRS 16.39 | PASS | Implemented |
 | **Terminating a lease early derecognises both balances and recognises the net difference**<br><sub>Walking away ends the accounting: the remaining liability and the remaining right-of-use asset both leave the balance sheet, the penalty is expensed, and the net difference is a single termination gain or loss — never a stranded balance.</sub> | ASC 842 842-10-40-1<br>IFRS 16.46 | PASS | Implemented |
+
+## ASC 958
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **A conditional grant advance remains a liability until its barrier is met**<br><sub>An advance under a conditional award is recorded as a refundable liability, and the same amount becomes grant revenue only after the documented barrier is met.</sub> | ASC 958 958-605<br>ASC 958 ASU 2018-08 | PASS | Implemented |
+| **A satisfied donor restriction moves the recorded amount between net asset classes**<br><sub>A release posts once, and the ledger shows the full amount leaving the restricted fund and entering the unrestricted fund.</sub> | ASC 958 958-205/225 | PASS | Implemented |
+| **An unconditional contribution promise is recognised when made**<br><sub>A documented unconditional promise is recorded as a receivable and contribution revenue when booked.</sub> | ASC 958 958-605-25 | PASS | Implemented |
+| **Discount accretion is contribution revenue**<br><sub>A one-month discounted promise is booked at present value and its discount accretion is posted as contribution revenue.</sub> | ASC 958 958-605-30/35 | PASS | Implemented |
+| **Shared costs follow a disclosed functional driver and tie to expense**<br><sub>A disclosed allocation driver assigns each shared cost exactly once across functions, and the functional amounts equal the original expense.</sub> | ASC 958 958-720 | PASS | Implemented |
 
 ## CDTFA Reg 1684
 
@@ -106,13 +139,19 @@ Commit `71bb38d0e18decf2e923c756351ec55f9e4f1ce1` · 2026-09-22T14:47:26.098Z
 | **A tax-included price yields the exact statutory tax with no residue**<br><sub>A $105.00 tax-included price extracts to exactly $100.00 of revenue and $5.00 of GST — the line cross-foots to the penny with no rounding residue parked anywhere.</sub> | ETA 165(1) | PASS | Implemented |
 | **Each line's tax rounds independently before the document total is summed**<br><sub>Three lines of $33.33, $33.33 and $33.34 each carry $1.67 of GST for a $5.01 document tax — one cent above the $5.00 a single $100.00 line would carry. The penny is the deterministic consequence of per-line rounding, stated openly rather than forced to agree.</sub> | ETA 165(1) | PASS | Implemented |
 | **A partially recoverable tax splits into credit and cost exactly**<br><sub>A $10.00 tax that is 50% recoverable produces a $5.00 input credit and a $5.00 non-recoverable cost — the split sums to the tax with neither side rounded away.</sub> | ETA 169(1) | PASS | Implemented |
-| **Native place-of-supply determination from the delivery address**<br><sub>Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.</sub> | ETA 144.1 (place of supply) | GAP | Not implemented |
+| **Native place-of-supply determination from the delivery address**<br><sub>Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.</sub> | ETA 144.1 (place of supply) | PASS | Partial |
 
 ### ETA — shortfalls
 
 **sales-tax-place-of-supply — Native place-of-supply determination from the delivery address**
 
-> The country packs carry sourced jurisdictional rates (Ontario HST 13%, GST 5%) but the kernel never selects among them: the merchant configures which tax code a document line uses, or an external rate provider quotes it. There is no native place-of-supply function mapping a delivery province or address to the applicable pack rate, and the packs self-report sourcingRules as partial.
+> Native selection covers ordinary fully taxable goods sold and legally delivered in Canada, including applicable provincial standard tax. Services, intangible property, exemptions and special place-of-supply rules require their own assessment; the command refuses an unclassified supply. This case establishes quotation, not automatic tax-code selection during document editing.
+
+## FRS 102
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **A restricted fund release reconciles between Charities SORP classes**<br><sub>The release reduces restricted fund resources and increases unrestricted resources by the same exact amount.</sub> | FRS 102 Charities SORP: statement of financial activities | PASS | Implemented |
 
 ## HMRC VAT700/12
 
@@ -168,14 +207,14 @@ Commit `71bb38d0e18decf2e923c756351ec55f9e4f1ce1` · 2026-09-22T14:47:26.098Z
 | **Settling a monetary item recognises the realized difference in profit or loss**<br><sub>Collecting part of a foreign-currency receivable clears exactly the proportional share of its carrying value, values the cash at the settlement-date rate, and books the difference as a realized gain or loss — the settled slice never leaves a tail behind and the unsettled slice keeps its historical carrying value.</sub> | IAS 21.28<br>ASC 830-20-35-1 | PASS | Implemented |
 | **Settling the complete foreign balance consumes the complete carrying value**<br><sub>Taking the complete residual consumes the complete carrying value — including a sub-cent rounding tail — so proportional rounding can never strand an uncloseable one-unit balance on a fully settled item.</sub> | IAS 21.28 | PASS | Implemented |
 | **A non-monetary asset measured at historical cost is not retranslated**<br><sub>Equipment bought in a foreign currency keeps its transaction-date translated cost through a period-end close that moves the rate: the revaluation run finds no monetary exposure in the asset or its matching foreign-currency liability and posts nothing — neither a gain nor a loss, and no restatement of cost.</sub> | IAS 21.23(b)<br>ASC 830-10-45-17 | PASS | Implemented |
-| **Exchange differences on a net investment in a foreign operation**<br><sub>A long-term intercompany balance that is in substance part of a net investment in a foreign operation has its exchange differences recognised in other comprehensive income until the investment is disposed of.</sub> | IAS 21.32 | GAP | Not implemented |
+| **Exchange differences on a net investment in a foreign operation**<br><sub>A qualifying long-term intercompany balance retains profit-or-loss treatment in separate statements and has its exchange differences recognised in other comprehensive income in consolidated statements until disposal.</sub> | IAS 21.32 | GAP | Not implemented |
 | **A foreign subsidiary translates profit at the average rate and equity at history**<br><sub>An 80%-owned USD subsidiary with USD 1,000.00 of equity acquired when the policy rate was 1.30 eliminates at CAD 1,300.00, while its USD 100.00 profit translates at the period average of 1.3750 to CAD 137.50 — and the 20% NCI income of CAD 27.50 proves the average, not the spot, was applied.</sub> | IAS 21.39<br>ASC 830-30-45-3 | PASS | Implemented |
 
 ### IAS 21 — shortfalls
 
 **fx-net-investment-oci — Exchange differences on a net investment in a foreign operation**
 
-> The product has no net-investment designation for intercompany monetary items: every monetary exchange difference the revaluation engine computes is offset to the profit-or-loss unrealized gain/loss account, and there is no other-comprehensive-income reserve for foreign-operation differences in the ledger.
+> The product has no net-investment designation for intercompany monetary items: separate-statement revaluation correctly uses profit or loss, but consolidation has no qualifying designation and reclassification path to an OCI reserve.
 
 ## IAS 28
 
