@@ -195,8 +195,7 @@ export async function OverheadRatesTabSlot({
   const authz = await getRootScopeAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
-  const rowParam = typeof sp.row === 'string' ? sp.row : null
-  return <RatesTab orgId={orgId} rowParam={rowParam} />
+  return <RatesTab orgId={orgId} searchParams={sp} />
 }
 
 /** Lifecycle tab slot: mode/cadence switch plus the drift table. */

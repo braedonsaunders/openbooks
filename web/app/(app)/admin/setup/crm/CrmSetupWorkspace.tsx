@@ -1,5 +1,7 @@
 "use client";
 
+import { apiJson, ApiResponseError } from "@/lib/api-error";
+
 import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import Link from "next/link";
@@ -326,6 +328,7 @@ function CrmSetupDrawer({
   const router = useRouter();
   const creating = !row;
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CrmForm>(() =>
     initialForm(tab, row, baseCurrency),
   );
@@ -349,8 +352,9 @@ function CrmSetupDrawer({
       payload = { ...fields, ...(multiCurrency ? { currency } : {}) };
     }
     setBusy(true);
+    setError(null);
     try {
-      const response = await fetch("/api/crm/setup", {
+      await apiJson("/api/crm/setup", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -358,12 +362,18 @@ function CrmSetupDrawer({
           id: row?.id,
           ...payload,
         }),
-      });
-      if (!response.ok) throw new Error();
+      },
+        tc("feedback.saveFailed"),
+      );
       toast.success(t(creating ? "setup.created" : "setup.updated"));
       router.push(closeHref);
-    } catch {
-      toast.error(tc("feedback.saveFailed"));
+    } catch (error) {
+      const message =
+        error instanceof ApiResponseError
+          ? error.message
+          : tc("feedback.saveFailed");
+      setError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -387,6 +397,11 @@ function CrmSetupDrawer({
       }
     >
       <div className="grid gap-4 p-1 sm:grid-cols-2">
+        {error ? (
+          <p role="alert" className="text-sm text-red-600 sm:col-span-2">
+            {error}
+          </p>
+        ) : null}
         {tab === "accountStatuses" ? (
           <AccountStatusFields form={form} set={set} t={t} />
         ) : null}
@@ -892,7 +907,9 @@ function TextAreaField({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
-      {hint ? <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p> : null}
+      {hint ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>
+      ) : null}
     </div>
   );
 }

@@ -1221,6 +1221,7 @@
       "openSurveys": "Open surveys"
     },
     "refusedTitle": "Self-service is unavailable",
+    "readFailed": "This section could not be loaded. Refresh the page to retry; if it remains unavailable, contact your administrator.",
     "overview": {
       "title": "Me",
       "description": "Your employment, requests, and balances — nothing else lists here.",

@@ -1165,6 +1165,7 @@
       "openSurveys": "Pesquisas abertas"
     },
     "refusedTitle": "O autoatendimento está indisponível",
+    "readFailed": "Não foi possível carregar esta seção. Atualize a página para tentar novamente; se continuar indisponível, contate o administrador.",
     "overview": {
       "title": "Eu",
       "description": "Seu vínculo, solicitações e saldos — nada mais aparece aqui.",

@@ -1,4 +1,5 @@
-import 'server-only'
+import 'server-only';
+import { OverheadCalculationError } from "@openbooks/engine/src/projects/overhead-rates.ts";
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -79,7 +80,8 @@ export interface OverheadData {
   onApplication: boolean
   steps: OverheadStep[]
   policies: OverheadPolicy[]
-  trueCost: TrueCostData
+  trueCost: TrueCostData | null;
+  refusal: string | null;
 }
 
 export async function loadOverhead(
@@ -94,9 +96,14 @@ export async function loadOverhead(
   const today = await businessToday(authz.user.orgId)
   const fromDate = parseIsoDate(today)
   fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
-  const from = fromDate.toISOString().slice(0, 10)
-  const data = await trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds)
-  const typesRes = (await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null }>(sql`
+  const from = fromDate.toISOString().slice(0, 10);
+  let refusal: string | null = null;
+  const data = await trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds).catch((error: unknown) => {
+    if (!(error instanceof OverheadCalculationError)) throw error;
+    refusal = error.message;
+    return null;
+  });
+  const typesRes = await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null }>(sql`
     select pt.id, pt.name,
            version.financial_profile->'overhead' as overhead
       from project_types pt
@@ -111,11 +118,11 @@ export async function loadOverhead(
          limit 1
       ) version on true
      where pt.org_id = ${authz.user.orgId} and pt.is_active
-     order by pt.sort_order, pt.name`))
-  const cardRes = (await db.execute<{ n: number; from_date: string | null }>(sql`
+     order by pt.sort_order, pt.name`);
+  const cardRes = await db.execute<{ n: number; from_date: string | null }>(sql`
     select count(*)::int as n, min(effective_from)::text as from_date
       from overhead_rates where org_id = ${authz.user.orgId}
-       and (effective_to is null or effective_to >= ${today})`))
+       and (effective_to is null or effective_to >= ${today})`)
   const card = cardRes.rows[0] ?? { n: 0, from_date: null }
 
   const methodLabel = (oh: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null) => {
@@ -128,7 +135,8 @@ export async function loadOverhead(
     }
   }
 
-  const stepDefs = [
+  const stepDefs = data
+    ? [
     {
       n: 1,
       title: t('setup.entities.overhead-model.step1t'),
@@ -151,6 +159,7 @@ export async function loadOverhead(
       done: card.n > 0 && typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
     },
   ]
+    : [];
 
   return {
     title: t('setup.entities.overhead-model.title'),
@@ -165,9 +174,11 @@ export async function loadOverhead(
     // OverheadActions owns client state (modals, useMoney, useBusinessToday),
     // so it arrives whole: the loader resolves only its inputs.
     actions: {
-      departments: data.departments.map((d) => ({ id: d.id, name: d.name, composite: d.composite })),
+      departments: (data?.departments ?? []).map((d) => ({ id: d.id, name: d.name, composite: d.composite })),
       projectTypes: typesRes.rows.map((r) => ({ id: r.id, name: r.name })),
-      autoOpen: card.n === 0 && !typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
+      autoOpen:
+        data !== null &&
+        card.n === 0 && !typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
     },
     tabs: VIEWS.map((item) => ({
       href: `/admin/setup/overhead?view=${item}`,
@@ -176,9 +187,9 @@ export async function loadOverhead(
     })),
     view,
     currentParams: sp,
-    onModel: view === 'model',
+    onModel: view === 'model' && data !== null,
     onRates: view === 'rates',
-    onLifecycle: view === 'lifecycle',
+    onLifecycle: view === 'lifecycle' && data !== null,
     onApplication: view === 'application',
     steps: stepDefs.map((s) => ({
       n: s.n,
@@ -193,6 +204,7 @@ export async function loadOverhead(
       methodLabel: methodLabel(r.overhead),
     })),
     trueCost: data,
+    refusal,
   }
 }
 
@@ -224,6 +236,14 @@ export function overheadSpec(data: OverheadData): PageSpec {
           actions: data.actions,
           tabs: data.tabs,
         }),
+        ...(data.refusal
+          ? [
+              widgetBlock("empty-state", {
+                title: data.title,
+                description: data.refusal,
+              }),
+            ]
+          : []),
         // Model body. Exactly one of the four bodies renders per request.
         {
           ...widgetBlock('overhead-model-body', {

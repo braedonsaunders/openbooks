@@ -3,7 +3,8 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
+import { z } from 'zod';
+import { fieldClockOwnerKey } from "../../../../lib/field-clock-owner";
 import { isUuid } from '../../../../lib/list-params'
 import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { recordClockEvent, replayClockEvents, type RecordClockInput } from '@openbooks/engine/src/hrm/field-time/clock.ts'
@@ -29,7 +30,14 @@ const geoSchema = z.object({
 
 const SINGLE_NEEDS = 'The clock event needs kind, occurredAt and clientEventId'
 
+const ownerSchema = z
+  .string({ error: "Open the clock page again before recording or replaying events" })
+  .regex(
+    /^[a-f0-9]{64}$/,
+    "Open the clock page again before recording or replaying events",
+  );
 const eventSchema = z.object({
+  ownerKey: ownerSchema,
   kind: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end', 'switch'], { error: SINGLE_NEEDS }),
   occurredAt: z.string({ error: SINGLE_NEEDS }).min(1, SINGLE_NEEDS),
   deviceId: z.string().max(120).nullable().optional(),
@@ -50,7 +58,9 @@ const REPLAY_CAP = 'Replay batches hold at most 200 events'
  * grew past it is a client bug the worker must see, not a truncation.
  */
 const clockBody = z.union([
-  z.object({ events: z.array(eventSchema, { error: REPLAY_NEEDS }).max(200, REPLAY_CAP) }),
+  z.object({
+    ownerKey: ownerSchema,
+    events: z.array(eventSchema, { error: REPLAY_NEEDS }).max(200, REPLAY_CAP) }),
   eventSchema,
 ])
 
@@ -82,7 +92,19 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
     // The clock is self: the employee always resolves from the login,
     // never from client input — another worker's party id reads as
     // missing here, not as permission to clock for them.
-    const employeePartyId = await resolveOwnParty(orgId, user.id)
+    const employeePartyId = await resolveOwnParty(orgId, user.id);
+
+    const ownerKey = fieldClockOwnerKey(orgId, user.id, employeePartyId);
+    const events = "events" in body ? body.events : [body];
+    if (
+      body.ownerKey !== ownerKey ||
+      events.some((event) => event.ownerKey !== ownerKey)
+    ) {
+      throw new FieldTimeError(
+        "clock_owner_changed",
+        "These events belong to a different clock login. Sign in as the original employee to replay them; the pending events have been retained.",
+      );
+    }
 
     if ('events' in body) {
       const inputs: RecordClockInput[] = body.events.map((event) => toInput(orgId, user.id, employeePartyId, event))

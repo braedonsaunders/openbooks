@@ -1,3 +1,4 @@
+import { toChartNumber } from '../chart-number';
 /**
  * True Cost rate-engine calculation primitives (ALLOCATION_BASES,
  * calculateRate, formatRate,
@@ -13,7 +14,12 @@
 import { trueCostStrings, type TrueCostStrings } from "./true-cost-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { add, cmp, div, fromUnits, mulDecimal, mulPercent, roundDiv, roundMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
-import { quantizeOverheadMoney } from "@openbooks/engine/src/projects/overhead-rates.ts";
+import {
+  deriveOverheadOverallRate,
+  deriveOverheadDeptComposite,
+  deriveOverheadDisplayRate,
+  OverheadCalculationError,
+  quantizeOverheadMoney } from "@openbooks/engine/src/projects/overhead-rates.ts";
 
 /* ─────────────────────────────────────────────── constants ── */
 
@@ -90,25 +96,25 @@ export function getAllocationBaseValue(baseType: AllocationBase, bases: Allocati
   const over = deptId === "Overall";
   switch (baseType) {
     case "billed_hours":
-      return over ? bases.hours.totalBilled : bases.hours.byDept[deptId]?.billed ?? 0;
+      return over ? bases.hours.totalBilled : (bases.hours.byDept[deptId]?.billed ?? 0);
     case "total_hours":
-      return over ? bases.hours.total : bases.hours.byDept[deptId]?.total ?? 0;
+      return over ? bases.hours.total : (bases.hours.byDept[deptId]?.total ?? 0);
     case "labor_dollars":
-      return over ? bases.laborDollars.total : bases.laborDollars.byDept[deptId] ?? 0;
+      return over ? bases.laborDollars.total : (bases.laborDollars.byDept[deptId] ?? 0);
     case "headcount":
-      return over ? bases.headcount.total : bases.headcount.byDept[deptId] ?? 0;
+      return over ? bases.headcount.total : (bases.headcount.byDept[deptId] ?? 0);
     case "revenue":
-      return over ? bases.revenue.total : bases.revenue.byDept[deptId] ?? 0;
+      return over ? bases.revenue.total : (bases.revenue.byDept[deptId] ?? 0);
     case "direct_cost":
-      return over ? bases.directCost.total : bases.directCost.byDept[deptId] ?? 0;
+      return over ? bases.directCost.total : (bases.directCost.byDept[deptId] ?? 0);
     case "square_feet":
-      return over ? bases.squareFeet.total : bases.squareFeet.byDept[deptId] ?? 0;
+      return over ? bases.squareFeet.total : (bases.squareFeet.byDept[deptId] ?? 0);
     case "units":
-      return over ? bases.units.total : bases.units.byDept[deptId] ?? 0;
+      return over ? bases.units.total : (bases.units.byDept[deptId] ?? 0);
     case "custom":
-      return over ? bases.custom.total : bases.custom.byDept[deptId] ?? 0;
+      return over ? bases.custom.total : (bases.custom.byDept[deptId] ?? 0);
     default:
-      return over ? bases.hours.totalBilled : bases.hours.byDept[deptId]?.billed ?? 0;
+      return over ? bases.hours.totalBilled : (bases.hours.byDept[deptId]?.billed ?? 0);
   }
 }
 
@@ -136,51 +142,25 @@ export function calculateRate(
   baseValue: number | Record<string, number>,
   method?: AllocationMethod,
 ): number {
-  if (typeof baseValue === "number" && baseValue === 0) return 0;
-  if (typeof baseValue === "object" && !Object.values(baseValue).some((v) => v > 0)) return 0;
-
-  const allocationMethod = method || category.allocationMethod || "simple";
-
-  const sumVals = (o: number | Record<string, number>) =>
-    typeof o === "object" ? Object.values(o).reduce((s, v) => s + (v || 0), 0) : o;
-
-  switch (allocationMethod) {
-    case "simple":
-      return safeDiv(sumVals(expenses), sumVals(baseValue));
-
-    case "weighted": {
-      const weights = category.allocationWeights || {};
-      let we = 0;
-      let wb = 0;
-      if (typeof expenses === "object" && typeof baseValue === "object") {
-        for (const deptId of Object.keys(expenses)) {
-          const w = Number(weights[deptId]) || 1.0;
-          we += (expenses[deptId] || 0) * w;
-          wb += (baseValue[deptId] || 0) * w;
-        }
-        return safeDiv(we, wb);
-      }
-      return safeDiv(sumVals(expenses), sumVals(baseValue));
-    }
-
-    case "stepped": {
-      const tiers = category.allocationTiers || [];
-      const baseVal = sumVals(baseValue);
-      if (tiers.length > 0) {
-        const sorted = [...tiers].sort((a, b) => (a.min || 0) - (b.min || 0));
-        for (let i = sorted.length - 1; i >= 0; i--) {
-          const t = sorted[i]!;
-          const tMin = Number(t.min) || 0;
-          const tMax = Number(t.max) || 999999;
-          if (baseVal >= tMin && baseVal <= tMax && Number(t.rate) > 0) return Number(t.rate);
-        }
-      }
-      return safeDiv(sumVals(expenses), baseVal);
-    }
-
-    default:
-      return safeDiv(sumVals(expenses), sumVals(baseValue));
-  }
+  const exactMap = (
+    value: number | Record<string, number>): Record<string, string> =>
+    typeof value === "number"
+      ? { Overall: quantizeOverheadMoney(value) }
+      : Object.fromEntries(
+          Object.entries(value).map(([id, amount]) => [
+            id,
+            quantizeOverheadMoney(amount),
+          ]),
+        );
+  return Number(
+    deriveOverheadOverallRate({
+      id: category.id,
+      allocationMethod: method ?? category.allocationMethod ?? "simple",
+      allocationTiers: category.allocationTiers,
+      allocationWeights: category.allocationWeights,
+      expenseByDept: exactMap(expenses),
+      baseByDept: exactMap(baseValue),
+    }));
 }
 
 /* ─────────────────────────────────────────────── rate formatting ── */
@@ -200,47 +180,50 @@ type RateMoneyOptions = {
 
 /** Format a raw rate using one of the five supported output formats. */
 export function formatRate(
-  rawRate: number,
+  rawRate: number | string,
   format: RateFormat | undefined,
-  periodData: { laborDollars?: { total: number } | number; directCost?: { total: number } | number; units?: { total: number }; monthCount?: number },
-  category: { totalExpense?: number; expenseOverall?: number },
-  money: (value: number, options?: RateMoneyOptions) => string,
+  periodData: { laborDollars?: { total: number | string } | number | string;
+    directCost?: { total: number | string } | number | string;
+    units?: { total: number | string }; monthCount?: number },
+  category: { totalExpense?: number | string;
+    expenseOverall?: number | string;
+  },
+  money: (value: number | string, options?: RateMoneyOptions) => string,
 ): FormattedRate {
-  const rateFormat = format || "per_hour";
-  const def = RATE_FORMATS[rateFormat] || RATE_FORMATS.per_hour;
-  const totalExpense = category.totalExpense ?? category.expenseOverall ?? 0;
-
-  switch (rateFormat) {
-    case "per_hour":
-      return { value: rawRate, display: `${money(rawRate, { minimumFractionDigits: def.decimals, maximumFractionDigits: def.decimals })}/hr`, unit: "hour", rawRate };
-
-    case "percent_labor": {
-      const laborBase = (typeof periodData.laborDollars === "object" ? periodData.laborDollars.total : periodData.laborDollars) || 1;
-      const pct = laborBase > 0 ? (totalExpense / laborBase) * 100 : 0;
-      return { value: pct, display: `${pct.toFixed(def.decimals)}%`, unit: "percent", rawRate };
-    }
-
-    case "percent_cost": {
-      const costBase = (typeof periodData.directCost === "object" ? periodData.directCost.total : periodData.directCost) || 1;
-      const pct = costBase > 0 ? (totalExpense / costBase) * 100 : 0;
-      return { value: pct, display: `${pct.toFixed(def.decimals)}%`, unit: "percent", rawRate };
-    }
-
-    case "per_fte": {
-      const monthCount = periodData.monthCount || 1;
-      const annualizationFactor = 12 / monthCount;
-      const fteRate = rawRate * (2080 / 12) * monthCount * annualizationFactor;
-      return { value: fteRate, display: `${money(fteRate, { notation: 'compact', maximumFractionDigits: 1 })}/FTE`, unit: "fte", rawRate };
-    }
-
-    case "per_unit": {
-      const unitCount = periodData.units?.total || 1;
-      const unitRate = safeDiv(totalExpense, unitCount);
-      return { value: unitRate, display: `${money(unitRate, { minimumFractionDigits: def.decimals, maximumFractionDigits: def.decimals })}/unit`, unit: "unit", rawRate };
-    }
-
-    default:
-      return { value: rawRate, display: `${money(rawRate, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/hr`, unit: "hour", rawRate };
+  const rateFormat = format ?? "per_hour";
+  const def = RATE_FORMATS[rateFormat];
+  const base = (
+    value: { total: number | string } | number | string | undefined,
+  ) =>
+    value === undefined
+      ? undefined
+      : quantizeOverheadMoney(typeof value === "object" ? value.total : value);
+  const exact = deriveOverheadDisplayRate({
+    rawRate: quantizeOverheadMoney(rawRate),
+    rateFormat,
+    expense: quantizeOverheadMoney(
+      category.totalExpense ?? category.expenseOverall ?? 0,
+    ),
+    laborDollars: base(periodData.laborDollars),
+    directCost: base(periodData.directCost),
+    units: base(periodData.units),
+  });
+  if (exact === null)
+    throw new OverheadCalculationError(
+      `Cannot calculate ${rateFormat}: its allocation base is missing or not positive. Check the category's allocation base and period before retrying.`,
+    );
+  const display =
+    rateFormat === "percent_labor" || rateFormat === "percent_cost"
+      ? `${roundMoney(exact, def.decimals)}%`
+      : `${money(exact, { minimumFractionDigits: def.decimals, maximumFractionDigits: def.decimals })}${def.suffix}`;
+  return { value: toChartNumber(exact), display, unit:
+      rateFormat === "per_hour"
+        ? "hour"
+        : rateFormat === "per_fte"
+          ? "fte"
+          : rateFormat === "per_unit"
+            ? "unit"
+            : "percent", rawRate: Number(rawRate),
   }
 }
 
@@ -267,85 +250,70 @@ export function calculateCompositeRate(
   categories: CompositeCategory[],
   compositeConfig: CompositeConfig,
   periodData: { avgLaborRate?: number } = {},
-): { value: number; method: CompositeMethod; includedCategories: string[]; categoryCount: number } {
+): {
+  value: number;
+  method: CompositeMethod;
+  includedCategories: string[];
+  categoryCount: number;
+} {
   const method = compositeConfig.method || "sum";
-  const includeCategories = compositeConfig.includeCategories || categories.map((c) => c.id);
+  const includeCategories =
+    compositeConfig.includeCategories || categories.map((c) => c.id);
   const excludeCategories = compositeConfig.excludeCategories || [];
 
   const included = categories.filter((c) => {
     if (c.includeInComposite === false) return false;
     if (excludeCategories.includes(c.id)) return false;
-    if (includeCategories.length > 0 && !includeCategories.includes(c.id)) return false;
+    if (includeCategories.length > 0 && !includeCategories.includes(c.id))
+      return false;
     return true;
   });
 
-  let value = 0;
-  switch (method) {
-    case "sum":
-      value = included.reduce((s, c) => s + (c.rateValue || 0), 0);
-      break;
-
-    case "weighted": {
-      const total = included.reduce((s, c) => s + (c.totalExpense || 0), 0);
-      if (total > 0) {
-        value = included.reduce((s, c) => s + (c.rateValue || 0) * ((c.totalExpense || 0) / total), 0);
-      }
-      break;
-    }
-
-    case "cascading": {
-      const baseLabor = Number(periodData.avgLaborRate || compositeConfig.baseLaborRate || 50);
-      let running = baseLabor;
-      const order = compositeConfig.cascadeOrder || includeCategories;
-      for (const catId of order) {
-        const c = included.find((x) => x.id === catId);
-        if (!c) continue;
-        const rate = c.rateValue || 0;
-        if (c.rateFormat === "percent_labor" || c.rateFormat === "percent_cost") running = running * (1 + rate / 100);
-        else running += rate;
-      }
-      value = running - baseLabor;
-      break;
-    }
-
-    default:
-      value = included.reduce((s, c) => s + (c.rateValue || 0), 0);
-  }
-
-  return { value, method, includedCategories: included.map((c) => c.id), categoryCount: included.length };
+  const value = Number(
+    deriveOverheadDeptComposite({
+      compositeMethod: method,
+      cascadeOrder:
+        compositeConfig.cascadeOrder ??
+        (includeCategories.length > 0 ? includeCategories : undefined),
+      baseLaborRate: periodData.avgLaborRate ?? compositeConfig.baseLaborRate,
+      categories: included.map((category) => ({
+        id: category.id,
+        rate: quantizeOverheadMoney(category.rateValue),
+        expense: quantizeOverheadMoney(category.totalExpense),
+        rateFormat: category.rateFormat ?? "per_hour",
+        includeInComposite: true,
+      })),
+    }),
+  );
+  return {
+    value,
+    method,
+    includedCategories: included.map((c) => c.id),
+    categoryCount: included.length,
+  };
 }
 
 /* ─────────────────────────────────── manual / derived / formula ── */
 
-/**
- * Parse a configured money input exactly. Route-persisted values arrive as
- * canonical decimal strings; legacy numeric values quantize without float
- * artifacts. Anything else behaves as zero, matching the legacy
- * `Number(x) || 0` leniency — strictness lives at the API boundary, so one
- * corrupt stored row cannot take down the whole report.
- */
+/** Stored configuration must be readable; corrupt amounts cannot become zero. */
 function exactConfigMoney(value: unknown): string {
+  if (value === undefined || value === null) return "0.0000";
   try {
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) return "0.0000";
-      return quantizeOverheadMoney(value);
-    }
-    if (typeof value !== "string") return "0.0000";
+    if (typeof value !== "number" && typeof value !== "string")
+      throw new Error("not a decimal");
     return quantizeOverheadMoney(value);
   } catch {
-    return "0.0000";
+    throw new OverheadCalculationError(
+      `The overhead model contains an unreadable amount "${String(value)}". Correct the stored category amount before retrying.`,
+    );
   }
 }
 
 /** Exact department share of an allocation base (decimal string, 0 when empty). */
 function exactBaseShare(base: AllocationBase, bases: AllocationBaseBundle, deptId: string): string {
-  try {
-    const totalBase = quantizeOverheadMoney(getAllocationBaseValue(base, bases, "Overall"));
-    if (cmp(totalBase, "0") <= 0) return "0";
-    return div(quantizeOverheadMoney(getAllocationBaseValue(base, bases, deptId)), totalBase);
-  } catch {
-    return "0";
-  }
+  const totalBase = exactConfigMoney(getAllocationBaseValue(base, bases, "Overall"));
+  if (cmp(totalBase, "0") <= 0) return "0";
+  return div(exactConfigMoney(getAllocationBaseValue(base, bases, deptId)), totalBase);
 }
 
 /** Calculate manual category values in fixed-total, department, or per-unit mode. */
@@ -362,7 +330,7 @@ export function calculateManualCategoryData(
   let expenseExact: Record<string, string> | undefined;
 
   if (entryMode === "fixed_total") {
-    const fixedTotalUnits = toUnits(String(manualConfig.fixedTotal ?? 0));
+    const fixedTotalUnits = toUnits(exactConfigMoney(manualConfig.fixedTotal ?? 0));
     totalExpense = Number(fromUnits(fixedTotalUnits));
     const weightUnits = (value: number): bigint => {
       if (!Number.isFinite(value) || value < 0) throw new Error("fixed-total allocation requires finite, non-negative department bases.");
@@ -398,7 +366,7 @@ export function calculateManualCategoryData(
       for (const share of shares) {
         const exact = fromUnits(share.units * sign);
         expenseExact[share.id] = exact;
-        expense[share.id] = Number(exact);
+        expense[share.id] = toChartNumber(exact);
       }
     }
   } else if (entryMode === "by_dept") {
@@ -462,10 +430,10 @@ export function calculateDerivedCategoryData(
   for (const id of deptIds) {
     const exact = mulDecimal(totalDerived, exactBaseShare(base, bases, id));
     expenseExact[id] = exact;
-    expense[id] = Number(exact);
+    expense[id] = toChartNumber(exact);
   }
   expenseExact["Overall"] = totalDerived;
-  const totalExpense = Number(totalDerived);
+  const totalExpense = toChartNumber(totalDerived);
   expense["Overall"] = totalExpense;
   return { expense, expenseExact, totalExpense };
 }
@@ -524,10 +492,10 @@ export function calculateFormulaCategoryData(
   for (const id of deptIds) {
     const exact = mulDecimal(totalExpenseExact, exactBaseShare(allocationBase, bases, id));
     expenseExact[id] = exact;
-    expense[id] = Number(exact);
+    expense[id] = toChartNumber(exact);
   }
   expenseExact["Overall"] = totalExpenseExact;
-  const totalExpense = Number(totalExpenseExact);
+  const totalExpense = toChartNumber(totalExpenseExact);
   expense["Overall"] = totalExpense;
   return { expense, expenseExact, totalExpense };
 }
@@ -654,7 +622,8 @@ export function evaluateFormula(expr: string): number | null {
 
 /* ─────────────────────────────────────────────── scenario modeler ── */
 
-export type ScenarioType = "hire" | "terminate" | "win_contract" | "lose_contract" | "cost_change" | "utilization_change";
+export type ScenarioType =
+  | "hire" | "terminate" | "win_contract" | "lose_contract" | "cost_change" | "utilization_change";
 
 export interface ScenarioInput {
   scenarioType: ScenarioType;

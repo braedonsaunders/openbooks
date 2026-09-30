@@ -1,4 +1,5 @@
 'use client'
+import { toChartNumber } from '../_ui/format'
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -455,7 +456,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{compareMoney(tagged, '0') !== 0 ? money0(tagged) : '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-400">{compareMoney(allocated, '0') !== 0 ? money0(allocated) : '—'}</td>
                   <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? Number(div(total, String(dept.billedHours))) : 0)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? toChartNumber(div(total, String(dept.billedHours))) : 0)}</td>
                 </tr>
               ))}
             </tbody>

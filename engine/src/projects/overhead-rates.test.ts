@@ -5,6 +5,8 @@ import {
   assertOverheadRatesPublishable,
   compareOverheadDecimals,
   deriveOverheadCategoryDeptRates,
+  deriveOverheadOverallRate,
+  deriveOverheadDisplayRate,
   deriveOverheadDeptComposite,
   formatOverheadPublishRate,
   overheadPublishBlockers,
@@ -228,7 +230,7 @@ test("publish rounding is halves-away-from-zero at cents, once", () => {
   assert.equal(formatOverheadPublishRate("32.5000"), "32.50");
 });
 
-test("legacy float path cannot publish a repeating decimal (finding 6.5)", () => {
+test("legacy float path cannot publish a repeating decimal", () => {
   // The pre-fix publication mapping ran formatMoney(String(floatComposite)).
   // A $100 burden over 3 billed hours is the ordinary case that broke it.
   assert.throws(() => formatMoney(String(100 / 3), 2), /loses precision beyond 4 decimal places/);
@@ -305,4 +307,16 @@ test("compareOverheadDecimals orders finite decimals without floats", () => {
   assert.equal(compareOverheadDecimals("1.5", "2"), -1);
   assert.equal(compareOverheadDecimals("-3", "-2"), -1);
   assert.equal(compareOverheadDecimals("1000000.00", "999999.9999"), 1);
+});
+
+test("Overall preserves zero weights and tier bounds, and undefined display bases stay undefined", () => {
+  const weighted = { id: "cost", allocationMethod: "weighted" as const, expenseByDept: { A: "900", B: "100" }, baseByDept: { A: "10", B: "10" }, allocationWeights: { A: 0, B: 1 } };
+  assert.equal(deriveOverheadOverallRate(weighted), "10.0000");
+  assert.deepEqual(deriveOverheadCategoryDeptRates(weighted), { A: "0.0000", B: "10.0000" });
+  assert.equal(deriveOverheadOverallRate({ ...weighted, expenseByDept: { A: "999999999999.9999", B: "100" } }), "10.0000");
+  const tiered = { id: "cost", allocationMethod: "stepped" as const, expenseByDept: { A: "100" }, baseByDept: { A: "4" }, allocationTiers: [{ min: 0, max: 0, rate: "20" }] };
+  assert.equal(deriveOverheadOverallRate(tiered), deriveOverheadCategoryDeptRates(tiered).A);
+  assert.equal(deriveOverheadOverallRate(tiered), "25.0000");
+  assert.equal(deriveOverheadDisplayRate({ rawRate: "25", expense: "100", rateFormat: "percent_labor", laborDollars: "0" }), null);
+  assert.equal(deriveOverheadDisplayRate({ rawRate: "25", expense: "100", rateFormat: "percent_labor", laborDollars: "400" }), "25.0000");
 });

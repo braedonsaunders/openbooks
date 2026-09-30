@@ -1,3 +1,4 @@
+import { fieldClockOwnerKey } from "../../../../lib/field-clock-owner";
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
@@ -37,7 +38,8 @@ import { ensureClockPhotoFolder } from '@openbooks/engine/src/hrm/field-time/pho
 export interface ClockPageData {
   title: string
   description: string
-  tabs: { href: string; label: string; active: boolean }[]
+  tabs: { href: string; label: string; active: boolean }[];
+  ownerKey: string | null;
   clock: {
     clockedIn: boolean
     since: string | null
@@ -129,6 +131,7 @@ export async function loadClockPageData(
 
 function emptyClockBody(t: ClockText) {
   return {
+    ownerKey: null,
     clock: {
       clockedIn: false,
       since: null,
@@ -197,6 +200,7 @@ async function clockBody(orgId: string, userId: string, t: ClockText) {
      order by t.name limit 500`)).rows
   const projectNames = new Map(projects.map((project) => [project.id, project.name]))
   return {
+    ownerKey: fieldClockOwnerKey(orgId, userId, partyId),
     clock: {
       clockedIn: day.status.clockedIn,
       since: day.status.since,
@@ -257,8 +261,11 @@ export function clockSpec(data: ClockPageData): PageSpec {
         },
         f('refusal'),
       ),
-      widgetBlock('hrm-clock-controls', {
-        initial: data.clock,
+      ...(data.ownerKey
+        ? [
+            widgetBlock('hrm-clock-controls', {
+              ownerKey: data.ownerKey,
+              initial: data.clock,
         projects: data.projects,
         tasks: data.tasks,
         photoRequired: data.photoRequired,
@@ -266,6 +273,8 @@ export function clockSpec(data: ClockPageData): PageSpec {
         geoHint: data.geoHint,
         clockOutLabel: data.clockOutLabel,
       }),
+          ]
+        : []),
       panel({
         title: f('pairsTitle'),
         bodyClassName: 'p-0',

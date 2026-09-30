@@ -1165,6 +1165,7 @@
       "openSurveys": "Enquêtes ouvertes"
     },
     "refusedTitle": "Le libre-service est indisponible",
+    "readFailed": "Cette section n’a pas pu être chargée. Actualisez la page pour réessayer ; si elle reste indisponible, contactez votre administrateur.",
     "overview": {
       "title": "Moi",
       "description": "Votre emploi, vos demandes et vos soldes — rien d'autre ne figure ici.",

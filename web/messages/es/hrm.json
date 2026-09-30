@@ -1165,6 +1165,7 @@
       "openSurveys": "Encuestas abiertas"
     },
     "refusedTitle": "El autoservicio no está disponible",
+    "readFailed": "No se pudo cargar esta sección. Actualice la página para reintentar; si sigue sin estar disponible, contacte al administrador.",
     "overview": {
       "title": "Yo",
       "description": "Su empleo, solicitudes y saldos — nada más aparece aquí.",
