@@ -28,10 +28,8 @@ import type { ModuleHomeTab } from "./tab-types";
  *     shared with the top nav, so the two strips cannot drift on the one
  *     calculation either could get wrong.
  *
- *   • MATCH THE BUTTONS BESIDE IT. The track is 40px, the same as a
- *     page-header primary button, and the pills are 36px — a 2px inset
- *     rather than the 4px that made the active pill read as visibly shorter
- *     than the button next to it.
+ *   • MATCH THE BUTTONS BESIDE IT. The pills and page-header buttons share
+ *     --page-control-height (36px). The track adds a 2px inset on each side.
  *
  * An active tab that lands in the overflow is pulled forward to the last
  * visible slot, so "where am I" is never hidden behind a menu.
@@ -47,7 +45,7 @@ import type { ModuleHomeTab } from "./tab-types";
 const SUBPIXEL_SLACK = 1;
 
 const PILL =
-  "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors";
+  "inline-flex h-[var(--page-control-height)] items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors";
 const PILL_ACTIVE =
   "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100";
 const PILL_IDLE =
@@ -166,7 +164,7 @@ export function ModuleHomeTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
       ref={trackRef}
       data-subtabs
       className={cn(
-        "relative flex h-10 min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800",
+        "relative flex h-[calc(var(--page-control-height)+0.25rem)] min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800",
         // A large route group is navigation, not the whole header. Cap it at
         // half the desktop viewport and let the component's existing,
         // measured More menu own the overflow. Small view switches keep

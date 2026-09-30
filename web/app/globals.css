@@ -15,6 +15,10 @@
 @import "@braedonsaunders/appkit-feedback/styles.css";
 
 @layer base {
+  :root {
+    --page-control-height: 2.25rem;
+  }
+
   /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare
      `border` utilities don't fall back to currentColor across the app. */
   *,
@@ -469,6 +473,11 @@
 [data-page-actions],
 [data-page-actions] > * {
   min-width: 0;
+}
+
+/* Page actions match the visible subtab controls throughout the application. */
+[data-page-actions] [data-slot="button"] {
+  height: var(--page-control-height);
 }
 
 /* A subtab strip inside the page-header action rail is always its LAST
