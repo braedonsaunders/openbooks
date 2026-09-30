@@ -46,14 +46,11 @@ sit directly above them. Subledgers (`inventory`, `assets`, `revenue`,
 those, and the tooling modules (`worker`, `harness`, `sim`, `conformance`,
 `sample-companies`) sit on top.
 
-The pinned cycle is the engine's known layering debt: the ledger posting operation family contains
-both the posting kernel and orchestration that calls subledger guards and
-effects (inventory movements, revenue obligations, payroll remittance checks,
-user scripts, allocations), while those same subledgers post through it.
-`close` and `flows` play the same double role for period close and record
-workflows. Breaking the pin means splitting the kernel from its orchestration
-(an effects and guards registry), which is refactoring work, not manifest work,
-and every step that removes an edge shrinks the pin.
+The module graph is acyclic. The posting kernel lives below orchestration,
+so subledgers can use its financial invariants without importing document
+posting orchestration back into their own modules. Guards and durable effects
+preserve each operation's transaction ownership. The manifest and boundary
+checker are authoritative; a new dependency must preserve this layering.
 
 ## Moving files
 

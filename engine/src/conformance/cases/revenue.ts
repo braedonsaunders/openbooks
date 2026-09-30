@@ -9,7 +9,7 @@
 import { proposeDropShipAssessment,applyDropShipAssessment } from '../../inventory/drop-ship-agency.ts';
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext,withBypassContext } from "../../platform/db.ts";
+import { db, withOrgContext } from "../../platform/db.ts";
 import { add, fromUnits, toUnits } from "../../money/money.ts";
 import { parseMoney, parseQuantity, parseRate } from "../../money/brands.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
@@ -978,7 +978,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     expected: {entries:[{step:'expected breakage',lines:[{role:'deferredRevenue',amount:'15.0000'},{role:'recognizedRevenue',amount:'-15.0000'}]}],values:{proportionalBreakageRevenue:'15.0000'}},
     run:async ctx=> {
       const ledger=ctx.ledger!,fixture=await createUsageCorpusFixture(ctx)
-      const actors=await withBypassContext(async()=> {
+      const actors=await withOrgContext(ledger.orgId, async()=> {
         const actors=await seedFlowActors(ledger.orgId)
         await db.execute(sql`update recognition_rules set method='usage' where org_id=${ledger.orgId} and id=(select recognition_rule_id from items where org_id=${ledger.orgId} and id=${ledger.items.service})`)
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${actors.submitterId},'ar.post','grant')`)
@@ -1363,7 +1363,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     ]},
     run: async(ctx)=> {
       const ledger=ctx.ledger!
-      const actors=await withBypassContext(async()=>{
+      const actors=await withOrgContext(ledger.orgId, async()=>{
         const actors=await seedFlowActors(ledger.orgId)
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"inventory":true,"dropShipping":true}'::jsonb) where id=${ledger.orgId}`)
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${actors.submitterId},'ar.post','grant')`)

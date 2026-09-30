@@ -34,7 +34,7 @@
 import { carryingAmountForSettlement, realizedFxControlAdjustment } from "../../payments/settlement-policy.ts";
 import { runRevaluation } from "../../close/fx-revaluation.ts";
 import { capture, periodFor, postNewDocument, setSpotRate } from "../ledger-helpers.ts";
-import { db,withBypassContext,withOrgContext } from "../../platform/db.ts";
+import { db,withOrgContext } from "../../platform/db.ts";
 import { sql } from "drizzle-orm";
 import { randomUUID } from 'node:crypto';
 import { postEntry } from '../../journal/post-entry.ts';
@@ -231,7 +231,7 @@ export const FX_SETTLEMENT_CASES: readonly ConformanceCase[] = [
     },
     run:async ctx=>{
       const ledger=ctx.ledger!,foreignId=randomUUID(),eliminationId=randomUUID(),interestId=randomUUID(),pairId=randomUUID()
-      const actors=await withBypassContext(async()=>{
+      const actors=await withOrgContext(ledger.orgId, async()=>{
         const actors=await seedFlowActors(ledger.orgId)
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true,"multiSubsidiary":true}'::jsonb) where id=${ledger.orgId}`)
         await db.execute(sql`update accounts set eliminate=true,monetary=true where org_id=${ledger.orgId} and id in (${ctx.roles.netInvestmentLoan},${ctx.roles.loanPayable})`)

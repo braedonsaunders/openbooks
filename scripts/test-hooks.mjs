@@ -86,22 +86,19 @@ process.on('warning', (warning) => {
 // Neither the spec nor the TAP reporter names the files that passed: both
 // print test names only, and spec adds a file path solely for a file that
 // fails to load. The test event stream is the only per-file signal. Every
-// genuine test node (pass, fail, skip, todo) carries the entryFile of the
-// file that registered it, while the file-level pseudo events a zero-test or
-// load-dead file emits carry none. One receipt line per file, carrying its
+// genuine test registration contributes to a file-specific summary. Empty or
+// load-dead files can emit pass/fail pseudo events with a file and line, so
+// those events cannot prove registration. One receipt line per file, carrying its
 // path and test count, therefore proves registration file by file, including
 // the silent-zero shape (loads fine, registers nothing, exits zero) that no
 // exit code sees. scripts/verify-test-registration.mjs reads this receipt.
 export default async function* fileRegistrationReceipt(source) {
   const counts = new Map()
   for await (const event of source) {
-    if (event?.type !== 'test:pass' && event?.type !== 'test:fail') continue
-    const file = event?.data?.entryFile
-    if (typeof file !== 'string' || file.length === 0) continue
-    const entry = counts.get(file) ?? { tests: 0, failed: 0 }
-    entry.tests += 1
-    if (event.type === 'test:fail') entry.failed += 1
-    counts.set(file, entry)
+    if (event?.type !== 'test:summary') continue
+    const { file, counts: summary } = event.data ?? {}
+    if (typeof file !== 'string' || file.length === 0 || !Number.isInteger(summary?.tests) || summary.tests < 1) continue
+    counts.set(file, { tests: summary.tests, failed: summary.failed })
   }
   for (const file of [...counts.keys()].sort()) {
     const { tests, failed } = counts.get(file)

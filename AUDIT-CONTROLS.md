@@ -210,10 +210,14 @@ implemented as product capability with its own schema, engine code, and
 tests: impairment restoration is now refused under US GAAP and capped at the
 unreversed loss under IFRS (`remeasurementPolicy`), and escalating tenant
 rents are levelled to straight-line income against the property billing
-pipeline by `levelLeaseRentStraightLine`. **Every case in the conformance
-register currently passes with no gaps and no partials.** The register's
-scope is stated in `engine/src/conformance/README.md`; standards outside it
-are not claimed in either direction.
+pipeline by `levelLeaseRentStraightLine`. **The published conformance evidence records 106 passing cases within their
+declared scope: 104 supported, one semantic and one partial.** The partial
+4-4-5 depreciation case maps monthly-native charges into fiscal periods; it
+does not establish week-weighted depreciation. A passing partial assertion
+does not establish complete support. The evidence names its measured source
+commit and partition. The register's scope is stated in
+`engine/src/conformance/README.md`; standards outside it are not claimed in
+either direction.
 
 **Coverage gaps.** Browser end-to-end coverage is a smoke tier only. Targeted
 database integration tests cover concurrent posting of one document
