@@ -1,19 +1,21 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useDirtyClose } from '@/lib/use-dirty-close'
+import { readApiErrorMessage } from '@/lib/api-error'
+import type { InventoryOperationOption } from '@openbooks/engine/inventory'
 
 interface ItemOpt { id: string; code?: string | null; name?: string | null }
 interface LocOpt { id: string; code?: string | null }
 interface AccountOpt { id: string; number?: string | null; name?: string | null }
 interface SubsidiaryOpt { id: string; name: string }
 
-const ACTIONS = ['receive', 'issue', 'adjust', 'transfer', 'build', 'landed'] as const
+const ACTIONS = ['receive', 'issue', 'adjust', 'transfer', 'build', 'disassemble', 'landed', 'reverse'] as const
 type Action = (typeof ACTIONS)[number]
 const BASES = ['value', 'quantity'] as const
 
@@ -29,18 +31,20 @@ export function InventoryActionDrawer({
   accounts,
   subsidiaries,
   closeHref = '/inventory',
+  allowedActions = ACTIONS,
 }: {
   items: ItemOpt[]
   stockLocations: LocOpt[]
   accounts: AccountOpt[]
   subsidiaries: SubsidiaryOpt[]
   closeHref?: string
+  allowedActions?: readonly Action[]
 }) {
   const t = useTranslations('inventory')
   const tCommon = useTranslations('common')
   const router = useRouter()
 
-  const [action, setAction] = useState<Action>('receive')
+  const [action, setAction] = useState<Action>(allowedActions[0] ?? 'receive')
   const [itemId, setItemId] = useState('')
   const [stockLocationId, setStockLocationId] = useState('')
   const [subsidiaryId, setSubsidiaryId] = useState('')
@@ -56,6 +60,36 @@ export function InventoryActionDrawer({
   // silence. Insufficient stock is a real inventory refusal and
   // must stay visible with the typed values intact.
   const [postError, setPostError] = useState<string | null>(null)
+  const [sourceMovementId, setSourceMovementId] = useState('')
+  const [selectedSource, setSelectedSource] = useState<InventoryOperationOption | null>(null)
+  const [sourceOptions, setSourceOptions] = useState<InventoryOperationOption[]>([])
+  const [sourceQuery, setSourceQuery] = useState('')
+  const [sourceCursor, setSourceCursor] = useState<string | null>(null)
+  const [sourceLoading, setSourceLoading] = useState(false)
+  const sourceRequest = useRef(0)
+  const usesSource = action === 'disassemble' || action === 'reverse'
+  const loadSources = useCallback(async (query: string, cursor: string | null, append: boolean) => {
+    if (action !== 'disassemble' && action !== 'reverse') return
+    const request = ++sourceRequest.current
+    setSourceLoading(true)
+    try {
+      const params = new URLSearchParams({ operation: action, q: query, limit: '50' })
+      if (cursor) params.set('cursor', cursor)
+      const response = await fetch(`/api/inventory/movement-options?${params}`)
+      if (!response.ok) throw new Error(await readApiErrorMessage(response,t('drawer.loadMovementsFailed')))
+      const page = await response.json() as { options: InventoryOperationOption[]; nextCursor: string | null }
+      if (request !== sourceRequest.current) return
+      setSourceOptions(current => append ? [...current,...page.options] : page.options)
+      setSourceCursor(page.nextCursor)
+    } catch (error) {
+      if (request === sourceRequest.current) setPostError(error instanceof Error ? error.message : t('drawer.loadMovementsFailed'))
+    } finally { if (request === sourceRequest.current) setSourceLoading(false) }
+  },[action,t])
+  useEffect(() => {
+    const requestState = sourceRequest
+    const search = setTimeout(() => { if (usesSource) void loadSources(sourceQuery,null,false) },150)
+    return () => { clearTimeout(search); requestState.current++ }
+  },[usesSource,sourceQuery,loadSources])
   // The posting date freezes when the drawer opens — the org's business day
   // from the server, never the browser's UTC day. The server hashes the date
   // into the idempotency request, so a retry after a midnight rollover must
@@ -81,18 +115,18 @@ export function InventoryActionDrawer({
     action === 'landed' ? t('drawer.amount') : action === 'adjust' ? t('drawer.quantityDelta') : t('labels.quantity')
   const offsetLabel = action === 'landed' ? t('drawer.freightAccount') : t('drawer.offsetAccount')
   const closeGuard = useDirtyClose({
-    dirty: action !== 'receive' || itemId !== '' || stockLocationId !== '' || toStockLocationId !== '' ||
+    dirty: action !== allowedActions[0] || sourceMovementId !== '' || itemId !== '' || stockLocationId !== '' || toStockLocationId !== '' ||
       quantity !== '' || unitCost !== '' || offsetAccountId !== '' || basis !== 'value' || memo !== '',
     busy, onClose: () => {},
     message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
   })
 
   async function submit() {
-    if (!itemId || !stockLocationId || !quantity) {
+    if (usesSource ? !sourceMovementId || (action === 'disassemble' && !quantity) || memo.trim().length < 5 : !itemId || !stockLocationId || !quantity) {
       toast.error(t('drawer.missingFields'))
       return
     }
-    if (!subsidiaryId) {
+    if (!usesSource && !subsidiaryId) {
       toast.error(t('create.selectSubsidiary'))
       return
     }
@@ -101,6 +135,7 @@ export function InventoryActionDrawer({
     try {
       const fingerprint = JSON.stringify([
         action,
+        sourceMovementId,
         itemId,
         stockLocationId,
         subsidiaryId,
@@ -120,7 +155,11 @@ export function InventoryActionDrawer({
       const res = await fetch('/api/inventory/actions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(action === 'disassemble' ? {
+          action,buildMovementId:sourceMovementId,quantity,date:postingDate,memo,idempotencyKey,
+        } : action === 'reverse' ? {
+          action,movementId:sourceMovementId,date:postingDate,memo,idempotencyKey,
+        } : {
           action,
           itemId,
           stockLocationId,
@@ -142,7 +181,7 @@ export function InventoryActionDrawer({
         )
       }
       const data = await res.json()
-      toast.success(t('drawer.posted', { value: data.value }))
+      toast.success(action === 'reverse' ? t('drawer.reversed') : t('drawer.posted', { value: data.value }))
       // Success consumes the retry identity: the next Post is a new action.
       retryKeyRef.current = null
       retryFingerprintRef.current = null
@@ -178,8 +217,8 @@ export function InventoryActionDrawer({
         ) : null}
         <div className={field}>
           <Label>{t('drawer.action')}</Label>
-          <Select value={action} disabled={busy} onChange={(e) => setAction(e.target.value as Action)}>
-            {ACTIONS.map((a) => (
+          <Select value={action} disabled={busy} onChange={(e) => { setAction(e.target.value as Action); setSourceMovementId(''); setSelectedSource(null); setSourceQuery(''); setSourceOptions([]); setSourceCursor(null) }}>
+            {allowedActions.map((a) => (
               <option key={a} value={a}>
                 {t(`drawer.actions.${a}`)}
               </option>
@@ -188,7 +227,15 @@ export function InventoryActionDrawer({
           <p className="text-xs text-slate-500 dark:text-slate-400">{t(`drawer.hint.${action}`)}</p>
         </div>
 
+        {usesSource ? <div className={field}>
+          <Label>{t('drawer.sourceMovement')}</Label>
+          <SearchSelect value={sourceMovementId} onChange={id => { setSourceMovementId(id); setSelectedSource(sourceOptions.find(source => source.id === id) ?? null) }} disabled={busy} remote searchable loading={sourceLoading}
+            onSearchChange={setSourceQuery} ariaLabel={t('drawer.sourceMovement')} placeholder={t('drawer.selectSourceMovement')}
+            options={(selectedSource && !sourceOptions.some(source => source.id === selectedSource.id) ? [selectedSource,...sourceOptions] : sourceOptions).map(source => ({ value:source.id,label:`${source.date} · ${source.item} · ${source.location} · ${source.subsidiary} · ${t(`kind.${source.kind}`)} · ${source.quantity}` }))} />
+          {sourceCursor ? <Button variant="outline" disabled={sourceLoading || busy} onClick={() => void loadSources(sourceQuery,sourceCursor,true)}>{t('drawer.moreMovements')}</Button> : null}
+        </div> : null}
         <div className="grid gap-4 sm:grid-cols-2">
+          {!usesSource ? <>
           <div className={field}>
             <Label>{itemLabel}<span className="text-red-500"> *</span></Label>
             <SearchSelect
@@ -224,6 +271,7 @@ export function InventoryActionDrawer({
               ariaLabel={t('create.subsidiary')}
             />
           </div>
+          </> : null}
           {action === 'transfer' ? (
             <div className={field}>
               <Label>{t('drawer.toLocation')}<span className="text-red-500"> *</span></Label>
@@ -238,13 +286,13 @@ export function InventoryActionDrawer({
               />
             </div>
           ) : null}
-          <div className={field}>
+          {action !== 'reverse' ? <div className={field}>
             <Label>
               {quantityLabel}
               <span className="text-red-500"> *</span>
             </Label>
             <Input disabled={busy} inputMode="decimal" className="text-right tabular-nums" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-          </div>
+          </div> : null}
           {action === 'landed' ? (
             <div className={field}>
               <Label>{t('drawer.basis')}</Label>
@@ -284,7 +332,7 @@ export function InventoryActionDrawer({
             </div>
           ) : null}
           <div className={`${field} sm:col-span-2`}>
-            <Label>{tCommon('labels.memo')}</Label>
+            <Label>{usesSource ? t('drawer.movementReason') : tCommon('labels.memo')}</Label>
             <Input disabled={busy} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('drawer.memoPlaceholder')} />
           </div>
         </div>

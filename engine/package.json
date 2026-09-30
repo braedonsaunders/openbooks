@@ -49,6 +49,8 @@
     "./documents": "./src/ledger/public.ts",
     "./src/*": "./src/*",
     "./tax": "./src/tax/public.ts",
-    "./provisions": "./src/provisions/public.ts"
+    "./provisions": "./src/provisions/public.ts",
+    "./inventory": "./src/inventory/public.ts",
+    "./inventory/contracts": "./src/inventory/public-contracts.ts"
   }
 }

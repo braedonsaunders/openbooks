@@ -11,9 +11,10 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryDefaultEntityAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
+    if ((specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) ||
+        (specifier === "./authz" && context.parentURL?.endsWith("/lib/feature-gates.ts"))) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__inventoryDefaultEntityAudit.user,allowedSubsidiaryIds:null}}",
+        "export async function guardPermission(){return {user:globalThis.__inventoryDefaultEntityAudit.user,allowedSubsidiaryIds:null}};export function can(){return true}",
       ) };
     }
     return next(specifier, context);
@@ -77,7 +78,7 @@ test("unscoped receipts, counts, and document lines book to the root entity", as
     // Path 3: document lines resolve an unscoped document to the same root.
     const documentId = randomUUID();
     await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,currency,status)
-      values(${documentId},${org.orgId},'goods_receipt','GR-ROOT-1',${org.date},'CAD','draft')`);
+      values(${documentId},${org.orgId},'purchase_receipt','GR-ROOT-1',${org.date},'CAD','draft')`);
     await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,quantity,unit_price,amount,stock_location_id)
       values(${randomUUID()},${org.orgId},${documentId},1,${org.items.fifo},2,10,20,${org.stockLocationId})`);
     // The warehouse admits the root only, so a successful load proves the

@@ -849,6 +849,8 @@ async function orgRowCountsCommitted(orgId: string): Promise<Record<string, numb
  * hang for minutes on the shared DB).
  */
 const CORE_A = [
+  // Physical operation headers and movements share deferred provenance links.
+  "assembly_disassemblies",
   "inventory_provisional_costs",
   "cost_layers",
   "inventory_movements",

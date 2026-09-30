@@ -8,6 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { adjustInventory, issueInventory, receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 import { buildAssembly, reverseAssemblyBuild } from "@openbooks/engine/src/inventory/assembly.ts";
+import { disassembleAssembly, reverseAssemblyDisassembly } from '@openbooks/engine/inventory';
 import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
 import { postLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
 import { reverseInventoryMovement } from "@openbooks/engine/src/inventory/reversal.ts";
@@ -25,6 +26,8 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 const inventoryActionBody = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('disassemble'), idempotencyKey: z.string().min(1), buildMovementId: uuidId,
+    date: isoDate(), quantity: exactMoney(), memo: z.string().trim().min(5).max(500) }).strict(),
   z.object({
     action: z.literal('receive'), idempotencyKey: z.string().min(1), itemId: uuidId,
     stockLocationId: uuidId, subsidiaryId: uuidId.optional(), offsetAccountId: uuidId,
@@ -124,6 +127,15 @@ export const POST = defineRoute({
   handler: async ({ body, authz: gate }) => {
   const user = gate.user
 
+  if (body.action === 'disassemble') {
+    try {
+      const result = await disassembleAssembly(user.orgId,user.id,{
+        buildMovementId:body.buildMovementId,quantity:body.quantity,date:body.date,reason:body.memo,idempotencyKey:body.idempotencyKey,
+      })
+      return NextResponse.json({ok:true,replayed:result.replayed,...result.value})
+    } catch (error) { return apiErrorResponse(error,{safeStatus:inventoryErrorStatus(error)}) }
+  }
+
   if (body.action === 'reverse') {
     if (!body.movementId || !isUuid(body.movementId)) {
       return NextResponse.json({ error: 'movement required' }, { status: 422 })
@@ -174,6 +186,8 @@ export const POST = defineRoute({
               reversalDate: body.date!,
               reason: body.memo!,
             }
+            if (source.rows[0]?.kind === 'assembly_disassembly' || source.rows[0]?.kind === 'assembly_recovery')
+              return reverseAssemblyDisassembly(user.orgId,user.id,input)
             if (manufacturing) return reverseMaterialIssue(user.orgId, user.id, input)
             return isAssemblyLeg
               ? reverseAssemblyBuild(user.orgId, user.id, input)

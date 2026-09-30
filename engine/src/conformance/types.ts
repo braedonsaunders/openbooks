@@ -135,6 +135,7 @@ export type Role =
   | "contributions"
   // Inventory
   | "inventory"
+  | "finishedGoodsInventory"
   | "cogs"
   | "inventoryAdjustment"
   | "inventoryClearing"
@@ -236,7 +237,7 @@ export interface LedgerContext {
   actorId: string;
   /** A date inside the open period. */
   date: string;
-  items: Record<"fifo" | "movingAvg" | "standard" | "service", string>;
+  items: Record<"fifo" | "movingAvg" | "standard" | "service" | "component" | "assembly", string>;
 }
 
 /**

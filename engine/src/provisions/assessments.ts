@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction, type SqlExecutor } from '../platform/db.ts'
-import { actorHasPermission } from '../organization/actor-permissions.ts'
-import { actorAllowedSubsidiaryIds } from '../organization/actor-subsidiaries.ts'
+import { lockActorCommandAuthority as authority } from '../organization/actor-command-authority.ts'
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts'
 import { isIsoCalendarDate } from '../platform/business-date.ts'
 import { orgReportingFramework, type ReportingFramework } from '../platform/reporting-framework.ts'
@@ -30,20 +29,6 @@ export interface ProvisionProposal {
   assessment: ProvisionAssessment
 }
 
-async function authority(tx: SqlExecutor, orgId: string, actorId: string, subsidiaryId: string | null, permission: string) {
-  // Pin the local actor, assigned roles and overrides while the transaction
-  // measures and writes under their current authority.
-  await tx.execute(sql`select id from users where id=${actorId} order by id for share`)
-  await tx.execute(sql`select id from role_assignments where org_id=${orgId} and user_id=${actorId} order by id for share`)
-  await tx.execute(sql`select id from app_roles where org_id=${orgId} and id in
-    (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) order by id for share`)
-  await tx.execute(sql`select id from user_permission_overrides where org_id=${orgId} and user_id=${actorId} order by id for share`)
-  if (!await actorHasPermission(tx, orgId, actorId, permission))
-    throw new ScopeNotFoundError()
-  const allowed = await actorAllowedSubsidiaryIds(tx, orgId, actorId)
-  if (subsidiaryId !== null && allowed !== null && !allowed.has(subsidiaryId)) throw new ScopeNotFoundError()
-  return allowed
-}
 
 function visibleEntity(column: ReturnType<typeof sql>, allowed: Set<string> | null) {
   if (allowed === null) return sql``

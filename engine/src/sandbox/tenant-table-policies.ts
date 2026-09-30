@@ -1,5 +1,6 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  "assembly_disassemblies": "clone:catalog-uuid-rebase",
   "provision_obligations": "clone:catalog-uuid-rebase",
   "account_group_members": "clone:catalog-uuid-rebase",
   "account_groups": "clone:catalog-uuid-rebase",

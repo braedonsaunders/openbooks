@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 import { isStockCountReviewRequired } from '@openbooks/engine/src/inventory/stock-count-gates.ts'
+import { INVENTORY_ACTION_PERMISSIONS } from '@openbooks/engine/inventory/contracts'
 import { Button, PageHeader } from '@openbooks/ui'
 import { Plus } from 'lucide-react'
 import { EntityListView } from '../../../components/entity-list-view'
@@ -199,6 +200,7 @@ export default async function Inventory({
               stockLocations={movementPickers[1].rows}
               accounts={movementPickers[2].rows}
               subsidiaries={movementPickers[3].rows}
+              allowedActions={(Object.keys(INVENTORY_ACTION_PERMISSIONS) as (keyof typeof INVENTORY_ACTION_PERMISSIONS)[]).filter(action => can(authz,INVENTORY_ACTION_PERMISSIONS[action]))}
               closeHref={closeMovementHref}
             />
           ) : undefined}
