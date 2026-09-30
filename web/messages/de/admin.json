@@ -4883,7 +4883,7 @@
         "title": "Ihr Startarbeitsbereich ist bereit",
         "actions": {
           "invoice": "Erste Rechnung erstellen",
-          "migrate": "Aus QuickBooks, Xero oder einem anderen System importieren",
+          "migrate": "Aus einem anderen Buchhaltungssystem importieren",
           "statement": "Kontoauszug importieren",
           "demo": "Ein separates Demounternehmen erkunden",
           "readiness": "Mit der Einrichtungsliste fortfahren"

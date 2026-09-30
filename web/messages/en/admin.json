@@ -4811,7 +4811,7 @@
         "description": "Your workspace is configured. Choose your next action; the checklist keeps track of remaining setup.",
         "actions": {
           "invoice": "Create your first invoice",
-          "migrate": "Import from QuickBooks, Xero or another system",
+          "migrate": "Import from another accounting system",
           "statement": "Import a bank statement",
           "demo": "Explore a separate demo company",
           "readiness": "Continue with the setup checklist"

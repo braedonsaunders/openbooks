@@ -83,6 +83,12 @@ test('catalog cognate pins may quote connector-namespace keys', () => {
   assert.equal(isConnectorPath('web/messages/catalog-parity.test.ts'), true)
 })
 
+test('the implementation-import budget may name connector paths without admitting adjacent product files', () => {
+  assert.deepEqual(auditPublicSnapshot(['scripts/engine-internal-imports.json']), [])
+  assert.equal(isConnectorPath('scripts/engine-internal-imports.json.ts'), false)
+  assert.equal(isConnectorPath('web/messages/en/admin.json'), false)
+})
+
 test('the perf-1m seeder may seed functional connector-branch rows', () => {
   // scripts/upgrade-rehearsal/seeders/perf-1m.ts writes qbd_requests hanging
   // off a qbd connection (the stable source key the connector reads): display

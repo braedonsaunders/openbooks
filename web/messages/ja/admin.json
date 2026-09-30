@@ -4883,7 +4883,7 @@
         "title": "開始ワークスペースの準備ができました",
         "actions": {
           "invoice": "最初の請求書を作成",
-          "migrate": "QuickBooks、Xeroなどからインポート",
+          "migrate": "別の会計システムからインポート",
           "statement": "銀行明細をインポート",
           "demo": "別のデモ会社を試す",
           "readiness": "設定チェックリストを続ける"
