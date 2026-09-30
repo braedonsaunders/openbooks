@@ -146,6 +146,9 @@ const connectorPaths = [
   // repository-relative file paths, so it names the connector client files it
   // moved exactly as the connector scope above does. No product copy.
   /^scripts\/engine-modules\/moves\.json$/,
+  // Import budgets contain repository paths and integer occurrence counts.
+  // Connector paths identify existing imports; they are not product copy.
+  /^scripts\/engine-internal-imports\.json$/,
   // Route-factory migration ledger. Its entries are repository-relative route
   // paths, so it names the connector OAuth routes exactly as the connector
   // scope above does. No product copy.

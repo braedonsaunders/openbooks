@@ -4801,7 +4801,7 @@
         "description": "Su espacio está configurado. Elija la siguiente acción; la lista muestra los pasos pendientes.",
         "actions": {
           "invoice": "Crear su primera factura",
-          "migrate": "Importar desde QuickBooks, Xero u otro sistema",
+          "migrate": "Importar desde otro sistema contable",
           "statement": "Importar un extracto bancario",
           "demo": "Explorar una empresa de demostración separada",
           "readiness": "Continuar con la lista de configuración"

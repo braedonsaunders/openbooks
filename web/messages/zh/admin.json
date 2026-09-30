@@ -4811,7 +4811,7 @@
         "description": "工作区已配置。请选择下一步操作；设置清单会记录剩余步骤。",
         "actions": {
           "invoice": "创建第一张发票",
-          "migrate": "从 QuickBooks、Xero 或其他系统导入",
+          "migrate": "从其他会计系统导入",
           "statement": "导入银行对账单",
           "demo": "探索独立的演示公司",
           "readiness": "继续完成设置清单"
