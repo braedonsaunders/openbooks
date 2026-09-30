@@ -58,6 +58,7 @@
     "postedToast": "Comptabilisé au grand livre",
     "autosaveFailed": "Échec de l’enregistrement automatique",
     "viewGlImpact": "Voir l’impact au GL",
+    "viewCurrentJournal": "Voir l’écriture courante",
     "allChangesSaved": "Toutes les modifications sont enregistrées",
     "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
     "unsavedChanges": "Modifications non enregistrées…",

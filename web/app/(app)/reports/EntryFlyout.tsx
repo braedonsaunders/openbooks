@@ -28,6 +28,7 @@ export type EntryData = {
     doc_kind: string | null
     doc_number: string | null
     subsidiary_id: string
+    custom?: Record<string, unknown>
   }
   lines: {
     line_number: number
@@ -47,6 +48,7 @@ export type EntryData = {
     subsidiary: string
     functional_currency: string
     extra_dims: Record<string, string>
+    custom?: Record<string, unknown>
   }[]
 }
 

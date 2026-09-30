@@ -58,6 +58,7 @@
     "postedToast": "已过账至总账",
     "autosaveFailed": "自动保存失败",
     "viewGlImpact": "查看总账影响",
+    "viewCurrentJournal": "查看当前分录",
     "allChangesSaved": "所有更改已保存",
     "saveFailedRetry": "保存失败——修正后重试",
     "unsavedChanges": "有未保存的更改……",

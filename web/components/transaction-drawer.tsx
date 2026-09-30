@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useLayoutEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
@@ -9,7 +9,7 @@ import { AttachmentPanel } from './attachment-panel'
 import { AuditTrailPanel } from './audit-trail-panel'
 import { DrawerTabStrip } from './drawer-tab-strip'
 
-interface TransactionDrawerProps {
+export interface TransactionDrawerProps {
   closeHref: string
   /** Optional guard for unsaved edits, forwarded to the UrlDrawer shell. */
   beforeClose?: () => boolean | Promise<boolean>
@@ -63,15 +63,30 @@ interface TransactionDrawerProps {
   showEvidenceTabs?: boolean
 }
 
-/**
- * The shared shell for every editable business transaction flyout.
- *
- * Record families keep their purpose-built bodies, while the flyout chrome and
- * every record-level control live behind one consistent Actions menu. Keeping
- * this boundary shared prevents bills, credits, orders, payments, journals,
- * and expenses from drifting into separate header interaction patterns.
- */
-export function TransactionDrawer({
+const TransactionDrawerContext = createContext<((props: TransactionDrawerProps | null) => void) | null>(null)
+
+/** Keep the shared shell mounted while an asynchronously loaded record supplies its body and controls. */
+export function TransactionDrawerHost({ pending, children }: { pending: TransactionDrawerProps; children?: ReactNode }) {
+  const [record, setRecord] = useState<TransactionDrawerProps | null>(null)
+  const register = useCallback((props: TransactionDrawerProps | null) => setRecord(props), [])
+  return <>
+    <TransactionDrawerContext.Provider value={register}>{children}</TransactionDrawerContext.Provider>
+    <TransactionDrawerFrame {...(record ?? pending)} />
+  </>
+}
+
+/** Shared transaction chrome, with primary lifecycle controls and the standard Actions menu. */
+export function TransactionDrawer(props: TransactionDrawerProps) {
+  const register = useContext(TransactionDrawerContext)
+  useLayoutEffect(() => {
+    if (!register) return
+    register(props)
+    return () => register(null)
+  }, [register, props])
+  return register ? null : <TransactionDrawerFrame {...props} />
+}
+
+function TransactionDrawerFrame({
   closeHref,
   beforeClose,
   recordId,
