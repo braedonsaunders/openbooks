@@ -58,6 +58,7 @@
     "postedToast": "元帳に記帳しました",
     "autosaveFailed": "自動保存に失敗しました",
     "viewGlImpact": "総勘定元帳への影響を表示",
+    "viewCurrentJournal": "現在の仕訳を表示",
     "allChangesSaved": "すべての変更を保存しました",
     "saveFailedRetry": "保存に失敗しました — 修正して再試行してください",
     "unsavedChanges": "未保存の変更…",

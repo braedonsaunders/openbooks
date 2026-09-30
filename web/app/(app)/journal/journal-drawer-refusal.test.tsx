@@ -74,7 +74,7 @@ const { NavigationProvider } = await import("../../../components/navigation-prov
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const TOKEN = "2026-09-17T12:00:00.000000Z";
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
+function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -216,27 +216,54 @@ test("posted journal links use one native drawer with immutable ledger lines", a
   const entryId = randomUUID();
   globalThis.__journalQuery = `journalEntry=${entryId}&txn=stale-payment`;
   const requests: string[] = [];
+  let entryReads = 0;
+  let deliver!: (response: Response) => void;
+  const response = new Promise<Response>((resolve) => { deliver = resolve; });
   const restoreFetch = scriptFetch((url) => {
     requests.push(url);
-    if (url === `/api/reports/entry/${entryId}?journal=1`) return Response.json({
-      entry: { id: entryId, entry_number: "JE-4080", date: "2026-09-17", status: "posted", origin: "manual", subsidiary_id: "sub-1" },
-      sourceJournal: { doc, lines: [{ ...BALANCED_LINES[0], amount: "999.00", description: "source document line" }] },
-      canPost: true,
-      lines: BALANCED_LINES.map((line, index) => ({ ...line, line_number: index + 1, memo: "immutable ledger line", account_number: String(index + 1000), account_name: `Account ${index}`, subsidiary_id: "sub-1", subsidiary: "Main entity", functional_currency: "CAD" })),
-    });
+    if (url === `/api/reports/entry/${entryId}?journal=1`) {
+      entryReads += 1;
+      return entryReads === 1 ? response : Response.json({ ...loadedData, sourceJournal: {
+        ...loadedData.sourceJournal, doc: { ...loadedData.sourceJournal.doc, updated_at: '43', custom: { approval_reference: 'Reopened review' } },
+      } });
+    }
     return null;
   });
+  const loadedData = {
+      entry: { id: entryId, entry_number: "JE-4080", date: "2026-09-17", status: "posted", origin: "manual", subsidiary_id: "sub-1" },
+      sourceJournal: { doc: { ...doc, updated_at: '42', custom: { approval_reference: "Reviewed September" } }, lines: [{ ...BALANCED_LINES[0], amount: "999.00", description: "source document line" }] },
+      canPost: true,
+      headerDefs: [{ id: "header-note", key: "approval_reference", label: "Approval reference", fieldType: "text", config: {}, isRequired: false }],
+      lineDefs: [{ id: "line-note", key: "posting_reference", label: "Posting reference", fieldType: "text", config: {}, isRequired: false }],
+      segments: [],
+      lines: BALANCED_LINES.map((line, index) => ({ ...line, line_number: index + 1, memo: "immutable ledger line", account_number: String(index + 1000), account_name: `Account ${index}`, subsidiary_id: "sub-1", subsidiary: "Main entity", functional_currency: "CAD", custom: { posting_reference: "Posted evidence" } })),
+  };
   t.after(restoreFetch);
   t.after(() => { globalThis.__journalQuery = undefined; });
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  const render = () => root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD"><NavigationProvider><JournalEntryDrawer /><EntryFlyout /></NavigationProvider></MoneyProvider></NextIntlClientProvider>);
   await act(async () => {
-    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD"><NavigationProvider><JournalEntryDrawer /><EntryFlyout /></NavigationProvider></MoneyProvider></NextIntlClientProvider>);
+    render();
     await tick();
   });
+  const loadingDialog = document.querySelector('[role="dialog"]');
+  assert.ok(loadingDialog, "the shared drawer opens immediately while its record loads");
+  assert.ok(loadingDialog.querySelector('[aria-busy="true"]'));
+  const fullscreen = loadingDialog.querySelector('button[aria-label*="ull screen"], button[aria-label*="ullscreen"]') as HTMLButtonElement | null;
+  assert.ok(fullscreen, "the loading shell exposes the standard drawer controls");
+  await click(fullscreen);
+  const fullscreenLabel = fullscreen.getAttribute('aria-label');
+  await act(async () => { deliver(Response.json(loadedData)); await tick(); });
   await tick();
+  assert.equal(document.querySelector('[role="dialog"]'), loadingDialog, "resolving the record must preserve the same dialog DOM node");
+  assert.equal(fullscreen.getAttribute('aria-label'), fullscreenLabel, "loading must retain the chosen drawer size");
+  assert.ok(buttonsNamed("Void")[0], "a current posted journal offers its lifecycle action directly in the header");
+  assert.match(document.body.textContent ?? "", /Approval reference|Posting reference/);
+  assert.match(document.body.textContent ?? "", /Reviewed September/);
+  assert.match(document.body.textContent ?? "", /Posted evidence/);
   assert.match(document.body.textContent ?? "", /JE-4080/);
   assert.match(document.body.textContent ?? "", /immutable ledger line/);
   assert.match(document.body.textContent ?? "", /CAD/);
@@ -245,6 +272,11 @@ test("posted journal links use one native drawer with immutable ledger lines", a
   assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
   assert.equal(requests.some((url) => url.includes('stale-payment')), false);
   assert.equal(requests.some((url) => url === `/api/journals/${doc.id}`), false, "opening posted evidence does not reload editable source lines");
+  await act(async () => { globalThis.__journalQuery = ''; render(); await tick(); });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  await act(async () => { globalThis.__journalQuery = `journalEntry=${entryId}`; render(); await tick(); });
+  assert.match(document.body.textContent ?? '', /Reopened review/, 'reopening a journal initializes from a fresh snapshot rather than a cached revision');
+  assert.equal(entryReads, 2);
 });
 
 test("a refused save pins the reason instead of toasting into the void", async (t) => {
@@ -272,9 +304,6 @@ test("a refused save pins the reason instead of toasting into the void", async (
   t.after(restoreFetch);
   const { unmount } = await mountJournal(doc, "edit");
   t.after(unmount);
-  const menu = buttonsNamed("Actions")[0];
-  assert.ok(menu, "record actions must live behind the Actions menu");
-  await click(menu);
   const save = buttonsNamed("Save")[0];
   assert.ok(save, "edit mode must offer Save");
   await click(save);
@@ -587,9 +616,6 @@ test(" journal: saving with a contentful account-less leg refuses by line name a
   t.after(unmount);
   // The footer prices the account-less $100 leg: debits read 200, not 100.
   assert.match(document.body.textContent ?? "", /200/, "the footer must include the account-less leg");
-  const menu = buttonsNamed("Actions")[0];
-  assert.ok(menu, "record actions must live behind the Actions menu");
-  await click(menu);
   const save = buttonsNamed("Save")[0];
   assert.ok(save, "a balanced journal must offer an enabled Save");
   assert.equal(save.disabled, false, "Save must enable on balanced legs so the refusal path is what fires");

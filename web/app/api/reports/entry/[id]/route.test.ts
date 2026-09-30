@@ -3,8 +3,7 @@ import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
 
-// Route boundary regression for fnd_mtcb4ic6_5yh8jo: an intercompany journal
-// entry whose header is visible may still carry lines for subsidiaries outside
+// An intercompany journal entry whose header is visible may still carry lines for subsidiaries outside
 // the caller's scope. The line query must enforce the same scope as the header.
 
 interface RouteState {
@@ -14,6 +13,7 @@ interface RouteState {
   queries: string[];
   /** When true the lines query returns payroll-origin party-tagged lines. */
   payrollLines: boolean;
+  journalDocument: boolean;
 }
 
 const stateKey = Symbol.for("openbooks.reports-entry-route-test");
@@ -22,6 +22,7 @@ const routeState: RouteState = {
   permissions: null,
   queries: [],
   payrollLines: false,
+  journalDocument: false,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
@@ -38,7 +39,7 @@ const reportsEntryAuthzStub = `
     return held.has('*') || held.has(permission) || held.has(permission.split('.')[0] + '.*')
   }
   function authz() {
-    return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(state.permissions ?? ['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }
+    return { user: { orgId: 'org-1', id: 'user-1', roles: [] }, permissions: new Set(state.permissions ?? ['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }
   }
   export async function guardPermission(permission) {
     return grants(permission) ? authz() : NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
@@ -91,6 +92,12 @@ stubModules({
       }
     `,
     "@openbooks/engine/src/platform/db.ts": `
+      export * as schema from '${import.meta.resolve('@openbooks/schema')}'
+      export function currentRequestOrgResolver() { return undefined }
+      export function registerRequestOrgResolver() {}
+      export function ambientTenantOrgId() { return 'org-1' }
+      export async function withOrgTransaction(orgId, work) { return work(db) }
+      export async function withBypass(work) { return work(db) }
       const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
       const sqlText = globalThis.openbooksReportsEntrySqlText
       const visibleLine = {
@@ -131,6 +138,7 @@ stubModules({
           account_name: 'Net pay payable',
           party: 'Alice Anderson',
           party_id: 'employee-alice',
+          custom: { employee_note: 'Alice Anderson payroll detail' },
           department: null,
           project: null,
           doc_kind: 'pay_run',
@@ -146,6 +154,7 @@ stubModules({
           account_name: 'Net pay payable',
           party: 'Bob Brown',
           party_id: 'employee-bob',
+          custom: { employee_note: 'Bob Brown payroll detail' },
           department: null,
           project: null,
           doc_kind: 'pay_run',
@@ -172,8 +181,21 @@ stubModules({
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes('from journal_entries e')) {
-            return { rows: [{ id: 'entry-1', subsidiary_id: 'sub-visible' }] }
+            return { rows: [{ id: '00000000-0000-4000-8000-000000000001', subsidiary_id: 'sub-visible',
+              ...(state.payrollLines ? { origin: 'payroll', custom: { employee_note: 'Alice Anderson' } } : {}),
+              ...(state.journalDocument ? { doc_id: '00000000-0000-4000-8000-000000000002', doc_kind: 'journal', source_document_id: null } : {}) }] }
           }
+          if (text.includes('from documents d')) return { rows: [{
+            id: '00000000-0000-4000-8000-000000000002', entry_id: '00000000-0000-4000-8000-000000000001',
+            kind: 'journal', status: 'posted', updated_at: '42', custom: { native_note: 'Reviewed journal' },
+          }] }
+          if (text.includes('from document_lines l')) return { rows: [] }
+          if (text.includes('from custom_field_defs')) return { rows: [{
+            id: 'field-1', key: 'native_note', label: 'Native note', fieldType: 'text', config: {}, isRequired: false, sortOrder: 0,
+          }] }
+          if (text.includes('from segment_definitions') || text.includes('from form_layouts') ||
+              text.includes('from role_assignments') || text.includes('from user_form_preferences')) return { rows: [] }
+          if (text.includes('from orgs')) return { rows: [{ f: { multiSubsidiary: false, multiCurrency: false }, complexity: 'standard' }] }
           if (text.includes('from journal_lines l')) {
             if (state.payrollLines) return { rows: payrollRows }
             // Model PostgreSQL applying the query predicate: without the
@@ -198,10 +220,11 @@ function reset(allowedSubsidiaryIds: Set<string> | null, permissions: string[] |
   routeState.permissions = permissions;
   routeState.queries.length = 0;
   routeState.payrollLines = payrollLines;
+  routeState.journalDocument = false;
 }
 
-function get(): Promise<Response> {
-  return GET(new Request("http://openbooks.test/api/reports/entry/entry-1"), {
+function get(journal = false): Promise<Response> {
+  return GET(new Request(`http://openbooks.test/api/reports/entry/entry-1${journal ? '?journal=1' : ''}`), {
     params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
 }
@@ -261,6 +284,17 @@ test("gl.read-only roles keep access", async () => {
   const response = await get();
 
   assert.equal(response.status, 200);
+  routeState.journalDocument = true;
+  const native = await get(true);
+  assert.equal(native.status, 200);
+  const body = await native.json();
+  assert.equal(body.sourceJournal.doc.updated_at, '42');
+  assert.deepEqual(body.sourceJournal.lines, [], 'native detail never substitutes editable source lines for posted GL evidence');
+  assert.equal(body.canPost, false, 'read-only access does not expose lifecycle mutations');
+  assert.equal(body.headerDefs[0].key, 'native_note');
+  assert.equal(body.lineDefs[0].key, 'native_note');
+  assert.match(JSON.stringify(body.layout), /cf_native_note/, 'the standard form resolver includes native custom fields');
+  assert.ok(routeState.queries.some((query) => query.includes('source.posted_entry_id = e.id')), 'legacy journal documents are resolved through their current posted entry');
 });
 
 test("callers with neither gl.read nor reports.read are refused", async () => {
@@ -299,7 +333,7 @@ test("reports.read-only roles see one restricted payroll line per account, never
 
   assert.equal(response.status, 200);
   const body = (await response.json()) as { lines: Array<Record<string, unknown>> };
-  const text = JSON.stringify(body.lines);
+  const text = JSON.stringify(body);
   assert.ok(!text.includes("Alice Anderson") && !text.includes("Bob Brown"), "no employee names");
   assert.ok(!text.includes("cheque"), "no per-employee cheque memos");
   assert.ok(!text.includes("employee-alice") && !text.includes("employee-bob"), "no employee ids");

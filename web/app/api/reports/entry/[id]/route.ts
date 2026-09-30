@@ -7,6 +7,9 @@ import { getAuthz, can } from '../../../../../lib/authz'
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../../../../../lib/payroll-confidentiality'
 import { notFound } from "@/lib/api/responses";
 import { loadJournalDoc } from '@/lib/journals'
+import { loadFieldDefs } from '@/lib/custom-fields'
+import { customSegmentOptions } from '@/lib/segments'
+import { resolveFormLayout } from '@/lib/customization/resolve'
 
 
 export const runtime = 'nodejs'
@@ -48,12 +51,17 @@ export const GET = defineRoute({
         : sql``
     const e = (await db.execute<Record<string, unknown>>(sql`
         select e.id, e.entry_number, e.posting_date::text as date, e.memo, e.origin, e.status,
-               e.source_document_id, e.subsidiary_id,
+               e.source_document_id, e.subsidiary_id, ${journalDrawer ? sql`e.custom,` : sql``}
                re.entry_number as reverses_number,
                d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number
           from journal_entries e
           left join journal_entries re on re.id = e.reverses_entry_id and re.org_id = e.org_id
-          left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+          left join lateral (
+            select source.id, source.kind, source.document_number from documents source
+             where source.org_id = e.org_id and (source.id = e.source_document_id
+                or (e.source_document_id is null and source.posted_entry_id = e.id))
+             order by source.id limit 1
+          ) d on true
          where e.id = ${id} and e.org_id = ${authz.user.orgId}
            ${subsidiaryFilter}
       `))
@@ -62,7 +70,7 @@ export const GET = defineRoute({
     const lines = (await db.execute<Record<string, unknown>>(sql`
         select l.line_number, l.amount, l.memo, l.is_open_item,
                l.subsidiary_id, sub.name as subsidiary, sub.base_currency as functional_currency,
-               l.extra_dims,
+               l.extra_dims, ${journalDrawer ? sql`l.custom,` : sql``}
                l.contributor_kind, l.contributor_ref,
                coalesce(ar.name, us.name) as contributor_name,
                a.id as account_id, a.number as account_number, a.name as account_name,
@@ -84,6 +92,7 @@ export const GET = defineRoute({
          order by l.line_number
       `))
     const canSeePayroll = can(authz, 'payroll.read')
+    const restrictedPayroll = !canSeePayroll && (entry.origin === 'payroll' || entry.doc_kind === 'pay_run')
     type FlyoutLine = Record<string, unknown> & {
         amount: string
         entryId: string
@@ -104,7 +113,7 @@ export const GET = defineRoute({
     const confidential = canSeePayroll ? mapped : collapseRestrictedPayrollLines(
         mapped,
         (first, total) => ({
-          ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, amount: total,
+          ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, custom: {}, amount: total,
         }),
       )
     const shaped = confidential.map((row) => {
@@ -126,13 +135,26 @@ export const GET = defineRoute({
     const journalHeader = currentJournal ? {
       doc: {
         ...currentJournal.doc,
-        ...(canSeePayroll || entry.origin !== 'payroll' ? {} : { party_id: null, party_name: null }),
+        ...(restrictedPayroll ? { party_id: null, party_name: null, custom: {} } : {}),
       },
       // The drawer displays the immutable, confidentiality-shaped GL lines.
       lines: [],
     } : null
-    return NextResponse.json({ entry, lines: shaped,
-      ...(journalDrawer ? { sourceJournal: journalHeader, canPost: Boolean(currentJournal) && can(authz, 'gl.post') } : {}),
+    const [headerDefs, lineDefs, segments] = journalDrawer ? await Promise.all([
+      loadFieldDefs('documents', 'journal'),
+      loadFieldDefs('document_lines', 'journal'),
+      customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
+    ]) : [[], [], []]
+    const form = journalDrawer ? await resolveFormLayout({
+      orgId: authz.user.orgId, userId: authz.user.id, recordType: 'journal',
+      userRoles: authz.user.roles.map(({ key }) => key), headerDefs, lineDefs,
+      explicitLayoutId: new URL(req.url).searchParams.get('form') ?? undefined,
+    }) : null
+    return NextResponse.json({
+      entry: restrictedPayroll ? { ...entry, custom: {} } : entry, lines: shaped,
+      ...(journalDrawer ? { sourceJournal: journalHeader, canPost: Boolean(currentJournal) && can(authz, 'gl.post'),
+        currentEntryId: !currentJournal ? sourceJournal?.doc.entry_id ?? null : null,
+        headerDefs, lineDefs, segments, layout: form?.layout } : {}),
     })
   },
 });

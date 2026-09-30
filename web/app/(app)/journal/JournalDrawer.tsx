@@ -305,6 +305,7 @@ function JournalDrawerBody({
   ledgerTotals,
   onLedgerRefresh,
   sourceDocument = true,
+  currentEntryId,
   canPost,
   closeHref,
 }: {
@@ -331,6 +332,8 @@ function JournalDrawerBody({
   onLedgerRefresh?: () => void
   /** Standalone and historical entries have no current document actions. */
   sourceDocument?: boolean
+  /** Historical generations link to the current journal without offering mutations against old evidence. */
+  currentEntryId?: string
   /**
    * Holds gl.post — the single permission every drawer mutation (save,
    * post, delete, void) requires server-side. Without it the drawer is
@@ -1047,22 +1050,28 @@ function JournalDrawerBody({
       description={mode === 'edit' ? tc('feedback.editingHint') : (ledgerDescription ?? doc.party_name ?? undefined)}
       primaryAction={
         canEditStatus && canPost ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>
-            {mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}
+          mode === 'edit' ? <>
+            <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts} onClick={save}>
+              {busy ? tc('actions.saving') : tc('actions.save')}
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={cancelWithConfirm}>
+              {tc('actions.cancel')}
+            </Button>
+          </> : <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setMode('edit')}>
+            {tc('actions.edit')}
+          </Button>
+        ) : sourceDocument && canPost && (doc.status === 'approved' || doc.status === 'posted') ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs text-red-600 dark:text-red-400" disabled={busy} onClick={voidJournal}>
+            {tc('actions.void')}
+          </Button>
+        ) : currentEntryId ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" asChild>
+            <JournalEntryLink entryId={currentEntryId}>{t('viewCurrentJournal')}</JournalEntryLink>
           </Button>
         ) : null
       }
       actions={
-        sourceDocument ? <>
-          {mode === 'edit' ? (
-            <>
-              {canPost ? (
-                <Button disabled={busy || hasInvalidAmounts} onClick={save}>
-                  {busy ? tc('actions.saving') : tc('actions.save')}
-                </Button>
-              ) : null}
-            </>
-          ) : sourceDocument ? (
+        sourceDocument && mode !== 'edit' ? (
             <>
               <PdfButton recordType="journal" recordId={String(doc.id)} />
               <FlowManualButtons subjectKind="journal" subjectId={String(doc.id)} />
@@ -1077,19 +1086,13 @@ function JournalDrawerBody({
                   <JournalEntryLink entryId={doc.entry_id}>{t('viewGlImpact')}</JournalEntryLink>
                 </Button>
               ) : null}
-              {canPost && (doc.status === 'approved' || doc.status === 'posted') ? (
-                <Button variant="ghost" disabled={busy} onClick={voidJournal} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                  {tc('actions.void')}
-                </Button>
-              ) : null}
               {canPost && doc.status === 'draft' ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                   {tc('actions.delete')}
                 </Button>
               ) : null}
             </>
-          ) : null}
-        </> : null
+        ) : null
       }
       footer={
         <div className="flex w-full items-center gap-3">

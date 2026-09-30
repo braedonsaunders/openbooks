@@ -58,6 +58,7 @@
     "postedToast": "Contabilizado en el libro mayor",
     "autosaveFailed": "Falló el guardado automático",
     "viewGlImpact": "Ver impacto en el libro mayor",
+    "viewCurrentJournal": "Ver el asiento actual",
     "allChangesSaved": "Todos los cambios guardados",
     "saveFailedRetry": "Error al guardar — corrija y reintente",
     "unsavedChanges": "Cambios sin guardar…",
