@@ -73,6 +73,9 @@ const mockSources = new Map<string, string>([
       export async function actOnInboxItem(ctx, itemId, actionKey, reason) {
         state.seenCtx.push({ ctx, itemId, actionKey, reason: reason ?? null })
       }
+      export async function countInbox() {
+        throw new Error('The action route must not query inbox totals')
+      }
     `,
   ],
 ]);

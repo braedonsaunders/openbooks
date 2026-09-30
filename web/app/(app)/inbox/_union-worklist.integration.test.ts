@@ -38,7 +38,7 @@ registerScopedHooks({
     // Worktree node_modules symlinks to the main checkout's install: pin
     // bare self-imports to this checkout (same modules a real install
     // resolves) so the loader and its transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/")) {
+    if (specifier.startsWith("@openbooks/engine/src/")) {
       const root = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 1);
       return nextResolve(
         new URL(`engine/${specifier.slice("@openbooks/engine/".length)}`, root).href,
@@ -67,6 +67,8 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { loadApprovals } = await import("./view.ts");
+const { inboxContext, inboxCounts } = await import("../../../lib/inbox-context");
+const { writeNotification } = await import("@openbooks/engine/src/inbox/adapters/notification.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
 
@@ -184,12 +186,25 @@ for (const tab of ["mine", "all"] as const) {
       const approver = await withBypass(() => createScratchUser(org.orgId, "Union Approver", "approver"));
       const pending = await withBypass(() => postedPendingDoc(org, submitter as unknown as string));
       state.authz = authzFor(org.orgId, approver as unknown as string);
+      await withOrgContext(org.orgId, async () => {
+        await writeNotification(db, { orgId: org.orgId, userId: approver as unknown as string, kind: "approval", title: "Your notice" });
+        await writeNotification(db, { orgId: org.orgId, userId: submitter as unknown as string, kind: "approval", title: "Someone else's notice" });
+      });
       const data = await withOrgContext(org.orgId, () =>
         loadApprovals(tab === "all" ? { tab: "all" } : {}),
       );
       assert.ok(data, "loader returns data");
       assert.equal(data!.approvalRows.length, 1, `${tab} tab reads the union reader, not gates-only`);
       assert.equal(data!.approvalRows[0]!.documentNumber, pending.number);
+      const counts = await withOrgContext(org.orgId, async () => {
+        const authz = state.authz as Authz;
+        return inboxCounts(authz, await inboxContext(authz));
+      });
+      assert.equal(counts.count, 2, "one personal approval plus one own unread notice; other actors' notices are excluded");
+      assert.equal(counts.count, data.tabs.find((t) => t.key === "mine")!.count! + data.tabs.find((t) => t.key === "tasks")!.count!);
+      const filtered = await withOrgContext(org.orgId, () => loadApprovals({ q: "no matching approval" }));
+      assert.equal(filtered!.approvalRows.length, 0);
+      assert.equal(filtered!.tabs.find((t) => t.key === "mine")!.count, counts.approvals, "search changes the rows, not the personal-work badge");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
