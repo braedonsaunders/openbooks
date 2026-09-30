@@ -166,7 +166,10 @@ export async function resolveAgencyPosting(tx:SqlExecutor,orgId:string,documentI
       from drop_ship_agent_allocations allocation join documents prior on prior.org_id=allocation.org_id and prior.id=allocation.document_id
       where allocation.org_id=${orgId} and allocation.sales_order_line_id=${s.sales_line_id} and allocation.kind=${document.kind}
         and (prior.status='posted' or prior.id=${documentId}) and allocation.document_line_id<>${l.id}`)).rows[0]!
+    const cancelled=(await tx.execute<{quantity:string}>(sql`select quantity_cancelled::text as quantity from document_lines where org_id=${orgId} and id=${document.kind==='vendor_bill' ? s.purchase_line_id : s.sales_line_id} for share`)).rows[0]!
+    const availableQuantity=toQuantityUnits(s.quantity)-toQuantityUnits(cancelled.quantity)
     const totalQuantity=toQuantityUnits(previous.quantity)+toQuantityUnits(q)
+    if(totalQuantity>availableQuantity)throw new AgencyError('The assessed order quantity was cancelled or already billed — review the native order cancellation and use a new approved order for additional goods')
     if(totalQuantity>toQuantityUnits(s.quantity) || cmp(add(previous.gross,l.amount),sourceAmount)>0)throw new AgencyError('The posted invoices or bills already cover this assessed order quantity — void the incorrect document through its controlled reversal workflow before replacing it')
     const expected=add(fromUnits(roundDiv(toUnits(sourceAmount)*totalQuantity,toQuantityUnits(s.quantity))),neg(previous.gross))
     if(cmp(l.amount,expected)!==0)throw new AgencyError('Reconcile cumulative invoice consideration to the approved order; create the document through native order conversion and assess contractual price changes on a new arrangement')

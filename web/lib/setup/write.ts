@@ -458,7 +458,7 @@ export async function validateEntityIntegrity(
   // absent one refused only in a multi-entity org. Firing the fence first
   // would refuse the onboarding wizard's single-entity default, which names
   // the org's sole subsidiary while the fence is closed.
-  const submittedSubsidiaryScope = entity.key !== 'pay-schedules'
+  const submittedSubsidiaryScope = entity.key !== 'tax-registrations' && entity.key !== 'pay-schedules'
     && entity.fields
       .filter((field) => field.ref === 'subsidiaries')
       .some((field) => Boolean(body[field.key]))
@@ -663,10 +663,13 @@ export async function validateEntityIntegrity(
     // (the drawer sends '' for untouched inputs) validates as unset.
     const current = rowId
       ? (((await executor.execute(sql`
-          select jurisdiction_id, registration_number, return_form_code
+          select subsidiary_id,jurisdiction_id, registration_number, return_form_code
             from tax_registrations where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
+    const seller=body.subsidiaryId!==undefined ? body.subsidiaryId : current?.subsidiary_id
+    if(seller && (!(typeof seller==='string') || !isUuid(seller) || !(await executor.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${seller} and is_active and not is_elimination`)).rows.length))
+      return 'Choose an active legal entity in this organization for the tax registration'
     const registrationJurisdictionId = String(
       body.jurisdictionId !== undefined && body.jurisdictionId !== ''
         ? body.jurisdictionId

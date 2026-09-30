@@ -1,4 +1,10 @@
-import { quoteGoodsPlaceOfSupply } from '../../tax/place-of-supply.ts';
+import { sql } from 'drizzle-orm';
+import { db } from '../../platform/db.ts';
+import { resolveCanadianGoodsTaxes,persistGoodsTaxSnapshot } from '../../tax/goods-selection.ts';
+import { provisionTaxPacks } from '../../tax/pack-provisioning.ts';
+import { persistLineTaxComponents } from '../../tax/persist.ts';
+import { draftDocument,capture,deps } from '../ledger-helpers.ts';
+import { postDocument } from '../../ledger/posting-document.ts';
 /**
  * Sales and consumption tax — ETA (GST/HST), Revenu Québec (QST), CRA GST34,
  * HMRC VAT Notice 700/12 (VAT100), and US economic-nexus thresholds.
@@ -522,7 +528,7 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
 
   {
     id: "sales-tax-place-of-supply",
-    title: "Native place-of-supply determination from the delivery address",
+    title: "Native Canadian goods selection posts the statutory delivery-province tax",
     citations: [
       {
         standard: "ETA",
@@ -532,26 +538,43 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
           "Whether GST or a participating province's HST applies — and at which of the differing HST rates — follows where the supply is made, so the same $100 supply bears $5.00 for an Alberta delivery and $13.00 for an Ontario one.",
       },
     ],
-    support: "partial",
-    tier: "computation",
+    support: "supported",
+    tier: "ledger",
     assertion:
       "Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.",
     facts: [
       "A $100.00 taxable supply delivered in Alberta must bear $5.00 (GST 5%).",
       "The identical supply delivered in Ontario must bear $13.00 (HST 13%).",
-      "The required outcome is the rate selected from the delivery province alone.",
+      "The selling Canadian legal entity has a dated federal registration, the maintained Canada pack and configured collected-tax accounts. Ordinary goods and contractual delivery terms are explicitly assessed; the merchant does not select a tax code.",
     ],
-    limitation:
-      "Native selection covers ordinary fully taxable goods sold and legally delivered in Canada, including applicable provincial standard tax. Services, intangible property, exemptions and special place-of-supply rules require their own assessment; the command refuses an unclassified supply. This case establishes quotation, not automatic tax-code selection during document editing.",
     expected: {
-      values: { albertaTax: "5.0000", ontarioTax: "13.0000" },
+      values: {albertaTax:'5.0000',ontarioTax:'13.0000'},
+      entries:[
+        {step:'Alberta goods invoice',lines:[{role:'ar',amount:'105.0000'},{role:'revenue',amount:'-100.0000'},{role:'taxPayable',amount:'-5.0000'}]},
+        {step:'Ontario goods invoice',lines:[{role:'ar',amount:'113.0000'},{role:'revenue',amount:'-100.0000'},{role:'taxPayable',amount:'-13.0000'}]},
+      ],
     },
-    run: () => {
-      const quote = (deliveryProvince: string) => quoteGoodsPlaceOfSupply({
-        taxableAmount: "100.00", quotedOn: "2026-08-01", country: "CA", deliveryProvince,
-        basis: "ordinary_taxable_goods_sale",
-      });
-      return { values: { albertaTax: quote("AB").taxAmount, ontarioTax: quote("ON").taxAmount } };
+    run: async ctx => {
+      const ledger=ctx.ledger!;
+      await provisionTaxPacks(ledger.orgId,['JURISDICTION:CA-AB','JURISDICTION:CA-ON'],ledger.actorId);
+      await db.execute(sql`update tax_codes set collected_account_id=${ctx.roles.taxPayable} where org_id=${ledger.orgId} and country='CA'`);
+      await db.execute(sql`update tax_registrations set subsidiary_id=${ledger.subsidiaryId},registration_number='123456789RT0001' where org_id=${ledger.orgId} and jurisdiction_id in(select id from tax_jurisdictions where org_id=${ledger.orgId} and code='CA')`);
+      const entries=[],values:Record<string,string>={};
+      for(const province of ['AB','ON']) {
+        const selection={basis:'ordinary_taxable_goods_sale',country:'CA',deliveryProvince:province,deliveryMethod:'supplier_arranged_shipping',agreementEvidence:'The signed ordinary taxable goods agreement requires supplier-arranged shipment to the stated destination province.'};
+        const documentId=await draftDocument(ledger,{kind:'customer_invoice',number:'GOODS-'+province,partyId:ledger.customerId,lines:[{accountId:ctx.roles.revenue,quantity:'1',unitPrice:'100',amount:'100'}]});
+        const chosen=(await resolveCanadianGoodsTaxes(ledger.orgId,{kind:'customer_invoice',subsidiaryId:ledger.subsidiaryId,documentDate:ledger.date,currency:'CAD',selection},[{amount:'100'}])).get(0)!;
+        await db.transaction(async tx=>{
+          await tx.execute(sql`update documents set custom=${JSON.stringify({canadianGoodsTax:selection})}::jsonb,tax_total=${chosen.computed.taxTotal},total=${chosen.computed.total} where org_id=${ledger.orgId} and id=${documentId}`);
+          const line=(await tx.execute<{id:string}>(sql`update document_lines set tax_amount=${chosen.computed.taxTotal},tax_input_amount='100' where org_id=${ledger.orgId} and document_id=${documentId} returning id`)).rows[0]!;
+          await persistLineTaxComponents(ledger.orgId,line.id,chosen.computed.components,ledger.actorId,tx);
+          await persistGoodsTaxSnapshot(tx,ledger.orgId,line.id,chosen.snapshot,ledger.actorId);
+          await tx.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${documentId}`);
+        });
+        entries.push(await capture(ctx,province==='AB'?'Alberta goods invoice':'Ontario goods invoice',async()=>{await postDocument(documentId,deps(ctx))}));
+        values[province==='AB'?'albertaTax':'ontarioTax']=chosen.computed.taxTotal;
+      }
+      return {entries,values};
     },
   },
 ];

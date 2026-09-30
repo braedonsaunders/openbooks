@@ -48,6 +48,10 @@ type Result = {
   translation: { presentationCurrency: string; rateType: string; rateDate: string } | null
 }
 type FilingObligation = {
+  registrationId?: string
+  subsidiaryId?: string | null
+  subsidiaryName?: string | null
+  registrationNumber?: string | null
   returnFormCode: string | null
   reportableFrom: string
   reportableTo: string
@@ -153,6 +157,8 @@ export function TaxFilingsView({
   const router = useRouter()
   const today = useBusinessToday()
   const bounds = monthBounds(today)
+  const [registrations,setRegistrations]=useState<FilingObligation[]>([])
+  const [registrationId,setRegistrationId]=useState('')
   const [code, setCode] = useState(forms[0]?.code ?? '')
   const [from, setFrom] = useState(bounds.from)
   const [to, setTo] = useState(bounds.to)
@@ -171,7 +177,9 @@ export function TaxFilingsView({
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { obligations?: FilingObligation[] } | null) => {
         if (cancelled || !data?.obligations?.length) return
-        const match = obligationPeriodForForm(data.obligations, code)
+        const matching=data.obligations.filter(obligation=>obligation.returnFormCode===code)
+        setRegistrations(matching.filter((value,index,all)=>all.findIndex(other=>other.registrationId===value.registrationId)===index))
+        const match = matching.length===1 ? obligationPeriodForForm(matching, code) : null
         if (match) {
           setFrom(match.from)
           setTo(match.to)
@@ -193,7 +201,7 @@ export function TaxFilingsView({
     if (!code) return
     setBusy(true)
     try {
-      const response = await fetch(`/api/tax/returns/${encodeURIComponent(code)}?from=${from}&to=${to}${adjustmentQuery(values)}`)
+      const response = await fetch(`/api/tax/returns/${encodeURIComponent(code)}?from=${from}&to=${to}${adjustmentQuery(values)}${registrationId ? `&registration=${encodeURIComponent(registrationId)}${registrations.find(reg=>reg.registrationId===registrationId)?.subsidiaryId ? `&subsidiary=${registrations.find(reg=>reg.registrationId===registrationId)!.subsidiaryId}` : ''}` : ''}`)
       if (!response.ok) throw new Error(await readApiErrorMessage(response, tCommon('feedback.saveFailed')))
       setResult((await response.json()) as Result)
     } catch (e) {
@@ -251,6 +259,8 @@ export function TaxFilingsView({
                   id="tax-form"
                   value={code}
                   onChange={(event) => {
+                    setRegistrationId('')
+                    setRegistrations([])
                     setCode(event.target.value)
                     setFrom(bounds.from)
                     setTo(bounds.to)
@@ -263,6 +273,12 @@ export function TaxFilingsView({
                   ))}
                 </Select>
               </div>
+              {registrations.length ? <div className="space-y-1.5">
+                <Label htmlFor="tax-registration">{t('registration')}</Label>
+                <Select id="tax-registration" value={registrationId} onChange={event=>{setRegistrationId(event.target.value);setResult(null)}}>
+                  <option value="">—</option>{registrations.map(reg=><option key={reg.registrationId} value={reg.registrationId}>{reg.registrationNumber ?? reg.registrationId}{reg.subsidiaryName ? ` — ${reg.subsidiaryName}` : ''}</option>)}
+                </Select>
+              </div> : null}
               <div className="space-y-1.5">
                 <Label htmlFor="tax-from">{t('from')}</Label>
                 <Input id="tax-from" type="date" value={from} onChange={(event) => { setFrom(event.target.value); setResult(null) }} />

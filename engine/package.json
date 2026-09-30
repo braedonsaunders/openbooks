@@ -55,6 +55,7 @@
     "./revenue": "./src/revenue/public.ts",
     "./payroll/withholding": "./src/payroll/public-withholding.ts",
     "./money/quantity": "./src/money/quantity.ts",
-    "./consolidation": "./src/consolidation/public.ts"
+    "./consolidation": "./src/consolidation/public.ts",
+    "./tax/contracts": "./src/tax/public-contracts.ts"
   }
 }
