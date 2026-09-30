@@ -26,7 +26,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 test("email delivery attempts share one canonical row and uncertain outcomes block re-sends", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    await withOrgContext({ orgId: org.orgId }, async () => {
+    await withOrgContext(org.orgId, async () => {
       const to = "controller@scratch.test";
       const deliveryKey = `obem_${"a".repeat(40)}`;
 
