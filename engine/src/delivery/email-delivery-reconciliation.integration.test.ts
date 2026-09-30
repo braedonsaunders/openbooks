@@ -10,6 +10,7 @@ import {
   markEmailUncertain,
 } from "./email-config.ts";
 import { db } from "../platform/db.ts";
+import { strandedWorkFindings } from "../agents/stranded-work.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -64,6 +65,10 @@ test("email delivery attempts share one canonical row and uncertain outcomes blo
     `)).rows[0];
     assert.equal(parked?.status, "uncertain");
     assert.match(parked?.error_message ?? "", /timed out/u);
+    const deliveryFinding = (await strandedWorkFindings(org.orgId, "1900-01-01"))
+      .find(finding => finding.subjectType === "email_log" && finding.subjectId === firstClaim.id);
+    assert.equal(deliveryFinding?.severity, "critical", "uncertain acceptance needs immediate review regardless of age");
+    assert.match(String(deliveryFinding?.summary.remedy), /acceptance evidence.*before sending another email/);
 
     // Attempt 2 (the BullMQ retry) reconciles BEFORE transmitting.
     const retryClaim = await claimEmailDeliveryLog({
@@ -99,6 +104,8 @@ test("email delivery attempts share one canonical row and uncertain outcomes blo
     assert.equal(finalRow?.status, "sent");
     assert.equal(finalRow?.provider_message_id, "email_re_accepted_once");
     assert.ok(finalRow?.sent_at);
+    assert.equal((await strandedWorkFindings(org.orgId, "1900-01-01"))
+      .some(finding => finding.subjectType === "email_log" && finding.subjectId === firstClaim.id), false);
 
     // Idempotent: completing again changes nothing and still returns success.
     const again = await confirmEmailSentGuarded(org.orgId, firstClaim.id, "email_re_accepted_once");
