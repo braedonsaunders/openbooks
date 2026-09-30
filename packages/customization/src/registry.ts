@@ -1103,7 +1103,7 @@ const LEASE_AGREEMENT: RecordTypeMeta = {
     options: ["draft","active","terminated","complete"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
 };
 
-const FINANCIAL_CHANGE_OPERATIONS = ["drop_ship_control_assessment",
+const FINANCIAL_CHANGE_OPERATIONS = ["net_investment_oci","net_investment_oci_reversal","drop_ship_control_assessment",
   "modification",
   "remeasurement",
   "termination",

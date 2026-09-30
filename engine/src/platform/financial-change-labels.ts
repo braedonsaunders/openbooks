@@ -13,6 +13,8 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
   partial_disposal: "Partial disposal",
   intercompany_transfer: "Intercompany transfer",
   group_valuation: "Group valuation",
+  net_investment_oci_reversal: "Net-investment FX correction",
+  net_investment_oci: "Net-investment FX assessment",
   loss_of_control: "Loss of control",
   reversal: "Reversal",
   scrap_snapshot_restatement: "Scrap snapshot restatement",

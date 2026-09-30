@@ -23,6 +23,8 @@ import { ROLES } from "./role-bindings.ts";
 
 /** Accounts the corpus needs beyond the shared scratch fixture. */
 const EXTRA_ACCOUNTS: readonly [Role, string, string, string][] = [
+  ["netInvestmentLoan", "1420", "Net-Investment Monetary Loan", "asset_other"],
+  ["netInvestmentOci", "3200", "Net-Investment FX OCI Reserve", "equity"],
   ["vendorPassThrough", "2190", "Vendor Pass-Through Consideration", "liability_current_other"],
   ["finishedGoodsInventory", "1460", "Finished Goods Inventory", "asset_current_other"],
   ["contractAsset", "1150", "Contract Asset", "asset_current_other"],

@@ -19,6 +19,8 @@ import type { FlowSubjectAdapter } from "./types.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 async function assertAccountingSubjectFeatures(orgId: string, subjectId: string, domain: string, operation: string) {
+  if(domain==='consolidation' && operation==='net_investment_oci' && (!await lockAndCheckOrgFeature(db,orgId,'multiSubsidiary') || !await lockAndCheckOrgFeature(db,orgId,'multiCurrency')))
+    throw new FinancialChangeFeatureError('Turn on Multi-Subsidiary and Multi-Currency in Company Settings → Features before submitting or approving a net-investment FX assessment')
   if (domain==='sales' && !await lockAndCheckOrgFeature(db,orgId,'dropShipping')) throw new FinancialChangeFeatureError('Turn on Drop Shipping in Company Settings → Features before submitting or approving a control assessment')
   if (domain==='revenue' && operation==='expected_breakage_estimate' && (!await lockAndCheckOrgFeature(db,orgId,'usageBilling') || !await lockAndCheckOrgFeature(db,orgId,'revenueRecognition')))
     throw new FinancialChangeFeatureError('Turn on Usage Billing and Revenue Recognition in Company Settings → Features before submitting or approving a breakage estimate')

@@ -30,6 +30,8 @@ export const ROLES: readonly Role[] = [
   "accumulatedDepreciation",
   "impairmentLoss",
   "disposalGainLoss",
+  "netInvestmentLoan",
+  "netInvestmentOci",
   "fxRealizedGainLoss",
   "fxUnrealizedGainLoss",
   "loanPayable",

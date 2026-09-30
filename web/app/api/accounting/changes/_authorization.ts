@@ -60,7 +60,7 @@ export async function authorizeChange(id: string, intent: "submit" | "apply" = "
   // caller cannot distinguish an existing lease change from a missing id.
   if (!policy || !can(auth, intent === "apply" && "applyPermission" in policy ? policy.applyPermission : policy.permission))
     return NextResponse.json({ error: "change not found" }, { status: 404 });
-  if (policy.feature && !(await isFeatureEnabled(auth.user.orgId, policy.feature)))
+  if (policy.feature && !(row.domain === "consolidation" && row.operation === "net_investment_oci_reversal") && !(await isFeatureEnabled(auth.user.orgId, policy.feature)))
     return NextResponse.json(
       {
         error:

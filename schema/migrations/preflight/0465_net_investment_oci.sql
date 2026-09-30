@@ -1,0 +1,1 @@
+SELECT 'net-investment accounting is partially installed' AS issue WHERE to_regclass('public.net_investment_entries') IS NOT NULL OR to_regclass('public.net_investment_sources') IS NOT NULL OR to_regprocedure('public.net_investment_evidence_guard()') IS NOT NULL;
