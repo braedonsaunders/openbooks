@@ -73,6 +73,8 @@ export interface SalesOrderDrawer {
   dropShipping: boolean
   dropShipLines: OrderDrawerProps['dropShipLines']
   dropShipVendors: OrderDrawerProps['dropShipVendors']
+  canAssessDropShip: boolean
+  dropShipLiabilityAccounts: {id:string;label:string}[]
   canRouteDropShip: boolean
   canCreateDropShipPurchaseOrder: boolean
   barcodeScanningEnabled: boolean
@@ -124,6 +126,7 @@ export async function loadSalesOrders(
   const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
   const customerPartNumbersEnabled = await isFeatureEnabled(authz.user.orgId, 'customerPartNumbers')
   const canManage = can(authz, 'ar.create')
+  const canAssessDropShip = dropShipping && can(authz,'ar.post')
   const canRouteDropShip = dropShipping && can(authz, 'orders.fulfill')
   const canCreateDropShipPurchaseOrder = dropShipping && can(authz, 'ap.create')
   const { backorders, pickLists, returnAuthorizations } = await orderFulfillmentActions(authz)
@@ -269,6 +272,8 @@ export async function loadSalesOrders(
           dropShipping,
           dropShipLines,
           dropShipVendors,
+          canAssessDropShip,
+          dropShipLiabilityAccounts: canAssessDropShip ? (await listScopedAccountOptions(authz.user.orgId,authz.allowedSubsidiaryIds,{types:['liability_current_other','liability_long_term'],activeOnly:true,postingOnly:true})).map(account=>({id:account.id,label:`${account.number ?? ''} — ${account.name}`})) : [],
           canRouteDropShip,
           canCreateDropShipPurchaseOrder,
           barcodeScanningEnabled,

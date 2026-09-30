@@ -1,3 +1,4 @@
+import { isAgencyConfirmationLine } from './drop-ship-agency.ts';
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
@@ -120,7 +121,18 @@ export async function reverseDropShipConfirmationPair(
      order by id
      for update
   `)).rows;
-  if (sourceEntries.length === 0) {
+  const receiptLines = (await tx.execute<{id:string}>(sql`select id from document_lines where org_id=${input.orgId} and document_id=${receiptId}`)).rows;
+  let agencyOnly = receiptLines.length > 0;
+  for (const line of receiptLines) if (!await isAgencyConfirmationLine(tx,input.orgId,receiptId,line.id)) agencyOnly=false;
+  if (agencyOnly && (await tx.execute(sql`select 1 from drop_ship_agent_allocations allocation
+    join documents invoice on invoice.org_id=allocation.org_id and invoice.id=allocation.document_id
+    join financial_changes change on change.org_id=allocation.org_id and change.id=allocation.change_id
+    join document_lines receipt_line on receipt_line.org_id=change.org_id and receipt_line.document_id=${receiptId}
+      and receipt_line.custom->'receipt'->>'sourceLineId'=change.before_state->>'purchase_line_id'
+    where allocation.org_id=${input.orgId} and allocation.kind='customer_invoice' and invoice.status='posted' limit 1`)).rows.length) {
+    throw new DropShipPairVoidRefusal('Void or correct the posted agency customer invoices through their controlled document workflow before reversing this vendor shipment');
+  }
+  if (sourceEntries.length === 0 && !agencyOnly) {
     throw new DropShipPairVoidRefusal(
       `Drop-ship confirmation for ${receipt.document_number} has no posted cost entry; reconcile its accounting evidence before voiding`,
     );

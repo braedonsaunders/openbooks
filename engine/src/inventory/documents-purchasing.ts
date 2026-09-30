@@ -1,3 +1,4 @@
+import { resolveAgencyPosting } from './drop-ship-agency.ts';
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
@@ -43,7 +44,8 @@ export async function assertBillReceiptsPostable(
 ): Promise<void> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return;
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
-  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  const agency = await resolveAgencyPosting(runner,orgId,documentId);
+  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(line=>!agency.has(line.lineId));
   if (lines.length === 0) return;
   assertDocumentLinesUntracked(lines, {
     movement: "receipt",
@@ -100,7 +102,10 @@ export async function applyBillInventoryReceipts(
   subsidiaryId: string,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return 0;
-  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  // Posted agency evidence survives later feature and configuration changes.
+  // This drain owes no stock receipt for those immutable vendor-bill lines.
+  const agency = new Set((await runner.execute<{id:string}>(sql`select document_line_id as id from drop_ship_agent_allocations where org_id=${orgId} and document_id=${documentId} and kind='vendor_bill'`)).rows.map(row=>row.id));
+  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(line=>!agency.has(line.lineId));
   for (const key of [
     ...new Set(
       lines.map((line) => `${line.itemId}:${line.stockLocationId}`),

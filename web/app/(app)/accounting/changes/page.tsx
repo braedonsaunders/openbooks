@@ -32,10 +32,10 @@ export default async function AccountingEvents({
   const auth = await getAuthz();
   if (!auth) redirect("/login");
   const domains = can(auth, "gl.read")
-    ? ["lease", "asset", "revenue", "consolidation", "provision"]
+    ? ["lease", "asset", "revenue", "consolidation", "provision", "sales"]
     : [
         ...(can(auth, "assets.read") ? ["lease", "asset"] : []),
-        ...(can(auth, "ar.read") ? ["revenue"] : []),
+        ...(can(auth, "ar.read") ? ["revenue", "sales"] : []),
         ...(can(auth, "close.read") ? ["consolidation"] : []),
       ];
   if (!domains.length) redirect(accessDeniedHref({ permission: "gl.read" }));
@@ -72,6 +72,7 @@ export default async function AccountingEvents({
   };
   if (row) {
     collect(row.payload);
+    collect(row.before_state);
     collect(row.before_state.preview);
     collect(row.before_state.previews);
   }
@@ -92,7 +93,7 @@ export default async function AccountingEvents({
   const permission =
     row?.domain === "provision"
       ? "gl.post"
-      : row?.domain === "revenue"
+      : (row?.domain === "revenue" || row?.domain === "sales")
       ? "ar.post"
       : row?.domain === "consolidation"
         ? "close.run"
@@ -162,6 +163,7 @@ export default async function AccountingEvents({
                     />
                   </section>
                 ) : null}
+                {row.domain === "sales" ? <section className="space-y-2"><h3 className="font-semibold">{t("lifecycle.proposedImpact")}</h3><ChangeEvidence value={row.before_state} names={referenceNames} /></section> : null}
                 <section className="space-y-2">
                   <h3 className="font-semibold">
                     {t("lifecycle.proposedTerms")}

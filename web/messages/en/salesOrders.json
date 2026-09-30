@@ -8,5 +8,20 @@
     "emptyDescription": "Create a sales order, or convert one from an estimate.",
     "newButton": "New sales order",
     "createDraftFailed": "Could not create a draft sales order"
+  },
+  "agency": {
+    "title": "Assess principal or agent",
+    "hint": "Assess whether the company controls the specified goods before transfer. Obtain independent approval before confirming shipment or approving an invoice or bill. An agent reports its arranging fee and carries the vendor entitlement as a pass-through liability.",
+    "line": "Paired sales-order line",
+    "choose": "Choose…",
+    "date": "Effective date",
+    "control": "Does the company control these goods before customer transfer?",
+    "principal": "Yes — principal, gross revenue",
+    "agent": "No — agent, net arranging fee",
+    "account": "Vendor pass-through liability account",
+    "evidence": "Contractual control evidence",
+    "reason": "Assessment reason",
+    "propose": "Prepare approval proposal",
+    "failed": "The control assessment could not be prepared"
   }
 }

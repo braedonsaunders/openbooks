@@ -53,6 +53,7 @@
     "./inventory": "./src/inventory/public.ts",
     "./inventory/contracts": "./src/inventory/public-contracts.ts",
     "./revenue": "./src/revenue/public.ts",
-    "./payroll/withholding": "./src/payroll/public-withholding.ts"
+    "./payroll/withholding": "./src/payroll/public-withholding.ts",
+    "./money/quantity": "./src/money/quantity.ts"
   }
 }

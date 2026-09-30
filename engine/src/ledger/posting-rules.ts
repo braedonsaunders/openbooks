@@ -293,7 +293,7 @@ export const RULES: Record<string, RuleFn> = {
       // the stock); all other lines DR their expense account.
       accountId: resolvedLineAccount(
         l,
-        deps.inventoryAssetByLine?.get(l.id) ?? l.accountId,
+        deps.agencyByLine?.get(l.id)?.accountId ?? deps.inventoryAssetByLine?.get(l.id) ?? l.accountId,
       ),
       amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
       memo: l.description,
@@ -317,7 +317,11 @@ export const RULES: Record<string, RuleFn> = {
   },
 
   customer_invoice: (doc, lines, deps) => {
-    const income: KernelLine[] = lines.map((l) => ({
+    const income: KernelLine[] = lines.flatMap((l): KernelLine[] => {
+      const agency = deps.agencyByLine?.get(l.id);
+      if (agency) return [{accountId: resolvedLineAccount(l), amount: negMoney(add(l.amount,neg(agency.vendorAmount))),memo: l.description,partyId:l.partyId ?? doc.partyId,...dims(doc,l)},
+        {accountId:agency.accountId,amount:negMoney(agency.vendorAmount),memo:"Vendor pass-through consideration",partyId:l.partyId ?? doc.partyId,...dims(doc,l)}];
+      return [{
       // Rev-rec lines credit deferred revenue; recognition drains it over the
       // term. All other lines credit income directly.
       accountId: resolvedLineAccount(
@@ -328,7 +332,7 @@ export const RULES: Record<string, RuleFn> = {
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
-    }));
+    }]; });
     const tax = salesTaxLines(doc, lines, deps, 1);
     const total = sumMoney([...income, ...tax].map((l) => l.amount));
     return [

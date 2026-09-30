@@ -1,3 +1,4 @@
+import { agencyForPurchaseLine,isAgencyConfirmationLine } from '../inventory/drop-ship-agency.ts';
 import { sql } from "drizzle-orm";
 import { cmp, neg } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
@@ -188,6 +189,11 @@ export async function applyDropShipConfirmationInventory(
   const currency = await subsidiaryCurrency(orgId, subsidiaryId, runner);
   let count = 0;
   for (const line of lines) {
+    const sourceLine = (await runner.execute<{id:string}>(sql`select custom->'receipt'->>'sourceLineId' as id from document_lines where org_id=${orgId} and id=${line.line_id}`)).rows[0]?.id;
+    if (sourceLine && await agencyForPurchaseLine(runner,orgId,sourceLine,receipt.document_date)) {
+      if (!await isAgencyConfirmationLine(runner,orgId,receiptId,line.line_id)) throw new DropShipRefusal('The shipment does not match its approved agency arrangement','invalid_pairing',422,'Recreate the vendor shipment from the assessed purchase order so its item, quantity, consideration and legal entity are preserved');
+      continue;
+    }
     if (!line.has_profile) {
       throw new DropShipRefusal(`Item ${line.item_name} has no inventory costing profile`, "item_profile_required", 422, `Open Items, select ${line.item_name}, and configure its Costing profile before confirming the shipment`);
     }

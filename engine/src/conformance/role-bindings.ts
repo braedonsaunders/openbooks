@@ -5,6 +5,7 @@ export const ROLES: readonly Role[] = [
   "ar",
   "ap",
   "bank",
+  "vendorPassThrough",
   "revenue",
   "deferredRevenue",
   "recognizedRevenue",

@@ -1,3 +1,4 @@
+import { resolveAgencyPosting } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
@@ -96,6 +97,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       taxComponentsByLine: await resolveTaxComponents(db, doc.id, doc.orgId),
     };
   }
+  deps = { ...deps, agencyByLine: await resolveAgencyPosting(db, doc.orgId, doc.id) };
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = {
       ...deps,

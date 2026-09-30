@@ -17,7 +17,7 @@ export {
 /** Workflow evidence only. Financial calculations and subject authorization
  * stay in their owning modules; the existing Flows engine owns decisions. */
 export type FinancialChangeDomain =
-  "lease" | "revenue" | "asset" | "consolidation" | "manufacturing" | "provision";
+  "lease" | "revenue" | "asset" | "consolidation" | "manufacturing" | "provision" | "sales";
 
 export class FinancialChangeFeatureError extends Error {
   readonly status = 422;
@@ -186,6 +186,9 @@ export async function loadFinancialChangeSubjectLabel(
   domain: FinancialChangeDomain,
   subjectId: string,
 ): Promise<string | null> {
+  if (domain === "sales") {
+    return (await tx.execute<{label:string}>(sql`select document.document_number || ' — line ' || line.line_number as label from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${orgId} and line.id=${subjectId}`)).rows[0]?.label ?? null;
+  }
   if (domain === "lease") {
     const row = (
       await tx.execute<{ label: string }>(sql`

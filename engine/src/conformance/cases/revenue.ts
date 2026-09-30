@@ -6,6 +6,7 @@
  * `requirement` line is our own restatement of the cited paragraph.
  */
 
+import { proposeDropShipAssessment,applyDropShipAssessment } from '../../inventory/drop-ship-agency.ts';
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext,withBypassContext } from "../../platform/db.ts";
@@ -1347,17 +1348,83 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           "An agent that arranges for another party to provide the good does not control it before transfer and reports only the amount of its fee.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "ledger",
     assertion:
-      "When the distributor never controls the vendor's good and only arranges delivery, its revenue is the contracted fee rather than the full amount charged to the customer.",
+      "An independently approved contractual control assessment routes a native invoice to a 20.00 arranging fee and an 80.00 vendor pass-through liability; the native vendor bill clears that liability through AP without receiving stock or reporting COGS.",
     facts: [
-      "The vendor controls and transfers the item directly to the customer.",
-      "The customer pays 100.00 and the vendor is entitled to 80.00; the distributor earns a 20.00 arranging fee.",
-      "The target outcome is 20.00 net revenue with no gross cost of goods sold presentation by the agent.",
+      "The vendor controls and transfers the specified goods directly to the customer; contractual evidence is reviewed through the native independent approval workflow before billing or shipment.",
+      "The customer consideration is 100.00 and the vendor entitlement is 80.00 in the same currency and legal entity.",
+      "The customer invoice and vendor bill retain their paired order-line provenance, including partial billed quantities.",
     ],
-    gap:
-      "Drop-ship accounting currently records a distributor's customer invoice gross and its vendor cost as cost of goods sold. It has no principal-versus-agent assessment or net-fee recognition path for an entity that never controls the good before transfer.",
-    expected: { values: { netRevenue: "20.0000", costOfGoodsSold: "0.0000" } },
+    expected: {entries:[
+      {step:"agent invoice and shipment",lines:[{role:"ar",amount:"100.0000"},{role:"revenue",amount:"-20.0000"},{role:"vendorPassThrough",amount:"-80.0000"}]},
+      {step:"vendor bill",lines:[{role:"vendorPassThrough",amount:"80.0000"},{role:"ap",amount:"-80.0000"}]}
+    ]},
+    run: async(ctx)=> {
+      const ledger=ctx.ledger!
+      const actors=await withBypassContext(async()=>{
+        const actors=await seedFlowActors(ledger.orgId)
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"inventory":true,"dropShipping":true}'::jsonb) where id=${ledger.orgId}`)
+        await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${actors.submitterId},'ar.post','grant')`)
+        await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+        return actors
+      })
+      return withOrgContext(ledger.orgId,async()=>{
+        const salesId=randomUUID(),salesLine=randomUUID(),purchaseId=randomUUID(),purchaseLine=randomUUID()
+        for(const [id,line,kind,number,party,amount] of [[salesId,salesLine,'sales_order','CONF-AGENT-ORDER',ledger.customerId,'100'],[purchaseId,purchaseLine,'purchase_order','CONF-AGENT-PO',ledger.vendorId,'80']]) {
+          await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status)
+            values(${id},${ledger.orgId},${kind},${number},${party},${ledger.subsidiaryId},${ledger.date},'CAD','draft')`)
+          await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit,unit_price,amount,tax_amount,stock_location_id)
+            values(${line},${ledger.orgId},${id},1,${ledger.items.standard},${ctx.roles.revenue},'Vendor-controlled goods','1','ea',${amount},${amount},'0',${ledger.stockLocationId})`)
+          if(kind==='sales_order' && (await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${id} and status='draft' returning id`)).rows.length!==1)throw new Error('Paired agency order could not be approved')
+        }
+        await routeDropShipLine({orgId:ledger.orgId,actorId:ledger.actorId,salesOrderId:salesId,salesOrderLineId:salesLine,allowedSubsidiaryIds:null})
+        await attachDropShipPurchaseOrder({orgId:ledger.orgId,actorId:ledger.actorId,salesOrderId:salesId,purchaseOrderId:purchaseId,shipToAddress:{name:'Agency customer'},lines:[{salesOrderLineId:salesLine,purchaseOrderLineId:purchaseLine}],allowedSubsidiaryIds:null})
+        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${purchaseId} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency purchase order could not be approved')
+        const id=await proposeDropShipAssessment(ledger.orgId,actors.submitterId,{salesOrderLineId:salesLine,controlsBeforeTransfer:false,passThroughAccountId:ctx.roles.vendorPassThrough,
+          controlEvidence:'The vendor retains control, inventory risk and responsibility for satisfying the specified goods until transfer to the customer; the company only arranges that transfer for its contracted fee.',
+          effectiveOn:ledger.date,reason:'Recognize the contractual arranging fee under the approved agent assessment',idempotencyKey:randomUUID()})
+        await submitFinancialChange(ledger.orgId,id,actors.submitterId)
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
+        await applyDropShipAssessment(ledger.orgId,id,actors.submitterId)
+        const makeConverted=async(kind:'customer_invoice'|'vendor_bill',number:string,amount:string,orderId:string,lineId:string)=> {
+          const document=await draftDocument(ledger,{kind,number,partyId:kind==='customer_invoice' ? ledger.customerId : ledger.vendorId,
+            lines:[{itemId:ledger.items.standard,accountId:ctx.roles.revenue,quantity:'1',unitPrice:amount,amount,stockLocationId:ledger.stockLocationId}]})
+          await db.execute(sql`update document_lines set unit='ea',custom=${JSON.stringify({convertedFrom:{documentId:orderId,lineId,quantity:'1'},...(kind==='vendor_bill' ? {purchaseOrderLineId:lineId} : {})})}::jsonb where org_id=${ledger.orgId} and document_id=${document}`)
+          await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by,updated_by) values(${ledger.orgId},${orderId},${document},'bills',${ledger.actorId},${ledger.actorId})`)
+          if((await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${orderId} and status='approved' returning id`)).rows.length!==1)throw new Error('Agency order could not advance its billing cover')
+          if((await db.execute(sql`update document_lines set quantity_billed='1' where org_id=${ledger.orgId} and id=${lineId} returning id`)).rows.length!==1)throw new Error('Agency order billing cover could not be recorded')
+          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${orderId} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency order could not restore its approval')
+          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${document} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency document could not be approved')
+          return document
+        }
+        const invoice=await makeConverted('customer_invoice','CONF-AGENT-INVOICE','100',salesId,salesLine)
+        const receipt=randomUUID(),receiptLine=randomUUID()
+        await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status,custom)
+          values(${receipt},${ledger.orgId},'purchase_receipt','CONF-AGENT-RECEIPT',${ledger.vendorId},${ledger.subsidiaryId},${ledger.date},'CAD','draft','{"dropShipConfirmation":{"idempotencyKey":"conformance-agency"}}'::jsonb)`)
+        await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,quantity,unit,unit_price,amount,tax_amount,custom)
+          values(${receiptLine},${ledger.orgId},${receipt},1,${ledger.items.standard},'1','ea','80','80','0',${JSON.stringify({receipt:{sourceLineId:purchaseLine}})}::jsonb)`)
+        await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by,updated_by) values(${ledger.orgId},${purchaseId},${receipt},'fulfills',${ledger.actorId},${ledger.actorId})`)
+        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${receipt} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency shipment could not be approved')
+        const fulfillment=randomUUID()
+        await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status,custom)
+          values(${fulfillment},${ledger.orgId},'sales_fulfillment','CONF-AGENT-FULFILLMENT',${ledger.customerId},${ledger.subsidiaryId},${ledger.date},'CAD','draft',${JSON.stringify({dropShipConfirmation:{purchaseReceiptId:receipt}})}::jsonb)`)
+        await db.execute(sql`insert into document_lines(org_id,document_id,line_number,item_id,quantity,unit,unit_price,amount,tax_amount,custom)
+          values(${ledger.orgId},${fulfillment},1,${ledger.items.standard},'1','ea','100','100','0',${JSON.stringify({fulfillment:{sourceLineId:salesLine}})}::jsonb)`)
+        await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by,updated_by) values(${ledger.orgId},${salesId},${fulfillment},'fulfills',${ledger.actorId},${ledger.actorId})`)
+        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${fulfillment} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency fulfillment could not be approved')
+        for(const [orderId,lineId] of [[salesId,salesLine],[purchaseId,purchaseLine]]) {
+          if((await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${orderId} and status='approved' returning id`)).rows.length!==1)throw new Error('Agency order could not advance shipment cover')
+          if((await db.execute(sql`update document_lines set quantity_fulfilled='1' where org_id=${ledger.orgId} and id=${lineId} returning id`)).rows.length!==1)throw new Error('Agency shipment cover could not be recorded')
+          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${orderId} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency order could not restore approval')
+        }
+        const customer=await capture(ctx,'agent invoice and shipment',async()=>{await postDocument(invoice,deps(ctx));await applyDropShipConfirmationInventory(db,ledger.orgId,ledger.actorId,receipt)})
+        const bill=await makeConverted('vendor_bill','CONF-AGENT-BILL','80',purchaseId,purchaseLine)
+        const vendor=await capture(ctx,'vendor bill',async()=>{await postDocument(bill,deps(ctx))})
+        return {entries:[customer,vendor]}
+      })
+    },
   },
 ];

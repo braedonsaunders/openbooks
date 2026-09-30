@@ -110,14 +110,16 @@
       "group_valuation": "Group valuation",
       "loss_of_control": "Loss of control",
       "reversal": "Reversal",
-      "provision_assessment": "Provision assessment"
+      "provision_assessment": "Provision assessment",
+      "drop_ship_control_assessment": "Drop-ship control assessment"
     },
     "domains": {
       "lease": "Lessee lease",
       "asset": "Fixed asset",
       "revenue": "Revenue contract",
       "consolidation": "Consolidation",
-      "provision": "Provision and contingency"
+      "provision": "Provision and contingency",
+      "sales": "Sales agency"
     },
     "evidence": {
       "assessment": "Assessment / measurement",
