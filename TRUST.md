@@ -24,8 +24,8 @@ Three things are published here:
    in the comprehensive verification run and, where stated, by storage guards.
 2. **The conformance corpus** — requirements of published accounting standards,
    encoded as executable fixtures with exact expected entries.
-3. **The results** — from explicitly dispatched comprehensive CI runs, including
-   failures and the measured source commit.
+3. **The results** — from explicitly dispatched comprehensive CI runs and
+   identified focused runs, including failures and the measured source commit.
 
 > [!IMPORTANT]
 > OpenBooks is alpha software. These checks are extensive and they are honest,
@@ -48,6 +48,12 @@ not establish that those comprehensive partitions ran for the same commit.
 Read the commit and timestamp in each linked artifact before using it as
 evidence. Historical passes remain evidence for their measured source, not
 for the current checkout.
+
+The current standards snapshot measured `035a6286dfe9` on September 30, 2026
+with the existing 106-case corpus: 64 computation and 42 isolated database
+ledger cases passed, with no failures, declared gaps or unrun cases. This was a
+focused local standards run. The separate controls, invariant checkpoint and
+comprehensive-run history retain their own source stamps.
 
 | What | Status |
 | --- | --- |

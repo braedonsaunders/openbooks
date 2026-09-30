@@ -4,14 +4,14 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**98 passing · 0 failing · 8 gaps · 0 not run**
+**106 passing · 0 failing · 0 gaps · 0 not run**
 
-Commit `51e7e2b95f5305f406f74ef85f4af5677d2f7791` · 2026-09-30T00:48:46.661Z
+Commit `035a6286dfe90d68f5492f0ad5320bcbd1b49fcf` · 2026-09-30T08:05:14.048Z
 
 | Partition | Passed | Failed | Gaps | Not run |
 | --- | --- | --- | --- | --- |
-| computation | 64 | 0 | 7 | 0 |
-| ledger | 34 | 0 | 1 | 0 |
+| computation | 64 | 0 | 0 | 0 |
+| ledger | 42 | 0 | 0 | 0 |
 
 ## AL DOR
 
@@ -45,26 +45,16 @@ Commit `51e7e2b95f5305f406f74ef85f4af5677d2f7791` · 2026-09-30T00:48:46.661Z
 | **A licence royalty is earned as the customer uses the intellectual property**<br><sub>The rating kernel produces no amount before a licence is used and prices the first 4 uses at 3.25 each when that use occurs.</sub> | ASC 606 606-10-55-65<br>IFRS 15.B63 | PASS | Implemented |
 | **A usage prepayment remains a liability until the month's usage is drawn**<br><sub>The prepaid invoice credits deferred revenue, and the rating run's 2026-07 draw drives the recognition run to release the same amount in July.</sub> | ASC 606 606-10-45-2; 606-10-32-39–41<br>IFRS 15.106; IFRS 15.84–86 | PASS | Implemented |
 | **A minimum usage commitment closes against the usage in its monthly window**<br><sub>The rating kernel measures the 5.00 usage against the 10.00 monthly minimum and computes the 5.00 shortfall for the window that ends on 2026-07-31.</sub> | ASC 606 606-10-55-48<br>IFRS 15.B46 | PASS | Implemented |
-| **Expected breakage is recognised in proportion to customer redemptions**<br><sub>Expected breakage is not recognised in proportion to earlier customer use; the system waits for a breakage policy rather than silently estimating it.</sub> | ASC 606 606-10-55-48<br>IFRS 15.B46 | GAP | Not implemented |
+| **Expected breakage is recognised in proportion to customer redemptions**<br><sub>An independently approved, entitled estimate is recognised proportionally as customer rights are exercised; amounts owed to third parties remain liabilities.</sub> | ASC 606 606-10-55-48<br>IFRS 15.B46 | PASS | Implemented |
 | **A significant financing component is separated from revenue**<br><sub>Revenue on a contract paid materially in arrears is measured at the cash selling price — the promised amount discounted at the rate a separate financing would carry — and the difference accretes as interest, year by year, landing exactly on the billed amount.</sub> | ASC 606 606-10-32-15<br>IFRS 15.60 | PASS | Implemented |
 | **A change in the progress estimate is caught up in the current period**<br><sub>Revising the estimated progress restates the cumulative target and books only the delta in the current period — an upward revision recognises more, a downward revision reverses what was already recognised, and prior periods are never restated.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
 | **A contract modification is assessed as a separate contract or as part of the existing one**<br><sub>Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | PASS | Implemented |
 | **A drop-ship principal reports the customer sale and vendor cost gross**<br><sub>When the distributor controls the good before it reaches the customer, the customer invoice records gross revenue and the vendor shipment records its cost separately as cost of goods sold.</sub> | ASC 606 606-10-55-36 to 55-40<br>IFRS 15.B34-B38 | PASS | Implemented |
-| **A drop-ship agent reports only its arranging fee**<br><sub>When the distributor never controls the vendor's good and only arranges delivery, its revenue is the contracted fee rather than the full amount charged to the customer.</sub> | ASC 606 606-10-55-36 to 55-40<br>IFRS 15.B34-B38 | GAP | Not implemented |
+| **A drop-ship agent reports only its arranging fee**<br><sub>An independently approved contractual control assessment routes a native invoice to a 20.00 arranging fee and an 80.00 vendor pass-through liability; the native vendor bill clears that liability through AP without receiving stock or reporting COGS.</sub> | ASC 606 606-10-55-36 to 55-40<br>IFRS 15.B34-B38 | PASS | Implemented |
 | **A progress application measures work done, withholds retainage, and states the amount due**<br><sub>Each schedule line reports what was completed this period, the retainage held back on it, and the net now due — and the application's totals are exactly the sum of its lines, so nothing is lost between the detail and the invoice.</sub> | ASC 606 606-10-25-27<br>IFRS 15.35 | PASS | Implemented |
 | **An approved change order revises the contract value but never below work already billed**<br><sub>Additions and deductions move the schedule line's capacity by exactly the change amount — but a deduction that would erase already-billed work is refused, so billed revenue can never be stranded without a contract value behind it.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | PASS | Implemented |
 | **Cost-to-cost measures progress by the share of budget consumed**<br><sub>Progress is the exact share of budget consumed — a quarter of the budget spent is 25% complete — capped at 100% when costs overrun, and zero when there is no budget or no cost yet, so an unbudgeted project can never report phantom progress.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
 | **A weekly hours drawdown preserves cents across calendar months**<br><sub>Billable work is priced at its invoiceable amount, allocated to the cent, and assigned to the calendar month in which the work occurred.</sub> | ASC 606 606-10-55-18<br>IFRS 15.B16 | PASS | Implemented |
-
-### ASC 606 — shortfalls
-
-**rev-expected-breakage-estimation — Expected breakage is recognised in proportion to customer redemptions**
-
-> The billing and recognition services do not store a breakage estimate or recognise expected breakage in proportion to customer redemptions; they can only account for the right when its commitment window closes.
-
-**rev-drop-ship-agent-net — A drop-ship agent reports only its arranging fee**
-
-> Drop-ship accounting currently records a distributor's customer invoice gross and its vendor cost as cost of goods sold. It has no principal-versus-agent assessment or net-fee recognition path for an entity that never controls the good before transfer.
 
 ## ASC 740
 
@@ -123,13 +113,7 @@ Commit `51e7e2b95f5305f406f74ef85f4af5677d2f7791` · 2026-09-30T00:48:46.661Z
 | **EI premiums stop once the annual maximum is reached**<br><sub>An employee who has already paid the full $1,123.07 of EI pays $0.00 on a further $2,000.00 of insurable earnings — while CPP, which has its own maximum still unreached, continues at $110.99.</sub> | CRA T4127 T4127 122nd edition — EI maximum (D1) | PASS | Implemented |
 | **Québec pay carries QPP, QPIP and reduced EI with the federal abatement**<br><sub>A $1,500.00 weekly Québec pay deducts $90.26 of QPP, $19.50 of EI at the Québec rate, and $6.45 of QPIP, while federal tax is reduced by the 16.5% abatement to a $141.63 period withholding — with no provincial T4127 tax, which Revenu Québec administers separately.</sub> | CRA T4127 T4127 122nd edition — Quebec factors (QPP, QPIP, abatement) | PASS | Implemented |
 | **A small bonus is taxed at the lump-sum rate, not the marginal rate**<br><sub>A $2,000.00 bonus paid with no other income in the year attracts exactly $300.00 of tax at the 15% lump-sum rate — while CPP and EI still apply to the bonus as pensionable and insurable earnings.</sub> | CRA T4127 T4127 122nd edition — tax on non-periodic payments (TB) | PASS | Implemented |
-| **Cumulative averaging (Option 2) for uneven pay**<br><sub>An employee paid unevenly through the year has income tax averaged cumulatively across elapsed periods, so a large early payment does not over-withhold against the annual liability.</sub> | CRA T4127 T4127 — Option 2 cumulative averaging | GAP | Not implemented |
-
-### CRA T4127 — shortfalls
-
-**payroll-cumulative-averaging — Cumulative averaging (Option 2) for uneven pay**
-
-> The engine implements only the Option-1 periodic method (plus the YTD variant of the K2 credit basis, which is not Option 2). There is no cumulative-averaging computation: uneven pay is annualized period by period, which over-withholds early lump sums relative to the guide's Option 2.
+| **Cumulative averaging (Option 2) for uneven pay**<br><sub>An employee paid unevenly through the year has income tax averaged cumulatively across elapsed periods, so a large early payment does not over-withhold against the annual liability.</sub> | CRA T4127 T4127 — Option 2 cumulative averaging | PASS | Implemented |
 
 ## ETA
 
@@ -139,13 +123,7 @@ Commit `51e7e2b95f5305f406f74ef85f4af5677d2f7791` · 2026-09-30T00:48:46.661Z
 | **A tax-included price yields the exact statutory tax with no residue**<br><sub>A $105.00 tax-included price extracts to exactly $100.00 of revenue and $5.00 of GST — the line cross-foots to the penny with no rounding residue parked anywhere.</sub> | ETA 165(1) | PASS | Implemented |
 | **Each line's tax rounds independently before the document total is summed**<br><sub>Three lines of $33.33, $33.33 and $33.34 each carry $1.67 of GST for a $5.01 document tax — one cent above the $5.00 a single $100.00 line would carry. The penny is the deterministic consequence of per-line rounding, stated openly rather than forced to agree.</sub> | ETA 165(1) | PASS | Implemented |
 | **A partially recoverable tax splits into credit and cost exactly**<br><sub>A $10.00 tax that is 50% recoverable produces a $5.00 input credit and a $5.00 non-recoverable cost — the split sums to the tax with neither side rounded away.</sub> | ETA 169(1) | PASS | Implemented |
-| **Native place-of-supply determination from the delivery address**<br><sub>Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.</sub> | ETA 144.1 (place of supply) | PASS | Partial |
-
-### ETA — shortfalls
-
-**sales-tax-place-of-supply — Native place-of-supply determination from the delivery address**
-
-> Native selection covers ordinary fully taxable goods sold and legally delivered in Canada, including applicable provincial standard tax. Services, intangible property, exemptions and special place-of-supply rules require their own assessment; the command refuses an unclassified supply. This case establishes quotation, not automatic tax-code selection during document editing.
+| **Native Canadian goods selection posts the statutory delivery-province tax**<br><sub>Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.</sub> | ETA 144.1 (place of supply) | PASS | Implemented |
 
 ## FRS 102
 
@@ -185,13 +163,7 @@ Commit `51e7e2b95f5305f406f74ef85f4af5677d2f7791` · 2026-09-30T00:48:46.661Z
 | **Inventory is written down to net realisable value when NRV falls below cost**<br><sub>When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV through the cost layers themselves — the loss is recognised immediately, the on-hand QUANTITY is unchanged, and the inventory subledger stays in agreement with the general ledger.</sub> | IAS 2.9<br>IAS 2.28<br>ASC 330 330-10-35-1C | PASS | Implemented |
 | **Reversal of a write-down is required under IFRS and prohibited under US GAAP**<br><sub>The same recovery in net realisable value reverses the write-down under IFRS — capped so cumulative reversals never exceed the cumulative write-down — and is refused outright under US GAAP, where the written-down amount is the new cost basis. The answer comes from the organisation's configured reporting framework, not from which function was called.</sub> | IAS 2.33<br>ASC 330 330-10-35-14 | PASS | Implemented |
 | **Freight and duty to bring inventory to its location join the cost of the stock**<br><sub>A freight voucher spreads exactly onto the on-hand layers, raising their carrying amount and debiting inventory against the freight account — the quantity on hand does not move and the subledger stays in agreement with the general ledger.</sub> | IAS 2.11<br>ASC 330 330-10-30-9 | PASS | Implemented |
-| **Disassembling part of a build returns the pro-rata components to stock**<br><sub>Taking apart four of ten built units returns eight components at their original five each to stock and leaves six assemblies at ten each — forty of component value comes home, sixty of assembly value remains, and nothing leaks or appears.</sub> | IAS 2.25<br>ASC 330 330-10-30-9 | GAP | Not implemented |
-
-### IAS 2 — shortfalls
-
-**inv-partial-disassembly — Disassembling part of a build returns the pro-rata components to stock**
-
-> Disassembly reverses a whole build only: reverseAssemblyBuild takes the build movement with no quantity, so part of a build can only come apart by reversing the entire build and rebuilding the remainder — there is no partial disassembly that returns the pro-rata components in one step.
+| **Disassembling part of a build returns the pro-rata components to stock**<br><sub>Taking apart four of ten built units returns eight components at their original five each to stock and leaves six assemblies at ten each — forty of component value comes home, sixty of assembly value remains, and nothing leaks or appears.</sub> | IAS 2.25<br>ASC 330 330-10-30-9 | PASS | Implemented |
 
 ## IAS 21
 
@@ -207,14 +179,8 @@ Commit `51e7e2b95f5305f406f74ef85f4af5677d2f7791` · 2026-09-30T00:48:46.661Z
 | **Settling a monetary item recognises the realized difference in profit or loss**<br><sub>Collecting part of a foreign-currency receivable clears exactly the proportional share of its carrying value, values the cash at the settlement-date rate, and books the difference as a realized gain or loss — the settled slice never leaves a tail behind and the unsettled slice keeps its historical carrying value.</sub> | IAS 21.28<br>ASC 830-20-35-1 | PASS | Implemented |
 | **Settling the complete foreign balance consumes the complete carrying value**<br><sub>Taking the complete residual consumes the complete carrying value — including a sub-cent rounding tail — so proportional rounding can never strand an uncloseable one-unit balance on a fully settled item.</sub> | IAS 21.28 | PASS | Implemented |
 | **A non-monetary asset measured at historical cost is not retranslated**<br><sub>Equipment bought in a foreign currency keeps its transaction-date translated cost through a period-end close that moves the rate: the revaluation run finds no monetary exposure in the asset or its matching foreign-currency liability and posts nothing — neither a gain nor a loss, and no restatement of cost.</sub> | IAS 21.23(b)<br>ASC 830-10-45-17 | PASS | Implemented |
-| **Exchange differences on a net investment in a foreign operation**<br><sub>A qualifying long-term intercompany balance retains profit-or-loss treatment in separate statements and has its exchange differences recognised in other comprehensive income in consolidated statements until disposal.</sub> | IAS 21.32 | GAP | Not implemented |
+| **Exchange differences on a net investment in a foreign operation**<br><sub>A qualifying long-term intercompany balance retains profit-or-loss treatment in separate statements and has its exchange differences recognised in other comprehensive income in consolidated statements until disposal.</sub> | IAS 21.32 | PASS | Implemented |
 | **A foreign subsidiary translates profit at the average rate and equity at history**<br><sub>An 80%-owned USD subsidiary with USD 1,000.00 of equity acquired when the policy rate was 1.30 eliminates at CAD 1,300.00, while its USD 100.00 profit translates at the period average of 1.3750 to CAD 137.50 — and the 20% NCI income of CAD 27.50 proves the average, not the spot, was applied.</sub> | IAS 21.39<br>ASC 830-30-45-3 | PASS | Implemented |
-
-### IAS 21 — shortfalls
-
-**fx-net-investment-oci — Exchange differences on a net investment in a foreign operation**
-
-> The product has no net-investment designation for intercompany monetary items: separate-statement revaluation correctly uses profit or loss, but consolidation has no qualifying designation and reclassification path to an OCI reserve.
 
 ## IAS 28
 
@@ -226,23 +192,9 @@ Commit `51e7e2b95f5305f406f74ef85f4af5677d2f7791` · 2026-09-30T00:48:46.661Z
 
 | Requirement | Citation | Status | Conformance |
 | --- | --- | --- | --- |
-| **A contract expected to lose money provides for the full loss immediately**<br><sub>The moment a contract is forecast to lose money, the entire expected loss is charged to profit or loss at once — it is never spread over the remaining term to flatter early periods.</sub> | IAS 37.66<br>ASC 450 450-20-25-2 | GAP | Not implemented |
-| **A probable, estimable obligation is recognised as a provision**<br><sub>A lawsuit that will probably cost 50,000.00 appears on the balance sheet now — a probable obligation is never left off the books until the cash leaves.</sub> | IAS 37.14<br>ASC 450 450-20-25-2 | GAP | Not implemented |
-| **A provision is measured at the best estimate and reviewed every period**<br><sub>The provision tracks the current best estimate — when new information moves the estimate from 50,000.00 to 65,000.00, a further 15,000.00 is charged in the period the estimate changes.</sub> | IAS 37.36<br>IAS 37.59 | GAP | Not implemented |
-
-### IAS 37 — shortfalls
-
-**con-expected-loss-provided — A contract expected to lose money provides for the full loss immediately**
-
-> No engine assesses construction contracts for expected losses: progress billing tracks completed value and billings, but nothing forecasts cost to complete, tests the contract for a loss, or posts a provision for it.
-
-**prov-recognition-threshold — A probable, estimable obligation is recognised as a provision**
-
-> No provisions engine exists: nothing records a present obligation, tests it against the probable-and-estimable threshold, or posts the resulting liability — such obligations can only be entered as manual journals with no recognition discipline behind them.
-
-**prov-best-estimate-measurement — A provision is measured at the best estimate and reviewed every period**
-
-> With no provisions ledger there is nothing to remeasure: no periodic review of open provisions, no adjustment path for a changed estimate, and no utilisation tracking when the obligation settles.
+| **A contract expected to lose money provides for the full loss immediately**<br><sub>The moment a contract is forecast to lose money, the entire expected loss is charged to profit or loss at once — it is never spread over the remaining term to flatter early periods.</sub> | IAS 37.66<br>ASC 450 450-20-25-2 | PASS | Implemented |
+| **A probable, estimable obligation is recognised as a provision**<br><sub>A lawsuit that will probably cost 50,000.00 appears on the balance sheet now — a probable obligation is never left off the books until the cash leaves.</sub> | IAS 37.14<br>ASC 450 450-20-25-2 | PASS | Implemented |
+| **A provision is measured at the best estimate and reviewed every period**<br><sub>The provision tracks the current best estimate — when new information moves the estimate from 50,000.00 to 65,000.00, a further 15,000.00 is charged in the period the estimate changes.</sub> | IAS 37.36<br>IAS 37.59 | PASS | Implemented |
 
 ## IFRS 10
 

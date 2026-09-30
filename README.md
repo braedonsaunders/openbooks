@@ -143,9 +143,11 @@ entry-level bookkeeping and want lasting control of their software and data.
 
 ### Verify the accounting, don't take our word for it
 
-Three verification artifacts are published after a successful, explicitly
-dispatched comprehensive run on `main`, and are reproducible from a clean
-checkout. Each result identifies the source commit it measured; an older result
+Verification artifacts identify the source commit and partition they measured
+and are reproducible from a clean checkout. Comprehensive bundles are published
+after a successful, explicitly dispatched run on `main`. A focused standards
+run can refresh its matrix and badge; it does not establish that the separate
+controls, harness or browser partitions ran for that commit. An older result
 does not establish that a later commit passed:
 
 - **[TRUST.md](TRUST.md)** — every ledger invariant that is checked
@@ -161,6 +163,12 @@ does not establish that a later commit passed:
   financial-statement assertions (existence, completeness, accuracy, cutoff,
   classification, presentation, rights and obligations) and IT general
   controls, for handing to an audit partner during planning.
+
+The checked-in standards report measured `035a6286dfe9` on September 30, 2026:
+106 passing, zero failing, zero declared gaps and zero not run. Its computation
+partition contains 64 cases; its isolated database ledger partition contains
+42. These are tested scenarios, not a count of computation or ledger defects,
+and their stated scope does not establish coverage of every accounting rule.
 
 ```bash
 npm -w engine run conformance -- report
