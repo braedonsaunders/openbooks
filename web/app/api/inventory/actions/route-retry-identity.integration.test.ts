@@ -13,7 +13,7 @@ registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__inventoryRetryAudit.user,allowedSubsidiaryIds:null}}",
+        "export async function guardPermission(){return {user:globalThis.__inventoryRetryAudit.user,allowedSubsidiaryIds:null}};export function can(){return true}",
       ) };
     }
     return next(specifier, context);

@@ -8,10 +8,12 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "../../platform/db.ts";
 import { fromUnits, toUnits } from "../../money/money.ts";
 import { applyInventoryIssuesForInvoice } from "../../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../../inventory/documents-purchasing.ts";
+import { buildAssembly } from "../../inventory/assembly.ts";
+import { disassembleAssembly } from "../../inventory/disassembly.ts";
 import { getOnHand } from "../../inventory/position.ts";
 import { postLandedCostVoucher } from "../../inventory/landed-cost.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory/nrv.ts";
@@ -681,8 +683,8 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
           "The cost of goods manufactured that is taken back apart returns its component costs to materials; the carrying amount is conserved, not remeasured.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
+    support: "supported",
+    tier: "ledger",
     assertion:
       "Taking apart four of ten built units returns eight components at their original five each to stock and leaves six assemblies at ten each — forty of component value comes home, sixty of assembly value remains, and nothing leaks or appears.",
     facts: [
@@ -690,14 +692,32 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
       "Four assemblies are disassembled for spares: eight components return at 5.00 each (40.00) and assembly stock falls by four units (40.00).",
       "Six assemblies remain at 60.00 and component stock stands at its unbuilt balance plus the forty returned.",
     ],
-    gap: "Disassembly reverses a whole build only: reverseAssemblyBuild takes the build movement with no quantity, so part of a build can only come apart by reversing the entire build and rebuilding the remainder — there is no partial disassembly that returns the pro-rata components in one step.",
     expected: {
+      entries: [{ step: "disassembly", lines: [{ role: "inventory", amount: "40.0000" }, { role: "finishedGoodsInventory", amount: "-40.0000" }] }],
       values: {
         componentsReturned: "8.0000",
         componentsValueReturned: "40.0000",
         assembliesRemaining: "6.0000",
         assembliesValueRemaining: "60.0000",
       },
+    },
+    run: async ctx => {
+      const ledger = ctx.ledger!;
+      await withBypassContext(async () => {
+        await db.execute(sql`update item_inventory_profiles set asset_account_id=${ctx.roles.finishedGoodsInventory} where org_id=${ledger.orgId} and item_id=${ledger.items.assembly}`);
+        await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${ledger.actorId},'items.post','grant')`);
+      });
+      return withOrgContext(ledger.orgId,async () => {
+        await receiveViaBill(ctx,{number:'CONF-COMPONENTS',itemId:ledger.items.component,quantity:'100',unitCost:'5',amount:'500'});
+        const built = await buildAssembly(ledger.orgId,ledger.actorId,{assemblyItemId:ledger.items.assembly,quantity:'10',stockLocationId:ledger.stockLocationId,subsidiaryId:ledger.subsidiaryId,date:ledger.date});
+        let returned: {quantity:string;value:string}[] = [];
+        const entry = await capture(ctx,'disassembly',async () => {
+          const result = await disassembleAssembly(ledger.orgId,ledger.actorId,{buildMovementId:built.movementId,quantity:'4',date:ledger.date,reason:'Recover service-spares components',idempotencyKey:randomUUID()});
+          returned = result.value.components;
+        });
+        const stock = await getOnHand(ledger.orgId,ledger.items.assembly,ledger.stockLocationId);
+        return {entries:[entry],values:{componentsReturned:returned[0]!.quantity,componentsValueReturned:returned[0]!.value,assembliesRemaining:stock.quantity,assembliesValueRemaining:stock.value}};
+      });
     },
   },
 ];

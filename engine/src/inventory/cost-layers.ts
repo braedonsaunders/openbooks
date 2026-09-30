@@ -29,7 +29,7 @@ export async function resolveProvisionalUnitCost(
   const last = (await tx.execute<{ unit_cost: string }>(sql`
     select unit_cost from inventory_movements
      where org_id=${orgId} and item_id=${itemId} and subsidiary_id=${subsidiaryId}
-       and kind in ('receipt','return','assembly_build','transfer_in')
+       and kind in ('receipt','return','assembly_build','assembly_recovery','transfer_in')
        and status='posted' and unit_cost is not null
      order by moved_at desc,created_at desc,id desc limit 1
   `));

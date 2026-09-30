@@ -415,6 +415,17 @@ export async function reverseAssemblyBuild(
   assertInventoryDate(input.reversalDate, "reversal date");
 
   return db.transaction(async (tx) => {
+    // Positions precede movement row locks, matching issue and disassembly
+    // commands. The posted source identity is immutable and is checked again
+    // under row locks before any correction is written.
+    const peek = (await tx.execute<{ journal_entry_id: string | null }>(sql`
+      select journal_entry_id from inventory_movements where org_id=${orgId} and id=${input.movementId}`)).rows[0];
+    if (peek?.journal_entry_id) {
+      const positions = (await tx.execute<{ item_id: string; stock_location_id: string }>(sql`
+        select distinct item_id,stock_location_id from inventory_movements
+        where org_id=${orgId} and journal_entry_id=${peek.journal_entry_id} order by item_id,stock_location_id`)).rows;
+      for (const position of positions) await lockInventoryPosition(tx, position.item_id, position.stock_location_id);
+    }
     const requested = (await tx.execute<ReversibleMovement>(sql`
       select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
@@ -504,6 +515,15 @@ export async function reverseAssemblyBuild(
         alreadyReversed: true,
       };
     }
+
+    const disassembled = (await tx.execute(sql`
+      select movement.id from inventory_movements movement
+        join assembly_disassemblies operation on operation.org_id=movement.org_id and operation.id=movement.assembly_disassembly_id
+       where movement.org_id=${orgId} and movement.kind='assembly_disassembly' and operation.build_movement_id=${build.id}
+         and not exists(select 1 from inventory_movements reversal
+           where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id)
+       limit 1`)).rows;
+    if (disassembled.length) throw new InventoryError('This build has physical disassemblies — reverse those disassembly operations through the inventory movement reversal before reversing the original build');
 
     for (const key of [
       ...new Set(

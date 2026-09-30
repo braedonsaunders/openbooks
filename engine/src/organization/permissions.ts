@@ -718,6 +718,7 @@ export const INVENTORY_ACTION_PERMISSIONS = {
   adjust: "items.post",
   transfer: "items.post",
   build: "items.post",
+  disassemble: "items.post",
   landed: "items.post",
   reverse: "items.reverse",
 } as const satisfies Record<string, CataloguePermission>;

@@ -984,7 +984,7 @@ const INVENTORY_ONHAND: RecordTypeMeta = {
   ],
 };
 
-const INVENTORY_MOVEMENT_KINDS = ["receipt", "issue", "transfer_out", "transfer_in", "adjustment", "count", "assembly_build", "assembly_consume", "return"];
+const INVENTORY_MOVEMENT_KINDS = ["receipt", "issue", "transfer_out", "transfer_in", "adjustment", "count", "assembly_build", "assembly_consume", "assembly_disassembly", "assembly_recovery", "return"];
 
 const INVENTORY_MOVEMENT: RecordTypeMeta = {
   key: "inventory_movement",

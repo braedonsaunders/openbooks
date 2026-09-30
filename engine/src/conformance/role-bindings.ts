@@ -17,6 +17,7 @@ export const ROLES: readonly Role[] = [
   "pledgeAllowance",
   "contributions",
   "inventory",
+  "finishedGoodsInventory",
   "cogs",
   "inventoryAdjustment",
   "inventoryClearing",

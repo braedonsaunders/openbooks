@@ -23,6 +23,7 @@ import { ROLES } from "./role-bindings.ts";
 
 /** Accounts the corpus needs beyond the shared scratch fixture. */
 const EXTRA_ACCOUNTS: readonly [Role, string, string, string][] = [
+  ["finishedGoodsInventory", "1460", "Finished Goods Inventory", "asset_current_other"],
   ["contractAsset", "1150", "Contract Asset", "asset_current_other"],
   ["pledgesReceivable", "1160", "Pledges Receivable", "asset_current_other"],
   ["discountOnPledges", "1161", "Discount on Pledges Receivable", "asset_current_other"],
@@ -175,6 +176,8 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
         movingAvg: scratch.items.movingAvg,
         standard: scratch.items.standard,
         service: scratch.items.service,
+        component: scratch.items.component,
+        assembly: scratch.items.assembly,
       },
     },
     drop: () => dropScratchOrg(scratch.orgId),

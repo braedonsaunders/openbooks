@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -136,7 +137,7 @@ export const inventoryMovements = pgTable(
     subsidiaryId: uuid("subsidiary_id").notNull(),
     itemId: uuid("item_id").notNull(),
     kind: text("kind", {
-      enum: ["receipt", "issue", "transfer_out", "transfer_in", "adjustment", "count", "assembly_build", "assembly_consume", "return"],
+      enum: ["receipt", "issue", "transfer_out", "transfer_in", "adjustment", "count", "assembly_build", "assembly_consume", "assembly_disassembly", "assembly_recovery", "return"],
     }).notNull(),
     movedAt: timestamp("moved_at", { withTimezone: true }).notNull(),
     stockLocationId: uuid("stock_location_id").notNull(),
@@ -149,6 +150,7 @@ export const inventoryMovements = pgTable(
     /** Provenance and posting linkage. */
     documentLineId: uuid("document_line_id"),
     journalEntryId: uuid("journal_entry_id"),
+    assemblyDisassemblyId: uuid("assembly_disassembly_id"),
     pairedMovementId: uuid("paired_movement_id"), // transfer_out ↔ transfer_in
     /** Stable key for retryable source effects; null for ordinary ad-hoc moves. */
     idempotencyKey: text("idempotency_key"),
@@ -185,6 +187,14 @@ export const inventoryMovements = pgTable(
     ),
   ],
 );
+
+/** Immutable physical operation evidence, including quantity-only recovery. */
+export const assemblyDisassemblies = pgTable('assembly_disassemblies', {
+  id: uuid('id').primaryKey().notNull(), orgId: orgRef(), subsidiaryId: uuid('subsidiary_id').notNull(), bookId: uuid('book_id').notNull(),
+  buildMovementId: uuid('build_movement_id').notNull(), quantity: money('quantity').notNull(), withdrawnValue: money('withdrawn_value').notNull(),
+  movedOn: date('moved_on').notNull(), reason: text('reason').notNull(), components: jsonb('components').notNull(),
+  journalEntryId: uuid('journal_entry_id'), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(), createdBy: uuid('created_by').notNull(),
+}, t => [uniqueIndex('assembly_disassemblies_org_id_id').on(t.orgId,t.id),index('assembly_disassemblies_source').on(t.orgId,t.buildMovementId,t.movedOn,t.id)]);
 
 export const stockCountLines = pgTable(
   "stock_count_lines",

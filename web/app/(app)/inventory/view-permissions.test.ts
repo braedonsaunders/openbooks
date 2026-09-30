@@ -33,7 +33,6 @@ stubModules({
     "./InventoryActionDrawer": "export function InventoryActionDrawer() { return null }",
     "./NewMovementButton": "export function NewMovementButton() { return null }",
     "./ReverseLandedVoucherAction": "export function ReverseLandedVoucherAction() { return globalThis.React.createElement('span', null, 'REVERSAL_ACTION') }",
-    "./movement-permissions": "export function canPostInventoryMovement(authz) { return authz.permissions.has('items.post') }",
     "../../../lib/setup/registry": "export const SETUP_ENTITY_BY_KEY = new Map()",
     "@braedonsaunders/appkit-viewspec": "export const page = () => ({}); export const pageHeader = () => ({}); export const ref = () => () => ({}); export const widget = () => ({}); export const widgetBlock = () => ({})",
   },
@@ -51,13 +50,14 @@ async function showsNewMovement(grants: string[]): Promise<unknown> {
   return (await loadInventory({})).showNewMovement;
 }
 
-test("the New-movement button follows the posting grant, not the manage grant", async () => {
+test("the movement editor offers posting and reversal only under their respective grants", async () => {
   // An items.post-only user sees and can open the drawer; posting needs
   // items.post while the button used to demand items.manage.
   assert.equal(await showsNewMovement(["items.read", "items.post"]), true);
   // An items.manage-only user must not see a drawer they cannot submit —
   // the route would 403 on post.
   assert.equal(await showsNewMovement(["items.read", "items.manage"]), false);
+  assert.equal(await showsNewMovement(["items.read", "items.reverse"]), true);
 });
 
 test("the landed-cost reversal action is visible only with the reversal grant", async () => {
