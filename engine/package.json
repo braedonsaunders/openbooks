@@ -52,6 +52,7 @@
     "./provisions": "./src/provisions/public.ts",
     "./inventory": "./src/inventory/public.ts",
     "./inventory/contracts": "./src/inventory/public-contracts.ts",
-    "./revenue": "./src/revenue/public.ts"
+    "./revenue": "./src/revenue/public.ts",
+    "./payroll/withholding": "./src/payroll/public-withholding.ts"
   }
 }

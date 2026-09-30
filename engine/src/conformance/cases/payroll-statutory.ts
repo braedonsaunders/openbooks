@@ -468,19 +468,23 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
           "An employer paying uneven amounts through the year may average income tax deductions cumulatively so employees with lumpy pay are not over-withheld early in the year.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
       "An employee paid unevenly through the year has income tax averaged cumulatively across elapsed periods, so a large early payment does not over-withhold against the annual liability.",
     facts: [
-      "An employee earns $60,000.00 in the first quarter and $10,000.00 per quarter after.",
-      "Under Option 1 each period annualizes its own pay; under Option 2 the deduction averages cumulative income over elapsed periods.",
-      "The required outcome is the cumulative-average deduction for the current period.",
+      "Alberta, 2026, four periods per year, fixed claim-code-1 amounts, CPP/EI exemption: $60,000 in the first quarter and $10,000 in the second.",
+      "The first quarter projects $240,000; federal tax $51,401.58 plus Alberta tax $23,218.48 gives periodic withholding $18,655.02.",
+      "In the second quarter S1 is 4/2, cumulative income is $70,000 and annual income A is $140,000. Federal tax $23,645.58 plus Alberta tax $10,954.48 gives cumulative tax $17,300.03.",
+      "The cumulative target is below $18,655.02 already withheld: the current deduction floors at zero and no voluntary additional withholding is consumed as tax history.",
     ],
-    gap:
-      "The engine implements only the Option-1 periodic method (plus the YTD variant of the K2 credit basis, which is not Option 2). There is no cumulative-averaging computation: uneven pay is annualized period by period, which over-withholds early lump sums relative to the guide's Option 2.",
     expected: {
       values: { periodicTax: "0.0000" },
+    },
+    run:()=>{
+      const result=calculateT4127({payDate:"2026-06-30",province:"AB",periodsPerYear:4,income:"10000",cppExempt:true,eiExempt:true,federalClaimCode:1,provincialClaimCode:1,
+        averaging:{elapsedPeriods:2,income:"60000",pensionDeductions:"0",alimonyDeductions:"0",unionDues:"0",f5A:"0",pensionablePeriodic:"0",insurablePeriodic:"0",qpipPeriodic:"0",pensionableNonPeriodic:"0",insurableNonPeriodic:"0",qpipNonPeriodic:"0",periodicTax:"18655.02",bonusTax:"0"}})
+      return {values:{periodicTax:result.periodicTax}}
     },
   },
 

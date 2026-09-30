@@ -1406,7 +1406,11 @@ export async function payRunStaleness(
            exists (
              select 1 from employee_payroll_profiles prof
               where prof.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
-                and prof.updated_at > r.calculated_at) as roster_changed,
+                and prof.updated_at > r.calculated_at)
+           or exists(select 1 from employee_tax_certificates certificate
+             join employee_payroll_profiles profile on profile.org_id=certificate.org_id and profile.employee_party_id=certificate.employee_party_id
+             where certificate.org_id=r.org_id and profile.pay_schedule_id=r.pay_schedule_id
+               and certificate.updated_at>r.calculated_at and (certificate.effective_from is null or certificate.effective_from<=r.pay_date)) as roster_changed,
            exists (
              select 1 from employee_roles er
               join employee_payroll_profiles prof

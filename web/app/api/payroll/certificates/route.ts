@@ -1,3 +1,4 @@
+import {prepareWithholdingRecordWrite} from "@openbooks/engine/payroll/withholding";
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -112,7 +113,7 @@ export const POST = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
     const orgId = gate.user.orgId
     const userId = gate.user.id
-    const parsedBody = await parseJsonBody(req, certificateBodySchema);
+    const parsedBody = await parseJsonBody(req, certificateBodySchema,{status:422});
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
 
@@ -238,6 +239,8 @@ export const POST = defineRoute({
     }
 
     return withOrgTransaction(orgId, async () => {
+      const effective=effectiveFrom??await businessToday(orgId)
+      await prepareWithholdingRecordWrite({orgId,actorId:userId,employeePartyId:body.employeePartyId,effectiveFrom:effective,protectCommittedHistory:certificate.protectCommittedHistory??false})
       // Lock the stable parent before reading current certificates. On a first
       // filing there is no certificate row for FOR UPDATE to lock, so locking
       // only the open rows lets two transactions both decide to insert a
@@ -266,7 +269,6 @@ export const POST = defineRoute({
       // forward instead.
       // A new certificate takes effect on the org's business day, never the UTC
       // day (which is tomorrow in the evening for the Americas).
-      const effective = effectiveFrom ?? (await businessToday(orgId))
       for (const row of open) {
         if (row.effective_from !== null && row.effective_from > effective) {
           return NextResponse.json(

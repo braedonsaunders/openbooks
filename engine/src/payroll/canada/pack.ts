@@ -124,6 +124,7 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // T4127 factor U1: employee-paid dues reduce taxable income.
   employeeUnionDuesTaxTreatment: "union_dues",
   deductionTreatments: [
+    {key:"pension_f_bonus",label:"Pension deduction from a non-periodic payment (F3)",help:"RPP/RRSP deduction taken from a bonus. Reduces the bonus tax base and is retained as F4 history; does not reduce CPP/EI earnings.",reduces:["nonPeriodic"]},
     // T4127 factors F (RPP/RRSP pension), U1 (union dues) and F2 (alimony):
     // each reduces the periodic income leg — annual taxable income A prices
     // (income − F − F2 − U1) × P, while bonuses carry their own F3/F4

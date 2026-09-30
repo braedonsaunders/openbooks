@@ -49,6 +49,10 @@ export async function takeEmployeeTaxYearFences(
   tx: Pick<typeof db, "execute">,
   keys: readonly string[],
 ): Promise<void> {
+  // Dated withholding records can affect several tax years. Every statutory
+  // writer owns the employee-wide configuration fence before yearly room,
+  // so a new election cannot race a calculation or commit in another year.
+  await takeFences(tx,keys.map(key=>key.slice(0,key.lastIndexOf(":"))));
   await takeFences(tx, keys);
 }
 

@@ -429,6 +429,7 @@ export async function calculateStub(
   const nonPeriodic = earning((l) => (l.taxable ?? true) && (l.nonPeriodic ?? false));
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
+  const insurableNonPeriodic=earning((l)=>(l.insurable??true)&&(l.nonPeriodic??false));
   // The one-off share of the pensionable leg, for packs that annualise the
   // leg: annualising the whole leg and adding the one-off again counts it
   // periodsPerYear + 1 times. No taxable filter — a non-taxable erogazione
@@ -469,7 +470,9 @@ export async function calculateStub(
   // applicability means included (the sibling flags' default-true), so a
   // pack that declares no program skips this loop and nothing changes.
   const programBases: Record<string, string> = {};
+  const programNonPeriodicBases:Record<string,string>={};
   for (const program of pack.contributionPrograms ?? []) {
+    programNonPeriodicBases[program.key]=earning((l)=>(l.programApplicability?.[program.key]??true)&&(l.nonPeriodic??false));
     programBases[program.key] =
       earning((l) => l.programApplicability?.[program.key] ?? true);
   }
@@ -550,7 +553,7 @@ export async function calculateStub(
       filingAccountId: jurisdiction.filingAccountId,
       periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
       workAllocations,
-      income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,
+      income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,insurableNonPeriodic,programNonPeriodicBases,
       supplementalWageAmounts: aggregateUsSupplementalWageAmounts(lines),
       statutoryExemptionAmounts: aggregateUsStatutoryExemptionAmounts(lines),
       programBases,

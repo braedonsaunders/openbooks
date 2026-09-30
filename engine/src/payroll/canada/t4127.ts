@@ -1,6 +1,6 @@
 /**
- * CRA T4127 payroll deductions engine — Option 1 (periodic method), the
- * method used by every major Canadian payroll provider, plus the bonus /
+ * CRA T4127 payroll deductions engine — Option 1 (periodic method), Option 2
+ * cumulative averaging, plus the bonus /
  * retroactive (non-periodic) method.
  *
  * Faithful to the guide's factor notation (A, C, C2, EI, F5, K1..K4, T1..T4,
@@ -9,8 +9,7 @@
  * per-period exemption truncates. All arithmetic is exact bigint via
  * money.ts primitives — no floats anywhere.
  *
- * Out of scope in v1 (documented, not forgotten): Option 2 cumulative
- * averaging, TD1X commission employees, mid-year province-transfer credit
+ * Methods outside this calculator: TD1X commission employees, mid-year province-transfer credit
  * variants (K2R/K2RQ), and Quebec *provincial* income tax (TP-1015, which
  * Revenu Québec administers — QPP/QPIP and the federal abatement side of
  * Quebec employment ARE implemented).
@@ -43,6 +42,25 @@ export interface T4127Ytd {
   nonPeriodicPensionDeductions?: string;
   /** F5B applied against YTD non-periodic payments. */
   nonPeriodicCppEnhancedDeductions?: string;
+}
+
+/** Prior committed inputs in the elected averaging window. Contribution
+ * ceilings remain calendar-year inputs in ytd and are never reset here. */
+export interface T4127Averaging {
+  elapsedPeriods:number
+  income:string
+  pensionDeductions:string
+  alimonyDeductions:string
+  unionDues:string
+  f5A:string
+  pensionablePeriodic:string
+  insurablePeriodic:string
+  qpipPeriodic:string
+  pensionableNonPeriodic:string
+  insurableNonPeriodic:string
+  qpipNonPeriodic:string
+  periodicTax:string
+  bonusTax:string
 }
 
 export interface T4127Input {
@@ -120,6 +138,11 @@ export interface T4127Input {
   /** PR — pay periods remaining including this one (YTD K2 method). Default P. */
   periodsRemaining?: number;
 
+  /** An explicit election enables Option 2; absent preserves Option 1. */
+  averaging?:T4127Averaging;
+  pensionableNonPeriodic?:string;
+  insurableNonPeriodic?:string;
+  qpipNonPeriodic?:string;
   ytd?: T4127Ytd;
 }
 
@@ -159,6 +182,11 @@ export interface T4127Result {
  * guide's own factor notation — see the module header.
  */
 export const T4127_FACTOR_LABELS: Readonly<Record<string, string>> = {
+  S1_NUM: "Averaging projection periods",
+  S1_DEN: "Elapsed scheduled periods in the averaging window",
+  M: "Periodic tax already withheld, excluding additional tax",
+  M1: "Bonus tax already withheld",
+  L: "Additional tax requested this pay",
   A: "Annual taxable income",
   A_step2: "Annual taxable income excluding this bonus",
   C: "CPP/QPP contribution",
@@ -250,8 +278,14 @@ export function calculateT4127(input: T4127Input): T4127Result {
   // D() emits fromUnits-fixed: every traced factor is canonical Money.
   const trace = (key: string, value: bigint) => { factors[key] = D(value) as Money; };
 
+  const averaging=input.averaging;
+  if(averaging && (!Number.isInteger(averaging.elapsedPeriods)||averaging.elapsedPeriods<1||averaging.elapsedPeriods>P))
+    throw new PayrollError('Cumulative averaging requires elapsed scheduled periods from 1 through the schedule’s periods per year — review the withholding method window');
+  const project=(amount:bigint)=>averaging?mulRatioCents(amount,BigInt(P),BigInt(averaging.elapsedPeriods)):mulInt(amount,P);
   const income = U(input.income);
   const bonus = opt(input.nonPeriodic);
+  if(averaging&&bonus>ZERO&&[input.pensionableNonPeriodic,input.insurableNonPeriodic,input.qpipNonPeriodic].some(value=>value===undefined))
+    throw new PayrollError('Cumulative averaging requires the pensionable, EI and QPIP bases of non-periodic pay — review its earning-component classifications before calculating');
   const PI = input.pensionable === undefined ? income + bonus : U(input.pensionable);
   const IE = input.insurable === undefined ? income + bonus : U(input.insurable);
   const ytd = input.ytd ?? {};
@@ -307,8 +341,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const F5 = r2(mulRatioCents(C, rate6(plan.addlRate), rate6(plan.totalRate)) + C2);
   let F5A = F5;
   let F5B = ZERO;
-  if (bonus > ZERO && PI > ZERO) {
-    F5A = mulRatioCents(F5, max0(PI - bonus), PI);
+  const pensionableBonus=input.pensionableNonPeriodic===undefined?bonus:U(input.pensionableNonPeriodic);
+  if (pensionableBonus > ZERO && PI > ZERO) {
+    F5A = mulRatioCents(F5, max0(PI - pensionableBonus), PI);
     F5B = F5 - F5A;
   }
   trace("F5", F5); trace("F5A", F5A); trace("F5B", F5B);
@@ -324,7 +359,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const F4 = opt(ytd.nonPeriodicPensionDeductions);
   const F5BYtd = opt(ytd.nonPeriodicCppEnhancedDeductions);
 
-  const annualPeriodic = max0(mulInt(income - F - F2 - F5A - U1, P) - HD - F1);
+  const accumulatedPeriodic=income-F-F2-F5A-U1+(averaging?
+    U(averaging.income)-U(averaging.pensionDeductions)-U(averaging.alimonyDeductions)-U(averaging.f5A)-U(averaging.unionDues):ZERO);
+  const annualPeriodic = max0(project(accumulatedPeriodic) - HD - F1);
   const bonusNet = max0(bonus - F3 - F5B);
   const bonusYtdNet = max0(B1 - F4 - F5BYtd);
   const aWithBonus = annualPeriodic + bonusNet + bonusYtdNet;
@@ -365,7 +402,12 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const PR = input.periodsRemaining ?? P;
   let cppCreditBasis: bigint;
   let eiCreditBasis: bigint;
-  if (k2Ytd) {
+  if (averaging) {
+    const projectedPe=project(PI-opt(input.pensionableNonPeriodic)+U(averaging.pensionablePeriodic))+U(averaging.pensionableNonPeriodic);
+    const projectedIe=project(IE-opt(input.insurableNonPeriodic)+U(averaging.insurablePeriodic))+U(averaging.insurableNonPeriodic);
+    cppCreditBasis=input.cppExempt||PM===0?ZERO:bmin(maxBaseProrated,mulRateCents(max0(projectedPe-mulRatioCents(U("3500"),BigInt(PM),12n)),plan.baseRate));
+    eiCreditBasis=input.eiExempt?ZERO:bmin(eiMax,mulRateCents(max0(projectedIe),eiRate));
+  } else if (k2Ytd) {
     // (D × base/total) + (PR × C × base/total): two parentheses, each rounded once.
     cppCreditBasis = bmin(
       maxBaseProrated,
@@ -381,7 +423,8 @@ export function calculateT4127(input: T4127Input): T4127Result {
     const eiMaxReached = priorEi + EI >= eiMax;
     eiCreditBasis = input.eiExempt ? ZERO : eiMaxReached ? eiMax : bmin(mulInt(EI, P), eiMax);
   }
-  const qpipCreditBasis = isQuebec ? bmin(mulInt(qpip, P), U(rates.qpip.maxEmployee)) : ZERO;
+  const projectedQpip=averaging?project((input.qpipInsurable===undefined?IE:U(input.qpipInsurable))-opt(input.qpipNonPeriodic)+U(averaging.qpipPeriodic))+U(averaging.qpipNonPeriodic):ZERO;
+  const qpipCreditBasis = isQuebec ? bmin(averaging?mulRateCents(max0(projectedQpip),rates.qpip.employeeRate):mulInt(qpip,P), U(rates.qpip.maxEmployee)) : ZERO;
 
   function k2At(lowestRate: string): bigint {
     let credit = mulRateCents(cppCreditBasis, lowestRate) + mulRateCents(eiCreditBasis, lowestRate);
@@ -479,17 +522,22 @@ export function calculateT4127(input: T4127Input): T4127Result {
 
   // ---- Per-period tax ------------------------------------------------------
   let periodicTax: bigint;
-  if (aWithoutBonus <= ZERO) periodicTax = L;
+  if (averaging) {
+    const M=U(averaging.periodicTax),M1=U(averaging.bonusTax);
+    periodicTax=max0(mulRatioCents(withoutBonus.t1+withoutBonus.t2-M1,BigInt(averaging.elapsedPeriods),BigInt(P))-M)+L;
+    trace("S1_NUM",U(String(P)));trace("S1_DEN",U(String(averaging.elapsedPeriods)));trace("M",M);trace("M1",M1);
+  } else if (aWithoutBonus <= ZERO) periodicTax = L;
   else periodicTax = divIntCents(withoutBonus.t1 + withoutBonus.t2, P) + L;
 
   let bonusTax = ZERO;
   if (bonus > ZERO) {
-    if (aWithBonus <= U("5000")) {
+    if (!averaging && aWithBonus <= U("5000")) {
       bonusTax = mulRateCents(bonus, isQuebec ? "0.10" : "0.15");
     } else {
       bonusTax = max0(withBonus.t1 + withBonus.t2 - (withoutBonus.t1 + withoutBonus.t2));
     }
   }
+  trace("L",L);
   trace("T", periodicTax);
   trace("TB", bonusTax);
 

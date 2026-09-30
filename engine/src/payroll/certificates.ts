@@ -51,6 +51,7 @@
  * pass whose only job is the move. `PayrollCertificate.storage` is the honest
  * record of which certificates are on which side of that line.
  */
+import {isIsoCalendarDate} from "../platform/business-date.ts";
 import { PayrollError } from "./error.ts";
 import { normalizeDecimal } from "../money/money.ts";
 
@@ -156,6 +157,10 @@ export interface PayrollCertificateField {
   /** The label the agency prints, including the line number where it has one. */
   label: string;
   kind: PayrollCertificateFieldKind;
+  /** Optional semantic format for a code answer, enforced at save and read. */
+  format?:"iso_date";
+  minLength?:number;
+  maxLength?:number;
   /** Required for `choice`. */
   choices?: readonly PayrollCertificateChoice[];
   /** Required for `amount`: the canonical scale answers are stored at. */
@@ -259,6 +264,8 @@ export interface PayrollCertificate {
    * inspecting fields.
    */
   storage: "profile_columns" | "certificate_rows";
+  /** Employer policy elections cannot reinterpret already committed payroll. */
+  protectCommittedHistory?:boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -606,12 +613,17 @@ function fieldAnswerProblem(
     }
     return null;
   }
+  if(field.minLength!==undefined&&value.length<field.minLength)return `${at}: explain the decision in at least ${field.minLength} characters`;
+  if(field.maxLength!==undefined&&value.length>field.maxLength)return `${at}: keep the explanation within ${field.maxLength} characters`;
+  if(field.format==="iso_date"&&!isIsoCalendarDate(value))return `${at}: "${value}" must be a real date in YYYY-MM-DD — correct the date before saving`;
   // `code`: the answer IS the jurisdiction/member code — free text, nonempty
   // (emptiness is "unanswered" and handled above).
   return null;
 }
 
 function fieldDeclarationProblem(field: PayrollCertificateField): string | null {
+  if((field.minLength!==undefined||field.maxLength!==undefined)&&field.kind!=="code")return "text length bounds apply only to a code field";
+  if(field.format&&field.kind!=="code")return "a semantic code format applies only to a code field";
   if (!field.help) return "every certificate field needs help text — the operator is reading a "
     + "tax form they did not write";
   if (field.kind === "choice") {

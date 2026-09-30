@@ -72,6 +72,13 @@ const nsPhaseOut = (payDate: string, TCP: string, edition: Edition): Golden => (
 });
 
 const GOLDENS: Golden[] = [
+  {year:2026,label:"Option 2 bonuses use the annual tax difference rather than Option 1’s low-income flat withholding",citation:`Chapter 5 bonus steps, ${ED[122]}`,
+    input:{payDate:"2026-03-06",province:"ON",periodsPerYear:52,...cc1,income:"0",nonPeriodic:"400",pensionable:"0",insurable:"0",pensionableNonPeriodic:"0",insurableNonPeriodic:"0",qpipNonPeriodic:"0",
+      averaging:{elapsedPeriods:1,income:"0",pensionDeductions:"0",alimonyDeductions:"0",unionDues:"0",f5A:"0",pensionablePeriodic:"0",insurablePeriodic:"0",qpipPeriodic:"0",pensionableNonPeriodic:"0",insurableNonPeriodic:"0",qpipNonPeriodic:"0",periodicTax:"0",bonusTax:"0"}},
+    expected:{periodicTax:"0.00",bonusTax:"0.00"}},
+  {year:2026,label:"a non-pensionable bonus does not consume the periodic enhanced-CPP deduction",citation:`hand-worked, ${ED[122]}`,
+    input:{payDate:"2026-03-06",province:"ON",periodsPerYear:52,...cc1,income:"1000",nonPeriodic:"400",pensionable:"1000",pensionableNonPeriodic:"0",insurable:"1000"},
+    expected:{cpp:"55.50",f5:"9.33",f5A:"9.33",f5B:"0.00"}},
   // ── Published claim-code columns ─────────────────────────────────────────
   ...federalK1(2024, 119, "2024-01-15", ["2355.75", "2558.63", "2964.38", "3370.13", "3775.88",
     "4181.63", "4587.38", "4993.13", "5398.88", "5804.63"]),
