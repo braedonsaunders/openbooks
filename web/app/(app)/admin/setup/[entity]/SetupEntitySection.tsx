@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
-import { decimalLabel } from '../../../../../lib/format'
+import { formatDecimal } from '../../../../../lib/money-format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   Badge,
@@ -16,13 +16,14 @@ import { ShowInactivesToggle } from '../../../../../components/show-inactives-to
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { SearchInput } from '../../../../../components/search-input'
 import { Pagination } from '../../../../../components/pagination'
-import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
-import { setupEntityForFeatureState, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
+import { mergeHref, parseListParams, parsePrefixedListParams, pickString } from '../../../../../lib/list-params'
+import { setupParentScope } from '../../../../../lib/setup/parent-scope'
+import { setupEntityForFeatureState, setupChildEntities, resolveSetupEntityGate, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
 import { setupEntityClientDescriptor } from '../../../../../lib/setup/types'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled, resolvedFeatureState } from '../../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 import { RateBookDrawer, type RateBookLine, type RateBookItemOption } from './RateBookDrawer'
@@ -66,14 +67,11 @@ export function renderCell(
     case 'boolean':
       return raw ? t('yes') : '—'
     case 'percent':
-      return raw == null || raw === '' ? '—' : `${Number(raw)}%`
+      return raw == null || raw === '' ? '—' : `${formatDecimal(locale, String(raw), { maximumFractionDigits: 4 })}%`
     case 'number': {
       if (raw == null || raw === '') return '—'
-      const num = Number(raw)
       // Locale-formatted, trailing zeros trimmed (1.7500 → 1.75, 40.0000 → 40).
-      return Number.isFinite(num)
-        ? decimalLabel(num, locale, 0, 4)
-        : String(raw)
+      return formatDecimal(locale, String(raw), { maximumFractionDigits: 4 })
     }
     case 'date':
       return raw ? String(raw) : '—'
@@ -93,6 +91,46 @@ export function renderCell(
   }
 }
 
+/** Shared child-tab composition for standalone setup and rehomed workspaces. */
+export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, canManage, allowedSubsidiaryIds, features, t }: {
+  entity: SetupEntity
+  row: Record<string, unknown> | null
+  orgId: string
+  actorId?: string
+  sp: Record<string, string | string[] | undefined>
+  basePath: string
+  canManage: boolean
+  allowedSubsidiaryIds: ReadonlySet<string> | null
+  features: Parameters<typeof resolveSetupEntityGate>[1]
+  t: (key: string) => string
+}) {
+  if (!row) return []
+  return setupChildEntities(entity.key)
+    .filter((child) => resolveSetupEntityGate(child, features).enabled)
+    .map((child) => {
+      const binding = child.parentRecords!.find((owner) => owner.entityKey === entity.key)!
+      return {
+        key: child.key,
+        label: t(`entities.${child.key}.title`),
+        content: pickString(sp.setupTab) === child.key ? (
+          <SetupEntitySection
+            entity={{ ...child, columns: child.columns.filter((column) => column.key !== binding.fieldKey) }}
+            orgId={orgId}
+            actorId={actorId}
+            searchParams={sp}
+            basePath={basePath}
+            canManage={canManage}
+            allowedSubsidiaryIds={allowedSubsidiaryIds}
+            parent={{ recordKey: entity.key, value: String(row[binding.valueKey ?? entity.idColumn ?? 'id']) }}
+            rowParam="childRow"
+            paramPrefix="child"
+            stacked
+          />
+        ) : null,
+      }
+    })
+}
+
 export async function SetupEntitySection({
   entity: baseEntity,
   orgId,
@@ -105,6 +143,9 @@ export async function SetupEntitySection({
   rowParam = 'row',
   visibleRowIds,
   renderColumn,
+  parent,
+  paramPrefix,
+  stacked = false,
 }: {
   entity: SetupEntity;
   /** Server-side presentation slot; list querying and drawers remain shared. */
@@ -133,6 +174,11 @@ export async function SetupEntitySection({
    *  mounting several sections gives each its own key (CK-09) so one URL
    *  opens exactly one drawer; single-section surfaces keep `row`. */
   rowParam?: string
+  /** An authorized owning record limits both list and edit-row queries. */
+  parent?: { recordKey: string; value: string }
+  /** Child search, pagination and inactive state must not change the parent list. */
+  paramPrefix?: string
+  stacked?: boolean
 }) {
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const gated = setupEntityForFeatureState(baseEntity, {
@@ -157,14 +203,23 @@ export async function SetupEntitySection({
   // existing authority path; reader visibility is unchanged.
   const canWriteEntity = commandPermission
     ? Boolean(currentAuthz && can(currentAuthz, commandPermission))
-    : canManage && (!entity.writePermission || Boolean(currentAuthz && can(currentAuthz, entity.writePermission)))
+    : canManage && !entity.readOnly && (!entity.writePermission || Boolean(currentAuthz && can(currentAuthz, entity.writePermission)))
   const t = await getTranslations('admin.setup')
   const locale = await getLocale()
   const rawRow = sp[rowParam]
   const openRow = typeof rawRow === 'string' ? rawRow : undefined
-  const showInactive = pickString(sp.showInactive) === 'true'
-  const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
-  const closeHref = mergeHref(basePath, sp, { [rowParam]: undefined })
+  const qParam = paramPrefix ? `${paramPrefix}Q` : 'q'
+  const pageParam = paramPrefix ? `${paramPrefix}Page` : 'page'
+  const inactiveParam = paramPrefix ? `${paramPrefix}ShowInactive` : 'showInactive'
+  const showInactive = pickString(sp[inactiveParam]) === 'true'
+  const listOptions = { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 }
+  const list = paramPrefix ? parsePrefixedListParams(sp, paramPrefix, listOptions) : parseListParams(sp, listOptions)
+  const parentScope = setupParentScope(entity, parent)
+  const children = setupChildEntities(entity.key)
+  const closeHref = mergeHref(basePath, sp, {
+    [rowParam]: undefined,
+    ...(children.length ? { setupTab: undefined, childRow: undefined, childQ: undefined, childPage: undefined, childShowInactive: undefined } : {}),
+  })
 
   const searchColumns = entity.columns.map(
     (column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`,
@@ -184,6 +239,7 @@ export async function SetupEntitySection({
   const idColumn = entity.idColumn ?? 'id'
   const rowFilter = sql`where 1 = 1
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+    ${parentScope ? sql`and ${parentScope.predicate}` : sql``}
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
     ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
     ${filterClauses.length ? sql.join(filterClauses, sql` `) : sql``}
@@ -207,17 +263,24 @@ export async function SetupEntitySection({
 
   const open = openRow
     ? openRow === 'new'
-      ? { creating: true, row: null }
+      ? entity.allowCreate !== false && !entity.readOnly ? { creating: true, row: null } : null
       : await (async () => {
           const selected = await db.execute(sql`
             select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
              where ${sql.raw(idColumn)} = ${openRow}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+             ${parentScope ? sql`and ${parentScope.predicate}` : sql``}
              ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
              limit 1`)
-          return { creating: false, row: selected.rows[0] ?? null }
+          return selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
         })()
     : null
+
+  const features = children.length ? await resolvedFeatureState(orgId) : {}
+  const childTabs = setupRecordTabs({
+    entity, row: open?.row ?? null, orgId, actorId, sp, basePath,
+    canManage, allowedSubsidiaryIds, features, t,
+  })
 
   const rateBookDrawerData = open && entity.key === 'item-rate-books'
     ? await (async () => {
@@ -337,14 +400,14 @@ export async function SetupEntitySection({
             ) : null}
           </p>
         </div>
-        {canWriteEntity ? (
+        {canWriteEntity && entity.allowCreate !== false ? (
             <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} rowParam={rowParam} />
           ) : null}
       </div>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput placeholder={t('searchPlaceholder')} />
+        <SearchInput placeholder={t('searchPlaceholder')} paramKey={qParam} pageParamKey={pageParam} />
         {(entity.filters ?? []).map((filter) => (
           <ListFilterSelect
             key={filter.key}
@@ -357,7 +420,7 @@ export async function SetupEntitySection({
           />
         ))}
         {entity.hasActive ? (
-          <ShowInactivesToggle basePath={basePath} currentParams={sp} />
+          <ShowInactivesToggle basePath={basePath} currentParams={sp} paramKey={inactiveParam} pageParamKey={pageParam} />
         ) : null}
       </div>
 
@@ -382,7 +445,7 @@ export async function SetupEntitySection({
               <TableRow key={String(row[idColumn])}>
                 {entity.columns.map((c, i) => (
                   <TableCell key={c.key}>
-                    {canWriteEntity && (i === 0 || entity.key === 'item-rate-books') ? (
+                    {(canWriteEntity || (canManage && entity.readOnly)) && (i === 0 || entity.key === 'item-rate-books') ? (
                       <Link
                         href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
@@ -403,7 +466,7 @@ export async function SetupEntitySection({
       </div>
 
       {total > 0 ? (
-        <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} />
+        <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} pageParamKey={pageParam} />
       ) : null}
 
       {open && canWriteEntity && entity.key === 'item-rate-books' && rateBookDrawerData ? (
@@ -419,6 +482,7 @@ export async function SetupEntitySection({
         />
       ) : open && canWriteEntity && entity.key === 'construction-rate-schedules' && open.row && rateScheduleScopeOptions && rateScheduleEditorData ? (
         <SetupDrawer
+          key={`${entity.key}:${String(open.row?.[idColumn] ?? 'new')}`}
           entity={drawerEntity}
           row={open.row}
           members={[]}
@@ -432,13 +496,17 @@ export async function SetupEntitySection({
             ),
           }}
         />
-      ) : open && canWriteEntity ? (
+      ) : open && (canWriteEntity || (canManage && entity.readOnly && !open.creating)) ? (
         <SetupDrawer
+          key={`${entity.key}:${String(open.row?.[idColumn] ?? 'new')}`}
           entity={drawerEntity}
           row={open.row}
           members={[]}
           refOptions={refOptions}
           closeHref={closeHref}
+          fixedValues={parentScope?.fixedValues}
+          stacked={stacked}
+          nestedTabs={childTabs}
         />
       ) : null}
     </div>

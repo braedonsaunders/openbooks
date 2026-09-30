@@ -122,6 +122,7 @@ export const BILLING_ENTITIES: SetupEntity[] = [
   },
   {
     key: 'customer-price-level-assignments',
+    parentRecords: [{ entityKey: 'price-levels', fieldKey: 'priceLevelId' }],
     table: 'customer_price_level_assignments',
     actorCols: true,
     groupKey: 'billing',

@@ -187,7 +187,7 @@ export async function loadSetupEntity(
   }
 
   const baseEntity = isCompany || isPeriodClose || isFxProvider ? undefined : SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!isCompany && !isPeriodClose && !isFxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.rehomed)) {
+  if (!isCompany && !isPeriodClose && !isFxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || baseEntity.rehomed)) {
     notFound()
   }
   const features = await resolvedFeatureState(orgId)

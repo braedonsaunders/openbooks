@@ -289,6 +289,7 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
   },
   {
     key: 'hrm-competencies',
+    parentRecords: [{ entityKey: 'hrm-competency-frameworks', fieldKey: 'frameworkId' }],
     table: 'hrm_competencies',
     actorCols: true,
     groupKey: 'workforce',

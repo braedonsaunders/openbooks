@@ -164,7 +164,7 @@ charge, and which government return the ledger settles to. It starts with a
 - **Tax Jurisdictions** — the taxing authorities (country, state, county, city,
   special, federal) and their tax type (VAT, GST, HST, PST, QST, sales/use,
   consumption). Jurisdictions can nest.
-- **Tax Nexus** — your registrations in each jurisdiction, including
+  Each jurisdiction's **Tax Nexus** tab contains its registrations, including
   registration number, filing frequency, return form, and effective dates.
 - **Tax Codes** — the tax treatment applied to a line: which side it applies to,
   standard/withholding/reverse-charge calculation, the collected, paid, and

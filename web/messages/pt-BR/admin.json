@@ -1814,7 +1814,7 @@
       },
       "step3": {
         "title": "Declare seu nexo",
-        "description": "Registre onde a empresa está inscrita para recolher e repassar, sua periodicidade e a declaração que entrega.",
+        "description": "Abra uma jurisdição e use a aba Nexo fiscal para informar o número de registro, a frequência de declaração, o formulário e as datas de vigência.",
         "stat": "{count, plural, =0 {Nenhum registro ainda} one {# registro} other {# registros}}",
         "cta": "Configurar nexo"
       }

@@ -12,13 +12,14 @@ export const distributionScanning: DocArticle = {
   body: `# Customer part numbers and scanning
 
 Customers may order an item using their own product code. Add a customer part
-number in Setup and map it to one item. Each customer code is unique for that
+number in the item's **Customer Part Numbers** tab and select its customer.
+Each customer code is unique for that
 customer, and each item can have one customer code per customer. The sales
 order item picker shows that code after you select the customer.
 
 ## Set up scan identifiers
 
-Add an exact GTIN, UPC, EAN or internal identifier to an item in Setup. An
+Add an exact GTIN, UPC, EAN or internal identifier in the item's **Item Identifiers** tab. An
 identifier may specify the item's base unit or a unit listed in the item's
 inventory conversions. Codes are matched exactly; the scanner never guesses
 from a partial value.

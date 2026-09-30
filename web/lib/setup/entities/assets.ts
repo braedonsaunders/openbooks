@@ -72,7 +72,8 @@ export const ASSET_ENTITIES: SetupEntity[] = [
     // Configurable pool CLASSES per regime (rate, method, first-year fraction,
     // recapture/terminal behavior). Org rows override the built-in class table.
     key: 'tax-pool-classes',
-    rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    parentRecords: [{ entityKey: 'tax-regimes', fieldKey: 'regime', valueKey: 'code' }],
+    rehomed: true, // owned by the Tax Regime record drawer
     table: 'tax_pool_classes',
     singularTitleKey: 'entities.tax-pool-classes.singularTitle',
     actorCols: true,
@@ -112,7 +113,8 @@ export const ASSET_ENTITIES: SetupEntity[] = [
     // Dated first-year rules per regime/class (half-year rule, AII, immediate
     // expensing) — legislatively volatile, so config not code.
     key: 'tax-first-year-rules',
-    rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    parentRecords: [{ entityKey: 'tax-regimes', fieldKey: 'regime', valueKey: 'code' }],
+    rehomed: true, // owned by the Tax Regime record drawer
     table: 'tax_first_year_rules',
     singularTitleKey: 'entities.tax-first-year-rules.singularTitle',
     actorCols: true,

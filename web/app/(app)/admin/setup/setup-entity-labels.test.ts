@@ -41,7 +41,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 function mountedKeys(): Set<string> {
   const mounted = new Set<string>()
   for (const entity of SETUP_ENTITY_BY_KEY.values()) {
-    if (!entity.rehomed && !entity.nestedUnder) mounted.add(entity.key)
+    if ((!entity.rehomed && !entity.nestedUnder) || entity.parentRecords?.length) mounted.add(entity.key)
   }
   const trees = [join(ROOT, 'web', 'app'), join(ROOT, 'web', 'components')].flatMap((dir) => sourceFiles(dir))
   for (const file of trees) {

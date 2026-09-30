@@ -1814,7 +1814,7 @@
       },
       "step3": {
         "title": "Declare your nexus",
-        "description": "Record where the business is registered to collect and remit, its filing frequency, and the return it files.",
+        "description": "Open a jurisdiction and use its Tax Nexus tab to record the registration number, filing frequency, return form, and effective dates.",
         "stat": "{count, plural, =0 {No registrations yet} one {# registration} other {# registrations}}",
         "cta": "Set up nexus"
       }

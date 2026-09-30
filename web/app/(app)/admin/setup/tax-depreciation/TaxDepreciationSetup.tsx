@@ -157,8 +157,8 @@ export function TaxDepreciationSetup({
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <SetupLink href="/admin/setup/tax-depreciation?tab=regimes" title={t('links.regimes.title')} description={t('links.regimes.description')} />
-          <SetupLink href="/admin/setup/tax-depreciation?tab=classes" title={t('links.classes.title')} description={t('links.classes.description')} />
-          <SetupLink href="/admin/setup/tax-depreciation?tab=first-year" title={t('links.firstYear.title')} description={t('links.firstYear.description')} />
+          <SetupLink href="/admin/setup/tax-depreciation?tab=regimes&setupTab=tax-pool-classes" title={t('links.classes.title')} description={t('links.classes.description')} />
+          <SetupLink href="/admin/setup/tax-depreciation?tab=regimes&setupTab=tax-first-year-rules" title={t('links.firstYear.title')} description={t('links.firstYear.description')} />
           <SetupLink href="/admin/setup/asset-categories" title={t('links.assignments.title')} description={t('links.assignments.description')} />
         </div>
       </section>

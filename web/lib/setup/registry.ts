@@ -58,12 +58,31 @@ export const SETUP_ENTITIES: SetupEntity[] = [
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))
 
+/** Collections rendered inside an owning record with the shared setup list. */
+export function setupChildEntities(parentKey: string): SetupEntity[] {
+  return SETUP_ENTITIES.filter((entity) => entity.parentRecords?.some((parent) => parent.entityKey === parentKey))
+}
+
+/** Collection links lead to the owning records, where the child tab is opened. */
+export function setupEntityHref(entity: SetupEntity): string {
+  const parentKey = entity.parentRecords?.[0]?.entityKey
+  if (!parentKey) return `/admin/setup/${entity.key}`
+  const parentHomes: Record<string, string> = {
+    items: '/items',
+    'tax-regimes': '/admin/setup/tax-depreciation?tab=regimes',
+    'entitlement-plans': '/admin/setup/payroll?tab=entitlements',
+    'pay-components': '/admin/setup/payroll?tab=components',
+  }
+  const home = parentHomes[parentKey] ?? `/admin/setup/${parentKey}`
+  return `${home}${home.includes('?') ? '&' : '?'}${parentKey === 'items' ? 'itemSetup' : 'setupTab'}=${entity.key}`
+}
+
 /** Entities grouped by section, in registry order — drives the left rail. */
 export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
   const byGroup = new Map<string, SetupEntity[]>()
   for (const g of SETUP_GROUPS) byGroup.set(g.key, [])
   for (const e of SETUP_ENTITIES) {
-    if (e.nestedUnder || e.rehomed) continue
+    if (e.nestedUnder || e.parentRecords?.length || e.rehomed) continue
     const list = byGroup.get(e.groupKey)
     if (list) list.push(e)
   }

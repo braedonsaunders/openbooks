@@ -2,12 +2,9 @@ import type { SetupEntity } from './types'
 import { foldWholeNumber } from './whole-number'
 
 /**
- * Setup-registry descriptors for HRM benefit plans and pricing tiers (0197).
- *
- * Both are ordinary registry entities behind the hrm switch and MUST be
- * spread into SETUP_ENTITIES in registry.ts — that wires the generic list
- * view (admin/setup/[entity]), the create/edit drawer, and the generic CRUD
- * API (api/admin/setup/[entity]).
+ * Benefit plans and their pricing tiers share the setup registry and CRUD API.
+ * Pricing tiers are managed inside their owning plan, with amounts copied
+ * onto elections so later repricing preserves history.
  *
  * What these screens are, and are NOT:
  *
@@ -103,6 +100,7 @@ export const BENEFIT_PLANS_ENTITY: SetupEntity = {
 
 export const BENEFIT_PLAN_LEVELS_ENTITY: SetupEntity = {
   key: 'benefit-plan-levels',
+  parentRecords: [{ entityKey: 'benefit-plans', fieldKey: 'planId' }],
   table: 'hrm_benefit_plan_levels',
   groupKey: 'workforce',
   featureKey: 'hrm',

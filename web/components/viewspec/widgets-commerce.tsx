@@ -16,6 +16,7 @@ import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDra
 import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadButton'
 import { FieldTicketDrawer } from '../../app/(app)/field-tickets/FieldTicketDrawer'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
+import { ItemDrawerSlot } from '../../app/(app)/items/ItemDrawerSlot'
 import { NewItemButton } from '../../app/(app)/items/NewItemButton'
 import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
 import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
@@ -209,8 +210,7 @@ export const COMMERCE_WIDGETS = {
   'item-drawer': (props) => {
     const drawer = props.drawer as (ComponentProps<typeof ItemDrawer> & { remountKey: string }) | null
     if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <ItemDrawer key={remountKey} {...rest} />
+    return <ItemDrawerSlot drawer={drawer} sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />
   },
 
   /* --- inventory ------------------------------------------------------------ */

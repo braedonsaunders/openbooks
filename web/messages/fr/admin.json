@@ -4492,7 +4492,7 @@
       },
       "step3": {
         "cta": "Configurer le nexus",
-        "description": "Consignez où l’entreprise est inscrite pour percevoir et verser, sa fréquence de déclaration et la déclaration qu’elle produit.",
+        "description": "Ouvrez une juridiction et utilisez son onglet Nexus fiscal pour renseigner le numéro d’enregistrement, la fréquence de déclaration, le formulaire et les dates d’effet.",
         "stat": "{count, plural, =0 {Aucune inscription pour l’instant} one {# inscription} other {# inscriptions}}",
         "title": "Déclarez votre nexus"
       },

@@ -4493,7 +4493,7 @@
       },
       "step3": {
         "cta": "Nexus einrichten",
-        "description": "Erfassen Sie, wo das Unternehmen für Erhebung und Abführung registriert ist, sowie dessen Meldehäufigkeit und die Erklärung, die es einreicht.",
+        "description": "Öffnen Sie ein Steuergebiet und erfassen Sie auf dessen Registerkarte Steuernexus die Registrierungsnummer, den Meldezeitraum, das Formular und die Gültigkeitsdaten.",
         "stat": "{count, plural, =0 {Noch keine Registrierungen} one {# Registrierung} other {# Registrierungen}}",
         "title": "Nexus deklarieren"
       },
