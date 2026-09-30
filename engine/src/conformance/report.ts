@@ -44,6 +44,21 @@ function byStandard(results: readonly CaseResult[]): Map<string, CaseResult[]> {
   return new Map([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)));
 }
 
+/** Report each executed partition separately so a computation-only run cannot
+ * be mistaken for ledger evidence. Declared gaps retain their partition. */
+function partitionTotals(report: CorpusReport) {
+  return Object.fromEntries((["computation", "ledger"] as const).map((tier) => {
+    const selected = report.results.filter((result) => result.case.tier === tier);
+    return [tier, {
+      total: selected.length,
+      pass: selected.filter((result) => result.status === "pass").length,
+      fail: selected.filter((result) => result.status === "fail").length,
+      gap: selected.filter((result) => result.status === "gap").length,
+      skipped: selected.filter((result) => result.status === "skipped").length,
+    }];
+  }));
+}
+
 export function renderMarkdown(report: CorpusReport): string {
   const out: string[] = [];
   const { totals } = report;
@@ -70,6 +85,13 @@ export function renderMarkdown(report: CorpusReport): string {
   out.push("");
   if (report.gitSha) out.push(`Commit \`${report.gitSha}\`${report.at ? ` · ${report.at}` : ""}`);
   else if (report.at) out.push(report.at);
+  out.push("");
+
+  out.push("| Partition | Passed | Failed | Gaps | Not run |");
+  out.push("| --- | --- | --- | --- | --- |");
+  for (const [tier, totals] of Object.entries(partitionTotals(report))) {
+    out.push(`| ${tier} | ${totals.pass} | ${totals.fail} | ${totals.gap} | ${totals.skipped} |`);
+  }
   out.push("");
 
   for (const [standard, results] of byStandard(report.results)) {
@@ -160,6 +182,7 @@ export function renderJson(report: CorpusReport): string {
       runId: report.runId,
       casesSha256: caseDigest(cases),
       totals: report.totals,
+      partitions: partitionTotals(report),
       pass: report.pass,
       ...(report.emptySelection ? { emptySelection: report.emptySelection } : {}),
       ...(report.notRunReason ? { notRunReason: report.notRunReason } : {}),

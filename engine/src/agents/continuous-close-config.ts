@@ -148,6 +148,12 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
     ],
   },
   {
+    detectorKey: "stranded_background_work",
+    agentKey: "accounting",
+    supportsMateriality: false,
+    parameters: [{ key: "staleAfterDays", defaultValue: 1, min: 1, max: 365, step: 1, unit: "days" }],
+  },
+  {
     detectorKey: "overdue_customer_balance",
     agentKey: "collections",
     supportsMateriality: true,

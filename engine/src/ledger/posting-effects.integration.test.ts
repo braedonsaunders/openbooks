@@ -13,7 +13,8 @@ import {
   type MetricData,
 } from "@opentelemetry/sdk-metrics";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { strandedWorkFindings } from "../agents/stranded-work.ts";
+import { db, withOrgContext, withBypassContext } from "../platform/db.ts";
 import { ATTR_KIND, ATTR_SURFACE } from "../platform/telemetry.ts";
 import {
   claimPostingEffectsForDocument,
@@ -58,7 +59,7 @@ async function collectDurations(): Promise<Array<DataPoint<Histogram>>> {
 }
 
 test("attempt ceiling terminalizes posting effects and authorized replay preserves audit evidence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   const actorId = randomUUID();
   const documentId = randomUUID();
   const entryId = randomUUID();
@@ -67,6 +68,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
   const logs: string[] = [];
   const originalLog = console.log;
   try {
+    await withOrgContext(org.orgId, async () => {
     await db.transaction(async (tx) => {
       const role = await tx.execute<{ id: string }>(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
@@ -136,6 +138,11 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
       reason: "inventory projection remained inconsistent",
     }]);
 
+    const stranded = await strandedWorkFindings(org.orgId, "1900-01-01");
+    assert.ok(stranded.some((finding) => finding.subjectId === effectId && finding.severity === "critical"));
+    assert.deepEqual(await strandedWorkFindings(randomUUID(), "1900-01-01"), [], "durable failures must remain tenant-scoped");
+    assert.deepEqual(await strandedWorkFindings(org.orgId, "1900-01-01"), stranded, "the failure remains detectable after its initial notification");
+
     const replayAt = new Date("2026-07-20T13:00:00.000Z");
     await replayTerminalPostingEffect({
       orgId: org.orgId,
@@ -145,6 +152,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
       now: replayAt,
     });
     assert.deepEqual(await listFailedPostingEffects(org.orgId), []);
+    assert.ok(!(await strandedWorkFindings(org.orgId, "1900-01-01")).some((finding) => finding.subjectId === effectId), "authorized recovery removes the terminal finding");
     const replayed = await db.execute<{
       status: string;
       attempt_count: number;
@@ -169,9 +177,10 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
 
     const replayResult = await processDuePostingEffects(replayAt, 1, async () => {});
     assert.deepEqual(replayResult, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
+    });
   } finally {
     console.log = originalLog;
-    await dropScratchOrg(org.orgId);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 

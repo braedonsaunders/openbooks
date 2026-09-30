@@ -967,11 +967,12 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       "Expected breakage is not recognised in proportion to earlier customer use; the system waits for a breakage policy rather than silently estimating it.",
     facts: [
       "Customers pay 100.00 for 100 usage credits, and 60 credits have been exercised by 2026-07-31.",
-      "The entity estimates that 20.00 of the remaining credit value will never be used.",
+      "The entity expects total breakage of 20.00, so 80 credits are expected to be redeemed; 60 of those 80 have been exercised.",
+      "The proportionate breakage revenue is 20.00 × 60 / 80 = 15.00, subject to entitlement and the variable-consideration constraint.",
     ],
     gap:
       "The billing and recognition services do not store a breakage estimate or recognise expected breakage in proportion to customer redemptions; they can only account for the right when its commitment window closes.",
-    expected: { values: { proportionalBreakageRevenue: "12.0000" } },
+    expected: { values: { proportionalBreakageRevenue: "15.0000" } },
   },
 
   {

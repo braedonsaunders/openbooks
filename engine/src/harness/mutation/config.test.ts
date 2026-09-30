@@ -39,6 +39,10 @@ test("checked-in config covers the curated scope and every referenced file exist
     for (const testFile of target.tests) {
       assert.ok(existsSync(join(REPO_ROOT, testFile)), `mapped test exists: ${testFile}`);
     }
+    if (["engine/src/sync/applications.ts", "engine/src/assets/depreciation-schedule-build.ts"].includes(target.path)) {
+      assert.equal(target.needsDb, true, `${target.path} must not receive a unit-only measurement`);
+      assert.ok(target.tests.some((file) => file.endsWith('.integration.test.ts')), `${target.path} needs persisted-state coverage`);
+    }
     if (target.lineRanges) {
       const lineCount = readFileSync(join(REPO_ROOT, target.path), "utf8").split("\n").length;
       for (const range of target.lineRanges) {

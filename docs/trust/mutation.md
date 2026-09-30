@@ -7,34 +7,56 @@ is killed ÷ measured over a sampled mutant set. A low score does not mean the
 code is wrong — it means the suite cannot see whole classes of behavior
 change there, so a future regression in that code would also pass green.
 
-## Current scores (sample 25/target, unit mode, git `875f2176f`)
+## Recorded measurement
 
-| target | score | measured | notes |
-| --- | --- | --- | --- |
-| engine/src/payroll/us/pub15t.ts | 76.0% | 25 | strongest unit coverage in scope |
-| engine/src/tax/tax.ts | 48.0% | 25 | |
-| engine/src/tax-returns/return.ts | 43.5% | 23 | |
-| engine/src/money/money.ts | 39.1% | 23 | survivors in precision validation + div() rounding |
-| engine/src/payroll/canada/t4127.ts | 37.5% | 24 | |
-| engine/src/ledger/posting.ts | 34.8% | 23 | unit mode; DB run pending |
-| engine/src/ledger/posting-effects.ts | 20.0% | 25 | backoff math covered; claim guards are not |
-| engine/src/assets/depreciation.ts | 17.4% | 23 | 47 baseline tests execute — breadth without teeth |
-| engine/src/payroll/run.ts | 16.0% | 25 | partial unit signal; DB run pending |
-| engine/src/payments/payments.ts | 8.3% | 24 | allocation math thinly covered in unit mode |
-| engine/src/payroll/us/withholding.ts | 8.3% | 24 | certificate/rate guards survive |
-| engine/src/sync/applications.ts | 0.0% | 23 | only 2 unit tests execute; rest need a DB |
-| engine/src/consolidation/consolidation.ts | n/a | 0 | DB-only; nightly measures it |
-| engine/src/payroll/canada/compute-statutory.ts | n/a | 0 | DB-only; pilot run executed 25/25 baseline tests with 2 survivors at line 127 (boundary `210->211`, `===`→`!==`) |
-| engine/src/payroll/canada/employer-levies.ts | n/a | 0 | DB-only; pilot run executed 2/2 baseline tests |
-| engine/src/payroll/us/compute-statutory.ts | n/a | 0 | DB-only |
+The checked-in report was measured on `1d6e4fec443071149393ad5545e13fdc1a55d311` at
+`2026-09-20T09:57:31.665Z` in the database partition. These are historical
+results, not evidence that later changes or newly extracted helpers are covered.
+A fresh scoped run reports its own source commit, selected files, baseline counts
+and partition; it does not replace or ratify this complete historical measurement.
 
-Top surviving mutants per file (the concrete test gaps) are listed in
-`engine/src/harness/mutation/mutation-report.json` under `topSurvivors`, and
-in full in the nightly `mutation-report` artifact. Loudest examples from the
-ratified run: `money.ts` div() tolerates truncation replacing half-away
-rounding; `posting.ts:610` reverse-charge `!==` flipped to `===` survives the
-unit set; `sync/applications.ts` flips anywhere survive; `depreciation.ts`
-manual-method guard negation survives.
+| target | score | measured |
+| --- | --- | --- |
+| engine/src/money/money.ts | 96.0% | 25 |
+| engine/src/ledger/posting-rules.ts | 100.0% | 25 |
+| engine/src/ledger/posting-tax-policy.ts | 84.0% | 25 |
+| engine/src/ledger/posting-effects.ts | 100.0% | 25 |
+| engine/src/sync/applications.ts | 40.0% | 25 |
+| engine/src/payments-core/payment-document-lock.ts | 100.0% | 3 |
+| engine/src/payments/payment-queries.ts | 73.3% | 15 |
+| engine/src/payroll/run-calculation-evidence.ts | 100.0% | 5 |
+| engine/src/payroll/run-calculation.ts | 92.9% | 14 |
+| engine/src/payroll/run-earning-lines.ts | 72.0% | 25 |
+| engine/src/payroll/canada/t4127.ts | 60.0% | 25 |
+| engine/src/payroll/canada/compute-statutory.ts | 87.0% | 23 |
+| engine/src/payroll/canada/employer-levies.ts | 60.0% | 25 |
+| engine/src/payroll/us/pub15t.ts | 96.0% | 25 |
+| engine/src/payroll/us/withholding.ts | 64.0% | 25 |
+| engine/src/payroll/us/compute-statutory.ts | 65.2% | 23 |
+| engine/src/tax/tax.ts | 84.0% | 25 |
+| engine/src/tax-returns/return.ts | 88.0% | 25 |
+| engine/src/consolidation/consolidation.ts | 80.0% | 25 |
+| engine/src/assets/depreciation-schedule-build.ts | 36.0% | 25 |
+| engine/src/ledger/posting-document.ts | 100.0% | 1 |
+| engine/src/ledger/posting-prepare.ts | 96.0% | 25 |
+| engine/src/ledger/posting-commit.ts | 100.0% | 25 |
+| engine/src/ledger/posting-replay.ts | 52.0% | 25 |
+| engine/src/ledger/posting-projection.ts | 100.0% | 9 |
+| engine/src/ledger/posting-dispatch.ts | 88.0% | 25 |
+| engine/src/ledger/posting-accounts.ts | 100.0% | 19 |
+| engine/src/ledger/posting-provider-tax.ts | 92.0% | 25 |
+| engine/src/ledger/posting-subsidiaries.ts | 100.0% | 20 |
+| engine/src/ledger/posting-period.ts | 95.5% | 22 |
+| engine/src/journal/posting-invariants.ts | 76.5% | 17 |
+| engine/src/payments/settlement-policy.ts | 68.0% | 25 |
+
+Survivor locations belong to that measured tree. Follow extracted code to its
+current implementation before reproducing a survivor, and use the database
+partition for reconciliation and persisted depreciation scheduling.
+
+A survivor is a missing regression signal, not proof that the production result
+is incorrect. An equivalent mutant can survive without changing observable
+behavior; classify it from a realistic execution before adding an assertion.
 
 ## Running it
 

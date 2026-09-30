@@ -19,3 +19,16 @@ test("Québec conformance uses the selling price for both GST and QST", async ()
   assert.deepEqual(actual.values, expected, "product calculation must match the independently transcribed QST rule");
   assert.ok(kase.citations.some((citation) => citation.reference.includes("https://www.revenuquebec.ca/")), "publish the primary source with the claim");
 });
+
+// Ordinary goods quotation uses the maintained schedules and the same rounded
+// component calculator as document posting, including QST's GST-exclusive base.
+test("native Canadian goods quotes retain dated provincial tax and refuse ambiguous input", async () => {
+  const { quoteGoodsPlaceOfSupply, PlaceOfSupplyError } = await import('../tax/place-of-supply.ts');
+  const input = { taxableAmount: '100.00', quotedOn: '2026-08-01', country: 'CA', deliveryProvince: 'QC', basis: 'ordinary_taxable_goods_sale' } as const;
+  const quote = quoteGoodsPlaceOfSupply(input);
+  assert.deepEqual(quote.components.map((row) => row.taxAmount), ['5.0000', '9.9800']);
+  assert.equal(quote.taxAmount, '14.9800');
+  assert.equal(quoteGoodsPlaceOfSupply({ ...input, deliveryProvince: 'NS', quotedOn: '2025-03-31' }).taxAmount, '15.0000');
+  assert.equal(quoteGoodsPlaceOfSupply({ ...input, deliveryProvince: 'NS', quotedOn: '2025-04-01' }).taxAmount, '14.0000');
+  assert.throws(() => quoteGoodsPlaceOfSupply({ ...input, taxableAmount: '100,00' }), PlaceOfSupplyError);
+});

@@ -1408,6 +1408,10 @@
         "unmapped_payroll_component": {
           "title": "Composantes de paie non affectées",
           "description": "Composantes de paie sans affectation comptable."
+        },
+        "stranded_background_work": {
+          "title": "Stranded background work",
+          "description": "Durable posting, scheduling, report generation or email work has failed permanently or remained overdue beyond the configured age. Review its retained evidence before controlled recovery."
         }
       },
       "accounting": {

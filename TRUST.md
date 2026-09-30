@@ -15,15 +15,17 @@
 Accounting software asks for an unusual amount of trust: you are handing it the
 record that your auditors, your bank, and your tax authority will rely on. This
 page is our answer to *why should you believe it works* — not a claim, but a
-set of checks you can read, run yourself, and watch run on every commit.
+set of checks you can read and run yourself, with published results identifying
+the exact source commit measured.
 
 Three things are published here:
 
 1. **The invariants** — properties the ledger must always hold, checked
-   continuously.
+   in the comprehensive verification run and, where stated, by storage guards.
 2. **The conformance corpus** — requirements of published accounting standards,
    encoded as executable fixtures with exact expected entries.
-3. **The results** — per-commit, from CI, including the failures.
+3. **The results** — from explicitly dispatched comprehensive CI runs, including
+   failures and the measured source commit.
 
 > [!IMPORTANT]
 > OpenBooks is alpha software. These checks are extensive and they are honest,
@@ -35,6 +37,17 @@ Three things are published here:
 ---
 
 ## Current results
+
+Routine pushes and pull requests run static checks and security scans. The
+comprehensive unit, database, simulation, browser, and recovery partitions run
+on explicit dispatch. Trust publication consumes a successful comprehensive
+run on `main`; release verification separately runs focused financial checks
+and requires an upgrade rehearsal. A green routine test-workflow badge does
+not establish that those comprehensive partitions ran for the same commit.
+
+Read the commit and timestamp in each linked artifact before using it as
+evidence. Historical passes remain evidence for their measured source, not
+for the current checkout.
 
 | What | Status |
 | --- | --- |

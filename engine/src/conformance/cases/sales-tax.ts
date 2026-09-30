@@ -1,3 +1,4 @@
+import { quoteGoodsPlaceOfSupply } from '../../tax/place-of-supply.ts';
 /**
  * Sales and consumption tax — ETA (GST/HST), Revenu Québec (QST), CRA GST34,
  * HMRC VAT Notice 700/12 (VAT100), and US economic-nexus thresholds.
@@ -531,7 +532,7 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
           "Whether GST or a participating province's HST applies — and at which of the differing HST rates — follows where the supply is made, so the same $100 supply bears $5.00 for an Alberta delivery and $13.00 for an Ontario one.",
       },
     ],
-    support: "not-implemented",
+    support: "partial",
     tier: "computation",
     assertion:
       "Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.",
@@ -540,10 +541,17 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
       "The identical supply delivered in Ontario must bear $13.00 (HST 13%).",
       "The required outcome is the rate selected from the delivery province alone.",
     ],
-    gap:
-      "The country packs carry sourced jurisdictional rates (Ontario HST 13%, GST 5%) but the kernel never selects among them: the merchant configures which tax code a document line uses, or an external rate provider quotes it. There is no native place-of-supply function mapping a delivery province or address to the applicable pack rate, and the packs self-report sourcingRules as partial.",
+    limitation:
+      "Native selection covers ordinary fully taxable goods sold and legally delivered in Canada, including applicable provincial standard tax. Services, intangible property, exemptions and special place-of-supply rules require their own assessment; the command refuses an unclassified supply. This case establishes quotation, not automatic tax-code selection during document editing.",
     expected: {
       values: { albertaTax: "5.0000", ontarioTax: "13.0000" },
+    },
+    run: () => {
+      const quote = (deliveryProvince: string) => quoteGoodsPlaceOfSupply({
+        taxableAmount: "100.00", quotedOn: "2026-08-01", country: "CA", deliveryProvince,
+        basis: "ordinary_taxable_goods_sale",
+      });
+      return { values: { albertaTax: quote("AB").taxAmount, ontarioTax: quote("ON").taxAmount } };
     },
   },
 ];

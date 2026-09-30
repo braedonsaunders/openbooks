@@ -124,7 +124,7 @@ async function waitForBlockedWriter(
       if (
         !excludedPids.has(Number(row.pid))
         && blockingPids.some((pid) => possibleBlockers.has(pid))
-        && /for\s+update/i.test(row.query)
+        && /for\s+update|pg_advisory_xact_lock/i.test(row.query)
       ) {
         return { pid: Number(row.pid), query: row.query, blockingPids }
       }
@@ -132,7 +132,7 @@ async function waitForBlockedWriter(
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
   throw new Error(
-    `timed out waiting for a SELECT FOR UPDATE blocked by PostgreSQL pid(s) ${[...possibleBlockers].join(', ')}`,
+    `timed out waiting for a document write lock blocked by PostgreSQL pid(s) ${[...possibleBlockers].join(', ')}`,
   )
 }
 
@@ -311,6 +311,8 @@ test(
     const fixture = await withBypass(async () => {
       const org = await createScratchOrg()
       const actorId = (await seedFlowActors(org.orgId)).adminId
+      await db.execute(sql`update app_roles set permissions = '["ap.create","ap.post","gl.post"]'::jsonb
+        where org_id = ${org.orgId} and key = 'admin'`)
 
       const insertDraft = async (
         id: string,
@@ -1507,3 +1509,11 @@ test('provider failure during API document create leaves no document or dependen
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+// The API must carry the revision and edited rows into the atomic command.
+test('posted correction validation retains its exact revision and edited lines', async () => {
+  const { documentCorrectionBodySchema } = await import('./api/document-edit-schema.ts');
+  const body = { expectedUpdatedAt: '42', amendmentReason: 'Correct duplicated allocation', lines: [{ accountId: randomUUID(), amount: '125.00' }] };
+  assert.deepEqual(documentCorrectionBodySchema.parse(body), body);
+  assert.equal(documentCorrectionBodySchema.safeParse({ ...body, expectedUpdatedAt: undefined }).success, false);
+});

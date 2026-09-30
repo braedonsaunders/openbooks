@@ -1,3 +1,4 @@
+import { quoteGoodsPlaceOfSupply, PlaceOfSupplyError } from '@openbooks/engine/tax';
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -40,6 +41,10 @@ const quoteFields = {
   shipTo: addressSchema.optional(),
 };
 const bodyObjectSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("nativeGoodsQuote"), taxableAmount: z.string(), quotedOn: z.string(),
+    country: z.literal("CA"), deliveryProvince: z.string(), basis: z.literal("ordinary_taxable_goods_sale"),
+  }).strict(),
   z.object({
     action: z.literal("manualQuote"),
     ...quoteFields,
@@ -113,6 +118,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = ((parsedBody2.data));
   try {
+    if (body.action === "nativeGoodsQuote") return NextResponse.json(quoteGoodsPlaceOfSupply(body));
     if (body.action === "manualQuote") {
       const taxableAmount = canonicalDecimal(body.taxableAmount ?? "0", 4);
       if (taxableAmount === null) {
@@ -158,7 +164,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
     );
     return NextResponse.json(result);
   } catch (e) {
-    return apiErrorResponse(e, e instanceof TaxRateProviderError ? { safeStatus: 422 } : {})
+    return apiErrorResponse(e, e instanceof TaxRateProviderError || e instanceof PlaceOfSupplyError ? { safeStatus: 422 } : {})
   }
 }
 

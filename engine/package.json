@@ -44,5 +44,10 @@
     "sim": "tsx src/sim/cli.ts",
     "samples": "tsx src/sample-companies/cli.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./documents": "./src/ledger/public.ts",
+    "./src/*": "./src/*",
+    "./tax": "./src/tax/public.ts"
   }
 }

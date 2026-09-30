@@ -1,4 +1,5 @@
 import 'server-only'
+import { createPostedCorrection, correctPostedDocument } from '@openbooks/engine/documents'
 import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
 import {
   EntryAllocationError,
@@ -49,8 +50,8 @@ import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 
 import {
-  DOCUMENT_EDIT_REVISION_CONFLICT, DocumentEditError, requireDocumentEditRevision, assertNoExistingDocumentCorrection,
-  runDocumentVersionedTransaction, buildReversalLinkEvidence,
+  DOCUMENT_EDIT_REVISION_CONFLICT, DocumentEditError, requireDocumentEditRevision,
+  runDocumentVersionedTransaction,
 } from '@openbooks/engine/src/records/document-edit-policy.ts'
 import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
 import { loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
@@ -186,143 +187,33 @@ export async function createDocumentDraft(
   return doc!
 }
 
-/**
- * Materialize the user's edited replacement as a draft while preserving the
- * posted source. The `reverses` link carries the mandatory reversal-audit
- * evidence (reason + requester + timestamp — see buildReversalLinkEvidence)
- * and blocks submission until the source's controlled void completes.
- */
+/** Create a retained correcting draft through the engine transaction contract. */
 export async function createPostedCorrectionDraft(
   sourceId: string,
   body: DocumentEditInput,
   ctx: DocumentEditContext,
   options: { deferFlows?: boolean } = {},
 ): Promise<{ id: string; documentNumber: string }> {
-  const expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
-  const reason = body.amendmentReason?.trim() ?? ''
-  if (reason.length < 8 || reason.length > 500) {
-    throw new DocumentEditError(422, 'A correction reason between 8 and 500 characters is required')
-  }
-
-  const created = await withOrgTransaction(ctx.orgId, async () => runDocumentVersionedTransaction<
-    DocumentTransaction,
-    { kind: string; status: string; subsidiaryId: string | null; updatedAt: string },
-    { id: string; documentNumber: string; kind: string }
-  >({
-    expectedRevision,
-    transaction: (work) => db.transaction(work),
-    // The source revision is authoritative only while this lock is held. The
-    // caller's outer command transaction (when present) is reused, so the lock
-    // spans every dependent replacement write.
-    lock: async (tx) => (await tx.execute<{
-      kind: string
-      status: string
-      subsidiaryId: string | null
-      updatedAt: string
-    }>(sql`
-      select kind, status, subsidiary_id as "subsidiaryId",
-             ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
-       from documents
-       where id = ${sourceId} and org_id = ${ctx.orgId}
-       for update
-    `)).rows[0] ?? null,
-    mutate: async (tx, source) => {
-      const existingCorrection = (await tx.execute<{ documentNumber: string }>(sql`
-        select replacement.document_number as "documentNumber"
-          from document_links link
-          join documents replacement
-            on replacement.id = link.from_document_id
-           and replacement.org_id = link.org_id
-         where link.org_id = ${ctx.orgId}
-           and link.to_document_id = ${sourceId}
-           and link.link_type = 'reverses'
-         limit 1
-      `)).rows[0]
-      assertNoExistingDocumentCorrection(existingCorrection?.documentNumber ?? null)
-      if (source.status !== 'posted') {
-        throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
-      }
-      // The replacement inherits the source's (already scope-gated)
-      // subsidiary unless the body re-homes it; the factory validates the
-      // result against the actor's real scope, never the org root.
-      const replacement = await createDocumentDraft(ctx.orgId, ctx.userId, source.kind, {
-        allowedSubsidiaryIds: await allowedSubsidiaryIds(ctx.userId, ctx.orgId),
-        subsidiaryId: body.subsidiaryId ?? source.subsidiaryId,
-        runFlows: false,
-        source: ctx.source,
-      })
-      const row = await loadDocumentEditCurrent(replacement.id, ctx.orgId)
-      if (!row) throw new Error(`replacement document ${replacement.id} disappeared during initialization`)
-      await applyDocumentEdit(
-        replacement.id,
-        row,
-        {
-          ...body,
-          expectedUpdatedAt: row.updatedAt,
-          // The drawer copies the SOURCE document's rows into the correction
-          // body, identities included: on the fresh replacement those are
-          // foreign, so the copy boundary treats every copied line as new.
-          lines: body.lines?.map((line) => {
-            if (line.lineId === undefined || line.lineId === null) return line
-            const copy = { ...line }
-            delete copy.lineId
-            return copy
-          }),
-        },
-        {
-          ...ctx,
-          source: 'posted_correction',
-          runFlows: false,
-        },
-      )
-      await db.execute(sql`
-        update documents
-           set custom = coalesce(custom, '{}'::jsonb) ||
-             ${JSON.stringify({
-               correctionOf: sourceId,
-               correctionReason: reason,
-             })}::jsonb,
-               updated_at = greatest(
-                 clock_timestamp(),
-                 updated_at + interval '1 microsecond'
-               ),
-               updated_by = ${ctx.userId}
-         where id = ${replacement.id} and org_id = ${ctx.orgId}
-      `)
-      await db.insert(schema.documentLinks).values({
-        orgId: ctx.orgId,
-        ...buildReversalLinkEvidence({
-          fromDocumentId: replacement.id,
-          toDocumentId: sourceId,
-          reason,
-          requestedBy: ctx.userId,
-        }),
-        createdBy: ctx.userId,
-        updatedBy: ctx.userId,
-      })
-      await db.execute(sql`
-        insert into audit_log
-          (org_id, table_name, row_id, action, changes, actor_id, request_id)
-        values (
-          ${ctx.orgId}, 'documents', ${replacement.id}, 'insert',
-          ${JSON.stringify({
-            mode: 'posted_correction_draft',
-            sourceDocumentId: sourceId,
-            reason,
-          })}::jsonb,
-          ${ctx.userId}, 'posted_correction'
-        )
-      `)
-      return { ...replacement, kind: source.kind }
-    },
-  }))
-  // Flow plans may enqueue email or other externally visible work. Dispatch
-  // only after the transaction that made the correction visible commits. A
-  // caller that owns a wider transaction defers this until its own commit.
+  const created = await createPostedCorrection(sourceId, body, ctx, {
+    createDraft: (kind, draftOptions) => createDocumentDraft(ctx.orgId, ctx.userId, kind, draftOptions),
+    applyEdit: applyDocumentEdit,
+  })
   if (!options.deferFlows) {
     await runPostedCorrectionDraftFlows(created.id, created.kind, ctx)
   }
   return { id: created.id, documentNumber: created.documentNumber }
+}
+
+/** Financial correction and void share one engine-owned transaction. */
+export async function correctPostedDocumentWithEditor(
+  sourceId: string,
+  input: DocumentEditInput,
+  context: DocumentEditContext,
+) {
+  return correctPostedDocument(sourceId, input, context, {
+    createDraft: (kind, options) => createDocumentDraft(context.orgId, context.userId, kind, options),
+    applyEdit: applyDocumentEdit,
+  })
 }
 
 export async function runPostedCorrectionDraftFlows(
