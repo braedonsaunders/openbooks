@@ -5,7 +5,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { celebrationDetail, teamNudgeTexts } from './_persona-copy'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { countInbox, listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
+import { listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
 import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
 import { nextPeriodAfter } from '@openbooks/engine/src/payroll/run-calendar.ts'
 import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
@@ -13,7 +13,7 @@ import { loadApprovalPerson, loadTeamEmploymentIdsForManager } from '@openbooks/
 import { listMyReviews } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
 import { listLeaveTypes, timeBalanceAsOf } from '@openbooks/engine/src/hrm/leave-read.ts'
 import { liveHomeAnnouncements } from '@/lib/setup/home-announcements'
-import { inboxContext } from '@/lib/inbox-context'
+import { inboxContext, inboxCounts, INBOX_TASK_KINDS } from '@/lib/inbox-context'
 import { can, type Authz } from '@/lib/authz'
 import { isFeatureEnabled } from '@/lib/features'
 import { hasAdminPersona } from './_widget-access'
@@ -157,7 +157,7 @@ export async function loadPersonaMetrics(
     const [tasks, approvals] = await Promise.all([
       need('inboxTasksTop', 'inboxCount')
         ? listInbox(ctx, {
-            kinds: ['hrm_process_step', 'hrm_leave_request', 'hrm_change_request', 'hrm_review', 'hrm_benefit_enrollment_window', 'hrm_qualification_alert', 'timesheet_week'],
+            kinds: INBOX_TASK_KINDS,
             cache,
           })
         : Promise.resolve([] as InboxItem[]),
@@ -168,11 +168,7 @@ export async function loadPersonaMetrics(
     if (need('inboxTasksTop')) out.inboxTasksTop = tasks.slice(0, 5).map(toPersonaItem)
     if (need('inboxApprovalsTop')) out.inboxApprovalsTop = approvals.slice(0, 5).map(toPersonaItem)
     if (need('inboxCount')) {
-      // The badge counts through count(), never through a rendered window:
-      // the notice list reads newest-first through its bounded default, so
-      // a list length would undercount past the window.
-      const unread = await countInbox(ctx, { kinds: ['notification'], cache })
-      out.inboxCount = approvals.length + unread
+      out.inboxCount = (await inboxCounts(authz, ctx)).count
     }
   }
 

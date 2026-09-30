@@ -1,10 +1,9 @@
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
-import { countInbox, listInbox, type InboxKind, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
-import { approvalWorklistPageForAuthz } from "../../../lib/application/approvals";
+import { listInbox, type InboxKind, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
 import "../../../lib/authz";
-import { inboxContext, INBOX_FILTER_KINDS, maySeeUnion, toInboxNoticeViews } from "../../../lib/inbox-context";
+import { inboxContext, inboxCounts, INBOX_FILTER_KINDS, toInboxNoticeViews } from "../../../lib/inbox-context";
 import { pickString } from "../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -18,9 +17,8 @@ const FILTERS = ["all", "approvals", "my_tasks", "signatures", "notices", "overd
  * feature key): every adapter applies its source's own gate, so the list
  * never widens visibility.
  *
- * ?count=1 is the single badge route: pending union decisions plus unread
- * notices. Task items (steps, drafts) wait in the list but do not badge —
- * the badge names decisions and notices only.
+ * ?count=1 is the single badge route: personal approvals plus all pending
+ * task kinds, including unread notices, using the Inbox tab totals.
  *
  * ?limit/&offset page each source leg (single-kind filters page exactly;
  * multi-kind reads bound each leg). Malformed windows 400 — they never
@@ -42,21 +40,15 @@ export const GET = defineRoute({
         // A failing notice source names itself in notices while the healthy
         // legs still count — the badge renders a degraded state
         // beside the partial count instead of a silently low number.
-        const notices: InboxSourceNotice[] = [];
-        const [union, unread] = await Promise.all([
-          maySeeUnion(authz)
-            ? approvalWorklistPageForAuthz(authz, { limit: 1, offset: 0 }).then((page) => page.total)
-            : Promise.resolve(0),
-          countInbox(ctx, { kinds: ["notification"], notices }),
-        ]);
+        const { count, notices } = await inboxCounts(authz, ctx);
         if (notices.length > 0) {
           return NextResponse.json({
-            count: union + unread,
+            count,
             partial: true,
             notices: toInboxNoticeViews(notices),
           });
         }
-        return NextResponse.json({ count: union + unread });
+        return NextResponse.json({ count });
       }
       const kinds: InboxKind[] | undefined =
         filter === "all" || filter === "overdue" ? undefined : INBOX_FILTER_KINDS[filter];

@@ -7,7 +7,7 @@ export const inboxAndHome: DocArticle = {
   order: 12,
   summary:
     'One inbox where approvals, checklist steps, requests, and notices complete in place, and a home dashboard composed for employees, managers, and admins.',
-  updated: '2026-09-27',
+  updated: '2026-09-30',
   keywords: ['inbox', 'my tasks', 'approvals', 'home', 'dashboard', 'notices', 'persona'],
   related: ['self-service', 'hrm-processes'],
   body: `# Your Inbox and Home
@@ -16,7 +16,7 @@ The inbox is where work waiting on you completes. Approvals, checklist steps, le
 
 Filter the list by approvals, my tasks, signatures, notices, or overdue. Decision rows (flow gates, documents, pay runs, budgets) decide through the same controls as ever, including bulk approve and out-of-office delegation. Task rows complete in place and disappear with a confirmation; the row stays put with the service's message when the action is refused.
 
-The badge on the Inbox entry counts pending decisions plus unread notices. Notices also live under their own route, and every new alert source writes a notice row — one channel, readable in both places.
+The badge on the Inbox entry counts your pending approvals plus the work in My tasks, including unread notices. These are the same unfiltered totals shown on the two Inbox tabs; searching or filtering a list does not change the badge. Notices also live under their own route, and every new alert source writes a notice row — one channel, readable in both places.
 
 ## Home
 

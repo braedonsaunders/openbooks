@@ -1,5 +1,5 @@
 import "server-only";
-import type { InboxKind, InboxListContext, InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
+import { countInbox, type InboxKind, type InboxListContext, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";
@@ -79,3 +79,18 @@ export const INBOX_TASK_KINDS: InboxKind[] = [
   ...INBOX_FILTER_KINDS.signatures!,
   ...INBOX_FILTER_KINDS.notices!,
 ];
+
+/** Unfiltered personal work totals shared by navigation, Inbox and Home.
+ * Count each source rather than a bounded list window. The badge totals the
+ * My Approvals and My Tasks tabs, independent of the active tab or filters. */
+export async function inboxCounts(authz: Authz, ctx: InboxListContext) {
+  const notices: InboxSourceNotice[] = [];
+  const [approvals, tasks] = await Promise.all([
+    maySeeUnion(authz)
+      ? import("./application/approvals").then(({ approvalWorklistPageForAuthz }) =>
+          approvalWorklistPageForAuthz(authz, { limit: 1, offset: 0 }).then((page) => page.total))
+      : Promise.resolve(0),
+    countInbox(ctx, { kinds: INBOX_TASK_KINDS, notices }),
+  ]);
+  return { approvals, tasks, count: approvals + tasks, notices };
+}

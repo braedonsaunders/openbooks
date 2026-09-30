@@ -38,7 +38,7 @@ registerHooks({
     if (specifier === '@openbooks/engine/src/hrm/performance/performance-read.ts') return virtual('export const listMyReviews = async () => ({asReviewer:[],asSubject:[]})')
     if (specifier === '@openbooks/engine/src/hrm/leave-read.ts') return virtual('export const listLeaveTypes = async () => []; export const timeBalanceAsOf = async () => null')
     if (specifier === '@/lib/setup/home-announcements') return virtual('export const liveHomeAnnouncements = async () => []')
-    if (specifier === '@/lib/inbox-context') return virtual('export const inboxContext = async () => ({})')
+    if (specifier === '@/lib/inbox-context') return virtual('export const inboxContext = async () => ({}); export const INBOX_TASK_KINDS = []; export const inboxCounts = async () => { throw new Error("The admin attention metric must not query inbox totals") }')
 
     return next(specifier)
   },

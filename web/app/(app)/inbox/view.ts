@@ -10,7 +10,7 @@ import {
   approvalWorklistPageForAuthz,
   type ApprovalWorklistItem,
 } from '../../../lib/application/approvals'
-import { inboxContext, INBOX_FILTER_KINDS, INBOX_TASK_KINDS, maySeeUnion } from '../../../lib/inbox-context'
+import { inboxContext, inboxCounts, INBOX_FILTER_KINDS, INBOX_TASK_KINDS, maySeeUnion } from '../../../lib/inbox-context'
 import {
   badge,
   column,
@@ -412,7 +412,6 @@ export async function loadApprovals(
   const mineRows: ApprovalRow[] = unified
     .map((item) => unionToRow(item, null))
     .sort(byRequestedAt)
-  const mineCount = unfilteredTotal
 
   // ---- All approvals (same union reader as mine + tile) --------------------
   // The tab stays canSeeAll-gated, but its rows are the caller's actionable
@@ -561,9 +560,10 @@ export async function loadApprovals(
   // ---- Task list (new inbox kinds + notices) ------------------------------
   // Union-owned kinds never render here (see INBOX_TASK_KINDS): decision
   // rows keep ApprovalsTable + GateActions, task rows get generic actions
-  // through /api/inbox/act. One shared per-request cache backs the counts
-  // and the active list so the sources read once.
+  // through /api/inbox/act. List windows share a per-request cache; totals
+  // use source counts separately so a bounded list cannot truncate a badge.
   const ctx = await inboxContext(authz)
+  const counts = await inboxCounts(authz, ctx)
   const taskCache = new Map<string, InboxItem[]>()
   // One source's refusal or failure must not blank the inbox (OM-10): the
   // engine names each failed source into this collector while the healthy
@@ -571,6 +571,7 @@ export async function loadApprovals(
   // beside the surviving rows. Keyed by kind so the six parallel reads
   // below cannot double-report the same source.
   const taskNoticeByKind = new Map<string, string>()
+  for (const notice of counts.notices) taskNoticeByKind.set(notice.kind, notice.message)
   const taskKindsFor = (key: InboxFilter) =>
     key === 'all' || key === 'overdue' ? INBOX_TASK_KINDS : (INBOX_FILTER_KINDS[key] ?? [])
   const taskItemsFor = async (key: InboxFilter): Promise<InboxItem[]> => {
@@ -640,8 +641,8 @@ export async function loadApprovals(
   }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'mine', label: t('tabs.mine'), count: mineCount },
-    { key: 'tasks', label: ti('filters.myTasks'), count: tasksAll.length },
+    { key: 'mine', label: t('tabs.mine'), count: counts.approvals },
+    { key: 'tasks', label: ti('filters.myTasks'), count: counts.tasks },
     { key: 'submitted', label: t('tabs.submitted') },
     ...(canSeeAll ? [{ key: 'all' as Tab, label: t('tabs.all') }] : []),
   ]
@@ -774,18 +775,18 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
           ],
         }),
         widgetBlock('delegation-banner', { users: data.delegateUsers }),
+        widgetBlock('list-toolbar', {
+          basePath: '/inbox',
+          currentParams: data.currentParams,
+          search: { paramKey: 'q', placeholder: data.searchPlaceholder },
+          filters: data.toolbarFilters,
+        }),
       ]),
     ],
     body: [
       frame(
         'tab-content',
         [
-          widgetBlock('list-toolbar', {
-            basePath: '/inbox',
-            currentParams: data.currentParams,
-            search: { paramKey: 'q', placeholder: data.searchPlaceholder },
-            filters: data.toolbarFilters,
-          }),
           {
             ...widgetBlock('empty-state', {
               icon: 'send',
