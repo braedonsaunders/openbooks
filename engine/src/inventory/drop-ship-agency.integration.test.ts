@@ -40,6 +40,16 @@ test('approved agency judgments preserve native AR and AP while reporting only t
         assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${order.id} and status='draft' returning id`)).rows.length,1)
         partials.push(partial)
         assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${partial} and status='draft' returning id`)).rows.length,1)
+        if(partials.length===1) {
+          await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${order.id}`)
+          await db.execute(sql`update document_lines set quantity_fulfilled='0.2',quantity_billed='0.2',quantity_cancelled='0.8' where org_id=${ledger.orgId} and id=${change.subject_id}`)
+          await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${order.id}`)
+          await assert.rejects(postDocument(partial,deps(ctx)),/order quantity was cancelled/)
+          assert.equal((await db.execute(sql`select 1 from drop_ship_agent_allocations where org_id=${ledger.orgId} and document_id=${partial}`)).rows.length,0)
+          await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${order.id}`)
+          await db.execute(sql`update document_lines set quantity_fulfilled='1',quantity_billed=${quantity},quantity_cancelled='0' where org_id=${ledger.orgId} and id=${change.subject_id}`)
+          await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${order.id}`)
+        }
         await postDocument(partial,deps(ctx))
         assert.equal((await db.execute<{amount:string}>(sql`select vendor_amount::text as amount from drop_ship_agent_allocations where org_id=${ledger.orgId} and document_id=${partial}`)).rows[0]!.amount,expectedVendor)
       }

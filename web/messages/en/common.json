@@ -316,5 +316,19 @@
     "noOptions": "No options defined",
     "selectRecord": "Select a record…",
     "loadFailed": "Could not load records"
+  },
+  "nativeGoodsTax": {
+    "title": "Canadian goods tax",
+    "manual": "Explicit line tax profiles",
+    "automatic": "Native goods tax",
+    "help": "For ordinary fully taxable goods only. Select the statutory delivery or collection province under the shipping terms, not the billing address. Manual profiles and overrides take precedence. The server checks the selling entity, dated registrations and configured tax accounts before saving.",
+    "province": "Statutory delivery province",
+    "delivery": "Delivery arrangement",
+    "delivered_or_made_available": "Delivered or made available",
+    "supplier_arranged_shipping": "Supplier-arranged shipment to destination",
+    "recipient_collection": "Recipient collects goods",
+    "evidence": "Contractual delivery and taxability evidence",
+    "incomplete": "Complete the province, at least 20 characters of evidence and valid line amounts before saving; tax preview is unavailable until the supply can be priced.",
+    "previewUnavailable": "Tax preview unavailable — complete the supply assessment and line amounts"
   }
 }

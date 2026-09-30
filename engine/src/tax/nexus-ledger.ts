@@ -13,6 +13,9 @@ export async function loadOrgFilingCalendar(
   rangeTo: string,
 ): Promise<FilingObligation[]> {
   const rows = (await db.execute<{
+    id: string
+    subsidiary_id: string | null
+    subsidiary_name: string | null
     jurisdiction_id: string
     jurisdiction_name: string
     jurisdiction_code: string
@@ -23,15 +26,19 @@ export async function loadOrgFilingCalendar(
     effective_from: string | null
     effective_to: string | null
   }>(sql`
-    select r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
+    select r.id, r.subsidiary_id, s.name as subsidiary_name, r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
            j.country, r.filing_frequency, r.return_form_code, r.registration_number,
            r.effective_from::text, r.effective_to::text
       from tax_registrations r
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
+      left join subsidiaries s on s.org_id=r.org_id and s.id=r.subsidiary_id
      where r.org_id = ${orgId} and r.is_active
   `));
   return buildFilingCalendar(
     rows.rows.map((r) => ({
+      registrationId: r.id,
+      subsidiaryId: r.subsidiary_id,
+      subsidiaryName: r.subsidiary_name,
       jurisdictionId: r.jurisdiction_id,
       jurisdictionName: r.jurisdiction_name,
       jurisdictionCode: r.jurisdiction_code,

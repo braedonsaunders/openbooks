@@ -89,6 +89,9 @@ export function filingPeriods(
 }
 
 export interface NexusRegistration {
+  registrationId?: string;
+  subsidiaryId?: string | null;
+  subsidiaryName?: string | null;
   jurisdictionId: string;
   jurisdictionName: string;
   jurisdictionCode: string;
@@ -101,6 +104,10 @@ export interface NexusRegistration {
 }
 
 export interface FilingObligation extends FilingPeriod {
+  registrationId?: string;
+  subsidiaryId?: string | null;
+  subsidiaryName?: string | null;
+  registrationNumber?: string | null;
   jurisdictionId: string;
   jurisdictionName: string;
   jurisdictionCode: string;
@@ -143,6 +150,7 @@ export function buildFilingCalendar(
     for (const period of filingPeriods(reg.filingFrequency, effFrom, effTo)) {
       obligations.push({
         ...period,
+        ...(reg.registrationId ? {registrationId:reg.registrationId,subsidiaryId:reg.subsidiaryId ?? null,subsidiaryName:reg.subsidiaryName ?? null,registrationNumber:reg.registrationNumber} : {}),
         reportableFrom: period.periodStart > effFrom ? period.periodStart : effFrom,
         reportableTo: period.periodEnd < effTo ? period.periodEnd : effTo,
         jurisdictionId: reg.jurisdictionId,

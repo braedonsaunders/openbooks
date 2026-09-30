@@ -775,6 +775,7 @@ async function clampTaxReturnWindowInSnapshot(
   from: string,
   to: string,
   pinnedId?: string | null,
+  subsidiaryIds?: string[],
 ): Promise<{ from: string; to: string }> {
   const registrations = await runner.execute<{
     id: string;
@@ -794,6 +795,7 @@ async function clampTaxReturnWindowInSnapshot(
       from tax_registrations r
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
      where r.org_id = ${orgId} and r.is_active and r.return_form_code = ${formCode}
+       ${subsidiaryIds?.length ? sql`and (r.subsidiary_id is null or r.subsidiary_id = any(${uuidArray(subsidiaryIds)}))` : sql``}
   `);
   const regs = registrations.rows.map((r) => ({
     id: r.id,
@@ -1103,8 +1105,8 @@ async function translateReturnGlRaw(
 /**
  * Resolve the filing identity: a caller-pinned registration (validated to this
  * org, this form, and active), or the existing form+effective-window match.
- * Registrations carry no subsidiary — the filing entity is a compute-time
- * input, so the number stays form+window keyed until registrations do.
+ * An owned registration fixes the legal filing entity before any activity is
+ * summed. Organization-wide legacy registrations retain their declared scope.
  */
 async function resolveReturnRegistration(
   runner: TaxReturnRunner,
@@ -1113,9 +1115,11 @@ async function resolveReturnRegistration(
   from: string,
   to: string,
   pinnedId?: string | null,
+  subsidiaryIds?: string[],
 ): Promise<{
   registrationNumber: string | null;
   registrationId: string | null;
+  subsidiaryId: string | null;
   effectiveFrom: string | null;
   effectiveTo: string | null;
 }> {
@@ -1130,10 +1134,10 @@ async function resolveReturnRegistration(
     const pin = (await runner.execute<{
       id: string; registration_number: string | null; return_form_code: string | null;
       effective_from: string | null; effective_to: string | null;
-      jurisdiction_code: string;
+      jurisdiction_code: string; subsidiary_id: string | null;
     }>(sql`
       select r.id, r.registration_number, r.return_form_code,
-             r.effective_from::text, r.effective_to::text, j.code as jurisdiction_code
+             r.effective_from::text, r.effective_to::text, j.code as jurisdiction_code, r.subsidiary_id
         from tax_registrations r
         join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
        where r.id = ${pinnedId} and r.org_id = ${orgId} and r.is_active`));
@@ -1161,15 +1165,17 @@ async function resolveReturnRegistration(
     return {
       registrationNumber: row.registration_number,
       registrationId: row.id,
+      subsidiaryId: row.subsidiary_id,
       effectiveFrom: row.effective_from,
       effectiveTo: row.effective_to,
     };
   }
-  const regRes = (await runner.execute<{ id: string; registration_number: string | null; jurisdiction_code: string }>(sql`
-    select r.id, r.registration_number, j.code as jurisdiction_code
+  const regRes = (await runner.execute<{ id: string; registration_number: string | null; jurisdiction_code: string; subsidiary_id: string | null }>(sql`
+    select r.id, r.registration_number, j.code as jurisdiction_code, r.subsidiary_id
       from tax_registrations r
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
      where r.org_id = ${orgId} and r.is_active and r.return_form_code = ${formCode}
+       ${subsidiaryIds?.length ? sql`and (r.subsidiary_id is null or r.subsidiary_id = any(${uuidArray(subsidiaryIds)}))` : sql``}
        and (r.effective_from is null or r.effective_from <= ${to})
        and (r.effective_to is null or r.effective_to >= ${from})
      order by r.effective_from desc nulls last, r.id`));
@@ -1195,6 +1201,7 @@ async function resolveReturnRegistration(
   return {
     registrationNumber: inJurisdiction[0]?.registration_number ?? null,
     registrationId: inJurisdiction[0]?.id ?? null,
+    subsidiaryId: inJurisdiction[0]?.subsidiary_id ?? null,
     effectiveFrom: null,
     effectiveTo: null,
   };
@@ -1283,6 +1290,7 @@ async function computeTaxReturnInSnapshot(
     from,
     to,
     opts?.filingEntity?.registrationId,
+    opts?.filingEntity?.subsidiaryIds,
   );
   from = window.from;
   to = window.to;
@@ -1299,6 +1307,7 @@ async function computeTaxReturnInSnapshot(
     from,
     to,
     opts?.filingEntity?.registrationId,
+    opts?.filingEntity?.subsidiaryIds,
   );
   if (registration.effectiveFrom && registration.effectiveFrom > from) from = registration.effectiveFrom;
   if (registration.effectiveTo && registration.effectiveTo < to) to = registration.effectiveTo;
@@ -1312,7 +1321,12 @@ async function computeTaxReturnInSnapshot(
   // sum below reads one consistent posture. Adjustments are denominated in the
   // return's functionalCurrency: the entity's currency, or the presentation
   // currency for a translated view (applied once, after translation).
-  const scope = await resolveReturnScope(runner, orgId, opts?.filingEntity);
+  const requestedEntities=opts.filingEntity?.subsidiaryIds ?? [];
+  if(registration.subsidiaryId && requestedEntities.length && (requestedEntities.length!==1 || requestedEntities[0]!==registration.subsidiaryId))
+    throw new TaxReturnError('The selected registration belongs to another filing entity — select its owning legal entity or a registration for the requested entity');
+  const scope = await resolveReturnScope(runner, orgId, registration.subsidiaryId
+    ? {subsidiaryIds:[registration.subsidiaryId],registrationId:registration.registrationId}
+    : opts?.filingEntity);
   const policy = resolveTranslationPolicy(opts?.translation, to);
 
   // The return reads the primary book only — the same book the filing gate

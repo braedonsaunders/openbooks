@@ -1,9 +1,10 @@
 /** Native statutory selection for ordinary, fully taxable Canadian goods sales.
- * Delivery means legal delivery under the sale agreement, including goods made
- * available for collection. Special supply rules require a separate assessment. */
+ * Delivery follows the statutory goods rules: goods delivered or made
+ * available, including the destination of supplier-arranged shipment. A billing
+ * address alone is not delivery evidence. Special supplies need their own assessment. */
 import { CANADA_TAX_PACK } from '../country-tax-packs/ca.ts';
 import type { CountryTaxCodeDefinition } from '../country-tax-packs/types.ts';
-import { isIsoCalendarDate } from '../platform/business-date.ts';
+import { isIsoCalendarDate } from '../platform/iso-date.ts';
 import { computeLineTaxes } from './tax.ts';
 import { canonicalDecimal } from '../money/exact-decimal.ts';
 import { fitsLedgerRange, normalizeMoney } from '../money/money.ts';
@@ -30,7 +31,7 @@ export function quoteGoodsPlaceOfSupply(input: GoodsSupplyQuoteInput) {
   if (!isIsoCalendarDate(input.quotedOn)) throw new PlaceOfSupplyError('provide the actual supply date in YYYY-MM-DD form');
   if (input.country !== 'CA') throw new PlaceOfSupplyError('use the applicable country tax rules; this native goods command prices supplies made in Canada');
   const province = CANADA_TAX_PACK.jurisdictions.find((row) => row.region === input.deliveryProvince);
-  if (!province) throw new PlaceOfSupplyError('provide a Canadian province or territory code for legal delivery under the sale agreement');
+  if (!province) throw new PlaceOfSupplyError('provide a Canadian province or territory code for statutory delivery or collection under the applicable shipping terms');
   const codes: CountryTaxCodeDefinition[] = [];
   if (province.taxType === 'hst') {
     if (!province.defaultTaxCode) throw new PlaceOfSupplyError('the HST rate schedule is unavailable; update the country tax pack before quoting');

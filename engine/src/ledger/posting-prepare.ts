@@ -1,4 +1,6 @@
-import { resolveAgencyPosting } from '../inventory/drop-ship-agency.ts';
+import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
+import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts'
+import { resolveAgencyPosting,AgencyError } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
@@ -49,6 +51,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       `document ${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,
     );
   }
+  try {await assertCanadianGoodsTaxEvidence(db,doc.orgId,doc.id)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
   assertCreditMemoDirection(doc, deps.migration);
   if (
     (doc.kind === "journal" ||
@@ -97,7 +100,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       taxComponentsByLine: await resolveTaxComponents(db, doc.id, doc.orgId),
     };
   }
-  deps = { ...deps, agencyByLine: await resolveAgencyPosting(db, doc.orgId, doc.id) };
+  try {deps = { ...deps, agencyByLine: await resolveAgencyPosting(db, doc.orgId, doc.id) }} catch(error) {if(error instanceof AgencyError)throw new PostingError(error.message);throw error}
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = {
       ...deps,

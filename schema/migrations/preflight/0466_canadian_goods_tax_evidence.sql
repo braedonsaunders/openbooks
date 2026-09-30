@@ -1,0 +1,1 @@
+SELECT 'native goods tax is partially installed' AS issue WHERE to_regclass('public.document_goods_tax_snapshots') IS NOT NULL OR EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='tax_registrations' AND column_name='subsidiary_id');

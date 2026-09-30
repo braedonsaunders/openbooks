@@ -1,9 +1,10 @@
+import { resolveCanadianGoodsTaxes,type GoodsTaxSnapshot } from '@openbooks/engine/tax'
 import 'server-only'
 import type { BillLineInput } from '@openbooks/engine/src/ledger/document-input.ts'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
-import { add, isZero, sum } from '@openbooks/engine/src/money/money.ts'
+import { cmp, add, isZero, sum } from '@openbooks/engine/src/money/money.ts'
 import {
   computeLineTaxes,
   type ComputedTaxComponent,
@@ -137,6 +138,7 @@ export function computeBillTotals(lines: BillLineInput[], profiles: TaxProfiles)
         ? profiles.codes.get(line.taxCodeId)
         : []
     if ((line.taxCodeId || line.taxGroupId) && !config) throw new Error('selected tax profile is inactive or has no effective rate')
+    if(line.taxOverridden && !config?.length && cmp(line.taxAmount ?? '0','0')!==0)throw new Error('Select a tax profile before overriding a nonzero tax amount so the collected-tax account is explicit')
     const result = computeLineTaxes(line.amount, config ?? [], {
       overridden: line.taxOverridden,
       taxAmount: line.taxAmount,
@@ -146,8 +148,9 @@ export function computeBillTotals(lines: BillLineInput[], profiles: TaxProfiles)
       amount: result.netAmount,
       taxInputAmount: result.inputAmount,
       taxAmount: result.taxTotal,
-      taxOverridden: result.overridden,
+      taxOverridden: result.overridden || (line.taxOverridden===true && !config?.length),
       taxComponents: result.components,
+      nativeGoodsTax: undefined as GoodsTaxSnapshot | undefined,
     }
   })
   const subtotal = sum(computed.map((l) => l.amount))
@@ -167,6 +170,7 @@ export interface ProviderBillTotalsOptions {
    * a side set here wins over the resolved snapshot for that side only, so an
    * explicit document location is quoted exactly as posting will replay it.
    */
+  canadianGoodsTax?: unknown
   taxProviderAddresses?: {
     shipFrom?: Record<string, string | null>
     shipTo?: Record<string, string | null>
@@ -247,7 +251,13 @@ export async function computeBillTotalsWithProvider(
   profiles: TaxProfiles,
   options: ProviderBillTotalsOptions,
 ) {
+  const native=await resolveCanadianGoodsTaxes(options.orgId,{kind:options.kind,subsidiaryId:options.subsidiaryId,documentDate:options.documentDate,currency:options.currency,selection:options.canadianGoodsTax},lines)
   const local = computeBillTotals(lines, profiles)
+  for(const [index,selected] of native) {
+    const line=local.lines[index]!
+    local.lines[index]={...line,amount:selected.computed.netAmount,taxInputAmount:selected.computed.inputAmount,taxAmount:selected.computed.taxTotal,taxOverridden:false,taxComponents:selected.computed.components,nativeGoodsTax:selected.snapshot}
+  }
+  if(native.size) {local.subtotal=sum(local.lines.map(line=>line.amount));local.taxTotal=sum(local.lines.map(line=>line.taxAmount));local.total=add(local.subtotal,local.taxTotal)}
   if (!PROVIDER_DOCUMENT_KINDS.has(options.kind)) return local
   const provider = await readTaxRateProviderConfig(options.orgId)
   if (!provider?.isEnabled || !provider.preferProvider || provider.provider === 'manual') return local
@@ -255,7 +265,7 @@ export async function computeBillTotalsWithProvider(
   const { shipFrom, shipTo } = await providerRequestAddresses(options)
   const resolved = [] as typeof local.lines
   for (const line of local.lines) {
-    if (!line.taxCodeId && !line.taxGroupId) {
+    if (line.nativeGoodsTax || (!line.taxCodeId && !line.taxGroupId)) {
       resolved.push(line)
       continue
     }

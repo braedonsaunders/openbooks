@@ -46,6 +46,7 @@ export const TAX_ENTITIES: SetupEntity[] = [
     hasActive: true,
     docSlug: 'tax-jurisdictions-and-nexus',
     columns: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions' },
       { key: 'registrationNumber', kind: 'text' },
       { key: 'filingFrequency', kind: 'text' },
@@ -53,6 +54,7 @@ export const TAX_ENTITIES: SetupEntity[] = [
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions', required: true },
       { key: 'registrationNumber', kind: 'text' },
       { key: 'filingFrequency', kind: 'select', options: FILING_FREQUENCIES, keepDefault: true },

@@ -1,5 +1,7 @@
 'use client'
 
+import { quoteGoodsPlaceOfSupply } from '@openbooks/engine/tax/contracts'
+
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
@@ -1179,6 +1181,8 @@ export function DocumentDrawer({
   // always releases through its own finally.
   const { busy, refusal, execute, refuse, runExclusive } = useAppAction()
 
+  const nativeGoods = config.kind==='customer_invoice' && customValues.canadianGoodsTax && typeof customValues.canadianGoodsTax==='object'
+    ? customValues.canadianGoodsTax as {deliveryProvince:string;deliveryMethod:string;agreementEvidence:string} : null
   const taxProfiles = useMemo(() => [
     ...(taxCodes ?? []).map((profile) => ({ ...profile, value: `code:${profile.id}` })),
     ...(taxGroups ?? []).map((profile) => ({ ...profile, value: `group:${profile.id}` })),
@@ -1189,6 +1193,7 @@ export function DocumentDrawer({
   )
   const lineTax = (row: LineRow) => {
     try {
+      if(nativeGoods && !row.taxProfileId && !row.taxOverridden)return quoteGoodsPlaceOfSupply({taxableAmount:String(row.amount),quotedOn:documentDate,country:'CA',deliveryProvince:nativeGoods.deliveryProvince,basis:'ordinary_taxable_goods_sale'}).taxAmount
       const taxConfig = taxByProfile.get(row.taxProfileId) ?? []
       return computeLineTaxes(drawerTaxInputAmount(row, taxConfig), taxConfig).taxTotal
     } catch {
@@ -1423,8 +1428,11 @@ export function DocumentDrawer({
     // Project-charge lines are immutable here; their source editor owns the
     // rate snapshot and the server-provided totals remain authoritative.
     if (config.kind === 'project_charge') return null
-    return computeDocumentDrawerTotals(rows, taxByProfile, config.hasTax)
-  }, [editable, isTransfer, transfer, config.kind, config.hasTax, rows, taxByProfile])
+    let previewRows=rows
+    try {previewRows=nativeGoods ? rows.map(row=>!row.taxProfileId && !row.taxOverridden && !isBlankDrawerLine(row)
+      ? {...row,taxOverridden:true,taxAmount:quoteGoodsPlaceOfSupply({taxableAmount:String(row.amount),quotedOn:documentDate,country:'CA',deliveryProvince:nativeGoods.deliveryProvince,basis:'ordinary_taxable_goods_sale'}).taxAmount} : row) : rows} catch { return null }
+    return computeDocumentDrawerTotals(previewRows, taxByProfile, config.hasTax)
+  }, [editable, isTransfer, transfer, config.kind, config.hasTax, rows, taxByProfile, nativeGoods,documentDate])
   const effectiveTotals = calculatedTotals ?? totals
 
   // -- subsidiaries (multi-subsidiary orgs only; empty/undefined = no UI) ----
@@ -2058,7 +2066,7 @@ export function DocumentDrawer({
         label: tCommon('labels.tax'),
         width: '110px',
         type: 'select',
-        options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
+        options: [{ value: '', label: nativeGoods ? tCommon('nativeGoodsTax.automatic') : t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       })
     }
     for (const segment of segments.filter((item) => item.showOnLines)) {
@@ -2240,7 +2248,7 @@ export function DocumentDrawer({
       },
       tax_code_id: {
         key: 'taxProfileId', width: '110px', type: 'select',
-        options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
+        options: [{ value: '', label: nativeGoods ? tCommon('nativeGoodsTax.automatic') : t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
       amount: { key: 'amount', width: '120px', type: 'amount', align: 'right', required: true },
       tax_amount: {
@@ -2745,6 +2753,7 @@ export function DocumentDrawer({
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
+            {editable && nativeGoods && !calculatedTotals ? tCommon('nativeGoodsTax.previewUnavailable') : <>
             {t('drawer.subtotalAmount', { amount: money(effectiveTotals.subtotal, { currency: doc.currency }) })}
             {config.hasTax ? <> · {t('drawer.taxTotalAmount', { amount: money(effectiveTotals.taxTotal, { currency: doc.currency }) })}</> : null}
             {' · '}
@@ -2759,12 +2768,40 @@ export function DocumentDrawer({
                 </strong>
               </>
             ) : null}
+            </>}
           </span>
         </div>
       }
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.actionFailed')} />
+          {config.kind==='customer_invoice' && (editable || nativeGoods) ? <div className="space-y-3 border-b p-4">
+            <div className="space-y-1"><FieldLabel fieldName={tCommon('nativeGoodsTax.title')}>{tCommon('nativeGoodsTax.title')}</FieldLabel>
+              {editable ? <Select value={nativeGoods ? 'native' : 'manual'} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:event.target.value==='native'
+                ? {basis:'ordinary_taxable_goods_sale',country:'CA',deliveryProvince:'',deliveryMethod:'delivered_or_made_available',agreementEvidence:''} : null}))}>
+                <option value="manual">{tCommon('nativeGoodsTax.manual')}</option><option value="native">{tCommon('nativeGoodsTax.automatic')}</option>
+              </Select> : <p>{tCommon('nativeGoodsTax.automatic')}</p>}
+            </div>
+            {nativeGoods ? <>
+              <p className="text-xs text-slate-500">{tCommon('nativeGoodsTax.help')}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><FieldLabel fieldName={tCommon('nativeGoodsTax.province')}>{tCommon('nativeGoodsTax.province')}</FieldLabel>
+                  {editable ? <Select value={nativeGoods.deliveryProvince} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:{...nativeGoods,deliveryProvince:event.target.value}}))}>
+                    <option value="">—</option>{['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(province=><option key={province} value={province}>{province}</option>)}
+                  </Select> : <p>{nativeGoods.deliveryProvince}</p>}
+                </div>
+                <div><FieldLabel fieldName={tCommon('nativeGoodsTax.delivery')}>{tCommon('nativeGoodsTax.delivery')}</FieldLabel>
+                  {editable ? <Select value={nativeGoods.deliveryMethod} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:{...nativeGoods,deliveryMethod:event.target.value}}))}>
+                    {['delivered_or_made_available','supplier_arranged_shipping','recipient_collection'].map(method=><option key={method} value={method}>{tCommon(`nativeGoodsTax.${method}`)}</option>)}
+                  </Select> : <p>{tCommon(`nativeGoodsTax.${nativeGoods.deliveryMethod}`)}</p>}
+                </div>
+              </div>
+              <div><FieldLabel fieldName={tCommon('nativeGoodsTax.evidence')}>{tCommon('nativeGoodsTax.evidence')}</FieldLabel>
+                {editable ? <Input value={nativeGoods.agreementEvidence} maxLength={4000} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:{...nativeGoods,agreementEvidence:event.target.value}}))}/> : <p>{nativeGoods.agreementEvidence}</p>}
+              </div>
+              {editable && (!nativeGoods.deliveryProvince || nativeGoods.agreementEvidence.trim().length<20 || !calculatedTotals) ? <p role="alert" className="text-sm text-amber-700">{tCommon('nativeGoodsTax.incomplete')}</p> : null}
+            </> : null}
+          </div> : null}
         {isTransfer ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}>

@@ -390,7 +390,7 @@ export function setupEntityForFeatureState(
     return { ...control, options: control.options.filter((option) => option.value !== 'equipment_charge') }
   }
   const visible = (control: SetupField | SetupColumn) =>
-    (features.multiSubsidiary || !isSubsidiaryControl(control))
+    (features.multiSubsidiary || entity.key === 'tax-registrations' || !isSubsidiaryControl(control))
     && (equipmentOn || !isEquipmentControl(control))
     && (fieldTicketsOn || !isFieldTicketControl(control))
   return {

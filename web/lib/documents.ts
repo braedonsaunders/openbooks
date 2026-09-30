@@ -1,3 +1,4 @@
+import { parseCanadianGoodsSelection,resolveCanadianGoodsTaxes,persistGoodsTaxSnapshot,type GoodsTaxSnapshot } from '@openbooks/engine/tax'
 import 'server-only'
 import { createPostedCorrection, correctPostedDocument } from '@openbooks/engine/documents'
 import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
@@ -18,7 +19,7 @@ import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revisi
 import { sql } from 'drizzle-orm'
 import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
-import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, schema, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { assertReturnSourceSelectable, type ReturnSide } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { InventoryError } from '@openbooks/engine/src/inventory/contracts.ts'
 import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -54,7 +55,6 @@ import {
   runDocumentVersionedTransaction,
 } from '@openbooks/engine/src/records/document-edit-policy.ts'
 import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
-import { loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
 
 /** False when this kind belongs to a Features switch that is off. */
 export async function isDocKindEnabled(orgId: string, kind: string): Promise<boolean> {
@@ -290,6 +290,7 @@ export async function precomputeDocumentTotalsForCreate(
         partyId: body.partyId,
         subsidiaryId: body.subsidiaryId,
         taxProviderAddresses: documentTaxProviderAddresses(body.custom),
+        canadianGoodsTax: body.custom?.canadianGoodsTax,
       },
     )
   } catch (error) {
@@ -1065,12 +1066,23 @@ export async function applyDocumentEdit(
       throw new DocumentEditError(404, `${def.label} not found in this organization`, { [def.key]: 'not found in this organization' })
     }
     headerCustom = { ...existingCustom, ...v.cleaned }
+    if(Object.prototype.hasOwnProperty.call(supplied,'canadianGoodsTax')) {
+      const selection=parseCanadianGoodsSelection(supplied.canadianGoodsTax)
+      if(selection)headerCustom.canadianGoodsTax=selection
+      else delete headerCustom.canadianGoodsTax
+    }
     for (const def of headerDefs) {
       if (Object.prototype.hasOwnProperty.call(supplied, def.key) && supplied[def.key] == null) {
         delete headerCustom[def.key]
       }
     }
   }
+  if(body.lines===undefined && (current.custom?.canadianGoodsTax || headerCustom?.canadianGoodsTax)
+    && (JSON.stringify(current.custom?.canadianGoodsTax)!==JSON.stringify(headerCustom?.canadianGoodsTax ?? current.custom?.canadianGoodsTax)
+      || (body.custom && Object.prototype.hasOwnProperty.call(body.custom,'canadianGoodsTax') && !body.custom.canadianGoodsTax)
+      || (body.documentDate!==undefined && body.documentDate!==current.documentDate)
+      || (body.subsidiaryId!==undefined && body.subsidiaryId!==current.subsidiaryId) || currency!==undefined))
+    throw new DocumentEditError(422,'Save the invoice lines with the changed goods supply assessment, date, currency or selling entity so its native tax can be recalculated');
   // Structural funding override (the drawer's fundingSource picker: deposit
   // destination, check source, card liability). It is not a registered
   // custom field, so validateCustomValues cannot see it — without an
@@ -1127,7 +1139,7 @@ export async function applyDocumentEdit(
   // distribution stamps rely on). Null = new line.
   let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -1306,6 +1318,7 @@ export async function applyDocumentEdit(
             partyId: body.partyId !== undefined ? body.partyId : current.partyId,
             subsidiaryId: body.subsidiaryId !== undefined ? body.subsidiaryId : current.subsidiaryId,
             taxProviderAddresses: documentTaxProviderAddresses(headerCustom ?? current.custom),
+            canadianGoodsTax: (headerCustom ?? current.custom)?.canadianGoodsTax,
           },
         )
       } catch (error) {
@@ -1375,6 +1388,7 @@ export async function applyDocumentEdit(
         taxOverridden: l.taxOverridden === true,
         taxComponents: l.taxComponents,
         providerQuote: l.providerQuote,
+        nativeGoodsTax: l.nativeGoodsTax,
         partyId: l.partyId ?? null,
         departmentId: l.departmentId ?? null,
         projectId: l.projectId ?? null,
@@ -1448,7 +1462,19 @@ export async function applyDocumentEdit(
         )
       }
 
-      const targetSubsidiaryId = body.subsidiaryId ?? locked.subsidiaryId
+      let targetSubsidiaryId = body.subsidiaryId ?? locked.subsidiaryId
+      // Revalidate local statutory sources under the same transaction that
+      // replaces the lines. Preflight cannot pin a later configuration edit.
+      if(preparedLines) {
+        const native=await resolveCanadianGoodsTaxes(orgId,{kind:current.kind,subsidiaryId:targetSubsidiaryId,documentDate:body.documentDate ?? current.documentDate,
+          currency:currency ?? (await tx.execute<{currency:string}>(sql`select currency from documents where org_id=${orgId} and id=${id}`)).rows[0]!.currency,
+          selection:(headerCustom ?? current.custom)?.canadianGoodsTax},preparedLines,tx)
+        if(!targetSubsidiaryId && native.size)targetSubsidiaryId=native.values().next().value!.snapshot.subsidiaryId
+        for(const [index,selected] of native)if(preparedLines[index]!.nativeGoodsTax?.fingerprint!==selected.snapshot.fingerprint)
+          throw new DocumentEditError(409,'The native goods tax configuration changed during preparation — reload the invoice, review its supply terms and save it again')
+        if(preparedLines.some((line,index)=>line.nativeGoodsTax && !native.has(index)))throw new DocumentEditError(409,'The invoice tax policy changed during preparation — reload it and save the intended supply assessment again')
+      }
+
       const effectiveHeaderDims = headerDims?.cleaned ?? (
         locked.extraDims && typeof locked.extraDims === 'object' && !Array.isArray(locked.extraDims)
           ? locked.extraDims as Record<string, string>
@@ -1851,6 +1877,7 @@ export async function applyDocumentEdit(
             components: l.taxComponents,
             actorId: userId,
           })
+          if(l.nativeGoodsTax)await persistGoodsTaxSnapshot(tx,orgId,inserted.rows[0]!.id,l.nativeGoodsTax,userId)
           if (l.providerQuote) {
             await persistTaxQuote(
               orgId,
@@ -1960,7 +1987,7 @@ export async function applyDocumentEdit(
           location_id = ${body.locationId !== undefined ? body.locationId : sql`location_id`},
           class_id = ${body.classId !== undefined ? body.classId : sql`class_id`},
           extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
-          subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
+          subsidiary_id = ${targetSubsidiaryId},
           expected_pay_date = ${body.expectedPayDate !== undefined ? body.expectedPayDate : sql`expected_pay_date`},
           payment_hold_reason = ${body.paymentHoldReason !== undefined ? body.paymentHoldReason : sql`payment_hold_reason`},
           internal_notes = ${body.internalNotes !== undefined ? body.internalNotes : sql`internal_notes`},
