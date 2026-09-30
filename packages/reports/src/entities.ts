@@ -13,6 +13,7 @@
 
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
+import { RESOURCING_REPORT_ENTITIES } from './resourcing-entities'
 
 export { HRM_REPORT_ENTITIES } from './hrm-entities'
 
@@ -1977,6 +1978,10 @@ export function registerReportEntityList(source: string, entities: readonly Repo
 
   REPORT_ENTITY_LISTS.set(source, [...entities])
 }
+
+// Built-in sources share the registry's lifecycle. Reloading a server
+// consumer must not register its report definitions a second time.
+registerReportEntityList('resourcing', RESOURCING_REPORT_ENTITIES)
 
 /** Enumerate the core catalog followed by each additional registered source. */
 export function allReportEntities(): readonly { source: string; entity: ReportEntity }[] {

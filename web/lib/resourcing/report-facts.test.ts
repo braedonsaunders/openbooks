@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { MAX_AGGREGATE_MEASURES, MAX_FORMULA_MEASURES, shapeSummarizedRows, summarizeRows } from '@openbooks/reports'
+import { allReportEntities, MAX_AGGREGATE_MEASURES, MAX_FORMULA_MEASURES, RESOURCING_REPORT_ENTITIES, shapeSummarizedRows, summarizeRows } from '@openbooks/reports'
 import { RESOURCING_REPORT_PLANS, benchEntity, capacityDemandEntity, engagementEntity, summarizeResourcingRows, utilizationEntity } from './report-facts.ts'
 
 const formulas = {
@@ -21,6 +21,13 @@ const formulas = {
   noCost: 'No labor cost recorded',
   undefined: 'Undefined',
 }
+
+test('reloading resourcing facts retains one canonical report catalog', async () => {
+  const reloaded = await import(new URL('./report-facts.ts?registration-reload', import.meta.url).href) as typeof import('./report-facts.ts')
+  assert.notEqual(reloaded.RESOURCING_REPORT_PLANS, RESOURCING_REPORT_PLANS, 'the facts module must actually be re-evaluated')
+  assert.equal(reloaded.utilizationEntity, utilizationEntity)
+  assert.deepEqual(allReportEntities().filter(({ source }) => source === 'resourcing').map(({ entity }) => entity), [...RESOURCING_REPORT_ENTITIES])
+})
 
 function shape(rows: Record<string, unknown>[], plan: ReturnType<typeof RESOURCING_REPORT_PLANS.utilization>) {
   return shapeSummarizedRows(summarizeRows(rows, plan), plan, rows)
