@@ -34,8 +34,14 @@
 import { carryingAmountForSettlement, realizedFxControlAdjustment } from "../../payments/settlement-policy.ts";
 import { runRevaluation } from "../../close/fx-revaluation.ts";
 import { capture, periodFor, postNewDocument, setSpotRate } from "../ledger-helpers.ts";
-import { db } from "../../platform/db.ts";
+import { db,withBypassContext,withOrgContext } from "../../platform/db.ts";
 import { sql } from "drizzle-orm";
+import { randomUUID } from 'node:crypto';
+import { postEntry } from '../../journal/post-entry.ts';
+import { seedFlowActors,seedApprovalFlow } from '../../testing/fixtures.ts';
+import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts';
+import { decideGate } from '../../flows/gates.ts';
+import { proposeNetInvestmentAssessment,applyNetInvestmentAssessment } from '../../consolidation/net-investment.ts';
 import type { ConformanceCase } from "../types.ts";
 
 export const FX_SETTLEMENT_CASES: readonly ConformanceCase[] = [
@@ -208,8 +214,8 @@ export const FX_SETTLEMENT_CASES: readonly ConformanceCase[] = [
           "Qualifying net-investment exchange differences remain in profit or loss in separate statements and move to other comprehensive income in statements that include the foreign operation through consolidation.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
+    support: "supported",
+    tier: "ledger",
     assertion:
       "A qualifying long-term intercompany balance retains profit-or-loss treatment in separate statements and has its exchange differences recognised in other comprehensive income in consolidated statements until disposal.",
     facts: [
@@ -218,10 +224,52 @@ export const FX_SETTLEMENT_CASES: readonly ConformanceCase[] = [
       "At the closing rate the loan carries an exchange difference of CAD 500.00.",
       "The consolidated outcome is a CAD 500.00 movement in other comprehensive income, with nothing in consolidated profit or loss; separate statements retain profit-or-loss treatment.",
     ],
-    gap:
-      "The product has no net-investment designation for intercompany monetary items: separate-statement revaluation correctly uses profit or loss, but consolidation has no qualifying designation and reclassification path to an OCI reserve.",
     expected: {
+      entries:[{step:'standalone loan FX',lines:[{role:'netInvestmentLoan',amount:'500.0000'},{role:'fxUnrealizedGainLoss',amount:'-500.0000'}]},
+        {step:'consolidated net-investment OCI',lines:[{role:'fxUnrealizedGainLoss',amount:'500.0000'},{role:'netInvestmentOci',amount:'-500.0000'}]}],
       values: { ociMovement: "500.0000", profitOrLossMovement: "0.0000" },
+    },
+    run:async ctx=>{
+      const ledger=ctx.ledger!,foreignId=randomUUID(),eliminationId=randomUUID(),interestId=randomUUID(),pairId=randomUUID()
+      const actors=await withBypassContext(async()=>{
+        const actors=await seedFlowActors(ledger.orgId)
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true,"multiSubsidiary":true}'::jsonb) where id=${ledger.orgId}`)
+        await db.execute(sql`update accounts set eliminate=true,monetary=true where org_id=${ledger.orgId} and id in (${ctx.roles.netInvestmentLoan},${ctx.roles.loanPayable})`)
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_elimination,is_active)
+          values(${foreignId},${ledger.orgId},${ledger.subsidiaryId},'Foreign loan operation','USD','US',false,true),
+            (${eliminationId},${ledger.orgId},${ledger.subsidiaryId},'Net-investment eliminations','CAD','CA',true,true)`)
+        await db.execute(sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,method,ownership_percent,acquisition_date,
+          investment_account_id,equity_income_account_id,goodwill_account_id,fair_value_adjustment_account_id)
+          values(${interestId},${ledger.orgId},${ledger.subsidiaryId},${foreignId},'2026-01-01','full',100,'2026-01-01',${ctx.roles.investmentInSub},${ctx.roles.equityMethodIncome},${ctx.roles.goodwill},${ctx.roles.fairValueAdjustment})`)
+        await db.execute(sql`insert into intercompany_pairs(id,org_id,from_subsidiary_id,to_subsidiary_id,due_from_account_id,due_to_account_id)
+          values(${pairId},${ledger.orgId},${ledger.subsidiaryId},${foreignId},${ctx.roles.netInvestmentLoan},${ctx.roles.loanPayable})`)
+        await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${ledger.orgId},${actors.submitterId},'close.run','grant')`)
+        await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+        return actors
+      })
+      return withOrgContext(ledger.orgId,async()=>{
+        const periodId=await periodFor(ledger,'2026-07-31')
+        await postEntry(db,{orgId:ledger.orgId,bookId:ledger.bookId,subsidiaryId:ledger.subsidiaryId,entryNumber:'CONF-NETINV-LOAN',postingDate:'2026-07-15',periodId,origin:'manual',actorId:ledger.actorId,currency:'CAD',
+          lines:[{accountId:ctx.roles.netInvestmentLoan,amount:'13500',currency:'USD',txnAmount:'10000',fxRate:'1.35'},
+            {accountId:ctx.roles.bank,amount:'-13500',currency:'CAD',txnAmount:'-13500',fxRate:'1'}]})
+        await postEntry(db,{orgId:ledger.orgId,bookId:ledger.bookId,subsidiaryId:foreignId,entryNumber:'CONF-NETINV-BORROWING',postingDate:'2026-07-15',periodId,origin:'manual',actorId:ledger.actorId,currency:'USD',
+          lines:[{accountId:ctx.roles.bank,amount:'10000'},{accountId:ctx.roles.loanPayable,amount:'-10000'}]})
+        await setSpotRate(ledger,'USD','CAD','2026-07-31','1.40')
+        const standalone=await capture(ctx,'standalone loan FX',async()=>{const result=await runRevaluation(ledger.orgId,periodId,ledger.actorId,[ledger.subsidiaryId]);if(result.problems.length)throw new Error(result.problems.join('; '))},{asOf:'2026-07-31'})
+        const source=(await db.execute<{id:string}>(sql`select line.id from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
+          where line.org_id=${ledger.orgId} and line.account_id=${ctx.roles.netInvestmentLoan} and entry.origin='fx_revaluation' and entry.period_id=${periodId} and entry.reverses_entry_id is null`)).rows[0]!
+        const changeId=await proposeNetInvestmentAssessment(ledger.orgId,interestId,actors.submitterId,{pairId,bookId:ledger.bookId,eliminationSubsidiaryId:eliminationId,ociAccountId:ctx.roles.netInvestmentOci,profitLossAccountId:ctx.roles.fxUnrealizedGainLoss,
+          sourceLineIds:[source.id],notPlannedOrLikely:true,nonTrade:true,qualificationEvidence:'The signed long-term financing agreement and approved treasury plan establish a non-trade monetary loan with settlement neither planned nor likely in the foreseeable future.',
+          effectiveOn:'2026-07-31',reason:'Recognize qualifying loan FX in consolidated OCI',idempotencyKey:randomUUID()})
+        await submitFinancialChange(ledger.orgId,changeId,actors.submitterId)
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${changeId} and status='pending'`)).rows[0]!
+        await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
+        const consolidated=await capture(ctx,'consolidated net-investment OCI',async()=>{await applyNetInvestmentAssessment(ledger.orgId,changeId,actors.submitterId)},{asOf:'2026-07-31'})
+        const amounts=(await db.execute<{oci:string;pnl:string}>(sql`select coalesce(-sum(line.amount) filter(where line.account_id=${ctx.roles.netInvestmentOci}),0)::text as oci,
+          coalesce(sum(line.amount) filter(where line.account_id=${ctx.roles.fxUnrealizedGainLoss}),0)::text as pnl from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
+          where line.org_id=${ledger.orgId} and entry.status in ('posted','reversed') and entry.posting_date<='2026-07-31'`)).rows[0]!
+        return {entries:[standalone,consolidated],values:{ociMovement:amounts.oci,profitOrLossMovement:amounts.pnl}}
+      })
     },
   },
 ];

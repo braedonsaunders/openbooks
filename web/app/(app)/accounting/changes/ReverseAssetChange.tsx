@@ -10,10 +10,12 @@ export function ReverseAssetChange({
   id,
   domain = "asset",
   effectiveOn,
+  operation,
 }: {
   id: string;
   domain?: "asset" | "consolidation";
   effectiveOn?: string;
+  operation?: string;
 }) {
   const router = useRouter(),
     today = useBusinessToday();
@@ -23,7 +25,7 @@ export function ReverseAssetChange({
     [date, setDate] = useState(effectiveOn ?? today),
     [reason, setReason] = useState(""),
     [key, setKey] = useState(() => crypto.randomUUID());
-  const dirty = reason !== "" || (domain === "asset" && date !== (effectiveOn ?? today));
+  const dirty = reason !== "" || ((domain === "asset" || operation === "net_investment_oci") && date !== (effectiveOn ?? today));
   const closeDrawer = () => {
     setOpen(false);
     setDate(effectiveOn ?? today);
@@ -38,14 +40,14 @@ export function ReverseAssetChange({
     setBusy(true);
     try {
       const r = await fetch(
-        domain === "asset"
+        operation === "net_investment_oci" ? `/api/consolidation/net-investment-changes/${id}/reverse` : domain === "asset"
           ? `/api/accounting/changes/${id}/reverse`
           : `/api/consolidation/changes/${id}/reverse`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...(domain === "asset" ? { effectiveOn: date } : {}),
+            ...((domain === "asset" || operation === "net_investment_oci") ? { effectiveOn: date } : {}),
             reason,
             idempotencyKey: key,
           }),
@@ -76,7 +78,7 @@ export function ReverseAssetChange({
         open={open}
         onClose={closeGuard.close}
         title={
-          domain === "asset"
+          operation === "net_investment_oci" ? "Correct net-investment FX" : domain === "asset"
             ? "Reverse asset change"
             : "Correct loss of control"
         }
@@ -88,7 +90,7 @@ export function ReverseAssetChange({
         }
       >
         <div className="space-y-4">
-          {domain === "asset" ? (
+          {domain === "asset" || operation === "net_investment_oci" ? (
             <div>
               <Label>Reversal date</Label>
               <Input

@@ -1,3 +1,4 @@
+import { applyNetInvestmentAssessment,applyNetInvestmentReversal } from '@openbooks/engine/consolidation'
 import { applyDropShipAssessment } from '@openbooks/engine/inventory'
 import { applyExpectedBreakage } from '@openbooks/engine/revenue'
 import { applyProvisionAssessment } from "@openbooks/engine/provisions";
@@ -29,7 +30,7 @@ export const POST = defineRoute({
       if (gate.domain === "consolidation")
         return NextResponse.json(
           await (
-            gate.operation === "reversal"
+            gate.operation === "net_investment_oci_reversal" ? applyNetInvestmentReversal : gate.operation === "net_investment_oci" ? applyNetInvestmentAssessment : gate.operation === "reversal"
               ? applyLossOfControlReversal
               : applyLossOfControl
           )(gate.auth.user.orgId, id, gate.auth.user.id),

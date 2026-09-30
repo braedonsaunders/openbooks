@@ -666,6 +666,7 @@ async function postRevaluationEntry(
         nextPeriodId,
         basis: "assigned_period_open_item_residuals_and_nonopen_gl_less_effective_fx_by_account",
         positions,
+        gainLossAccountId: gainLossAccount,
         effectiveAdjustments: effective,
         lines,
         netDelta,

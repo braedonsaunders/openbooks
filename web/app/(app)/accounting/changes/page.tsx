@@ -239,10 +239,10 @@ export default async function AccountingEvents({
                   />
                 ) : null}
                 {row.domain === "consolidation" &&
-                row.operation === "loss_of_control" &&
+                ["loss_of_control","net_investment_oci"].includes(row.operation) &&
                 row.status === "applied" &&
                 can(auth, "close.run") ? (
-                  <ReverseAssetChange id={row.id} domain="consolidation" />
+                  <ReverseAssetChange id={row.id} domain="consolidation" operation={row.operation} effectiveOn={row.effective_on} />
                 ) : null}
                 {row.domain === "consolidation" ? (
                   <Link

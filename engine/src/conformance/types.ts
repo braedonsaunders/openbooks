@@ -152,6 +152,8 @@ export type Role =
   | "impairmentLoss"
   | "disposalGainLoss"
   // Foreign currency
+  | "netInvestmentLoan"
+  | "netInvestmentOci"
   | "fxRealizedGainLoss"
   | "fxUnrealizedGainLoss"
   | "loanPayable"

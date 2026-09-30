@@ -111,7 +111,9 @@
       "loss_of_control": "Loss of control",
       "reversal": "Reversal",
       "provision_assessment": "Provision assessment",
-      "drop_ship_control_assessment": "Drop-ship control assessment"
+      "drop_ship_control_assessment": "Drop-ship control assessment",
+      "net_investment_oci": "Net-investment FX assessment",
+      "net_investment_oci_reversal": "Net-investment FX correction"
     },
     "domains": {
       "lease": "Lessee lease",
@@ -280,6 +282,25 @@
       "destinationAccount": "Destination account",
       "removeReserve": "Remove reserve",
       "addReserve": "Add reserve"
+    },
+    "netInvestment": {
+      "title": "Assess net-investment FX",
+      "hint": "Review qualifying loan exchange differences for consolidated OCI. Standalone FX remains in profit or loss. Each selected line is attributed once and requires independent approval.",
+      "choose": "Choose…",
+      "pair": "Paired monetary loan",
+      "book": "Accounting book",
+      "elimination": "Consolidation elimination entity",
+      "oci": "OCI translation reserve",
+      "pnl": "Native FX gain-or-loss account",
+      "date": "Assessment date",
+      "sources": "Native FX source lines",
+      "sourceHint": "Select the current assessment period’s qualifying loan lines, including opening reversal mirrors where appropriate. Review each currency and counterparty against the contractual evidence.",
+      "qualified": "Settlement of this long-term monetary loan is neither planned nor likely in the foreseeable future.",
+      "nonTrade": "This balance is a non-trade loan, not a trade receivable or payable.",
+      "evidence": "Contractual qualification and currency evidence",
+      "reason": "Review reason",
+      "propose": "Prepare assessment for approval",
+      "failed": "Could not prepare the net-investment FX assessment"
     }
   },
   "provisions": {
