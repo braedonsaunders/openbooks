@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadDashboardLayout } = await import('./_load-layout')
 const { DEFAULT_DASHBOARD_LAYOUTS } = await import('@openbooks/schema')
@@ -54,8 +54,8 @@ test('stored empty grid falls back to the default layout', { skip: !env.OPENBOOK
   try {
     const authz = await adminAuthz(org.orgId, 'Empty Grid')
     await storeLayout(org.orgId, authz.user.id, { widgets: [], quickActions: [] })
-    const loaded = await loadDashboardLayout(authz)
-    // HR-15: the persona default under this org's real flags.
+    const loaded = await withOrgContext(org.orgId, () => loadDashboardLayout(authz))
+    // Current product default, rather than the malformed saved snapshot.
     const expected = expectedAdminDefault()
     assert.deepEqual(loaded.layout.widgets, expected.widgets)
     assert.equal(loaded.isCustomised, false)
@@ -69,7 +69,7 @@ test('malformed stored layout falls back to the default layout', { skip: !env.OP
   try {
     const authz = await adminAuthz(org.orgId, 'Bad Shape')
     await storeLayout(org.orgId, authz.user.id, { widgets: 'nope', quickActions: 'also-nope' })
-    const loaded = await loadDashboardLayout(authz)
+    const loaded = await withOrgContext(org.orgId, () => loadDashboardLayout(authz))
     // Current product default, rather than the malformed saved snapshot.
     const expected = expectedAdminDefault()
     assert.deepEqual(loaded.layout.widgets, expected.widgets)
@@ -85,7 +85,7 @@ test('valid stored layout is still honoured', { skip: !env.OPENBOOKS_DB_URL }, a
     const authz = await adminAuthz(org.orgId, 'Valid Grid')
     const widgets = DEFAULT_DASHBOARD_LAYOUTS.admin.widgets.slice(0, 2)
     await storeLayout(org.orgId, authz.user.id, { widgets })
-    const loaded = await loadDashboardLayout(authz)
+    const loaded = await withOrgContext(org.orgId, () => loadDashboardLayout(authz))
     assert.deepEqual(loaded.layout.widgets, widgets)
     assert.equal(loaded.isCustomised, true)
   } finally {
