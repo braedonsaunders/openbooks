@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -184,25 +185,25 @@ export function CashCockpit({
                 </Link>
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableBody>
                   {data.bankAccounts.map((b) => (
-                    <tr key={b.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-2.5">
+                    <SharedTableRow key={b.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="px-4 py-2.5">
                         <Link href={(`/banking/${b.id}`)} className="font-medium text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300">
                           {b.name}
                         </Link>
                         {b.number ? <span className="ml-2 text-xs text-slate-400">{b.number}</span> : null}
-                      </td>
-                      <td className={cn('px-4 py-2.5 text-right font-medium tabular-nums', compareMoney(b.balance, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(b.balance)}</td>
-                    </tr>
+                      </SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2.5 text-right font-medium tabular-nums', compareMoney(b.balance, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(b.balance)}</SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                  <tr className="border-t border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/30">
-                    <td className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-100">{t('totalCash')}</td>
-                    <td className={cn('px-4 py-2.5 text-right font-bold tabular-nums', compareMoney(data.startingCash, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(data.startingCash)}</td>
-                  </tr>
-                </tbody>
-              </table>
+                  <SharedTableRow className="border-t border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/30">
+                    <SharedTableCell className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-100">{t('totalCash')}</SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2.5 text-right font-bold tabular-nums', compareMoney(data.startingCash, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(data.startingCash)}</SharedTableCell>
+                  </SharedTableRow>
+                </SharedTableBody>
+              </SharedTable>
             )}
           </CockpitPanel>
         )

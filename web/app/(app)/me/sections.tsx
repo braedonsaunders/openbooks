@@ -5,6 +5,7 @@
  * loader-resolved empty line (a person with no address on file is
  * legitimate) rather than a blank panel pretending to load.
  */
+import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
 import { UrlDrawer } from '@openbooks/ui'
 import type { MeOverviewData } from '../../../lib/hrm/self-service'
 
@@ -13,11 +14,11 @@ type PayExplain = NonNullable<MeOverviewData['payExplain']>;
 function TraceTable({ rows, amountLabel }: { rows: { description: string; hours: string | null; rate: string | null; amount: string; treatment: string | null }[]; amountLabel: string }) {
   if (rows.length === 0) return null
   return (
-    <table className="w-full text-sm">
-      <tbody>
+    <SharedTable className="w-full text-sm">
+      <SharedTableBody>
         {rows.map((row) => (
-          <tr key={row.description} className="border-t border-slate-100 dark:border-slate-800">
-            <td className="py-1 pr-2">
+          <SharedTableRow key={row.description} className="border-t border-slate-100 dark:border-slate-800">
+            <SharedTableCell className="py-1 pr-2">
               {row.description}
               {row.hours !== null && row.rate !== null ? (
                 <span className="block text-xs text-slate-500 dark:text-slate-400">
@@ -27,13 +28,13 @@ function TraceTable({ rows, amountLabel }: { rows: { description: string; hours:
               {row.treatment ? (
                 <span className="block text-xs text-slate-500 dark:text-slate-400">{row.treatment}</span>
               ) : null}
-            </td>
-            <td className="py-1 text-right tabular-nums">{row.amount}</td>
-          </tr>
+            </SharedTableCell>
+            <SharedTableCell className="py-1 text-right tabular-nums">{row.amount}</SharedTableCell>
+          </SharedTableRow>
         ))}
-      </tbody>
+      </SharedTableBody>
       <caption className="sr-only">{amountLabel}</caption>
-    </table>
+    </SharedTable>
   )
 }
 

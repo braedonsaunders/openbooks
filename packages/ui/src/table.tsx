@@ -71,6 +71,11 @@ export const TableBody = React.forwardRef<
 })
 TableBody.displayName = 'TableBody'
 
+export const TableFooter = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+  ({ className, ...props }, ref) => <tfoot ref={ref} className={className} {...props} />,
+)
+TableFooter.displayName = 'TableFooter'
+
 export type TableRowProps = HTMLMotionProps<'tr'> & {
   /** Disable the entrance animation for this row (e.g. for static rows). */
   noAnimate?: boolean

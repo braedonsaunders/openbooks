@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { BookOpen, Clock, KeyRound, Play, RotateCcw, Search, TerminalSquare } from 'lucide-react'
@@ -446,30 +447,30 @@ function ReferencePane({ rt, t }: { rt: RecordType; t: ReturnType<typeof useTran
         </span>
       </div>
       <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/60">
-              <th className="px-4 py-2 font-medium">{t('fields.field')}</th>
-              <th className="px-4 py-2 font-medium">{t('fields.type')}</th>
-              <th className="px-4 py-2 font-medium">{t('fields.required')}</th>
-              <th className="px-4 py-2 font-medium">{t('fields.description')}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="border-b border-slate-200 bg-slate-50/60 text-left text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/60">
+              <SharedTableHead className="px-4 py-2 font-medium">{t('fields.field')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 font-medium">{t('fields.type')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 font-medium">{t('fields.required')}</SharedTableHead>
+              <SharedTableHead className="px-4 py-2 font-medium">{t('fields.description')}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {rt.fields.map((f) => (
-              <tr key={f.name} className="border-b border-slate-100 last:border-0 dark:border-slate-800/50">
-                <td className="px-4 py-2 font-mono text-[12px] text-slate-700 dark:text-slate-300">
+              <SharedTableRow key={f.name} className="border-b border-slate-100 last:border-0 dark:border-slate-800/50">
+                <SharedTableCell className="px-4 py-2 font-mono text-[12px] text-slate-700 dark:text-slate-300">
                   {f.name}
                   {f.custom ? <span className="ml-1.5 text-[10px] text-teal-600 dark:text-teal-400">{t('customBadge')}</span> : null}
                   {!f.writable ? <span className="ml-1.5 text-[10px] text-slate-400">{t('console.readOnly')}</span> : null}
-                </td>
-                <td className="px-4 py-2 font-mono text-[12px] text-slate-500 dark:text-slate-400">{f.type}</td>
-                <td className="px-4 py-2">{f.required ? <Badge variant="warning">{t('fields.yes')}</Badge> : null}</td>
-                <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{f.description ?? '—'}</td>
-              </tr>
+                </SharedTableCell>
+                <SharedTableCell className="px-4 py-2 font-mono text-[12px] text-slate-500 dark:text-slate-400">{f.type}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2">{f.required ? <Badge variant="warning">{t('fields.yes')}</Badge> : null}</SharedTableCell>
+                <SharedTableCell className="px-4 py-2 text-slate-500 dark:text-slate-400">{f.description ?? '—'}</SharedTableCell>
+              </SharedTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </div>
     </div>
   )

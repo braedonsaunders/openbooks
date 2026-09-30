@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -330,26 +331,26 @@ export function CashWeekFlyout({
                 {search ? t('empty.noMatches') : t('empty.noneThisWeek', { side: side === 'ar' ? t('empty.inflows') : t('empty.outflows') })}
               </p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('docNumber')}>{t('table.id')}{sortIcon('docNumber')}</th>
-                    <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('partyName')}>{side === 'ar' ? t('table.customer') : t('table.vendor')}{sortIcon('partyName')}</th>
-                    <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('predictedDate')}>{t('table.predicted')}{sortIcon('predictedDate')}</th>
-                    <th className="px-3 py-2 text-center font-medium">{t('table.method')}</th>
-                    <th className="px-3 py-2 text-center font-medium">{t('table.status')}</th>
-                    <th className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('docNumber')}>{t('table.id')}{sortIcon('docNumber')}</SharedTableHead>
+                    <SharedTableHead className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('partyName')}>{side === 'ar' ? t('table.customer') : t('table.vendor')}{sortIcon('partyName')}</SharedTableHead>
+                    <SharedTableHead className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('predictedDate')}>{t('table.predicted')}{sortIcon('predictedDate')}</SharedTableHead>
+                    <SharedTableHead className="px-3 py-2 text-center font-medium">{t('table.method')}</SharedTableHead>
+                    <SharedTableHead className="px-3 py-2 text-center font-medium">{t('table.status')}</SharedTableHead>
+                    <SharedTableHead className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {paged.map((e) => (
-                    <tr key={e.id} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                      <td className="px-4 py-2.5">
+                    <SharedTableRow key={e.id} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                      <SharedTableCell className="px-4 py-2.5">
                         <TxnLink entryId={e.entryId} docKind={e.docKind} docId={e.docId} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">
                           {e.docNumber || e.docKind || '—'}
                         </TxnLink>
-                      </td>
-                      <td className="px-3 py-2.5">
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5">
                         {e.partyId ? (
                           <button type="button" onClick={() => setEntity({ id: e.partyId!, name: e.partyName })} title={t('paymentHistoryTitle')} className="flex items-center gap-1 font-medium text-slate-700 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-300">
                             {e.partyName}
@@ -358,15 +359,15 @@ export function CashWeekFlyout({
                         ) : (
                           <span className="font-medium text-slate-700 dark:text-slate-200">{e.partyName}</span>
                         )}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.predictedDate)}</td>
-                      <td className="px-3 py-2.5 text-center"><MethodPill method={e.method} /></td>
-                      <td className="px-3 py-2.5 text-center"><DaysPill entry={e} /></td>
-                      <td className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', side === 'ar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(e.amount)}</td>
-                    </tr>
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.predictedDate)}</SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-center"><MethodPill method={e.method} /></SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-center"><DaysPill entry={e} /></SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', side === 'ar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(e.amount)}</SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             )}
           </div>
 
@@ -526,31 +527,31 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
             {search ? t('empty.noMatches') : t('empty.noSourceItems')}
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('name')}>{t('table.entityDescription')}{sortIcon('name')}</th>
-                <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('date')}>{t('table.date')}{sortIcon('date')}</th>
-                <th className="cursor-pointer px-3 py-2 text-center font-medium select-none" onClick={() => sortBy('type')}>{t('table.type')}{sortIcon('type')}</th>
-                <th className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('name')}>{t('table.entityDescription')}{sortIcon('name')}</SharedTableHead>
+                <SharedTableHead className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('date')}>{t('table.date')}{sortIcon('date')}</SharedTableHead>
+                <SharedTableHead className="cursor-pointer px-3 py-2 text-center font-medium select-none" onClick={() => sortBy('type')}>{t('table.type')}{sortIcon('type')}</SharedTableHead>
+                <SharedTableHead className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {paged.map((r, i) => (
-                <tr key={`${r.name}-${r.date ?? ''}-${i}`} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                  <td className="px-4 py-2.5">
+                <SharedTableRow key={`${r.name}-${r.date ?? ''}-${i}`} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                  <SharedTableCell className="px-4 py-2.5">
                     <span className="font-medium text-slate-700 dark:text-slate-200">{r.name}</span>
                     {r.details ? <span className="block text-[11px] text-slate-400 dark:text-slate-500">{r.details}</span> : null}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{r.date ? fmtDate(r.date) : '—'}</td>
-                  <td className="px-3 py-2.5 text-center">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{r.date ? fmtDate(r.date) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2.5 text-center">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{r.type}</span>
-                  </td>
-                  <td className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', tone)}>{money(r.amount)}</td>
-                </tr>
+                  </SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', tone)}>{money(r.amount)}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         )}
       </div>
 

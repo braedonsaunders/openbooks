@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useEffect, useId, useState } from 'react'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
@@ -533,26 +534,26 @@ export function PspSettlementsWorkspace({
             />
           </div>
         </div>
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted-foreground">
-            <tr>
-              <th className="py-1">{strings.colProvider}</th>
-              <th>{strings.referenceLabel}</th>
-              <th>{strings.dateLabel}</th>
-              <th className="text-right">{strings.colNet}</th>
-              <th>{strings.statusLabel}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader className="text-left text-muted-foreground">
+            <SharedTableRow>
+              <SharedTableHead className="py-1">{strings.colProvider}</SharedTableHead>
+              <SharedTableHead>{strings.referenceLabel}</SharedTableHead>
+              <SharedTableHead>{strings.dateLabel}</SharedTableHead>
+              <SharedTableHead className="text-right">{strings.colNet}</SharedTableHead>
+              <SharedTableHead>{strings.statusLabel}</SharedTableHead>
+              <SharedTableHead></SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {listed.map((b) => (
-              <tr key={b.id} className="border-t">
-                <td className="py-1">{b.provider}</td>
-                <td className="font-mono text-xs">{b.externalRef}</td>
-                <td>{b.date}</td>
-                <td className="text-right tabular-nums">{b.net}</td>
-                <td>{b.status}</td>
-                <td className="text-right">
+              <SharedTableRow key={b.id} className="border-t">
+                <SharedTableCell className="py-1">{b.provider}</SharedTableCell>
+                <SharedTableCell className="font-mono text-xs">{b.externalRef}</SharedTableCell>
+                <SharedTableCell>{b.date}</SharedTableCell>
+                <SharedTableCell className="text-right tabular-nums">{b.net}</SharedTableCell>
+                <SharedTableCell>{b.status}</SharedTableCell>
+                <SharedTableCell className="text-right">
                   {b.rawStatus === 'draft' && canReconcile && (
                     <Button size="sm" variant="ghost" onClick={() => void post(b.id)}>
                       {strings.postLabel}
@@ -568,35 +569,35 @@ export function PspSettlementsWorkspace({
                       {strings.reverse}
                     </Button>
                   )}
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             ))}
             {loading && (
-              <tr>
-                <td colSpan={6} className="py-4 text-center text-muted-foreground">
+              <SharedTableRow>
+                <SharedTableCell colSpan={6} className="py-4 text-center text-muted-foreground">
                   {strings.loadingLabel}
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             )}
             {!loading && loadFailed && (
-              <tr>
-                <td colSpan={6} className="py-4 text-center text-muted-foreground">
+              <SharedTableRow>
+                <SharedTableCell colSpan={6} className="py-4 text-center text-muted-foreground">
                   <p>{strings.loadFailedLabel}</p>
                   <Button size="sm" variant="outline" className="mt-2" onClick={() => void load()}>
                     {strings.retryLabel}
                   </Button>
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             )}
             {!loading && !loadFailed && listed.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-4 text-center text-muted-foreground">
+              <SharedTableRow>
+                <SharedTableCell colSpan={6} className="py-4 text-center text-muted-foreground">
                   {strings.empty}
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             )}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </Card>
     </>
   )

@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -109,35 +110,35 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
               {data.byVendor.length === 0 ? (
                 <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('noPayables')}</p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                    <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                      <th className="px-4 py-2 text-left font-medium">{t('vendor')}</th>
-                      <th className="px-3 py-2 text-right font-medium">{t('overdueCol')}</th>
-                      <th className="px-4 py-2 text-right font-medium">{t('openCol')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <SharedTable className="w-full text-sm">
+                  <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                    <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                      <SharedTableHead className="px-4 py-2 text-left font-medium">{t('vendor')}</SharedTableHead>
+                      <SharedTableHead className="px-3 py-2 text-right font-medium">{t('overdueCol')}</SharedTableHead>
+                      <SharedTableHead className="px-4 py-2 text-right font-medium">{t('openCol')}</SharedTableHead>
+                    </SharedTableRow>
+                  </SharedTableHeader>
+                  <SharedTableBody>
                     {data.byVendor.map((v) => (
-                      <tr
+                      <SharedTableRow
                         key={v.partyId ?? v.partyName}
                         className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
                       >
-                        <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                        <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">
                           {v.partyId ? (
                             <TableDrilldownButton onActivate={() => setEntity({ id: v.partyId!, name: v.partyName })}>
                               {v.partyName}
                             </TableDrilldownButton>
                           ) : v.partyName}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
+                        </SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-right tabular-nums">
                           {compareMoney(v.overdue, '0.0000') > 0 ? <span className="text-red-600 dark:text-red-400">{moneyCompact(v.overdue)}</span> : <span className="text-slate-300 dark:text-slate-600">—</span>}
-                        </td>
-                        <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(v.amount)}</td>
-                      </tr>
+                        </SharedTableCell>
+                        <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(v.amount)}</SharedTableCell>
+                      </SharedTableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </SharedTableBody>
+                </SharedTable>
               )}
             </div>
           </CockpitPanel>

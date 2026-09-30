@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useEffect, useState } from 'react'
 import { Drawer, cn } from '@openbooks/ui'
 import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -148,29 +149,29 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
                 {tab === 'open' ? t('emptyOpen') : t('emptyPayments')}
               </p>
             ) : tab === 'open' ? (
-              <table className="w-full text-sm">
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableBody>
                   {visibleOpen.map((i, k: number) => (
-                    <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-1.5"><TxnLink entryId={i.entryId ?? ''} docKind={i.docKind} docId={i.docId} className={linkCls}>{i.docNumber || i.docKind}</TxnLink></td>
-                      <td className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? dt(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">{t('overdue')}</span> : null}</td>
-                      <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(i.remaining)}</td>
-                    </tr>
+                    <SharedTableRow key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="px-4 py-1.5"><TxnLink entryId={i.entryId ?? ''} docKind={i.docKind} docId={i.docId} className={linkCls}>{i.docNumber || i.docKind}</TxnLink></SharedTableCell>
+                      <SharedTableCell className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? dt(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">{t('overdue')}</span> : null}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(i.remaining)}</SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             ) : (
-              <table className="w-full text-sm">
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableBody>
                   {visiblePay.map((p, k: number) => (
-                    <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{dt(p.date)}</td>
-                      <td className="px-3 py-1.5"><TxnLink entryId={p.entryId ?? ''} docKind={p.docKind} docId={p.docId} className={linkCls}>{p.docNumber || p.docKind}</TxnLink></td>
-                      <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(p.amount)}</td>
-                    </tr>
+                    <SharedTableRow key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{dt(p.date)}</SharedTableCell>
+                      <SharedTableCell className="px-3 py-1.5"><TxnLink entryId={p.entryId ?? ''} docKind={p.docKind} docId={p.docId} className={linkCls}>{p.docNumber || p.docKind}</TxnLink></SharedTableCell>
+                      <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(p.amount)}</SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             )}
           </div>
 

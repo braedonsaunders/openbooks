@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
@@ -172,39 +173,39 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
 
       {prices.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-              <tr>
-                <th className="px-3 py-2 font-medium">{t('currency')}</th>
-                <th className="px-3 py-2 text-right font-medium">{t('unitPrice')}</th>
-                <th className="px-3 py-2 font-medium">{t('effectiveFrom')}</th>
-                <th className="px-3 py-2 font-medium">{t('effectiveTo')}</th>
-                <th className="px-3 py-2 font-medium">{common('labels.status')}</th>
-                {canManage ? <th className="px-3 py-2" /> : null}
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <SharedTableRow>
+                <SharedTableHead className="px-3 py-2 font-medium">{t('currency')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right font-medium">{t('unitPrice')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">{t('effectiveFrom')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">{t('effectiveTo')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">{common('labels.status')}</SharedTableHead>
+                {canManage ? <SharedTableHead className="px-3 py-2" /> : null}
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {prices.map((p) => (
-                <tr key={p.id} className="border-t border-slate-100 dark:border-slate-800/60">
-                  <td className="px-3 py-2 font-mono">{p.currency}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{num(p.unit_price)}</td>
-                  <td className="px-3 py-2 tabular-nums">{p.effective_from ? String(p.effective_from).slice(0, 10) : '—'}</td>
-                  <td className="px-3 py-2 tabular-nums">{p.effective_to ? String(p.effective_to).slice(0, 10) : '—'}</td>
-                  <td className="px-3 py-2">
+                <SharedTableRow key={p.id} className="border-t border-slate-100 dark:border-slate-800/60">
+                  <SharedTableCell className="px-3 py-2 font-mono">{p.currency}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-right tabular-nums">{num(p.unit_price)}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 tabular-nums">{p.effective_from ? String(p.effective_from).slice(0, 10) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 tabular-nums">{p.effective_to ? String(p.effective_to).slice(0, 10) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     <Badge variant={p.is_active ? 'success' : 'outline'}>
                       {p.is_active ? common('status.active') : common('status.inactive')}
                     </Badge>
-                  </td>
+                  </SharedTableCell>
                   {canManage ? (
-                    <td className="px-3 py-2 text-right">
+                    <SharedTableCell className="px-3 py-2 text-right">
                       <button type="button" onClick={() => startEdit(p)} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{common('actions.edit')}</button>
                       <button type="button" onClick={() => remove(p.id)} disabled={busy} className="ml-3 text-xs font-medium text-red-600 hover:underline dark:text-red-400">{common('actions.delete')}</button>
-                    </td>
+                    </SharedTableCell>
                   ) : null}
-                </tr>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       ) : loadState === 'loaded' && !form ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>

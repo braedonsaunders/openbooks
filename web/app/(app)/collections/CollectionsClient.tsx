@@ -1,5 +1,6 @@
 "use client";
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -186,20 +187,20 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
       <Card className="p-4">
         <h3 className="mb-3 text-sm font-semibold">{t("plansTitle")}</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground"><tr><th className="py-1">{t("plansTable.plan")}</th><th className="text-right">{t("plansTable.price")}</th><th>{t("plansTable.billing")}</th><th></th></tr></thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("plansTable.plan")}</SharedTableHead><SharedTableHead className="text-right">{t("plansTable.price")}</SharedTableHead><SharedTableHead>{t("plansTable.billing")}</SharedTableHead><SharedTableHead></SharedTableHead></SharedTableRow></SharedTableHeader>
+            <SharedTableBody>
               {plans.map((p) => (
-                <tr key={p.id} className="border-t">
-                  <td className="py-1 font-medium">{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">{t("archived")}</span>}</td>
-                  <td className="text-right tabular-nums">{money(p.amount, { currency: p.currency ?? undefined })}</td>
-                  <td>{t("every", { count: p.intervalCount > 1 ? `${p.intervalCount} ` : "", unit: p.interval.replace("ly", p.intervalCount > 1 ? "s" : "") })}</td>
-                  <td className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>{t("delete")}</Button></td>
-                </tr>
+                <SharedTableRow key={p.id} className="border-t">
+                  <SharedTableCell className="py-1 font-medium">{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">{t("archived")}</span>}</SharedTableCell>
+                  <SharedTableCell className="text-right tabular-nums">{money(p.amount, { currency: p.currency ?? undefined })}</SharedTableCell>
+                  <SharedTableCell>{t("every", { count: p.intervalCount > 1 ? `${p.intervalCount} ` : "", unit: p.interval.replace("ly", p.intervalCount > 1 ? "s" : "") })}</SharedTableCell>
+                  <SharedTableCell className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>{t("delete")}</Button></SharedTableCell>
+                </SharedTableRow>
               ))}
-              {loaded && plans.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-muted-foreground">{t("noPlans")}</td></tr>}
-            </tbody>
-          </table>
+              {loaded && plans.length === 0 && <SharedTableRow><SharedTableCell colSpan={4} className="py-3 text-center text-muted-foreground">{t("noPlans")}</SharedTableCell></SharedTableRow>}
+            </SharedTableBody>
+          </SharedTable>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-5">
           <Input placeholder={t("planNamePlaceholder")} value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} className="sm:col-span-2" />
@@ -222,18 +223,18 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
       <Card className="p-4">
         <h3 className="mb-3 text-sm font-semibold">{t("subsTitle")}</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground"><tr><th className="py-1">{t("subsTable.customer")}</th><th>{t("subsTable.plan")}</th><th className="text-right">{t("subsTable.qty")}</th><th className="text-right">{t("subsTable.mrr")}</th><th>{t("subsTable.nextBill")}</th><th>{t("subsTable.status")}</th><th></th></tr></thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("subsTable.customer")}</SharedTableHead><SharedTableHead>{t("subsTable.plan")}</SharedTableHead><SharedTableHead className="text-right">{t("subsTable.qty")}</SharedTableHead><SharedTableHead className="text-right">{t("subsTable.mrr")}</SharedTableHead><SharedTableHead>{t("subsTable.nextBill")}</SharedTableHead><SharedTableHead>{t("subsTable.status")}</SharedTableHead><SharedTableHead></SharedTableHead></SharedTableRow></SharedTableHeader>
+            <SharedTableBody>
               {subs.map((s) => (
-                <tr key={s.id} className="border-t align-top">
-                  <td className="py-1 font-medium">{s.customerName ?? "—"}</td>
-                  <td>{s.planName}</td>
-                  <td className="text-right tabular-nums">{s.quantity}</td>
-                  <td className="text-right tabular-nums">{s.status === "active" ? money(s.mrr, { currency: s.planCurrency ?? undefined }) : "—"}</td>
-                  <td>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</td>
-                  <td><Badge variant={s.status === "active" ? "default" : "secondary"}>{enumLabel(s.status, subscriptionStatusLabels, tCommon("labels.unknownValue"))}</Badge></td>
-                  <td className="whitespace-nowrap text-right">
+                <SharedTableRow key={s.id} className="border-t align-top">
+                  <SharedTableCell className="py-1 font-medium">{s.customerName ?? "—"}</SharedTableCell>
+                  <SharedTableCell>{s.planName}</SharedTableCell>
+                  <SharedTableCell className="text-right tabular-nums">{s.quantity}</SharedTableCell>
+                  <SharedTableCell className="text-right tabular-nums">{s.status === "active" ? money(s.mrr, { currency: s.planCurrency ?? undefined }) : "—"}</SharedTableCell>
+                  <SharedTableCell>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</SharedTableCell>
+                  <SharedTableCell><Badge variant={s.status === "active" ? "default" : "secondary"}>{enumLabel(s.status, subscriptionStatusLabels, tCommon("labels.unknownValue"))}</Badge></SharedTableCell>
+                  <SharedTableCell className="whitespace-nowrap text-right">
                     {s.status === "active" && changing === s.id ? (
                       <span className="inline-flex items-center gap-1">
                         <Input type="number" value={changeQty} onChange={(e) => setChangeQty(e.target.value)} className="h-7 w-16" />
@@ -260,12 +261,12 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                         }}>{t("cancelSub")}</Button>}
                       </>
                     )}
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               ))}
-              {loaded && subs.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-muted-foreground">{t("noSubs")}</td></tr>}
-            </tbody>
-          </table>
+              {loaded && subs.length === 0 && <SharedTableRow><SharedTableCell colSpan={7} className="py-3 text-center text-muted-foreground">{t("noSubs")}</SharedTableCell></SharedTableRow>}
+            </SharedTableBody>
+          </SharedTable>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-6">
           <Select value={subForm.customerId} onChange={(e) => setSubForm({ ...subForm, customerId: e.target.value })} className="sm:col-span-2">
@@ -399,37 +400,37 @@ function RecurringPanel() {
       </Card>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted-foreground">
-            <tr>
-              <th className="whitespace-nowrap px-3 py-2">{t("table.template")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.customer")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.cadence")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.nextRun")}</th>
-              <th className="whitespace-nowrap px-3 py-2">{t("table.runs")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.autoPost")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.status")}</th><th className="whitespace-nowrap px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loadState === "loading" && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground" role="status">{common("feedback.loading")}</td></tr>}
-            {loadState === "failed" && <tr><td colSpan={8} className="py-6 text-center text-destructive" role="alert"><span>{common("feedback.loadFailed")}</span> <Button size="sm" variant="outline" onClick={() => { void load(); }}>{common("actions.retry")}</Button></td></tr>}
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader className="text-left text-muted-foreground">
+            <SharedTableRow>
+              <SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.template")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.customer")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.cadence")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.nextRun")}</SharedTableHead>
+              <SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.runs")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.autoPost")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.status")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2"></SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
+            {loadState === "loading" && <SharedTableRow><SharedTableCell colSpan={8} className="py-6 text-center text-muted-foreground" role="status">{common("feedback.loading")}</SharedTableCell></SharedTableRow>}
+            {loadState === "failed" && <SharedTableRow><SharedTableCell colSpan={8} className="py-6 text-center text-destructive" role="alert"><span>{common("feedback.loadFailed")}</span> <Button size="sm" variant="outline" onClick={() => { void load(); }}>{common("actions.retry")}</Button></SharedTableCell></SharedTableRow>}
             {rows.map((s) => (
-              <tr key={s.id} className="border-t">
-                <td className="whitespace-nowrap px-3 py-2 font-medium">{s.templateNumber}</td>
-                <td className="whitespace-nowrap px-3 py-2">{s.partyName ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2">{t(`cadences.${s.cadence}`)}{s.cron ? ` (${s.cron})` : ""}</td>
-                <td className="whitespace-nowrap px-3 py-2">{s.nextRunOn}</td>
-                <td className="whitespace-nowrap px-3 py-2">{s.runCount}{s.lastError ? <span className="ml-1 text-red-600" title={s.lastError}>⚠</span> : null}</td>
-                <td className="whitespace-nowrap px-3 py-2">{s.autoPost ? t("yes") : t("no")}</td>
-                <td className="whitespace-nowrap px-3 py-2">{s.isActive ? <Badge>{t("active")}</Badge> : <Badge variant="secondary">{t("paused")}</Badge>}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
+              <SharedTableRow key={s.id} className="border-t">
+                <SharedTableCell className="whitespace-nowrap px-3 py-2 font-medium">{s.templateNumber}</SharedTableCell>
+                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.partyName ?? "—"}</SharedTableCell>
+                <SharedTableCell className="whitespace-nowrap px-3 py-2">{t(`cadences.${s.cadence}`)}{s.cron ? ` (${s.cron})` : ""}</SharedTableCell>
+                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.nextRunOn}</SharedTableCell>
+                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.runCount}{s.lastError ? <span className="ml-1 text-red-600" title={s.lastError}>⚠</span> : null}</SharedTableCell>
+                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.autoPost ? t("yes") : t("no")}</SharedTableCell>
+                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.isActive ? <Badge>{t("active")}</Badge> : <Badge variant="secondary">{t("paused")}</Badge>}</SharedTableCell>
+                <SharedTableCell className="whitespace-nowrap px-3 py-2 text-right">
                   <Button size="sm" variant="ghost" onClick={() => act(s.id, "POST")}>{t("runNow")}</Button>
                   <Button size="sm" variant="ghost" onClick={() => act(s.id, "PATCH", { isActive: !s.isActive })}>
                     {s.isActive ? t("pause") : t("resume")}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => act(s.id, "DELETE")}>{t("delete")}</Button>
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             ))}
-            {loadState === "loaded" && rows.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">{t("noneYet")}</td></tr>}
-          </tbody>
-        </table>
+            {loadState === "loaded" && rows.length === 0 && <SharedTableRow><SharedTableCell colSpan={8} className="py-6 text-center text-muted-foreground">{t("noneYet")}</SharedTableCell></SharedTableRow>}
+          </SharedTableBody>
+        </SharedTable>
       </div>
     </div>
   );

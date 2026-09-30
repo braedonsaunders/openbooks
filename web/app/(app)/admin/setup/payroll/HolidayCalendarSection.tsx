@@ -1,3 +1,4 @@
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { getTranslations } from 'next-intl/server'
 import { Alert, Badge } from '@openbooks/ui'
 import {
@@ -130,27 +131,27 @@ export async function HolidayCalendarSection({
 
       {!failure && jurisdiction ? (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-              <tr>
-                <th className="px-3 py-2">{label('holidayCalendar.date', 'Observed')}</th>
-                <th className="px-3 py-2">{label('holidayCalendar.holiday', 'Holiday')}</th>
-                <th className="px-3 py-2">{label('holidayCalendar.statutoryDate', 'Falls on')}</th>
-                <th className="px-3 py-2">{label('holidayCalendar.source', 'Source')}</th>
-                <th className="px-3 py-2">{label('holidayCalendar.paid', 'Paid')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <SharedTableRow>
+                <SharedTableHead className="px-3 py-2">{label('holidayCalendar.date', 'Observed')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{label('holidayCalendar.holiday', 'Holiday')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{label('holidayCalendar.statutoryDate', 'Falls on')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{label('holidayCalendar.source', 'Source')}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{label('holidayCalendar.paid', 'Paid')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody className="divide-y divide-slate-200 dark:divide-slate-800">
               {holidays.map((holiday) => (
-                <tr key={`${holiday.key}-${holiday.date}`}>
-                  <td className="px-3 py-2 tabular-nums">{holiday.date}</td>
-                  <td className="px-3 py-2">{holiday.name}</td>
+                <SharedTableRow key={`${holiday.key}-${holiday.date}`}>
+                  <SharedTableCell className="px-3 py-2 tabular-nums">{holiday.date}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">{holiday.name}</SharedTableCell>
                   {/* Shown only when the observance rule MOVED the day — that
                       shift is the thing an operator most often disbelieves. */}
-                  <td className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-400">
+                  <SharedTableCell className="px-3 py-2 tabular-nums text-slate-500 dark:text-slate-400">
                     {holiday.statutoryDate === holiday.date ? '' : holiday.statutoryDate}
-                  </td>
-                  <td className="px-3 py-2">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     <Badge variant={holiday.source === 'pack' ? 'outline' : 'success'}>
                       {holiday.source === 'pack'
                         ? holiday.elected
@@ -158,23 +159,23 @@ export async function HolidayCalendarSection({
                           : label('holidayCalendar.statutory', 'Statutory')
                         : label('holidayCalendar.company', 'Company')}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     {holiday.paid
                       ? label('holidayCalendar.yes', 'Yes')
                       : label('holidayCalendar.unpaid', 'Unpaid closure')}
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               ))}
               {holidays.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-slate-500 dark:text-slate-400">
+                <SharedTableRow>
+                  <SharedTableCell colSpan={5} className="px-3 py-6 text-center text-slate-500 dark:text-slate-400">
                     {label('holidayCalendar.empty', 'No holidays are observed in this year.')}
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               ) : null}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       ) : null}
     </div>

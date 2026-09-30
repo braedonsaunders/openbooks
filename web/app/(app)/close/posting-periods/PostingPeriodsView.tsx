@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { PagedTable } from '../../../../components/paged-table'
 import { enumLabel } from '@/lib/enum-label'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '@/lib/api-error'
@@ -98,11 +99,11 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
       // The status is checked before the body is trusted: a non-JSON failure
       // body must surface the named refusal, never a SyntaxError from
       // response.json().
-      const payload = (await response.json().catch(() => null)) as (CommitResult & { error?: string }) | null
       if (!response.ok) {
-        toast.error(payload?.error ?? t('postingPeriods.commitFailed'))
+        toast.error(await readApiErrorMessage(response, t('postingPeriods.commitFailed')))
         return
       }
+      const payload = (await response.json().catch(() => null)) as CommitResult | null
       if (!payload) {
         toast.error(t('postingPeriods.commitFailed'))
         return
@@ -173,34 +174,21 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; r
           ) : rows.length === 0 ? (
             <p className="text-sm text-slate-500">{t('postingPeriods.empty')}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  <th className="py-1 pr-2">{t('postingPeriods.document')}</th>
-                  <th className="py-1 pr-2">{t('postingPeriods.kind')}</th>
-                  <th className="py-1 pr-2">{t('postingPeriods.effectiveDate')}</th>
-                  <th className="py-1 pr-2">{t('postingPeriods.period')}</th>
-                  <th className="py-1">{t('postingPeriods.status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.documentId} className="border-t">
-                    <td className="py-1 pr-2 font-mono">{row.documentNumber}</td>
-                    <td className="py-1 pr-2">{enumLabel(row.kind, transactionKindLabels, tc('labels.unknownValue'))}</td>
-                    <td className="py-1 pr-2">{row.effectiveDate}</td>
-                    <td className="py-1 pr-2">{row.periodName ?? '—'}</td>
-                    <td className="py-1">
-                      {row.blocked ? (
-                        <Badge variant="destructive">{row.blockReason}</Badge>
-                      ) : (
-                        <Badge variant="success">{t('postingPeriods.assignable')}</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <PagedTable
+              rows={rows}
+              rowKey={(row) => row.documentId}
+              searchable
+              empty={t('postingPeriods.empty')}
+              columns={[
+                { key: 'document', header: t('postingPeriods.document'), cell: (row) => <span className="font-mono">{row.documentNumber}</span>, search: (row) => row.documentNumber },
+                { key: 'kind', header: t('postingPeriods.kind'), cell: (row) => enumLabel(row.kind, transactionKindLabels, tc('labels.unknownValue')), search: (row) => row.kind },
+                { key: 'date', header: t('postingPeriods.effectiveDate'), cell: (row) => row.effectiveDate },
+                { key: 'period', header: t('postingPeriods.period'), cell: (row) => row.periodName ?? '—', search: (row) => row.periodName ?? '' },
+                { key: 'status', header: t('postingPeriods.status'), cell: (row) => row.blocked
+                  ? <Badge variant="destructive">{row.blockReason}</Badge>
+                  : <Badge variant="success">{t('postingPeriods.assignable')}</Badge> },
+              ]}
+            />
           )}
           {assignable.length > 0 ? (
             <div className="mt-4">

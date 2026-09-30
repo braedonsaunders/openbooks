@@ -56,8 +56,8 @@ const ENTITY_SOURCES_PATH = "web/lib/list/entity-sources.ts";
  * as sites are converted; never raise it. The stale-entry ratchet below
  * stops entries rotting; these stop the lists growing.
  */
-export const TABLE_CEILING = 67;
-export const DIALOG_WINDOW_CEILING = 12;
+export const TABLE_CEILING = 1;
+export const DIALOG_WINDOW_CEILING = 0;
 export const BESPOKE_PAGE_CEILING = 17;
 
 const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView"];

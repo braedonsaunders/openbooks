@@ -1,6 +1,7 @@
 'use client'
 
 /** Split from RunWizard.tsx; moved without behavior changes. */
+import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
 import { type StubChange, type StubRow, type AdjustmentRow, type ComponentOption, GENERIC_FACTOR_LABELS, withholding } from './run-wizard-model'
 import { HeaderFact } from './run-wizard-controls'
 import { Fragment, useState } from 'react'
@@ -157,36 +158,36 @@ export function StubDrawer({
           <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
             {t('run.stub.lines')}
           </h4>
-          <table className="w-full text-sm">
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableBody>
               {stub.lines.map((line, index) => (
-                <tr key={index} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                  <td className="py-1 pr-2 text-slate-500 dark:text-slate-400">
+                <SharedTableRow key={index} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                  <SharedTableCell className="py-1 pr-2 text-slate-500 dark:text-slate-400">
                     {t(`run.lineKind.${line.kind}`)}
-                  </td>
-                  <td className="py-1 pr-2">
+                  </SharedTableCell>
+                  <SharedTableCell className="py-1 pr-2">
                     {line.description}
                     {(line.project_name || line.department_name) && (
                       <span className="ml-1 text-xs text-slate-400">
                         {[line.project_name, line.department_name].filter(Boolean).join(' · ')}
                       </span>
                     )}
-                  </td>
-                  <td className="py-1 pr-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  </SharedTableCell>
+                  <SharedTableCell className="py-1 pr-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
                     {line.hours ? `${line.hours} × ${fmt(line.rate)}` : ''}
-                  </td>
-                  <td
+                  </SharedTableCell>
+                  <SharedTableCell
                     className={cn(
                       'py-1 text-right tabular-nums',
                       line.kind === 'deduction' && 'text-red-600 dark:text-red-400',
                     )}
                   >
                     {line.kind === 'deduction' ? `−${fmt(line.amount)}` : fmt(line.amount)}
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
 
         {change?.previousPayDate && (
@@ -197,24 +198,24 @@ export function StubDrawer({
             {change.changes.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">{t('wizard.review.noChangeDetail')}</p>
             ) : (
-              <table className="w-full text-sm">
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableBody>
                   {change.changes.map((row, index) => (
-                    <tr key={index} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                      <td className="py-1 pr-2 text-slate-500 dark:text-slate-400">
+                    <SharedTableRow key={index} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                      <SharedTableCell className="py-1 pr-2 text-slate-500 dark:text-slate-400">
                         {t(`wizard.review.changeKind.${row.kind}`)}
-                      </td>
-                      <td className="py-1 pr-2">{row.component}</td>
-                      <td className="py-1 pr-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1 pr-2">{row.component}</SharedTableCell>
+                      <SharedTableCell className="py-1 pr-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
                         {row.from === null ? '—' : fmt(row.from)}
-                      </td>
-                      <td className="py-1 text-right tabular-nums">
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1 text-right tabular-nums">
                         {row.to === null ? '—' : fmt(row.to)}
-                      </td>
-                    </tr>
+                      </SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             )}
             <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
               {t('wizard.review.changedTotals', {

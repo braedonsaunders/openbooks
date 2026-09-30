@@ -1,5 +1,6 @@
 "use client";
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, CardContent, Input, Label, Select } from "@openbooks/ui";
@@ -362,31 +363,31 @@ function SurchargeRules({
           <h2 className="font-semibold text-slate-900 dark:text-white">{t("surchargeRules")}</h2>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("surchargeHint")}</p>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-slate-500">
-              <th className="py-1">{t("ruleName")}</th>
-              <th>{t("ruleCalc")}</th>
-              <th>{t("ruleProvider")}</th>
-              <th>{t("ruleEffective")}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="text-left text-xs text-slate-500">
+              <SharedTableHead className="py-1">{t("ruleName")}</SharedTableHead>
+              <SharedTableHead>{t("ruleCalc")}</SharedTableHead>
+              <SharedTableHead>{t("ruleProvider")}</SharedTableHead>
+              <SharedTableHead>{t("ruleEffective")}</SharedTableHead>
+              <SharedTableHead />
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {rules.map((r) => (
-              <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="py-1.5">{r.name}</td>
-                <td className="tabular-nums">
+              <SharedTableRow key={r.id} className="border-t border-slate-100 dark:border-slate-800">
+                <SharedTableCell className="py-1.5">{r.name}</SharedTableCell>
+                <SharedTableCell className="tabular-nums">
                   {r.calculation === "percent"
                     ? `${r.percent}%`
                     : r.calculation === "fixed"
                       ? r.fixedAmount
                       : `${r.percent}% + ${r.fixedAmount}`}
                   {r.capAmount ? ` (≤ ${r.capAmount})` : ""}
-                </td>
-                <td>{r.provider ?? t("allProviders")}</td>
-                <td className="tabular-nums">{r.effectiveFrom}{r.effectiveTo ? ` → ${r.effectiveTo}` : ""}</td>
-                <td className="text-right">
+                </SharedTableCell>
+                <SharedTableCell>{r.provider ?? t("allProviders")}</SharedTableCell>
+                <SharedTableCell className="tabular-nums">{r.effectiveFrom}{r.effectiveTo ? ` → ${r.effectiveTo}` : ""}</SharedTableCell>
+                <SharedTableCell className="text-right">
                   {r.isActive ? (
                     <button
                       type="button"
@@ -399,11 +400,11 @@ function SurchargeRules({
                   ) : (
                     <span className="text-xs text-slate-400">{t("inactive")}</span>
                   )}
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             ))}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
         <div className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
           <div className="space-y-1.5">
             <Label>{t("ruleName")}</Label>

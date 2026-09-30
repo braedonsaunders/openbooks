@@ -6,23 +6,12 @@ import { useTranslations } from 'next-intl'
 import {
   Button,
   Input,
-  Table,
-  TableBody,
   TableCell,
   TableHead,
-  TableHeader,
-  TableRow,
 } from '@openbooks/ui'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { ListTable, type ListTableColumn } from './list-table'
 
-export interface PagedColumn<T> {
-  key: string
-  header: ReactNode
-  align?: 'left' | 'right'
-  cell: (row: T) => ReactNode
-  /** Text used for client-side search matching (optional). */
-  search?: (row: T) => string
-}
+export type PagedColumn<T> = ListTableColumn<T>
 
 export interface PagedSelection<T> {
   getId: (row: T) => string
@@ -154,24 +143,7 @@ export function PagedTable<T>({
     return (
       <div className="space-y-3">
         {toolbar}
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {columns.map((c) => (
-                <TableHead key={c.key} align={c.align === 'right' ? 'right' : undefined} className={c.align === 'right' ? 'text-right' : undefined}>
-                  {c.header}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow>
-              <TableCell colSpan={selection ? columns.length + 1 : columns.length} className="text-slate-500 dark:text-slate-400">
-                {empty}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <ListTable rows={[]} columns={columns} rowKey={rowKey} empty={empty} />
       </div>
     )
   }
@@ -179,78 +151,32 @@ export function PagedTable<T>({
   return (
     <div className="space-y-3">
       {toolbar}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {selection ? (
-              <TableHead className="w-10">
-                <span className="sr-only">{tp('selectAllMatching')}</span>
-                <input
-                  ref={selectAllRef}
-                  type="checkbox"
-                  className={checkboxClass}
-                  checked={allFilteredSelected}
-                  disabled={selection.disabled || filteredIds.length === 0}
-                  onChange={() => selection.onToggleAll(filteredIds)}
-                />
-              </TableHead>
-            ) : null}
-            {columns.map((c) => (
-              <TableHead key={c.key} align={c.align === 'right' ? 'right' : undefined} className={c.align === 'right' ? 'text-right' : undefined}>
-                {c.header}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {view.map((row, i) => (
-            <InteractiveTableRow
-              key={rowKey(row, start + i)}
-              className={onRowClick ? `cursor-pointer ${rowClassName?.(row) ?? ''}` : rowClassName?.(row)}
-              onClick={
-                onRowClick
-                  ? (event) => {
-                      // Row actions live INSIDE the row: a click starting in
-                      // an interactive descendant runs only that control,
-                      // never the row-open — otherwise the opened drawer
-                      // covers the action and its refusal. Keyboard
-                      // Enter/Space on a focused control targets the control
-                      // too, so it stays single-action; plain-cell clicks
-                      // still open the row.
-                      const target = event.target as Element | null
-                      if (
-                        target?.closest?.(
-                          'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [data-row-action]',
-                        )
-                      )
-                        return
-                      onRowClick(row)
-                    }
-                  : undefined
-              }
-            >
-              {selection ? (
-                <TableCell>
-                  <input
-                    type="checkbox"
-                    className={checkboxClass}
-                    checked={selected?.has(selection.getId(row)) ?? false}
-                    disabled={selection.disabled}
-                    onChange={() => selection.onToggle(selection.getId(row))}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </TableCell>
-              ) : null}
-              {columns.map((c) => (
-                <TableCell key={c.key} className={c.align === 'right' ? 'text-right tabular-nums' : undefined}>
-                  {c.cell(row)}
-                </TableCell>
-              ))}
-            </InteractiveTableRow>
-          ))}
-          {footer}
-        </TableBody>
-      </Table>
+      <ListTable
+        rows={view}
+        columns={columns}
+        rowKey={(row, index) => rowKey(row, start + index)}
+        empty={empty}
+        rowClassName={rowClassName}
+        onRowClick={onRowClick}
+        footer={footer}
+        selectionHeader={selection ? (
+          <TableHead className="w-10">
+            <span className="sr-only">{tp('selectAllMatching')}</span>
+            <input ref={selectAllRef} type="checkbox" className={checkboxClass}
+              checked={allFilteredSelected} disabled={selection.disabled || filteredIds.length === 0}
+              onChange={() => selection.onToggleAll(filteredIds)} />
+          </TableHead>
+        ) : undefined}
+        selectionCell={selection ? (row) => (
+          <TableCell>
+            <input type="checkbox" className={checkboxClass}
+              checked={selected?.has(selection.getId(row)) ?? false}
+              disabled={selection.disabled}
+              onChange={() => selection.onToggle(selection.getId(row))}
+              onClick={(event) => event.stopPropagation()} />
+          </TableCell>
+        ) : undefined}
+      />
       {filtered.length > pageSize ? (
         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>

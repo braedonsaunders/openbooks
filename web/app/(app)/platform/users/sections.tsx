@@ -1,12 +1,10 @@
+import { ServerPagedTable } from '../../../../components/server-paged-table'
 import Link from 'next/link'
 import { ShieldAlert } from 'lucide-react'
-import { Badge, Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { Pagination } from '../../../../components/pagination'
-import { PerPageSelect } from '../../../../components/per-page-select'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
-import { SortTh } from '../../../../components/sortable-th'
 import { asDate } from '../../../../lib/platform-console'
 import { ViewerDateTime } from '../../../../components/viewer-format'
 import type { PlatformUser } from '../../../../lib/platform-admin'
@@ -115,99 +113,28 @@ export function UsersList({
 }) {
   const filtered = currentParams.q !== undefined || status !== undefined
   return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            title="Users"
-            description="Production login identities, organization roles, and platform privileges."
-            back={{ href: '/platform', label: 'Back to platform' }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search name, email, or organization…" />
-            <FilterChips
-              basePath={basePath}
-              currentParams={currentParams}
-              paramKey="status"
-              label="Status"
-              options={[
-                { value: 'active', label: 'Active', count: Number(statusCounts.active ?? 0) },
-                { value: 'inactive', label: 'Inactive', count: Number(statusCounts.inactive ?? 0) },
-                { value: 'super', label: 'Super admin', count: Number(statusCounts.super ?? 0) },
-              ]}
-            />
-            <PerPageSelect basePath={basePath} currentParams={currentParams} perPage={perPage} />
-          </div>
-        </>
-      }
-    >
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortTh basePath={basePath} currentParams={currentParams} column="name" sort={sort} dir={dir}>
-                  User
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="organization" sort={sort} dir={dir}>
-                  Home organization
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="role" sort={sort} dir={dir}>
-                  Roles
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="grants" sort={sort} dir={dir}>
-                  Grants
-                </SortTh>
-                <SortTh basePath={basePath} currentParams={currentParams} column="lastLogin" sort={sort} dir={dir}>
-                  Last login
-                </SortTh>
-                <TableHead className="w-px whitespace-nowrap px-2 text-center" style={{ width: 64 }}>
-                  <span className="sr-only">Manage</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">
-                    {filtered ? 'No users match these filters.' : 'No users yet.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <UserIdentityCell
-                        name={user.name}
-                        href={`/platform/users/${user.id}`}
-                        email={user.email}
-                        isSuperAdmin={user.isSuperAdmin}
-                        isActive={user.isActive}
-                      />
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">{user.orgName}</TableCell>
-                    <TableCell>
-                      <UserRolesCell roles={user.roles} />
-                    </TableCell>
-                    <TableCell>
-                      <UserGrantsCell
-                        label={user.grantCount ? `${user.grantCount} explicit` : 'Home only'}
-                        emphasised={user.grantCount > 0}
-                      />
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                      {asDate(user.lastLoginAt) ? <ViewerDateTime value={asDate(user.lastLoginAt)!} /> : 'Never'}
-                    </TableCell>
-                    <TableCell className="w-px whitespace-nowrap px-2 text-center" style={{ width: 64 }}>
-                      <UserManageCell href={`/platform/users/${user.id}`} />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
+    <ListPageLayout header={<PageHeader title="Users" description="Production login identities, organization roles, and platform privileges." back={{ href: '/platform', label: 'Back to platform' }} />}>
+      <div className="space-y-5">
+
+        <ServerPagedTable
+          rows={rows} rowKey={(row) => row.id}
+          total={total} page={page} perPage={perPage}
+          basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
+          empty={filtered ? 'No users match these filters.' : 'No users yet.'}
+          toolbar={<><SearchInput placeholder="Search name, email, or organization…" /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label="Status" options={[
+            { value: 'active', label: 'Active', count: Number(statusCounts.active ?? 0) },
+            { value: 'inactive', label: 'Inactive', count: Number(statusCounts.inactive ?? 0) },
+            { value: 'super', label: 'Super admin', count: Number(statusCounts.super ?? 0) },
+          ]} /></>}
+          columns={[
+          { key: 'user', header: 'User', sortKey: 'name', cell: (user) => <UserIdentityCell name={user.name} href={`/platform/users/${user.id}`} email={user.email} isSuperAdmin={user.isSuperAdmin} isActive={user.isActive} /> },
+          { key: 'organization', header: 'Home organization', sortKey: 'organization', cell: (user) => user.orgName },
+          { key: 'roles', header: 'Roles', sortKey: 'role', cell: (user) => <UserRolesCell roles={user.roles} /> },
+          { key: 'grants', header: 'Grants', sortKey: 'grants', cell: (user) => <UserGrantsCell label={user.grantCount ? `${user.grantCount} explicit` : 'Home only'} emphasised={user.grantCount > 0} /> },
+          { key: 'lastLogin', header: 'Last login', sortKey: 'lastLogin', cell: (user) => asDate(user.lastLoginAt) ? <ViewerDateTime value={asDate(user.lastLoginAt)!} /> : 'Never' },
+          { key: 'manage', header: <span className="sr-only">Manage</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (user) => <UserManageCell href={`/platform/users/${user.id}`} /> },
+        ]}
+        />
       </div>
     </ListPageLayout>
   )

@@ -1,10 +1,8 @@
-import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { ServerPagedTable } from '../../../../components/server-paged-table'
+import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { Pagination } from '../../../../components/pagination'
-import { PerPageSelect } from '../../../../components/per-page-select'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
-import { SortTh } from '../../../../components/sortable-th'
 import { asDate } from '../../../../lib/platform-console'
 import type { PlatformGrant, PlatformOrganization, PlatformUser } from '../../../../lib/platform-admin'
 import { revokeAccessAction } from '../actions'
@@ -98,97 +96,27 @@ export function AccessList({
 }) {
   const filtered = currentParams.q !== undefined || status !== undefined
   return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            title="Cross-org access"
-            description="Controlled mappings between login identities and organizations. Super admins do not require grants."
-            back={{ href: '/platform', label: 'Back to platform' }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder="Search member, organization, or acting user…" />
-            <FilterChips
-              basePath={basePath}
-              currentParams={currentParams}
-              paramKey="status"
-              label="Status"
-              options={[
-                { value: 'active', label: 'Active', count: Number(statusCounts.active ?? 0) },
-                { value: 'inactive', label: 'Revoked', count: Number(statusCounts.inactive ?? 0) },
-              ]}
-            />
-            <PerPageSelect basePath={basePath} currentParams={currentParams} perPage={perPage} />
-          </div>
-        </>
-      }
-    >
+    <ListPageLayout header={<PageHeader title="Cross-org access" description="Controlled mappings between login identities and organizations. Super admins do not require grants." back={{ href: '/platform', label: 'Back to platform' }} />}>
       <div className="space-y-5">
         <GrantAccessForm members={members} organizations={organizations} actingUsers={actingUsers} />
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="member" sort={sort} dir={dir}>
-                    Member
-                  </SortTh>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="organization" sort={sort} dir={dir}>
-                    Organization
-                  </SortTh>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="actingUser" sort={sort} dir={dir}>
-                    Acts as
-                  </SortTh>
-                  <TableHead>Status</TableHead>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="updated" sort={sort} dir={dir}>
-                    Last changed
-                  </SortTh>
-                  <TableHead className="w-px whitespace-nowrap px-2 text-center" style={{ width: 64 }}>
-                    <span className="sr-only">Revoke</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {grants.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">
-                      {filtered
-                        ? 'No grants match these filters.'
-                        : 'No grants. Grant access above to map a login into another organization.'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  grants.map((grant) => (
-                    <TableRow key={grant.id}>
-                      <TableCell>
-                        <IdentityCell
-                          name={grant.memberName}
-                          detail={`${grant.memberEmail} · ${grant.memberOrgName}`}
-                        />
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">{grant.orgName}</TableCell>
-                      <TableCell>
-                        <ActingCell name={grant.actingName} email={grant.actingEmail} />
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={grant.isActive ? 'success' : 'secondary'}>
-                          {grant.isActive ? 'Active' : 'Revoked'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                        <ViewerDateTime value={asDate(grant.updatedAt) ?? new Date()} />
-                      </TableCell>
-                      <TableCell className="w-px whitespace-nowrap px-2 text-center" style={{ width: 64 }}>
-                        <AccessControlCell grantId={grant.id} isActive={grant.isActive} />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
-        </div>
+        <ServerPagedTable
+          rows={grants} rowKey={(row) => row.id}
+          total={total} page={page} perPage={perPage}
+          basePath={basePath} currentParams={currentParams} sort={sort} dir={dir}
+          empty={filtered ? 'No grants match these filters.' : 'No grants. Grant access above to map a login into another organization.'}
+          toolbar={<><SearchInput placeholder="Search member, organization, or acting user…" /><FilterChips basePath={basePath} currentParams={currentParams} paramKey="status" label="Status" options={[
+            { value: 'active', label: 'Active', count: Number(statusCounts.active ?? 0) },
+            { value: 'inactive', label: 'Revoked', count: Number(statusCounts.inactive ?? 0) },
+          ]} /></>}
+          columns={[
+          { key: 'member', header: 'Member', sortKey: 'member', cell: (grant) => <IdentityCell name={grant.memberName} detail={`${grant.memberEmail} · ${grant.memberOrgName}`} /> },
+          { key: 'organization', header: 'Organization', sortKey: 'organization', cell: (grant) => grant.orgName },
+          { key: 'actingUser', header: 'Acts as', sortKey: 'actingUser', cell: (grant) => <ActingCell name={grant.actingName} email={grant.actingEmail} /> },
+          { key: 'status', header: 'Status', cell: (grant) => <Badge variant={grant.isActive ? 'success' : 'secondary'}>{grant.isActive ? 'Active' : 'Revoked'}</Badge> },
+          { key: 'updated', header: 'Last changed', sortKey: 'updated', cell: (grant) => asDate(grant.updatedAt) ? <ViewerDateTime value={asDate(grant.updatedAt)!} /> : '—' },
+          { key: 'revoke', header: <span className="sr-only">Revoke</span>, className: 'w-px whitespace-nowrap px-2 text-center', style: { width: 64 }, cell: (grant) => <AccessControlCell grantId={grant.id} isActive={grant.isActive} /> },
+        ]}
+        />
       </div>
     </ListPageLayout>
   )

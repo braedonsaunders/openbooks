@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -357,20 +358,20 @@ export function TaxFilingsView({
                 {result.watermark ? (
                   <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{result.watermark}</p>
                 ) : null}
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500 dark:border-slate-800">
-                      <th className="py-2 pr-4 font-medium">{t('columns.line')}</th>
-                      <th className="py-2 pr-4 font-medium">{t('columns.description')}</th>
-                      <th className="py-2 text-right font-medium">{t('columns.amount')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <SharedTable className="w-full text-sm">
+                  <SharedTableHeader>
+                    <SharedTableRow className="border-b border-slate-200 text-left text-xs uppercase text-slate-500 dark:border-slate-800">
+                      <SharedTableHead className="py-2 pr-4 font-medium">{t('columns.line')}</SharedTableHead>
+                      <SharedTableHead className="py-2 pr-4 font-medium">{t('columns.description')}</SharedTableHead>
+                      <SharedTableHead className="py-2 text-right font-medium">{t('columns.amount')}</SharedTableHead>
+                    </SharedTableRow>
+                  </SharedTableHeader>
+                  <SharedTableBody>
                     {result.boxes.map((box) => (
-                      <tr key={box.lineCode} className={`border-b border-slate-100 dark:border-slate-900 ${box.computed ? 'font-semibold text-slate-900 dark:text-slate-100' : ''}`}>
-                        <td className="py-2 pr-4 tabular-nums text-slate-500">{box.lineCode}</td>
-                        <td className="py-2 pr-4">{box.label}</td>
-                        <td className="py-1.5 text-right tabular-nums">
+                      <SharedTableRow key={box.lineCode} className={`border-b border-slate-100 dark:border-slate-900 ${box.computed ? 'font-semibold text-slate-900 dark:text-slate-100' : ''}`}>
+                        <SharedTableCell className="py-2 pr-4 tabular-nums text-slate-500">{box.lineCode}</SharedTableCell>
+                        <SharedTableCell className="py-2 pr-4">{box.label}</SharedTableCell>
+                        <SharedTableCell className="py-1.5 text-right tabular-nums">
                           {box.editable ? (
                             <input
                               type="number"
@@ -384,11 +385,11 @@ export function TaxFilingsView({
                               onBlur={() => compute()}
                             />
                           ) : fmt(box.value)}
-                        </td>
-                      </tr>
+                        </SharedTableCell>
+                      </SharedTableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </SharedTableBody>
+                </SharedTable>
               </CardContent>
             </Card>
           ) : (

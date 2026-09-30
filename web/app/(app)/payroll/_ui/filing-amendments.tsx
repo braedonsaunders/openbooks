@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '../../../../lib/viewer-format'
@@ -770,41 +771,41 @@ function FilingCorrectionSectionBody({
 
           {review.changes.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                    <th className="py-1 pr-3 font-medium">{text('lifecycle.box', 'Box')}</th>
-                    <th className="py-1 pr-3 font-medium">{text('lifecycle.field', 'Field')}</th>
-                    <th className="py-1 pr-3 text-right font-medium">{text('lifecycle.asFiled', 'As filed')}</th>
-                    <th className="py-1 text-right font-medium">{text('lifecycle.now', 'Now')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="text-left text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                    <SharedTableHead className="py-1 pr-3 font-medium">{text('lifecycle.box', 'Box')}</SharedTableHead>
+                    <SharedTableHead className="py-1 pr-3 font-medium">{text('lifecycle.field', 'Field')}</SharedTableHead>
+                    <SharedTableHead className="py-1 pr-3 text-right font-medium">{text('lifecycle.asFiled', 'As filed')}</SharedTableHead>
+                    <SharedTableHead className="py-1 text-right font-medium">{text('lifecycle.now', 'Now')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {review.changes.map((change) => (
-                    <tr
+                    <SharedTableRow
                       key={`${change.code ?? ''}:${change.label}`}
                       className="border-t border-slate-100 dark:border-slate-800"
                     >
-                      <td className="py-1 pr-3 font-medium tabular-nums">{change.code ?? '—'}</td>
-                      <td className="py-1 pr-3">{change.label}</td>
+                      <SharedTableCell className="py-1 pr-3 font-medium tabular-nums">{change.code ?? '—'}</SharedTableCell>
+                      <SharedTableCell className="py-1 pr-3">{change.label}</SharedTableCell>
                       {change.redacted ? (
-                        <td className="py-1 text-right text-amber-700 dark:text-amber-400" colSpan={2}>
+                        <SharedTableCell className="py-1 text-right text-amber-700 dark:text-amber-400" colSpan={2}>
                           {text('lifecycle.redacted', 'Changed — value not displayed')}
-                        </td>
+                        </SharedTableCell>
                       ) : (
                         <>
-                          <td className="py-1 pr-3 text-right tabular-nums text-slate-500 line-through dark:text-slate-400">
+                          <SharedTableCell className="py-1 pr-3 text-right tabular-nums text-slate-500 line-through dark:text-slate-400">
                             {show(change.previous, change.money === true)}
-                          </td>
-                          <td className="py-1 text-right font-semibold tabular-nums">
+                          </SharedTableCell>
+                          <SharedTableCell className="py-1 text-right font-semibold tabular-nums">
                             {show(change.current, change.money === true)}
-                          </td>
+                          </SharedTableCell>
                         </>
                       )}
-                    </tr>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
           )}
 

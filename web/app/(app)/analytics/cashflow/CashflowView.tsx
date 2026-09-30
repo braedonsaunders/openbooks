@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { useCallback, useMemo, useState } from 'react'
@@ -172,31 +173,31 @@ function CategoryTab({ data }: { data: CashflowData }) {
     <div className="space-y-4">
       {data.categories.length ? (
         <Panel title={t('panels.forecastCategories')} icon={SlidersHorizontal} hint={t('panels.forecastCatHint')} bodyClassName="p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('catTable.category')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('catTable.method')}</th>
-                <th className="px-4 py-2 text-left font-medium">{t('catTable.logic')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('catTable.perWeek')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('catTable.horizonTotal')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('catTable.category')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('catTable.method')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('catTable.logic')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('catTable.perWeek')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('catTable.horizonTotal')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {data.categories.map((c) => (
-                <tr key={c.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-4 py-2.5">
+                <SharedTableRow key={c.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-4 py-2.5">
                     <span className={cn('mr-2 inline-block h-2 w-2 rounded-full', c.direction === 'inflow' ? 'bg-emerald-500' : 'bg-red-500')} />
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
-                  </td>
-                  <td className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{c.method.replace(/_/g, ' ')}</span></td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{c.logic || '—'}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(divideMoney(c.total, String(Math.max(1, c.weekly.length))))}</td>
-                  <td className={cn('px-4 py-2.5 text-right font-medium tabular-nums', c.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(c.total)}</td>
-                </tr>
+                  </SharedTableCell>
+                  <SharedTableCell className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{c.method.replace(/_/g, ' ')}</span></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{c.logic || '—'}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(divideMoney(c.total, String(Math.max(1, c.weekly.length))))}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2.5 text-right font-medium tabular-nums', c.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(c.total)}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </Panel>
       ) : null}
       <div className="flex items-center justify-between">
@@ -214,26 +215,26 @@ function CategoryTab({ data }: { data: CashflowData }) {
       </p>
       <Panel title={t('partyPanel.byParty', { side: side === 'ap' ? t('partyPanel.payables') : t('partyPanel.receivables') })} icon={ListOrdered} bodyClassName="p-0">
         <div className="max-h-[30rem] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('partyTable.party')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('partyTable.items')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('partyTable.amount')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('partyTable.share')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('partyTable.party')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('partyTable.items')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('partyTable.amount')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('partyTable.share')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {entries.map((e) => (
-                <tr key={e.name} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{e.name}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{e.count}</td>
-                  <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(e.amount)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{compareMoney(total, '0.0000') > 0 ? formatExactPercent(divideMoney(e.amount, total), 1) : '—'}</td>
-                </tr>
+                <SharedTableRow key={e.name} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{e.name}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{e.count}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(e.amount)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{compareMoney(total, '0.0000') > 0 ? formatExactPercent(divideMoney(e.amount, total), 1) : '—'}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       </Panel>
     </div>

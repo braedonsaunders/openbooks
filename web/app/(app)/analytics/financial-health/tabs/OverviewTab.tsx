@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useState } from 'react'
 import { AlertTriangle, Lightbulb, Zap, Table2, ChartArea } from 'lucide-react'
 import { Sparkline, cn } from '@openbooks/ui'
@@ -67,36 +68,36 @@ export function OverviewTab({ data }: { data: HealthData }) {
           </Panel>
 
           <Panel title="P&L Summary" icon={Table2} bodyClassName="p-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Line Item</th>
-                  <th className="px-4 py-2 text-right font-medium">Current</th>
-                  <th className="px-4 py-2 text-right font-medium">Prior Year</th>
-                  <th className="px-4 py-2 text-right font-medium">Change</th>
-                  <th className="px-4 py-2 text-right font-medium">Change %</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">Line Item</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">Current</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">Prior Year</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">Change</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">Change %</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {data.pnlSummary.map((l) => {
                   // Favorability, not sign: a COGS/OpEx/Other-Expense increase is bad.
                   const isCost = l.key === 'cogs' || l.key === 'opex' || l.key === 'otherExpense'
                   const good = isCost ? l.change <= 0 : l.change >= 0
                   const changeCls = good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                   return (
-                  <tr key={l.key} className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', l.strong && 'bg-slate-50/50 dark:bg-slate-800/20')}>
-                    <td className={cn('px-4 py-2', l.strong ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400')}>{l.label}</td>
-                    <td className={cn('px-4 py-2 text-right tabular-nums', l.strong ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300')}>{fmtMoney(l.current)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(l.prior)}</td>
-                    <td className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>{fmtMoney(l.change)}</td>
-                    <td className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>
+                  <SharedTableRow key={l.key} className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', l.strong && 'bg-slate-50/50 dark:bg-slate-800/20')}>
+                    <SharedTableCell className={cn('px-4 py-2', l.strong ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400')}>{l.label}</SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', l.strong ? 'font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300')}>{fmtMoney(l.current)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(l.prior)}</SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>{fmtMoney(l.change)}</SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>
                       {l.changePct === null ? '—' : fmtPct(l.changePct)}
-                    </td>
-                  </tr>
+                    </SharedTableCell>
+                  </SharedTableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </Panel>
         </div>
 

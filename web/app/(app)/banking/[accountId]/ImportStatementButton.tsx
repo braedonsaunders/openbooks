@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -567,31 +568,31 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 </p>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-                      <tr>
-                        <th className="px-3 py-2">{tCommon('labels.date')}</th>
-                        <th className="px-3 py-2">{tCommon('labels.description')}</th>
-                        <th className="px-3 py-2">{tBanking('labels.ref')}</th>
-                        <th className="px-3 py-2 text-right">{tCommon('labels.amount')}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <SharedTable className="w-full text-sm">
+                    <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                      <SharedTableRow>
+                        <SharedTableHead className="px-3 py-2">{tCommon('labels.date')}</SharedTableHead>
+                        <SharedTableHead className="px-3 py-2">{tCommon('labels.description')}</SharedTableHead>
+                        <SharedTableHead className="px-3 py-2">{tBanking('labels.ref')}</SharedTableHead>
+                        <SharedTableHead className="px-3 py-2 text-right">{tCommon('labels.amount')}</SharedTableHead>
+                      </SharedTableRow>
+                    </SharedTableHeader>
+                    <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {visiblePreview.lines.slice(0, PREVIEW_CAP).map((l, i) => (
-                        <tr key={i}>
-                          <td className="px-3 py-1.5 whitespace-nowrap">{l.postedOn}</td>
-                          <td className="max-w-[18rem] truncate px-3 py-1.5">
+                        <SharedTableRow key={i}>
+                          <SharedTableCell className="px-3 py-1.5 whitespace-nowrap">{l.postedOn}</SharedTableCell>
+                          <SharedTableCell className="max-w-[18rem] truncate px-3 py-1.5">
                             {l.description ?? '—'}
                             {l.possibleDuplicateOf ? (
                               <Badge variant="warning" className="ml-2">{t('possibleDuplicateBadge')}</Badge>
                             ) : null}
-                          </td>
-                          <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{l.counterpartyRef ?? ''}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">{money(l.amount)}</td>
-                        </tr>
+                          </SharedTableCell>
+                          <SharedTableCell className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{l.counterpartyRef ?? ''}</SharedTableCell>
+                          <SharedTableCell className="px-3 py-1.5 text-right tabular-nums">{money(l.amount)}</SharedTableCell>
+                        </SharedTableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </SharedTableBody>
+                  </SharedTable>
                   {visiblePreview.lines.length > PREVIEW_CAP ? (
                     <div className="border-t border-slate-200 px-3 py-1.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
                       {t('moreLines', { count: visiblePreview.lines.length - PREVIEW_CAP })}

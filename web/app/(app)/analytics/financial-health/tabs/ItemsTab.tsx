@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useState } from 'react'
 import { Boxes, ArrowUp, ArrowDown, Table2, BarChart3 } from 'lucide-react'
 import { cn, EmptyState } from '@openbooks/ui'
@@ -51,30 +52,30 @@ export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: st
           </Panel>
           <Panel title="Line-Item Analysis" icon={Table2} bodyClassName="p-0">
             <div className="max-h-80 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Item</th>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">Item</SharedTableHead>
                     <Th label="Prior" onClick={() => setSort('prior')} active={sort === 'prior'} />
                     <Th label="Current" onClick={() => setSort('current')} active={sort === 'current'} />
                     <Th label="Δ" onClick={() => setSort('change')} active={sort === 'change'} />
                     <Th label="Δ %" onClick={() => setSort('changePct')} active={sort === 'changePct'} />
                     <Th label="Contribution" onClick={() => setSort('contribution')} active={sort === 'contribution'} />
-                  </tr>
-                </thead>
-                <tbody>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {sorted.map((it) => (
                     <InteractiveTableRow key={it.id} onClick={() => onDrill(it.id, it.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-                      <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{it.name}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(it.prior)}</td>
-                      <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(it.current)}</td>
-                      <td className={cn('px-4 py-2 text-right tabular-nums', cmp(it.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(it.change)}</td>
-                      <td className={cn('px-4 py-2 text-right tabular-nums', (it.changePct ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{it.changePct === null ? '—' : fmtPct(it.changePct)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(it.contribution)}</td>
+                      <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{it.name}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(it.prior)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(it.current)}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', cmp(it.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(it.change)}</SharedTableCell>
+                      <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', (it.changePct ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{it.changePct === null ? '—' : fmtPct(it.changePct)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(it.contribution)}</SharedTableCell>
                     </InteractiveTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
           </Panel>
         </div>
@@ -89,11 +90,11 @@ export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: st
 
 function Th({ label, onClick, active }: { label: string; onClick: () => void; active: boolean }) {
   return (
-    <th className="px-4 py-2 text-right font-medium">
+    <SharedTableHead className="px-4 py-2 text-right font-medium">
       <button type="button" onClick={onClick} className={cn('hover:text-slate-700 dark:hover:text-slate-300', active && 'text-teal-600 dark:text-teal-400')}>
         {label}
       </button>
-    </th>
+    </SharedTableHead>
   )
 }
 

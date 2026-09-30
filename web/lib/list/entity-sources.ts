@@ -345,6 +345,43 @@ export interface EntityQuickFilter {
 }
 
 const SOURCES: Record<string, EntityListSource> = {
+  hrm_process_template: {
+    recordType: 'hrm_process_template', table: 'hrm_process_templates', alias: 't',
+    readPermission: 'hrm.process.manage',
+    baseJoins: sql`left join lateral (
+      select count(*)::int as step_count from hrm_process_template_steps step
+       where step.org_id=t.org_id and step.template_id=t.id
+    ) steps on true`,
+    countJoins: sql``,
+    builtInExpr: {
+      name: sql`t.name`, kind: sql`t.kind`,
+      scope: sql`case when t.applies_to->>'employer_subsidiary_id' is not null or t.applies_to->>'department_id' is not null then 'limited' else 'all' end`,
+      step_count: sql`steps.step_count`,
+      status: sql`case when t.is_active then 'active' else 'retired' end`,
+    },
+    sorts: { name: sql`t.name`, kind: sql`t.kind`, steps: sql`steps.step_count`, status: sql`t.is_active` },
+    defaultSort: sql`t.name`,
+    statusExpr: sql`case when t.is_active then 'active' else 'retired' end`,
+    quickFilters: [{ paramKey: 'kind', filterKey: 'kind' }, { paramKey: 'status', filterKey: 'status' }],
+    // Templates are organization configuration, matching the native template
+    // reader's process-management grant; employee execution is scoped separately.
+    where: (view, adhoc, orgId) => {
+      const parts: SQL[] = [sql`t.org_id=${orgId}`]
+      const status = sql`case when t.is_active then 'active' else 'retired' end`
+      for (const filter of view.filters) {
+        if (filter.key === 'status') pushNonprofitStatusFilter(parts, filter, status, ['active', 'retired'])
+        else if (filter.key === 'kind') pushNonprofitStatusFilter(parts, { ...filter, key: 'status' }, sql`t.kind`, ['onboarding', 'offboarding', 'transfer'])
+        else parts.push(sql`and false`)
+      }
+      if (adhoc.q) parts.push(sql`and (t.name ilike ${`%${adhoc.q}%`} or t.kind ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.filters?.status) parts.push(sql`and ${status}=${adhoc.filters.status}`)
+      if (adhoc.filters?.kind) parts.push(sql`and t.kind=${adhoc.filters.kind}`)
+      return sql.join(parts, sql` `)
+    },
+    drawerParam: 'template', basePath: '/hrm/processes/templates',
+    statusVariant: (_row, value) => value === 'active' ? 'success' : 'outline',
+  },
+
   change_set: {
     recordType: 'change_set', table: 'change_sets', alias: 'cs', baseJoins: sql``,
     builtInExpr: { name: sql`cs.name`, status: sql`cs.status`, created: sql`to_char(cs.created_at, 'YYYY-MM-DD HH24:MI')` },

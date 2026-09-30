@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -233,24 +234,24 @@ function RemittanceGroupCard({
           )}
         </div>
       </div>
-      <table className="w-full text-sm">
-        <tbody>
+      <SharedTable className="w-full text-sm">
+        <SharedTableBody>
           {group.components.map((component) => (
-            <tr key={component.componentId} className="border-t border-slate-100 dark:border-slate-800">
-              <td className="py-1.5">{component.name}</td>
-              <td className="py-1.5 text-xs text-slate-400">
+            <SharedTableRow key={component.componentId} className="border-t border-slate-100 dark:border-slate-800">
+              <SharedTableCell className="py-1.5">{component.name}</SharedTableCell>
+              <SharedTableCell className="py-1.5 text-xs text-slate-400">
                 {component.kind === 'deduction' ? t('withheld') : t('employer')}
-              </td>
-              <td className="py-1.5 text-xs text-slate-400">{component.accountLabel ?? t('noAccount')}</td>
-              <td className="py-1.5 text-right tabular-nums">{money(component.amount)}</td>
-            </tr>
+              </SharedTableCell>
+              <SharedTableCell className="py-1.5 text-xs text-slate-400">{component.accountLabel ?? t('noAccount')}</SharedTableCell>
+              <SharedTableCell className="py-1.5 text-right tabular-nums">{money(component.amount)}</SharedTableCell>
+            </SharedTableRow>
           ))}
-          <tr className="border-t border-slate-200 font-semibold dark:border-slate-700">
-            <td className="py-1.5" colSpan={3}>{t('total')}</td>
-            <td className="py-1.5 text-right tabular-nums">{money(group.total)}</td>
-          </tr>
-        </tbody>
-      </table>
+          <SharedTableRow className="border-t border-slate-200 font-semibold dark:border-slate-700">
+            <SharedTableCell className="py-1.5" colSpan={3}>{t('total')}</SharedTableCell>
+            <SharedTableCell className="py-1.5 text-right tabular-nums">{money(group.total)}</SharedTableCell>
+          </SharedTableRow>
+        </SharedTableBody>
+      </SharedTable>
     </section>
   )
 }

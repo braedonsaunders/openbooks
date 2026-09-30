@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "./ReportTable"
 import { useEffect, useMemo, useState } from 'react'
 import { useFormatter } from 'next-intl'
 import { useMoney } from '@/components/money-provider'
@@ -138,26 +139,26 @@ export function StatementMatrixTable({
 
   return (
     <div className="min-w-0 max-w-full overflow-x-auto">
-      <table className="w-full text-sm tabular-nums">
-        <thead>
+      <SharedTable className="w-full text-sm tabular-nums">
+        <SharedTableHeader>
           {hasGroups && (
-            <tr>
-              <th className="min-w-[10rem] sm:min-w-[16rem]" />
+            <SharedTableRow>
+              <SharedTableHead className="min-w-[10rem] sm:min-w-[16rem]" />
               {spans.map((s, i) => (
-                <th
+                <SharedTableHead
                   key={i}
                   colSpan={s.span}
                   className="border-b border-slate-200 px-4 pt-1 pb-1 text-center text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-700 dark:text-slate-400"
                 >
                   {s.group}
-                </th>
+                </SharedTableHead>
               ))}
-            </tr>
+            </SharedTableRow>
           )}
-          <tr className="border-b border-slate-300 dark:border-slate-600">
-            <th className="min-w-[10rem] py-2 pr-4 text-left font-semibold text-slate-500 dark:text-slate-400 sm:min-w-[16rem]" />
+          <SharedTableRow className="border-b border-slate-300 dark:border-slate-600">
+            <SharedTableHead className="min-w-[10rem] py-2 pr-4 text-left font-semibold text-slate-500 dark:text-slate-400 sm:min-w-[16rem]" />
             {cols.map((c, ci) => (
-              <th
+              <SharedTableHead
                 key={c.key}
                 className={cn(
                   'py-2 pl-4 text-right font-semibold whitespace-nowrap',
@@ -166,11 +167,11 @@ export function StatementMatrixTable({
                 )}
               >
                 {c.label}
-              </th>
+              </SharedTableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </SharedTableRow>
+        </SharedTableHeader>
+        <SharedTableBody>
           {lines.map((l, i) => {
             if (hidden.has(i)) return null
             const canToggle = ranges.has(i)
@@ -190,8 +191,8 @@ export function StatementMatrixTable({
 
             if (l.kind === 'section') {
               return (
-                <tr key={i}>
-                  <td
+                <SharedTableRow key={i}>
+                  <SharedTableCell
                     colSpan={cols.length + 1}
                     className="pt-4 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"
                   >
@@ -199,8 +200,8 @@ export function StatementMatrixTable({
                       {chevron}
                       {l.label}
                     </span>
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               )
             }
             const isSub = l.kind === 'subtotal'
@@ -209,14 +210,14 @@ export function StatementMatrixTable({
             const weight = isTotal || l.emphasis ? 'font-semibold text-slate-900 dark:text-slate-100' : isSub ? 'font-medium' : ''
 
             return (
-              <tr
+              <SharedTableRow
                 key={i}
                 className={cn(
                   isTotalish && '[&>td]:border-t [&>td]:border-slate-300 dark:[&>td]:border-slate-600',
                   isTotal && '[&>td]:border-b-[3px] [&>td]:border-double [&>td]:border-slate-400 dark:[&>td]:border-slate-500',
                 )}
               >
-                <td
+                <SharedTableCell
                   className={cn(
                     'py-1 pr-4',
                     weight,
@@ -236,7 +237,7 @@ export function StatementMatrixTable({
                       l.label
                     )}
                   </span>
-                </td>
+                </SharedTableCell>
                 {cols.map((c, ci) => {
                   const v = l.values?.[ci]
                   const window = l.drillWindows?.[ci]
@@ -265,7 +266,7 @@ export function StatementMatrixTable({
                   const neg = v !== undefined && isNegative(v, c.kind)
                   const text = v === undefined ? '' : valueText(v, c.kind)
                   return (
-                    <td
+                    <SharedTableCell
                       key={c.key}
                       className={cn(
                         'py-1 pl-4 text-right whitespace-nowrap',
@@ -281,14 +282,14 @@ export function StatementMatrixTable({
                       ) : (
                         text
                       )}
-                    </td>
+                    </SharedTableCell>
                   )
                 })}
-              </tr>
+              </SharedTableRow>
             )
           })}
-        </tbody>
-      </table>
+        </SharedTableBody>
+      </SharedTable>
     </div>
   )
 }

@@ -237,7 +237,7 @@ export function QualificationDrawer({
 
   async function renew(): Promise<void> {
     if (!qualificationId || !detail) return
-    const issuedOn = window.prompt(t('qualifications.renewPrompt'), today)
+    const issuedOn = await promptDialog({ title: t('qualifications.renewPrompt'), initialValue: today })
     if (!issuedOn) return
     setStatus(undefined)
     try {

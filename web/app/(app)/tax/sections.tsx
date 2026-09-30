@@ -1,3 +1,4 @@
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import Link from 'next/link'
 import { Settings } from 'lucide-react'
 import { Badge, Button, cn } from '@openbooks/ui'
@@ -36,31 +37,7 @@ export interface TaxHistoryRow {
   saved: string
 }
 
-/**
- * Pieces of the tax page that the page and the widget registry share.
- *
- * The prepare/history tab strip is a WIDGET rather than the shared `tab-nav`:
- * it carries a count badge inside one tab and `aria-current` instead of
- * `role="tab"` — a different component with a different contract, the same
- * reason the payments and receipts strips stayed separate. The prepare panel
- * is the client `TaxFilingsView` verbatim (compute/export/save are
- * interactive fetch flows a spec cannot name), and the history table stays a
- * component for the reason the admin-users one did: the native page
- * hand-rolls a plain `<table>` with its own classes, and the spec's table
- * block offers only the two real table variants the app has.
- *
- * The spec itself is coarse by necessity: the native page sits in
- * `PageContainer`, whose `FadeInBody` motion wrappers carry
- * `data-page-motion` attributes and post-animation inline styles that a spec
- * `grid` (a plain div) cannot reproduce — so the spec draws no chrome of its
- * own and places a single `tax-page` widget rendering the identical shell
- * components the widget registry uses. The pager likewise lives in the shared
- * history-table component (not in the spec) because this table is not a spec
- * table; the spec's `pagination` block would render a second one. The tab
- * presence flags still come from the loader; they are applied one level down,
- * inside `TaxTabPanels`, exactly as the native `{tab === ... ? ... : ...}`
- * does, because a `when` cannot cross a widget boundary.
- */
+/** Native record cells and actions compose the shared table primitives. */
 
 /** The native shell: PageContainer's centered container with its space-y-6 body. */
 export function TaxPageShell({ children }: { children: React.ReactNode }) {
@@ -71,8 +48,7 @@ export function TaxPageShell({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** The native header: hand-rolled h1 + description with the setup action —
- *  not the shared PageHeader, whose flex-row chrome is a different element. */
+/** Native record cells and actions compose the shared table primitives. */
 export function TaxPageHeader({
   title,
   description,
@@ -156,7 +132,7 @@ export function TaxPreparePanel({
   return <TaxFilingsView forms={forms} canSave={canSave} canManageSetup={canManageSetup} />
 }
 
-/** The hand-rolled filing-history table with its search/filter toolbar and pager. */
+/** Native record cells and actions compose the shared table primitives. */
 export function TaxHistoryTable({
   searchPlaceholder,
   statusLabel,
@@ -222,32 +198,32 @@ export function TaxHistoryTable({
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
-              <tr>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+              <SharedTableRow>
                 <SortTh basePath={basePath} currentParams={currentParams} column="form" sort={sortProps.sort} dir={sortProps.dir}>{columnForm}</SortTh>
                 <SortTh basePath={basePath} currentParams={currentParams} column="period" sort={sortProps.sort} dir={sortProps.dir}>{columnPeriod}</SortTh>
-                <th className="px-3 py-2">{columnVersion}</th>
+                <SharedTableHead className="px-3 py-2">{columnVersion}</SharedTableHead>
                 <SortTh basePath={basePath} currentParams={currentParams} column="status" sort={sortProps.sort} dir={sortProps.dir}>{columnStatus}</SortTh>
-                <th className="px-3 py-2">{columnReference}</th>
+                <SharedTableHead className="px-3 py-2">{columnReference}</SharedTableHead>
                 <SortTh basePath={basePath} currentParams={currentParams} column="created" sort={sortProps.sort} dir={sortProps.dir}>{columnSaved}</SortTh>
-              </tr>
-            </thead>
-            <tbody>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">{empty}</td></tr>
+                <SharedTableRow><SharedTableCell colSpan={6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">{empty}</SharedTableCell></SharedTableRow>
               ) : rows.map((filing) => (
-                <tr key={filing.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                  <td className="px-3 py-2"><Link href={(filing.filingHref) as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{filing.formName}</Link><div className="font-mono text-xs text-slate-400">{filing.formCode}</div></td>
-                  <td className="whitespace-nowrap px-3 py-2">{filing.period}</td>
-                  <td className="px-3 py-2 tabular-nums">{filing.version}</td>
-                  <td className="px-3 py-2"><Badge variant={filing.statusVariant}>{filing.statusLabel}</Badge></td>
-                  <td className="px-3 py-2">{filing.reference}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{filing.saved}</td>
-                </tr>
+                <SharedTableRow key={filing.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                  <SharedTableCell className="px-3 py-2"><Link href={(filing.filingHref) as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{filing.formName}</Link><div className="font-mono text-xs text-slate-400">{filing.formCode}</div></SharedTableCell>
+                  <SharedTableCell className="whitespace-nowrap px-3 py-2">{filing.period}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 tabular-nums">{filing.version}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2"><Badge variant={filing.statusVariant}>{filing.statusLabel}</Badge></SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">{filing.reference}</SharedTableCell>
+                  <SharedTableCell className="whitespace-nowrap px-3 py-2 text-slate-500 dark:text-slate-400">{filing.saved}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
         <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
       </div>

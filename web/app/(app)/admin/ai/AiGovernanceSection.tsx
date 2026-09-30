@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Select } from '@openbooks/ui'
@@ -96,25 +97,25 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
           </Button>
         </div>
         <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <th className="px-3 py-2">{ledger.capabilityColumns.capability}</th>
-                <th className="px-3 py-2">{ledger.capabilityColumns.autonomy}</th>
-                <th className="px-3 py-2">{ledger.capabilityColumns.reviewer}</th>
-                <th className="px-3 py-2">{ledger.capabilityColumns.notice}</th>
-                <th className="px-3 py-2">{ledger.capabilityColumns.reviewed}</th>
-                <th className="px-3 py-2">{ledger.capabilityColumns.enabled}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.capability}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.autonomy}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.reviewer}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.notice}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.reviewed}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.capabilityColumns.enabled}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {capabilities.map((cap) => (
-                <tr key={cap.key} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="px-3 py-2">
+                <SharedTableRow key={cap.key} className="border-t border-slate-100 dark:border-slate-800">
+                  <SharedTableCell className="px-3 py-2">
                     <span className="font-medium">{cap.name}</span>
                     <span className="block text-xs text-slate-500 dark:text-slate-400">{cap.purpose}</span>
-                  </td>
-                  <td className="px-3 py-2">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     <Select
                       value={cap.autonomy}
                       disabled={busy}
@@ -126,8 +127,8 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
                         </option>
                       ))}
                     </Select>
-                  </td>
-                  <td className="px-3 py-2">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">
                     <div className="flex items-center gap-1">
                       <Input
                         value={reviewers[cap.key] ?? cap.reviewerRole ?? ''}
@@ -146,23 +147,23 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
                         {ledger.saveLabel}
                       </Button>
                     </div>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{cap.noticeLabel}</td>
-                  <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{cap.noticeLabel}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
                     {cap.reviewedLabel}
                     <span className="block">
                       <Button size="sm" variant="outline" disabled={busy} onClick={() => void patch({ key: cap.key, markReviewed: true })}>
                         {ledger.reviewLabel}
                       </Button>
                     </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs">
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-xs">
                     {cap.enabledLabel}
-                  </td>
-                </tr>
+                  </SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       </section>
       <section>
@@ -192,28 +193,28 @@ export function AiGovernanceSection({ ledger }: { ledger: AiLedgerData | null })
           ))}
         </div>
         <div className="mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <th className="px-3 py-2">{ledger.decisionColumns.when}</th>
-                <th className="px-3 py-2">{ledger.decisionColumns.capability}</th>
-                <th className="px-3 py-2">{ledger.decisionColumns.summary}</th>
-                <th className="px-3 py-2">{ledger.decisionColumns.outcome}</th>
-                <th className="px-3 py-2">{ledger.decisionColumns.reviewer}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.when}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.capability}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.summary}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.outcome}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2">{ledger.decisionColumns.reviewer}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {decisions.map((d) => (
-                <tr key={d.id} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">{d.recordedAt.slice(0, 16).replace('T', ' ')}</td>
-                  <td className="px-3 py-2">{d.capabilityKey}</td>
-                  <td className="px-3 py-2">{d.outputSummary}</td>
-                  <td className="px-3 py-2">{d.outcome}</td>
-                  <td className="px-3 py-2">{d.humanReviewer ?? '—'}</td>
-                </tr>
+                <SharedTableRow key={d.id} className="border-t border-slate-100 dark:border-slate-800">
+                  <SharedTableCell className="whitespace-nowrap px-3 py-2 tabular-nums">{d.recordedAt.slice(0, 16).replace('T', ' ')}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">{d.capabilityKey}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">{d.outputSummary}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">{d.outcome}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2">{d.humanReviewer ?? '—'}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       </section>
     </div>

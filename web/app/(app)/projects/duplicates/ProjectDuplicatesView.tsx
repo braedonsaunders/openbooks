@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { PagedTable } from '../../../../components/paged-table'
 import { enumLabel } from '@/lib/enum-label'
 import { toast } from 'sonner'
 import { GitMerge, Play } from 'lucide-react'
@@ -212,89 +213,49 @@ export function ProjectDuplicatesView({ canMerge }: { canMerge: boolean }) {
                 </div>
               ) : null}
               <CardContent>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-500">
-                      <th className="py-1 pr-2">{t('duplicates.survivor')}</th>
-                      <th className="py-1 pr-2">{t('duplicates.code')}</th>
-                      <th className="py-1 pr-2">{t('duplicates.name')}</th>
-                      <th className="py-1 pr-2">{t('duplicates.status')}</th>
-                      <th className="py-1">{t('duplicates.action')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.projects.map((project) => {
-                      // A cached preview only speaks for the survivor it was
-                      // computed for — and for this group. Anything else is a
-                      // stale direction, never rendered as impact.
+                <PagedTable
+                  rows={group.projects}
+                  rowKey={(project) => project.id}
+                  empty={t('duplicates.empty')}
+                  searchable
+                  columns={[
+                    { key: 'survivor', header: t('duplicates.survivor'), cell: (project) => (
+                      <input
+                        type="radio"
+                        name={groupKey}
+                        checked={survivorId === project.id}
+                        onChange={() => {
+                          setSurvivors((current) => ({ ...current, [groupKey]: project.id }))
+                          setPreviewErrors((current) => withoutKey(current, groupKey))
+                        }}
+                        aria-label={t('duplicates.survivor')}
+                      />
+                    ) },
+                    { key: 'code', header: t('duplicates.code'), cell: (project) => <span className="font-mono">{project.code ?? '—'}</span>, search: (project) => project.code ?? '' },
+                    { key: 'name', header: t('duplicates.name'), cell: (project) => project.name, search: (project) => project.name },
+                    { key: 'status', header: t('duplicates.status'), cell: (project) => (
+                      <Badge variant={project.isActive ? 'success' : 'warning'}>
+                        {enumLabel(project.status, projectStatusLabels, tCommon('labels.unknownValue'))}
+                      </Badge>
+                    ) },
+                    { key: 'action', header: t('duplicates.action'), cell: (project) => {
                       const cached = previews[`${groupKey}:${project.id}`]
                       const previewResult = cached && cached.survivorId === survivorId ? cached : null
-                      const movedTotal = previewResult
-                        ? previewResult.moved.reduce((sum, item) => sum + item.rows, 0)
-                        : null
-                      return (
-                        <tr key={project.id} className="border-t">
-                          <td className="py-1 pr-2">
-                            <input
-                              type="radio"
-                              name={groupKey}
-                              checked={survivorId === project.id}
-                              onChange={() => {
-                                setSurvivors((current) => ({ ...current, [groupKey]: project.id }))
-                                setPreviewErrors((current) => withoutKey(current, groupKey))
-                              }}
-                              aria-label={t('duplicates.survivor')}
-                            />
-                          </td>
-                          <td className="py-1 pr-2 font-mono">{project.code ?? '—'}</td>
-                          <td className="py-1 pr-2">{project.name}</td>
-                          <td className="py-1 pr-2">
-                            {project.isActive ? (
-                              <Badge variant="success">{enumLabel(project.status, projectStatusLabels, tCommon('labels.unknownValue'))}</Badge>
-                            ) : (
-                              <Badge variant="warning">{enumLabel(project.status, projectStatusLabels, tCommon('labels.unknownValue'))}</Badge>
-                            )}
-                          </td>
-                          <td className="py-1">
-                            {project.id !== survivorId ? (
-                              <div className="flex items-center gap-2">
-                                {canMerge ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={busy !== null}
-                                    onClick={() => preview(groupKey, survivorId, project.id)}
-                                  >
-                                    {t('duplicates.preview')}
-                                  </Button>
-                                ) : null}
-                                {canMerge && previewResult && !previewResult.alreadyMerged ? (
-                                  <Button
-                                    size="sm"
-                                    disabled={busy !== null}
-                                    onClick={() => merge(groupKey, survivorId, project.id)}
-                                  >
-                                    <GitMerge size={13} />
-                                    {t('duplicates.merge', { count: movedTotal ?? 0 })}
-                                  </Button>
-                                ) : null}
-                                {previewResult ? (
-                                  <span className="text-xs text-slate-500">
-                                    {previewResult.alreadyMerged
-                                      ? t('duplicates.alreadyMerged')
-                                      : t('duplicates.moveCount', { count: movedTotal ?? 0 })}
-                                  </span>
-                                ) : null}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-500">{t('duplicates.kept')}</span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                      const movedTotal = previewResult ? previewResult.moved.reduce((sum, item) => sum + item.rows, 0) : 0
+                      return project.id === survivorId
+                        ? <span className="text-xs text-slate-500">{t('duplicates.kept')}</span>
+                        : <div className="flex items-center gap-2">
+                            {canMerge ? <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => preview(groupKey, survivorId, project.id)}>{t('duplicates.preview')}</Button> : null}
+                            {canMerge && previewResult && !previewResult.alreadyMerged ? (
+                              <Button size="sm" disabled={busy !== null} onClick={() => merge(groupKey, survivorId, project.id)}>
+                                <GitMerge size={13} />{t('duplicates.merge', { count: movedTotal })}
+                              </Button>
+                            ) : null}
+                            {previewResult ? <span className="text-xs text-slate-500">{previewResult.alreadyMerged ? t('duplicates.alreadyMerged') : t('duplicates.moveCount', { count: movedTotal })}</span> : null}
+                          </div>
+                    } },
+                  ]}
+                />
               </CardContent>
             </Card>
           )

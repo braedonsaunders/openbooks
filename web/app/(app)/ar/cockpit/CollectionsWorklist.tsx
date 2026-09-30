@@ -1,5 +1,6 @@
 "use client";
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -158,21 +159,21 @@ export function CollectionsWorklist({
             {t("empty")}
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="w-9 py-2 pl-4" />
-                <th className="py-2 text-left font-medium">{t("customer")}</th>
-                <th className="py-2 text-left font-medium">
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="w-9 py-2 pl-4" />
+                <SharedTableHead className="py-2 text-left font-medium">{t("customer")}</SharedTableHead>
+                <SharedTableHead className="py-2 text-left font-medium">
                   {t("prediction")}
-                </th>
-                <th className="py-2 text-right font-medium">{t("due")}</th>
-                <th className="py-2 pr-4 text-right font-medium">
+                </SharedTableHead>
+                <SharedTableHead className="py-2 text-right font-medium">{t("due")}</SharedTableHead>
+                <SharedTableHead className="py-2 pr-4 text-right font-medium">
                   {t("amount")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {visible.map((e) => {
                 const on = selected.has(e.id);
                 return (
@@ -181,7 +182,7 @@ export function CollectionsWorklist({
                     className="group cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
                     onClick={() => toggle(e.id)} noAnimate
                   >
-                    <td className="w-9 py-2 pl-4">
+                    <SharedTableCell className="w-9 py-2 pl-4">
                       <input
                         type="checkbox"
                         readOnly
@@ -191,8 +192,8 @@ export function CollectionsWorklist({
                           customer: e.partyName,
                         })}
                       />
-                    </td>
-                    <td className="py-2">
+                    </SharedTableCell>
+                    <SharedTableCell className="py-2">
                       <span className="font-medium text-slate-700 dark:text-slate-200">
                         {e.partyName}
                       </span>
@@ -201,11 +202,11 @@ export function CollectionsWorklist({
                           {t("daysOverdue", { count: e.daysOverdue })}
                         </Badge>
                       ) : null}
-                    </td>
-                    <td className="py-2 text-xs text-slate-500 dark:text-slate-400">
+                    </SharedTableCell>
+                    <SharedTableCell className="py-2 text-xs text-slate-500 dark:text-slate-400">
                       {methodLabel(e.method)}
-                    </td>
-                    <td className="py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                    </SharedTableCell>
+                    <SharedTableCell className="py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">
                       {e.dueDate
                         ? format.dateTime(new Date(e.dueDate + "T00:00:00Z"), {
                             month: "short",
@@ -213,15 +214,15 @@ export function CollectionsWorklist({
                             timeZone: "UTC",
                           })
                         : "—"}
-                    </td>
-                    <td className="py-2 pr-4 text-right font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                    </SharedTableCell>
+                    <SharedTableCell className="py-2 pr-4 text-right font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
                       {money(e.amount)}
-                    </td>
+                    </SharedTableCell>
                   </InteractiveTableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         )}
       </div>
 

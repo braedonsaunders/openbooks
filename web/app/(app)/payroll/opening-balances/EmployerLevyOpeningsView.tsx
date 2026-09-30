@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { Fragment, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -246,21 +247,21 @@ function EmployerLevyOpeningsYearView({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full min-w-max text-sm">
-          <thead className="bg-slate-50 text-left dark:bg-slate-900">
-            <tr>
-              <th className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
+        <SharedTable className="w-full min-w-max text-sm">
+          <SharedTableHeader className="bg-slate-50 text-left dark:bg-slate-900">
+            <SharedTableRow>
+              <SharedTableHead className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
                 {text('levy', 'Levy')}
-              </th>
-              <th className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
+              </SharedTableHead>
+              <SharedTableHead className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
                 {text('region', 'Region')}
-              </th>
-              <th className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
+              </SharedTableHead>
+              <SharedTableHead className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
                 {text('baseYtd', 'Base year-to-date')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+              </SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
             {levies.map((levy) => {
               const stored = storedFor(levy)
               // An org levy is one row; a region levy is one row per stored
@@ -283,17 +284,17 @@ function EmployerLevyOpeningsYearView({
                   {editable.map((row) => {
                     const key = rowKey(levy.country, levy.levyKey, row.region)
                     return (
-                      <tr key={key} className="border-t border-slate-200 dark:border-slate-800">
-                        <td className="px-3 py-2">
+                      <SharedTableRow key={key} className="border-t border-slate-200 dark:border-slate-800">
+                        <SharedTableCell className="px-3 py-2">
                           <span className="font-medium">{levy.label}</span>{' '}
                           <span className="text-xs text-slate-500 dark:text-slate-400">
                             {levy.country} · {levy.description}
                           </span>
-                        </td>
-                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
+                        </SharedTableCell>
+                        <SharedTableCell className="px-3 py-2 text-slate-500 dark:text-slate-400">
                           {levy.scope === 'region' ? (row.region ?? '—') : '—'}
-                        </td>
-                        <td className="px-3 py-2">
+                        </SharedTableCell>
+                        <SharedTableCell className="px-3 py-2">
                           <Input
                             aria-label={`${levy.label} base year-to-date${row.region ? `, ${row.region}` : ''}`}
                             value={valueOf(levy.country, levy.levyKey, row.region)}
@@ -302,19 +303,19 @@ function EmployerLevyOpeningsYearView({
                             inputMode="decimal"
                             onChange={(event) => setAmount(levy.country, levy.levyKey, row.region, event.target.value)}
                           />
-                        </td>
-                      </tr>
+                        </SharedTableCell>
+                      </SharedTableRow>
                     )
                   })}
                   {levyAdded.map((row) => (
-                    <tr key={`added-${row.id}`} className="border-t border-slate-200 dark:border-slate-800">
-                      <td className="px-3 py-2">
+                    <SharedTableRow key={`added-${row.id}`} className="border-t border-slate-200 dark:border-slate-800">
+                      <SharedTableCell className="px-3 py-2">
                         <span className="font-medium">{levy.label}</span>{' '}
                         <span className="text-xs text-slate-500 dark:text-slate-400">
                           {levy.country} · {levy.description}
                         </span>
-                      </td>
-                      <td className="px-3 py-2">
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2">
                         <Input
                           aria-label={text('regionLabel', 'Region code')}
                           placeholder={text('regionPlaceholder', 'e.g. ON')}
@@ -329,8 +330,8 @@ function EmployerLevyOpeningsYearView({
                             )
                           }
                         />
-                      </td>
-                      <td className="px-3 py-2">
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2">
                         <Input
                           aria-label={`${levy.label} · ${text('newBaseLabel', 'New region base year-to-date')}${row.region ? ` · ${row.region}` : ''}`}
                           className="w-40"
@@ -345,12 +346,12 @@ function EmployerLevyOpeningsYearView({
                             )
                           }
                         />
-                      </td>
-                    </tr>
+                      </SharedTableCell>
+                    </SharedTableRow>
                   ))}
                   {levy.scope === 'region' && canManage && (
-                    <tr className="border-t border-slate-200 dark:border-slate-800">
-                      <td colSpan={3} className="px-3 py-2">
+                    <SharedTableRow className="border-t border-slate-200 dark:border-slate-800">
+                      <SharedTableCell colSpan={3} className="px-3 py-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -367,14 +368,14 @@ function EmployerLevyOpeningsYearView({
                           <Plus size={14} aria-hidden />
                           {text('addRegion', 'Add a region')}
                         </Button>
-                      </td>
-                    </tr>
+                      </SharedTableCell>
+                    </SharedTableRow>
                   )}
                 </Fragment>
               )
             })}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </div>
     </section>
   )

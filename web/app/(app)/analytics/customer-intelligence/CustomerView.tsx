@@ -1,5 +1,6 @@
 'use client'
 
+import { TableCell as SharedTableCell, TableRow as SharedTableRow, TableHead as SharedTableHead, Table as SharedTable, TableHeader as SharedTableHeader, TableBody as SharedTableBody } from "../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
@@ -373,38 +374,38 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
 
   const Row = ({ r }: { r: CustomerRow }) => (
     <InteractiveTableRow onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-      <td className="px-4 py-2">
+      <SharedTableCell className="px-4 py-2">
         <p className="font-medium text-slate-800 dark:text-slate-200">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitle')}> ⚠️</span> : null}</p>
         <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('lastActive', { days: r.recencyDays >= 9999 ? '—' : t('daysAgo', { days: r.recencyDays }) })}</p>
-      </td>
-      <td className="px-4 py-2 text-center">
+      </SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-center">
         <span className={cn('mr-1.5 rounded-full px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.healthGrade])}>{r.healthGrade}</span>
         <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">{r.healthScore}</span>
-      </td>
-      <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.invoicedRevenue)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</td>
-      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></td>
-      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></td>
-      <td className="px-4 py-2 text-center text-xs text-slate-500 capitalize dark:text-slate-400">{r.paymentRating}</td>
-      <td className="px-4 py-2">
+      </SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(r.invoicedRevenue)}</SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></SharedTableCell>
+      <SharedTableCell className="px-4 py-2 text-center text-xs text-slate-500 capitalize dark:text-slate-400">{r.paymentRating}</SharedTableCell>
+      <SharedTableCell className="px-4 py-2">
         <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap', REC_STYLE[r.recommendation])} title={r.recommendationDetail}>{t(`rec.${r.recommendation}`)}</span>
-      </td>
+      </SharedTableCell>
     </InteractiveTableRow>
   )
 
   const header = (
-    <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-      <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
-      <th className="px-4 py-2 text-center font-medium">{t('table.health')}</th>
-      <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
-      <th className="px-4 py-2 text-right font-medium">{t('table.invoiced')}</th>
-      <th className="px-4 py-2 text-right font-medium">{t('table.projectedClv')}</th>
-      <th className="px-4 py-2 text-center font-medium">{t('table.segment')}</th>
-      <th className="px-4 py-2 text-center font-medium">{t('table.churn')}</th>
-      <th className="px-4 py-2 text-center font-medium">{t('table.payment')}</th>
-      <th className="px-4 py-2 text-left font-medium">{t('table.recommendation')}</th>
-    </tr>
+    <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+      <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.customer')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.health')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.revenue')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.invoiced')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.projectedClv')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.segment')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.churn')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.payment')}</SharedTableHead>
+      <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.recommendation')}</SharedTableHead>
+    </SharedTableRow>
   )
 
   return (
@@ -441,9 +442,9 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
         }
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>{header}</thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>{header}</SharedTableHeader>
+            <SharedTableBody>
               {groups
                 ? groups.map(([label, set]) => {
                     const isCollapsed = collapsed.has(label)
@@ -454,19 +455,19 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
                           className="cursor-pointer border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/40"
                           onClick={() => setCollapsed((prev) => { const next = new Set(prev); if (next.has(label)) next.delete(label); else next.add(label); return next })} noAnimate
                         >
-                          <td colSpan={9} className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          <SharedTableCell colSpan={9} className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
                             <span className="mr-1.5 inline-block align-middle text-slate-400">{isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</span>
                             {label}
                             <span className="ml-2 font-normal text-slate-400">{t('groupSummary', { count: set.length, revenue: money(rev) })}</span>
-                          </td>
+                          </SharedTableCell>
                         </InteractiveTableRow>
                         {!isCollapsed && set.map((r) => <Row key={r.id} r={r} />)}
                       </GroupRows>
                     )
                   })
                 : flat.map((r) => <Row key={r.id} r={r} />)}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
         {!groups && totalPages > 1 && (
           <Pager page={pageNo} totalPages={totalPages} total={rows.length} pageSize={HEALTH_PAGE} onPage={setPage} noun={t('pager.nounCustomers')} />
@@ -498,12 +499,12 @@ function ProfitSortTh({
   onToggle: (col: ProfitSort) => void
 }) {
   return (
-    <th className={cn('px-3 py-2 font-medium', align === 'right' ? 'text-right' : 'text-left')}>
+    <SharedTableHead className={cn('px-3 py-2 font-medium', align === 'right' ? 'text-right' : 'text-left')}>
       <button type="button" onClick={() => onToggle(col)} className={cn('inline-flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300', sortCol === col && 'text-teal-600 dark:text-teal-400')}>
         {label}
         {sortCol === col && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
       </button>
-    </th>
+    </SharedTableHead>
   )
 }
 
@@ -562,31 +563,31 @@ function SegmentationTab({ data }: { data: CustomerData }) {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Panel title={t('panels.segmentPerformance')} icon={Grid3x3} bodyClassName="p-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.segment')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.customers')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.avgPerCustomer')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.revShare')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.segment')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.customers')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.revenue')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.avgPerCustomer')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.revShare')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {data.segments.map((s) => (
-                  <tr key={s.segment} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="px-4 py-2.5">
+                  <SharedTableRow key={s.segment} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                    <SharedTableCell className="px-4 py-2.5">
                       <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', SEGMENT_STYLE[s.segment])}>{t(`segment.${s.segment}`)}</span>
                       <span className="ml-2 hidden text-[11px] text-slate-400 lg:inline dark:text-slate-500">{t(`segmentDesc.${s.segment}`)}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{s.count}</td>
-                    <td className="px-4 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(s.totalRevenue)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{s.count ? money(s.avgRevenue) : '—'}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(s.totalRevenue / totalRevenue)}</td>
-                  </tr>
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{s.count}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(s.totalRevenue)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{s.count ? money(s.avgRevenue) : '—'}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtPct(s.totalRevenue / totalRevenue)}</SharedTableCell>
+                  </SharedTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </Panel>
         </div>
         <Panel title={t('panels.segmentMix')} icon={PieIcon}>
@@ -606,34 +607,34 @@ function SegmentationTab({ data }: { data: CustomerData }) {
         bodyClassName="p-0"
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.r')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.f')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.m')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.segment')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.invoices')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.recency')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.customer')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.r')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.f')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.m')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.segment')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.revenue')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.invoices')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.recency')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {pageRows.map((r) => (
-                <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                  <td className="px-4 py-2 text-center"><ScoreChip v={r.rfm.r} /></td>
-                  <td className="px-4 py-2 text-center"><ScoreChip v={r.rfm.f} /></td>
-                  <td className="px-4 py-2 text-center"><ScoreChip v={r.rfm.m} /></td>
-                  <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></td>
-                  <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.invoices}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</td>
-                </tr>
+                <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><ScoreChip v={r.rfm.r} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><ScoreChip v={r.rfm.f} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><ScoreChip v={r.rfm.m} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.invoices}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
         {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={filtered.length} pageSize={25} onPage={setPage} noun={t('pager.nounCustomers')} />}
       </Panel>
@@ -710,34 +711,34 @@ function LifetimeTab({
 
       <Panel title={t('panels.clvRanking')} icon={Gem} bodyClassName="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">#</th>
-                <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('table.tier')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.margin')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.annualValue')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.projectedClv')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.retention')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">#</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.customer')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.tier')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.revenue')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.margin')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.annualValue')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.projectedClv')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.retention')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {pageRows.map((r) => (
-                <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-4 py-2 text-slate-400 tabular-nums dark:text-slate-500">{r.clvRank}</td>
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitleShort')}> ⚠️</span> : null}</td>
-                  <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.revenue)}</td>
-                  <td className={cn('px-4 py-2 text-right tabular-nums', r.marginPct === null ? 'text-slate-400 dark:text-slate-500' : marginClass(r.marginPct))}>{r.marginPct === null ? '—' : `${r.marginPct.toFixed(1)}%`}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.annualValue)}</td>
-                  <td className="px-4 py-2 text-right font-semibold tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</td>
-                  <td className="px-4 py-2 text-right"><RetentionBadge v={r.retentionFactor} /></td>
-                </tr>
+                <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-4 py-2 text-slate-400 tabular-nums dark:text-slate-500">{r.clvRank}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitleShort')}> ⚠️</span> : null}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.revenue)}</SharedTableCell>
+                  <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', r.marginPct === null ? 'text-slate-400 dark:text-slate-500' : marginClass(r.marginPct))}>{r.marginPct === null ? '—' : `${r.marginPct.toFixed(1)}%`}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.annualValue)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionFactor} /></SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
         {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={byClv.length} pageSize={25} onPage={setPage} noun={t('pager.nounCustomers')} />}
       </Panel>
@@ -783,28 +784,28 @@ function ChurnTab({ data }: { data: CustomerData }) {
           {friction.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-slate-400">{t('empty.noFriction')}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.credits')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.creditValue')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.issueRate')}</th>
-                  <th className="px-4 py-2 text-center font-medium">{t('table.level')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.customer')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.credits')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.creditValue')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.issueRate')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.level')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {friction.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.creditCount}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{fmtMoney(r.creditValue, { compact: true })}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.returnRate.toFixed(1)}%</td>
-                    <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.frictionLevel])}>{t(`risk.${r.frictionLevel}`)}</span></td>
-                  </tr>
+                  <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                    <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.creditCount}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{fmtMoney(r.creditValue, { compact: true })}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.returnRate.toFixed(1)}%</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.frictionLevel])}>{t(`risk.${r.frictionLevel}`)}</span></SharedTableCell>
+                  </SharedTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           )}
         </Panel>
 
@@ -812,26 +813,26 @@ function ChurnTab({ data }: { data: CustomerData }) {
           {overdue.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-slate-400">{t('empty.noOverdue')}</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.avgCycle')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.overdue')}</th>
-                  <th className="px-4 py-2 text-center font-medium">{t('table.urgency')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.customer')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.avgCycle')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.overdue')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.urgency')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {overdue.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.avgOrderCycle}d</td>
-                    <td className="px-4 py-2 text-right font-semibold tabular-nums text-orange-600 dark:text-orange-400">{r.daysOverdue}d</td>
-                    <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize', URGENCY_STYLE[r.urgency])}>{r.urgency}</span></td>
-                  </tr>
+                  <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                    <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.avgOrderCycle}d</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-orange-600 dark:text-orange-400">{r.daysOverdue}d</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize', URGENCY_STYLE[r.urgency])}>{r.urgency}</span></SharedTableCell>
+                  </SharedTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           )}
         </Panel>
       </div>
@@ -847,32 +848,32 @@ function ChurnTab({ data }: { data: CustomerData }) {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
-                    <th className="px-4 py-2 text-center font-medium">{t('table.risk')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.score')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.daysInactive')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.retentionProb')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.riskFactors')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.customer')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-center font-medium">{t('table.risk')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.score')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.daysInactive')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.revenue')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.retentionProb')}</SharedTableHead>
+                    <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.riskFactors')}</SharedTableHead>
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
                   {pageRows.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></td>
-                      <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{r.churnScore}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</td>
-                      <td className="px-4 py-2 text-right"><RetentionBadge v={r.retentionProbability} /></td>
-                      <td className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">{r.churnFactors.join(' · ') || '—'}</td>
-                    </tr>
+                    <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{r.churnScore}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={r.retentionProbability} /></SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">{r.churnFactors.join(' · ') || '—'}</SharedTableCell>
+                    </SharedTableRow>
                   ))}
-                </tbody>
-              </table>
+                </SharedTableBody>
+              </SharedTable>
             </div>
             {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={atRisk.length} pageSize={25} onPage={setPage} noun={t('pager.nounCustomers')} />}
           </>
@@ -918,58 +919,58 @@ function GrowthTab({ data }: { data: CustomerData }) {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Panel title={t('panels.cohortRetention')} hint={t('panels.cohortHint')} bodyClassName="p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('table.cohort')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.customers')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.active')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.retention')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('table.avgLifetimeRev')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.cohort')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.customers')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.active')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.retention')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.avgLifetimeRev')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {data.cohorts.list.map((c) => (
-                <tr key={c.year} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <td className="px-4 py-2 font-medium text-slate-700 tabular-nums dark:text-slate-300">{c.year}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{c.totalCustomers}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.activeCustomers}</td>
-                  <td className="px-4 py-2 text-right"><RetentionBadge v={c.retentionRate} /></td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(c.avgRevenue)}</td>
-                </tr>
+                <SharedTableRow key={c.year} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                  <SharedTableCell className="px-4 py-2 font-medium text-slate-700 tabular-nums dark:text-slate-300">{c.year}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{c.totalCustomers}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{c.activeCustomers}</SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right"><RetentionBadge v={c.retentionRate} /></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(c.avgRevenue)}</SharedTableCell>
+                </SharedTableRow>
               ))}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </Panel>
 
         <Panel title={t('panels.monthlyDetails')} hint={t('panels.monthlyDetailsHint')} bodyClassName="p-0">
           <div className="max-h-80 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-slate-900">
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">{t('table.month')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.customers')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.new')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.txns')}</th>
-                  <th className="px-4 py-2 text-right font-medium">{t('table.mom')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader className="sticky top-0 bg-white dark:bg-slate-900">
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="px-4 py-2 text-left font-medium">{t('table.month')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.revenue')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.customers')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.new')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.txns')}</SharedTableHead>
+                  <SharedTableHead className="px-4 py-2 text-right font-medium">{t('table.mom')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {g.monthly.map((m) => (
-                  <tr key={m.month} className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', !m.isMature && 'opacity-60')}>
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{m.label}</td>
-                    <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(m.revenue)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{m.uniqueCustomers}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{m.newCustomers}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{m.transactionCount}</td>
-                    <td className={cn('px-4 py-2 text-right font-medium tabular-nums', growthCls(m.growthRate))}>
+                  <SharedTableRow key={m.month} className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', !m.isMature && 'opacity-60')}>
+                    <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{m.label}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(m.revenue)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{m.uniqueCustomers}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{m.newCustomers}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{m.transactionCount}</SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', growthCls(m.growthRate))}>
                       {m.growthRate === null ? '—' : `${m.growthRate > 0 ? '+' : ''}${m.growthRate}%`}
-                    </td>
-                  </tr>
+                    </SharedTableCell>
+                  </SharedTableRow>
                 ))}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </div>
         </Panel>
       </div>
@@ -1043,19 +1044,19 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
       ) : (
         <Panel title={t('panels.customerProfitability')} icon={Users} hint={t('panels.profitabilityHint', { threshold: money(100_000) })} bodyClassName="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="w-8 px-2 py-2" />
+            <SharedTable className="w-full text-sm">
+              <SharedTableHeader>
+                <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <SharedTableHead className="w-8 px-2 py-2" />
                   <ProfitSortTh label={t('table.customerJob')} col="customerName" align="left" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
                   <ProfitSortTh label={t('table.revenue')} col="totalRevenue" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
                   <ProfitSortTh label={t('table.costs')} col="totalCost" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
                   <ProfitSortTh label={t('table.profit')} col="grossProfit" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
                   <ProfitSortTh label={t('table.margin')} col="marginPct" sortCol={sortCol} sortDir={sortDir} onToggle={toggleSort} />
-                  <th className="px-3 py-2 text-center font-medium">{t('table.tier')}</th>
-                </tr>
-              </thead>
-              <tbody>
+                  <SharedTableHead className="px-3 py-2 text-center font-medium">{t('table.tier')}</SharedTableHead>
+                </SharedTableRow>
+              </SharedTableHeader>
+              <SharedTableBody>
                 {pageCustomers.map((c) => {
                   const isOpen = expanded.has(c.customerId)
                   return (
@@ -1064,43 +1065,43 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                         className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
                         onClick={() => toggle(c.customerId)} noAnimate
                       >
-                        <td className="px-2 py-2.5 text-center text-slate-400">
+                        <SharedTableCell className="px-2 py-2.5 text-center text-slate-400">
                           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </td>
-                        <td className="px-3 py-2.5">
+                        </SharedTableCell>
+                        <SharedTableCell className="px-3 py-2.5">
                           <span className="font-semibold text-slate-800 dark:text-slate-100">{c.customerName}{c.isFakeChampion ? <span title={t('fakeChampionTitle')}> ⚠️</span> : null}</span>
                           <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('jobsCount', { count: c.jobs.length })}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(c.totalRevenue)}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{money(c.totalCost)}</td>
-                        <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', cmp(c.grossProfit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</td>
-                        <td className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct.toFixed(1)}%</td>
-                        <td className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></td>
+                        </SharedTableCell>
+                        <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(c.totalRevenue)}</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{money(c.totalCost)}</SharedTableCell>
+                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-medium tabular-nums', cmp(c.grossProfit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</SharedTableCell>
+                        <SharedTableCell className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct.toFixed(1)}%</SharedTableCell>
+                        <SharedTableCell className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></SharedTableCell>
                       </InteractiveTableRow>
                       {isOpen
                         ? c.jobs.map((j) => (
-                            <tr key={j.jobId} className="border-b border-slate-50 bg-slate-50/40 text-xs dark:border-slate-800/60 dark:bg-slate-800/20">
-                              <td />
-                              <td className="py-2 pr-3 pl-8">
+                            <SharedTableRow key={j.jobId} className="border-b border-slate-50 bg-slate-50/40 text-xs dark:border-slate-800/60 dark:bg-slate-800/20">
+                              <SharedTableCell />
+                              <SharedTableCell className="py-2 pr-3 pl-8">
                                 <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                                   <FolderGit2 size={12} className="text-slate-400" />
                                   {j.jobName}
                                   {j.transactionCount ? <span className="text-slate-400 dark:text-slate-500">({t('txnsCount', { count: j.transactionCount })})</span> : null}
                                 </span>
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.revenue)}</td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.costs)}</td>
-                              <td className={cn('px-3 py-2 text-right tabular-nums', cmp(j.profit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300')}>{money(j.profit)}</td>
-                              <td className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct))}>{j.marginPct.toFixed(1)}%</td>
-                              <td />
-                            </tr>
+                              </SharedTableCell>
+                              <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.revenue)}</SharedTableCell>
+                              <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.costs)}</SharedTableCell>
+                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', cmp(j.profit, '0') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-300')}>{money(j.profit)}</SharedTableCell>
+                              <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', marginClass(j.marginPct))}>{j.marginPct.toFixed(1)}%</SharedTableCell>
+                              <SharedTableCell />
+                            </SharedTableRow>
                           ))
                         : null}
                     </GroupRows>
                   )
                 })}
-              </tbody>
-            </table>
+              </SharedTableBody>
+            </SharedTable>
           </div>
           {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={sorted.length} pageSize={PAGE_SIZE} onPage={setPage} noun={t('pager.nounCustomers')} />}
         </Panel>

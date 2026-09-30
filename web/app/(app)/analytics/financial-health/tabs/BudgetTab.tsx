@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ClipboardList, Download, Search } from 'lucide-react'
@@ -128,27 +129,27 @@ function RealBudget({ data }: { data: HealthData }) {
           ))}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{t('columns.account')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('columns.budget')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('columns.actual')}</th>
-                <th className="w-40 px-4 py-2 text-left font-medium">{t('columns.progress')}</th>
-                <th className="px-4 py-2 text-right font-medium">{t('columns.variance')}</th>
-                <th className="px-4 py-2 text-center font-medium">{t('columns.status')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <SharedTableHead className="px-4 py-2 text-left font-medium">{t('columns.account')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('columns.budget')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('columns.actual')}</SharedTableHead>
+                <SharedTableHead className="w-40 px-4 py-2 text-left font-medium">{t('columns.progress')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-right font-medium">{t('columns.variance')}</SharedTableHead>
+                <SharedTableHead className="px-4 py-2 text-center font-medium">{t('columns.status')}</SharedTableHead>
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {pageRows.map((r) => {
                 // Progress ratio from exact amounts; the bar clamps at 100%.
                 const ratio = cmp(r.budget, '0') !== 0 ? Math.max(0, ratioNumber(r.actual, r.budget)) : null
                 return (
-                  <tr key={r.accountId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.status === 'no-budget' ? '—' : fmtMoney(r.budget, { compact: true })}</td>
-                    <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(r.actual, { compact: true })}</td>
-                    <td className="px-4 py-2">
+                  <SharedTableRow key={r.accountId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                    <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.status === 'no-budget' ? '—' : fmtMoney(r.budget, { compact: true })}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(r.actual, { compact: true })}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2">
                       {ratio === null ? (
                         <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
                       ) : (
@@ -159,16 +160,16 @@ function RealBudget({ data }: { data: HealthData }) {
                           <span className="text-[11px] tabular-nums text-slate-400">{Math.round(ratio * 100)}%</span>
                         </span>
                       )}
-                    </td>
-                    <td className={cn('px-4 py-2 text-right tabular-nums', r.status === 'no-budget' ? 'text-slate-400 dark:text-slate-500' : r.favorable ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+                    </SharedTableCell>
+                    <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', r.status === 'no-budget' ? 'text-slate-400 dark:text-slate-500' : r.favorable ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
                       {r.status === 'no-budget' ? '—' : `${cmp(r.variance, '0') >= 0 ? '+' : ''}${fmtMoney(r.variance, { compact: true })}`}
-                    </td>
-                    <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', STATUS_STYLE[r.status])}>{statusLabel(r.status)}</span></td>
-                  </tr>
+                    </SharedTableCell>
+                    <SharedTableCell className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', STATUS_STYLE[r.status])}>{statusLabel(r.status)}</span></SharedTableCell>
+                  </SharedTableRow>
                 )
               })}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
         {totalPages > 1 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">

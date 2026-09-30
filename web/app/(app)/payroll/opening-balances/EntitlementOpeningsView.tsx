@@ -1,5 +1,6 @@
 'use client'
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -314,14 +315,14 @@ export function EntitlementOpeningsView({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <table className="w-full min-w-max text-sm">
-          <thead className="bg-slate-50 text-left dark:bg-slate-900">
-            <tr>
-              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+        <SharedTable className="w-full min-w-max text-sm">
+          <SharedTableHeader className="bg-slate-50 text-left dark:bg-slate-900">
+            <SharedTableRow>
+              <SharedTableHead className="sticky left-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                 {text('employee', 'Employee')}
-              </th>
+              </SharedTableHead>
               {plans.map((plan) => (
-                <th
+                <SharedTableHead
                   key={plan.id}
                   className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
                 >
@@ -343,26 +344,26 @@ export function EntitlementOpeningsView({
                       }
                     />
                   </span>
-                </th>
+                </SharedTableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800">
             {initial.rows.length === 0 && (
-              <tr>
-                <td
+              <SharedTableRow>
+                <SharedTableCell
                   colSpan={plans.length + 1}
                   className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   {text('empty', 'No employees have an active payroll profile yet.')}
-                </td>
-              </tr>
+                </SharedTableCell>
+              </SharedTableRow>
             )}
             {initial.rows.map((row) => {
               const blocked = initial.blocked[row.employeePartyId]
               return (
-                <tr key={row.employeePartyId}>
-                  <td className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap dark:bg-slate-950">
+                <SharedTableRow key={row.employeePartyId}>
+                  <SharedTableCell className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap dark:bg-slate-950">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-slate-800 dark:text-slate-100">
                         {row.employeeName}
@@ -383,11 +384,11 @@ export function EntitlementOpeningsView({
                         {text('blockedHint', 'date the carry-in after it')}
                       </p>
                     )}
-                  </td>
+                  </SharedTableCell>
                   {plans.map((plan) => {
                     const lock = row.locked[plan.id]
                     return (
-                      <td key={plan.id} className="px-2 py-1.5 text-right">
+                      <SharedTableCell key={plan.id} className="px-2 py-1.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {lock && (
                             <Badge
@@ -411,14 +412,14 @@ export function EntitlementOpeningsView({
                             className={cn('w-32 text-right tabular-nums')}
                           />
                         </div>
-                      </td>
+                      </SharedTableCell>
                     )
                   })}
-                </tr>
+                </SharedTableRow>
               )
             })}
-          </tbody>
-        </table>
+          </SharedTableBody>
+        </SharedTable>
       </div>
     </section>
   )

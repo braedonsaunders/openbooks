@@ -7,6 +7,7 @@
 // fields live, and feeds the gl_account/party pickers from
 // /api/forms/options (module-level cached per source).
 
+import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Star, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -441,13 +442,13 @@ function LineListEditor({
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
                 {columns.map((f) => {
                   const required = Boolean(f.required || f.validation?.required)
                   return (
-                    <th
+                    <SharedTableHead
                       key={f.id}
                       className={cn(
                         'px-2.5 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-300',
@@ -461,20 +462,20 @@ function LineListEditor({
                         {f.label}
                         {required && !disabled ? <span className="ml-0.5 text-red-500">*</span> : null}
                       </FieldLabel>
-                    </th>
+                    </SharedTableHead>
                   )
                 })}
-                {disabled ? null : <th className="w-9 px-1" aria-label={t('rowActions')} />}
-              </tr>
-            </thead>
-            <tbody>
+                {disabled ? null : <SharedTableHead className="w-9 px-1" aria-label={t('rowActions')} />}
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
               {rows.map((row, rowIndex) => {
                 const rowCtx = {
                   values: { ...headerValues, ...row },
                   rows: allRows,
                 }
                 return (
-                  <tr
+                  <SharedTableRow
                     key={rowIndex}
                     className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
                   >
@@ -482,7 +483,7 @@ function LineListEditor({
                       const hidden = f.showIf && !evaluateLogicRule(f.showIf, rowCtx)
                       const error = errors[`${section.id}.${rowIndex}.${f.id}`]
                       return (
-                        <td key={f.id} className="px-2 py-1.5 align-top">
+                        <SharedTableCell key={f.id} className="px-2 py-1.5 align-top">
                           {hidden ? (
                             <span className="text-slate-300 dark:text-slate-600">—</span>
                           ) : (
@@ -499,11 +500,11 @@ function LineListEditor({
                               ) : null}
                             </>
                           )}
-                        </td>
+                        </SharedTableCell>
                       )
                     })}
                     {disabled ? null : (
-                      <td className="px-1 py-1.5 align-top">
+                      <SharedTableCell className="px-1 py-1.5 align-top">
                         <Button
                           type="button"
                           variant="ghost"
@@ -513,13 +514,13 @@ function LineListEditor({
                         >
                           <Trash2 size={14} />
                         </Button>
-                      </td>
+                      </SharedTableCell>
                     )}
-                  </tr>
+                  </SharedTableRow>
                 )
               })}
-            </tbody>
-          </table>
+            </SharedTableBody>
+          </SharedTable>
         </div>
       )}
       {disabled ? null : (
