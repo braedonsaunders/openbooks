@@ -1,0 +1,1 @@
+SELECT 'employer-defined benefit programs are partially installed' AS issue WHERE to_regclass('public.hrm_benefit_programs') IS NOT NULL OR to_regclass('public.hrm_benefit_awards') IS NOT NULL OR to_regclass('public.hrm_benefit_program_members') IS NOT NULL;

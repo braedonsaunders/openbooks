@@ -1222,6 +1222,16 @@
       "active": "有效",
       "ended": "已结束",
       "cancelled": "已取消"
+    },
+    "workspace": {
+      "tabs": {
+        "overview": "概览",
+        "programs": "计划",
+        "enrollments": "参保",
+        "rewards": "奖励",
+        "incentives": "激励",
+        "payouts": "发放"
+      }
     }
   },
   "me": {
@@ -1485,7 +1495,19 @@
       "changeDescription": "从开放窗口内的日期起变更 — 旧记录于前一日结束。",
       "changeReasonPlaceholder": "保障变更的原因",
       "changeSubmit": "保存变更",
-      "changeFailed": "无法记录该变更。"
+      "changeFailed": "无法记录该变更。",
+      "awards": {
+        "paidTitle": "已发放奖励",
+        "pendingTitle": "待付款奖励",
+        "hint": "已发放奖励已计入工资。待付款奖励不等于已付款。",
+        "paidEmpty": "暂无已发放奖励。",
+        "pendingEmpty": "暂无待付款奖励。",
+        "refusalTitle": "奖励不可用",
+        "program": "计划",
+        "period": "获得期间",
+        "value": "金额",
+        "status": "状态"
+      }
     },
     "qualifications": {
       "columns": {
@@ -2356,5 +2378,343 @@
     "biasFlags": "待审查措辞",
     "loading": "正在根据引用记录起草…",
     "copied": "此处无可编辑字段 — 草稿已复制到剪贴板。"
+  },
+  "portfolio": {
+    "overviewTitle": "福利组合",
+    "programsTitle": "福利计划",
+    "rewardsTitle": "奖励与津贴",
+    "incentivesTitle": "激励计划",
+    "payoutsTitle": "奖励发放",
+    "newProgram": "新建计划",
+    "newAward": "新建奖励",
+    "programsEmptyTitle": "尚无福利计划",
+    "programsEmptyDescription": "创建第一个雇主计划，用于发放奖励、津贴或激励。",
+    "awardsEmptyTitle": "尚无奖励",
+    "awardsEmptyDescription": "计划发放奖励后将在此显示。",
+    "loadFailed": "无法加载福利工作区。",
+    "loadFailedTitle": "福利不可用",
+    "awardsTruncated": "仅显示前500条",
+    "totalLabel": "记录总数",
+    "drawerFailedTitle": "计划详情不完整",
+    "attentionTitle": "需要处理",
+    "attentionEmpty": "暂无需要处理的事项。",
+    "reportsTitle": "福利报表",
+    "reportsEmpty": "暂无可用的福利报表。",
+    "reportsFailedTitle": "报表不可用",
+    "optionsFailedTitle": "选项不可用",
+    "vitalsFailedTitle": "合计不完整",
+    "openProgram": "打开",
+    "openAward": "打开",
+    "programActionFailed": "计划更改失败。",
+    "awardActionFailed": "奖励更改失败。",
+    "awardCreateFailed": "奖励未能记录。",
+    "attention": {
+      "pendingEnrollments": "有{count}条参保等待审批",
+      "pendingAwards": "有{count}条奖励等待审批",
+      "queuedAwards": "有{count}条奖励等待发放",
+      "draftPrograms": "有{count}个草稿计划尚未生效",
+      "missingComponent": "计划{code}通过工资发放，但未指定工资项目"
+    },
+    "vitals": {
+      "activePrograms": "生效中的计划",
+      "openWindows": "开放中的窗口",
+      "pendingApprovals": "待审批",
+      "queuedPayouts": "排队发放",
+      "deliveredTitle": "已发放",
+      "awaitingTitle": "待发放",
+      "deliveredEmpty": "暂无已发放的奖励。",
+      "awaitingEmpty": "暂无待发放的奖励。"
+    },
+    "cardsTitle": "计划类型",
+    "cards": {
+      "count": "{count}个计划",
+      "health": {
+        "title": "健康与保险",
+        "description": "医疗、牙科、眼科及人寿等参保计划。"
+      },
+      "retirement": {
+        "title": "退休与储蓄",
+        "description": "养老金与退休储蓄计划。"
+      },
+      "allowance": {
+        "title": "津贴与开支",
+        "description": "通过工资发放的定期开支津贴。"
+      },
+      "reward": {
+        "title": "奖励与表彰",
+        "description": "一次性表彰奖励与礼品卡。"
+      },
+      "incentive": {
+        "title": "激励与利润分享",
+        "description": "按成员分配的计量型发放。"
+      },
+      "custom": {
+        "title": "自定义计划",
+        "description": "公司发放的其他所有福利。"
+      }
+    },
+    "families": {
+      "reward": "奖励",
+      "allowance": "津贴",
+      "incentive": "激励",
+      "custom": "自定义"
+    },
+    "familyHints": {
+      "reward": "一次性表彰:奖金、礼品卡、即时奖励。",
+      "allowance": "定期开支额度:餐补、交通、健康。",
+      "incentive": "计量分配:利润、收入或工时，并结算。",
+      "custom": "不属于其他类型的发放。"
+    },
+    "valuations": {
+      "fixed": "固定金额",
+      "percent": "按基数比例",
+      "pool": "共享奖金池"
+    },
+    "metrics": {
+      "revenue": "收入",
+      "gross_profit": "毛利",
+      "net_profit": "净利",
+      "approved_hours": "已批准工时"
+    },
+    "scopes": {
+      "company": "全公司",
+      "department": "部门",
+      "project": "项目"
+    },
+    "allocations": {
+      "equal": "平均分配",
+      "hours": "按工时",
+      "role": "按角色权重"
+    },
+    "frequencies": {
+      "monthly": "每月",
+      "quarterly": "每季度",
+      "annual": "每年",
+      "project_complete": "项目完成时",
+      "manual": "手动"
+    },
+    "periodBasis": {
+      "calendar": "日历年",
+      "fiscal": "财年"
+    },
+    "delivery": {
+      "payroll": "通过工资",
+      "external": "外部供应商"
+    },
+    "programStatus": {
+      "draft": "草稿",
+      "active": "生效中",
+      "closed": "已关闭"
+    },
+    "awardStatus": {
+      "draft": "草稿",
+      "pending": "待审批",
+      "approved": "已批准",
+      "queued": "排队发放",
+      "delivered": "已发放",
+      "voided": "已作废"
+    },
+    "columns": {
+      "program": "计划",
+      "family": "类型",
+      "value": "金额",
+      "effective": "有效期",
+      "status": "状态",
+      "recipient": "领取人",
+      "period": "所属期",
+      "currency": "币种",
+      "externalRef": "供应商参考号",
+      "voidReason": "作废原因"
+    },
+    "membersTitle": "成员",
+    "membersEmpty": "暂无成员。",
+    "members": {
+      "weight": "权重",
+      "weightPlaceholder": "1",
+      "weightHint": "奖金池分配的份额权重。留空表示平均。",
+      "role": "角色",
+      "rolePlaceholder": "成员",
+      "roleHint": "按角色加权分配所用的角色。"
+    },
+    "addMember": "添加成员",
+    "removeMember": "结束成员资格",
+    "removeReasonPrompt": "该成员资格为何结束?",
+    "removeReasonRequired": "请输入成员资格结束的原因。",
+    "sourcesTitle": "计量科目",
+    "sourcesEmpty": "暂无计量科目。",
+    "settlementPending": "结算期结束后将基于这些科目结算。",
+    "activateProgram": "生效",
+    "closeProgram": "关闭",
+    "closeReasonLabel": "该计划为何关闭?",
+    "editProgram": "编辑",
+    "reports": {
+      "enrollments": "福利参保",
+      "inputs": "福利工资项目",
+      "awards": "福利奖励"
+    },
+    "simulate": {
+      "title": "结算模拟",
+      "periodFrom": "所属期起",
+      "periodTo": "所属期止",
+      "run": "开始模拟",
+      "estimate": "预估:该期间含未过账或未批准来源，实际结算可能不同。",
+      "noRecipients": "该期间无可发放对象。",
+      "totalHours": "已批准工时",
+      "entries": "来源分录",
+      "revenue": "收入",
+      "expenses": "费用",
+      "measured": "计量基数",
+      "totalAwarded": "发放总额",
+      "settle": "结算该期间"
+    },
+    "simulateFailedTitle": "模拟失败",
+    "simulatePeriodRequired": "请选择要模拟的期间。",
+    "builder": {
+      "title": "新建福利计划",
+      "editTitle": "编辑福利计划",
+      "stepsLabel": "计划步骤",
+      "steps": {
+        "offer": "内容",
+        "eligibility": "范围",
+        "value": "金额",
+        "timing": "时间",
+        "controls": "管控",
+        "delivery": "发放",
+        "review": "复核"
+      },
+      "fields": {
+        "family": "计划类型",
+        "code": "计划代码",
+        "name": "计划名称",
+        "description": "说明",
+        "legalEntity": "法人实体",
+        "currency": "币种",
+        "valuation": "计值方式",
+        "fixedAmount": "固定金额",
+        "percentRate": "比例",
+        "budgetAmount": "奖金池预算",
+        "metric": "计量来源",
+        "metricScope": "计量范围",
+        "departments": "部门",
+        "projects": "项目",
+        "capAmount": "人均上限",
+        "thresholdAmount": "发放门槛",
+        "effectiveFrom": "生效自",
+        "effectiveTo": "有效至",
+        "frequency": "频率",
+        "periodBasis": "期间基准",
+        "paymentDelayDays": "期后至发放天数",
+        "allocation": "分配方式",
+        "measuredAccountIds": "计量科目",
+        "deliveryMethod": "发放方式",
+        "payComponent": "工资项目",
+        "reason": "更改原因"
+      },
+      "allEntities": "全部实体",
+      "entityHint": "留空表示该计划适用的所有实体。",
+      "employmentsTruncated": "雇佣名单仅显示前500名。成员登记接受范围内任何雇佣。",
+      "searchDepartments": "搜索部门…",
+      "searchProjects": "搜索项目…",
+      "searchAccounts": "搜索科目…",
+      "noDepartments": "范围内暂无部门。",
+      "noProjects": "范围内暂无项目。",
+      "noAccounts": "范围内暂无记账科目。",
+      "measuredHint": "仅金额型激励需指定计量科目。结算按这些科目计价。",
+      "payComponentMapsValue": "金额通过下方工资项目进入工资，无需资金清单。",
+      "chooseComponent": "选择工资项目",
+      "chooseProgram": "选择计划",
+      "chooseRecipient": "选择领取人",
+      "chooseBasis": "选择基准",
+      "basisHint": "结算与工资须对季度口径一致，因此基准是计划的一部分。",
+      "externalHint": "在工资系统支持税务处理之前，不能发放正金额的非现金奖励。需要付款时，请创建通过工资发放的现金奖励。",
+      "reviewTitle": "复核计划",
+      "reviewEmpty": "尚未填写任何内容。",
+      "reviewHint": "创建将保存为草稿。详情抽屉将从服务器读回。",
+      "reasonPlaceholder": "变更了什么、为什么",
+      "reasonRequired": "请输入本次更改的原因。",
+      "fixFields": "请修正标出的字段。",
+      "createFailed": "计划未能创建。",
+      "create": "创建计划",
+      "saveChanges": "保存更改",
+      "cancel": "取消",
+      "back": "上一步",
+      "next": "下一步",
+      "amountNoun": "金额"
+    },
+    "awardBuilderTitle": "新建奖励",
+    "awardFields": {
+      "program": "计划",
+      "recipient": "领取人",
+      "periodFrom": "所属期起",
+      "periodTo": "所属期止",
+      "value": "金额",
+      "currency": "币种",
+      "reason": "原因",
+      "reasonPlaceholder": "为何发放该奖励?",
+      "recipientNote": "给领取人的备注",
+      "recordReference": "记录参考号",
+      "recordReferencePlaceholder": "供应商确认号或订单号",
+      "recordReferenceHint": "外部发放将在奖励上记录该参考号。"
+    },
+    "awardCreate": "记录奖励",
+    "submitAward": "提交审批",
+    "approveAward": "批准",
+    "queueAward": "排队发放",
+    "payrollDelivery": "通过工资发放",
+    "externalDelivery": "记录外部发放",
+    "voidAward": "作废",
+    "payrollInputLabel": "工资项目",
+    "payrollInputPlaceholder": "既有工资项目编号",
+    "externalRefLabel": "供应商参考号",
+    "externalRefPlaceholder": "供应商确认号或订单号",
+    "voidReasonPrompt": "该奖励为何作废?",
+    "voidReasonRequired": "请输入作废原因。",
+    "awardTimelineEmpty": "已发放与已作废的奖励保留历史，不再有后续操作。",
+    "queueRunLabel": "工资计算",
+    "queueRunsLoading": "正在加载工资计算…",
+    "queueRunsEmpty": "暂无处理中的工资计算。",
+    "queueRunChoose": "选择工资计算",
+    "queueRunHint": "排队将在工资计算中创建原生调整。",
+    "linkedRunHint": "发放将确认已保存的关联。",
+    "unlinkedQueueHint": "未关联已排队 — 发放时将指定。",
+    "runsUnavailable": "工资计算不可用。",
+    "validation": {
+      "programCode": "请输入计划代码。",
+      "programName": "请为计划命名。",
+      "currency": "请输入三个大写字母的货币代码，例如 USD。",
+      "effectiveFrom": "请选择有效的计划开始日期（YYYY-MM-DD）。",
+      "effectiveTo": "请选择有效的结束日期（YYYY-MM-DD），或留空。",
+      "dateOrder": "结束日期不得早于开始日期。",
+      "fixedAmount": "请输入每位受益人的固定金额。",
+      "percentRate": "请输入应用于计量基数的百分比。",
+      "budgetAmount": "请输入受益人共同分配的预算。",
+      "metric": "请选择激励的计量指标。",
+      "scopeIds": "请至少选择一个部门或项目。",
+      "sourceAccounts": "请选择确定基数的计量科目。",
+      "periodBasis": "请选择日历年度或财务年度期间。",
+      "payComponent": "请选择工资发放所用的收入项目。",
+      "paymentDelay": "请输入期末至付款的整数天数，或 0。",
+      "awardProgram": "请选择授予奖励的计划。",
+      "awardRecipient": "请选择受益人的雇佣记录。",
+      "periodFrom": "请选择有效的期间开始日期（YYYY-MM-DD）。",
+      "periodTo": "请选择有效的期间结束日期（YYYY-MM-DD），或留空。",
+      "awardValue": "请输入奖励金额。",
+      "awardReason": "请记录奖励原因。",
+      "memberEmployment": "请选择成员的雇佣记录。",
+      "membershipFrom": "请选择有效的成员开始日期（YYYY-MM-DD）。",
+      "legalEntity": "请选择负责此计划的法人实体。",
+      "weight": "请输入最多四位小数的正权重。"
+    },
+    "decimal": {
+      "json-number": "{field}：请输入十进制文本，不要使用 JSON 数字。",
+      "scale": "{field}：最多使用 {places} 位小数。",
+      "separator": "{field}：请重新输入 {value}，去掉千位分隔符并使用小数点。",
+      "decimal-comma": "{field}：请将 {value} 写为 {dotted}，使用小数点。",
+      "ambiguous-comma": "{field}：{value} 可能表示 {grouped} 或 {dotted}。请用小数点重新输入预期值，不使用千位分隔符。",
+      "currency": "{field}：请去掉货币符号 {symbol}，仅输入金额。",
+      "scientific": "{field}：请完整输入 {value} 的十进制形式，不使用科学计数法。",
+      "not-a-number": "{field}：请输入可读的十进制金额。"
+    },
+    "description": "福利、表彰与激励：明确资格、受控审批和工资发放。"
   }
 }

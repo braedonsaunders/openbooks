@@ -225,6 +225,29 @@ async function seedPerformance(h: Harness): Promise<void> {
   await db.execute(sql`insert into hrm_goal_updates (org_id, goal_id, progress_percent, note) values (${h.org.orgId}, ${goalId}, 50, 'halfway')`);
 }
 
+async function seedBenefitsAwards(h: Harness): Promise<void> {
+  const programId = randomUUID();
+  const awardId = randomUUID();
+  await db.execute(sql`insert into hrm_benefit_programs
+    (id, org_id, code, name, family, legal_entity_id, currency, effective_from, metric)
+    values (${programId}, ${h.org.orgId}, 'PROFIT', 'Annual sharing', 'incentive',
+      ${h.org.subsidiaryId}, 'USD', '2026-01-01', 'net_profit')`);
+  await db.execute(sql`insert into hrm_benefit_program_members
+    (org_id, program_id, employment_id, effective_from)
+    values (${h.org.orgId}, ${programId}, ${h.employmentId}, '2026-01-01')`);
+  await db.execute(sql`insert into hrm_benefit_awards
+    (id, org_id, program_id, employment_id, period_from, period_to, value,
+      currency, program_snapshot, source_snapshot, evidence, source_key)
+    values (${awardId}, ${h.org.orgId}, ${programId}, ${h.employmentId},
+      '2026-01-01', '2026-01-31', '25.0100', 'USD',
+      '{"name":"Annual sharing","code":"PROFIT","family":"incentive","percentRate":"5.0000"}'::jsonb,
+      '{"companyProfit":"PRIVATE_FINANCIAL_SOURCE","postingFacts":[{"amount":"500.2000"}]}'::jsonb,
+      '{"kind":"incentive-settlement","programRevision":1,"pool":"PRIVATE_POOL","share":"0.0500"}'::jsonb,
+      'dsar-award')`);
+  await db.execute(sql`insert into hrm_benefit_award_events (org_id, award_id, kind, reason)
+    values (${h.org.orgId}, ${awardId}, 'created', 'January entitlement')`);
+}
+
 async function seedEmploymentExtras(h: Harness): Promise<void> {
   const templateId = randomUUID();
   await db.execute(sql`insert into hrm_process_templates (id, org_id, kind, name) values (${templateId}, ${h.org.orgId}, 'onboarding', 'Onboarding')`);
@@ -253,6 +276,7 @@ test("an export carries every new domain and the manifest names them all", { ski
     await seedPayrollIdentity(h);
     await seedTimePayrollExtras(h);
     await seedPerformance(h);
+    await seedBenefitsAwards(h);
     const prior = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
     const requested = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
     await buildExport(h.org.orgId, requested.id);
@@ -271,6 +295,7 @@ test("an export carries every new domain and the manifest names them all", { ski
       roeSeparationPayments: Record<string, unknown>[];
       itAddizionaliOpeningBalances: Record<string, unknown>[];
       priorExports: { id: string }[];
+      benefitAwards: { value: string; program_name: string; evidence: Record<string, unknown> }[];
       manifest: { gathered: { module: string; status: string }[]; excluded: { table: string; reason: string }[] };
     };
     // One generic loop over every seeded payload key: each newly gathered
@@ -289,6 +314,7 @@ test("an export carries every new domain and the manifest names them all", { ski
       ["priorStubs", 1], ["retroSettlements", 1], ["parallelFindings", 1], ["anomalyFlags", 1],
       ["runAdjustments", 1], ["holidayAssertions", 1], ["laborCostRates", 1], ["workSchedules", 1],
       ["goals", 1], ["reviews", 1], ["reviewAnswers", 1],
+      ["benefitProgramMemberships", 1], ["benefitAwards", 1], ["benefitAwardEvents", 1],
     ] as const) {
       assert.equal(
         (manifest as unknown as Record<string, unknown[]>)[key]?.length,
@@ -297,6 +323,11 @@ test("an export carries every new domain and the manifest names them all", { ski
       );
     }
     const priorIds = manifest.priorExports.map((e) => e.id);
+    assert.equal(manifest.benefitAwards[0]?.value, "25.0100");
+    assert.equal(manifest.benefitAwards[0]?.program_name, "Annual sharing");
+    assert.deepEqual(manifest.benefitAwards[0]?.evidence, { kind: "incentive-settlement", programRevision: 1 });
+    assert.doesNotMatch(JSON.stringify(manifest), /PRIVATE_FINANCIAL_SOURCE|PRIVATE_POOL|postingFacts|percentRate/,
+      "personal exports exclude employer financial measurements and allocation policy");
     assert.ok(priorIds.includes(prior.id), "the ledger carries the earlier export, never its bytes");
     assert.deepEqual(manifest.taxCertificates.map((c) => c.certificate_key), ["ca_td1_ON"]);
     const profile = manifest.payrollProfiles[0] ?? {};

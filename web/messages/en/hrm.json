@@ -1222,6 +1222,16 @@
       "active": "Active",
       "ended": "Ended",
       "cancelled": "Cancelled"
+    },
+    "workspace": {
+      "tabs": {
+        "overview": "Overview",
+        "programs": "Programs",
+        "enrollments": "Enrollments",
+        "rewards": "Rewards",
+        "incentives": "Incentives",
+        "payouts": "Payouts"
+      }
     }
   },
   "me": {
@@ -1485,7 +1495,19 @@
       "changeDescription": "Change from a date inside an open window — the old row ends the day before.",
       "changeReasonPlaceholder": "Why the coverage changes",
       "changeSubmit": "Save change",
-      "changeFailed": "The change could not be recorded."
+      "changeFailed": "The change could not be recorded.",
+      "awards": {
+        "paidTitle": "Delivered rewards",
+        "pendingTitle": "Awards awaiting payment",
+        "hint": "Delivered awards are already included in payroll pay. Pending awards are not payments.",
+        "paidEmpty": "No delivered rewards yet.",
+        "pendingEmpty": "No awards awaiting payment.",
+        "refusalTitle": "Awards unavailable",
+        "program": "Program",
+        "period": "Earned period",
+        "value": "Value",
+        "status": "Status"
+      }
     },
     "qualifications": {
       "columns": {
@@ -2356,5 +2378,343 @@
     "biasFlags": "Language to review",
     "loading": "Drafting from the cited records…",
     "copied": "No editable field here — the draft was copied to the clipboard."
+  },
+  "portfolio": {
+    "overviewTitle": "Benefits portfolio",
+    "programsTitle": "Benefit programs",
+    "rewardsTitle": "Rewards and allowances",
+    "incentivesTitle": "Incentives",
+    "payoutsTitle": "Award payouts",
+    "newProgram": "New program",
+    "newAward": "New award",
+    "programsEmptyTitle": "No benefit programs yet",
+    "programsEmptyDescription": "Create the first employer-defined program to grant rewards, allowances, or incentives.",
+    "awardsEmptyTitle": "No awards yet",
+    "awardsEmptyDescription": "Awards appear here once a program grants them.",
+    "loadFailed": "The benefits workspace could not be loaded.",
+    "loadFailedTitle": "Benefits unavailable",
+    "awardsTruncated": "showing the first 500",
+    "totalLabel": "Total records",
+    "drawerFailedTitle": "Program details incomplete",
+    "attentionTitle": "Needs attention",
+    "attentionEmpty": "Nothing needs attention.",
+    "reportsTitle": "Benefits reports",
+    "reportsEmpty": "No benefits reports are available.",
+    "reportsFailedTitle": "Reports unavailable",
+    "optionsFailedTitle": "Choices unavailable",
+    "vitalsFailedTitle": "Totals incomplete",
+    "openProgram": "Open",
+    "openAward": "Open",
+    "programActionFailed": "The program change failed.",
+    "awardActionFailed": "The award change failed.",
+    "awardCreateFailed": "The award was not recorded.",
+    "attention": {
+      "pendingEnrollments": "{count} enrollments waiting for approval",
+      "pendingAwards": "{count} awards waiting for approval",
+      "queuedAwards": "{count} awards queued for payout",
+      "draftPrograms": "{count} draft programs not yet active",
+      "missingComponent": "Program {code} delivers through payroll but names no pay component"
+    },
+    "vitals": {
+      "activePrograms": "Active programs",
+      "openWindows": "Open windows",
+      "pendingApprovals": "Pending approvals",
+      "queuedPayouts": "Queued payouts",
+      "deliveredTitle": "Delivered",
+      "awaitingTitle": "Awaiting payout",
+      "deliveredEmpty": "No delivered awards.",
+      "awaitingEmpty": "No awards awaiting payout."
+    },
+    "cardsTitle": "Program types",
+    "cards": {
+      "count": "{count} programs",
+      "health": {
+        "title": "Health and insurance",
+        "description": "Insured medical, dental, vision, and life plans."
+      },
+      "retirement": {
+        "title": "Retirement and savings",
+        "description": "Pension and retirement savings plans."
+      },
+      "allowance": {
+        "title": "Allowances and spending",
+        "description": "Recurring spending allowances paid through payroll."
+      },
+      "reward": {
+        "title": "Rewards and recognition",
+        "description": "One-off recognition awards and gift cards."
+      },
+      "incentive": {
+        "title": "Incentives and profit sharing",
+        "description": "Measured payouts shared across members."
+      },
+      "custom": {
+        "title": "Custom programs",
+        "description": "Anything else the organization grants."
+      }
+    },
+    "families": {
+      "reward": "Reward",
+      "allowance": "Allowance",
+      "incentive": "Incentive",
+      "custom": "Custom"
+    },
+    "familyHints": {
+      "reward": "One-off recognition: bonuses, gift cards, spot awards.",
+      "allowance": "Recurring spending power: meals, transport, wellness.",
+      "incentive": "Measured sharing: profit, revenue, or hours with settlement.",
+      "custom": "A grant that fits no other family."
+    },
+    "valuations": {
+      "fixed": "Fixed amount",
+      "percent": "Percent of base",
+      "pool": "Shared pool"
+    },
+    "metrics": {
+      "revenue": "Revenue",
+      "gross_profit": "Gross profit",
+      "net_profit": "Net profit",
+      "approved_hours": "Approved hours"
+    },
+    "scopes": {
+      "company": "Whole company",
+      "department": "Departments",
+      "project": "Projects"
+    },
+    "allocations": {
+      "equal": "Equal shares",
+      "hours": "By hours",
+      "role": "By role weight"
+    },
+    "frequencies": {
+      "monthly": "Monthly",
+      "quarterly": "Quarterly",
+      "annual": "Annual",
+      "project_complete": "On project completion",
+      "manual": "Manual"
+    },
+    "periodBasis": {
+      "calendar": "Calendar year",
+      "fiscal": "Fiscal year"
+    },
+    "delivery": {
+      "payroll": "Through payroll",
+      "external": "External provider"
+    },
+    "programStatus": {
+      "draft": "Draft",
+      "active": "Active",
+      "closed": "Closed"
+    },
+    "awardStatus": {
+      "draft": "Draft",
+      "pending": "Pending approval",
+      "approved": "Approved",
+      "queued": "Queued for payout",
+      "delivered": "Delivered",
+      "voided": "Voided"
+    },
+    "columns": {
+      "program": "Program",
+      "family": "Family",
+      "value": "Value",
+      "effective": "Effective",
+      "status": "Status",
+      "recipient": "Recipient",
+      "period": "Period",
+      "currency": "Currency",
+      "externalRef": "Provider reference",
+      "voidReason": "Void reason"
+    },
+    "membersTitle": "Members",
+    "membersEmpty": "No members yet.",
+    "members": {
+      "weight": "Weight",
+      "weightPlaceholder": "1",
+      "weightHint": "Share weight for pool splits; blank means equal.",
+      "role": "Role",
+      "rolePlaceholder": "Contributor",
+      "roleHint": "Role used by role-weighted splits."
+    },
+    "addMember": "Add member",
+    "removeMember": "End membership",
+    "removeReasonPrompt": "Why does this membership end?",
+    "removeReasonRequired": "Enter the reason the membership ends.",
+    "sourcesTitle": "Measured accounts",
+    "sourcesEmpty": "No measured accounts.",
+    "settlementPending": "Settlement runs against these accounts once the period closes.",
+    "activateProgram": "Activate",
+    "closeProgram": "Close",
+    "closeReasonLabel": "Why does this program close?",
+    "editProgram": "Edit",
+    "reports": {
+      "enrollments": "Benefit enrollments",
+      "inputs": "Benefit payroll inputs",
+      "awards": "Benefit awards"
+    },
+    "simulate": {
+      "title": "Settlement simulation",
+      "periodFrom": "Period from",
+      "periodTo": "Period to",
+      "run": "Simulate",
+      "estimate": "Estimate: unposted or unapproved sources fall inside this period, so settlement may differ.",
+      "noRecipients": "No payable recipients for this period.",
+      "totalHours": "Approved hours",
+      "entries": "Source entries",
+      "revenue": "Revenue",
+      "expenses": "Expenses",
+      "measured": "Measured base",
+      "totalAwarded": "Total to award",
+      "settle": "Settle period"
+    },
+    "simulateFailedTitle": "Simulation failed",
+    "simulatePeriodRequired": "Pick the period to simulate.",
+    "builder": {
+      "title": "New benefit program",
+      "editTitle": "Edit benefit program",
+      "stepsLabel": "Program steps",
+      "steps": {
+        "offer": "Offer",
+        "eligibility": "Eligibility",
+        "value": "Value",
+        "timing": "Timing",
+        "controls": "Controls",
+        "delivery": "Delivery",
+        "review": "Review"
+      },
+      "fields": {
+        "family": "Program family",
+        "code": "Program code",
+        "name": "Program name",
+        "description": "Description",
+        "legalEntity": "Legal entity",
+        "currency": "Currency",
+        "valuation": "Valuation",
+        "fixedAmount": "Fixed amount",
+        "percentRate": "Percent rate",
+        "budgetAmount": "Pool budget",
+        "metric": "Measured from",
+        "metricScope": "Measure scope",
+        "departments": "Departments",
+        "projects": "Projects",
+        "capAmount": "Cap per recipient",
+        "thresholdAmount": "Payout threshold",
+        "effectiveFrom": "Effective from",
+        "effectiveTo": "Effective to",
+        "frequency": "Frequency",
+        "periodBasis": "Period basis",
+        "paymentDelayDays": "Days from period end to payout",
+        "allocation": "Allocation",
+        "measuredAccountIds": "Measured accounts",
+        "deliveryMethod": "Delivery",
+        "payComponent": "Pay component",
+        "reason": "Reason for change"
+      },
+      "allEntities": "All entities",
+      "entityHint": "Blank means every entity the program may run in.",
+      "employmentsTruncated": "The employment list shows the first 500 names; membership still accepts any in-scope employment.",
+      "searchDepartments": "Search departments…",
+      "searchProjects": "Search projects…",
+      "searchAccounts": "Search accounts…",
+      "noDepartments": "No departments in scope.",
+      "noProjects": "No projects in scope.",
+      "noAccounts": "No posting accounts in scope.",
+      "measuredHint": "Only incentive money metrics name measured accounts; settlement prices from these.",
+      "payComponentMapsValue": "Value reaches pay through the earning component below — no funding list needed.",
+      "chooseComponent": "Choose a pay component",
+      "chooseProgram": "Choose a program",
+      "chooseRecipient": "Choose a recipient",
+      "chooseBasis": "Choose a basis",
+      "basisHint": "Settlement and payroll must agree on the quarter, so the basis is part of the program.",
+      "externalHint": "Positive non-cash awards cannot be delivered until payroll supports their tax treatment. Create a cash payroll reward for a payable award.",
+      "reviewTitle": "Review the program",
+      "reviewEmpty": "Nothing entered yet.",
+      "reviewHint": "Creation lands as a draft; the detail drawer reads it back from the server.",
+      "reasonPlaceholder": "What changed and why",
+      "reasonRequired": "Enter the reason for this change.",
+      "fixFields": "Fix the highlighted fields.",
+      "createFailed": "The program was not created.",
+      "create": "Create program",
+      "saveChanges": "Save changes",
+      "cancel": "Cancel",
+      "back": "Back",
+      "next": "Next",
+      "amountNoun": "Amount"
+    },
+    "awardBuilderTitle": "New award",
+    "awardFields": {
+      "program": "Program",
+      "recipient": "Recipient",
+      "periodFrom": "Period from",
+      "periodTo": "Period to",
+      "value": "Value",
+      "currency": "Currency",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why is this award granted?",
+      "recipientNote": "Recipient note",
+      "recordReference": "Record reference",
+      "recordReferencePlaceholder": "Provider confirmation or order number",
+      "recordReferenceHint": "External delivery records this reference on the award."
+    },
+    "awardCreate": "Record award",
+    "submitAward": "Submit for approval",
+    "approveAward": "Approve",
+    "queueAward": "Queue for payout",
+    "payrollDelivery": "Deliver through payroll",
+    "externalDelivery": "Record external delivery",
+    "voidAward": "Void",
+    "payrollInputLabel": "Payroll input",
+    "payrollInputPlaceholder": "Existing payroll input id",
+    "externalRefLabel": "Provider reference",
+    "externalRefPlaceholder": "Provider confirmation or order number",
+    "voidReasonPrompt": "Why is this award voided?",
+    "voidReasonRequired": "Enter the reason the award is voided.",
+    "awardTimelineEmpty": "Delivered and voided awards keep their history; no further moves apply.",
+    "queueRunLabel": "Pay run",
+    "queueRunsLoading": "Loading pay runs…",
+    "queueRunsEmpty": "No open pay run.",
+    "queueRunChoose": "Choose a pay run",
+    "queueRunHint": "Queuing creates the native adjustment on the run.",
+    "linkedRunHint": "Payout confirms the stored run linkage.",
+    "unlinkedQueueHint": "Queued without run linkage — delivery will name it then.",
+    "runsUnavailable": "Pay runs unavailable.",
+    "validation": {
+      "programCode": "Enter a program code.",
+      "programName": "Name the program.",
+      "currency": "Enter a 3-letter currency code in capitals, for example USD.",
+      "effectiveFrom": "Choose a real program start date (YYYY-MM-DD).",
+      "effectiveTo": "Choose a real end date (YYYY-MM-DD) or leave it open.",
+      "dateOrder": "The end date must be on or after the start date.",
+      "fixedAmount": "Enter the fixed amount each recipient receives.",
+      "percentRate": "Enter the percent rate applied to the measured base.",
+      "budgetAmount": "Enter the pool budget shared across recipients.",
+      "metric": "Choose what the incentive is measured from.",
+      "scopeIds": "Select at least one department or project in scope.",
+      "sourceAccounts": "Select the measured accounts that determine the base.",
+      "periodBasis": "Choose calendar or fiscal periods.",
+      "payComponent": "Select the earning pay component used for payroll.",
+      "paymentDelay": "Enter whole days from period end to payout, or 0.",
+      "awardProgram": "Choose the program granting the award.",
+      "awardRecipient": "Choose the recipient employment.",
+      "periodFrom": "Choose a real period start (YYYY-MM-DD).",
+      "periodTo": "Choose a real period end (YYYY-MM-DD) or leave it open.",
+      "awardValue": "Enter the award value.",
+      "awardReason": "Record why the award is granted.",
+      "memberEmployment": "Choose the member employment.",
+      "membershipFrom": "Choose a real membership start (YYYY-MM-DD).",
+      "legalEntity": "Choose the legal entity responsible for this program.",
+      "weight": "Enter a positive weight with up to 4 decimal places."
+    },
+    "decimal": {
+      "json-number": "{field}: enter decimal text, not a JSON number.",
+      "scale": "{field}: use at most {places} decimal places.",
+      "separator": "{field}: rewrite {value} without grouping separators, using a dot for decimals.",
+      "decimal-comma": "{field}: rewrite {value} as {dotted}, using a dot for decimals.",
+      "ambiguous-comma": "{field}: {value} could mean {grouped} or {dotted}. Retype the intended value with a dot for decimals and no grouping.",
+      "currency": "{field}: remove the currency symbol {symbol}; enter the amount only.",
+      "scientific": "{field}: write {value} in full decimal form, not scientific notation.",
+      "not-a-number": "{field}: enter a readable decimal amount."
+    },
+    "description": "Benefits, recognition and incentives — clear eligibility, controlled approvals and payroll delivery."
   }
 }

@@ -8,6 +8,7 @@ import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from '../hrm-leave'
 import { ACTION_REASONS_ENTITY } from '../hrm-action-reasons'
 import { DOCUMENT_CATEGORIES_ENTITY, DOCUMENT_TEMPLATES_ENTITY, RETENTION_SCHEDULES_ENTITY } from '../hrm-documents'
 import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from '../hrm-benefits'
+import { BENEFIT_PROGRAMS_ENTITY, BENEFIT_PROGRAM_SCOPES_ENTITY, BENEFIT_PROGRAM_SOURCES_ENTITY, BENEFIT_PROGRAM_MEMBERS_ENTITY } from '../benefit-programs'
 import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from '../hrm-compensation'
 import { CONSTRUCTION_CLASSIFICATIONS_ENTITY, CONSTRUCTION_COMP_CLASSES_ENTITY, CONSTRUCTION_PER_DIEM_POLICIES_ENTITY, CONSTRUCTION_RATE_SCHEDULES_ENTITY, CONSTRUCTION_RATIO_RULES_ENTITY } from '../hrm-construction'
 import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from '../hrm-qualifications'
@@ -220,6 +221,10 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
   BENEFIT_PLANS_ENTITY,
   BENEFIT_PLAN_LEVELS_ENTITY,
+  BENEFIT_PROGRAMS_ENTITY,
+  BENEFIT_PROGRAM_SCOPES_ENTITY,
+  BENEFIT_PROGRAM_SOURCES_ENTITY,
+  BENEFIT_PROGRAM_MEMBERS_ENTITY,
   // HRM compensation architecture (0221, HR-12): job families, levels
   // and versioned pay bands behind the hrmCompensation switch, rehomed
   // as sections onto the Compensation page.

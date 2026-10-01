@@ -16,6 +16,27 @@ import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { loadQueueLabels } from './change-requests'
 import { listScopedDepartmentOptions } from '../scoped-options'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
+import {
+  parsePortfolioView,
+  type AwardTableText,
+  type BuilderOption,
+  type ProgramEditSeed,
+  type ProgramTableText,
+  type OverviewCard,
+  type PortfolioView,
+  type ProgramFamily,
+  type VitalsLabels,
+} from './benefits-portfolio'
+import {
+  loadBenefitsPortfolio,
+  type AttentionItem,
+  type AwardDetailDrawer,
+  type PortfolioAwardRow,
+  type PortfolioData,
+  type PortfolioProgramRow,
+  type PortfolioVitals,
+  type ProgramDetailDrawer,
+} from './benefits-workspace'
 
 /**
  * Benefits workspace loader — windows and enrolments behind the Benefits
@@ -100,6 +121,80 @@ export interface BenefitsData {
   drawerCloseHref: string
   approveLabel: string
   actionFailed: string
+  portfolioView: PortfolioView
+  overview: {
+    vitals: PortfolioVitals
+    vitalsLabels: VitalsLabels
+    cards: OverviewCard[]
+    attention: AttentionItem[]
+    attentionTitle: string
+    attentionEmpty: string
+    reportLinks: { key: string; href: string; label: string }[]
+    reportsTitle: string
+    reportsEmpty: string
+  }
+  programColumns: { program: string; family: string; value: string; effective: string; status: string }
+  programTableText: ProgramTableText
+  awardTableText: AwardTableText
+  programRows: PortfolioProgramRow[]
+  incentiveProgramRows: PortfolioProgramRow[]
+  programsTitle: string
+  programsEmptyTitle: string
+  programsEmptyDescription: string
+  programsRefusal: { title: string; message: string } | null
+  awardColumns: { program: string; recipient: string; period: string; value: string; status: string }
+  awardRows: PortfolioAwardRow[]
+  rewardAwardRows: PortfolioAwardRow[]
+  incentiveAwardRows: PortfolioAwardRow[]
+  rewardsTitle: string
+  incentivesTitle: string
+  payoutsTitle: string
+  awardsEmptyTitle: string
+  awardsEmptyDescription: string
+  awardsRefusal: { title: string; message: string } | null
+  newProgramButton: string
+  newProgramHref: string
+  newAwardButton: string
+  newAwardHref: string
+  programBuilderOpen: boolean
+  programBuilderFamily: ProgramFamily
+  programBuilderLocked: boolean
+  awardBuilderOpen: boolean
+  defaultAwardCurrency: string
+  accountOptions: BuilderOption[]
+  payComponentOptions: BuilderOption[]
+  employmentOptions: BuilderOption[]
+  employmentsTruncated: boolean
+  programDrawer: ProgramDetailDrawer | null
+  programCloseHref: string
+  awardDrawer: AwardDetailDrawer | null
+  awardCloseHref: string
+  canQueue: boolean
+  awardProgramOptions: { value: string; label: string; currency: string }[]
+  vitalsRefusal: { title: string; message: string } | null
+  awardsTotal: number
+  awardsTruncated: boolean
+  truncationNotice: string
+  tiles: { activePrograms: string; openWindows: string; pendingApprovals: string; queuedPayouts: string }
+  deliveredRows: { currency: string; amount: string; display: string }[]
+  awaitingRows: { currency: string; amount: string; display: string }[]
+  moneyColumns: { currency: string; amount: string }
+  deliveredTitle: string
+  deliveredEmpty: string
+  awaitingTitle: string
+  awaitingEmpty: string
+  reportsRefusal: { title: string; message: string } | null
+  optionsRefusal: { title: string; message: string } | null
+  scopeDepartments: BuilderOption[]
+  scopeProjects: BuilderOption[]
+  programEditOpen: boolean
+  programEditSeed: ProgramEditSeed | null
+  planSection: {
+    orgId: string
+    actorId: string
+    canManage: boolean
+    allowedSubsidiaryIds: string[] | null
+  } | null
 }
 
 type BenefitsCatalog = {
@@ -148,15 +243,20 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const rawSegment = sp.segment ?? 'all'
   const segment = (SEGMENTS as readonly string[]).includes(rawSegment) ? rawSegment : null
   const showingEnrolments = sp.view === 'enrolments'
+  const portfolioView = parsePortfolioView(showingEnrolments ? 'enrolments' : sp.view)
   const tabs = await hrmGroupTabs(authz, basePath)
-  const keepView: Record<string, string> = showingEnrolments ? { view: 'enrolments' } : {}
+  const keepView: Record<string, string> = showingEnrolments
+    ? { view: 'enrolments' }
+    : portfolioView !== 'overview'
+      ? { view: portfolioView }
+      : {}
   const currentParams: BenefitsData['currentParams'] = { ...keepView }
   if (sp.segment) currentParams.segment = sp.segment
 
   if (segment === null) {
     return {
       title: t('benefits.title'),
-      description: t('benefits.description'),
+      description: t('portfolio.description'),
       listTitle: '',
       tabs,
       refusal: { title: t('benefits.unknownSegmentTitle'), message: t('benefits.unknownSegment', { segment: rawSegment }) },
@@ -183,6 +283,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       drawerCloseHref: basePath,
       approveLabel: t('benefits.approve'),
       actionFailed: t('benefits.actionFailed'),
+      ...emptyPortfolioFields(t, canManage, basePath),
     }
   }
 
@@ -269,10 +370,30 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     }
   }
 
+  const openCount = windows.filter((w) => w.status === 'open').length
+  const pendingEnrollmentCount = enrolments.filter((e) => e.status === 'pending_approval').length
+  const portfolio = await loadBenefitsPortfolio(authz, sp, { openCount, pendingEnrollments: pendingEnrollmentCount }, t)
+  const portfolioFields = toPortfolioFields(t, authz, canManage, basePath, sp, portfolio, segment === 'all' ? undefined : segment)
+
+  const listTitle =
+    showingEnrolments || portfolioView === 'enrolments'
+      ? t('benefits.enrolmentsTitle')
+      : portfolioView === 'programs'
+        ? t('portfolio.programsTitle')
+        : portfolioView === 'rewards'
+          ? t('portfolio.rewardsTitle')
+          : portfolioView === 'incentives'
+            ? t('portfolio.incentivesTitle')
+            : portfolioView === 'payouts'
+              ? t('portfolio.payoutsTitle')
+              : portfolioView === 'overview'
+                ? t('portfolio.overviewTitle')
+                : t('benefits.windowsTitle')
+
   return {
     title: t('benefits.title'),
-    description: t('benefits.description'),
-    listTitle: showingEnrolments ? t('benefits.enrolmentsTitle') : t('benefits.windowsTitle'),
+    description: t('portfolio.description'),
+    listTitle,
     tabs,
     refusal: null,
     hasContent: true,
@@ -312,7 +433,442 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     drawerCloseHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, {}),
     approveLabel: t('benefits.approve'),
     actionFailed: t('benefits.actionFailed'),
+    ...portfolioFields,
   }
+}
+
+/**
+ * Portfolio fields for the refusal path: the unknown-segment page renders
+ * the refusal instead of content, but the contract still carries a
+ * well-shaped empty portfolio.
+ */
+function emptyPortfolioFields(
+  t: BenefitsCatalog,
+  canManage: boolean,
+  basePath: string,
+): Pick<
+  BenefitsData,
+  | 'portfolioView'
+  | 'overview'
+  | 'programColumns'
+  | 'programTableText'
+  | 'awardTableText'
+  | 'programRows'
+  | 'incentiveProgramRows'
+  | 'programsTitle'
+  | 'programsEmptyTitle'
+  | 'programsEmptyDescription'
+  | 'programsRefusal'
+  | 'awardColumns'
+  | 'awardRows'
+  | 'rewardAwardRows'
+  | 'incentiveAwardRows'
+  | 'rewardsTitle'
+  | 'incentivesTitle'
+  | 'payoutsTitle'
+  | 'awardsEmptyTitle'
+  | 'awardsEmptyDescription'
+  | 'awardsRefusal'
+  | 'newProgramButton'
+  | 'newProgramHref'
+  | 'newAwardButton'
+  | 'newAwardHref'
+  | 'programBuilderOpen'
+  | 'programBuilderFamily'
+  | 'programBuilderLocked'
+  | 'awardBuilderOpen'
+  | 'defaultAwardCurrency'
+  | 'accountOptions'
+  | 'payComponentOptions'
+  | 'employmentOptions'
+  | 'employmentsTruncated'
+  | 'programDrawer'
+  | 'programCloseHref'
+  | 'awardDrawer'
+  | 'awardCloseHref'
+  | 'canQueue'
+  | 'awardProgramOptions'
+  | 'vitalsRefusal'
+  | 'awardsTotal'
+  | 'awardsTruncated'
+  | 'truncationNotice'
+  | 'tiles'
+  | 'deliveredRows'
+  | 'awaitingRows'
+  | 'moneyColumns'
+  | 'deliveredTitle'
+  | 'deliveredEmpty'
+  | 'awaitingTitle'
+  | 'awaitingEmpty'
+  | 'reportsRefusal'
+  | 'optionsRefusal'
+  | 'scopeDepartments'
+  | 'scopeProjects'
+  | 'programEditOpen'
+  | 'programEditSeed'
+  | 'planSection'
+> {
+  return {
+    portfolioView: 'overview',
+    overview: {
+      vitals: {
+        activePrograms: 0,
+        draftPrograms: 0,
+        openWindows: 0,
+        pendingEnrollments: 0,
+        pendingAwards: 0,
+        queuedAwards: 0,
+        deliveredByCurrency: [],
+        awaitingByCurrency: [],
+      },
+      vitalsLabels: vitalsLabels(t),
+      cards: [],
+      attention: [],
+      attentionTitle: t('portfolio.attentionTitle'),
+      attentionEmpty: t('portfolio.attentionEmpty'),
+      reportLinks: [],
+      reportsTitle: t('portfolio.reportsTitle'),
+      reportsEmpty: t('portfolio.reportsEmpty'),
+    },
+    programColumns: programColumns(t),
+    programTableText: programTableText(t),
+    awardTableText: awardTableText(t),
+    programRows: [],
+    incentiveProgramRows: [],
+    programsTitle: t('portfolio.programsTitle'),
+    programsEmptyTitle: '',
+    programsEmptyDescription: '',
+    programsRefusal: null,
+    awardColumns: awardColumns(t),
+    awardRows: [],
+    rewardAwardRows: [],
+    incentiveAwardRows: [],
+    rewardsTitle: t('portfolio.rewardsTitle'),
+    incentivesTitle: t('portfolio.incentivesTitle'),
+    payoutsTitle: t('portfolio.payoutsTitle'),
+    awardsEmptyTitle: '',
+    awardsEmptyDescription: '',
+    awardsRefusal: null,
+    newProgramButton: t('portfolio.newProgram'),
+    newProgramHref: `${basePath}?program=new`,
+    newAwardButton: t('portfolio.newAward'),
+    newAwardHref: `${basePath}?award=new`,
+    programBuilderOpen: false,
+    programBuilderFamily: 'reward',
+    programBuilderLocked: false,
+    awardBuilderOpen: false,
+    defaultAwardCurrency: '',
+    accountOptions: [],
+    payComponentOptions: [],
+    employmentOptions: [],
+    employmentsTruncated: false,
+    programDrawer: null,
+    programCloseHref: basePath,
+    awardDrawer: null,
+    awardCloseHref: basePath,
+    canQueue: false,
+    awardProgramOptions: [],
+    vitalsRefusal: null,
+    awardsTotal: 0,
+    awardsTruncated: false,
+    truncationNotice: t('portfolio.awardsTruncated'),
+    tiles: { activePrograms: '0', openWindows: '0', pendingApprovals: '0', queuedPayouts: '0' },
+    deliveredRows: [],
+    awaitingRows: [],
+    moneyColumns: { currency: t('portfolio.columns.currency'), amount: t('portfolio.columns.value') },
+    deliveredTitle: t('portfolio.vitals.deliveredTitle'),
+    deliveredEmpty: t('portfolio.vitals.deliveredEmpty'),
+    awaitingTitle: t('portfolio.vitals.awaitingTitle'),
+    awaitingEmpty: t('portfolio.vitals.awaitingEmpty'),
+    reportsRefusal: null,
+    optionsRefusal: null,
+    scopeDepartments: [],
+    scopeProjects: [],
+    programEditOpen: false,
+    programEditSeed: null,
+    planSection: null,
+  }
+}
+
+function vitalsLabels(t: BenefitsCatalog): VitalsLabels {
+  return {
+    activePrograms: t('portfolio.vitals.activePrograms'),
+    openWindows: t('portfolio.vitals.openWindows'),
+    pendingApprovals: t('portfolio.vitals.pendingApprovals'),
+    queuedPayouts: t('portfolio.vitals.queuedPayouts'),
+    deliveredTitle: t('portfolio.vitals.deliveredTitle'),
+    awaitingTitle: t('portfolio.vitals.awaitingTitle'),
+    deliveredEmpty: t('portfolio.vitals.deliveredEmpty'),
+    awaitingEmpty: t('portfolio.vitals.awaitingEmpty'),
+    reportsTitle: t('portfolio.reportsTitle'),
+    reportsEmpty: t('portfolio.reportsEmpty'),
+    attentionTitle: t('portfolio.attentionTitle'),
+    attentionEmpty: t('portfolio.attentionEmpty'),
+    cardsTitle: t('portfolio.cardsTitle'),
+  }
+}
+
+function programColumns(t: BenefitsCatalog): BenefitsData['programColumns'] {
+  return {
+    program: t('portfolio.columns.program'),
+    family: t('portfolio.columns.family'),
+    value: t('portfolio.columns.value'),
+    effective: t('portfolio.columns.effective'),
+    status: t('portfolio.columns.status'),
+  }
+}
+
+function programTableText(t: BenefitsCatalog): ProgramTableText {
+  return {
+    program: t('portfolio.columns.program'),
+    family: t('portfolio.columns.family'),
+    value: t('portfolio.columns.value'),
+    effective: t('portfolio.columns.effective'),
+    status: t('portfolio.columns.status'),
+    emptyTitle: t('portfolio.programsEmptyTitle'),
+    emptyDescription: t('portfolio.programsEmptyDescription'),
+    totalLabel: t('portfolio.totalLabel'),
+    truncatedLabel: t('portfolio.awardsTruncated'),
+  }
+}
+
+function awardTableText(t: BenefitsCatalog): AwardTableText {
+  return {
+    program: t('portfolio.columns.program'),
+    recipient: t('portfolio.columns.recipient'),
+    period: t('portfolio.columns.period'),
+    value: t('portfolio.columns.value'),
+    status: t('portfolio.columns.status'),
+    emptyTitle: t('portfolio.awardsEmptyTitle'),
+    emptyDescription: t('portfolio.awardsEmptyDescription'),
+    totalLabel: t('portfolio.totalLabel'),
+    truncatedLabel: t('portfolio.awardsTruncated'),
+  }
+}
+
+function awardColumns(t: BenefitsCatalog): BenefitsData['awardColumns'] {
+  return {
+    program: t('portfolio.columns.program'),
+    recipient: t('portfolio.columns.recipient'),
+    period: t('portfolio.columns.period'),
+    value: t('portfolio.columns.value'),
+    status: t('portfolio.columns.status'),
+  }
+}
+
+/** Cards, titles, builder state, and view-filtered rows from one portfolio. */
+function toPortfolioFields(
+  t: BenefitsCatalog,
+  authz: Authz,
+  canManage: boolean,
+  basePath: string,
+  sp: Record<string, string | undefined>,
+  portfolio: PortfolioData,
+  segment: string | undefined,
+): Omit<ReturnType<typeof emptyPortfolioFields>, 'portfolioView'> & { portfolioView: PortfolioView } {
+  const portfolioView = parsePortfolioView(sp.view)
+  const viewParam = (view: string): string => (view === 'overview' ? basePath : `${basePath}?view=${view}`)
+  const familyCount = (family: string): number => portfolio.programs.filter((p) => p.family === family).length
+  const countLabel = (count: number): string | null =>
+    count > 0 ? t('portfolio.cards.count', { count }) : null
+  const cards: OverviewCard[] = [
+    {
+      key: 'health',
+      title: t('portfolio.cards.health.title'),
+      description: t('portfolio.cards.health.description'),
+      href: `${basePath}?view=programs&plan=new`,
+      iconKey: 'heart-pulse',
+      countLabel: null,
+    },
+    {
+      key: 'retirement',
+      title: t('portfolio.cards.retirement.title'),
+      description: t('portfolio.cards.retirement.description'),
+      href: `${basePath}?view=programs&plan=new`,
+      iconKey: 'piggy-bank',
+      countLabel: null,
+    },
+    {
+      key: 'allowance',
+      title: t('portfolio.cards.allowance.title'),
+      description: t('portfolio.cards.allowance.description'),
+      href: `${viewParam('programs')}${viewParam('programs') === basePath ? '?' : '&'}program=new&family=allowance`,
+      iconKey: 'wallet',
+      countLabel: countLabel(familyCount('allowance')),
+    },
+    {
+      key: 'reward',
+      title: t('portfolio.cards.reward.title'),
+      description: t('portfolio.cards.reward.description'),
+      href: `${viewParam('rewards')}&program=new&family=reward`,
+      iconKey: 'gift',
+      countLabel: countLabel(familyCount('reward')),
+    },
+    {
+      key: 'incentive',
+      title: t('portfolio.cards.incentive.title'),
+      description: t('portfolio.cards.incentive.description'),
+      href: `${viewParam('incentives')}&program=new&family=incentive`,
+      iconKey: 'chart-line',
+      countLabel: countLabel(familyCount('incentive')),
+    },
+    {
+      key: 'custom',
+      title: t('portfolio.cards.custom.title'),
+      description: t('portfolio.cards.custom.description'),
+      href: `${viewParam('programs')}${viewParam('programs') === basePath ? '?' : '&'}program=new&family=custom`,
+      iconKey: 'shapes',
+      countLabel: countLabel(familyCount('custom')),
+    },
+  ]
+  const requestedFamily = sp.family === 'reward' || sp.family === 'allowance' || sp.family === 'incentive' || sp.family === 'custom'
+    ? sp.family
+    : null
+  const currencies = new Map<string, number>()
+  for (const program of portfolio.programs) currencies.set(program.currency, (currencies.get(program.currency) ?? 0) + 1)
+  const defaultAwardCurrency = [...currencies.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+  return {
+    portfolioView,
+    overview: {
+      vitals: portfolio.vitals,
+      vitalsLabels: vitalsLabels(t),
+      cards,
+      attention: portfolio.attention,
+      attentionTitle: portfolio.attentionTitle,
+      attentionEmpty: t('portfolio.attentionEmpty'),
+      reportLinks: portfolio.reportLinks,
+      reportsTitle: portfolio.reportsTitle,
+      reportsEmpty: t('portfolio.reportsEmpty'),
+    },
+    programColumns: programColumns(t),
+    programTableText: programTableText(t),
+    awardTableText: awardTableText(t),
+    programRows: portfolio.programs,
+    incentiveProgramRows: portfolio.programs.filter((p) => p.family === 'incentive'),
+    programsTitle: t('portfolio.programsTitle'),
+    programsEmptyTitle: t('portfolio.programsEmptyTitle'),
+    programsEmptyDescription: t('portfolio.programsEmptyDescription'),
+    programsRefusal: portfolio.programsRefusal,
+    awardColumns: awardColumns(t),
+    awardRows: portfolio.awards,
+    rewardAwardRows: portfolio.awards.filter((a) => a.programFamily === 'reward' || a.programFamily === 'allowance'),
+    incentiveAwardRows: portfolio.awards.filter((a) => a.programFamily === 'incentive'),
+    rewardsTitle: t('portfolio.rewardsTitle'),
+    incentivesTitle: t('portfolio.incentivesTitle'),
+    payoutsTitle: t('portfolio.payoutsTitle'),
+    awardsEmptyTitle: t('portfolio.awardsEmptyTitle'),
+    awardsEmptyDescription: t('portfolio.awardsEmptyDescription'),
+    awardsRefusal: portfolio.awardsRefusal,
+    newProgramButton: portfolio.newProgramButton,
+    newProgramHref: portfolioHrefFor(basePath, segment, sp.view, { program: 'new' }),
+    newAwardButton: t('portfolio.newAward'),
+    newAwardHref: portfolioHrefFor(basePath, segment, sp.view, { award: 'new' }),
+    programBuilderOpen: sp.program === 'new' && canManage && portfolio.optionsRefusal === null,
+    programBuilderFamily: requestedFamily ?? 'reward',
+    programBuilderLocked: requestedFamily !== null,
+    awardBuilderOpen: sp.award === 'new' && canManage && portfolio.optionsRefusal === null,
+    defaultAwardCurrency,
+    accountOptions: portfolio.accountOptions,
+    payComponentOptions: portfolio.payComponentOptions,
+    employmentOptions: portfolio.employmentOptions,
+    employmentsTruncated: portfolio.employmentsTruncated,
+    programDrawer: portfolio.programDrawer,
+    programCloseHref: portfolio.programCloseHref,
+    awardDrawer: portfolio.awardDrawer,
+    awardCloseHref: portfolio.awardCloseHref,
+    canQueue: portfolio.canQueue,
+    vitalsRefusal: portfolio.vitalsRefusal,
+    awardsTotal: portfolio.awardsTotal,
+    awardsTruncated: portfolio.awardsTruncated,
+    truncationNotice: t('portfolio.awardsTruncated'),
+    tiles: {
+      activePrograms: String(portfolio.vitals.activePrograms),
+      openWindows: String(portfolio.vitals.openWindows),
+      pendingApprovals: String(portfolio.vitals.pendingEnrollments + portfolio.vitals.pendingAwards),
+      queuedPayouts: String(portfolio.vitals.queuedAwards),
+    },
+    deliveredRows: portfolio.vitals.deliveredByCurrency,
+    awaitingRows: portfolio.vitals.awaitingByCurrency,
+    moneyColumns: { currency: t('portfolio.columns.currency'), amount: t('portfolio.columns.value') },
+    deliveredTitle: t('portfolio.vitals.deliveredTitle'),
+    deliveredEmpty: t('portfolio.vitals.deliveredEmpty'),
+    awaitingTitle: t('portfolio.vitals.awaitingTitle'),
+    awaitingEmpty: t('portfolio.vitals.awaitingEmpty'),
+    reportsRefusal: portfolio.reportsRefusal,
+    optionsRefusal: portfolio.optionsRefusal,
+    scopeDepartments: portfolio.departmentOptions,
+    scopeProjects: portfolio.projectOptions,
+    programEditOpen: sp.edit === '1' && portfolio.programs.some((program) => program.id === sp.program && program.status === 'draft') && canManage && portfolio.optionsRefusal === null,
+    // The edit seed resolves from the authoritative program row the service
+    // just listed — the builder edits server state, never a client echo.
+    // Source accounts resolve through the detail drawer when it is open.
+    programEditSeed: (() => {
+      if (sp.edit !== '1' || sp.program === undefined || sp.program === 'new') return null
+      const seed = portfolio.programs.find((row) => row.id === sp.program) ?? null
+      if (!seed || seed.status !== 'draft' || portfolio.optionsRefusal) return null
+      const drawerSources = [...portfolio.editSourceAccountIds]
+      return {
+        id: seed.id,
+        code: seed.code,
+        name: seed.name,
+        family: seed.family,
+        description: seed.description,
+        legalEntityId: seed.legalEntityId,
+        currency: seed.currency,
+        effectiveFrom: seed.effectiveFrom,
+        effectiveTo: seed.effectiveTo,
+        payComponentId: seed.payComponentId,
+        deliveryMethod: seed.deliveryMethod,
+        valuation: seed.valuation,
+        metric: seed.metric ?? '',
+        metricScope: seed.metricScope ?? 'company',
+        scopeIds: [...seed.scopeIds],
+        allocation: seed.allocation,
+        percentRate: seed.percentRate,
+        fixedAmount: seed.fixedAmount,
+        capAmount: seed.capAmount,
+        budgetAmount: seed.budgetAmount,
+        thresholdAmount: seed.thresholdAmount,
+        frequency: seed.frequency,
+        periodBasis: seed.periodBasis,
+        paymentDelayDays: seed.paymentDelayDays,
+        sourceAccountIds: drawerSources,
+      }
+    })(),
+    // Manual awards record rewards, allowances, and custom grants. Incentive
+    // values settle through the settlement service only — the award route
+    // refuses manual incentive values, so incentive programs are not offered
+    // here; they settle from their program drawer.
+    awardProgramOptions: portfolio.programs
+      .filter((program) => program.status === 'active' && program.family !== 'incentive')
+      .map((program) => ({ value: program.id, label: `${program.code} — ${program.name}`, currency: program.currency })),
+    // The insured-plan Setup section rehomes onto the programs view, where
+    // the health and retirement cards land. Every other view keeps the
+    // portfolio tables; the section reads its own rows, never the loader's.
+    planSection:
+      portfolioView === 'programs'
+        ? {
+            orgId: authz.user.orgId,
+            actorId: authz.user.id,
+            canManage,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null,
+          }
+        : null,
+  }
+}
+
+function portfolioHrefFor(
+  basePath: string,
+  segment: string | undefined,
+  view: string | undefined,
+  extra: Record<string, string>,
+): string {
+  const params = new URLSearchParams()
+  if (segment) params.set('segment', segment)
+  if (view && view !== 'overview') params.set('view', view)
+  for (const [key, value] of Object.entries(extra)) params.set(key, value)
+  const query = params.toString()
+  return query ? `${basePath}?${query}` : basePath
 }
 
 export interface BenefitsPanelData {

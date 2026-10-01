@@ -3139,6 +3139,26 @@
         "title": "顧客品番",
         "singular": "顧客品番",
         "description": "顧客が注文する商品に対応する顧客固有の商品コードです。"
+      },
+      "benefit-programs": {
+        "title": "給付プログラム",
+        "singularTitle": "給付プログラム",
+        "description": "雇用主が定める報奨・手当・インセンティブ・独自プログラム。型付きルール、財源、所属で管理。健康・退職は既存プランのまま。"
+      },
+      "benefit-program-scopes": {
+        "title": "プログラム範囲",
+        "singularTitle": "プログラム範囲",
+        "description": "測定対象の部門・プロジェクトをテナントキーで解決。全社範囲は行を持たない。"
+      },
+      "benefit-program-sources": {
+        "title": "プログラム財源",
+        "singularTitle": "プログラム財源",
+        "description": "プログラムごとの財源勘定を型付き子テーブルで管理。"
+      },
+      "benefit-program-members": {
+        "title": "プログラム所属",
+        "singularTitle": "プログラム所属",
+        "description": "適用期間・重み・役割付きで雇用をプログラムに結び付ける。"
       }
     },
     "fields": {
@@ -3669,7 +3689,18 @@
       "aiRailsRetroThreshold": "この金額以上の遡及を検出（既定500）。",
       "aiRailsCohort": "子会社・部門・給与サイクル・職位で従業員をグルーピング。",
       "aiRailsBiasTerms": "組織が定める語句を完全一致で検出。1行1語句。",
-      "aiRailsReviewMonths": "レビュー周期（月、1〜36）。期限切れはsetupの受信箱に通知。"
+      "aiRailsReviewMonths": "レビュー周期（月、1〜36）。期限切れはsetupの受信箱に通知。",
+      "benefitProgramFamily": "報奨・手当・インセンティブ・独自。健康・退職は既存プランのまま。",
+      "benefitProgramDescription": "何をなぜ支給するかを平易に記す。",
+      "benefitProgramEntity": "責任を持つ法人。有効化前に必須。",
+      "benefitProgramComponent": "支給額の稼得項目。給与支給と課税対象の外部支給に必須。",
+      "benefitDeliveryMethod": "給与は給与入力で支給。外部は提供者の参照を記録。",
+      "benefitValuation": "固定は金額、率は料率、総額は予算を配分。",
+      "benefitMetric": "売上・粗利・純利益・承認時間のいずれかを測定。",
+      "benefitMetricScope": "全社は組織全体。部門・プロジェクトは範囲行を指定。",
+      "benefitAllocation": "均等は等分、時間は時間重み、役割は役割重み。",
+      "benefitFrequency": "月次・四半期・年次・完了時・手動のいずれかで測定。",
+      "benefitPeriodBasis": "四半期・年次は暦か会計年度かを指定。"
     },
     "options": {
       "usageAggregation": {
@@ -4196,6 +4227,53 @@
         "upc": "UPC",
         "ean": "EAN",
         "internal": "内部"
+      },
+      "benefitProgramFamily": {
+        "reward": "報奨",
+        "allowance": "手当",
+        "incentive": "インセンティブ",
+        "custom": "独自"
+      },
+      "benefitProgramStatus": {
+        "draft": "下書き",
+        "active": "有効",
+        "closed": "終了"
+      },
+      "benefitDeliveryMethod": {
+        "payroll": "給与",
+        "external": "外部"
+      },
+      "benefitValuation": {
+        "fixed": "固定",
+        "percent": "率",
+        "pool": "総額"
+      },
+      "benefitMetric": {
+        "revenue": "売上",
+        "gross_profit": "粗利",
+        "net_profit": "純利益",
+        "approved_hours": "承認時間"
+      },
+      "benefitMetricScope": {
+        "company": "全社",
+        "department": "部門",
+        "project": "プロジェクト"
+      },
+      "benefitAllocation": {
+        "equal": "均等",
+        "hours": "時間",
+        "role": "役割"
+      },
+      "benefitFrequency": {
+        "monthly": "月次",
+        "quarterly": "四半期",
+        "annual": "年次",
+        "project_complete": "完了時",
+        "manual": "手動"
+      },
+      "benefitPeriodBasis": {
+        "calendar": "暦",
+        "fiscal": "会計年度"
       }
     },
     "invoicing": {
@@ -4973,7 +5051,9 @@
       "holidayCompanyDay": "会社休日",
       "holidayElection": "法定祝日への選択",
       "benefitCosts": "費用と按分",
-      "benefitComponents": "給与コンポーネント"
+      "benefitComponents": "給与コンポーネント",
+      "benefitDelivery": "支給",
+      "benefitRules": "ルール"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",

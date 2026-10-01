@@ -3064,6 +3064,26 @@
         "title": "Customer part numbers",
         "singular": "Customer part number",
         "description": "Customer-specific product codes mapped to the items they order."
+      },
+      "benefit-programs": {
+        "title": "Benefit programs",
+        "singularTitle": "Benefit program",
+        "description": "Employer-defined rewards, allowances, incentives, and custom programs with typed rules, funding sources, and membership. Insured health and retirement stay on benefit plans."
+      },
+      "benefit-program-scopes": {
+        "title": "Program scope",
+        "singularTitle": "Program scope",
+        "description": "Departments and projects a program measures, resolved through tenant keys. Company scope carries no rows."
+      },
+      "benefit-program-sources": {
+        "title": "Program sources",
+        "singularTitle": "Program source",
+        "description": "Funding source accounts per program, as a typed child table."
+      },
+      "benefit-program-members": {
+        "title": "Program members",
+        "singularTitle": "Program member",
+        "description": "Employments bound to a program over effective dates, with weight and role for allocation."
       }
     },
     "fields": {
@@ -3594,7 +3614,18 @@
       "aiRailsRetroThreshold": "Flag retro-pay adjustments at or above this amount (default 500).",
       "aiRailsCohort": "Group employees for baselines by subsidiary, department, pay schedule or job level.",
       "aiRailsBiasTerms": "Org-declared words and phrases the draft check flags whole-word, one per line in the editor.",
-      "aiRailsReviewMonths": "Ledger review cadence in months (1–36); overdue capabilities nudge the setup admins' inbox."
+      "aiRailsReviewMonths": "Ledger review cadence in months (1–36); overdue capabilities nudge the setup admins' inbox.",
+      "benefitProgramFamily": "Reward, allowance, incentive, or custom. Insured health and retirement stay on benefit plans.",
+      "benefitProgramDescription": "What this program pays and why, in plain language.",
+      "benefitProgramEntity": "Responsible legal entity. Required before activation.",
+      "benefitProgramComponent": "Earning component paying the value. Required for payroll delivery and for taxable external value.",
+      "benefitDeliveryMethod": "Payroll pays through pay-run inputs; external records the provider reference.",
+      "benefitValuation": "Fixed pays an amount, percent pays a rate, pool shares a budget.",
+      "benefitMetric": "Measured figure for incentives: revenue, gross profit, net profit, or approved hours.",
+      "benefitMetricScope": "Company measures the org; department and project name their scope rows.",
+      "benefitAllocation": "Equal splits evenly; hours weights by time; role weights by member role.",
+      "benefitFrequency": "How often the program measures: monthly, quarterly, annual, project complete, or manual.",
+      "benefitPeriodBasis": "Quarterly and annual programs name calendar or fiscal periods so settlement and payroll agree."
     },
     "options": {
       "usageAggregation": {
@@ -4121,6 +4152,53 @@
         "upc": "UPC",
         "ean": "EAN",
         "internal": "Internal"
+      },
+      "benefitProgramFamily": {
+        "reward": "Reward",
+        "allowance": "Allowance",
+        "incentive": "Incentive",
+        "custom": "Custom"
+      },
+      "benefitProgramStatus": {
+        "draft": "Draft",
+        "active": "Active",
+        "closed": "Closed"
+      },
+      "benefitDeliveryMethod": {
+        "payroll": "Payroll",
+        "external": "External"
+      },
+      "benefitValuation": {
+        "fixed": "Fixed",
+        "percent": "Percent",
+        "pool": "Pool"
+      },
+      "benefitMetric": {
+        "revenue": "Revenue",
+        "gross_profit": "Gross profit",
+        "net_profit": "Net profit",
+        "approved_hours": "Approved hours"
+      },
+      "benefitMetricScope": {
+        "company": "Company",
+        "department": "Department",
+        "project": "Project"
+      },
+      "benefitAllocation": {
+        "equal": "Equal",
+        "hours": "Hours",
+        "role": "Role"
+      },
+      "benefitFrequency": {
+        "monthly": "Monthly",
+        "quarterly": "Quarterly",
+        "annual": "Annual",
+        "project_complete": "Project complete",
+        "manual": "Manual"
+      },
+      "benefitPeriodBasis": {
+        "calendar": "Calendar",
+        "fiscal": "Fiscal"
       }
     },
     "payroll": {
@@ -4901,7 +4979,9 @@
       "holidayElection": "Election on a statutory holiday",
       "holidayCompanyDay": "Company holiday",
       "benefitCosts": "Costs and proration",
-      "benefitComponents": "Pay components"
+      "benefitComponents": "Pay components",
+      "benefitDelivery": "Delivery",
+      "benefitRules": "Rules"
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"

@@ -1222,6 +1222,16 @@
       "active": "Active",
       "ended": "Terminée",
       "cancelled": "Annulée"
+    },
+    "workspace": {
+      "tabs": {
+        "overview": "Aperçu",
+        "programs": "Programmes",
+        "enrollments": "Adhésions",
+        "rewards": "Récompenses",
+        "incentives": "Intéressement",
+        "payouts": "Versements"
+      }
     }
   },
   "me": {
@@ -1485,7 +1495,19 @@
       "changeDescription": "Modifiez depuis une date dans une fenêtre ouverte — l'ancienne ligne se termine la veille.",
       "changeReasonPlaceholder": "Pourquoi la couverture change",
       "changeSubmit": "Enregistrer la modification",
-      "changeFailed": "La modification n'a pas pu être enregistrée."
+      "changeFailed": "La modification n'a pas pu être enregistrée.",
+      "awards": {
+        "paidTitle": "Récompenses versées",
+        "pendingTitle": "Récompenses en attente de versement",
+        "hint": "Les récompenses versées sont déjà incluses dans la paie. Les récompenses en attente ne sont pas des paiements.",
+        "paidEmpty": "Aucune récompense versée.",
+        "pendingEmpty": "Aucune récompense en attente de versement.",
+        "refusalTitle": "Récompenses indisponibles",
+        "program": "Programme",
+        "period": "Période acquise",
+        "value": "Valeur",
+        "status": "Statut"
+      }
     },
     "qualifications": {
       "columns": {
@@ -2356,5 +2378,343 @@
     "biasFlags": "Formulations à revoir",
     "loading": "Rédaction depuis les pièces citées…",
     "copied": "Aucun champ modifiable ici — le brouillon a été copié dans le presse-papiers."
+  },
+  "portfolio": {
+    "overviewTitle": "Portefeuille d'avantages",
+    "programsTitle": "Programmes d'avantages",
+    "rewardsTitle": "Récompenses et allocations",
+    "incentivesTitle": "Primes d'intéressement",
+    "payoutsTitle": "Versements des primes",
+    "newProgram": "Nouveau programme",
+    "newAward": "Nouvelle prime",
+    "programsEmptyTitle": "Aucun programme d'avantages",
+    "programsEmptyDescription": "Créez le premier programme de l'employeur pour accorder récompenses, allocations ou intéressement.",
+    "awardsEmptyTitle": "Aucune prime",
+    "awardsEmptyDescription": "Les primes apparaissent ici dès qu'un programme les accorde.",
+    "loadFailed": "L'espace avantages n'a pas pu être chargé.",
+    "loadFailedTitle": "Avantages indisponibles",
+    "awardsTruncated": "les 500 premiers sont affichés",
+    "totalLabel": "Enregistrements au total",
+    "drawerFailedTitle": "Détails du programme incomplets",
+    "attentionTitle": "À traiter",
+    "attentionEmpty": "Rien à traiter.",
+    "reportsTitle": "États des avantages",
+    "reportsEmpty": "Aucun état des avantages disponible.",
+    "reportsFailedTitle": "États indisponibles",
+    "optionsFailedTitle": "Choix indisponibles",
+    "vitalsFailedTitle": "Totaux incomplets",
+    "openProgram": "Ouvrir",
+    "openAward": "Ouvrir",
+    "programActionFailed": "La modification du programme a échoué.",
+    "awardActionFailed": "La modification de la prime a échoué.",
+    "awardCreateFailed": "La prime n'a pas été enregistrée.",
+    "attention": {
+      "pendingEnrollments": "{count} adhésions en attente d'approbation",
+      "pendingAwards": "{count} primes en attente d'approbation",
+      "queuedAwards": "{count} primes en file de versement",
+      "draftPrograms": "{count} programmes brouillons pas encore actifs",
+      "missingComponent": "Le programme {code} verse par la paie mais ne nomme aucune rubrique"
+    },
+    "vitals": {
+      "activePrograms": "Programmes actifs",
+      "openWindows": "Guichets ouverts",
+      "pendingApprovals": "Approbations en attente",
+      "queuedPayouts": "Versements en file",
+      "deliveredTitle": "Versées",
+      "awaitingTitle": "En attente de versement",
+      "deliveredEmpty": "Aucune prime versée.",
+      "awaitingEmpty": "Aucune prime en attente de versement."
+    },
+    "cardsTitle": "Types de programme",
+    "cards": {
+      "count": "{count} programmes",
+      "health": {
+        "title": "Santé et assurance",
+        "description": "Régimes assurés santé, dentaire, vision et vie."
+      },
+      "retirement": {
+        "title": "Retraite et épargne",
+        "description": "Régimes de retraite et d'épargne."
+      },
+      "allowance": {
+        "title": "Allocations et dépenses",
+        "description": "Allocations de dépenses périodiques versées par la paie."
+      },
+      "reward": {
+        "title": "Récompenses et reconnaissance",
+        "description": "Primes ponctuelles et cartes cadeaux."
+      },
+      "incentive": {
+        "title": "Intéressement et participation",
+        "description": "Versements mesurés partagés entre membres."
+      },
+      "custom": {
+        "title": "Programmes sur mesure",
+        "description": "Tout autre avantage accordé par l'organisation."
+      }
+    },
+    "families": {
+      "reward": "Récompense",
+      "allowance": "Allocation",
+      "incentive": "Intéressement",
+      "custom": "Sur mesure"
+    },
+    "familyHints": {
+      "reward": "Reconnaissance ponctuelle : bonus, cartes cadeaux, primes spontanées.",
+      "allowance": "Pouvoir d'achat périodique : repas, transport, bien-être.",
+      "incentive": "Partage mesuré : bénéfice, chiffre d'affaires ou heures avec liquidation.",
+      "custom": "Un avantage qui n'entre dans aucune autre famille."
+    },
+    "valuations": {
+      "fixed": "Montant fixe",
+      "percent": "Pourcentage de la base",
+      "pool": "Enveloppe partagée"
+    },
+    "metrics": {
+      "revenue": "Chiffre d'affaires",
+      "gross_profit": "Marge brute",
+      "net_profit": "Bénéfice net",
+      "approved_hours": "Heures approuvées"
+    },
+    "scopes": {
+      "company": "Toute l'entreprise",
+      "department": "Départements",
+      "project": "Projets"
+    },
+    "allocations": {
+      "equal": "Parts égales",
+      "hours": "Aux heures",
+      "role": "Au poids du rôle"
+    },
+    "frequencies": {
+      "monthly": "Mensuelle",
+      "quarterly": "Trimestrielle",
+      "annual": "Annuelle",
+      "project_complete": "À l'achèvement du projet",
+      "manual": "Manuelle"
+    },
+    "periodBasis": {
+      "calendar": "Année civile",
+      "fiscal": "Exercice fiscal"
+    },
+    "delivery": {
+      "payroll": "Par la paie",
+      "external": "Prestataire externe"
+    },
+    "programStatus": {
+      "draft": "Brouillon",
+      "active": "Actif",
+      "closed": "Clôturé"
+    },
+    "awardStatus": {
+      "draft": "Brouillon",
+      "pending": "En attente d'approbation",
+      "approved": "Approuvée",
+      "queued": "En file de versement",
+      "delivered": "Versée",
+      "voided": "Annulée"
+    },
+    "columns": {
+      "program": "Programme",
+      "family": "Famille",
+      "value": "Valeur",
+      "effective": "Effet",
+      "status": "Statut",
+      "recipient": "Bénéficiaire",
+      "period": "Période",
+      "currency": "Devise",
+      "externalRef": "Référence prestataire",
+      "voidReason": "Motif d'annulation"
+    },
+    "membersTitle": "Membres",
+    "membersEmpty": "Aucun membre.",
+    "members": {
+      "weight": "Pondération",
+      "weightPlaceholder": "1",
+      "weightHint": "Poids de part pour les enveloppes ; vide signifie égal.",
+      "role": "Rôle",
+      "rolePlaceholder": "Contributeur",
+      "roleHint": "Rôle utilisé pour les répartitions pondérées par rôle."
+    },
+    "addMember": "Ajouter un membre",
+    "removeMember": "Mettre fin à l'adhésion",
+    "removeReasonPrompt": "Pourquoi cette adhésion prend-elle fin ?",
+    "removeReasonRequired": "Indiquez le motif de fin d'adhésion.",
+    "sourcesTitle": "Comptes mesurés",
+    "sourcesEmpty": "Aucun compte mesuré.",
+    "settlementPending": "La liquidation s'exécute sur ces comptes à la clôture de la période.",
+    "activateProgram": "Activer",
+    "closeProgram": "Clôturer",
+    "closeReasonLabel": "Pourquoi ce programme est-il clôturé ?",
+    "editProgram": "Modifier",
+    "reports": {
+      "enrollments": "Adhésions aux avantages",
+      "inputs": "Rubriques de paie des avantages",
+      "awards": "Primes d'avantages"
+    },
+    "simulate": {
+      "title": "Simulation de liquidation",
+      "periodFrom": "Période du",
+      "periodTo": "Période au",
+      "run": "Simuler",
+      "estimate": "Estimation : des sources non comptabilisées ou non approuvées tombent dans cette période, la liquidation peut différer.",
+      "noRecipients": "Aucun bénéficiaire payable pour cette période.",
+      "totalHours": "Heures approuvées",
+      "entries": "Écritures sources",
+      "revenue": "Chiffre d'affaires",
+      "expenses": "Charges",
+      "measured": "Base mesurée",
+      "totalAwarded": "Total à attribuer",
+      "settle": "Liquider la période"
+    },
+    "simulateFailedTitle": "Simulation échouée",
+    "simulatePeriodRequired": "Choisissez la période à simuler.",
+    "builder": {
+      "title": "Nouveau programme d'avantages",
+      "editTitle": "Modifier le programme d'avantages",
+      "stepsLabel": "Étapes du programme",
+      "steps": {
+        "offer": "Offre",
+        "eligibility": "Éligibilité",
+        "value": "Valeur",
+        "timing": "Calendrier",
+        "controls": "Contrôles",
+        "delivery": "Versement",
+        "review": "Contrôle"
+      },
+      "fields": {
+        "family": "Famille du programme",
+        "code": "Code du programme",
+        "name": "Nom du programme",
+        "description": "Description",
+        "legalEntity": "Entité juridique",
+        "currency": "Devise",
+        "valuation": "Évaluation",
+        "fixedAmount": "Montant fixe",
+        "percentRate": "Taux en pourcentage",
+        "budgetAmount": "Budget de l'enveloppe",
+        "metric": "Mesuré depuis",
+        "metricScope": "Périmètre de mesure",
+        "departments": "Départements",
+        "projects": "Projets",
+        "capAmount": "Plafond par bénéficiaire",
+        "thresholdAmount": "Seuil de versement",
+        "effectiveFrom": "Effet le",
+        "effectiveTo": "Fin d'effet",
+        "frequency": "Fréquence",
+        "periodBasis": "Base de période",
+        "paymentDelayDays": "Jours de fin de période au versement",
+        "allocation": "Répartition",
+        "measuredAccountIds": "Comptes mesurés",
+        "deliveryMethod": "Versement",
+        "payComponent": "Rubrique",
+        "reason": "Motif de modification"
+      },
+      "allEntities": "Toutes les entités",
+      "entityHint": "Vide signifie chaque entité où le programme peut s'appliquer.",
+      "employmentsTruncated": "La liste des emplois montre les 500 premiers noms ; l'adhésion accepte tout emploi couvert.",
+      "searchDepartments": "Rechercher des départements…",
+      "searchProjects": "Rechercher des projets…",
+      "searchAccounts": "Rechercher des comptes…",
+      "noDepartments": "Aucun département couvert.",
+      "noProjects": "Aucun projet couvert.",
+      "noAccounts": "Aucun compte de mouvement couvert.",
+      "measuredHint": "Seules les mesures monétaires d'intéressement nomment des comptes mesurés ; la liquidation chiffre depuis ceux-ci.",
+      "payComponentMapsValue": "La valeur atteint la paie par la rubrique ci-dessous — aucune liste de financement.",
+      "chooseComponent": "Choisir une rubrique",
+      "chooseProgram": "Choisir un programme",
+      "chooseRecipient": "Choisir un bénéficiaire",
+      "chooseBasis": "Choisir une base",
+      "basisHint": "Liquidation et paie doivent s'accorder sur le trimestre, donc la base fait partie du programme.",
+      "externalHint": "Les récompenses non monétaires positives ne peuvent pas être versées tant que la paie ne prend pas en charge leur traitement fiscal. Créez une récompense monétaire en paie pour un versement.",
+      "reviewTitle": "Contrôlez le programme",
+      "reviewEmpty": "Rien saisi pour l'instant.",
+      "reviewHint": "La création atterrit en brouillon ; le détail le relit depuis le serveur.",
+      "reasonPlaceholder": "Ce qui a changé et pourquoi",
+      "reasonRequired": "Indiquez le motif de cette modification.",
+      "fixFields": "Corrigez les champs signalés.",
+      "createFailed": "Le programme n'a pas été créé.",
+      "create": "Créer le programme",
+      "saveChanges": "Enregistrer",
+      "cancel": "Annuler",
+      "back": "Retour",
+      "next": "Suivant",
+      "amountNoun": "Montant"
+    },
+    "awardBuilderTitle": "Nouvelle prime",
+    "awardFields": {
+      "program": "Programme",
+      "recipient": "Bénéficiaire",
+      "periodFrom": "Période du",
+      "periodTo": "Période au",
+      "value": "Valeur",
+      "currency": "Devise",
+      "reason": "Motif",
+      "reasonPlaceholder": "Pourquoi cette prime est-elle accordée ?",
+      "recipientNote": "Note au bénéficiaire",
+      "recordReference": "Référence d'enregistrement",
+      "recordReferencePlaceholder": "Confirmation du prestataire ou numéro de commande",
+      "recordReferenceHint": "Le versement externe enregistre cette référence sur la prime."
+    },
+    "awardCreate": "Enregistrer la prime",
+    "submitAward": "Soumettre à approbation",
+    "approveAward": "Approuver",
+    "queueAward": "Mettre en file de versement",
+    "payrollDelivery": "Verser par la paie",
+    "externalDelivery": "Enregistrer le versement externe",
+    "voidAward": "Annuler",
+    "payrollInputLabel": "Rubrique de paie",
+    "payrollInputPlaceholder": "Identifiant de la rubrique existante",
+    "externalRefLabel": "Référence prestataire",
+    "externalRefPlaceholder": "Confirmation du prestataire ou numéro de commande",
+    "voidReasonPrompt": "Pourquoi cette prime est-elle annulée ?",
+    "voidReasonRequired": "Indiquez le motif d'annulation.",
+    "awardTimelineEmpty": "Les primes versées et annulées gardent leur historique ; aucune autre étape ne s'applique.",
+    "queueRunLabel": "Paie",
+    "queueRunsLoading": "Chargement des paies…",
+    "queueRunsEmpty": "Aucune paie ouverte.",
+    "queueRunChoose": "Choisir une paie",
+    "queueRunHint": "La mise en file crée l’ajustement natif sur la paie.",
+    "linkedRunHint": "Le versement confirme le lien enregistré.",
+    "unlinkedQueueHint": "En file sans lien — le versement le nommera.",
+    "runsUnavailable": "Paies indisponibles.",
+    "validation": {
+      "programCode": "Saisissez un code de programme.",
+      "programName": "Nommez le programme.",
+      "currency": "Saisissez un code de devise de 3 lettres majuscules, par exemple USD.",
+      "effectiveFrom": "Choisissez une date de début valide (AAAA-MM-JJ).",
+      "effectiveTo": "Choisissez une date de fin valide (AAAA-MM-JJ) ou laissez vide.",
+      "dateOrder": "La fin doit être à la date de début ou après.",
+      "fixedAmount": "Saisissez le montant fixe par bénéficiaire.",
+      "percentRate": "Saisissez le taux appliqué à la base mesurée.",
+      "budgetAmount": "Saisissez le budget partagé entre les bénéficiaires.",
+      "metric": "Choisissez la mesure de la prime.",
+      "scopeIds": "Sélectionnez au moins un service ou projet.",
+      "sourceAccounts": "Sélectionnez les comptes qui déterminent la base.",
+      "periodBasis": "Choisissez des périodes civiles ou fiscales.",
+      "payComponent": "Sélectionnez la composante de rémunération utilisée en paie.",
+      "paymentDelay": "Saisissez un nombre entier de jours avant versement, ou 0.",
+      "awardProgram": "Choisissez le programme attribuant la récompense.",
+      "awardRecipient": "Choisissez l’emploi du bénéficiaire.",
+      "periodFrom": "Choisissez un début de période valide (AAAA-MM-JJ).",
+      "periodTo": "Choisissez une fin de période valide (AAAA-MM-JJ) ou laissez vide.",
+      "awardValue": "Saisissez la valeur de la récompense.",
+      "awardReason": "Indiquez le motif de la récompense.",
+      "memberEmployment": "Choisissez l’emploi du membre.",
+      "membershipFrom": "Choisissez une date d’adhésion valide (AAAA-MM-JJ).",
+      "legalEntity": "Choisissez l’entité juridique responsable du programme.",
+      "weight": "Saisissez un poids positif avec au plus 4 décimales."
+    },
+    "decimal": {
+      "json-number": "{field} : saisissez un texte décimal, pas un nombre JSON.",
+      "scale": "{field} : utilisez au plus {places} décimales.",
+      "separator": "{field} : réécrivez {value} sans séparateur de milliers, avec un point décimal.",
+      "decimal-comma": "{field} : réécrivez {value} sous la forme {dotted}, avec un point décimal.",
+      "ambiguous-comma": "{field} : {value} peut signifier {grouped} ou {dotted}. Saisissez la valeur voulue sans séparateur de milliers, avec un point décimal.",
+      "currency": "{field} : retirez le symbole {symbol} et saisissez uniquement le montant.",
+      "scientific": "{field} : écrivez {value} en entier, sans notation scientifique.",
+      "not-a-number": "{field} : saisissez un montant décimal lisible."
+    },
+    "description": "Avantages, reconnaissance et primes : admissibilité claire, approbations contrôlées et versement en paie."
   }
 }
