@@ -11,7 +11,8 @@
       "runs": "Nóminas",
       "remittances": "Remesas",
       "separations": "Bajas",
-      "yearEnd": "Cierre anual"
+      "yearEnd": "Cierre anual",
+      "checks": "Comprobaciones"
     },
     "actions": {
       "viewRuns": "Nóminas",

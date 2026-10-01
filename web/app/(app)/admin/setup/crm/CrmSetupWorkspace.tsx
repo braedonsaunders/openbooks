@@ -1,4 +1,5 @@
 "use client";
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
 
 import { apiJson, ApiResponseError } from "@/lib/api-error";
 
@@ -156,22 +157,7 @@ export function CrmSetupWorkspace({
         </p>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
-        {TABS.map((key) => (
-          <Link
-            key={key}
-            href={`${basePath}?tab=${key}`}
-            className={cn(
-              "whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-              tab === key
-                ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
-                : "border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100",
-            )}
-          >
-            {t(`setup.tabs.${key}`)}
-          </Link>
-        ))}
-      </div>
+      <ModuleHomeTabs tabs={TABS.map((key) => ({ href: `${basePath}?tab=${key}`, label: t(`setup.tabs.${key}`), active: tab === key }))} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SearchInput placeholder={t(`setup.search.${tab}`)} />

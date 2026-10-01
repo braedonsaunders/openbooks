@@ -12,7 +12,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { agingByParty } = await import('./aging')
+const { agingByParty, agingDetail, agingDetailPage } = await import('./aging')
 const { partnerBalances } = await import('./statements')
 
 /**
@@ -105,6 +105,16 @@ test('unrestricted consolidated aging includes root-owned null-subsidiary invoic
 
     const restricted = await withBypass(() => agingByParty('ar', asOf, { subsidiaryIds: [branchId] }, scratch.orgId))
     assert.equal(Number(restricted.totals.total), 100, 'a restricted scope still fails closed on null headers')
+
+    for (const dims of [undefined, { subsidiaryIds: all, includeNullSubsidiary: true }, { subsidiaryIds: [branchId] }, { subsidiaryIds: [], includeNullSubsidiary: true }]) {
+      await withBypass(async () => {
+        const detail = await agingDetail('ar', asOf, dims, scratch.orgId)
+        const page = await agingDetailPage('ar', asOf, dims, scratch.orgId, {}, { page: 1, perPage: 50 })
+        assert.deepEqual(page.rows, detail.rows, 'paging preserves explicit subsidiary and null-header visibility')
+        assert.deepEqual(page.totals, detail.totals)
+        assert.equal(page.total, detail.rows.length)
+      })
+    }
 
     const empty = await withBypass(() =>
       agingByParty('ar', asOf, { subsidiaryIds: [], includeNullSubsidiary: true }, scratch.orgId),

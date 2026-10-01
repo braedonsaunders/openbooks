@@ -1,4 +1,5 @@
 'use client'
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -163,20 +164,7 @@ export function PaymentOperationsSetup({
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-        {VIEWS.map((item) => (
-          <Link
-            key={item}
-            href={`${basePath}?view=${item}`}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
-              view === item ? 'border-teal-600 text-teal-700 dark:text-teal-300' : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
-            )}
-          >
-            {t(`tabs.${item}`)}
-          </Link>
-        ))}
-      </div>
+      <ModuleHomeTabs tabs={VIEWS.map((key) => ({ href: `${basePath}?view=${key}`, label: t(`tabs.${key}`), active: view === key }))} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">

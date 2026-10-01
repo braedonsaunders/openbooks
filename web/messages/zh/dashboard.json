@@ -7,7 +7,8 @@
     "evening": "晚上好"
   },
   "header": {
-    "customize": "自定义"
+    "customize": "自定义",
+    "description": "查看日常工作、财务概览和快捷方式。"
   },
   "widgets": {
     "operatingExpenses": "营业费用",

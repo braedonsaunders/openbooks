@@ -52,6 +52,7 @@ export {
   type AgingDetailResult,
   type AgingDetailRow,
   agingDetail,
+  agingDetailPage,
 } from "./reports/aging";
 
 export {

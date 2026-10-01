@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -281,25 +283,7 @@ export function VendorComplianceDrawer({
         </p>
       ) : null}
 
-      <nav className="mb-4 flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={t('drawer.tabs.aria')}>
-        {tabs.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.key}
-            onClick={() => setTab(item.key)}
-            className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors ${
-              tab === item.key
-                ? 'border-teal-500 font-medium text-teal-700 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
-            }`}
-          >
-            {item.label}
-            {item.count != null ? <span className="text-xs tabular-nums text-slate-400">{item.count}</span> : null}
-          </button>
-        ))}
-      </nav>
+      <RecordTabs label={t('drawer.tabs.aria')} tabs={tabs} active={tab} onChange={setTab} className="mb-4 border-b border-slate-200 dark:border-slate-800" />
 
       <TabContent tabKey={tab}>
         {tab === 'certificates' ? (

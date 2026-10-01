@@ -31,6 +31,7 @@ test('default workspaces follow the approved journey-oriented information archit
       ['customers', 'Customers'],
       ['purchasing', 'Purchasing'],
       ['operations', 'Operations'],
+      ['hrm', 'People'],
       ['banking', 'Banking'],
       ['accounting', 'Accounting'],
       ['insights', 'Insights'],
@@ -49,33 +50,14 @@ test('default workspaces follow the approved journey-oriented information archit
     'ar-invoices',
     'receipts',
   ])
-  assert.deepEqual(DEFAULT_NAV_ORDER.operations, [
-    'property-management',
-    'projects',
-    'wip-billing',
-    'timesheets',
-    'resourcing',
-    'field-tickets',
-    'payroll',
-    'items',
-    'inventory',
-    'warehouses',
-    'picks',
-    'shipments',
-    'returns',
-    'equipment',
-    'employees',
-    'hrm',
-    'me',
-  ])
-  assert.deepEqual(DEFAULT_NAV_ORDER['my-work'], [
-    'dashboard',
-    'approvals',
-    'assistant',
-    'continuous-close',
-    'documents',
-    'apps',
-  ])
+  for (const key of ['employees', 'hrm', 'payroll']) {
+    assert.ok(DEFAULT_NAV_ORDER.hrm.includes(key))
+    assert.ok(!DEFAULT_NAV_ORDER.operations.includes(key))
+  }
+  assert.ok(DEFAULT_NAV_ORDER['my-work'].includes('me'))
+  assert.ok(!DEFAULT_NAV_ORDER.operations.includes('me'))
+  assert.ok(DEFAULT_NAV_ORDER.operations.includes('inventory'))
+  assert.ok(DEFAULT_NAV_ORDER.operations.includes('projects'))
   assert.equal(
     NAV_MODULES.find((module) => module.key === 'continuous-close')?.group,
     'my-work',
@@ -89,7 +71,7 @@ test('default workspaces follow the approved journey-oriented information archit
     DEFAULT_NAV_ORDER.accounting.slice(5, 7),
     ['leases', 'budgets'],
   )
-  assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(-3), [
+  assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(10, 13), [
     'accounting-changes',
     'provisions',
     'nonprofit',

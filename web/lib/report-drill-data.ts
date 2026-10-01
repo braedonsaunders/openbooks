@@ -10,7 +10,7 @@ import { can, type Authz } from './authz'
 import { canRunReportEntity } from './report-authz'
 import { executeReport, loadReportDefinition } from './custom-reports'
 import { loadView } from './views'
-import { agingDetail, transactionDetail } from './reports'
+import { agingDetailPage, transactionDetail } from './reports'
 import { getMoneyFormatter } from './money-server'
 import { flowRates } from './fx-presentation'
 import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
@@ -19,7 +19,7 @@ import { reportBookSelection } from './report-books'
 import type { StatementDimFilter } from './statement-matrix'
 import type { DimFilter } from './reports'
 import { subsidiaryVisibleFilter } from './subsidiaries'
-import { decimalAdd, decimalCmp, decimalNeg, decimalSum } from './statement-format'
+import { decimalAdd, decimalCmp, decimalNeg } from './statement-format'
 
 export const REPORT_DRILL_PAGE_SIZE = 50
 
@@ -210,19 +210,19 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
-    agingDetail(target.side, target.asOf, dims, authz.user.orgId, {
+    agingDetailPage(target.side, target.asOf, dims, authz.user.orgId, {
       basis: target.currencyBasis,
       reportingCurrency: target.currency,
       partyId: target.partyId,
       partyIsNull: target.unassignedParty,
       bucket: target.bucket,
-    }),
+    }, { page, perPage: REPORT_DRILL_PAGE_SIZE }),
   ])
   const rows = result.rows
   return {
     title: target.label,
     description: tr('drillDrawer.supporting'),
-    summary: [{ label: tc('labels.total'), value: money(decimalSum(rows.map((row) => row.open))) }],
+    summary: [{ label: tc('labels.total'), value: money(result.totals.total) }],
     columns: [
       { label: tc('labels.party') },
       { label: tc('labels.reference') },
@@ -231,7 +231,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
       { label: tr('aging.columns.bucket') },
       { label: tc('labels.openBalance'), align: 'right' },
     ],
-    rows: paginate(rows, page).map((row) => ({
+    rows: rows.map((row) => ({
       key: row.docId,
       cells: [row.partyName, row.reference, row.dueDate, row.ageDays, tr(`aging.buckets.${row.bucket}`), money(row.open)],
       transaction: { entryId: row.docId, docKind: row.docKind, docId: row.docId },
@@ -239,7 +239,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
     linkColumn: 1,
     page,
     perPage: REPORT_DRILL_PAGE_SIZE,
-    total: rows.length,
+    total: result.total,
   }
 }
 

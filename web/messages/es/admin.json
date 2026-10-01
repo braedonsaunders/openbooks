@@ -438,7 +438,13 @@
     "saveConflict": "Otro usuario cambió la navegación. Recargue la página y vuelva a aplicar sus cambios.",
     "invalidConfig": "La configuración de navegación no es válida.",
     "unknownApp": "La navegación hace referencia a una aplicación no instalada.",
-    "resetDefaults": "Restablecer valores predeterminados"
+    "resetDefaults": "Restablecer valores predeterminados",
+    "workspaceHelp": "Los espacios de trabajo organizan el menú principal. La navegación local permite cambiar entre páginas o vistas relacionadas con una tarea.",
+    "localTitle": "Navegación local",
+    "localHelp": "Elige una tarea y cambia el nombre, el orden o la visibilidad de sus destinos locales. Se siguen aplicando los permisos y las funciones habilitadas.",
+    "localWorkspace": "Tarea",
+    "localLabel": "Nombre del destino",
+    "resetLocal": "Restablecer el orden y la visibilidad locales"
   },
   "roles": {
     "metaTitle": "Roles",

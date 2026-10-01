@@ -1,3 +1,4 @@
+import { NativeListDrawer } from '../native-list-drawer'
 import { type ComponentProps } from 'react'
 import { ModuleHomeTabs } from '../module-home/ui'
 import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
@@ -14,19 +15,16 @@ import { PropertyManagementWorkspace } from '../../app/(app)/property-management
 import { CaptureList } from '../../app/(app)/ap/capture/sections'
 import { CaptureReviewDrawer } from '../../app/(app)/ap/capture/CaptureReviewDrawer'
 import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadButton'
-import { FieldTicketDrawer } from '../../app/(app)/field-tickets/FieldTicketDrawer'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
 import { ItemDrawerSlot } from '../../app/(app)/items/ItemDrawerSlot'
 import { NewItemButton } from '../../app/(app)/items/NewItemButton'
 import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
 import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
 import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
-import { ExpenseDrawer } from '../../app/(app)/expenses/ExpenseDrawer'
 import { ExpenseActions } from '../../app/(app)/expenses/ExpenseActions'
 import { buildListDrawerHref } from '../../lib/list-params'
 import { NewOrderButton } from '../../app/(app)/_order/NewOrderButton'
 import { NewOrderRedirect } from '../../app/(app)/_order/NewOrderRedirect'
-import { OrderDrawer } from '../../app/(app)/_order/OrderDrawer'
 import { NewProjectButton } from '../../app/(app)/projects/NewProjectButton'
 import { NewProjectRedirect } from '../../app/(app)/projects/NewProjectRedirect'
 import { ProjectDrawer } from '../../app/(app)/projects/ProjectDrawer'
@@ -185,11 +183,7 @@ export const COMMERCE_WIDGETS = {
   /* --- field tickets -------------------------------------------------------- */
   /** Keyless, like `journal-drawer`: the native page renders no key and the
    *  drawer resets from effects on the ticket id. */
-  'field-ticket-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof FieldTicketDrawer> | null
-    if (!drawer) return null
-    return <FieldTicketDrawer {...drawer} />
-  },
+  'field-ticket-drawer': (props) => <NativeListDrawer widget="field-ticket-drawer" drawer={props.drawer} />,
 
   /* --- items ---------------------------------------------------------------- */
   /** One widget for the whole header slot: the native markup differs per view
@@ -242,7 +236,7 @@ export const COMMERCE_WIDGETS = {
       status={String(props.status ?? '')}
       canSubmit={props.canSubmit === true}
       canPost={props.canPost === true}
-      openHref={buildListDrawerHref(
+      openHref={str(props, 'openHref') ?? buildListDrawerHref(
         '/expenses/reports',
         (props.sp as Record<string, string | string[] | undefined>) ?? {},
         'expense',
@@ -250,12 +244,7 @@ export const COMMERCE_WIDGETS = {
       )}
     />
   ),
-  'expense-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof ExpenseDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <ExpenseDrawer key={remountKey} {...rest} />
-  },
+  'expense-drawer': (props) => <NativeListDrawer widget="expense-drawer" drawer={props.drawer} />,
 
   /* --- orders (quotes, sales orders, purchase orders) ----------------------- */
   //
@@ -282,12 +271,7 @@ export const COMMERCE_WIDGETS = {
       createFailedMessage={str(props, 'createFailedMessage') ?? undefined}
     />
   ),
-  'order-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof OrderDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <OrderDrawer key={remountKey} {...rest} />
-  },
+  'order-drawer': (props) => <NativeListDrawer widget="order-drawer" drawer={props.drawer} />,
 
   /* --- projects ----------------------------------------------------------- */
   'new-project': () => <NewProjectButton />,

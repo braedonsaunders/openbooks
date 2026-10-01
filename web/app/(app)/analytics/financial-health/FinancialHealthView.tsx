@@ -1,9 +1,10 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { DollarSign, TrendingUp, Scale, Target } from 'lucide-react'
-import { cn } from '@openbooks/ui'
 import type { HealthData } from '../../../../lib/analytics/health-data'
 import type { RatioDef } from '../_ui/RatioCard'
 import { Gauge } from '../_ui/Gauge'
@@ -82,28 +83,7 @@ export function FinancialHealthView({
       </div>
 
       {/* Tab strip */}
-      <div className="-mx-1 overflow-x-auto">
-        <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {tabs.map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setTab(k)}
-              className={cn(
-                '-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors',
-                tab === k
-                  ? 'border-teal-500 text-teal-600 dark:text-teal-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
-              )}
-            >
-              {t(`tabs.${k}`)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Direct keyed render. AnimatePresence's exit-wait deadlocks with these
-          heavy multi-chart panels, so we mount the active tab directly. */}
+      <RecordTabs label={t('title')} tabs={tabs.map((k) => ({ key: k, label: t(`tabs.${k}`) }))} active={tab} onChange={setTab}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'margin' ? <MarginTab data={data} /> : null}
@@ -116,6 +96,7 @@ export function FinancialHealthView({
         {tab === 'ratios' ? <RatiosTab data={data} defs={defs} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+      </RecordTabs>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>

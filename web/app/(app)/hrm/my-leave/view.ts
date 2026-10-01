@@ -39,7 +39,7 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
   return page({
     route: '/hrm/my-leave',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'space-y-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -65,7 +65,7 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
         f('refusal'),
       ),
       {
-        ...grid('flex h-full min-h-0 flex-col gap-4', [
+        ...grid('space-y-4', [
           panel({
             title: f('balancesTitle'),
             iconKey: 'gauge',
@@ -80,54 +80,48 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
               }),
             ],
           }),
-          panel({
-            title: f('title'),
-            iconKey: 'calendar',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            className: 'min-h-0 flex-1',
-            blocks: [
-              registeredListTable('hrm_my_leave', {
-                variant: 'app',
-                rows: f('requests'),
-                rowKey: item('id'),
-                columns: [
-                  column(
-                    f('columns.employee'),
-                    link(item('employeeLabel'), item('employeeHref')),
-                  ),
-                  column(f('columns.type'), text(item('leaveTypeCode'))),
-                  column(
-                    f('columns.range'),
-                    text(item('rangeLabel'), { className: 'tabular-nums' }),
-                  ),
-                  column(f('columns.hours'), text(item('hours')), {
-                    align: 'right',
-                    className: 'tabular-nums',
+          grid('space-y-3', [
+            registeredListTable('hrm_my_leave', {
+              variant: 'app',
+              rows: f('requests'),
+              rowKey: item('id'),
+              columns: [
+                column(
+                  f('columns.employee'),
+                  link(item('employeeLabel'), item('employeeHref')),
+                ),
+                column(f('columns.type'), text(item('leaveTypeCode'))),
+                column(
+                  f('columns.range'),
+                  text(item('rangeLabel'), { className: 'tabular-nums' }),
+                ),
+                column(f('columns.hours'), text(item('hours')), {
+                  align: 'right',
+                  className: 'tabular-nums',
+                }),
+                column(
+                  f('columns.status'),
+                  badge(item('statusLabel'), {
+                    variant: item('statusVariant'),
                   }),
-                  column(
-                    f('columns.status'),
-                    badge(item('statusLabel'), {
-                      variant: item('statusVariant'),
-                    }),
-                  ),
-                  column('', link(item('openLabel'), item('requestHref'))),
-                ],
-                empty: {
-                  title: f('emptyTitle'),
-                  description: f('emptyDescription'),
-                },
-              }),
-              widgetBlock(
-                'hrm-leave-dialog',
-                {
-                  requestId: f('dialogRequestId'),
-                  closeHref: f('dialogCloseHref'),
-                  canWithdrawCancel: f('canWithdrawCancel'),
-                },
-                f('dialogOpen'),
-              ),
-            ],
-          }),
+                ),
+                column('', link(item('openLabel'), item('requestHref'))),
+              ],
+              empty: {
+                title: f('emptyTitle'),
+                description: f('emptyDescription'),
+              },
+            }),
+            widgetBlock(
+              'hrm-leave-dialog',
+              {
+                requestId: f('dialogRequestId'),
+                closeHref: f('dialogCloseHref'),
+                canWithdrawCancel: f('canWithdrawCancel'),
+              },
+              f('dialogOpen'),
+            ),
+          ]),
         ]),
         when: f('hasContent'),
       },

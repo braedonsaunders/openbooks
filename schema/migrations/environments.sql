@@ -169,8 +169,8 @@ declare
   -- quiet; v1 now MEANS the predicate form.
   body text := $pol$
     (
-      public.app_bypass_rls_active()
-      or org_id::text = current_setting('app.current_org', true)
+      (SELECT public.app_bypass_rls_active())
+      or org_id::text = (SELECT current_setting('app.current_org', true))
     )
   $pol$;
 begin
@@ -241,14 +241,14 @@ begin
     drop policy if exists sandbox_isolation on sandboxes;
     create policy sandbox_isolation on sandboxes
       using (
-        public.app_bypass_rls_active()
-        or org_id::text = current_setting('app.current_org', true)
-        or production_org_id::text = current_setting('app.current_org', true)
+        (SELECT public.app_bypass_rls_active())
+        or org_id::text = (SELECT current_setting('app.current_org', true))
+        or production_org_id::text = (SELECT current_setting('app.current_org', true))
       )
       with check (
-        public.app_bypass_rls_active()
+        (SELECT public.app_bypass_rls_active())
         or (
-          production_org_id::text = current_setting('app.current_org', true)
+          production_org_id::text = (SELECT current_setting('app.current_org', true))
           and exists (
             select 1
               from public.orgs sandbox_org

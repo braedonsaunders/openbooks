@@ -1,3 +1,4 @@
+import '@xyflow/react/dist/style.css'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadOrgChartPage, orgChartSpec, orgChartTitle } from './view'
 

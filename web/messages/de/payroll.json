@@ -11,7 +11,8 @@
       "runs": "Lohnläufe",
       "remittances": "Abführungen",
       "separations": "Austritte",
-      "yearEnd": "Jahresabschluss"
+      "yearEnd": "Jahresabschluss",
+      "checks": "Prüfungen"
     },
     "actions": {
       "viewRuns": "Lohnläufe",

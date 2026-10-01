@@ -9,7 +9,6 @@ import {
   field as item,
   page,
   pageHeader,
-  panel,
   ref,
   rootRef,
   text,
@@ -39,7 +38,7 @@ export function meChecklistsSpec(data: MeChecklistsData): PageSpec {
   return page({
     route: '/me/checklists',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'space-y-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -58,48 +57,42 @@ export function meChecklistsSpec(data: MeChecklistsData): PageSpec {
         f('refusal'),
       ),
       {
-        ...grid('flex h-full min-h-0 flex-col gap-4', [
-          panel({
-            title: f('listTitle'),
-            iconKey: 'list-checks',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            className: 'min-h-0 flex-1',
-            blocks: [
-              registeredListTable('me_checklists', {
-                variant: 'app',
-                rows: f('rows'),
-                rowKey: item('id'),
-                columns: [
-                  column(f('columns.title'), text(item('title'))),
-                  column(f('columns.process'), text(item('processKind'))),
-                  column(
-                    f('columns.due'),
-                    text(item('dueOn'), { className: 'tabular-nums' }),
-                  ),
-                  column(f('columns.required'), text(item('requiredLabel'))),
-                  column(f('columns.evidence'), text(item('evidenceLabel'))),
-                  column(
-                    f('columns.status'),
-                    badge(item('statusLabel'), {
-                      variant: item('statusVariant'),
-                    }),
-                  ),
-                  column(
-                    '',
-                    widgetCell('hrm-step-complete', {
-                      stepId: item('id'),
-                      label: item('completeLabel'),
-                      failedLabel: rootF('completeFailed'),
-                    }),
-                  ),
-                ],
-                empty: {
-                  title: f('emptyTitle'),
-                  description: f('emptyDescription'),
-                },
-              }),
-            ],
-          }),
+        ...grid('space-y-4', [
+          grid('space-y-3', [
+            registeredListTable('me_checklists', {
+              variant: 'app',
+              rows: f('rows'),
+              rowKey: item('id'),
+              columns: [
+                column(f('columns.title'), text(item('title'))),
+                column(f('columns.process'), text(item('processKind'))),
+                column(
+                  f('columns.due'),
+                  text(item('dueOn'), { className: 'tabular-nums' }),
+                ),
+                column(f('columns.required'), text(item('requiredLabel'))),
+                column(f('columns.evidence'), text(item('evidenceLabel'))),
+                column(
+                  f('columns.status'),
+                  badge(item('statusLabel'), {
+                    variant: item('statusVariant'),
+                  }),
+                ),
+                column(
+                  '',
+                  widgetCell('hrm-step-complete', {
+                    stepId: item('id'),
+                    label: item('completeLabel'),
+                    failedLabel: rootF('completeFailed'),
+                  }),
+                ),
+              ],
+              empty: {
+                title: f('emptyTitle'),
+                description: f('emptyDescription'),
+              },
+            }),
+          ]),
         ]),
         when: f('hasContent'),
       },

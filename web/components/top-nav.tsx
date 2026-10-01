@@ -14,7 +14,7 @@
 // dropdown is open at a time; hover-to-open with a small close delay so the
 // pointer can cross the gap between trigger and panel.
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -25,6 +25,7 @@ import { NavCountBadge } from './nav-count-badge'
 import { findActiveNavHref } from './sidebar-nav-active'
 import { useNavGroups } from './use-platform-nav'
 import { visibleTopNavGroupCount } from '../lib/top-nav-overflow'
+import { menuColumns } from '../lib/nav/menu-columns'
 
 const MORE_MENU_INDEX = -1
 
@@ -45,6 +46,9 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   const moreLabel = t('more')
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   const [visibleCount, setVisibleCount] = useState(navGroups.length)
+  const menuId = useId()
+  const [focusEdge, setFocusEdge] = useState<'first' | 'last' | undefined>()
+  const opener = useRef<HTMLElement | null>(null)
   const navRef = useRef<HTMLElement>(null)
   const measurementRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | null>(null)
@@ -116,7 +120,27 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
 
   function scheduleClose() {
     if (closeTimer.current) window.clearTimeout(closeTimer.current)
-    closeTimer.current = window.setTimeout(() => setOpenIdx(null), 150)
+    closeTimer.current = window.setTimeout(() => {
+      if (!document.activeElement?.closest('[data-navigation-menu]')) setOpenIdx(null)
+    }, 150)
+  }
+
+  function openFromControl(index: number, target: HTMLElement, edge: 'first' | 'last' = 'first') {
+    opener.current = target
+    setFocusEdge(edge)
+    enterMenu(index)
+  }
+
+  function triggerKeyDown(event: KeyboardEvent<HTMLElement>, index: number) {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    openFromControl(index, event.currentTarget, event.key === 'ArrowUp' ? 'last' : 'first')
+  }
+
+  function closeMenu(restoreFocus = false) {
+    setOpenIdx(null)
+    setFocusEdge(undefined)
+    if (restoreFocus) opener.current?.focus()
   }
 
   const visibleGroups = navGroups.slice(0, visibleCount)
@@ -172,23 +196,27 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
             className="min-w-[15rem] py-1.5"
             trigger={
               group.groupHref ? (
-                // Workspace with a module home: clicking the parent NAVIGATES
-                // (hover still opens the dropdown for direct child access).
-                <Link
-                  href={group.groupHref as never}
-                  prefetch
-                  aria-haspopup="menu"
-                  aria-expanded={open}
-                  aria-current={groupActive ? 'true' : undefined}
-                  data-walkthrough={`nav:${group.groupHref}`}
-                  onMouseEnter={() => enterMenu(i)}
-                  onMouseLeave={scheduleClose}
-                  onClick={() => setOpenIdx(null)}
-                  className={triggerCls}
-                >
-                  {group.label}
-                  <ChevronDown size={12} className="opacity-50" />
-                </Link>
+                <div className={cn(triggerCls, 'gap-0 pr-1')} onMouseEnter={() => { setFocusEdge(undefined); enterMenu(i) }} onMouseLeave={scheduleClose}>
+                  <Link
+                    href={group.groupHref as never}
+                    prefetch
+                    aria-current={groupActive ? 'true' : undefined}
+                    data-walkthrough={`nav:${group.groupHref}`}
+                    onClick={() => closeMenu()}
+                    onKeyDown={(event) => triggerKeyDown(event, i)}
+                    className="flex h-full items-center focus-visible:outline-2 focus-visible:outline-teal-600"
+                  >{group.label}</Link>
+                  <button
+                    type="button"
+                    aria-label={t('openMenu', { name: group.label })}
+                    aria-haspopup="menu"
+                    aria-expanded={open}
+                    aria-controls={open ? `${menuId}-${i}` : undefined}
+                    onKeyDown={(event) => triggerKeyDown(event, i)}
+                    onClick={(event) => openFromControl(i, event.currentTarget)}
+                    className="ml-1 flex h-8 w-5 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-teal-600"
+                  ><ChevronDown size={12} className="opacity-50" /></button>
+                </div>
               ) : (
                 <button
                   type="button"
@@ -197,7 +225,9 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
                   aria-current={groupActive ? 'true' : undefined}
                   onMouseEnter={() => enterMenu(i)}
                   onMouseLeave={scheduleClose}
-                  onClick={() => enterMenu(i)}
+                  aria-controls={open ? `${menuId}-${i}` : undefined}
+                  onKeyDown={(event) => triggerKeyDown(event, i)}
+                  onClick={(event) => openFromControl(i, event.currentTarget)}
                   className={triggerCls}
                 >
                   {group.label}
@@ -207,11 +237,15 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
             }
           >
             <GroupMenu
+              id={`${menuId}-${i}`}
+              label={group.label}
+              focusEdge={focusEdge}
+              onClose={closeMenu}
               items={group.items}
               activeHref={activeHref}
               onEnter={() => enterMenu(i)}
               onLeave={scheduleClose}
-              onSelect={() => setOpenIdx(null)}
+              onSelect={() => closeMenu()}
             />
           </Popover>
         )
@@ -231,7 +265,9 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
               aria-current={moreActive ? 'true' : undefined}
               onMouseEnter={() => enterMenu(MORE_MENU_INDEX)}
               onMouseLeave={scheduleClose}
-              onClick={() => enterMenu(MORE_MENU_INDEX)}
+              aria-controls={moreOpen ? `${menuId}-more` : undefined}
+              onKeyDown={(event) => triggerKeyDown(event, MORE_MENU_INDEX)}
+              onClick={(event) => openFromControl(MORE_MENU_INDEX, event.currentTarget)}
               className={cn(
                 'flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium transition-colors',
                 moreActive
@@ -244,29 +280,78 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
             </button>
           }
         >
-          <div
-            role="menu"
+          <NavigationMenu
+            id={`${menuId}-more`}
+            label={moreLabel}
+            focusEdge={focusEdge}
+            onClose={closeMenu}
             onMouseEnter={() => enterMenu(MORE_MENU_INDEX)}
             onMouseLeave={scheduleClose}
-            onClick={() => setOpenIdx(null)}
+            onClick={() => closeMenu()}
           >
             {overflowGroups.map((group, i) => (
               <OverflowGroupRow key={`${group.label}-${visibleCount + i}`} group={group} activeHref={activeHref} />
             ))}
-          </div>
+          </NavigationMenu>
         </Popover>
       ) : null}
     </nav>
   )
 }
 
+/** Keep native link activation while providing the menu keyboard contract. */
+function NavigationMenu({ id, label, focusEdge, onClose, children, ...props }: {
+  id?: string
+  label?: string
+  focusEdge?: 'first' | 'last'
+  onClose?: (restoreFocus?: boolean) => void
+  children: ReactNode
+  className?: string
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  onClick?: () => void
+}) {
+  const root = useRef<HTMLDivElement>(null)
+  function entries() {
+    return Array.from(root.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])
+      .filter((item) => item.closest('[data-navigation-menu]') === root.current)
+  }
+  useEffect(() => {
+    const items = entries()
+    items.forEach((item) => { item.tabIndex = -1 })
+    if (!focusEdge) return
+    ;(focusEdge === 'last' ? items.at(-1) : items[0])?.focus()
+  }, [focusEdge])
+  function keyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose?.(true); return }
+    if (event.key === 'Tab') { onClose?.(true); return }
+    const items = entries()
+    const index = items.indexOf(document.activeElement as HTMLElement)
+    let next: number
+    if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = items.length - 1
+    else if (event.key === 'ArrowDown') next = (index + 1) % items.length
+    else if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length
+    else return
+    event.preventDefault()
+    event.stopPropagation()
+    items[next]?.focus()
+  }
+  return <div ref={root} id={id} role="menu" aria-label={label} data-navigation-menu onKeyDown={keyDown} {...props}>{children}</div>
+}
+
 function GroupMenu({
+  id, label, focusEdge, onClose,
   items,
   activeHref,
   onEnter,
   onLeave,
   onSelect,
 }: {
+  id?: string
+  label?: string
+  focusEdge?: 'first' | 'last'
+  onClose?: (restoreFocus?: boolean) => void
   items: SidebarNavItem[]
   activeHref: string | null
   onEnter?: () => void
@@ -275,15 +360,18 @@ function GroupMenu({
 }) {
   const blocks = toBlocks(items)
   const sectioned = blocks.some((block) => block.kind === 'subgroup')
+  const columns = sectioned ? menuColumns(blocks, (block) => block.kind === 'subgroup' ? block.items.length + 1.5 : 1) : [blocks]
   return (
-    <div
-      role="menu"
+    <NavigationMenu
+      id={id} label={label} focusEdge={focusEdge} onClose={onClose}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={onSelect}
-      className={cn(sectioned && 'grid w-[32rem] grid-cols-2 gap-x-2 gap-y-1 p-1')}
+      className={cn('max-h-[min(36rem,calc(100dvh-5rem))] overflow-y-auto', sectioned && 'w-[32rem] max-w-[calc(100vw-2rem)] p-1')}
     >
-      {blocks.map((block, bi) =>
+      <div className={cn(sectioned && columns.length > 1 && 'grid grid-cols-2 items-start gap-x-2')}>
+      {columns.map((column, ci) => <div key={ci} data-nav-column className="min-w-0 space-y-1">
+      {column.map((block, bi) =>
         block.kind === 'item' ? (
           <MenuItemLink key={block.item.href} item={block.item} active={activeHref === block.item.href} />
         ) : (
@@ -297,7 +385,9 @@ function GroupMenu({
           />
         ),
       )}
-    </div>
+      </div>)}
+      </div>
+    </NavigationMenu>
   )
 }
 
@@ -307,6 +397,11 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
   const rowRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | null>(null)
   const active = groupContainsActiveHref(group, activeHref)
+  const [focusEdge, setFocusEdge] = useState<'first' | undefined>()
+  function openByKeyboard(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== 'ArrowRight') return
+    event.preventDefault(); event.stopPropagation(); setFocusEdge('first'); openMenu()
+  }
 
   useEffect(
     () => () => {
@@ -357,6 +452,7 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
           aria-haspopup="menu"
           aria-expanded={open}
           data-walkthrough={`nav:${group.groupHref}`}
+          onKeyDown={openByKeyboard}
           className={rowCls}
         >
           {rowContent}
@@ -367,8 +463,10 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
           role="menuitem"
           aria-haspopup="menu"
           aria-expanded={open}
+          onKeyDown={openByKeyboard}
           onClick={(event) => {
             event.stopPropagation()
+            setFocusEdge('first')
             setOpen((current) => !current)
           }}
           className={rowCls}
@@ -378,13 +476,12 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
       )}
       {open ? (
         <div
-          role="menu"
           className={cn(
             'absolute top-0 z-10 min-w-[15rem] rounded-md border border-slate-200 bg-white py-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900',
             flip ? 'right-full -mr-1' : 'left-full -ml-1',
           )}
         >
-          <GroupMenu items={group.items} activeHref={activeHref} />
+          <GroupMenu label={group.label} items={group.items} activeHref={activeHref} focusEdge={focusEdge} onClose={(restore) => { setOpen(false); if (restore) rowRef.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus() }} />
         </div>
       ) : null}
     </div>

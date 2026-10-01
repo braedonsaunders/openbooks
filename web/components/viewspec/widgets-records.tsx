@@ -1,3 +1,4 @@
+import { NativeListDrawer } from '../native-list-drawer'
 import { type ComponentProps } from 'react'
 import { RecordCountCell, InNavCell } from '../../app/(app)/records/types/sections'
 import { TypeBuilderDrawer } from '../../app/(app)/records/types/TypeBuilderDrawer'
@@ -22,14 +23,8 @@ import { ActivityDrawer } from '../../app/(app)/crm/ActivityDrawer'
 import { ForecastKpiGroup, ForecastExcludedNote, ManageQuotasButton, QuotaEmptyAction, ForecastSnapshotAction } from '../../app/(app)/crm/forecasts/sections'
 import { NewRecordButton } from '../../app/(app)/records/[typeKey]/NewRecordButton'
 import { RecordDrawer } from '../../app/(app)/records/[typeKey]/RecordDrawer'
-import { DocumentDrawer } from '../document-drawer'
-import { ReturnWorkflowPanel } from '../../app/(app)/returns/ReturnWorkflowPanel'
-import type { ReturnAuthorization } from '@openbooks/engine/src/sales/returns.ts'
 import { DocumentRowActions } from '../document-row-actions'
 import { NewDocumentButton } from '../new-document-button'
-import { PaymentLinksPanel } from '../payment-links-panel'
-import { AppliedPaymentsPanel, type AppliedPayment } from '../applied-payments-panel'
-import { CreditApplicationsPanel } from '../credit-applications-panel'
 import { DOC_KINDS } from '../../lib/document-kinds'
 import { NewPartyButton } from '../../app/(app)/parties/NewPartyButton'
 import { PartyDrawer } from '../../app/(app)/parties/PartyDrawer'
@@ -241,62 +236,7 @@ export const RECORDS_WIDGETS = {
   /** The remount key rides along as a prop: switching documents must reset the
    *  drawer's client state, and a widget at a fixed position would otherwise
    *  be reused (same as `account-drawer` / `party-drawer`). */
-  'document-drawer': (props) => {
-    const drawer = props.drawer as
-      | (ComponentProps<typeof DocumentDrawer> & {
-          remountKey: string
-          paymentLinks?: { documentId: string; canManage: boolean } | null
-          appliedPayments?: { payments: AppliedPayment[]; currency: string } | null
-          creditApplications?: {
-            documentId: string
-            side: 'ap' | 'ar'
-            partyId: string | null
-            canApply: boolean
-          } | null
-          workflow?: ReturnAuthorization | null
-          workflowCanInspect?: boolean
-          workflowCanManage?: boolean
-          vendors?: { id: string; display_name: string }[]
-        })
-      | null
-    if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, vendors, ...rest } = drawer
-    return (
-      <DocumentDrawer
-        key={remountKey}
-        {...rest}
-        afterContent={
-          paymentLinks || appliedPayments || creditApplications || workflow ? (
-            <>
-              {appliedPayments ? (
-                <AppliedPaymentsPanel payments={appliedPayments.payments} currency={appliedPayments.currency} />
-              ) : null}
-              {creditApplications ? (
-                <CreditApplicationsPanel
-                  documentId={creditApplications.documentId}
-                  side={creditApplications.side}
-                  partyId={creditApplications.partyId}
-                  canApply={creditApplications.canApply}
-                />
-              ) : null}
-              {paymentLinks ? (
-                <PaymentLinksPanel documentId={paymentLinks.documentId} canManage={paymentLinks.canManage} />
-              ) : null}
-              {workflow ? (
-                <ReturnWorkflowPanel
-                  authorization={workflow}
-                  canInspect={workflowCanInspect === true}
-                  canManage={workflowCanManage === true}
-                  stockLocations={rest.stockLocations ?? []}
-                  vendors={vendors ?? []}
-                />
-              ) : null}
-            </>
-          ) : null
-        }
-      />
-    )
-  },
+  'document-drawer': (props) => <NativeListDrawer widget="document-drawer" drawer={props.drawer} />,
   /** `config` is re-derived from the row's kind via the static DOC_KINDS map;
    *  the loader never ships a registry entry as data. The post grant arrives
    *  as loader-resolved booleans (the same decisions the drawer reads):
@@ -327,7 +267,7 @@ export const RECORDS_WIDGETS = {
         id={String(props.id ?? '')}
         status={String(props.status ?? '')}
         config={config}
-        openHref={`${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
+        openHref={str(props, 'openHref') ?? `${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
         canPost={(namespaced ?? props.canPost) === true}
       />
     )

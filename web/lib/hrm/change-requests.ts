@@ -467,7 +467,8 @@ export async function loadChangeRequestQueue(
     t.has(`queue.segments.${segment}`) ? t(`queue.segments.${segment}`) : segment
   const segments: QueueSegment[] = QUEUE_SEGMENTS.map((segment) => ({
     value: segment,
-    label: `${segmentLabel(segment)} (${counts[segment] ?? 0})`,
+    // FilterChips renders the count separately from the translated label.
+    label: segmentLabel(segment),
     count: counts[segment] ?? 0,
   }))
 

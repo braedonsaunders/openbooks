@@ -97,8 +97,7 @@ export const PLATFORM_WIDGETS = {
       event: ComponentProps<typeof AuditEventFlyout>['event']
       closeHref: string
     } | null
-    if (!drawer) return null
-    return <AuditEventFlyout event={drawer.event} closeHref={drawer.closeHref} />
+    return <AuditEventFlyout event={drawer?.event ?? null} closeHref={drawer?.closeHref ?? ''} />
   },
 
   /* --- notifications inbox ---------------------------------------------------- */

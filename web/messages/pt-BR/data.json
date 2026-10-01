@@ -41,7 +41,7 @@
     "format": "Formato do arquivo",
     "file": "Arquivo",
     "chooseFile": "Escolher um arquivo",
-    "orPaste": "…ou cole as linhas",
+    "orPaste": "Ou colar dados",
     "mode": "Quando um registro já existe",
     "modeInsert": "Ignorar (inserir apenas novos)",
     "modeUpsert": "Atualizar (upsert)",
@@ -56,7 +56,7 @@
     "toInsert": "A criar",
     "toUpdate": "A atualizar",
     "toFail": "Erros",
-    "commit": "Importar {n} linhas",
+    "commit": "Importar {n, plural, one {# linha} other {# linhas}}",
     "committing": "Importando…",
     "commitFailed": "Não foi possível concluir a importação.",
     "commitPersistenceFailed": "Este navegador não conseguiu salvar a chave de nova tentativa, então nenhuma importação foi enviada. Ative o armazenamento de sessão ou use um navegador que permita esse recurso e tente novamente.",
@@ -98,7 +98,15 @@
       "createFailedFinalize": "Não foi possível criar a empresa de exemplo: a finalização da nova empresa falhou. A empresa foi criada, mas sua configuração não terminou; tente novamente para continuar de onde parou.",
       "createFailedNumbering": "Não foi possível criar a empresa de exemplo: a conciliação da numeração de documentos falhou. A empresa foi criada, mas sua numeração não terminou; tente novamente para continuar a numeração."
     },
-    "loadFailed": "Não foi possível carregar os tipos de registro importáveis."
+    "loadFailed": "Não foi possível carregar os tipos de registro importáveis.",
+    "sourceTitle": "Selecionar registros e carregar um arquivo",
+    "sourceHint": "Escolha o tipo de registro a importar. Mapeie as colunas e confira as alterações antes de importar.",
+    "fileHint": "CSV, Excel (.xlsx) ou JSON. Inclua cabeçalhos de coluna nos arquivos CSV e Excel.",
+    "pasteHint": "Cole CSV com uma linha de cabeçalho ou um array JSON de registros. Escolha o formato correspondente acima.",
+    "rowCount": "{n, plural, one {# linha} other {# linhas}}",
+    "parsing": "Lendo arquivo…",
+    "pastedData": "Dados colados",
+    "reviewHint": "Confira as quantidades e os erros antes de importar. Nenhum registro foi importado ainda."
   },
   "history": {
     "title": "Histórico de importações",
@@ -114,5 +122,8 @@
       "committed": "Comprometido",
       "failed": "Falhou"
     }
+  },
+  "resources": {
+    "parties": "Pessoas e empresas"
   }
 }

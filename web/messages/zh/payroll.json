@@ -11,7 +11,8 @@
       "runs": "工资核算",
       "remittances": "代缴",
       "separations": "离职",
-      "yearEnd": "年终"
+      "yearEnd": "年终",
+      "checks": "检查"
     },
     "actions": {
       "viewRuns": "工资核算",

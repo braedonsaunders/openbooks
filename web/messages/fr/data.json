@@ -41,7 +41,7 @@
     "format": "Format du fichier",
     "file": "Fichier",
     "chooseFile": "Choisir un fichier",
-    "orPaste": "…ou coller des lignes",
+    "orPaste": "Ou coller des données",
     "mode": "Si une ligne existe déjà",
     "modeInsert": "L'ignorer (insérer uniquement)",
     "modeUpsert": "La mettre à jour (upsert)",
@@ -56,7 +56,7 @@
     "toInsert": "À créer",
     "toUpdate": "À mettre à jour",
     "toFail": "Erreurs",
-    "commit": "Importer {n} lignes",
+    "commit": "Importer {n, plural, one {# ligne} other {# lignes}}",
     "committing": "Importation…",
     "commitFailed": "L’importation n’a pas pu être effectuée.",
     "commitPersistenceFailed": "Ce navigateur n’a pas pu enregistrer la clé de nouvelle tentative ; aucune importation n’a donc été envoyée. Activez le stockage de session ou utilisez un navigateur qui l’autorise, puis réessayez.",
@@ -98,7 +98,15 @@
       "createFailedFinalize": "La société exemple n’a pas pu être créée : la finalisation de la nouvelle société a échoué. La société a été créée mais sa configuration n’est pas terminée ; réessayez pour reprendre où elle s’est arrêtée.",
       "createFailedNumbering": "La société exemple n’a pas pu être créée : le rapprochement de la numérotation des documents a échoué. La société a été créée mais sa numérotation n’est pas terminée ; réessayez pour reprendre la numérotation."
     },
-    "loadFailed": "Impossible de charger les types d'enregistrement importables."
+    "loadFailed": "Impossible de charger les types d'enregistrement importables.",
+    "sourceTitle": "Sélectionner les enregistrements et charger un fichier",
+    "sourceHint": "Choisissez le type d’enregistrement à importer. Associez les colonnes et prévisualisez les modifications avant l’importation.",
+    "fileHint": "CSV, Excel (.xlsx) ou JSON. Incluez les en-têtes de colonnes dans les fichiers CSV et Excel.",
+    "pasteHint": "Collez du CSV avec une ligne d’en-tête, ou un tableau JSON d’enregistrements. Choisissez le format correspondant ci-dessus.",
+    "rowCount": "{n, plural, one {# ligne} other {# lignes}}",
+    "parsing": "Lecture du fichier…",
+    "pastedData": "Données collées",
+    "reviewHint": "Vérifiez les nombres et les erreurs avant l’importation. Aucun enregistrement n’a encore été importé."
   },
   "history": {
     "title": "Historique des imports",
@@ -114,5 +122,8 @@
     },
     "rows": "Lignes",
     "by": "Par"
+  },
+  "resources": {
+    "parties": "Personnes et entreprises"
   }
 }

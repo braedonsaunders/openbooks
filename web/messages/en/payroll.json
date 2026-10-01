@@ -11,7 +11,8 @@
       "runs": "Pay runs",
       "remittances": "Remittances",
       "separations": "Separations",
-      "yearEnd": "Year-end"
+      "yearEnd": "Year-end",
+      "checks": "Checks"
     },
     "actions": {
       "viewRuns": "Pay runs",

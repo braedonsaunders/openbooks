@@ -1,7 +1,8 @@
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import Link from 'next/link'
 import { Settings } from 'lucide-react'
-import { Badge, Button, cn } from '@openbooks/ui'
+import { Badge, Button } from '@openbooks/ui'
 import { SortTh } from '../../../components/sortable-th'
 import { Pagination } from '../../../components/pagination'
 import { SearchInput } from '../../../components/search-input'
@@ -86,37 +87,7 @@ export function TaxTabs({
 }: {
   tabs: { key: string; href: string; label: string; active: boolean; count: number | null }[]
 }) {
-  return (
-    <nav className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
-      {tabs.map((item) => (
-        <Link
-          key={item.key}
-          href={item.href as never}
-          aria-current={item.active ? 'page' : undefined}
-          className={cn(
-            '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-            item.active
-              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
-          )}
-        >
-          {item.label}
-          {item.count !== null && item.count > 0 ? (
-            <span
-              className={cn(
-                'rounded-full px-1.5 text-xs tabular-nums',
-                item.active
-                  ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-300'
-                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-              )}
-            >
-              {item.count}
-            </span>
-          ) : null}
-        </Link>
-      ))}
-    </nav>
-  )
+  return <ModuleHomeTabs tabs={tabs} />
 }
 
 /** The interactive prepare panel: compute, export and save are client fetch flows. */

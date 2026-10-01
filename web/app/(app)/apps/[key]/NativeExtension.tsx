@@ -11,12 +11,14 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, requirePermission } from '@/lib/authz'
 import { requireFeatureEnabled } from '@/lib/feature-gates'
-import { PageHeader } from '@openbooks/ui'
+import { PageHeader, PageHeaderNavigationProvider } from '@openbooks/ui'
 import { getAppByKey } from '@/lib/apps/store'
 import { parseNativeExtension } from '@/lib/apps/native-ui'
 import { BlockList } from '@/components/viewspec/blocks'
 import { ListPageLayout, DetailPageLayout } from '@/components/page-layout'
 import { loadRecordWorkspace, recordModuleSpec } from '../../records/[typeKey]/view'
+import { readNavigationConfig } from '@/lib/nav/config'
+import { applyLocalNavigationPreferences } from '@openbooks/engine/navigation'
 
 /** Installed bytes and grants come from one version-pinned package lookup. */
 export async function NativeExtension({ appKey, searchParams }: {
@@ -52,17 +54,20 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
   const t = await getTranslations('admin.extensions.native')
   const td = await getTranslations('admin.extensions.draft')
   const notice = preview ? <Alert variant="info"><AlertDescription>{td('previewNotice')}</AlertDescription></Alert> : null
-  const tabs = <ModuleHomeTabs tabs={ui.screens.map(item => ({ href: `${preview ? '/admin/apps/preview/' + preview.id : '/apps/' + appKey}?screen=${encodeURIComponent(item.key)}`, label: item.title, active: item.key === selected }))} />
-  if (screen.kind === 'action') return <DetailPageLayout header={<>{notice}{tabs}<PageHeader title={screen.title} description={screen.description} /></>}>
+  const preferences = preview ? undefined : (await readNavigationConfig(authz.user.orgId))?.config.localNavigation?.[`app:${appKey}`]
+  const choices = ui.screens.filter(item => preview || item.kind !== 'records' || (grants.includes('records.read') && can(authz, 'records.read')))
+    .map(item => ({ href: `${preview ? '/admin/apps/preview/' + preview.id : '/apps/' + appKey}?screen=${encodeURIComponent(item.key)}`, label: item.title, active: item.key === selected }))
+  const tabs = <ModuleHomeTabs tabs={applyLocalNavigationPreferences(choices, preferences)} />
+  if (screen.kind === 'action') return <DetailPageLayout header={<>{notice}<PageHeader title={screen.title} description={screen.description} actions={tabs} /></>}>
     <NativeActionForm key={`${versionId ?? preview?.id}:${screen.key}`} appKey={appKey} versionId={versionId} screen={screen} preview={!!preview} />
   </DetailPageLayout>
   if (screen.kind === 'records') {
     if (preview) {
       const type = preview.objects.recordTypes.find(item => item.key === screen.typeKey)
       const fields = type ? lintRecordFields(type.fields, type.name) : null
-      if (fields?.success) return <DraftRecordPreview sections={fields.sections} typeKey={screen.typeKey} typeName={type!.name}
-        title={screen.title} basePath={`/admin/apps/preview/${preview.id}`} searchParams={{ ...searchParams, screen: selected }} header={<>{notice}{tabs}</>} />
-      return <ListPageLayout header={<>{notice}{tabs}<PageHeader title={screen.title} /></>}><p>{t('existingRecordsPreview')}</p></ListPageLayout>
+      if (fields?.success) return <PageHeaderNavigationProvider navigation={tabs}><DraftRecordPreview sections={fields.sections} typeKey={screen.typeKey} typeName={type!.name}
+        title={screen.title} basePath={`/admin/apps/preview/${preview.id}`} searchParams={{ ...searchParams, screen: selected }} header={notice} /></PageHeaderNavigationProvider>
+      return <ListPageLayout header={<>{notice}<PageHeader title={screen.title} actions={tabs} /></>}><p>{t('existingRecordsPreview')}</p></ListPageLayout>
     }
     if (!grants.includes('records.read') || !can(authz, 'records.read')) notFound()
     const data = await loadRecordWorkspace(searchParams, screen.typeKey, `/apps/${appKey}`)
@@ -70,10 +75,10 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
     data.canCreate = data.canCreate && grants.includes('records.create')
     if (data.drawerProps) data.drawerProps.canEdit = data.drawerProps.canEdit && grants.includes('records.create')
     const spec = recordModuleSpec(data)
-    return <ListPageLayout header={<>{tabs}<BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></>}><BlockList blocks={spec.body} scope={data} searchParams={searchParams} /></ListPageLayout>
+    return <ListPageLayout header={<><PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></PageHeaderNavigationProvider></>}><BlockList blocks={spec.body} scope={data} searchParams={searchParams} /></ListPageLayout>
   }
   const scope = { name, description, key: appKey }
-  const header = <>{notice}{tabs}<BlockList blocks={screen.spec.header} scope={scope} searchParams={searchParams} /></>
+  const header = <>{notice}<PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={screen.spec.header} scope={scope} searchParams={searchParams} /></PageHeaderNavigationProvider></>
   const body = <BlockList blocks={screen.spec.body} scope={scope} searchParams={searchParams} />
   if (screen.spec.layout === 'bare') return <>{header}{body}</>
   const Layout = screen.spec.layout === 'detail' ? DetailPageLayout : ListPageLayout

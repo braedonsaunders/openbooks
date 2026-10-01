@@ -102,8 +102,8 @@ export function reconcileConversations(
  * refetch) while honouring this tab's deletions. Stale payloads — a
  * prefetched route served after a delete, a refetch that raced it — still
  * carry deleted ids; the tombstones filter them before the merge. The viewed
- * thread survives even outside the server's top-N window (deep link into a
- * long history); a tombstoned thread never does.
+ * thread survives a server payload that has not caught up with its creation;
+ * a tombstoned thread never does.
  */
 export function syncServerConversations(
   local: SidebarConversation[],

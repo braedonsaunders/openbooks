@@ -1032,7 +1032,12 @@
         "description": "The rating grid over a review cycle: proposed beside calibrated, with the audit trail.",
         "newSession": "New session",
         "sessionsEmpty": "No calibration sessions yet.",
-        "status": { "draft": "Draft", "open": "Open", "closed": "Closed", "unknown": "Unknown status" },
+        "status": {
+          "draft": "Draft",
+          "open": "Open",
+          "closed": "Closed",
+          "unknown": "Unknown status"
+        },
         "colSession": "Session",
         "colStatus": "Status",
         "colOpened": "Opened",
@@ -1087,9 +1092,21 @@
         "colStatus": "Status",
         "impactLabel": "Impact of loss",
         "riskLabel": "Risk of loss",
-        "lossLevels": { "low": "Low", "medium": "Medium", "high": "High" },
-        "readiness": { "readyNow": "Ready now", "oneToTwoYears": "In 1–2 years", "threePlusYears": "In 3+ years" },
-        "planStatuses": { "draft": "Draft", "active": "Active", "archived": "Archived" },
+        "lossLevels": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        },
+        "readiness": {
+          "readyNow": "Ready now",
+          "oneToTwoYears": "In 1–2 years",
+          "threePlusYears": "In 3+ years"
+        },
+        "planStatuses": {
+          "draft": "Draft",
+          "active": "Active",
+          "archived": "Archived"
+        },
         "promotionLabel": "Promotion ready",
         "notesLabel": "Notes",
         "submitLabel": "Save record",
@@ -2197,8 +2214,8 @@
   },
   "orgChart": {
     "title": "Org chart",
-    "description": "The reporting tree with vacancies, as of any date.",
-    "tree": "Tree",
+    "description": "Explore your people, teams and reporting relationships. Plan changes with effective dates and approvals.",
+    "tree": "Chart",
     "directory": "Directory",
     "columns": {
       "name": "Name",
@@ -2207,7 +2224,7 @@
       "manager": "Manager"
     },
     "directoryEmpty": "Nobody matches this search.",
-    "search": "Search",
+    "search": "Search people, roles or departments",
     "asOf": "As of",
     "labels": {
       "vacancies": "Vacancies",
@@ -2222,7 +2239,36 @@
       "expand": "Expand",
       "collapse": "Collapse",
       "noMatch": "Nobody matches this search.",
-      "empty": "No reporting tree yet. Once employments record a manager, the tree draws here."
+      "empty": "No reporting tree yet. Once employments record a manager, the tree draws here.",
+      "allDepartments": "All departments",
+      "noDepartment": "No department",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "editStructure": "Edit structure",
+      "doneEditing": "Done editing",
+      "focus": "Focus on team",
+      "wholeOrganization": "Whole organization",
+      "missingFocus": "This employee is not visible on this date.",
+      "matches": "matches",
+      "clearFilters": "Clear filters",
+      "edit": "Edit employment",
+      "openEmployee": "Open employee record",
+      "noReports": "No direct reports",
+      "noVisibleManager": "No manager visible in this chart",
+      "openPosition": "Open position",
+      "panHint": "Drag the canvas to explore · Scroll to zoom",
+      "connectHint": "Connect a manager’s lower point to an employee’s upper point to propose a reporting change.",
+      "approvalHint": "Changes are effective-dated requests. The chart updates after approval.",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fit": "Fit to screen",
+      "minimap": "Organization overview",
+      "managerConnector": "Manager connector",
+      "employeeConnector": "Employee connector",
+      "invalidConnection": "Choose a different manager outside this employee’s reporting branch.",
+      "preparingEdit": "Preparing employment change…",
+      "editFailed": "Could not load this employment. Retry to prepare the change.",
+      "noAssignment": "No unique primary assignment is available today. Open the employee’s Employment tab to review the assignments before proposing a change."
     }
   },
   "meDocuments": {

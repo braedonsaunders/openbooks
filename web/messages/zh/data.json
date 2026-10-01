@@ -41,7 +41,7 @@
     "format": "文件格式",
     "file": "文件",
     "chooseFile": "选择文件",
-    "orPaste": "…或粘贴行",
+    "orPaste": "或粘贴数据",
     "mode": "当记录已存在时",
     "modeInsert": "跳过（仅插入新记录）",
     "modeUpsert": "更新（插入或更新）",
@@ -98,7 +98,15 @@
       "createFailedFinalize": "无法创建示例企业：完成新企业失败。企业已创建，但其设置未完成；重试将从中断处继续。",
       "createFailedNumbering": "无法创建示例企业：对账单据编号失败。企业已创建，但其单据编号未完成；重试将继续编号对账。"
     },
-    "loadFailed": "无法加载可导入的记录类型。"
+    "loadFailed": "无法加载可导入的记录类型。",
+    "sourceTitle": "选择记录并上传文件",
+    "sourceHint": "选择要导入的记录类型。映射列并预览更改后再导入。",
+    "fileHint": "CSV、Excel（.xlsx）或 JSON。CSV 和 Excel 文件须包含列标题。",
+    "pasteHint": "粘贴带标题行的 CSV 或记录的 JSON 数组。请在上方选择对应格式。",
+    "rowCount": "{n} 行",
+    "parsing": "正在读取文件…",
+    "pastedData": "粘贴的数据",
+    "reviewHint": "导入前请检查数量和错误。目前尚未导入任何记录。"
   },
   "history": {
     "title": "导入历史",
@@ -114,5 +122,8 @@
       "committed": "已提交",
       "failed": "失败"
     }
+  },
+  "resources": {
+    "parties": "个人与公司"
   }
 }

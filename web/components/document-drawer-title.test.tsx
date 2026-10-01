@@ -16,6 +16,7 @@ function titleHtml() {
   return renderToString(
     React.createElement(NextIntlClientProvider, {
       locale: 'en',
+      timeZone: 'UTC',
       messages: {},
       children: React.createElement(DocumentDrawerTitle, {
         kind: 'customer_invoice',

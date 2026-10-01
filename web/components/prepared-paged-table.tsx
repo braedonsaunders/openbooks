@@ -21,6 +21,7 @@ export function PreparedPagedTable({
   empty,
   leading,
   footer,
+  toolbarAfter,
   searchable = true,
 }: {
   source: PreparedListSourceKey
@@ -29,6 +30,7 @@ export function PreparedPagedTable({
   empty: ReactNode
   leading?: ReactNode
   footer?: ReactNode
+  toolbarAfter?: ReactNode
   searchable?: boolean
 }) {
   return (
@@ -45,6 +47,7 @@ export function PreparedPagedTable({
       empty={empty}
       emptyAsRow
       searchable={searchable}
+      toolbarAfter={toolbarAfter}
       leading={leading}
       footer={footer}
     />

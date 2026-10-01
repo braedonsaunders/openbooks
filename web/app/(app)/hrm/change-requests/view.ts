@@ -5,16 +5,14 @@ import { getTranslations } from 'next-intl/server'
 import {
   badge,
   column,
-  grid,
   field as item,
   link,
   page,
   pageHeader,
-  panel,
   ref,
   rootRef,
-  spanRow,
   text,
+  textBlock,
   widget,
   widgetBlock,
   widgetCell,
@@ -28,16 +26,10 @@ import {
 } from '../../../../lib/hrm/change-requests'
 
 /**
- * The org-wide employment change-request queue, split into a loader and a
- * spec.
- *
- * Follows the close-list archetype: the rows render through the shared
- * `table` block (variant 'app') over loader-resolved display cells, status
- * segments ride the shared `filter-chips` widget on the `status` search
- * param, and "Propose change" is the page-header primary action opening a
- * URL-param dialog. The list itself is loader-resolved through the existing
- * change-request service, newest first, with subsidiary scope enforced
- * inside it.
+ * Employment change requests use the shared list-page layout and registered
+ * table. Status filters share the table's search toolbar, matching the
+ * employee list, and the shared page layout owns the sibling view tabs.
+ * The domain reader retains authorization, bounded reads and refusal data.
  */
 
 const f = ref<ChangeRequestQueueData>()
@@ -63,8 +55,8 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
       f('statusHeader'),
       badge(item('statusLabel'), { variant: item('statusVariant') }),
     ),
-    // HR-16 begin: classification + verb chips (0227). actionDisplay is null
-    // when unclassified (feature off); verbLabel only when not a plain apply.
+    // Classification is absent for unclassified requests; only non-apply
+    // events carry a verb chip.
     column(f('actionHeader'), text(item('actionDisplay'))),
     // Verb chips render through a conditional cell (null = no chip), the
     // same conditional-pair pattern as the flows last-run cell.
@@ -72,10 +64,8 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
       f('verbHeader'),
       widgetCell('hrm-verb-chip', { label: item('verbLabel') }),
     ),
-    // HR-16 end
-    // OM-12: every row opens its request-detail drawer (?request=<id>),
-    // the same open-link column the leave queue carries — a link, so row
-    // click and keyboard Enter both reach the shareable drawer URL.
+    // Every row opens its request-detail drawer (?request=<id>),
+    // using a keyboard-accessible link to its shareable URL.
     column('', link(item('openLabel'), item('requestHref'))),
   ]
   if (data.canManage) {
@@ -91,7 +81,7 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
           // This column only renders inside the gated branch, so
           // the grant travels explicitly rather than by implication.
           canManage: rootF('canManage'),
-          // HR-16 verb buttons need their own gate (approve + feature),
+          // Verb buttons need their own approve permission,
           // which the manage grant alone does not imply.
           canVerb: rootF('canVerb'),
         }),
@@ -101,7 +91,7 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
   return page({
     route: '/hrm/change-requests',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'space-y-3',
     header: [
       pageHeader({
         title: f('title'),
@@ -117,18 +107,17 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
             },
             f('canManage'),
           ),
-          // HR-16 begin: rehomed reason-code setup beside the queue.
+          // Reason-code setup belongs beside the queue.
           widget(
             'link-button',
             {
               href: f('reasonsHref'),
               label: f('reasonsLabel'),
               iconKey: 'tag',
+              variant: 'outline',
             },
             f('canEditReasons'),
           ),
-          // HR-16 end
-          widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
     ],
@@ -144,81 +133,72 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
         f('refusal'),
       ),
       {
-        ...grid('flex h-full min-h-0 flex-col gap-4', [
-          widgetBlock('filter-chips', {
-            basePath: '/hrm/change-requests',
-            currentParams: data.currentParams,
-            paramKey: 'status',
-            label: data.segmentsLabel,
-            allLabel: data.allLabel,
-            options: data.segments,
-          }),
-          panel({
-            title: f('listTitle'),
-            iconKey: 'clipboard-check',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            className: 'min-h-0 flex-1',
-            blocks: [
-              registeredListTable('hrm_change_requests', {
-                variant: 'app',
-                rows: f('rows'),
-                rowKey: item('id'),
-                columns,
-                empty: {
-                  title: f('emptyTitle'),
-                  description: f('emptyDescription'),
-                },
-                ...(data.truncated
-                  ? {
-                      trailing: [
-                        spanRow({
-                          label: f('truncatedNote'),
-                          labelColSpan: data.canManage ? 10 : 9,
-                          labelClassName:
-                            'text-center text-xs text-slate-400 dark:text-slate-500',
-                          cells: [],
-                        }),
-                      ],
-                    }
-                  : {}),
-              }),
-              widgetBlock(
-                'hrm-propose-change-dialog',
+        ...registeredListTable(
+          'hrm_change_requests',
+          {
+            variant: 'app',
+            rows: f('rows'),
+            rowKey: item('id'),
+            columns,
+            empty: {
+              title: f('emptyTitle'),
+              description: f('emptyDescription'),
+            },
+          },
+          [
+            widget('list-toolbar', {
+              basePath: '/hrm/change-requests',
+              currentParams: data.currentParams,
+              filters: [
                 {
-                  departmentOptions: f('departmentOptions'),
-                  employmentLabel: f('proposeEmploymentLabel'),
-                  employmentPlaceholder: f('proposeEmploymentPlaceholder'),
-                  emptyLabel: f('proposeEmpty'),
-                  requestFailed: f('proposeFailed'),
-                  closeHref: f('dialogCloseHref'),
+                  paramKey: 'status',
+                  label: data.segmentsLabel,
+                  allLabel: data.allLabel,
+                  options: data.segments,
                 },
-                f('proposeOpen'),
-              ),
-              // OM-12: the request-detail drawer (?request=<id>), mirroring
-              // the leave queue's hrm-leave-dialog trio — the loader owns
-              // the open state and the return href, closing navigates the
-              // param away. departmentOptions ride along for the drawer's
-              // lifecycle actions (edit) and department display labels.
-              widgetBlock(
-                'hrm-change-request-dialog',
-                {
-                  requestId: f('dialogRequestId'),
-                  closeHref: f('dialogCloseHref'),
-                  subject: f('dialogSubject'),
-                  departmentOptions: f('departmentOptions'),
-                  // The drawer hosts the same lifecycle actions as
-                  // the gated table column, so it carries the same grant.
-                  canManage: f('canManage'),
-                  canVerb: f('canVerb'),
-                },
-                f('dialogOpen'),
-              ),
-            ],
-          }),
-        ]),
+              ],
+            }),
+          ],
+        ),
         when: f('hasContent'),
       },
-      // HR-16 begin: the rehomed reason-code setup section (?reasons=1).
+      // Keep the bounded-read notice visible even when search matches no rows.
+      textBlock(f('truncatedNote'), {
+        size: 'xs',
+        tone: 'muted',
+        className: 'mt-3',
+        when: f('truncated'),
+      }),
+      ...(data.hasContent
+        ? [
+            widgetBlock(
+              'hrm-propose-change-dialog',
+              {
+                departmentOptions: f('departmentOptions'),
+                employmentLabel: f('proposeEmploymentLabel'),
+                employmentPlaceholder: f('proposeEmploymentPlaceholder'),
+                emptyLabel: f('proposeEmpty'),
+                requestFailed: f('proposeFailed'),
+                closeHref: f('dialogCloseHref'),
+              },
+              f('proposeOpen'),
+            ),
+            // The drawer reuses the same lifecycle actions and explicit grants.
+            widgetBlock(
+              'hrm-change-request-dialog',
+              {
+                requestId: f('dialogRequestId'),
+                closeHref: f('dialogCloseHref'),
+                subject: f('dialogSubject'),
+                departmentOptions: f('departmentOptions'),
+                canManage: f('canManage'),
+                canVerb: f('canVerb'),
+              },
+              f('dialogOpen'),
+            ),
+          ]
+        : []),
+      // Reason-code setup is rehomed on this route (?reasons=1).
       // Rendered by the generic setup surface over the hrm-action-reasons
       // registry entity; hidden while the feature is off or the viewer
       // cannot manage.
@@ -230,7 +210,6 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
         }),
         when: f('showReasons'),
       },
-      // HR-16 end
     ],
   })
 }

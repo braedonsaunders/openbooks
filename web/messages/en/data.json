@@ -43,7 +43,7 @@
     "format": "File format",
     "file": "File",
     "chooseFile": "Choose a file",
-    "orPaste": "…or paste rows",
+    "orPaste": "Or paste data",
     "mode": "When a record already exists",
     "modeInsert": "Skip it (insert new only)",
     "modeUpsert": "Update it (upsert)",
@@ -60,7 +60,7 @@
     "toUpdate": "To update",
     "toFail": "Errors",
     "warnings": "Warnings",
-    "commit": "Import {n} rows",
+    "commit": "Import {n, plural, one {# row} other {# rows}}",
     "committing": "Importing…",
     "commitFailed": "The import could not be completed.",
     "commitPersistenceFailed": "This browser could not save the import retry key, so no import was sent. Enable session storage or use a browser that allows it, then try again.",
@@ -98,7 +98,15 @@
       "createFailedClone": "Sample company could not be created: copying the template's posted history failed. Nothing was created; you can retry.",
       "createFailedFinalize": "Sample company could not be created: finalizing the new company failed. The company was created but its setup did not finish; retry resumes it from where it stopped.",
       "createFailedNumbering": "Sample company could not be created: reconciling document numbering failed. The company was created but its document numbering was not finished; retry resumes numbering."
-    }
+    },
+    "sourceTitle": "Select records and upload a file",
+    "sourceHint": "Choose the record type to import. Map its columns and preview the changes before importing.",
+    "fileHint": "CSV, Excel (.xlsx), or JSON. Include column headers for CSV and Excel files.",
+    "pasteHint": "Paste CSV with a header row, or a JSON array of records. Choose the matching format above.",
+    "rowCount": "{n, plural, one {# row} other {# rows}}",
+    "parsing": "Reading file…",
+    "pastedData": "Pasted data",
+    "reviewHint": "Review the counts and any errors before importing. No records have been imported yet."
   },
   "history": {
     "title": "Import history",
@@ -114,5 +122,8 @@
     },
     "rows": "Records",
     "by": "By"
+  },
+  "resources": {
+    "parties": "People & companies"
   }
 }

@@ -1,3 +1,5 @@
+import { LOCAL_NAVIGATION, type LocalNavigationPreferences } from './local-navigation.ts'
+
 // OpenBooks module registry. Module keys
 // are STABLE ids (never change them once shipped); org nav configs reference
 // them. The resolver merges this with the org's saved layout and filters by
@@ -15,6 +17,8 @@ export interface NavModule {
   iconKey: string
   /** Permission required to see the module (wildcards supported). */
   requiredPermission?: string
+  /** Alternate grants accepted by the destination. */
+  requiredPermissionsAny?: readonly string[]
   /** Optional-feature gate — hidden while the org has the feature off. */
   featureKey?: string
   /** HR-15: when set, the shell renders a live count badge on this entry,
@@ -30,6 +34,8 @@ export interface NavModule {
    *  it and render the item inline. */
   subgroup?: string
   exact?: boolean
+  /** The workspace header owns this landing link in its default group. */
+  homeOnly?: boolean
 }
 
 export const NAV_GROUPS = [
@@ -37,6 +43,7 @@ export const NAV_GROUPS = [
   { key: 'customers', label: 'Customers', iconKey: 'users' },
   { key: 'purchasing', label: 'Purchasing', iconKey: 'clipboard' },
   { key: 'operations', label: 'Operations', iconKey: 'package' },
+  { key: 'hrm', label: 'People', iconKey: 'users' },
   { key: 'banking', label: 'Banking', iconKey: 'building' },
   { key: 'accounting', label: 'Accounting', iconKey: 'journal' },
   { key: 'insights', label: 'Insights', iconKey: 'activity' },
@@ -59,13 +66,14 @@ export const NAV_GROUP_HOMES: Partial<Record<NavGroupKey, string>> = {
   purchasing: '/purchasing',
   banking: '/banking',
   accounting: '/accounting',
+  hrm: '/hrm',
   insights: '/analytics',
   settings: '/admin',
 }
 
-// Nav taxonomy: eight stable job-to-be-done workspaces. Customer work follows
+// Nav taxonomy: stable workspaces for related business tasks. Customer work follows
 // the complete relationship-to-cash journey; purchasing follows buy-to-pay;
-// operations owns delivery/catalog/people; accounting owns financial control.
+// operations owns delivery/catalog; People owns HR; accounting owns financial control.
 // Module keys remain stable because tenant configurations reference them.
 export const NAV_MODULES: NavModule[] = [
   // My Work — the signed-in user's daily landing surfaces.
@@ -644,8 +652,8 @@ export const NAV_MODULES: NavModule[] = [
     href: '/entities/employees',
     label: 'Employees',
     iconKey: 'clipboard-check',
-    group: 'operations',
-    subgroup: 'people',
+    group: 'hrm',
+    subgroup: 'workforce',
     requiredPermission: 'parties.read',
   },
   {
@@ -693,21 +701,24 @@ export const NAV_MODULES: NavModule[] = [
     href: '/payroll',
     label: 'Payroll',
     iconKey: 'wallet',
-    group: 'operations',
-    subgroup: 'people',
+    group: 'hrm',
+    subgroup: 'payroll-work',
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     recordTarget: { kind: 'nested', segment: 'runs' },
+    exact: true,
   },
   {
     key: 'hrm',
     href: '/hrm',
     label: 'Human Resources',
     iconKey: 'users',
-    group: 'operations',
-    subgroup: 'people',
+    group: 'hrm',
+    subgroup: 'workforce',
     requiredPermission: 'hrm.employment.read',
     featureKey: 'hrm',
+    homeOnly: true,
+    exact: true,
   },
   // Construction compliance is a feature-gated tab on the HRM strip, not
   // a second Operations → People nav module beside Payroll and Me.
@@ -721,8 +732,7 @@ export const NAV_MODULES: NavModule[] = [
     href: '/me',
     label: 'Me',
     iconKey: 'circle-user',
-    group: 'operations',
-    subgroup: 'people',
+    group: 'my-work',
     requiredPermission: 'hrm.self.read',
     featureKey: 'hrm',
   },
@@ -955,6 +965,82 @@ export const NAV_SUBGROUPS: Record<string, { href: string; iconKey?: string }> =
   customize: { href: '/admin/build', iconKey: 'construction' },
 }
 
+const LOCAL_DESTINATION_LABELS: Record<string, string> = {
+  "/entities/employees": "Employees",
+  "/hrm/org-chart": "Org chart",
+  "/hrm/processes": "Processes",
+  "/hrm/documents": "Documents",
+  "/hrm/qualifications": "Qualifications",
+  "/hrm/positions": "Positions",
+  "/hrm/recruiting": "Openings",
+  "/hrm/leave": "Leave requests",
+  "/hrm/performance": "Cycles",
+  "/hrm/surveys": "Surveys",
+  "/hrm/compensation": "Compensation",
+  "/hrm/compensation/equity": "Pay equity",
+  "/hrm/benefits": "Enrollment windows",
+  "/payroll": "Payroll",
+  "/payroll/runs": "Pay runs",
+  "/payroll/anomalies": "Checks",
+  "/payroll/remittances": "Remittances",
+  "/payroll/separations": "Separations",
+  "/payroll/year-end": "Year-end",
+  "/resourcing": "Overview",
+  "/resourcing/board": "Staffing board",
+  "/resourcing/assignments": "Assignments",
+  "/resourcing/requests": "Resource requests",
+  "/resourcing/demand": "Staffing demand",
+  "/resourcing/retainers": "Retainers",
+  "/warehouse": "Warehouse",
+  "/picks": "Pick Lists",
+  "/shipments": "Shipments",
+  "/returns": "Returns",
+  "/nonprofit": "Nonprofit",
+  "/nonprofit/funds": "Funds",
+  "/nonprofit/releases": "Releases",
+  "/nonprofit/grants": "Grants",
+  "/nonprofit/encumbrances": "Encumbrances",
+  "/nonprofit/setup": "Nonprofit setup",
+  "/assets": "Fixed Assets",
+  "/assets?tab=tax-depreciation": "Tax Depreciation",
+  "/assets/leases": "Lessee Leases",
+  "/assets/equipment": "Equipment",
+  "/compliance": "Overview",
+  "/compliance/vendors": "Subcontractors",
+  "/compliance/lien-waivers": "Lien Waivers",
+  "/compliance/information-returns": "Information Returns"
+}
+
+/** Native local destinations are also discoverable and editable in the main menu. */
+for (const workspace of LOCAL_NAVIGATION) {
+  if (workspace.inline) continue
+  for (const tab of workspace.tabs) {
+    if (tab.href.includes('?') || NAV_MODULES.some((module) => module.href === tab.href)) continue
+    const group: NavGroupKey = workspace.id.startsWith('hrm-') || workspace.id === 'payroll'
+      ? 'hrm' : workspace.id === 'resourcing' || workspace.id === 'warehouse' || workspace.id === 'time' ? 'operations'
+      : workspace.id === 'compliance' ? 'purchasing' : 'accounting'
+    const moduleKey = tab.href.slice(1).replaceAll('/', '-')
+    NAV_MODULES.push({
+      key: moduleKey, href: tab.href, label: tab.label ?? LOCAL_DESTINATION_LABELS[tab.href]!,
+      iconKey: 'list-checks', group,
+      subgroup: workspace.id === 'hrm-people' ? 'workforce' : workspace.id.startsWith('hrm-') ? workspace.id : workspace.id === 'payroll' ? 'payroll-work' : workspace.id,
+      requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, featureKey: tab.feature ?? workspace.feature,
+      exact: true,
+    })
+  }
+}
+NAV_MODULES.push(
+  ...[
+    ['payroll-opening-balances', '/payroll/opening-balances', 'Opening Balances', 'payroll.read'],
+    ['payroll-retro', '/payroll/retro', 'Retroactive Pay', 'payroll.read'],
+    ['payroll-parallel-run', '/payroll/parallel-run', 'Parallel Run', 'payroll.read'],
+    ['payroll-work-locations', '/payroll/work-locations', 'Work Locations', 'payroll.manage'],
+  ].map(([key, href, label, requiredPermission]) => ({ key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: 'wallet', group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true })),
+  { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'clipboard-check', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
+  { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'shield', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
+  { key: 'admin-navigation', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'settings', subgroup: 'customize', requiredPermissionsAny: ['admin.nav.manage', 'admin.customization.manage'] },
+)
+
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))
 
 /**
@@ -985,7 +1071,7 @@ export function resolveStoredHref(stored: unknown): string | null {
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   // HR-15: one My Work entry (Inbox); /notifications stays a route and a
   // Notices filter inside the inbox, but no longer a nav entry.
-  'my-work': ['dashboard', 'approvals', 'assistant', 'continuous-close', 'documents', 'apps'],
+  'my-work': ['dashboard', 'approvals', 'me', 'assistant', 'continuous-close', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-activities',
@@ -1006,7 +1092,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'timesheets',
     'resourcing',
     'field-tickets',
-    'payroll',
     'items',
     'inventory',
     'warehouses',
@@ -1014,10 +1099,8 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'shipments',
     'returns',
     'equipment',
-    'employees',
-    'hrm',
-    'me',
   ],
+  hrm: ['hrm', 'employees', 'hrm-change-requests', 'hrm-org-chart', 'hrm-processes', 'hrm-documents', 'hrm-qualifications', 'hrm-positions', 'hrm-recruiting', 'hrm-leave', 'hrm-performance', 'hrm-surveys', 'hrm-compensation', 'hrm-compensation-equity', 'hrm-benefits', 'hrm-compliance', 'payroll', 'payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll-separations', 'payroll-year-end', 'payroll-opening-balances', 'payroll-retro', 'payroll-parallel-run', 'payroll-work-locations'],
   banking: [
     'banking',
     'banking-cash',
@@ -1051,6 +1134,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'records',
     'admin-custom-fields',
     'admin-customization',
+    'admin-navigation',
     'admin-page-layouts',
     'admin-pdf-templates',
     'flows',
@@ -1065,12 +1149,20 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   ],
 }
 
+for (const module of NAV_MODULES) {
+  if (!DEFAULT_NAV_ORDER[module.group].includes(module.key)) {
+    DEFAULT_NAV_ORDER[module.group] = [...DEFAULT_NAV_ORDER[module.group], module.key]
+  }
+}
+
 // --- org config shape (stored in org_nav_configs.config) -------------------
 
 export type NavItemConfig =
   | {
       kind: 'module'
       moduleKey: string
+      /** Explicit placement must survive future default workspace changes. */
+      placement?: 'custom'
       label?: string
       iconKey?: string
       hidden?: boolean
@@ -1108,6 +1200,9 @@ export interface NavGroupConfig {
 
 export interface OrgNavConfig {
   version: 2
+  /** Marks the workspace defaults used when this configuration was saved. */
+  architectureVersion?: 1
+  localNavigation?: LocalNavigationPreferences
   groups: NavGroupConfig[]
 }
 
@@ -1129,5 +1224,5 @@ export function defaultNavConfig(): OrgNavConfig {
       ...(mobileModules.has(moduleKey) ? { mobile: true } : {}),
     })),
   }))
-  return { version: 2, groups }
+  return { version: 2, architectureVersion: 1, groups }
 }

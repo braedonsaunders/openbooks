@@ -391,7 +391,13 @@
     "saveConflict": "Someone else changed the navigation. Reload the page and reapply your edits.",
     "invalidConfig": "The navigation configuration is invalid.",
     "unknownApp": "The navigation references an app that is not installed.",
-    "resetDefaults": "Reset to defaults"
+    "resetDefaults": "Reset to defaults",
+    "workspaceHelp": "Workspaces organize the main menu. Local navigation switches between closely related pages or views within a task.",
+    "localTitle": "Local navigation",
+    "localHelp": "Choose a task, then rename, reorder, or hide its local destinations. Permissions and enabled features still apply.",
+    "localWorkspace": "Task",
+    "localLabel": "Destination label",
+    "resetLocal": "Reset local order and visibility"
   },
   "roles": {
     "metaTitle": "Roles",

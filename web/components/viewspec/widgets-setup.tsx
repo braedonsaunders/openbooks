@@ -178,6 +178,7 @@ export const SETUP_WIDGETS = {
       initial={props.initial as ComponentProps<typeof NavEditor>['initial']}
       apps={(props.apps as ComponentProps<typeof NavEditor>['apps']) ?? []}
       initialRevision={(props.revision as ComponentProps<typeof NavEditor>['initialRevision']) ?? null}
+      localCatalog={props.localCatalog as ComponentProps<typeof NavEditor>['localCatalog']}
     />
   ),
   /** THREE FLAT props, no wrapper bag — the bank-feeds division. */

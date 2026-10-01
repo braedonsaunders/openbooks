@@ -7,7 +7,8 @@
     "evening": "Buenas noches"
   },
   "header": {
-    "customize": "Personalizar"
+    "customize": "Personalizar",
+    "description": "Tu trabajo diario, resumen financiero y accesos directos."
   },
   "widgets": {
     "operatingExpenses": "Gastos operativos",

@@ -1,11 +1,10 @@
+import { NativeListDrawer } from '../native-list-drawer'
 import { type ComponentProps } from 'react'
 import { NewWarehouseButton, NewWarehouseDrawer } from '../../app/(app)/warehouse/NewWarehouseDrawer'
 import { PutawayQueue } from '../../app/(app)/warehouse/PutawayQueue'
 import { WarehousesPanel } from '../../app/(app)/warehouse/WarehousesPanel'
 import { ReplenishmentProposals } from '../../app/(app)/reports/replenishment/ReplenishmentProposals'
-import { PickListDrawer } from '../../app/(app)/picks/PickListDrawer'
 import { NewPickListDrawer } from '../../app/(app)/picks/NewPickListDrawer'
-import { ShipmentDrawer } from '../../app/(app)/shipments/ShipmentDrawer'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Warehouse adapters: the cockpit's tie-out hero, putaway queue and create
@@ -45,20 +44,11 @@ export const WAREHOUSE_WIDGETS = {
       canOrder={props.canOrder === true}
     />
   ),
-  'pick-list-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof PickListDrawer>['data'] | null
-    if (!drawer) return null
-    return <PickListDrawer key={drawer.document.id} data={drawer} />
-  },
+  'pick-list-drawer': (props) => <NativeListDrawer widget="pick-list-drawer" drawer={props.drawer} />,
   'new-pick-list-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof NewPickListDrawer>['data'] | null
     if (!drawer) return null
     return <NewPickListDrawer key={drawer.salesOrder.id} data={drawer} />
   },
-  'shipment-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof ShipmentDrawer>['data'] & { initialMode?: 'view' | 'edit' }) | null
-    if (!drawer) return null
-    const { initialMode, ...data } = drawer
-    return <ShipmentDrawer key={data.document.id} data={data} initialMode={initialMode} />
-  },
+  'shipment-drawer': (props) => <NativeListDrawer widget="shipment-drawer" drawer={props.drawer} />,
 } satisfies Record<string, WidgetRenderer>

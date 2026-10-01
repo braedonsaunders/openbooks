@@ -391,7 +391,13 @@
     "saveConflict": "Outro usuário alterou a navegação. Recarregue a página e aplique suas alterações novamente.",
     "invalidConfig": "A configuração de navegação é inválida.",
     "unknownApp": "A navegação faz referência a um aplicativo não instalado.",
-    "resetDefaults": "Restaurar padrões"
+    "resetDefaults": "Restaurar padrões",
+    "workspaceHelp": "Os espaços de trabalho organizam o menu principal. A navegação local alterna entre páginas ou visualizações relacionadas a uma tarefa.",
+    "localTitle": "Navegação local",
+    "localHelp": "Escolha uma tarefa e renomeie, reordene ou oculte seus destinos locais. As permissões e os recursos habilitados continuam sendo aplicados.",
+    "localWorkspace": "Tarefa",
+    "localLabel": "Nome do destino",
+    "resetLocal": "Restaurar ordem e visibilidade locais"
   },
   "roles": {
     "metaTitle": "Funções",

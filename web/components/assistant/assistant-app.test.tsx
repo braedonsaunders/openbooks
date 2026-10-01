@@ -498,6 +498,28 @@ function sidebarTitles(host: HTMLElement): string[] {
   return [...host.querySelectorAll("li")].map((li) => li.textContent ?? "");
 }
 
+test("complete history renders beyond twenty chats and shrinks after deleting and refreshing", async (t) => {
+  clearDeletedConversations();
+  const history = Array.from({ length: 45 }, (_, index) => ({
+    id: randomUUID(), title: `History chat ${index + 1}`, updatedAt: new Date().toISOString(),
+  }));
+  const restoreFetch = installFetch({ a: history[0]!.id, b: history[1]!.id });
+  const view = mountWorkbench();
+  t.after(async () => {
+    await view.unmount();
+    restoreFetch();
+    clearDeletedConversations();
+  });
+  await view.render({ conversations: history, activeId: null, initialMessages: [] });
+  assert.deepEqual(sidebarTitles(view.host), history.map((chat) => chat.title));
+  await openRowMenuAndDelete(view.host, history[0]!.title);
+  const remaining = history.slice(1);
+  assert.deepEqual(sidebarTitles(view.host), remaining.map((chat) => chat.title));
+  await view.render({ conversations: remaining, activeId: null, initialMessages: [] });
+  assert.equal(sidebarTitles(view.host).length, 44, "refresh must not refill a hidden twenty-chat window");
+  assert.ok(sidebarTitles(view.host).includes("History chat 45"), "the oldest chat must already be rendered");
+});
+
 /** F-user-002: a delete confirmed in the chat menu must survive switching chats. */
 test("a deleted thread stays gone when the next chat arrives with a stale server list", async (t) => {
   const a = randomUUID();

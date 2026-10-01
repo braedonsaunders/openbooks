@@ -6,8 +6,12 @@ import { useTranslations } from 'next-intl'
 import { ArrowDown, ArrowUp, Eye, EyeOff, FolderPlus, Pin, PinOff, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Select, cn } from '@openbooks/ui'
+import { promptDialog } from '../../../../lib/prompt'
+import type { LocalNavigationPreference } from '@openbooks/engine/navigation'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useUnsavedNavigationGuard } from '../../../../lib/use-unsaved-navigation-guard'
+import { LOCAL_NAVIGATION } from '@openbooks/engine/navigation'
+import type { NavigationEditorWorkspace } from '../../../../lib/nav/catalog'
 import {
   MODULE_BY_KEY,
   NAV_GROUP_BY_KEY,
@@ -34,8 +38,9 @@ function itemLabel(item: NavItemConfig): string {
   return item.label ?? MODULE_BY_KEY.get(item.moduleKey)?.label ?? item.moduleKey
 }
 
-export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavConfig; apps: NavAppOption[]; initialRevision?: string | null }) {
+export function NavEditor({ initial, apps, initialRevision, localCatalog }: { initial: OrgNavConfig; apps: NavAppOption[]; initialRevision?: string | null; localCatalog?: NavigationEditorWorkspace[] }) {
   const t = useTranslations('admin.navigation')
+  const tAll = useTranslations()
   const tCommon = useTranslations('common')
   const [config, setConfig] = useState<OrgNavConfig>(initial)
   const [savedConfig, setSavedConfig] = useState<OrgNavConfig>(initial)
@@ -43,6 +48,7 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
   // embeds and tests) sends no expectation; null expects no saved row.
   const revisionRef = useRef<string | null | undefined>(initialRevision)
   const [busy, setBusy] = useState(false)
+  const [localWorkspace, setLocalWorkspace] = useState(LOCAL_NAVIGATION[0]!.id)
   const router = useRouter()
   const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig)
   useUnsavedNavigationGuard(dirty, tCommon('feedback.unsavedChanges'), tCommon('confirm.discardChanges'))
@@ -51,6 +57,31 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
     config.groups.flatMap((group) => group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : []))),
   )
   const availableApps = apps.filter((app) => !placedApps.has(app.key))
+  const workspaces = localCatalog ?? LOCAL_NAVIGATION.map((set) => ({
+    id: set.id, label: tAll(`nav.localWorkspaces.${set.id}` as never),
+    tabs: set.tabs.map((tab) => ({ href: tab.href, label: tAll(`${tab.ns}.${tab.key}` as never) })),
+  }))
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === localWorkspace)
+  const savedLocal = config.localNavigation?.[localWorkspace]?.items ?? []
+  const configuredHrefs = new Set(savedLocal.map((item) => item.href))
+  const localItems: LocalNavigationPreference['items'] = [
+    ...savedLocal.filter((item) => selectedWorkspace?.tabs.some((tab) => tab.href === item.href)),
+    ...(selectedWorkspace?.tabs.filter((tab) => !configuredHrefs.has(tab.href)).map((tab) => ({ href: tab.href })) ?? []),
+  ]
+
+  function changeLocal(items: typeof localItems) {
+    setConfig((current) => ({ ...current, localNavigation: { ...current.localNavigation, [localWorkspace]: { items } } }))
+  }
+
+  function renameLocal(href: string, label: string) {
+    const module = [...MODULE_BY_KEY.values()].find((entry) => entry.href === href)
+    const canonicalItem = module && config.groups.flatMap((group) => group.items).some((item) => item.kind === 'module' && item.moduleKey === module.key)
+    if (module && canonicalItem) {
+      setConfig((current) => ({ ...current, groups: current.groups.map((group) => ({ ...group, items: group.items.map((item) => item.kind === 'module' && item.moduleKey === module.key ? { ...item, label: label || undefined } : item) })) }))
+    } else {
+      changeLocal(localItems.map((item) => item.href === href ? { ...item, label: label || undefined } : item))
+    }
+  }
 
   const setGroup = (gi: number, patch: Partial<NavGroupConfig>) =>
     setConfig((c) => ({
@@ -68,13 +99,14 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
       }))
       const [item] = groups[fromGroup]!.items.splice(itemIndex, 1)
       if (!item) return current
+      if (item.kind === 'module') item.placement = 'custom'
       groups[targetGroup]!.items.push(item)
       return { ...current, groups }
     })
   }
 
-  function addGroup() {
-    const label = prompt(t('newGroupPrompt'))?.trim()
+  async function addGroup() {
+    const label = await promptDialog({ title: t('newGroupPrompt') })
     if (!label) return
     setConfig((current) => ({
       ...current,
@@ -135,12 +167,13 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-slate-600 dark:text-slate-400">{t('workspaceHelp')}</p>
       {config.groups.map((g, gi) => (
         <Card key={g.id}>
           <CardContent className="space-y-2 p-4">
             <div className="flex items-center gap-2">
               <Input
-                value={g.label}
+                value={NAV_GROUP_BY_KEY.get(g.id as NavGroupKey)?.label === g.label ? tAll(`nav.groups.${g.id}` as never) : g.label}
                 onChange={(e) => setGroup(gi, { label: e.target.value })}
                 className="max-w-56 font-semibold"
                 aria-label={t('groupLabelAria')}
@@ -193,7 +226,8 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
                     value={
                       item.kind === 'app'
                         ? item.label ?? appByKey.get(item.appKey)?.name ?? item.appKey
-                        : itemLabel(item)
+                        : item.kind === 'module' && (!item.label || item.label === MODULE_BY_KEY.get(item.moduleKey)?.label)
+                          ? tAll(`nav.modules.${item.moduleKey}` as never) : itemLabel(item)
                     }
                     onChange={(e) =>
                       setGroup(gi, {
@@ -223,7 +257,7 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
                   >
                     {config.groups.map((group) => (
                       <option key={group.id} value={group.id}>
-                        {group.label}
+                        {NAV_GROUP_BY_KEY.get(group.id as NavGroupKey)?.label === group.label ? tAll(`nav.groups.${group.id}` as never) : group.label}
                       </option>
                     ))}
                   </Select>
@@ -292,10 +326,11 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
               variant="outline"
               size="sm"
               disabled={busy}
-              onClick={() => {
-                const href = prompt(t('linkUrlPrompt'))
+              onClick={async () => {
+                const href = await promptDialog({ title: t('linkUrlPrompt') })
                 if (!href) return
-                const label = prompt(t('linkLabelPrompt')) ?? href
+                const label = await promptDialog({ title: t('linkLabelPrompt'), initialValue: href })
+                if (!label) return
                 setGroup(gi, {
                   items: [...g.items, { kind: 'link', href, label }],
                 })
@@ -311,12 +346,12 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
                   if (!appKey) return
                   setGroup(gi, { items: [...g.items, { kind: 'app', appKey }] })
                 }}
-                aria-label={t.has('addApp') ? t('addApp') : 'Add app shortcut'}
+                aria-label={t('addApp')}
                 className="w-52"
                 triggerClassName="h-9 text-xs"
                 disabled={busy}
               >
-                <option value="">{t.has('addApp') ? t('addApp') : 'Add app shortcut…'}</option>
+                <option value="">{t('addApp')}</option>
                 {availableApps.map((app) => (
                   <option key={app.key} value={app.key}>
                     {app.name}
@@ -328,7 +363,40 @@ export function NavEditor({ initial, apps, initialRevision }: { initial: OrgNavC
         </Card>
       ))}
 
-      <div className="flex items-center gap-2">
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <h2 className="font-semibold">{t('localTitle')}</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{t('localHelp')}</p>
+          <Select value={localWorkspace} onChange={(event) => setLocalWorkspace(event.currentTarget.value)} aria-label={t('localWorkspace')} disabled={busy}>
+            {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.label}</option>)}
+          </Select>
+          <ul className="space-y-2">
+            {localItems.map((item, index) => {
+              const destination = selectedWorkspace?.tabs.find((tab) => tab.href === item.href)
+              const module = [...MODULE_BY_KEY.values()].find((entry) => entry.href === item.href)
+              const native = module && config.groups.flatMap((group) => group.items).find((entry) => entry.kind === 'module' && entry.moduleKey === module.key)
+              return <li key={item.href} className={cn('flex items-center gap-2', item.hidden && 'opacity-50')}>
+                <Input value={(native?.label && native.label !== module?.label ? native.label : undefined) ?? item.label ?? destination?.label ?? item.href} onChange={(event) => renameLocal(item.href, event.target.value)} aria-label={t('localLabel')} disabled={busy} />
+                <Button variant="ghost" size="icon" aria-label={item.hidden ? t('showItem') : t('hideItem')} onClick={() => changeLocal(localItems.map((entry, i) => i === index ? { ...entry, hidden: !entry.hidden } : entry))} disabled={busy}>{item.hidden ? <EyeOff size={14} /> : <Eye size={14} />}</Button>
+                <Button variant="ghost" size="icon" aria-label={t('moveItemUp')} onClick={() => changeLocal(move(localItems, index, -1))} disabled={busy || index === 0}><ArrowUp size={14} /></Button>
+                <Button variant="ghost" size="icon" aria-label={t('moveItemDown')} onClick={() => changeLocal(move(localItems, index, 1))} disabled={busy || index === localItems.length - 1}><ArrowDown size={14} /></Button>
+              </li>
+            })}
+          </ul>
+          <Button variant="outline" disabled={busy} onClick={() => setConfig((current) => {
+            const localNavigation = { ...current.localNavigation }
+            const labels = (current.localNavigation?.[localWorkspace]?.items ?? []).filter((item) => item.label)
+            if (labels.length) localNavigation[localWorkspace] = { items: selectedWorkspace?.tabs.map((tab) => {
+              const saved = labels.find((item) => item.href === tab.href)
+              return { href: tab.href, ...(saved?.label ? { label: saved.label } : {}) }
+            }) ?? [] }
+            else delete localNavigation[localWorkspace]
+            return { ...current, localNavigation }
+          })}><RotateCcw size={14} /> {t('resetLocal')}</Button>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center gap-2">
         <Button onClick={save} disabled={busy}>
           {busy ? tCommon('actions.saving') : t('save')}
         </Button>

@@ -3,6 +3,7 @@ import 'server-only'
 import type { ReactNode } from 'react'
 import { can, getAuthz } from '../../lib/authz'
 import { RecordListView } from '../record-list-view'
+import type { NativeListDrawerData } from '../../lib/list/drawer-routes'
 
 /**
  * Slot for the universal record list — the documents twin of EntityListSlot.
@@ -23,6 +24,7 @@ export async function RecordListSlot({
   basePath,
   sp,
   drawer,
+  nativeDrawer,
   emptyAction,
   renderRowActions,
 }: {
@@ -30,6 +32,7 @@ export async function RecordListSlot({
   basePath: string
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
+  nativeDrawer?: NativeListDrawerData | null
   emptyAction?: ReactNode
   renderRowActions?: Parameters<typeof RecordListView>[0]['renderRowActions']
 }) {
@@ -44,6 +47,7 @@ export async function RecordListSlot({
       canManage={can(authz, 'admin.customization.manage')}
       sp={sp}
       drawer={drawer}
+      nativeDrawer={nativeDrawer}
       emptyAction={emptyAction}
       renderRowActions={renderRowActions}
     />

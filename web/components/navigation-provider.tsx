@@ -2,8 +2,8 @@
 
 // Supplies a client-side navigate fn to @openbooks/ui's UrlDrawer and the
 // shared report overlay store. Overlay-only chrome (report drill, register,
-// txn flyout) is a replaceState — it must not re-run a force-dynamic report
-// loader. Record drawers that own `open` on the server still router.push.
+// txn flyout) and registered list drawers use native history without re-running
+// the force-dynamic list/report loader. Filter changes still use router.push.
 
 import {
   createContext,
@@ -16,6 +16,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { DrawerNavigateContext } from '@openbooks/ui'
 import { isOverlayOnlyHrefChange } from '../lib/report-overlay'
+import { isListDrawerHrefChange } from '../lib/list/drawer-routes'
 
 export type ReportOverlayApi = {
   search: string
@@ -67,7 +68,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 
   const navigate = useCallback((href: string) => {
     const current = `${pathname}${liveSearch ? `?${liveSearch}` : ''}`
-    if (typeof window !== 'undefined' && isOverlayOnlyHrefChange(current, href)) {
+    if (typeof window !== 'undefined' && (isOverlayOnlyHrefChange(current, href) || isListDrawerHrefChange(current, href))) {
       replaceOverlay(href)
       return
     }

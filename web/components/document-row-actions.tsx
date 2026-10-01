@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import { ListDrawerLink } from './list-drawer-link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -57,8 +57,8 @@ export function DocumentRowActions({
       })
       // The error body may not be JSON (proxy 5xx pages): never let the read
       // itself throw, or the failure goes silent with an unhandled rejection.
-      const data = (await res.json().catch(() => ({}))) as { error?: unknown }
       if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
         const message = typeof data.error === 'string' && data.error ? data.error : t('toasts.actionFailed')
         setRefusal(message)
         toast.error(message)
@@ -131,7 +131,7 @@ export function DocumentRowActions({
   }
   return (
     <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-      <Link href={openHref} aria-label={tCommon('actions.open')} title={tCommon('actions.open')}><Eye size={14} /></Link>
+      <ListDrawerLink href={openHref} aria-label={tCommon('actions.open')} title={tCommon('actions.open')}><Eye size={14} /></ListDrawerLink>
     </Button>
   )
 }

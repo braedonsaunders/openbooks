@@ -391,7 +391,13 @@
     "saveConflict": "Un autre utilisateur a modifié la navigation. Rechargez la page et appliquez à nouveau vos modifications.",
     "invalidConfig": "La configuration de la navigation est invalide.",
     "unknownApp": "La navigation fait référence à une application non installée.",
-    "resetDefaults": "Rétablir les valeurs par défaut"
+    "resetDefaults": "Rétablir les valeurs par défaut",
+    "workspaceHelp": "Les espaces de travail organisent le menu principal. La navigation locale permet de passer entre les pages ou vues liées à une tâche.",
+    "localTitle": "Navigation locale",
+    "localHelp": "Choisissez une tâche, puis renommez, réorganisez ou masquez ses destinations locales. Les autorisations et les fonctionnalités activées continuent de s’appliquer.",
+    "localWorkspace": "Tâche",
+    "localLabel": "Libellé de destination",
+    "resetLocal": "Réinitialiser l’ordre et la visibilité locaux"
   },
   "roles": {
     "metaTitle": "Rôles",

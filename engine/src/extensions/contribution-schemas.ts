@@ -2,6 +2,7 @@ import { z } from "zod";
 import { FEATURES } from "../organization/feature-registry.ts";
 const featureKeys = new Set(FEATURES.map((feature) => feature.key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)));
 import { NAV_GROUP_BY_KEY, NAV_MODULES } from "../navigation/nav-registry.ts";
+import { LOCAL_NAVIGATION_BY_ID } from "../navigation/local-navigation.ts";
 const KEY = /^[a-z][a-z0-9_]{0,63}$/;
 const PERMISSION_KEY = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$/;
 export const navContributionSchema = z.object({
@@ -19,6 +20,8 @@ export const navContributionSchema = z.object({
     .max(120).refine((href) => !NAV_MODULES.some((entry) => entry.href === href), "native navigation route"),
   /** Canonical workspace group the entry is appended to. */
   group: z.string().min(1).max(100).refine((key) => NAV_GROUP_BY_KEY.has(key as never), "unknown navigation group"),
+  /** Optional route workspace whose local navigation includes this page. */
+  workspaceKey: z.string().refine((key) => Boolean(LOCAL_NAVIGATION_BY_ID.get(key) && !LOCAL_NAVIGATION_BY_ID.get(key)!.inline), "unknown local route workspace").optional(),
   /** Icon key, as NavModule.iconKey; the resolver falls back to 'link'. */
   iconKey: z.string().trim().min(1).max(64).default("link"),
   /**

@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 const SCOPE = "assistant";
 
-/** The current user's recent assistant conversations, newest first. */
+/** The current user's complete assistant history, newest first. */
 export const GET = defineRoute({
   permission: "assistant.use",
   feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },

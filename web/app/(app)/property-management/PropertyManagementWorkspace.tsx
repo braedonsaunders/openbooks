@@ -1,9 +1,11 @@
 "use client";
 
+import { RecordTabs } from "@/components/module-home/record-tabs";
+
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Button, Card, CardContent, cn } from "@openbooks/ui";
+import { Button, Card, CardContent } from "@openbooks/ui";
 import type { FormLayoutConfig, ListViewConfig } from "@openbooks/customization";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
@@ -293,29 +295,7 @@ export function PropertyManagementWorkspace({
       <Card className="min-w-0 overflow-hidden">
         <CardContent className="p-0">
           <div className="flex flex-col items-stretch justify-between gap-3 border-b border-slate-200 px-4 sm:flex-row sm:items-center dark:border-slate-800">
-            <nav
-              className="-mb-px flex min-w-0 gap-1 overflow-x-auto"
-              role="tablist"
-              aria-label={t("sectionsAria")}
-            >
-              {mainTabs.map((item) => (
-                <button
-                  type="button"
-                  key={item.key}
-                  role="tab"
-                  aria-selected={tab === item.key}
-                  onClick={() => setTab(item.key)}
-                  className={cn(
-                    "border-b-2 px-3 py-3 text-sm font-medium transition-colors",
-                    tab === item.key
-                      ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
-                      : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200",
-                  )}
-                >
-                  {t(`tabs.${item.key}`)}
-                </button>
-              ))}
-            </nav>
+            <RecordTabs label={t("sectionsAria")} tabs={mainTabs.map((item) => ({ key: item.key, label: t(`tabs.${item.key}`) }))} active={tab} onChange={setTab} />
             <div className="flex flex-wrap gap-2 py-3 sm:justify-end">
               {tab === "properties" && permissions.manage ? (
                 <Button onClick={() => setCreateProperty(true)}>

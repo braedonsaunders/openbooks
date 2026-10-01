@@ -156,7 +156,7 @@ export function PagedTable<T>({
         className="max-w-xs"
       />
     )
-  ) : null
+  ) : toolbarAfter ?? null
 
   if (rows.length === 0) {
     if (!emptyAsRow) return <>{empty}</>

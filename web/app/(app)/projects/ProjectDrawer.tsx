@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -712,25 +714,7 @@ export function ProjectDrawer({
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
       subtabs={
-        <nav className="-mb-px flex flex-wrap gap-1" aria-label={t('cockpit.tabsAria')}>
-          {tabs.map((tb) => (
-            <button
-              key={tb.key}
-              type="button"
-              role="tab"
-              aria-selected={tab === tb.key}
-              onClick={() => setTab(tb.key)}
-              className={cn(
-                'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-                tab === tb.key
-                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-              )}
-            >
-              {tb.label}
-            </button>
-          ))}
-        </nav>
+        <RecordTabs label={t('cockpit.tabsAria')} tabs={tabs.map((item) => ({ key: item.key, label: item.label }))} active={tab} onChange={setTab} />
       }
       headerActions={
         mode === 'edit' ? (
@@ -886,29 +870,7 @@ export function ProjectDrawer({
 
       {tab === 'project_management' ? (
         <div>
-          <nav
-            className="mb-5 flex gap-1 border-b border-slate-200 dark:border-slate-800"
-            aria-label={t('cockpit.tabs.project_management')}
-            role="tablist"
-          >
-            {managementTabs.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                role="tab"
-                aria-selected={managementTab === item.key}
-                onClick={() => setManagementTab(item.key)}
-                className={cn(
-                  '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-                  managementTab === item.key
-                    ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          <RecordTabs label={t('cockpit.tabs.project_management')} tabs={managementTabs} active={managementTab} onChange={setManagementTab} className="mb-5 border-b border-slate-200 dark:border-slate-800" />
           {managementTab === 'work_breakdown' ? (
             <WorkBreakdownTab
               projectId={String(pr.id)}

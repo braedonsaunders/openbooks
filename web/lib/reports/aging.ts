@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { statementBookExpr } from "../gl-summary";
 import { mulDecimal } from "@openbooks/engine/src/money/money.ts";
@@ -8,7 +8,7 @@ import { mulDecimal } from "@openbooks/engine/src/money/money.ts";
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../../../engine/src/records/open-item-kinds.ts";
 import { resolveOrgId } from "../org-scope";
-import { presentationCurrency, presentationRates } from "../fx-presentation";
+import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
@@ -169,7 +169,7 @@ interface OpenDocument {
   openTxn: string;
 }
 
-async function openDocuments(
+function openDocumentsSql(
   side: AgingSide,
   asOf: string,
   dims: DimFilter | undefined,
@@ -178,7 +178,7 @@ async function openDocuments(
   kinds: readonly string[],
   creditKind: string,
   scope?: { partyId?: string; partyIsNull?: boolean; bucket?: AgingBucket; bookId?: string | null },
-): Promise<OpenDocument[]> {
+): SQL {
   // Account gate: the AP side admits liability_payable lines plus the
   // designated employee-payable control (preset-typed liability_current_other,
   // where OOP reports actually post); the AR side admits asset_receivable.
@@ -187,12 +187,7 @@ async function openDocuments(
   const accountScope = side === "ap"
     ? apOpenAccountScope(sql`a`, orgId)
     : arOpenAccountScope(sql`a`);
-  const r = (await db.execute<{
-    doc_id: string; kind: string; party_id: string | null; party_name: string | null;
-    reference: string | null; due: string | null; age_days: number;
-    doc_currency: string; txn_ccy: string; func_ccy: string;
-    open_base: string; open_txn: string;
-  }>(sql`
+  return sql`
     -- The open is reconstructed AS OF the report date — gross open-item
     -- lines minus applications dated on/before it — never the live cached
     -- balance: a later settlement must not rewrite a past aging (or
@@ -270,7 +265,19 @@ async function openDocuments(
       from open_docs od
       left join parties p on p.id = od.party_id and p.org_id = ${orgId}
      where abs(od.open_base) > 0
-  `));
+  `;
+}
+
+interface OpenDocumentSource extends Record<string, unknown> {
+  doc_id: string; kind: string; party_id: string | null; party_name: string | null;
+  reference: string | null; due: string | null; age_days: number;
+  doc_currency: string; txn_ccy: string; func_ccy: string;
+  open_base: string; open_txn: string;
+}
+
+async function openDocuments(...args: Parameters<typeof openDocumentsSql>): Promise<OpenDocument[]> {
+  const r = await db.execute<OpenDocumentSource>(sql`select * from (${openDocumentsSql(...args)}) document_rows
+    order by party_name nulls last, age_days desc, doc_id`);
   return r.rows.map((x) => ({
     docId: x.doc_id,
     kind: x.kind,
@@ -629,6 +636,83 @@ export async function agingDetail(
   return presentAgingDetail(docs, basis, target, asOf, rates)
 }
 
+export interface AgingDetailPageResult extends AgingDetailResult {
+  total: number
+  page: number
+  perPage: number
+}
+
+/** Rebuild once in SQL, retain exact full-scope totals, and transfer only the
+ * requested page. Conversion still occurs per document before summation. */
+export async function agingDetailPage(
+  side: AgingSide,
+  asOf: string,
+  dims: DimFilter | undefined,
+  orgId: string,
+  opts: AgingOptions,
+  window: { page: number; perPage: number },
+): Promise<AgingDetailPageResult> {
+  if (!Number.isSafeInteger(window.page) || window.page < 1
+    || !Number.isSafeInteger(window.perPage) || window.perPage < 1 || window.perPage > 500
+    || !Number.isSafeInteger((window.page - 1) * window.perPage)) {
+    throw new RangeError('Aging pages require a positive page and a page size from 1 to 500.')
+  }
+  const resolvedOrgId = await resolveOrgId(orgId)
+  const orgBase = await presentationCurrency(resolvedOrgId)
+  const basis = opts.basis ?? 'base'
+  const target = opts.reportingCurrency ?? orgBase
+  const currency = basis === 'transaction' ? sql`od.txn_ccy` : sql`od.func_ccy`
+  const amount = basis === 'transaction' ? sql`od.open_txn` : sql`od.open_base`
+  const result = await db.execute<{
+    rows: AgingDetailRow[] | null; total: string; totals: Record<string, string>; missing: string[] | null
+  }>(sql`
+    with open_document_rows as materialized (
+      ${openDocumentsSql(side, asOf, dims, resolvedOrgId, orgBase,
+        side === 'ap' ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS,
+        side === 'ap' ? 'vendor_credit' : 'customer_credit', opts)}
+    ), currencies as (
+      select distinct ${currency} as ccy from open_document_rows od where ${currency} <> ${target}
+    ), rates as (
+      ${presentationSpotRatesSql(resolvedOrgId, target, sql`select ccy from currencies`, asOf)}
+    ), presented as materialized (
+      select od.*, ${currency} as source_currency,
+        ${presentationAmountSql(amount, currency, target, sql`r.rate::numeric`)} as presented_open,
+        case when od.age_days <= 0 then 'current' when od.age_days <= 30 then 'b1'
+             when od.age_days <= 60 then 'b2' when od.age_days < 90 then 'b3' else 'b4' end as bucket
+      from open_document_rows od left join rates r on r.from_currency = ${currency}
+    ), visible as materialized (
+      select * from presented where presented_open <> 0
+    )
+    select (select jsonb_agg(jsonb_build_object(
+        'docId', selected.doc_id, 'docKind', selected.kind,
+        'partyId', selected.party_id, 'partyName', selected.party_name,
+        'reference', selected.reference, 'dueDate', selected.due,
+        'ageDays', selected.age_days, 'bucket', selected.bucket,
+        'open', selected.presented_open::text, 'docCurrency', selected.doc_currency,
+        'txnOpen', selected.open_txn::text
+      ) order by selected.party_name nulls last, selected.age_days desc, selected.doc_id)
+      from (select * from visible order by party_name nulls last, age_days desc, doc_id
+        limit ${window.perPage} offset ${(window.page - 1) * window.perPage}) selected) as rows,
+      count(*)::text as total,
+      jsonb_build_object(
+        'current', coalesce(sum(presented_open) filter (where bucket='current'),0)::text,
+        'b1', coalesce(sum(presented_open) filter (where bucket='b1'),0)::text,
+        'b2', coalesce(sum(presented_open) filter (where bucket='b2'),0)::text,
+        'b3', coalesce(sum(presented_open) filter (where bucket='b3'),0)::text,
+        'b4', coalesce(sum(presented_open) filter (where bucket='b4'),0)::text,
+        'total', coalesce(sum(presented_open),0)::text
+      ) as totals,
+      (select array_agg(distinct source_currency order by source_currency)
+        from presented where source_currency <> ${target} and presented_open is null) as missing
+    from visible
+  `)
+  const data = result.rows[0]
+  if (!data) throw new Error('The aging query did not return its totals.')
+  if (data.missing?.length) throw new AgingRatesUnavailableError(data.missing, target, asOf)
+  const totals = Object.fromEntries(['current', 'b1', 'b2', 'b3', 'b4', 'total'].map((key) => [key, decimalAdd(ZERO, data.totals[key]!)])) as AgingDetailResult['totals']
+  return { rows: data.rows ?? [], total: Number(data.total), totals, asOf, basis, reportingCurrency: target, ...window }
+}
+
 function presentAgingDetail(
   docs: OpenDocument[],
   basis: AgingCurrencyBasis,
@@ -650,10 +734,6 @@ function presentAgingDetail(
       docCurrency: d.docCurrency, txnOpen: d.openTxn as ExactDecimal,
     })
   }
-  // The old grouped query ordered by party name with nulls last, oldest first.
-  rows.sort((a, b) =>
-    (a.partyName ?? "\uffff").localeCompare(b.partyName ?? "\uffff") || b.ageDays - a.ageDays,
-  )
   return { rows, totals, asOf, basis, reportingCurrency: target }
 }
 

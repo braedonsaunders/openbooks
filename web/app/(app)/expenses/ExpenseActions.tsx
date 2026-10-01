@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import { ListDrawerLink } from '../../../components/list-drawer-link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -62,7 +62,7 @@ export function ExpenseActions({
   }
   return (
     <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-      <Link href={openHref} aria-label={tCommon('actions.open')} title={tCommon('actions.open')}><Eye size={14} /></Link>
+      <ListDrawerLink href={openHref} aria-label={tCommon('actions.open')} title={tCommon('actions.open')}><Eye size={14} /></ListDrawerLink>
     </Button>
   )
 }

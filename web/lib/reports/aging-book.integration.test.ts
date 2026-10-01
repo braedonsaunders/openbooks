@@ -11,7 +11,7 @@ const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/p
 const { createScratchOrg, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
-const { agingByParty, agingDetail } = await import('./aging.ts')
+const { agingByParty, agingDetail, agingDetailPage } = await import('./aging.ts')
 const { partnerStatement } = await import('./registers.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
@@ -79,6 +79,14 @@ test(
         assert.equal(detail.rows.length, 1)
         assert.equal(String(detail.rows[0]!.open), '500.0000')
         assert.equal(String(detail.totals.total), '500.0000')
+
+        for (const bookId of [undefined, taxBookId]) {
+          const complete = await agingDetail('ar', org.date, undefined, org.orgId, { bookId })
+          const paged = await agingDetailPage('ar', org.date, undefined, org.orgId, { bookId }, { page: 1, perPage: 1 })
+          assert.deepEqual(paged.rows, complete.rows)
+          assert.deepEqual(paged.totals, complete.totals)
+          assert.equal(paged.total, complete.rows.length)
+        }
 
         // An explicit book reads that book — the tax mirror is intact.
         const taxSummary = await agingByParty('ar', org.date, undefined, org.orgId, { bookId: taxBookId })

@@ -1,5 +1,5 @@
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
 import Link from 'next/link'
-import { cn } from '@openbooks/ui'
 
 /**
  * Fixed-assets adapters retained for stored PageSpecs plus the live
@@ -17,25 +17,7 @@ export function AssetsTabs({
 }: {
   tabs: { key: string; href: string; label: string; active: boolean }[]
 }) {
-  return (
-    <nav className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href as never}
-          aria-current={tab.active ? 'page' : undefined}
-          className={cn(
-            '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-            tab.active
-              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
-          )}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </nav>
-  )
+  return <ModuleHomeTabs tabs={tabs} />
 }
 
 /** The documentation link in the register header actions. */

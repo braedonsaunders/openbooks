@@ -441,10 +441,8 @@ export function BlockView({
     return null
   switch (block.kind) {
     case 'page-header': {
-      const navigation = block.actions?.filter((action) => action.widget === 'module-home-tabs')
-      const actions = block.actions?.filter((action) => action.widget !== 'module-home-tabs')
+      const actions = block.actions
       return (
-        <>
         <PageHeader
           title={resolveText(block.title, scope)}
           description={resolveText(block.description, scope) || undefined}
@@ -468,8 +466,6 @@ export function BlockView({
             ) : undefined
           }
         />
-        {navigation?.length ? <div className="mt-2 min-w-0 empty:hidden"><WidgetSlot widgets={navigation} scope={scope} /></div> : null}
-        </>
       )
     }
 
