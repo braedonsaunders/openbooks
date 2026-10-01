@@ -3,7 +3,7 @@
 import type { ComponentProps } from 'react'
 import { DocumentDrawer } from './document-drawer'
 import { ReturnWorkflowPanel } from '../app/(app)/returns/ReturnWorkflowPanel'
-import type { ReturnAuthorization } from '@openbooks/engine/src/sales/returns.ts'
+import type { ReturnAuthorization } from '@openbooks/engine/sales/returns/contracts'
 import { PaymentLinksPanel } from './payment-links-panel'
 import { AppliedPaymentsPanel, type AppliedPayment } from './applied-payments-panel'
 import { CreditApplicationsPanel } from './credit-applications-panel'
