@@ -8,6 +8,8 @@ export type LocalNavigationTab = {
   ns: string
   key: string
   label?: string
+  /** Explicit main-menu identity for a query-addressed working view. */
+  menuKey?: string
   permission?: string
   permissionsAny?: string[]
   feature?: string
@@ -54,7 +56,8 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   people: [
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
     { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.employment.read', 'hrm.self.read'] },
-    { href: '/hrm/processes', ns: 'hrm', key: 'home.tabs.processes', permission: 'hrm.process.read', prefix: true },
+    { href: '/hrm/processes', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
+    { href: '/hrm/processes/templates', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', prefix: true },
     { href: '/hrm/documents', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },
     { href: '/hrm/qualifications', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
   ],
@@ -62,20 +65,20 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/hrm/positions', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read' },
     { href: '/hrm/recruiting', ns: 'hrm', key: 'recruiting.tabs.openings', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'] },
     ...['interviews', 'offers', 'postings', 'pools'].map((tab) => ({
-      href: `/hrm/recruiting?tab=${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
+      href: `/hrm/recruiting?tab=${tab}`, menuKey: `hrm-recruiting-${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
       permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'],
     })),
   ],
   timeOff: [
     { href: '/hrm/leave', ns: 'hrm', key: 'leave.listTitle', permission: 'hrm.leave.read', carry: ['segment'] },
-    { href: '/hrm/leave?view=calendar', ns: 'hrm', key: 'leave.calendarTitle', permission: 'hrm.leave.read', carry: ['segment'] },
+    { href: '/hrm/leave?view=calendar', menuKey: 'hrm-leave-calendar', ns: 'hrm', key: 'leave.calendarTitle', permission: 'hrm.leave.read', carry: ['segment'] },
   ],
   talent: [
     { href: '/hrm/performance', ns: 'hrm', key: 'performance.continuous.tabs.cycles', feature: 'hrmPerformance' },
-    ...['calibration', 'talent'].map((tab) => ({ href: `/hrm/performance?tab=${tab}`, ns: 'hrm', key: `performance.continuous.tabs.${tab}`, permission: 'hrm.performance.manage', feature: 'hrmPerformance' })),
-    { href: '/hrm/performance?tab=retention', ns: 'hrm', key: 'retention.title', permission: 'hrm.retention.read', feature: 'hrmPerformance' },
+    ...['calibration', 'talent'].map((tab) => ({ href: `/hrm/performance?tab=${tab}`, menuKey: `hrm-performance-${tab}`, ns: 'hrm', key: `performance.continuous.tabs.${tab}`, permission: 'hrm.performance.manage', feature: 'hrmPerformance' })),
+    { href: '/hrm/performance?tab=retention', menuKey: 'hrm-performance-retention', ns: 'hrm', key: 'retention.title', permission: 'hrm.retention.read', feature: 'hrmPerformance' },
     { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys', permission: 'hrm.surveys.manage', feature: 'hrmSurveys' },
-    { href: '/hrm/performance?tab=settings', ns: 'hrm', key: 'performance.continuous.tabs.settings', permission: 'hrm.performance.manage', feature: 'hrmPerformance' },
+    { href: '/hrm/performance?tab=settings', menuKey: 'hrm-performance-settings', ns: 'hrm', key: 'performance.continuous.tabs.settings', permission: 'hrm.performance.manage', feature: 'hrmPerformance' },
   ],
   rewards: [
     { href: '/hrm/compensation', ns: 'hrm', key: 'home.tabs.compensation', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },

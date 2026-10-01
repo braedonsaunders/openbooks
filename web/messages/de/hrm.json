@@ -580,7 +580,8 @@
         "acknowledgement": "Bestätigung",
         "attachment": "Anhang"
       }
-    }
+    },
+    "employeeUnavailable": "Für diesen Mitarbeiter kann keine neue Checkliste erstellt werden. Wählen Sie einen aktiven Mitarbeiter."
   },
   "leave": {
     "title": "Urlaub",

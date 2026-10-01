@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { Button, Drawer, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { Button, Drawer, Input, Label, SearchSelect } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 
@@ -15,9 +15,8 @@ export interface ProcessCreateData {
   templatesHref: string
 }
 
-/** New checklist drawer. The template is explicit and is loaded only after
- * the employee, kind and effective date establish which active templates
- * actually cover this checklist. */
+/** Employee and date scope the eligible templates. The chosen template owns
+ * the checklist kind; the operator never enters the same classification twice. */
 export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | null }) {
   const t = useTranslations('hrm')
   const tc = useTranslations('common')
@@ -29,15 +28,15 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   const [optionStatus, setOptionStatus] = useState<string | undefined>()
   const optionRequest = useRef(0)
   const templateRequest = useRef(0)
-  const [kind, setKind] = useState<'onboarding' | 'offboarding' | 'transfer'>('onboarding')
   const [effectiveDate, setEffectiveDate] = useState(create?.effectiveDate ?? '')
   const [templateId, setTemplateId] = useState('')
-  const [templateOptions, setTemplateOptions] = useState<{ value: string; label: string }[]>([])
+  const [templateOptions, setTemplateOptions] = useState<{ value: string; label: string; kind: 'onboarding' | 'offboarding' | 'transfer' }[]>([])
+  const selectedTemplate = templateOptions.find((template) => template.value === templateId)
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [templateStatus, setTemplateStatus] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
   const dirty = create !== null && (
-    employmentId !== '' || kind !== 'onboarding' || effectiveDate !== create.effectiveDate || templateId !== ''
+    employmentId !== '' || effectiveDate !== create.effectiveDate || templateId !== ''
   )
   const discard = useCallback(() => {
     if (!create) return
@@ -55,7 +54,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   useEffect(() => {
     if (!create) return
     const requestId = (optionRequest.current += 1)
-    const params = new URLSearchParams({ source: 'employments', limit: '25' })
+    const params = new URLSearchParams({ source: 'employments', limit: '25', active: 'true' })
     if (query.trim()) params.set('q', query.trim())
     if (employmentId) params.set('include', employmentId)
     fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
@@ -66,18 +65,17 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
           setLoadingOptions(false)
           return
         }
-        const payload = (await response.json().catch(() => ({}))) as {
+        const payload = (await response.json()) as {
           options?: { employmentId?: unknown; label?: unknown }[]
         }
         if (requestId !== optionRequest.current) return
-        setEmploymentOptions(
-          (Array.isArray(payload.options) ? payload.options : []).flatMap((option) =>
+        const options = (Array.isArray(payload.options) ? payload.options : []).flatMap((option) =>
             typeof option.employmentId === 'string' && typeof option.label === 'string'
               ? [{ value: option.employmentId, label: option.label }]
               : [],
-          ),
-        )
-        setOptionStatus(undefined)
+          )
+        setEmploymentOptions(options)
+        setOptionStatus(employmentId && !options.some((option) => option.value === employmentId) ? t('processes.employeeUnavailable') : undefined)
         setLoadingOptions(false)
       })
       .catch(() => {
@@ -92,19 +90,19 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
     // never set state synchronously in the effect body (cascading renders).
     // Staleness is already handled by the requestId fence, not by unmounting.
     const run = async (): Promise<void> => {
+      const requestId = (templateRequest.current += 1)
       setTemplateId('')
+      setTemplateOptions([])
       if (!create || !employmentId || !effectiveDate) {
         setTemplateOptions([])
         setTemplateStatus(undefined)
         setTemplatesLoading(false)
         return
       }
-      const requestId = (templateRequest.current += 1)
       const params = new URLSearchParams({
         active: 'true',
         employment: employmentId,
         effectiveDate,
-        kind,
       })
       setTemplatesLoading(true)
       await fetch(`/api/hrm/process-templates?${params.toString()}`, { method: 'GET' })
@@ -117,12 +115,12 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
             return
           }
           const payload = (await response.json()) as {
-            templates?: { id?: unknown; name?: unknown; stepCount?: unknown }[]
+            templates?: { id?: unknown; name?: unknown; kind?: unknown; stepCount?: unknown }[]
           }
           if (requestId !== templateRequest.current) return
-          const ready = (payload.templates ?? []).flatMap((template) =>
-            typeof template.id === 'string' && typeof template.name === 'string' && Number(template.stepCount) > 0
-              ? [{ value: template.id, label: template.name }]
+          const ready = (payload.templates ?? []).flatMap((template): { value: string; label: string; kind: 'onboarding' | 'offboarding' | 'transfer' }[] =>
+            typeof template.id === 'string' && typeof template.name === 'string' && (template.kind === 'onboarding' || template.kind === 'offboarding' || template.kind === 'transfer') && Number(template.stepCount) > 0
+              ? [{ value: template.id, label: `${template.name} · ${t(`processes.kinds.${template.kind}`)}`, kind: template.kind }]
               : [],
           )
           setTemplateOptions(ready)
@@ -137,14 +135,14 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
         })
     }
     void run()
-  }, [create, effectiveDate, employmentId, kind, t])
+  }, [create, effectiveDate, employmentId, t])
 
   if (!create) return null
 
   const close = () => void guardedClose()
 
   async function save() {
-    if (!employmentId || !effectiveDate || !templateId) return
+    if (!employmentId || !employmentOptions.some((option) => option.value === employmentId) || optionStatus || loadingOptions || !effectiveDate || !selectedTemplate || templatesLoading) return
     // A transport failure rejects instead of resolving: without the
     // finally the drawer strands busy (and unclosable through the dirty
     // guard) with no error shown.
@@ -153,7 +151,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
       const response = await fetch('/api/hrm/processes', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ employmentId, kind, effectiveDate, templateId }),
+        body: JSON.stringify({ employmentId, kind: selectedTemplate.kind, effectiveDate, templateId: selectedTemplate.value }),
       })
       if (!response.ok) {
         toast.error(await readApiErrorMessage(response, t('processes.actionFailed')))
@@ -164,7 +162,11 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
         toast.error(t('processes.actionFailed'))
         return
       }
-      router.push(`/hrm/processes?segment=open&process=${payload.process.id}` as never)
+      const next = new URL(create!.closeHref, window.location.origin)
+      next.searchParams.delete('new')
+      next.searchParams.set('segment', 'open')
+      next.searchParams.set('process', payload.process.id)
+      router.push(`${next.pathname}${next.search}` as never)
       router.refresh()
     } catch {
       toast.error(t('processes.actionFailed'))
@@ -181,7 +183,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
           <SearchSelect
             id="process-employment"
             value={employmentId}
-            onChange={setEmploymentId}
+            onChange={(value) => { setEmploymentId(value); setLoadingOptions(true); setOptionStatus(undefined) }}
             options={employmentOptions}
             ariaLabel={t('processes.columns.employee')}
             sheetTitle={t('processes.columns.employee')}
@@ -203,14 +205,6 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
           ) : null}
         </div>
         <div>
-          <Label htmlFor="process-kind">{t('processes.columns.kind')}</Label>
-          <Select id="process-kind" value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
-            <option value="onboarding">{t('processes.kinds.onboarding')}</option>
-            <option value="offboarding">{t('processes.kinds.offboarding')}</option>
-            <option value="transfer">{t('processes.kinds.transfer')}</option>
-          </Select>
-        </div>
-        <div>
           <Label htmlFor="process-effective">{t('processes.columns.effective')}</Label>
           <Input id="process-effective" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} />
         </div>
@@ -224,6 +218,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
             ariaLabel={t('processes.templates.template')}
             sheetTitle={t('processes.templates.template')}
             emptyLabel="—"
+            disabled={!employmentId || !effectiveDate || templatesLoading}
             loading={templatesLoading}
             statusMessage={templateStatus}
             statusTone={templateStatus ? 'muted' : undefined}
@@ -240,11 +235,15 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
             </p>
           ) : null}
         </div>
+        {selectedTemplate ? <div>
+          <Label htmlFor="process-kind">{t('processes.columns.kind')}</Label>
+          <Input id="process-kind" readOnly value={t(`processes.kinds.${selectedTemplate.kind}`)} />
+        </div> : null}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={close}>
             {tc('actions.cancel')}
           </Button>
-          <Button disabled={saving || !employmentId || !effectiveDate || !templateId} onClick={save}>
+          <Button disabled={saving || loadingOptions || !!optionStatus || templatesLoading || !employmentOptions.some((option) => option.value === employmentId) || !effectiveDate || !selectedTemplate} onClick={save}>
             {saving ? tc('actions.creating') : tc('actions.create')}
           </Button>
         </div>

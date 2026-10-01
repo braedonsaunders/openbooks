@@ -580,7 +580,8 @@
         "acknowledgement": "Acuse de recibo",
         "attachment": "Adjunto"
       }
-    }
+    },
+    "employeeUnavailable": "Este empleado ya no está disponible para una nueva lista de verificación. Elija un empleado activo."
   },
   "leave": {
     "title": "Ausencias",

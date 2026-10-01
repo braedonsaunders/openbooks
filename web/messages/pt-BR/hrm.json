@@ -580,7 +580,8 @@
         "acknowledgement": "Ciência",
         "attachment": "Anexo"
       }
-    }
+    },
+    "employeeUnavailable": "Este funcionário não está mais disponível para uma nova lista de verificação. Escolha um funcionário ativo."
   },
   "leave": {
     "title": "Licenças",

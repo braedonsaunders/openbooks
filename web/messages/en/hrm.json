@@ -580,7 +580,8 @@
         "acknowledgement": "Acknowledgement",
         "attachment": "Attachment"
       }
-    }
+    },
+    "employeeUnavailable": "This employee is no longer available for a new checklist. Choose an active employee."
   },
   "leave": {
     "title": "Leave",

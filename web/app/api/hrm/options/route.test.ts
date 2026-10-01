@@ -334,3 +334,17 @@ test("people forwards the pin under its own key for the exit-interviewer picker"
     },
   ]);
 });
+
+
+test('active-only employment browsing forwards the policy for both search and pinned selections', async () => {
+  reset()
+  const include = '00000000-0000-4000-8000-000000000031'
+  const response = await optionsRoute!.GET(getRequest(`?source=employments&active=true&include=${include}`))
+  assert.equal(response.status, 200)
+  const args = routeState.calls[0]!.args as Record<string, unknown>
+  assert.equal(args.activeOnly, true)
+  assert.equal(args.includeEmploymentId, include)
+  reset()
+  assert.equal((await optionsRoute!.GET(getRequest('?source=employments&active=maybe'))).status, 400)
+  assert.deepEqual(routeState.calls, [])
+})

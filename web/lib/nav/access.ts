@@ -15,8 +15,12 @@ export function visibleNavigationHref(href: string, allowed: (permission: string
   const path = navPathname(href)
   const owner = NAV_MODULES.filter((module) => {
     const root = navPathname(module.href)
-    return path === root || path.startsWith(`${root}/`)
-  }).sort((a, b) => navPathname(b.href).length - navPathname(a.href).length)[0]
+    if (path !== root && !path.startsWith(`${root}/`)) return false
+    if (!module.href.includes('?')) return true
+    const target = new URL(module.href, 'https://navigation.invalid')
+    const current = new URL(href, target.origin)
+    return path === root && [...target.searchParams].every(([key, value]) => current.searchParams.get(key) === value)
+  }).sort((a, b) => navPathname(b.href).length - navPathname(a.href).length || (b.href.includes('?') ? 1 : 0) - (a.href.includes('?') ? 1 : 0))[0]
   if (owner) {
     if (owner.featureKey && !featureEnabled(state, owner.featureKey)) return false
     if (FEATURES.some((feature) => feature.navModules?.includes(owner.key) && !featureEnabled(state, feature.key))) return false

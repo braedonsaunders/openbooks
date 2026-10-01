@@ -1216,6 +1216,16 @@ export function likeEscape(fragment: string): string {
   return fragment.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
+/** New choices exclude inactive people and explicitly retired employee roles.
+ * A canonical employment may exist before its optional roster role; absence
+ * of that role does not retire the employment. Stored historical selections
+ * remain readable unless the caller explicitly requests active-only pins.
+ */
+const ACTIVE_WORKER_OPTIONS = sql`and p.is_active and not exists (
+  select 1 from employee_roles r
+   where r.org_id = p.org_id and r.party_id = p.id and not r.is_active
+)`;
+
 export interface EmploymentOptionsQuery {
   readonly orgId: string;
   readonly actorId: string;
@@ -1225,6 +1235,8 @@ export interface EmploymentOptionsQuery {
   readonly limit?: number;
   /** Employment id to pin first (the draft's stored value under edit). */
   readonly includeEmploymentId?: string;
+  /** Active browsing by default; true also excludes inactive pinned values. */
+  readonly activeOnly?: boolean;
 }
 
 export interface EmploymentOptionDTO {
@@ -1284,6 +1296,7 @@ export async function loadEmploymentOptions(
      where e.org_id = ${orgId}::uuid
        and e.employer_subsidiary_id is not null
        ${employerScope}
+       ${query.activeOnly !== false ? ACTIVE_WORKER_OPTIONS : sql``}
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by p.display_name, e.id
      limit ${limit}`)).rows;
@@ -1313,7 +1326,8 @@ export async function loadEmploymentOptions(
        where e.org_id = ${orgId}::uuid
          and e.id = ${includeId}::uuid
          and e.employer_subsidiary_id is not null
-         ${employerScope}`)).rows[0] ?? null
+         ${employerScope}
+         ${query.activeOnly === true ? ACTIVE_WORKER_OPTIONS : sql``}`)).rows[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)] : page;
 
@@ -1350,6 +1364,8 @@ export interface PeopleOptionsQuery {
   readonly limit?: number;
   /** Party id to pin first (the stored interviewer under edit). */
   readonly includePartyId?: string;
+  /** Active browsing by default; true also excludes inactive pinned values. */
+  readonly activeOnly?: boolean;
 }
 
 export interface PeopleOptionDTO {
@@ -1393,6 +1409,7 @@ export async function loadPeopleOptions(
         on e.org_id = p.org_id and e.worker_party_id = p.id and ${employmentScope}
      where p.org_id = ${orgId}::uuid
        and e.employer_subsidiary_id is not null
+       ${query.activeOnly !== false ? ACTIVE_WORKER_OPTIONS : sql``}
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      group by p.id, p.display_name
      order by p.display_name
@@ -1410,6 +1427,7 @@ export async function loadPeopleOptions(
        where p.org_id = ${orgId}::uuid
          and p.id = ${includeId}::uuid
          and e.employer_subsidiary_id is not null
+         ${query.activeOnly === true ? ACTIVE_WORKER_OPTIONS : sql``}
        group by p.id, p.display_name`)).rows[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.partyId !== pinned.partyId)] : page;
