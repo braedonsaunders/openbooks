@@ -15,31 +15,30 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
   const org = await withBypassContext(() => createScratchOrg())
   const other = await withBypassContext(() => createScratchOrg())
   const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
-  const tenant = <T>(fn: () => Promise<T>) => withOrgTransaction(org.orgId, fn)
   try {
-    await tenant(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`))
-    const authz = await tenant(() => resolveAuthzByUserId(org.orgId, actor))
+    await withOrgTransaction(org.orgId, () => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`))
+    const authz = await withOrgTransaction(org.orgId, () => resolveAuthzByUserId(org.orgId, actor))
     assert.ok(authz)
     const run = async (job: TransferJob) => {
       const token = randomUUID()
-      await tenant(() => db.execute(sql`update data_transfer_jobs set claim_token=${token},claim_until=now()+interval '10 minutes' where org_id=${org.orgId} and id=${job.id}`))
+      await withOrgTransaction(org.orgId, () => db.execute(sql`update data_transfer_jobs set claim_token=${token},claim_until=now()+interval '10 minutes' where org_id=${org.orgId} and id=${job.id}`))
       await processTransfer(org.orgId, job.id, token)
-      return tenant(() => loadTransfer(org.orgId, job.id))
+      return withOrgTransaction(org.orgId, () => loadTransfer(org.orgId, job.id))
     }
     const source = async (prefix: string, count: number, duplicate = false) => {
       const text = ['code,name,kind', ...Array.from({ length: count }, (_, i) => `${prefix}-${duplicate && i === count - 1 ? 0 : i},Item ${i},service`)].join('\n')
       const bytes = Buffer.from(text)
-      let job = await tenant(() => createTransfer(authz, { requestKey: randomUUID(), kind: 'import', resource: 'items', format: 'csv', filename: `${prefix}.csv`, bytes: bytes.length }))
-      for (let offset = 0; offset < bytes.length; offset += TRANSFER_CHUNK_BYTES) job = await tenant(() => uploadTransferPart(authz, job.id, offset / TRANSFER_CHUNK_BYTES, bytes.subarray(offset, offset + TRANSFER_CHUNK_BYTES)))
-      job = await tenant(() => commandTransfer(authz, job.id, { action: 'finish-upload', revision: job.revision }))
+      let job = await withOrgTransaction(org.orgId, () => createTransfer(authz, { requestKey: randomUUID(), kind: 'import', resource: 'items', format: 'csv', filename: `${prefix}.csv`, bytes: bytes.length }))
+      for (let offset = 0; offset < bytes.length; offset += TRANSFER_CHUNK_BYTES) job = await withOrgTransaction(org.orgId, () => uploadTransferPart(authz, job.id, offset / TRANSFER_CHUNK_BYTES, bytes.subarray(offset, offset + TRANSFER_CHUNK_BYTES)))
+      job = await withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, { action: 'finish-upload', revision: job.revision }))
       job = await run(job)
       assert.equal(job.state, 'mapping', job.error ?? '')
       return job
     }
-    const preview = async (job: TransferJob) => run(await tenant(() => commandTransfer(authz, job.id, {
+    const preview = async (job: TransferJob) => run(await withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, {
       action: 'preview', revision: job.revision, options: { mapping: { code: 'code', name: 'name', kind: 'kind' }, importMode: 'insert' },
     })))
-    const countItems = (prefix: string) => tenant(async () => Number((await db.execute<{ n: string }>(sql`select count(*) n from items where org_id=${org.orgId} and code like ${`${prefix}-%`}`)).rows[0]!.n))
+    const countItems = (prefix: string) => withOrgTransaction(org.orgId, async () => Number((await db.execute<{ n: string }>(sql`select count(*) n from items where org_id=${org.orgId} and code like ${`${prefix}-%`}`)).rows[0]!.n))
 
     await t.test('duplicates across batch boundaries refuse approval with every source row identified', async () => {
       const job = await preview(await source('DUPLICATE', 251, true))
@@ -47,19 +46,19 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
       assert.equal(job.preview.failed, 2)
       assert.deepEqual([...new Set(job.preview.errors.map((error) => error.row))], [1, 251])
       assert.match(job.preview.errors[0]!.message, /keep one record per natural key/)
-      const evidence = await tenant(() => db.execute<{ source: string; approval: string }>(sql`select
+      const evidence = await withOrgTransaction(org.orgId, () => db.execute<{ source: string; approval: string }>(sql`select
         evidence->>'sourceHash' as source,evidence->>'approvalHash' as approval from data_transfer_events
         where org_id=${org.orgId} and job_id=${job.id} and action='preview-completed'`))
       assert.ok(evidence.rows[0]!.source)
       assert.equal(evidence.rows[0]!.approval, job.approvalHash, 'Approval evidence contains the hash that was actually published')
-      await assert.rejects(tenant(() => commandTransfer(authz, job.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! })), /clean preview.*correct the row errors/)
+      await assert.rejects(withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! })), /clean preview.*correct the row errors/)
       assert.equal(await countItems('DUPLICATE'), 0)
     })
 
     await t.test('consistency evidence collected across batches identifies every conflicting source row', async () => {
       const job = await preview(await source('CONSISTENCY', 251))
       const label = 'Register "Monthly" has conflicting period start, period end, or pay date values — use one period tuple per register name and upload the corrected file.'
-      await tenant(async () => {
+      await withOrgTransaction(org.orgId, async () => {
         await db.execute(sql`update data_transfer_rows set keys=jsonb_build_array(jsonb_build_object(
           'key','register:Monthly','value',case when row_no=1 then '2026-01' else '2026-02' end,'label',${label}::text))
           where org_id=${org.orgId} and job_id=${job.id} and row_no in (1,251)`)
@@ -77,7 +76,7 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
       const job = await preview(await source('CHECKPOINT', 501))
       assert.equal(job.preview.failed, 0, JSON.stringify(job.preview.errors))
       await withBypassContext(() => db.execute(sql`alter table items add constraint transfer_test_refusal check (code<>'CHECKPOINT-250') not valid`))
-      let committing = await tenant(() => commandTransfer(authz, job.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! }))
+      let committing = await withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! }))
       try {
         const failed = await run(committing)
         assert.equal(failed.state, 'failed')
@@ -85,50 +84,50 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
         assert.equal(failed.outcome.created, 250)
         assert.match(failed.error ?? '', /batch was refused and rolled back.*retry from the stored checkpoint/)
         assert.equal(await countItems('CHECKPOINT'), 250)
-        const audit = await tenant(() => db.execute<{ n: string }>(sql`select count(*) n from audit_log a join items i on i.org_id=a.org_id and i.id=a.row_id where a.org_id=${org.orgId} and a.table_name='items' and i.code like 'CHECKPOINT-%'`))
+        const audit = await withOrgTransaction(org.orgId, () => db.execute<{ n: string }>(sql`select count(*) n from audit_log a join items i on i.org_id=a.org_id and i.id=a.row_id where a.org_id=${org.orgId} and a.table_name='items' and i.code like 'CHECKPOINT-%'`))
         assert.equal(Number(audit.rows[0]!.n), 250)
         committing = failed
       } finally { await withBypassContext(() => db.execute(sql`alter table items drop constraint transfer_test_refusal`)) }
-      const retry = await tenant(() => commandTransfer(authz, committing.id, { action: 'retry', revision: committing.revision }))
-      const retryHistory = await tenant(() => db.execute<{ failed_count: number }>(sql`select failed_count from import_jobs where org_id=${org.orgId} and id=${retry.id}`))
+      const retry = await withOrgTransaction(org.orgId, () => commandTransfer(authz, committing.id, { action: 'retry', revision: committing.revision }))
+      const retryHistory = await withOrgTransaction(org.orgId, () => db.execute<{ failed_count: number }>(sql`select failed_count from import_jobs where org_id=${org.orgId} and id=${retry.id}`))
       assert.equal(retryHistory.rows[0]!.failed_count, 0, 'History exposes the new checkpoint rather than the refused batch outcome')
       const complete = await run(retry)
       assert.equal(complete.state, 'completed', complete.error ?? '')
       assert.equal(complete.processedRows, 501)
       assert.equal(complete.outcome.created, 501)
       assert.equal(await countItems('CHECKPOINT'), 501)
-      const replay = await tenant(() => commandTransfer(authz, complete.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! }))
+      const replay = await withOrgTransaction(org.orgId, () => commandTransfer(authz, complete.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! }))
       assert.equal(replay.id, complete.id)
       assert.equal(replay.state, 'completed')
-      const history = await tenant(() => db.execute<{ status: string; created_count: number }>(sql`select status,created_count from import_jobs where org_id=${org.orgId} and id=${complete.id}`))
+      const history = await withOrgTransaction(org.orgId, () => db.execute<{ status: string; created_count: number }>(sql`select status,created_count from import_jobs where org_id=${org.orgId} and id=${complete.id}`))
       assert.deepEqual(history.rows[0], { status: 'committed', created_count: 501 })
     })
 
     await t.test('revoked import authority reaches the operator and commits no records', async () => {
       const job = await preview(await source('REVOKED', 3))
-      const committing = await tenant(() => commandTransfer(authz, job.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! }))
-      await tenant(() => db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect) values (${org.orgId},${actor},'data.import','deny')`))
+      const committing = await withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! }))
+      await withOrgTransaction(org.orgId, () => db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect) values (${org.orgId},${actor},'data.import','deny')`))
       try {
         const failed = await run(committing)
         assert.equal(failed.state, 'failed')
         assert.match(failed.error ?? '', /data.import permission is required.*restore it/)
         assert.equal(failed.outcome.created, 0)
         assert.equal(await countItems('REVOKED'), 0)
-      } finally { await tenant(() => db.execute(sql`delete from user_permission_overrides where org_id=${org.orgId} and user_id=${actor} and permission='data.import'`)) }
+      } finally { await withOrgTransaction(org.orgId, () => db.execute(sql`delete from user_permission_overrides where org_id=${org.orgId} and user_id=${actor} and permission='data.import'`)) }
     })
 
     await t.test('a replaced worker cannot overwrite the new claim and a shutdown keeps work resumable', async () => {
       const job = await source('FENCED', 1)
-      const requested = await tenant(() => commandTransfer(authz, job.id, { action: 'preview', revision: job.revision, options: { mapping: { code: 'code', name: 'name', kind: 'kind' } } }))
+      const requested = await withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, { action: 'preview', revision: job.revision, options: { mapping: { code: 'code', name: 'name', kind: 'kind' } } }))
       const replacement = randomUUID()
-      await tenant(() => db.execute(sql`update data_transfer_jobs set claim_token=${replacement},claim_until=now()+interval '10 minutes' where org_id=${org.orgId} and id=${job.id}`))
+      await withOrgTransaction(org.orgId, () => db.execute(sql`update data_transfer_jobs set claim_token=${replacement},claim_until=now()+interval '10 minutes' where org_id=${org.orgId} and id=${job.id}`))
       await processTransfer(org.orgId, job.id, randomUUID())
-      let current = await tenant(() => loadTransfer(org.orgId, job.id))
+      let current = await withOrgTransaction(org.orgId, () => loadTransfer(org.orgId, job.id))
       assert.equal(current.claimToken, replacement)
       assert.equal(current.state, requested.state)
       const abort = new AbortController(); abort.abort()
       await processTransfer(org.orgId, job.id, replacement, abort.signal)
-      current = await tenant(() => loadTransfer(org.orgId, job.id))
+      current = await withOrgTransaction(org.orgId, () => loadTransfer(org.orgId, job.id))
       assert.equal(current.claimToken, null)
       assert.equal(current.state, 'previewing')
       assert.equal((await run(current)).state, 'ready')
@@ -145,15 +144,15 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
       })
       assert.equal(Number(forged.rows[0]!.n), 0, 'A runtime connection cannot authorize its own RLS bypass')
       const immutable = (error: unknown) => error instanceof Error && /evidence are immutable.*create a new transfer/i.test(String((error.cause as Error | undefined)?.message ?? error.message))
-      await assert.rejects(tenant(() => db.execute(sql`update data_transfer_chunks set data='changed'::bytea where org_id=${org.orgId} and job_id=${job.id}`)), immutable)
-      await assert.rejects(tenant(() => db.execute(sql`update data_transfer_rows set data='{}'::jsonb where org_id=${org.orgId} and job_id=${job.id}`)), immutable)
-      await assert.rejects(tenant(() => db.execute(sql`delete from data_transfer_events where org_id=${org.orgId} and job_id=${job.id}`)), immutable)
+      await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`update data_transfer_chunks set data='changed'::bytea where org_id=${org.orgId} and job_id=${job.id}`)), immutable)
+      await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`update data_transfer_rows set data='{}'::jsonb where org_id=${org.orgId} and job_id=${job.id}`)), immutable)
+      await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`delete from data_transfer_events where org_id=${org.orgId} and job_id=${job.id}`)), immutable)
     })
 
     await t.test('exports pass the legacy row ceiling with a complete bounded cursor and checksum', async () => {
-      await tenant(() => db.execute(sql`insert into items (org_id,code,name,kind,custom)
+      await withOrgTransaction(org.orgId, () => db.execute(sql`insert into items (org_id,code,name,kind,custom)
         select ${org.orgId},'EXPORT-'||n,'Export item '||n,'service','{}'::jsonb from generate_series(1,50001) n`))
-      const job = await tenant(() => createTransfer(authz, { requestKey: randomUUID(), kind: 'export', resource: 'items', format: 'csv', filename: 'items.csv', bytes: 0, options: { columns: ['code', 'name'] } }))
+      const job = await withOrgTransaction(org.orgId, () => createTransfer(authz, { requestKey: randomUUID(), kind: 'export', resource: 'items', format: 'csv', filename: 'items.csv', bytes: 0, options: { columns: ['code', 'name'] } }))
       const complete = await run(job)
       assert.equal(complete.state, 'completed', complete.error ?? '')
       assert.ok(complete.totalRows > 50_000)
@@ -167,22 +166,22 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
 
     await t.test('export windows bound bytes before hydrating payloads and preserve exact numeric decoding', async () => {
       const page: ExportPage = { size: 10, after: null, next: null, done: false }
-      const result = await tenant(() => readExportWindow(db, sql`select n::text as "__transferId",n as "__transferOrder",repeat('x',2000000) as payload,
+      const result = await withOrgTransaction(org.orgId, () => readExportWindow(db, sql`select n::text as "__transferId",n as "__transferOrder",repeat('x',2000000) as payload,
         999999999999998.99::numeric as amount from generate_series(1,10) n order by n`, { page, allowedSubsidiaryIds: null }))
       assert.equal(result.rows.length, 4)
       assert.equal(result.rows[0]!.amount, '999999999999998.99')
       finishExportPage(result.rows, 'test records', { page, allowedSubsidiaryIds: null })
       assert.equal(page.done, false)
       assert.equal(page.next, '4', 'Numeric identities retain their database order rather than a lexical cast')
-      await assert.rejects(tenant(() => readExportWindow(db, sql`select '1' as "__transferId",1 as "__transferOrder",repeat('x',4194305) as payload`,
+      await assert.rejects(withOrgTransaction(org.orgId, () => readExportWindow(db, sql`select '1' as "__transferId",1 as "__transferOrder",repeat('x',4194305) as payload`,
         { page: { size: 1, after: null, next: null, done: false }, allowedSubsidiaryIds: null })), /exceeds the 4 MiB.*review this resource/)
     })
 
     await t.test('recent transfer filenames do not outlive the operator’s subsidiary authority', async () => {
-      const job = await tenant(() => createTransfer({ ...authz, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }, {
+      const job = await withOrgTransaction(org.orgId, () => createTransfer({ ...authz, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }, {
         requestKey: randomUUID(), kind: 'export', resource: 'items', format: 'csv', filename: 'scoped-items.csv', bytes: 0, options: { columns: ['code'] },
       }))
-      const visible = (scope: ReadonlySet<string> | null) => tenant(() => db.execute(sql`select id from data_transfer_jobs where org_id=${org.orgId} and id=${job.id} and ${transferMetadataScope(scope, sql`scope`)}`))
+      const visible = (scope: ReadonlySet<string> | null) => withOrgTransaction(org.orgId, () => db.execute(sql`select id from data_transfer_jobs where org_id=${org.orgId} and id=${job.id} and ${transferMetadataScope(scope, sql`scope`)}`))
       assert.equal((await visible(new Set([org.subsidiaryId]))).rows.length, 1)
       assert.equal((await visible(new Set([other.subsidiaryId]))).rows.length, 0)
       assert.equal((await visible(new Set())).rows.length, 0)
