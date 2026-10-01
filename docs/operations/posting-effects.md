@@ -21,7 +21,9 @@ engine boundary, including operations-CLI calls. The document must still be
 posted. A retry queues work; it does not itself establish completion. The prior
 terminal evidence and the actor/reason are retained in the audit trail. Worker
 lease fencing and downstream idempotency protect against repeated attempts;
-retrying never deliberately creates a second source-document journal.
+retrying never deliberately creates a second source-document journal. A posted
+document cannot be voided while its effects remain incomplete, so the retry
+remedy stays available.
 
 ## Operations inspection
 
