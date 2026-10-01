@@ -1042,6 +1042,7 @@ export function PlatformClient() {
             {t("runs.heading")}
           </h2>
           <PagedTable
+            source="sync_runs"
             rows={data.runs}
             columns={runColumns}
             pageSize={15}

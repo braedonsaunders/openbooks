@@ -227,6 +227,7 @@ export function CountsList({
   return (
     <>
       <PagedTable
+        source="inventory_counts"
         rows={rows}
         columns={columns}
         searchable
@@ -832,6 +833,7 @@ function CountDetailBody({
         </div>
       ) : null}
       <PagedTable
+        source="inventory_count_lines"
         rows={lines}
         columns={lineColumns}
         searchable

@@ -109,6 +109,7 @@ export function BomWorkspace({
   return (
     <>
       <PagedTable
+        source="inventory_bom"
         rows={assemblies}
         columns={columns}
         searchable
