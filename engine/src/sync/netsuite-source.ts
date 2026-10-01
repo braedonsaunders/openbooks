@@ -81,7 +81,7 @@ export function netSuiteAccountCurrency(
     ? subsidiaries.filter((subsidiary) => subsidiary.sourceRef === String(account.subsidiary))
     : subsidiaries;
   if (candidates.length === 1) {
-    const currency = netSuiteCurrencyIso(candidates[0].fields.baseCurrency);
+    const currency = netSuiteCurrencyIso(candidates[0]?.fields.baseCurrency);
     if (currency) return currency;
   }
   throw new Error(`Cannot resolve currency for NetSuite account ${account.id}; check its source subsidiary and currency configuration before retrying`);
