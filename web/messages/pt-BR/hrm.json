@@ -1510,7 +1510,10 @@
         "program": "Programa",
         "period": "Período adquirido",
         "value": "Valor",
-        "status": "Status"
+        "status": "Status",
+        "reversedTitle": "Pagamentos de recompensas revertidos",
+        "reversedEmpty": "Nenhum pagamento de recompensa revertido.",
+        "reversedStatus": "Revertido"
       }
     },
     "qualifications": {
@@ -2572,10 +2575,10 @@
     "members": {
       "weight": "Peso",
       "weightPlaceholder": "1",
-      "weightHint": "Peso de partilha para fundos; vazio significa igual.",
+      "weightHint": "A alocação ponderada por função exige peso positivo. A alocação igual ou por horas aprovadas não usa este campo.",
       "role": "Papel",
       "rolePlaceholder": "Colaborador",
-      "roleHint": "Papel usado em repartições ponderadas por papel."
+      "roleHint": "Função registrada nesta participação; os pesos de alocação são configurados separadamente."
     },
     "addMember": "Adicionar membro",
     "removeMember": "Encerrar participação",
@@ -2651,8 +2654,8 @@
         "payComponent": "Verba",
         "reason": "Motivo da alteração"
       },
-      "allEntities": "Todas as entidades",
-      "entityHint": "Vazio significa cada entidade onde o programa pode operar.",
+      "allEntities": "Escolher entidade jurídica",
+      "entityHint": "Uma entidade jurídica é responsável pelo programa e suas obrigações de folha. Adicione funcionários elegíveis após criar o rascunho.",
       "employmentsTruncated": "A lista de vínculos mostra os primeiros 500 nomes; a participação aceita qualquer vínculo alcançado.",
       "searchDepartments": "Pesquisar departamentos…",
       "searchProjects": "Pesquisar projetos…",
@@ -2680,7 +2683,12 @@
       "cancel": "Cancelar",
       "back": "Voltar",
       "next": "Avançar",
-      "amountNoun": "Valor"
+      "amountNoun": "Valor",
+      "componentPrerequisite": "Crie um componente salarial ativo na configuração da folha, atualize as opções e selecione-o. As regras da folha determinam o tratamento tributário e contábil.",
+      "openPayrollSetup": "Abrir configuração da folha",
+      "accountsPrerequisite": "Nenhuma conta de medição contabilizável está visível. Adicione as contas necessárias ou peça ao financeiro para verificar o acesso à entidade jurídica e atualize as opções.",
+      "openAccounts": "Abrir plano de contas",
+      "refreshOptions": "Atualizar opções"
     },
     "awardBuilderTitle": "Novo prêmio",
     "awardFields": {

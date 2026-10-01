@@ -21,11 +21,13 @@ const authz = { user: { orgId: 'org', id: 'employee-login' } } as never
 
 test('self-service award view separates paid from pending and projects no company evidence or actor ids', async () => {
   const base = { id: 'award', programName: 'Recognition', periodFrom: '2026-01-01', periodTo: '2026-01-31', currency: 'USD', value: '25.00', evidence: { companyProfit: '999999.00' }, approvedBy: 'private-actor', employmentId: 'private-employment' }
-  state.__statementRows = [{ paidAwards: [{ ...base, status: 'delivered' }], pendingAwards: [{ ...base, id: 'pending', status: 'approved' }] }]
+  state.__statementRows = [{ paidAwards: [{ ...base, status: 'delivered' }], pendingAwards: [{ ...base, id: 'pending', status: 'approved' }], reversedAwards: [{ ...base, id: 'reversed', status: 'delivered', deliveryState: 'reversed' }] }]
   const data = await loadMyBenefitAwards(authz)
   assert.deepEqual(state.__statementQuery, { orgId: 'org', actorId: 'employee-login' })
   assert.equal(data.paidAwards.length, 1)
   assert.equal(data.pendingAwards.length, 1)
+  assert.equal(data.reversedAwards.length, 1)
+  assert.equal(data.reversedAwards[0]?.statusLabel, 'Reversed')
   assert.equal(data.paidAwards[0]?.programName, 'Recognition')
   assert.ok(!JSON.stringify(data).includes('999999'))
   assert.ok(!JSON.stringify(data).includes('private-actor'))

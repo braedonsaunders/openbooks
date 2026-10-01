@@ -12,6 +12,7 @@ import {
 } from "../authorization.ts";
 import { PayrollError } from "../../payroll/error.ts";
 import { mutatePayRunAdjustment } from "../../payroll/run-adjustments.ts";
+import { benefitListWindow } from "./list-window.ts";
 import { BenefitsError, isUniqueViolation } from "./errors.ts";
 import { getBenefitProgram } from "./programs.ts";
 import {
@@ -177,7 +178,7 @@ function canonicalValue(value: unknown, signed: boolean): string {
 /**
  * Load one award; unknown or out-of-scope ids refuse uniformly. Awards bind
  * to an employment, so restricted actors see only awards of their own
- * legal entities, resolved through the employment in the database.
+ * legal entities, resolved through the immutable program entity in the database.
  */
 export async function getBenefitAward(
   exec: SqlExecutor,
@@ -186,6 +187,7 @@ export async function getBenefitAward(
   awardId: string,
 ): Promise<BenefitAward> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
+  await assertHrmEnabled(exec, orgId);
   const row = (
     await exec.execute<Record<string, unknown>>(sql`
       select a.id as id, a.program_id as "programId",
@@ -237,6 +239,7 @@ export async function listBenefitAwards(query: {
     if (query.programId !== undefined) {
       await getBenefitProgram(db, orgId, actorId, String(query.programId));
     }
+    const { limit, offset } = benefitListWindow(query.limit, query.offset);
     const rows = (
       await db.execute<Record<string, unknown>>(sql`
         select a.id as id, a.program_id as "programId",
@@ -255,8 +258,8 @@ export async function listBenefitAwards(query: {
          where a.org_id = ${orgId}
            ${query.programId !== undefined ? sql`and a.program_id = ${query.programId}` : sql``}
            ${scope !== null ? sql`and p.legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
-         order by a.period_from desc
-         ${query.limit !== undefined ? sql`limit ${Math.max(1, Math.min(2000, Math.floor(query.limit)))} offset ${query.offset === undefined ? 0 : Math.max(0, Math.floor(query.offset))}` : sql``}
+         order by a.period_from desc, a.id desc
+         ${limit !== null ? sql`limit ${limit} offset ${offset}` : sql`offset ${offset}`}
       `)
     ).rows;
     const total = (
@@ -505,19 +508,20 @@ async function recordAward(
         `employment service starts after the award period — issue awards inside the employment span`,
       );
     }
-    const activeSpan = (
-      await db.execute<{ id: string }>(sql`
-        select id from worker_employment_versions
-         where org_id = ${orgId} and employment_id = ${employmentId} and status = 'active'
-           and effective_from <= ${periodFrom}::date
-           and (effective_to is null or effective_to >= ${(periodTo ?? periodFrom)}::date)
-         limit 1
-      `)
-    ).rows;
-    if (adjustsAwardId === null && activeSpan.length === 0) {
+    const activeCoverage = (await db.execute<{ covered: boolean }>(sql`
+      select coalesce(
+        daterange(${periodFrom}::date, ${(periodTo ?? periodFrom)}::date + 1, '[)')
+          <@ range_agg(daterange(effective_from, effective_to, '[)')),
+        false
+      ) as covered
+      from worker_employment_versions
+      where org_id = ${orgId} and employment_id = ${employmentId}
+        and status = 'active' and recorded_until is null
+    `)).rows[0]?.covered === true;
+    if (adjustsAwardId === null && !activeCoverage) {
       throw new BenefitsError(
         "REFUSED",
-        "no active employment span covers the award period — issue awards inside active service",
+        "current employment history has no active service covering the full award period — issue awards inside active service; end dates exclude their day",
       );
     }
     const sources = (

@@ -1510,7 +1510,10 @@
         "program": "プログラム",
         "period": "対象期間",
         "value": "金額",
-        "status": "状態"
+        "status": "状態",
+        "reversedTitle": "取消済み報奨支払い",
+        "reversedEmpty": "取消済み報奨支払いはありません。",
+        "reversedStatus": "取消済み"
       }
     },
     "qualifications": {
@@ -2572,10 +2575,10 @@
     "members": {
       "weight": "ウェイト",
       "weightPlaceholder": "1",
-      "weightHint": "プール分配の按分ウェイト。空欄は均等。",
+      "weightHint": "役割の重みによる配分には正の重みが必要です。均等配分と承認済み時間による配分ではこの項目を使いません。",
       "role": "役割",
       "rolePlaceholder": "担当",
-      "roleHint": "役割ウェイト分配に使用する役割。"
+      "roleHint": "この加入記録に保存する役割。配分の重みは別途設定します。"
     },
     "addMember": "メンバーを追加",
     "removeMember": "メンバーシップを終了",
@@ -2651,8 +2654,8 @@
         "payComponent": "給与項目",
         "reason": "変更理由"
       },
-      "allEntities": "すべての法人",
-      "entityHint": "空欄はプログラムが適用可能なすべての法人を意味します。",
+      "allEntities": "責任法人を選択",
+      "entityHint": "1つの法人がプログラムと給与義務を担います。下書き作成後に対象従業員を追加してください。",
       "employmentsTruncated": "雇用リストは最初の500名を表示します。メンバー登録は対象の雇用であれば可能です。",
       "searchDepartments": "部門を検索…",
       "searchProjects": "プロジェクトを検索…",
@@ -2680,7 +2683,12 @@
       "cancel": "キャンセル",
       "back": "戻る",
       "next": "次へ",
-      "amountNoun": "金額"
+      "amountNoun": "金額",
+      "componentPrerequisite": "給与設定で有効な給与項目を作成し、選択肢を更新して選択してください。給与ルールによって税務と会計処理が決まります。",
+      "openPayrollSetup": "給与設定を開く",
+      "accountsPrerequisite": "記帳可能な測定勘定科目が表示されていません。必要な科目を追加するか、財務担当者に責任法人へのアクセスを確認してもらい、選択肢を更新してください。",
+      "openAccounts": "勘定科目表を開く",
+      "refreshOptions": "選択肢を更新"
     },
     "awardBuilderTitle": "新規褒賞",
     "awardFields": {

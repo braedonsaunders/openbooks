@@ -129,3 +129,9 @@ test("statement evidence cannot disclose financial sources or allocation fractio
     sourceSnapshot: { revenueTotal: "1000000.0000" },
   }), { kind: "incentive-settlement", programRevision: 3, payableAfter: "2026-08-01" });
 });
+
+
+test("statement payable metadata validates real calendar dates", () => {
+  assert.equal(statementEvidence({kind: "recognition", payableAfter: "2026-02-30"})?.payableAfter, undefined);
+  assert.equal(statementEvidence({kind: "recognition", payableAfter: "2026-02-28"})?.payableAfter, "2026-02-28");
+});

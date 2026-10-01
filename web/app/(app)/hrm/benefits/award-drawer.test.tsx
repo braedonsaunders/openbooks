@@ -73,3 +73,45 @@ test('finance selects an editable scoped native run and the server refusal prese
     assert.deepEqual((globalThis as Record<string, unknown>).__benefitAwardErrors, ['Choose a pay run whose pay date is on or after the award payable date.'])
   } finally { await ui.cleanup() }
 })
+
+const { AwardBuilderDrawer } = await import('./AwardBuilderDrawer')
+
+test('a fixed award carries its denomination and one request identity survives a network retry', async () => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  const previous = globalThis.fetch
+  const requests: Record<string, unknown>[] = []
+  globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(JSON.parse(String(init?.body)))
+    throw new Error('Connection interrupted')
+  }) as typeof fetch
+  ;(globalThis as Record<string, unknown>).__benefitAwardErrors = []
+  async function fill(id: string, value: string) {
+    await act(async () => {
+      const control = document.getElementById(id)
+      const node = (control?.tagName === 'BUTTON' ? control.closest('span')?.querySelector('select') : control) as HTMLInputElement
+      assert.ok(node, id)
+      const prototype = node.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : node.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype
+      Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(node, value)
+      node.dispatchEvent(new Event(node.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }))
+    })
+  }
+  try {
+    await act(async () => root.render(<NextIntlClientProvider locale="en" messages={messages}><AwardBuilderDrawer closeHref="/hrm/benefits" defaultCurrency="USD" programOptions={[{ value: 'program', label: 'Recognition', currency: 'USD', fixedAmount: '25.0000' }]} employmentOptions={[{ value: 'employment', label: 'Ada' }]} /></NextIntlClientProvider>))
+    await fill('award-builder-program', 'program')
+    const value = document.getElementById('award-builder-value') as HTMLInputElement
+    assert.equal(value.value, '25.0000')
+    assert.equal(value.readOnly, true)
+    await fill('award-builder-recipient', 'employment')
+    await fill('award-builder-from', '2026-01-01')
+    await fill('award-builder-reason', 'Recognize excellent service')
+    const submit = () => Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Record award')!
+    await act(async () => submit().click())
+    await act(async () => submit().click())
+    assert.equal(requests.length, 2, 'both attempts reach the domain boundary')
+    assert.equal(requests[0]!.value, '25.0000')
+    assert.match(String(requests[0]!.sourceKey), /^award:[0-9a-f-]{36}$/)
+    assert.equal(requests[0]!.sourceKey, requests[1]!.sourceKey)
+  } finally { await act(async () => root.unmount()); host.remove(); globalThis.fetch = previous }
+})

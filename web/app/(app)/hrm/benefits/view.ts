@@ -90,14 +90,14 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
                   statTile({ iconKey: 'timer', accent: 'amber', label: f('overview.vitalsLabels.pendingApprovals'), value: f('tiles.pendingApprovals') }),
                   statTile({ iconKey: 'wallet', accent: 'violet', label: f('overview.vitalsLabels.queuedPayouts'), value: f('tiles.queuedPayouts') }),
                 ]),
-                // Partial vitals (aggregate failed, page-derived fallback)
-                // render beside their named refusal — never as clean totals.
+                // An unreadable award population stays unknown; its named
+                // refusal appears beside omitted currency totals.
                 widgetBlock(
                   'empty-state',
                   { title: data.vitalsRefusal?.title ?? '', description: data.vitalsRefusal?.message },
                   f('vitalsRefusal'),
                 ),
-                grid('grid shrink-0 grid-cols-1 gap-4 lg:grid-cols-2', [
+                ...(data.awardsRefusal ? [] : [grid('grid shrink-0 grid-cols-1 gap-4 lg:grid-cols-2', [
                   panel({ title: f('deliveredTitle'), iconKey: 'circle-check', className: 'shrink-0', blocks: [table({
                     variant: 'app',
                     rows: f('deliveredRows'),
@@ -118,7 +118,7 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
                     ],
                     empty: { title: f('awaitingTitle'), description: f('awaitingEmpty') },
                   })] }),
-                ]),
+                ])]),
                 panel({
                   title: f('overview.attentionTitle'),
                   iconKey: 'triangle-alert',
@@ -164,7 +164,7 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
             { title: data.optionsRefusal?.title ?? '', description: data.optionsRefusal?.message },
             f('optionsRefusal'),
           ),
-          ...(showingPrograms || showingIncentives
+          ...((showingPrograms || showingIncentives) && !data.programsRefusal
             ? [
                 widgetBlock('hrm-program-table', {
                   rows: showingIncentives ? data.incentiveProgramRows : data.programRows,
@@ -174,13 +174,13 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
                 }),
               ]
             : []),
-          ...(showingRewards || showingIncentives || showingPayouts
+          ...((showingRewards || showingIncentives || showingPayouts) && !data.awardsRefusal
             ? [
                 widgetBlock('link-button', { href: f('newAwardHref'), label: f('newAwardButton'), iconKey: 'plus' }, f('canManage')),
                 widgetBlock('hrm-award-table', {
                   rows: awardRows,
                   text: data.awardTableText,
-                  total: data.awardsTotal,
+                  total: awardRows.length,
                   truncated: data.awardsTruncated,
                 }),
               ]

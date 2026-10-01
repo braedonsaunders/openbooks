@@ -306,7 +306,7 @@ export interface AttentionItem {
 /** Sum canonical decimal values within one currency; one line per currency. */
 export function totalsByCurrency(
   rows: { value: string; currency: string }[],
-  amount: (value: string, currency: string) => string = (value, currency) => `${value} ${currency}`,
+  amount: (value: string, currency: string) => string,
 ): CurrencyTotal[] {
   const byCurrency = new Map<string, string[]>()
   for (const row of rows) {

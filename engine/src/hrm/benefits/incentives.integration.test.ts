@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { toUnits } from "../../money/money.ts";
-import { setupHarness, withHarness, grantPermissions, mkDepartment, seedEmployment, setFeatures } from "../../testing/hrm-harness.ts";
+import { setupHarness, withHarness, grantPermissions, mkDepartment, seedEmployment, setFeatures, restrictRole, mkSecondSubsidiary } from "../../testing/hrm-harness.ts";
 import { BenefitsError } from "./errors.ts";
 import {
   measureApprovedHours,
@@ -267,6 +267,27 @@ test("an entity outside the actor's scope is not found, never measured", { skip:
   });
 });
 
+test("a caller-supplied unrestricted lens cannot widen the actor's actual legal-entity scope", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(INCENTIVES_SPEC), async (h) => {
+    const money = await moneyConfig(h, { metric: "revenue", expenseAccountIds: [] });
+    const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const hours = hoursConfig(h, [worker.employmentId]);
+    await postEntry(h, [
+      { account: h.org.accounts.revenue, amount: "-100.0000" },
+      { account: h.org.accounts.bank, amount: "100.0000" },
+    ]);
+    await seedTime(h, worker.workerPartyId);
+    assert.equal((await measureMoneySource(db, h.org.orgId, h.ledgerId, money)).value, "100.0000");
+    assert.equal((await measureApprovedHours(db, h.org.orgId, h.ledgerId, hours)).totalHours, "8.0000");
+    // Preserve the grants while removing the employer from the native role scope.
+    await restrictRole(h.org.orgId, "incentives_ledger", []);
+    for (const suppliedScope of [null, new Set([h.org.subsidiaryId])]) {
+      await refuses(() => measureMoneySource(db, h.org.orgId, h.ledgerId, { ...money, allowedSubsidiaryIds: suppliedScope }), /outside your scope/);
+      await refuses(() => measureApprovedHours(db, h.org.orgId, h.ledgerId, { ...hours, allowedSubsidiaryIds: suppliedScope }), /outside your scope/);
+    }
+  });
+});
+
 test("department measures sum shaped postings and refuse un-shaped ones", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(INCENTIVES_SPEC), async (h) => {
     const dept = await mkDepartment(h.org.orgId, "Sales");
@@ -454,5 +475,19 @@ test("approved-hours attribution uses worked dates inside effective membership",
     assert.equal(snapshot.approvedHoursFacts.find((f) => f.entryId === before)!.employmentId, null);
     assert.equal(snapshot.approvedHoursFacts.find((f) => f.entryId === inside)!.employmentId, worker.employmentId);
     assert.equal(snapshot.approvedHoursFacts.find((f) => f.entryId === inside)!.workedOn, "2026-07-15");
+  });
+});
+
+
+test("approved hours follow the employer active on the worked date, not old employment history", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(INCENTIVES_SPEC), async (h) => {
+    const former = await seedEmployment(h.org.orgId, h.org.subsidiaryId, {displayName: "Former employee", status: "terminated"});
+    const otherEntity = await mkSecondSubsidiary(h.org.orgId, h.org.subsidiaryId, {currency: "USD", country: "US"});
+    await seedEmployment(h.org.orgId, otherEntity, {workerPartyId: former.workerPartyId});
+    await seedTime(h, former.workerPartyId, {hours: "8.0000"});
+    const measured = await measureApprovedHours(db, h.org.orgId, h.hrId, hoursConfig(h, [former.employmentId]));
+    assert.equal(measured.totalHours, "0.0000");
+    assert.deepEqual(measured.approvedHoursFacts, []);
+    assert.deepEqual(measured.hoursByEmployment, [{employmentId: former.employmentId, hours: "0.0000"}]);
   });
 });

@@ -26,7 +26,8 @@ import {
  * exactly as typed; the award service canonicalizes it and refuses
  * duplicates by source key, so a retried submit lands once. Delivery never
  * edits net pay: payroll programs settle through payroll inputs, external
- * programs through a recorded provider reference.
+ * programs retain their provider evidence pending supported non-cash tax
+ * treatment. A provider reference alone never marks a payable award delivered.
  */
 
 function FieldError({ id, message }: { id: string; message: string | undefined }) {
@@ -45,7 +46,7 @@ export function AwardBuilderDrawer({
   defaultCurrency,
 }: {
   closeHref: string
-  programOptions: (PortfolioOption & { currency: string })[]
+  programOptions: (PortfolioOption & { currency: string; fixedAmount: string | null })[]
   employmentOptions: PortfolioOption[]
   defaultCurrency: string
 }) {
@@ -65,6 +66,8 @@ export function AwardBuilderDrawer({
   })
   const [errors, setErrors] = useState<AwardFieldErrors>({})
   const [saving, setSaving] = useState(false)
+  const [sourceKey] = useState(() => `award:${crypto.randomUUID()}`)
+  const selectedProgram = programOptions.find((option) => option.value === draft.programId)
 
   function close() {
     router.push(closeHref as never)
@@ -91,12 +94,10 @@ export function AwardBuilderDrawer({
   function set<K extends keyof AwardDraft>(key: K, value: AwardDraft[K]) {
     setDraft((current) => {
       const next = { ...current, [key]: value }
-      // The award inherits its program's currency unless the operator
-      // already typed their own — a silently switched currency would
-      // reprice the value beside it.
-      if (key === 'programId' && current.currency === defaultCurrency) {
-        const program = programOptions.find((o) => o.value === value)
-        if (program) next.currency = program.currency
+      if (key === 'programId') {
+        const program = programOptions.find((option) => option.value === value)
+        next.currency = program?.currency ?? ''
+        next.value = program?.fixedAmount ?? ''
       }
       return next
     })
@@ -137,7 +138,7 @@ export function AwardBuilderDrawer({
             note: draft.recipientNote.trim() === '' ? null : draft.recipientNote.trim(),
             recordReference: draft.recordReference.trim() === '' ? null : draft.recordReference.trim(),
           },
-          sourceKey: `${draft.programId}|${draft.employmentId}|${draft.periodFrom}|${draft.periodTo}|${draft.value.trim()}|${currency}`,
+          sourceKey,
         }),
       })
       // res.ok first, always: a refusal body is read only for its message.
@@ -229,7 +230,7 @@ export function AwardBuilderDrawer({
           <div>
             <Label htmlFor="award-builder-value">{t('portfolio.awardFields.value')}</Label>
             <Input
-              id="award-builder-value"
+              id="award-builder-value" readOnly={selectedProgram?.fixedAmount != null}
               inputMode="decimal"
               value={draft.value}
               onChange={(e) => set('value', e.target.value)}
@@ -240,7 +241,7 @@ export function AwardBuilderDrawer({
           <div>
             <Label htmlFor="award-builder-currency">{t('portfolio.awardFields.currency')}</Label>
             <Input
-              id="award-builder-currency"
+              id="award-builder-currency" readOnly
               value={draft.currency}
               onChange={(e) => set('currency', e.target.value)}
               placeholder="USD"

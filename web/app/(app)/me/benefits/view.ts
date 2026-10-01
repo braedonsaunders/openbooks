@@ -64,6 +64,7 @@ export function meBenefitsSpec(data: MeBenefitsPageData): PageSpec {
       {
         ...grid('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4', [
           widgetBlock('empty-state', { title: data.awardsRefusal?.title ?? '', description: data.awardsRefusal?.message }, f('awardsRefusal')),
+          ...(data.awardsRefusal ? [] : [
           heading(2, f('awardsText.paidTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
           textBlock(f('awardsText.hint')),
           registeredListTable('me_benefit_awards_paid', {
@@ -85,6 +86,17 @@ export function meBenefitsSpec(data: MeBenefitsPageData): PageSpec {
               column(f('awardsText.status'), badge(item('statusLabel'), { variant: 'warning' })),
             ], empty: { title: f('awardsText.pendingEmpty') },
           }),
+          heading(2, f('awardsText.reversedTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+          registeredListTable('me_benefit_awards_reversed', {
+            variant: 'app', rows: f('reversedAwards'), rowKey: item('id'),
+            columns: [
+              column(f('awardsText.program'), text(item('programName'))),
+              column(f('awardsText.period'), text(item('periodLabel'))),
+              column(f('awardsText.value'), text(item('valueLabel')), { align: 'right', className: 'tabular-nums' }),
+              column(f('awardsText.status'), badge(item('statusLabel'), { variant: 'outline' })),
+            ], empty: { title: f('awardsText.reversedEmpty') },
+          }),
+          ]),
           // Elections and windows render as direct lists under house
           // headings — no panel repeats the section name. The monthly
           // hint rides above the elections list it explains.

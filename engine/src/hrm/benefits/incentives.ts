@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { fromUnits, toUnits } from "../../money/money.ts";
+import { requireAggregateBenefitsRead } from "../authorization.ts";
 import { InvalidCivilDateError, parseCivilDate } from "../temporal.ts";
 import type { BenefitMetricScope } from "./program-types.ts";
 import type { IncentivePeriodBasis } from "./incentive-math.ts";
@@ -96,9 +97,9 @@ export interface MoneySourceConfig {
    */
   readonly incentiveExpenseAccountId: string | null;
   /**
-   * Actor's employer-subsidiary scope (null = unrestricted), resolved by the
-   * caller from the benefits manage/read aggregate. A legal entity outside
-   * the scope refuses here at the read boundary — never in the UI alone.
+   * An optional narrowing lens (null leaves the actor's live scope intact).
+   * The read independently resolves native role scope, so this caller-supplied
+   * set can narrow authority but cannot grant it.
    */
   readonly allowedSubsidiaryIds: Set<string> | null;
 }
@@ -116,6 +117,16 @@ export interface PostingSourceFact {
   readonly postedAt: string | null;
 }
 
+export interface HoursEmploymentFact {
+  readonly employmentId: string;
+  readonly legalEntityId: string;
+  readonly versionId: string;
+  readonly versionNo: number;
+  readonly status: string;
+  readonly effectiveFrom: string;
+  readonly effectiveTo: string | null;
+}
+
 export interface ApprovedHoursFact {
   readonly entryId: string;
   readonly employeePartyId: string;
@@ -126,6 +137,7 @@ export interface ApprovedHoursFact {
   readonly projectId: string | null;
   readonly approvedBy: string | null;
   readonly approvedAt: string | null;
+  readonly employmentFacts: readonly HoursEmploymentFact[];
 }
 
 export interface MoneySourceSnapshot {
@@ -172,8 +184,8 @@ export interface HoursSourceConfig {
     readonly effectiveTo: string | null;
   }>;
   /**
-   * Actor's employer-subsidiary scope (null = unrestricted), resolved by the
-   * caller from the benefits manage/read aggregate. Refused at the read.
+   * An optional narrowing lens (null leaves the actor's live scope intact).
+   * The read independently resolves native role scope before measuring.
    */
   readonly allowedSubsidiaryIds: Set<string> | null;
 }
@@ -355,10 +367,9 @@ async function resolvePrimaryBook(exec: SqlExecutor, orgId: string): Promise<str
 /**
  * Posted money base for one period. Revenue is the negated credit-side sum
  * (income posts credit-negative); expenses are the debit-side sum. Only
- * posted entries of the primary posting book count — drafts never count,
- * and a reversed entry counts through its posted reversal (the voided
- * original leaves the posted set, its posted correction enters it), so the
- * net is correct double-entry accounting, not an exclusion.
+ * posted and reversed entries of the primary posting book count; drafts
+ * never count. The original's immutable lines and its posted offset both
+ * remain in the ledger, so signed corrections net within their posting dates.
  */
 export async function measureMoneySource(
   exec: SqlExecutor,
@@ -370,7 +381,14 @@ export async function measureMoneySource(
   const actor = requireActorId(actorId);
   await requireMoneyRead(exec, org, actor);
   const legalEntityId = requireUuid(config.legalEntityId, "legal entity");
-  if (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId)) {
+  // The caller may narrow a read, but its supplied lens cannot confer
+  // authority. Resolve the actor's live ceiling at this exported boundary.
+  const actorScope = await requireAggregateBenefitsRead(exec, org, actor);
+  if (config.allowedSubsidiaryIds !== null && !(config.allowedSubsidiaryIds instanceof Set)) {
+    throw new BenefitsError("INVALID_INPUT", "an explicit subsidiary scope is required — resolve the actor's scope before measuring");
+  }
+  if ((actorScope !== null && !actorScope.has(legalEntityId)) ||
+    (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId))) {
     throw new BenefitsError(
       "NOT_FOUND",
       "this legal entity is outside your scope — reload the program list; entities you cannot see are never measured",
@@ -477,7 +495,7 @@ export async function measureMoneySource(
            l.posting_date::text as posting_date, e.posted_at::text as posted_at
       from journal_lines l
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
-     where l.org_id = ${org} and e.status = 'posted' and ${bookFilter}
+     where l.org_id = ${org} and e.status in ('posted', 'reversed') and ${bookFilter}
        and l.posting_date >= ${periodFrom}::date and l.posting_date <= ${periodTo}::date
        and l.subsidiary_id = ${legalEntityId}::uuid
        and l.account_id = any (${uuidList(allAccounts, "account id")}::uuid[])
@@ -559,7 +577,14 @@ export async function measureApprovedHours(
   const org = requireOrgId(orgId);
   const actor = requireActorId(actorId);
   const legalEntityId = requireUuid(config.legalEntityId, "legal entity");
-  if (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId)) {
+  // The caller may narrow a read, but its supplied lens cannot confer
+  // authority. Resolve the actor's live ceiling at this exported boundary.
+  const actorScope = await requireAggregateBenefitsRead(exec, org, actor);
+  if (config.allowedSubsidiaryIds !== null && !(config.allowedSubsidiaryIds instanceof Set)) {
+    throw new BenefitsError("INVALID_INPUT", "an explicit subsidiary scope is required — resolve the actor's scope before measuring");
+  }
+  if ((actorScope !== null && !actorScope.has(legalEntityId)) ||
+    (config.allowedSubsidiaryIds !== null && !config.allowedSubsidiaryIds.has(legalEntityId))) {
     throw new BenefitsError(
       "NOT_FOUND",
       "this legal entity is outside your scope — reload the program list; entities you cannot see are never measured",
@@ -639,8 +664,11 @@ export async function measureApprovedHours(
        and ${dimColumn} is null
        and exists (
          select 1 from worker_employments emp
+          join worker_employment_versions v on v.org_id=emp.org_id and v.employment_id=emp.id
           where emp.org_id = t.org_id and emp.worker_party_id = t.employee_party_id
             and emp.employer_subsidiary_id = ${legalEntityId}::uuid
+            and v.status='active' and v.recorded_until is null and v.recorded_at <= now()
+            and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to > t.worked_on)
        )
     `)).rows[0]?.n ?? 0;
     if (unshaped > 0) {
@@ -655,20 +683,35 @@ export async function measureApprovedHours(
   const rows = (await exec.execute<{
     id: string; hours: string; employee_party_id: string; approved_at: string | null;
     worked_on: string; department_id: string | null; project_id: string | null; approved_by: string | null;
+    employment_facts: HoursEmploymentFact[];
   }>(sql`
     select t.id::text as id, t.hours::text as hours,
            t.worked_on::text as worked_on, t.department_id::text as department_id,
            t.project_id::text as project_id, t.approved_by::text as approved_by,
            t.employee_party_id::text as employee_party_id,
-           t.approved_at::text as approved_at
+           t.approved_at::text as approved_at,
+           (select coalesce(jsonb_agg(jsonb_build_object(
+              'employmentId', emp.id, 'legalEntityId', emp.employer_subsidiary_id,
+              'versionId', v.id, 'versionNo', v.version_no, 'status', v.status,
+              'effectiveFrom', v.effective_from, 'effectiveTo', v.effective_to
+            ) order by emp.id, v.version_no), '[]'::jsonb)
+            from worker_employments emp
+            join worker_employment_versions v on v.org_id=emp.org_id and v.employment_id=emp.id
+            where emp.org_id=t.org_id and emp.worker_party_id=t.employee_party_id
+              and v.status='active' and v.recorded_until is null and v.recorded_at <= now()
+              and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to > t.worked_on)
+           ) as employment_facts
       from time_entries t
      where t.org_id = ${org} and t.status = 'approved'
        and t.worked_on >= ${periodFrom}::date and t.worked_on <= ${periodTo}::date
        and ${dimFilter}
        and exists (
          select 1 from worker_employments emp
+          join worker_employment_versions v on v.org_id=emp.org_id and v.employment_id=emp.id
           where emp.org_id = t.org_id and emp.worker_party_id = t.employee_party_id
             and emp.employer_subsidiary_id = ${legalEntityId}::uuid
+            and v.status='active' and v.recorded_until is null and v.recorded_at <= now()
+            and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to > t.worked_on)
        )
      order by t.id
   `)).rows;
@@ -686,6 +729,9 @@ export async function measureApprovedHours(
   const entryIds: string[] = [];
   let maxApprovedAt: string | null = null;
   for (const row of rows) {
+    if (row.employment_facts.length !== 1) {
+      throw new BenefitsError("REFUSED", `approved time entry ${row.id} has ambiguous active employment evidence on ${row.worked_on} — correct the overlapping employment coverage before measuring; time is never assigned to an employer by guesswork`);
+    }
     const hours = toUnits(row.hours);
     if (hours < 0n) {
       throw new BenefitsError(
@@ -701,7 +747,7 @@ export async function measureApprovedHours(
     const employmentId = employmentByParty.get(row.employee_party_id);
     const workedOn = row.worked_on.slice(0, 10);
     const periods = employmentId === undefined ? [] : memberPeriods.get(employmentId) ?? [];
-    const attributable = employmentId !== undefined && (config.memberPeriods === undefined ||
+    const attributable = employmentId !== undefined && row.employment_facts[0]!.employmentId === employmentId && (config.memberPeriods === undefined ||
       periods.some((p) => p.effectiveFrom <= workedOn && (p.effectiveTo === null || p.effectiveTo >= workedOn)));
     if (attributable) {
       byEmployment.set(employmentId, (byEmployment.get(employmentId) ?? 0n) + hours);
@@ -710,7 +756,7 @@ export async function measureApprovedHours(
       entryId: row.id, employeePartyId: row.employee_party_id,
       employmentId: attributable ? employmentId : null, workedOn, hours: row.hours,
       departmentId: row.department_id, projectId: row.project_id,
-      approvedBy: row.approved_by, approvedAt: row.approved_at,
+      approvedBy: row.approved_by, approvedAt: row.approved_at, employmentFacts: row.employment_facts,
     });
   }
   void actor;

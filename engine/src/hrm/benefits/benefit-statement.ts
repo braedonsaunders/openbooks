@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { fromUnits, toUnits } from "../../money/money.ts";
 import { loadOwnEmploymentIds, requireHrmBenefitsRead, requireOwnEmploymentSubject, requireHrmSelfRead } from "../authorization.ts";
+import { parseCivilDate } from "../temporal.ts";
 import { BenefitsError } from "./errors.ts";
 import type { EnrollmentSummary } from "./benefits-read.ts";
 import type { BenefitAward } from "./program-types.ts";
@@ -16,22 +17,24 @@ import {
 /**
  * Employee reward statement: one employment's benefits, program awards, and
  * payroll records in a single read — without duplicating payments and
- * without conflating estimates with paid values.
+ * without conflating estimates with committed payroll values.
  *
- * Two gates, one read. An employee reads their OWN employments with the self-service
- * read grant: the subject is the employment resolved from their login,
+ * An employee reads their own employments with the self-service read grant: the subject is the employment resolved from their login,
  * and every row query is fenced to that employment id — never an
  * organization-wide list. Anyone else passes the HR employment gate
- * (grant plus employer scope). Either way the award rows project exactly
- * the BenefitAward shape: value, status, linkage, and per-award proof.
- * Source and program snapshots never leave the database through this
- * module — the query selects only the statement fields, and a leakage test scans every
- * response for their keys.
+ * (grant plus employer scope). Award rows project value, status, linkage,
+ * frozen program title and limited evidence metadata. Full source and policy
+ * snapshots stay in the database; allocation fractions and explanations
+ * are excluded because they can reveal the employer's financial base.
  *
  * Sections stay visually separate for a reason: an award is the
- * entitlement record (what the program owes), a pay stub is the cash
- * record (what payroll paid). A delivered award's value is already inside
- * stub gross — the statement labels that instead of adding the two.
+ * entitlement record (what the program owes), a pay stub is the payroll
+ * record (what payroll calculated and committed). Delivery does not certify
+ * bank settlement; payment evidence belongs to the native payment workflow.
+ * A delivered award's value is already inside
+ * stub gross. External fulfillment is recorded separately by its provider
+ * reference; neither category is added to payroll gross. Voided native runs
+ * classify their award deliveries as reversed history, outside paid totals.
  * Draft, pending, approved, and queued awards are listed as NOT YET PAID
  * and never summed with delivered ones; totals group by currency and mixed
  * currencies are never totaled. Company measures (profit, totals, digests)
@@ -56,15 +59,18 @@ export interface StatementStub {
 export interface StatementAward extends BenefitAward {
   /** The employer-facing policy title frozen when this award was recorded. */
   readonly programName: string;
+  readonly deliveryState: "pending" | "delivered" | "reversed";
 }
 
 export interface BenefitStatement {
   readonly employmentId: string;
   readonly enrollments: readonly EnrollmentSummary[];
-  /** Delivered awards: paid (value already inside stub gross). */
+  /** Delivered to committed payroll; value is already inside stub gross. */
   readonly paidAwards: readonly StatementAward[];
-  /** Draft/pending/approved/queued awards: in progress, not yet paid. */
+  /** Draft/pending/approved/queued awards: not yet delivered to payroll. */
   readonly pendingAwards: readonly StatementAward[];
+  /** Historical deliveries reversed by a native pay-run void; never counted as paid. */
+  readonly reversedAwards: readonly StatementAward[];
   /** Delivered totals grouped by currency (mixed currencies never total). */
   readonly paidTotals: ReadonlyArray<{ readonly currency: string; readonly total: string }>;
   readonly payrollRecords: readonly StatementStub[];
@@ -72,8 +78,8 @@ export interface BenefitStatement {
 
 /**
  * Authorize one employment's statement: self (the employment belongs to
- * the actor and the self-service read grant is present) or manager (HR employment gate). A
- * stranger's employment fails both and never yields an empty statement.
+ * the actor and the self-service read grant is present) or manager (HR
+ * employment gate). A stranger's employment fails both and never yields an empty statement.
  */
 async function authorizeSubject(
   orgId: string,
@@ -132,11 +138,6 @@ async function readOwnEnrollments(orgId: string, employmentId: string): Promise<
   }));
 }
 
-/**
- * Own-subject award rows: one employment's full set, newest first. The
- * projection is exactly the BenefitAward shape — source and program
- * snapshots are selected nowhere, so they can leak nowhere.
- */
 /** Only statement-safe metadata is projected. Allocation fractions and their
  * explanations can disclose the company pool by division, even without a
  * profit field, so the statement never forwards arbitrary award evidence. */
@@ -146,15 +147,24 @@ export function statementEvidence(value: unknown): Record<string, unknown> | nul
   const safe: Record<string, unknown> = {};
   if (typeof input.kind === "string") safe.kind = input.kind;
   if (typeof input.programRevision === "number") safe.programRevision = input.programRevision;
-  if (typeof input.payableAfter === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.payableAfter)) {
-    safe.payableAfter = input.payableAfter;
+  if (typeof input.payableAfter === "string") {
+    try { safe.payableAfter = parseCivilDate(input.payableAfter); } catch {
+      // Malformed optional display metadata is withheld; it never supplies
+      // policy or eligibility inputs, which their source services validate.
+    }
   }
   return Object.keys(safe).length > 0 ? safe : null;
 }
 
+/**
+ * Own-subject award rows: one employment's full set, newest first. The
+ * projection includes the frozen title and limited evidence metadata,
+ * without selecting confidential source or policy objects.
+ */
 async function readOwnAwards(orgId: string, employmentId: string): Promise<StatementAward[]> {
   const rows = (await db.execute<Record<string, unknown>>(sql`
-    select a.id, a.program_snapshot->>'name' as "programName", a.program_id as "programId", a.employment_id as "employmentId",
+    select r.run_status as "runStatus", doc.status as "runDocumentStatus",
+           a.id, a.program_snapshot->>'name' as "programName", a.program_id as "programId", a.employment_id as "employmentId",
            a.period_from::text as "periodFrom", a.period_to::text as "periodTo",
            a.value::text as "value", a.currency, a.status, a.evidence,
            a.source_key as "sourceKey", a.adjusts_award_id as "adjustsAwardId",
@@ -164,11 +174,15 @@ async function readOwnAwards(orgId: string, employmentId: string): Promise<State
            a.approved_by as "approvedBy", a.approved_at::text as "approvedAt",
            a.created_by as "createdBy", a.void_reason as "voidReason"
       from hrm_benefit_awards a
+      left join pay_runs r on r.org_id = a.org_id and r.document_id = a.pay_run_document_id
+      left join documents doc on doc.org_id = a.org_id and doc.id = a.pay_run_document_id
      where a.org_id = ${orgId} and a.employment_id = ${employmentId}
      order by a.period_from desc, a.created_at desc
   `)).rows;
   return rows.map((row) => ({
     id: String(row.id),
+    deliveryState: row.status !== "delivered" ? "pending"
+      : row.runStatus === "voided" || row.runDocumentStatus === "voided" ? "reversed" : "delivered",
     programId: String(row.programId),
     programName: typeof row.programName === "string" ? row.programName : "",
     employmentId: String(row.employmentId),
@@ -198,7 +212,8 @@ async function employmentStatement(
   await authorizeSubject(orgId, actorId, employmentId);
   const enrollments = await readOwnEnrollments(orgId, employmentId);
   const awards = await readOwnAwards(orgId, employmentId);
-  const paidAwards = awards.filter((a) => a.status === "delivered");
+  const paidAwards = awards.filter((a) => a.status === "delivered" && a.deliveryState === "delivered");
+  const reversedAwards = awards.filter((a) => a.deliveryState === "reversed");
   const pendingAwards = awards.filter((a) => a.status !== "delivered" && a.status !== "voided");
   const totals = new Map<string, bigint>();
   for (const award of paidAwards) {
@@ -214,7 +229,10 @@ async function employmentStatement(
     select s.id::text as id, s.pay_date::text as pay_date, s.currency_code as currency,
            s.gross::text as gross, s.net_pay::text as net_pay
       from pay_stubs s
+      join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+      join documents d on d.org_id = r.org_id and d.id = r.document_id
      where s.org_id = ${orgId} and s.employment_id = ${employmentId}
+       and r.run_status = 'committed' and d.status <> 'voided'
      order by s.pay_date desc
   `)).rows;
   const payrollRecords: StatementStub[] = [];
@@ -241,7 +259,7 @@ async function employmentStatement(
       })),
     });
   }
-  return { employmentId, enrollments, paidAwards, pendingAwards, paidTotals, payrollRecords };
+  return { employmentId, enrollments, paidAwards, pendingAwards, reversedAwards, paidTotals, payrollRecords };
 }
 
 /** One employment's statement (the employee themself, or a manager with scope). */

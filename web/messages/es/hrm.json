@@ -1510,7 +1510,10 @@
         "program": "Programa",
         "period": "Período devengado",
         "value": "Valor",
-        "status": "Estado"
+        "status": "Estado",
+        "reversedTitle": "Pagos de recompensas revertidos",
+        "reversedEmpty": "No hay pagos de recompensas revertidos.",
+        "reversedStatus": "Revertido"
       }
     },
     "qualifications": {
@@ -2572,10 +2575,10 @@
     "members": {
       "weight": "Ponderación",
       "weightPlaceholder": "1",
-      "weightHint": "Peso de reparto para fondos; vacío significa igual.",
+      "weightHint": "La asignación ponderada por rol requiere un peso positivo. La asignación igualitaria o por horas aprobadas no utiliza este campo.",
       "role": "Rol",
       "rolePlaceholder": "Colaborador",
-      "roleHint": "Rol usado en repartos ponderados por rol."
+      "roleHint": "Rol registrado en esta afiliación; los pesos de asignación se configuran por separado."
     },
     "addMember": "Agregar miembro",
     "removeMember": "Terminar membresía",
@@ -2651,8 +2654,8 @@
         "payComponent": "Concepto",
         "reason": "Motivo del cambio"
       },
-      "allEntities": "Todas las entidades",
-      "entityHint": "Vacío significa cada entidad donde el programa puede operar.",
+      "allEntities": "Elegir entidad jurídica",
+      "entityHint": "Una entidad jurídica es responsable del programa y sus obligaciones de nómina. Añada empleados elegibles tras crear el borrador.",
       "employmentsTruncated": "La lista de empleos muestra los primeros 500 nombres; la membresía acepta cualquier empleo alcanzado.",
       "searchDepartments": "Buscar departamentos…",
       "searchProjects": "Buscar proyectos…",
@@ -2680,7 +2683,12 @@
       "cancel": "Cancelar",
       "back": "Atrás",
       "next": "Siguiente",
-      "amountNoun": "Monto"
+      "amountNoun": "Monto",
+      "componentPrerequisite": "Cree un componente salarial activo en la configuración de nómina, actualice las opciones y selecciónelo. Sus reglas de nómina determinan el tratamiento fiscal y contable.",
+      "openPayrollSetup": "Abrir configuración de nómina",
+      "accountsPrerequisite": "No hay cuentas de medición contabilizables visibles. Añada las cuentas necesarias o pida a finanzas que compruebe su acceso a la entidad jurídica y actualice las opciones.",
+      "openAccounts": "Abrir plan contable",
+      "refreshOptions": "Actualizar opciones"
     },
     "awardBuilderTitle": "Nuevo premio",
     "awardFields": {
