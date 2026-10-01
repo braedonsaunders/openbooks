@@ -93,7 +93,7 @@
     "roster": {
       "title": "账户",
       "hint": "已过账总账余额",
-      "empty": "尚无可对账的账户。请在科目表中将银行和卡账户标记为可对账。",
+      "empty": "尚无有效的银行或信用卡账户。请在科目表中添加。",
       "bankSection": "银行账户",
       "cardSection": "信用卡",
       "reconciledThrough": "已对账至 {date}",
@@ -383,6 +383,8 @@
   },
   "account": {
     "description": "{details} — 导入对账单，然后匹配并签核。",
+    "configure": "配置账户",
+    "setupDescription": "要导入对账单或对此账户进行对账，请在科目表中启用“可对账”并选择结算币种。",
     "stats": {
       "glBalance": "总账余额（已过账）",
       "reconciledThrough": "对账截至",

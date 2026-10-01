@@ -107,6 +107,9 @@ export function columnDescriptors(
   for (const c of view.columns) {
     if (!c.visible) continue
     if (c.key === "_actions") {
+      // Honor the current catalog for saved views created before an action
+      // column was removed. The record's reference cell still opens its drawer.
+      if (!listColumnMeta(recordType, c.key)) continue
       out.push({ key: "_actions", kind: "actions", label: labels.actions ?? "Actions", sortable: false, width: 44 })
       continue
     }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { resolveValue } from '@braedonsaunders/appkit-viewspec'
 
 const state = { genericFailure: false, customerHomeCalls: 0 }
 Object.assign(globalThis, { __customerRatesBannerTest: state })
@@ -57,6 +58,28 @@ registerHooks({
 })
 
 const { loadCustomers, customersSpec } = await import('./view')
+
+test('customer vitals retain five readable metrics with optional features disabled', async () => {
+  const base = await loadCustomers({})
+  for (const crmEnabled of [false, true]) {
+    for (const ordersEnabled of [false, true]) {
+      const data = { ...base, crmEnabled, ordersEnabled, arAllowed: true, partiesAllowed: true }
+      const grid = customersSpec(data).body.find((block) => block.kind === 'grid')
+      assert.ok(grid?.kind === 'grid')
+      const vitals = grid.blocks[0]
+      assert.ok(vitals?.kind === 'grid')
+      const visible = vitals.blocks.filter((block) => !block.when || resolveValue(block.when, data))
+      assert.equal(visible.length, 5, `CRM=${crmEnabled}, Orders=${ordersEnabled}`)
+      const unreadable = { ...data, arAllowed: false, crmEnabled: false, ordersEnabled: false }
+      const protectedGrid = customersSpec(unreadable).body.find((block) => block.kind === 'grid')
+      assert.ok(protectedGrid?.kind === 'grid')
+      const protectedVitals = protectedGrid.blocks[0]
+      assert.ok(protectedVitals?.kind === 'grid')
+      assert.equal(protectedVitals.blocks.filter((block) => !block.when || resolveValue(block.when, unreadable)).length, 1,
+        'without AR access only the customer count is readable')
+    }
+  }
+})
 
 test('missing consolidated rates become a banner while figures fail closed', async () => {
   state.genericFailure = false

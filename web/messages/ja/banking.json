@@ -93,7 +93,7 @@
     "roster": {
       "title": "口座",
       "hint": "転記済み元帳の残高",
-      "empty": "消込可能な口座がまだありません。勘定科目表で銀行口座とカード口座を消込可能に設定してください。",
+      "empty": "有効な銀行口座またはカード口座はまだありません。勘定科目表で追加してください。",
       "bankSection": "銀行口座",
       "cardSection": "クレジットカード",
       "reconciledThrough": "{date}まで消込済み",
@@ -383,6 +383,8 @@
   },
   "account": {
     "description": "{details} — 明細をインポートし、照合して承認します。",
+    "configure": "口座を設定",
+    "setupDescription": "明細をインポートしたり、この口座を消し込んだりするには、勘定科目表で「消込対象」を有効にし、決済通貨を選択してください。",
     "stats": {
       "glBalance": "総勘定元帳残高（記帳済み）",
       "reconciledThrough": "消込済み期日",

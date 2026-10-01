@@ -93,7 +93,7 @@
     "roster": {
       "title": "Cuentas",
       "hint": "Saldos del libro mayor contabilizado",
-      "empty": "Aún no hay cuentas conciliables. Marque sus cuentas bancarias y de tarjeta como conciliables en el plan de cuentas.",
+      "empty": "Aún no hay cuentas bancarias o de tarjeta activas. Añádalas en el plan de cuentas.",
       "bankSection": "Cuentas bancarias",
       "cardSection": "Tarjetas de crédito",
       "reconciledThrough": "Conciliado hasta {date}",
@@ -383,6 +383,8 @@
   },
   "account": {
     "description": "{details} — importe extractos, luego concilie y apruebe.",
+    "configure": "Configurar cuenta",
+    "setupDescription": "Para importar extractos o conciliar esta cuenta, active Conciliable y elija una moneda de liquidación en el plan de cuentas.",
     "stats": {
       "glBalance": "Saldo contable (contabilizado)",
       "reconciledThrough": "Conciliado hasta",

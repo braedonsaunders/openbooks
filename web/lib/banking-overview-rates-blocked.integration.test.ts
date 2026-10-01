@@ -40,12 +40,14 @@ const { loadBankingAccount } = await import(root + 'web/app/(app)/banking/[accou
 
 /**
  * A multi-subsidiary org whose consolidated rates were never
- * derived for the current period. The overview must still list the same
- * reconcilable accounts as the Match picker with the same cash total —
- * the missing derivation pins a banner, never an empty roster.
+ * derived for the current period. The overview includes bank/card accounts
+ * before reconciliation setup; Match still requires that setup. Missing
+ * consolidated rates pin a banner, never an empty or incomplete roster.
  */
-test('rates-blocked banking overview agrees with the match picker', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('rates-blocked banking includes accounts awaiting setup and keeps Match eligibility separate', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
+  const reserveId = randomUUID()
+  const cardId = randomUUID()
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, 'Treasurer', 'admin'))
     await withBypass(async () => {
@@ -58,6 +60,13 @@ test('rates-blocked banking overview agrees with the match picker', { skip: !pro
       await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values (${childId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
       await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where id = ${org.accounts.bank} and org_id = ${org.orgId}`)
+      await db.execute(sql`
+        insert into accounts(id,org_id,number,name,type,is_active,is_summary,reconcilable)
+        values (${reserveId},${org.orgId},'1020','Reserve Savings','asset_bank',true,false,false),
+               (${cardId},${org.orgId},'2050','Corporate Credit Card','liability_card',true,false,false),
+               (${randomUUID()},${org.orgId},'1030','Inactive bank','asset_bank',false,false,false),
+               (${randomUUID()},${org.orgId},'1090','Bank summary','asset_bank',true,true,false)
+      `)
       const entryId = randomUUID()
       await db.execute(sql`
         insert into journal_entries
@@ -74,7 +83,15 @@ test('rates-blocked banking overview agrees with the match picker', { skip: !pro
           (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId},
            '250.0000', 'CAD', '250.0000', 1, 'Bank rates blocked'),
           (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.adjustment}, ${org.subsidiaryId},
-           '-250.0000', 'CAD', '-250.0000', 1, 'Bank rates blocked')
+           '-250.0000', 'CAD', '-250.0000', 1, 'Bank rates blocked'),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 3, ${reserveId}, ${org.subsidiaryId},
+           '75.0000', 'CAD', '75.0000', 1, 'Reserve opening'),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 4, ${org.accounts.adjustment}, ${org.subsidiaryId},
+           '-75.0000', 'CAD', '-75.0000', 1, 'Reserve offset'),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 5, ${cardId}, ${org.subsidiaryId},
+           '-50.0000', 'CAD', '-50.0000', 1, 'Card opening'),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 6, ${org.accounts.adjustment}, ${org.subsidiaryId},
+           '50.0000', 'CAD', '50.0000', 1, 'Card offset')
       `)
       await db.execute(sql`
         update journal_entries
@@ -89,22 +106,31 @@ test('rates-blocked banking overview agrees with the match picker', { skip: !pro
         ratesBlocked: unknown
         rosterAccounts: { id: string }[]
         totalCash: string
+        totalCards: string
       }
       assert.ok(loaded.ratesBlocked, 'the missing derivation still pins its banner')
-      assert.equal(loaded.rosterAccounts.length, 1, 'the roster lists the reconcilable account even while rates are blocked')
-      assert.equal(loaded.rosterAccounts[0]?.id, org.accounts.bank)
-      assert.equal(loaded.totalCash, '250.0000', 'the cash total reads the ledger, not the blocked fallback')
+      assert.deepEqual(new Set(loaded.rosterAccounts.map((a) => a.id)), new Set([org.accounts.bank,reserveId,cardId]), 'all active bank/card leaf accounts appear before setup')
+      assert.equal(loaded.totalCash, '325.0000', 'cash includes bank accounts awaiting reconciliation setup')
+      assert.equal(loaded.totalCards, '-50.0000', 'card balances include cards awaiting setup')
       const match = (await loadMatch({})) as { accounts: { id: string }[] }
       assert.deepEqual(
         match.accounts.map((a) => a.id),
-        loaded.rosterAccounts.map((a) => a.id),
-        'the match picker and the overview roster read the same accounts',
+        [org.accounts.bank],
+        'Match only offers accounts configured for reconciliation',
       )
-      // The per-account page guards through the same reader: the listed
-      // bank renders, a non-bank account 404s instead of rendering a
-      // workspace its siblings refuse to list.
+      // Every rostered bank opens its detail page; configuration controls
+      // workflow availability without granting access to non-bank accounts.
       const detail = (await loadBankingAccount(org.accounts.bank, {})) as { headerTitle: string }
       assert.match(detail.headerTitle, /Cash/, 'the rostered account renders its page')
+      const pending = await loadBankingAccount(reserveId, {})
+      assert.match(pending.headerTitle, /Reserve Savings/)
+      assert.equal(pending.canReconcile, false)
+      assert.equal(pending.canConfigure, true)
+      assert.equal(pending.configureHref, `/accounts?account=${reserveId}`)
+      assert.equal(pending.headerDescription, 'account.setupDescription')
+      const configured = await loadBankingAccount(org.accounts.bank, {})
+      assert.equal(configured.canReconcile, true)
+      assert.equal(configured.canConfigure, false)
       await assert.rejects(
         loadBankingAccount(org.accounts.adjustment, {}),
         /NEXT_HTTP_ERROR_FALLBACK;404/,

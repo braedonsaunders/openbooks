@@ -93,7 +93,7 @@
     "roster": {
       "title": "Contas",
       "hint": "Saldos do razão contabilizado",
-      "empty": "Ainda não há contas conciliáveis. Marque suas contas bancárias e de cartão como conciliáveis no plano de contas.",
+      "empty": "Ainda não há contas bancárias ou de cartão ativas. Adicione-as no plano de contas.",
       "bankSection": "Contas bancárias",
       "cardSection": "Cartões de crédito",
       "reconciledThrough": "Conciliado até {date}",
@@ -383,6 +383,8 @@
   },
   "account": {
     "description": "{details} — importe extratos e, em seguida, corresponda e finalize.",
+    "configure": "Configurar conta",
+    "setupDescription": "Para importar extratos ou conciliar esta conta, ative Conciliável e escolha uma moeda de liquidação no plano de contas.",
     "stats": {
       "glBalance": "Saldo do razão (lançado)",
       "reconciledThrough": "Conciliado até",

@@ -82,6 +82,8 @@ export interface PurchasingData {
   openPosLabel: string
   openPosValue: string
   openPosSub: string
+  openApLabel: string
+  overdueLabel: string
   spend30dLabel: string
   spend30dValue: string
   spend30dSub: string
@@ -263,6 +265,8 @@ export async function loadPurchasing(
     openPosLabel: t('home.vitals.openPos'),
     openPosValue: moneyCompact(data.openPoValue),
     openPosSub: t('home.vitals.openPosSub', { count: data.openPos }),
+    openApLabel: t('home.vitals.openAp'),
+    overdueLabel: t('home.vitals.overdue'),
     spend30dLabel: t('home.vitals.spend30d'),
     spend30dValue: moneyCompact(data.spend30d),
     spend30dSub: t('home.vitals.spend30dSub'),
@@ -367,17 +371,20 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
         },
       }, f('ratesBlocked')),
       grid('flex h-full min-h-0 flex-col gap-4', [
-        // Vitals strip. Two tiles are feature-gated; `when` expresses that
-        // without the spec gaining a conditional.
+        // Optional capabilities use their own metrics while enabled. Otherwise
+        // show payables metrics under the same AP read permission as the pulse.
         grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
           statTile({ iconKey: 'building', accent: 'teal', label: f('vendorsLabel'), value: f('vendorsValue'), when: f('grants.parties') }),
-          statTile({
+          data.ordersEnabled ? statTile({
             iconKey: 'clipboard',
             accent: 'violet',
             label: f('openPosLabel'),
             value: f('openPosValue'),
             sub: f('openPosSub'),
             when: f('posAllowed'),
+          }) : statTile({
+            iconKey: 'wallet', accent: 'violet', label: f('openApLabel'),
+            value: f('apOutstanding'), when: f('apAllowed'),
           }),
           statTile({
             iconKey: 'trending-up',
@@ -396,7 +403,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             tone: 'positive',
             when: f('apAllowed'),
           }),
-          statTile({
+          data.expensesEnabled ? statTile({
             iconKey: 'triangle-alert',
             accent: 'amber',
             label: f('unpostedLabel'),
@@ -404,6 +411,10 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             sub: f('unpostedSub'),
             tone: f('unpostedTone'),
             when: f('expensesEnabled'),
+          }) : statTile({
+            iconKey: 'triangle-alert', accent: 'red', label: f('overdueLabel'),
+            value: f('apOverdue'),
+            tone: data.apOverdueIsNegative ? 'negative' : undefined, when: f('apAllowed'),
           }),
         ]),
 
@@ -412,11 +423,10 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             title: f('heroTitle'),
             iconKey: 'building',
             hint: f('heroHint'),
-            // Content-sized like the banking roster hero: no fixed minimum
-            // and no inner scroll, so five rows render five rows instead of
-            // a stretched blank panel pushing the rail's next action down.
-            bodyClassName: 'p-0',
-            className: 'self-start lg:col-span-2',
+            // Match the AR/AP worklist panels: fill the available grid height
+            // and keep long tables scrollable inside the panel.
+            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            className: 'min-h-0 lg:col-span-2',
             // The roster carries per-vendor AP money: without ap.read the
             // whole panel is omitted, never an honest-looking zero hero.
             when: f('apAllowed'),

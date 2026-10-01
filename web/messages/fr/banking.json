@@ -93,7 +93,7 @@
     "roster": {
       "title": "Comptes",
       "hint": "Soldes du grand livre comptabilisé",
-      "empty": "Aucun compte rapprochable pour l'instant. Marquez vos comptes bancaires et cartes comme rapprochables dans le plan comptable.",
+      "empty": "Aucun compte bancaire ou de carte actif. Ajoutez-en dans le plan comptable.",
       "bankSection": "Comptes bancaires",
       "cardSection": "Cartes de crédit",
       "reconciledThrough": "Rapproché jusqu'au {date}",
@@ -383,6 +383,8 @@
   },
   "account": {
     "description": "{details} — importez les relevés, puis appariez et approuvez.",
+    "configure": "Configurer le compte",
+    "setupDescription": "Pour importer des relevés ou rapprocher ce compte, activez Rapprochable et choisissez une devise de règlement dans le plan comptable.",
     "stats": {
       "glBalance": "Solde au grand livre (comptabilisé)",
       "reconciledThrough": "Rapproché jusqu’au",

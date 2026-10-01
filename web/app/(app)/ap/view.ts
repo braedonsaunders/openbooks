@@ -38,11 +38,16 @@ export interface ApCockpitData {
 export async function loadApCockpit(): Promise<ApCockpitData> {
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
-  const t = await getTranslations('ap')
-
-  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
+  // Navigation and configuration are independent reads; neither should wait
+  // for the complete cash forecast before the page can finish loading.
+  const [t, locale, cfg, tabs] = await Promise.all([
+    getTranslations('ap'),
+    getLocale(),
+    analyticsConfig(authz.user.orgId, 'cashflow'),
+    groupTabs('purchasing', '/ap', { orgId: authz.user.orgId }),
+  ])
   const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const position = await apPosition(authz.user.orgId, 4, apSettings, undefined, authz.allowedSubsidiaryIds, await getLocale())
+  const position = await apPosition(authz.user.orgId, 4, apSettings, undefined, authz.allowedSubsidiaryIds, locale)
   // The schedule bars need each week's label and amount; the week drill
   // fetches the week a reader actually opens from /api/cash/week-entries.
   // Shipping every week's transactions as well repeated the whole open-item
@@ -70,7 +75,7 @@ export async function loadApCockpit(): Promise<ApCockpitData> {
     ],
     newBasePath: '/ap/bills',
     newTriggerLabel: t('actions.newBill'),
-    tabs: await groupTabs('purchasing', '/ap', { orgId: authz.user.orgId }),
+    tabs,
     data,
   }
 }

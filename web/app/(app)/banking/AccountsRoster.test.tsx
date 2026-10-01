@@ -93,3 +93,32 @@ test('recent import does not make an old statement appear current in the roster 
     href: '/banking/bank-old',
   }])
 })
+
+test('banking shows all supplied accounts by default and new accounts remain visible with saved preferences', async (t) => {
+  const priorFetch = globalThis.fetch
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = priorFetch
+  })
+  const rows = [...accounts, { ...accounts[0]!, id: 'card-new', name: 'Corporate card', type: 'liability_card' }]
+  for (const layoutPrefs of [{}, { order: ['bank-old'], hidden: ['bank-old'] }]) {
+    globalThis.fetch = (async () => Response.json({ layout: layoutPrefs, revision: 'rev-1' })) as typeof fetch
+    await act(async () => {
+      root.render(React.createElement(NextIntlClientProvider,
+        { locale: 'en', messages, timeZone: 'UTC' } as unknown as React.ComponentProps<typeof NextIntlClientProvider>,
+        React.createElement(MoneyProvider, { currency: 'USD' } as React.ComponentProps<typeof MoneyProvider>,
+          React.createElement(AccountsRosterPanel, {
+            key: JSON.stringify(layoutPrefs), accounts: rows, totalCash: '3750.0000', totalCards: '1250.0000', layoutPrefs,
+          }))))
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    })
+    assert.equal(Boolean(host.querySelector('a[href="/banking/bank-old"]')), !('hidden' in layoutPrefs))
+    assert.ok(host.querySelector('a[href="/banking/bank-current"]'), 'an account absent from the saved order remains visible')
+    assert.ok(host.querySelector('a[href="/banking/card-new"]'), 'a newly added card remains visible')
+    assert.match(host.textContent ?? '', /3,750\.00/, 'hiding a row must not change the cash total')
+  }
+})

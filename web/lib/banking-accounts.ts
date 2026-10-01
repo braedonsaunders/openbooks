@@ -3,20 +3,11 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 
-/**
- * The ONE membership read every banking surface agrees on.
- *
- * The overview roster, the Match account picker, and the per-account page
- * used to answer "which accounts are banks?" three different ways, so a
- * workspace with underived consolidated rates showed zero accounts on one
- * screen and two on the next. Every surface now filters through
- * `reconcilableBankMembership` (same predicate, same `a` alias for the
- * accounts table); the list/single readers below serve the picker and the
- * account-page guard, while the roster's richer query embeds the same
- * fragment. Subsidiary scoping stays each query's own decision — the
- * overview scopes to its resolved view, the picker and the account page
- * read org-wide — so only membership is unified here, never visibility.
- */
+/** Bank account membership and reconciliation eligibility share the same
+ * active leaf-account policy. Visibility does not require reconciliation
+ * setup: the overview and detail pages include every bank/card account;
+ * import and Match pickers additionally require the reconcilable flag.
+ * Each caller continues to enforce its own subsidiary scope. */
 
 export interface ReconcilableBankAccount {
   id: string
@@ -40,7 +31,22 @@ interface ReconcilableBankAccountRow extends Record<string, unknown> {
  * banking query aliases the accounts table as `a`.
  */
 export function reconcilableBankMembership() {
-  return sql`a.reconcilable and a.is_active and not a.is_summary and a.type in ('asset_bank', 'liability_card')`
+  return sql`${bankAccountMembership()} and a.reconcilable`
+}
+
+/** All active bank/card leaf accounts, including those awaiting setup. */
+export function bankAccountMembership() {
+  return sql`a.is_active and not a.is_summary and a.type in ('asset_bank', 'liability_card')`
+}
+
+/** Detail-page membership; reconciliation eligibility is exposed separately. */
+export async function bankAccount(orgId: string, accountId: string): Promise<(ReconcilableBankAccount & { reconcilable: boolean }) | null> {
+  const res = await db.execute<ReconcilableBankAccountRow & { reconcilable: boolean }>(sql`
+    select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId", a.reconcilable
+      from accounts a
+     where a.id = ${accountId} and a.org_id = ${orgId} and ${bankAccountMembership()}
+  `)
+  return res.rows[0] ?? null
 }
 
 /** Every reconcilable bank/card account in the org, by number. */
@@ -54,7 +60,7 @@ export async function listReconcilableBankAccounts(orgId: string): Promise<Recon
   return res.rows.map((a) => ({ id: a.id, number: a.number, name: a.name, type: a.type, subsidiaryId: a.subsidiaryId }))
 }
 
-/** Membership guard for the per-account page: null reads as a 404. */
+/** Read a bank/card account eligible for reconciliation: null means ineligible. */
 export async function reconcilableBankAccount(
   orgId: string,
   accountId: string,

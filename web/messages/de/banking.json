@@ -93,7 +93,7 @@
     "roster": {
       "title": "Konten",
       "hint": "Salden aus dem gebuchten Hauptbuch",
-      "empty": "Noch keine abstimmbaren Konten. Markieren Sie Bank- und Kartenkonten im Kontenplan als abstimmbar.",
+      "empty": "Noch keine aktiven Bank- oder Kartenkonten. Fügen Sie diese im Kontenplan hinzu.",
       "bankSection": "Bankkonten",
       "cardSection": "Kreditkarten",
       "reconciledThrough": "Abgestimmt bis {date}",
@@ -383,6 +383,8 @@
   },
   "account": {
     "description": "{details} — Auszüge importieren, dann abgleichen und abzeichnen.",
+    "configure": "Konto konfigurieren",
+    "setupDescription": "Um Kontoauszüge zu importieren oder dieses Konto abzustimmen, aktivieren Sie Abstimmbar und wählen Sie im Kontenplan eine Abrechnungswährung.",
     "stats": {
       "glBalance": "Hauptbuchsaldo (gebucht)",
       "reconciledThrough": "Abgestimmt bis",

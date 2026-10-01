@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { BANK_KINDS } from "../document-kinds.ts";
-import { reconcilableBankMembership } from '../banking-accounts'
+import { bankAccountMembership } from '../banking-accounts'
 import { statementBookExpr } from '../gl-summary'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { add, cmp, mulDecimal, neg, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
@@ -78,12 +78,10 @@ export async function bankingHome(
   // binds as an empty uuid array so every `= any(...)` leg matches nothing.
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
-  // Roster membership is the ONE banking reader: the same
-  // reconcilable/active/bank-type predicate the Match picker and the
-  // account-page guard filter through, with this query's own subsidiary
-  // scope appended after it. The badges below intentionally keep their own
-  // wider scope (all active accounts).
-  const membership = reconcilableBankMembership()
+  // Cash and the roster include all active bank/card leaf accounts, even
+  // before reconciliation is configured. Match/import enforce eligibility
+  // separately; subsidiary and posting-book visibility remain scoped here.
+  const membership = bankAccountMembership()
   const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
   // Document-side counts match root-owned rows only for unrestricted
   // root-covering views; the limb never widens an empty scope (see filters).
@@ -96,7 +94,7 @@ export async function bankingHome(
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
 
   const [rosterRes, flowsRes, badgesRes] = (await Promise.all([
-    // Roster — one row per reconcilable account with balance + workflow state.
+    // Roster — one row per active bank/card account with balance + workflow state.
     db.execute(sql`
       select a.id, a.number, a.name, a.type, a.currency_restriction,
              bal.func as func,

@@ -135,9 +135,9 @@ export async function apPosition(
   const [apItems, arItems, apStats, arStats, banks, catConfigs] = await Promise.all([
     openItems(orgId, "ap", asOfIso, subIds),
     openItems(orgId, "ar", asOfIso, subIds),
-    paymentStats("ap", asOfIso, subIds),
-    paymentStats("ar", asOfIso, subIds),
-    bankBalances(asOfIso, subIds),
+    paymentStats("ap", asOfIso, subIds, orgId),
+    paymentStats("ar", asOfIso, subIds, orgId),
+    bankBalances(asOfIso, subIds, orgId),
     loadCategories(orgId),
   ]);
 
