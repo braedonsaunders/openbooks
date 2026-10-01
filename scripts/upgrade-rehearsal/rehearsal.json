@@ -34,6 +34,9 @@
           "reason": "The tagged harness CLI runs on the migration login (a superuser in CI, which FORCE ROW LEVEL SECURITY cannot bind) because as the runtime role it cannot read its own org row; its base-table probe therefore sees other orgs' rows whenever two or more orgs hold documents. Fixed on main (R1.11); the candidate harness re-probes as the runtime role with no tolerance."
         }
       ]
+    },
+    {
+      "tag": "v0.1.0-alpha.26"
     }
   ],
   "requiredDatasetClasses": [
