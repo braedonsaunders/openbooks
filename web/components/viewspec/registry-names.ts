@@ -117,6 +117,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'compliance-setup-banner',
   'contract-drawer',
   'crm-new-button',
+  'crm-sales-workspace',
   'crm-setup-workspace',
   'currency-basis',
   'custom-field-drawer',
