@@ -457,7 +457,9 @@
       "employee": "员工",
       "tax": "税款",
       "lines": "工资行",
-      "trace": "{engine} 跟踪"
+      "trace": "{engine} 跟踪",
+      "nonCash": "非现金福利",
+      "cashGross": "现金薪酬"
     },
     "submitApproval": "提交审批",
     "approvalSubmitted": "已连同证据包送审",

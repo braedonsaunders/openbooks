@@ -1,5 +1,7 @@
+import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { lockFlowSubjectDecision } from "../../flows/decision-lock.ts";
+import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../../platform/db.ts";
 import { fitsLedgerRange, normalizeMoney } from "../../money/money.ts";
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
 import { moneyRefusal } from "../../money/decimal-refusal.ts";
@@ -23,7 +25,7 @@ import {
   requireOneRow,
   requireOrgId,
 } from "./shared.ts";
-import type { BenefitAward, BenefitAwardStatus } from "./program-types.ts";
+import type { BenefitAward } from "./program-types.ts";
 
 /**
  * Employer-defined benefit award lifecycle.
@@ -34,9 +36,10 @@ import type { BenefitAward, BenefitAwardStatus } from "./program-types.ts";
  * inputs (never manual net-pay edits) or a recorded external reference that
  * never pretends the provider issued something it did not.
  *
- * Segregation: HR authors (hrm.benefits.manage) create, submit, approve, and
+ * Segregation: HR authors (hrm.benefits.manage) create, submit, and
  * void; finance payout (payroll.manage) queues and records delivery.
- * Approval never comes from the creator, even for administrators.
+ * Submission follows the pinned program approval setting: none or native Flows.
+ * No-approval and direct processing retain evidence without inventing a human decision.
  */
 
 export type { BenefitAward, BenefitAwardStatus } from "./program-types.ts";
@@ -50,14 +53,35 @@ const AWARD_COLUMNS = sql`id, program_id as "programId",
   external_ref as "externalRef",
   pay_run_document_id as "payRunDocumentId",
   pay_run_adjustment_id as "payRunAdjustmentId",
+  flow_run_id as "flowRunId", submitted_by as "submittedBy", submitted_at::text as "submittedAt", decision_snapshot as "decisionSnapshot",
   approved_by as "approvedBy", approved_at::text as "approvedAt",
   created_by as "createdBy", void_reason as "voidReason"`;
+
+// A committed run alone is insufficient: the employee's exact native input
+// must be present on its calculated stub with the required payment representation.
+const PAYROLL_PROCESSED_SQL = sql`exists (
+  select 1 from pay_stubs s join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
+  join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+  join documents d on d.org_id = r.org_id and d.id = r.document_id
+  join pay_run_adjustments adjustment on adjustment.org_id = a.org_id and adjustment.id = a.pay_run_adjustment_id
+  where s.org_id = a.org_id and s.pay_run_document_id = a.pay_run_document_id
+    and s.employment_id = a.employment_id and s.currency_code = a.currency
+    and s.employee_party_id = adjustment.employee_party_id
+    and adjustment.pay_run_document_id = a.pay_run_document_id
+    and adjustment.component_id = p.pay_component_id and adjustment.amount = a.value
+    and d.subsidiary_id = p.legal_entity_id and d.currency = a.currency
+    and l.component_id = adjustment.component_id and l.amount = a.value and l.description = adjustment.note
+    and l.kind = 'earning' and l.payment_kind = case when p.delivery_method = 'external' then 'non_cash' else 'cash' end
+    and (l.payment_kind = 'cash' or l.non_cash_account_id is not null)
+    and r.run_status = 'committed' and d.status <> 'voided'
+)`;
 
 function toAward(row: Record<string, unknown>): BenefitAward {
   const status = String(row.status);
   if (
     status !== "draft" &&
     status !== "pending" &&
+    status !== "rejected" &&
     status !== "approved" &&
     status !== "queued" &&
     status !== "delivered" &&
@@ -83,6 +107,12 @@ function toAward(row: Record<string, unknown>): BenefitAward {
     externalRef: row.externalRef != null ? String(row.externalRef) : null,
     payRunDocumentId: row.payRunDocumentId != null ? String(row.payRunDocumentId) : null,
     payRunAdjustmentId: row.payRunAdjustmentId != null ? String(row.payRunAdjustmentId) : null,
+    payrollProcessed: row.payrollProcessed === true,
+    flowRunId: row.flowRunId != null ? String(row.flowRunId) : null,
+    submittedBy: row.submittedBy != null ? String(row.submittedBy) : null,
+    submittedAt: row.submittedAt != null ? String(row.submittedAt) : null,
+    decisionSnapshot: row.decisionSnapshot != null ? row.decisionSnapshot as Record<string, unknown> : null,
+    approvalHref: status === "pending" && row.flowRunId != null ? "/approvals" : null,
     approvedBy: row.approvedBy != null ? String(row.approvedBy) : null,
     approvedAt: row.approvedAt != null ? String(row.approvedAt) : null,
     createdBy: row.createdBy != null ? String(row.createdBy) : null,
@@ -169,8 +199,13 @@ function canonicalValue(value: unknown, signed: boolean): string {
   if (!fitsLedgerRange(canonical)) {
     throw new BenefitsError("INVALID_INPUT", "the amount exceeds the ledger's 15 whole-digit limit — enter a smaller exact amount");
   }
+  if (canonical === "0.0000") {
+    throw new BenefitsError("INVALID_INPUT", signed
+      ? "a zero-value adjustment corrects no payroll obligation — enter a non-zero signed correction or leave the original reward unchanged"
+      : "a zero-value reward creates no payroll obligation — enter a positive award value");
+  }
   if (!signed && canonical.startsWith("-")) {
-    throw new BenefitsError("INVALID_INPUT", "award value is a non-negative amount in program currency");
+    throw new BenefitsError("INVALID_INPUT", "award value is a positive amount in program currency");
   }
   return canonical;
 }
@@ -198,9 +233,10 @@ export async function getBenefitAward(
              a.evidence, a.source_key as "sourceKey", a.adjusts_award_id as "adjustsAwardId", a.external_ref as "externalRef",
              a.pay_run_document_id as "payRunDocumentId",
              a.pay_run_adjustment_id as "payRunAdjustmentId",
+             a.flow_run_id as "flowRunId", a.submitted_by as "submittedBy", a.submitted_at::text as "submittedAt", a.decision_snapshot as "decisionSnapshot",
              a.approved_by as "approvedBy", a.approved_at::text as "approvedAt",
              a.created_by as "createdBy", a.void_reason as "voidReason",
-             p.legal_entity_id as "subsidiaryId"
+             p.legal_entity_id as "subsidiaryId", ${PAYROLL_PROCESSED_SQL} as "payrollProcessed"
         from hrm_benefit_awards a
         join hrm_benefit_programs p on p.org_id = a.org_id and p.id = a.program_id
        where a.org_id = ${orgId} and a.id = ${awardId}
@@ -251,8 +287,10 @@ export async function listBenefitAwards(query: {
                a.external_ref as "externalRef",
                a.pay_run_document_id as "payRunDocumentId",
                a.pay_run_adjustment_id as "payRunAdjustmentId",
-               a.approved_by as "approvedBy", a.approved_at::text as "approvedAt",
-               a.created_by as "createdBy", a.void_reason as "voidReason"
+               a.flow_run_id as "flowRunId", a.submitted_by as "submittedBy", a.submitted_at::text as "submittedAt", a.decision_snapshot as "decisionSnapshot",
+             a.approved_by as "approvedBy", a.approved_at::text as "approvedAt",
+               a.created_by as "createdBy", a.void_reason as "voidReason",
+               ${PAYROLL_PROCESSED_SQL} as "payrollProcessed"
           from hrm_benefit_awards a
           join hrm_benefit_programs p on p.org_id = a.org_id and p.id = a.program_id
          where a.org_id = ${orgId}
@@ -434,7 +472,7 @@ async function recordAward(
       }
       const target = toAward(adjusted);
       if (!["approved", "queued", "delivered"].includes(target.status)) {
-        throw new BenefitsError("REFUSED", "only approved or delivered obligations can receive an adjusting award — complete approval before recording a correction");
+        throw new BenefitsError("REFUSED", "only approved, queued or delivered obligations can receive an adjusting award — complete approval before recording a correction");
       }
       originalPolicy = adjusted.programSnapshot as Record<string, unknown>;
       originalSources = adjusted.sourceSnapshot as Record<string, unknown>;
@@ -543,7 +581,7 @@ async function recordAward(
       if (over) {
         throw new BenefitsError(
           "REFUSED",
-          `award value ${value} ${currency} exceeds program ${program.code} per-award cap ${program.capAmount} ${program.currency} — lower the award, or close the program and open a new revision with a higher cap`,
+          `award value ${value} ${currency} exceeds program ${program.code} per-award cap ${program.capAmount} ${program.currency} — lower the award, or close the program and create a replacement with a new code and a higher cap`,
         );
       }
     }
@@ -559,16 +597,17 @@ async function recordAward(
       if (spentUnits + BigInt(normalizeMoney(value).replace(".", "")) > BigInt(program.budgetAmount.replace(".", ""))) {
         throw new BenefitsError(
           "REFUSED",
-          `program ${program.code} budget ${program.budgetAmount} ${program.currency} cannot cover this award — spent ${normalizeMoney(spent ?? "0")} with ${value} requested; void an award, or close the program and open a new revision with a higher budget`,
+          `program ${program.code} budget ${program.budgetAmount} ${program.currency} cannot cover this award — spent ${normalizeMoney(spent ?? "0")} with ${value} requested; void an award, or close the program and create a replacement with a new code and a higher budget`,
         );
       }
     }
-    const programSnapshot = originalPolicy ?? {
+    const programSnapshot = originalPolicy ? { ...originalPolicy, approvalMode: originalPolicy.approvalMode ?? program.approvalMode } : {
       id: program.id,
       code: program.code,
       name: program.name,
       family: program.family,
       currency: program.currency,
+      approvalMode: program.approvalMode,
       deliveryMethod: program.deliveryMethod,
       valuation: program.valuation,
       metric: program.metric,
@@ -677,66 +716,7 @@ export async function recordSettledAward(query: CreateBenefitAwardQuery): Promis
   return recordAward(query, "settlement");
 }
 
-async function moveAward(
-  orgId: string,
-  actorId: string,
-  awardId: string,
-  from: readonly BenefitAwardStatus[],
-  to: BenefitAwardStatus,
-  event: string,
-  reason: string,
-  gate: "hr" | "finance",
-  extra?: (exec: SqlExecutor, award: BenefitAward) => Promise<Partial<Record<string, unknown>>>,
-): Promise<BenefitAward> {
-  return withOrgTransaction(orgId, async () => {
-    if (gate === "hr") {
-      await requireHrmBenefitsManage(db, orgId, actorId);
-    } else {
-      await requirePayrollManage(db, orgId, actorId);
-    }
-    await assertHrmEnabled(db, orgId);
-    const locked = (
-      await db.execute<Record<string, unknown>>(sql`
-        select ${AWARD_COLUMNS} from hrm_benefit_awards
-         where org_id = ${orgId} and id = ${awardId}
-         for update
-      `)
-    ).rows[0];
-    if (!locked) {
-      throw new BenefitsError(
-        "NOT_FOUND",
-        "benefit award not found in this organization — reload the award list and retry",
-      );
-    }
-    const before = toAward(locked);
-    if (!from.includes(before.status)) {
-      throw new BenefitsError(
-        "BAD_STATE",
-        `award is ${before.status} — this move needs ${from.join(" or ")}; reload and retry`,
-      );
-    }
-    await requireAwardEntityScope(db, orgId, actorId, before.programId);
-    const patch = extra ? await extra(db, before) : {};
-    const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
-          update hrm_benefit_awards
-             set status = ${to}, updated_by = ${actorId}, updated_at = now()
-           where org_id = ${orgId} and id = ${awardId}
-          returning ${AWARD_COLUMNS}
-        `)
-      ).rows,
-      `${event} the benefit award`,
-    );
-    void patch;
-    const after = toAward(updated);
-    await appendAwardEvent(db, orgId, actorId, awardId, event, reason);
-    await auditAwardWrite(db, orgId, actorId, awardId, event, before, after, reason);
-    return after;
-  });
-}
-
-/** Draft → pending: HR submits the recorded award for approval. */
+/** Submit once under the pinned no-approval setting or native Flows policy. */
 export async function submitBenefitAward(query: {
   readonly orgId: string;
   readonly actorId: string;
@@ -745,64 +725,107 @@ export async function submitBenefitAward(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const awardId = requireId(query.awardId, "awardId");
-  return moveAward(orgId, actorId, awardId, ["draft"], "pending", "submitted", "submitted for approval", "hr");
+  return withOrgTransaction(orgId, () => withTransactionSavepoint(db, async () => {
+    await requireHrmBenefitsManage(db, orgId, actorId);
+    await assertHrmEnabled(db, orgId);
+    await lockFlowSubjectDecision(orgId, BENEFIT_AWARD_SUBJECT_KIND, awardId);
+    const row = requireOneRow((await db.execute<Record<string, unknown>>(sql`
+      select ${AWARD_COLUMNS} from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId} for update
+    `)).rows, "loading the reward for submission");
+    const before = toAward(row);
+    await requireAwardEntityScope(db, orgId, actorId, before.programId);
+    // A replay adopts the existing submission; it cannot open fresh gates.
+    if ((before.flowRunId !== null || before.decisionSnapshot?.mode === "not_required") && ["pending", "approved", "queued", "delivered", "rejected"].includes(before.status)) return before;
+    if (before.status !== "draft") throw new BenefitsError("BAD_STATE", `reward is ${before.status} — only a draft can be submitted; create a new reward for a new decision`);
+    requireOneRow((await db.execute(sql`update hrm_benefit_awards set submitted_by = ${actorId}, submitted_at = now(), updated_by = ${actorId}, updated_at = now() where org_id = ${orgId} and id = ${awardId} and status = 'draft' returning id`)).rows, "recording the reward submitter");
+    const programPolicy = row.programSnapshot as Record<string, unknown>;
+    if (programPolicy.approvalMode !== "none" && programPolicy.approvalMode !== "flows") {
+      throw new BenefitsError("REFUSED", "This reward has no pinned approval setting. Void it and create a new reward from a program with an explicit approval setting.");
+    }
+    if (programPolicy.approvalMode === "none") {
+      const decision = { outcome: "approved", mode: "not_required", approvalMode: "none", programId: before.programId, revision: programPolicy.revision };
+      const after = toAward(requireOneRow((await db.execute<Record<string, unknown>>(sql`
+        update hrm_benefit_awards set status = 'approved', approved_at = now(), approved_by = null,
+          decision_snapshot = ${JSON.stringify(decision)}::jsonb, updated_by = ${actorId}, updated_at = now()
+        where org_id = ${orgId} and id = ${awardId} and status = 'draft' returning ${AWARD_COLUMNS}
+      `)).rows, "submitting the reward without required approvals"));
+      await appendAwardEvent(db, orgId, actorId, awardId, "submitted", "No approvals required by the pinned program setting; ready for payroll. No human approval was recorded.");
+      await auditAwardWrite(db, orgId, actorId, awardId, "submitted", before, after, "no approvals required by the pinned program setting");
+      return after;
+    }
+    const { runRecordFlows } = await import("../../flows/run.ts");
+    const result = await runRecordFlows({ kind: "on_submit", source: "api" }, BENEFIT_AWARD_SUBJECT_KIND, awardId, { orgId, userId: actorId });
+    const gatedRun = result.runs.find(run => run.gatesCreated > 0);
+    const directRun = result.runs.find(run => run.ungatedOutcome === "apply" && run.status === "completed" && run.gatesCreated === 0);
+    const governingRun = gatedRun ?? directRun;
+    if (result.failed) {
+      const cause = result.runs.filter(run => run.status === "failed").map(run => `${run.flowName}: ${run.error ?? "execution failed"}`).join("; ") || result.error || "workflow dispatch failed";
+      throw new BenefitsError("REFUSED", `Benefits workflow could not submit this reward: ${cause}. Open Flows, correct the policy or approver assignment, then submit again. No approval or payout was recorded.`);
+    }
+    if (!governingRun) throw new BenefitsError("REFUSED", "No Benefits approval policy matched this reward. Open Flows, choose Benefits reward or incentive award, and configure approval steps or explicitly select direct processing before submitting again.");
+    const pending = requireOneRow((await db.execute<Record<string, unknown>>(sql`
+      update hrm_benefit_awards set status = 'pending', flow_run_id = ${governingRun.runId}, updated_by = ${actorId}, updated_at = now()
+      where org_id = ${orgId} and id = ${awardId} and status = 'draft' returning ${AWARD_COLUMNS}
+    `)).rows, "submitting the reward");
+    await appendAwardEvent(db, orgId, actorId, awardId, "submitted", gatedRun ? "submitted to the configured Benefits approval workflow" : "submitted under the explicit direct processing policy");
+    let after = toAward(pending);
+    if (!gatedRun && directRun) {
+      const runs = await awardSubmissionRuns(orgId, awardId);
+      const policy = runs.find(run => run.id === directRun.runId)?.context.submissionPolicy as { ungatedOutcome?: unknown } | undefined;
+      if (policy?.ungatedOutcome !== "apply") throw new BenefitsError("REFUSED", "The direct processing policy has no pinned execution evidence. Review it in Flows and submit again.");
+      const snapshot = { outcome: "approved", mode: "automatic", runId: directRun.runId, runs, gates: [] };
+      after = toAward(requireOneRow((await db.execute<Record<string, unknown>>(sql`
+        update hrm_benefit_awards set status = 'approved', approved_at = now(), approved_by = null,
+          decision_snapshot = ${JSON.stringify(snapshot)}::jsonb, updated_by = ${actorId}, updated_at = now()
+        where org_id = ${orgId} and id = ${awardId} and status = 'pending' returning ${AWARD_COLUMNS}
+      `)).rows, "applying the direct processing policy"));
+      await appendAwardEvent(db, orgId, actorId, awardId, "automatically_approved", "ready for payroll under the explicit direct processing policy; no human approval was recorded");
+    }
+    await auditAwardWrite(db, orgId, actorId, awardId, "submitted", before, after, gatedRun ? "workflow approval required" : "explicit direct processing");
+    return after;
+  }));
 }
 
-/**
- * Pending → approved: a second actor approves. The creator never approves
- * their own award, even when holding every permission.
- */
-export async function approveBenefitAward(query: {
-  readonly orgId: string;
-  readonly actorId: string;
-  readonly awardId: string;
-}): Promise<BenefitAward> {
+type SubmissionRun = { id: string; status: string; context: Record<string, unknown> };
+async function awardSubmissionRuns(orgId: string, awardId: string): Promise<SubmissionRun[]> {
+  return (await db.execute<SubmissionRun>(sql`select id, status, context from flow_runs where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${awardId} and trigger = 'on_submit' order by created_at, id`)).rows;
+}
+
+/** Native gate release runs inside decideGate's transactional savepoint. */
+export async function releaseBenefitAwardApproval(query: {
+  readonly orgId: string; readonly actorId: string; readonly awardId: string;
+  readonly outcome: "approved" | "rejected"; readonly comment?: string | null;
+}): Promise<void> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const awardId = requireId(query.awardId, "awardId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const locked = (
-      await db.execute<Record<string, unknown>>(sql`
-        select ${AWARD_COLUMNS} from hrm_benefit_awards
-         where org_id = ${orgId} and id = ${awardId}
-         for update
-      `)
-    ).rows[0];
-    if (!locked) {
-      throw new BenefitsError(
-        "NOT_FOUND",
-        "benefit award not found in this organization — reload the award list and retry",
-      );
-    }
-    const before = toAward(locked);
-    if (before.status !== "pending") {
-      throw new BenefitsError("BAD_STATE", `award is ${before.status} — only pending awards approve; reload and retry`);
-    }
+    await lockFlowSubjectDecision(orgId, BENEFIT_AWARD_SUBJECT_KIND, awardId);
+    const row = requireOneRow((await db.execute<Record<string, unknown>>(sql`select ${AWARD_COLUMNS} from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId} for update`)).rows, "loading the reward decision");
+    const before = toAward(row);
     await requireAwardEntityScope(db, orgId, actorId, before.programId);
-    if (before.createdBy !== null && before.createdBy === actorId) {
-      throw new BenefitsError(
-        "REFUSED",
-        "the creator cannot approve their own award — ask a second manager holding hrm.benefits.manage to approve",
-      );
-    }
-    const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
-          update hrm_benefit_awards
-             set status = 'approved', approved_by = ${actorId}, approved_at = now(),
-                 updated_by = ${actorId}, updated_at = now()
-           where org_id = ${orgId} and id = ${awardId}
-          returning ${AWARD_COLUMNS}
-        `)
-      ).rows,
-      "approving the benefit award",
-    );
-    const after = toAward(updated);
-    await appendAwardEvent(db, orgId, actorId, awardId, "approved", "approved by a second manager");
-    await auditAwardWrite(db, orgId, actorId, awardId, "approved", before, after, "approved");
-    return after;
+    if (before.status !== "pending") return;
+    if (!before.flowRunId || !before.submittedBy) throw new BenefitsError("REFUSED", "This reward has no workflow submission evidence. Preserve it and submit a new reward through the configured Benefits policy.");
+    const gates = (await db.execute<{ id: string; status: string; decided_by: string | null; decided_at: string | null; comment: string | null; on_behalf_of_user_id: string | null }>(sql`
+      select id, status, decided_by, decided_at::text, comment, on_behalf_of_user_id from flow_gates
+      where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${awardId} order by created_at, id
+    `)).rows;
+    if (gates.some(gate => gate.status === "pending" || gate.status === "escalated")) throw new BenefitsError("REFUSED", "Approval stages remain open. Complete the reward's pending decisions in Approvals before adding it to payroll.");
+    if (!gates.some(gate => gate.status === query.outcome && gate.decided_by === actorId)) throw new BenefitsError("REFUSED", "No matching workflow decision authorizes this reward. Decide its assigned gate in Approvals.");
+    if (query.outcome === "approved" && gates.some(gate => gate.status === "rejected")) throw new BenefitsError("REFUSED", "The reward was rejected by its approval workflow. Create a new reward rather than releasing the rejected obligation.");
+    const runs = await awardSubmissionRuns(orgId, awardId);
+    if (!runs.some(run => run.id === before.flowRunId) || runs.some(run => run.status === "failed")) throw new BenefitsError("REFUSED", "The reward's workflow evidence is missing or failed. Review the execution in Flows before retrying the decision.");
+    const snapshot = { outcome: query.outcome, mode: "human", runId: before.flowRunId, runs, gates };
+    const after = toAward(requireOneRow((await db.execute<Record<string, unknown>>(sql`
+      update hrm_benefit_awards set status = ${query.outcome}, approved_by = ${query.outcome === "approved" ? actorId : null},
+        approved_at = ${query.outcome === "approved" ? sql`now()` : sql`null`}, decision_snapshot = ${JSON.stringify(snapshot)}::jsonb,
+        updated_by = ${actorId}, updated_at = now()
+      where org_id = ${orgId} and id = ${awardId} and status = 'pending' returning ${AWARD_COLUMNS}
+    `)).rows, "recording the workflow decision"));
+    await appendAwardEvent(db, orgId, actorId, awardId, query.outcome, query.comment?.trim() || `Benefits workflow ${query.outcome}`);
+    await auditAwardWrite(db, orgId, actorId, awardId, query.outcome, before, after, query.comment?.trim() || null);
   });
 }
 
@@ -861,6 +884,30 @@ export async function queueBenefitAward(query: {
         `award is ${before.status} — only approved awards queue; reload and retry`,
       );
     }
+    if (before.status === "approved") {
+      const policy = locked.programSnapshot as Record<string, unknown>;
+      const decision = before.decisionSnapshot;
+      const none = policy.approvalMode === "none" && decision?.mode === "not_required"
+        && decision.approvalMode === "none" && decision.programId === before.programId && decision.revision === policy.revision
+        && before.flowRunId === null && before.approvedBy === null && before.approvedAt !== null && before.submittedBy !== null && before.submittedAt !== null;
+      const flows = policy.approvalMode === "flows" && before.flowRunId !== null
+        && decision?.runId === before.flowRunId && before.approvedAt !== null && before.submittedBy !== null && before.submittedAt !== null
+        && ((decision.mode === "human" && before.approvedBy !== null) || (decision.mode === "automatic" && before.approvedBy === null));
+      if (decision?.outcome !== "approved" || (!none && !flows)) {
+        throw new BenefitsError("REFUSED", "This reward has no complete pinned approval decision. Void the unissued reward and create a new reward before adding it to payroll.");
+      }
+      if (flows) {
+        const proof = (await db.execute<{ complete: boolean; matching_actor: boolean }>(sql`
+          select
+            not exists (select 1 from flow_gates where org_id=${orgId} and subject_kind=${BENEFIT_AWARD_SUBJECT_KIND} and subject_id=${awardId} and status in ('pending','escalated','rejected'))
+            and not exists (select 1 from flow_runs where org_id=${orgId} and subject_kind=${BENEFIT_AWARD_SUBJECT_KIND} and subject_id=${awardId} and status in ('running','waiting','failed')) as complete,
+            exists (select 1 from flow_gates where org_id=${orgId} and subject_kind=${BENEFIT_AWARD_SUBJECT_KIND} and subject_id=${awardId} and status='approved' and decided_by=${before.approvedBy} and decided_at is not null) as matching_actor
+        `)).rows[0];
+        if (!proof?.complete || (decision?.mode === "human" && !proof.matching_actor)) {
+          throw new BenefitsError("REFUSED", "This reward has no complete matching workflow decision. Review its native approval history before adding it to payroll; void an unissued reward with inconsistent evidence and create a new reward.");
+        }
+      }
+    }
     const employment = (
       await db.execute<{ employer_subsidiary_id: string | null; worker_party_id: string }>(sql`
         select employer_subsidiary_id, worker_party_id from worker_employments
@@ -875,11 +922,13 @@ export async function queueBenefitAward(query: {
     }
     await requireAwardEntityScope(db, orgId, actorId, before.programId);
     const program = await getBenefitProgram(db, orgId, actorId, before.programId);
-    if (program.deliveryMethod === "payroll" && (payRunDocumentId === null || payRunAdjustmentId === null)) {
-      throw new BenefitsError("REFUSED", "select an editable pay run to queue this payroll award — a queued award must have its native pay-run adjustment");
+    if (normalizeMoney(before.value) === "0.0000") {
+      throw new BenefitsError("REFUSED", before.adjustsAwardId === null
+        ? "a zero-value reward cannot enter payroll — void this reward and create a reward with a positive value"
+        : "a zero-value adjustment cannot enter payroll — void this adjustment and record a non-zero signed correction");
     }
-    if (program.deliveryMethod === "external" && payRunDocumentId !== null) {
-      throw new BenefitsError("REFUSED", "external awards cannot be linked to a cash payroll adjustment — keep provider fulfillment separate from cash pay");
+    if (payRunDocumentId === null || payRunAdjustmentId === null) {
+      throw new BenefitsError("REFUSED", "select an editable pay run to queue this payroll award — a queued award must have its native pay-run adjustment");
     }
     if ((before.status === "queued" || before.status === "delivered") && (before.payRunDocumentId !== payRunDocumentId || before.payRunAdjustmentId !== payRunAdjustmentId)) {
       throw new BenefitsError("REFUSED", "this award already queued with different payout linkage — use its recorded pay run and adjustment");
@@ -1017,8 +1066,8 @@ async function requireAwardAdjustment(
   if (!run) {
     throw new BenefitsError("NOT_FOUND", "pay run not found in this organization — finalize the run before recording delivery");
   }
-  const programPolicy = (await exec.execute<{ legal_entity_id: string; payable_date: string }>(sql`
-    select legal_entity_id, (${award.periodTo ?? award.periodFrom}::date + payment_delay_days)::text as payable_date
+  const programPolicy = (await exec.execute<{ legal_entity_id: string; payable_date: string; delivery_method: string }>(sql`
+    select legal_entity_id, delivery_method, (${award.periodTo ?? award.periodFrom}::date + payment_delay_days)::text as payable_date
       from hrm_benefit_programs where org_id = ${orgId} and id = ${award.programId}
   `)).rows[0];
   const programEntity = programPolicy?.legal_entity_id;
@@ -1034,7 +1083,7 @@ async function requireAwardAdjustment(
   if (run.document_status === "voided") {
     throw new BenefitsError(
       "BAD_STATE",
-      "pay run is voided — link an adjustment on a live run",
+      "pay run is voided — record an adjusting award on a live pay run",
     );
   }
   if (committed && run.run_status !== "committed") {
@@ -1043,6 +1092,15 @@ async function requireAwardAdjustment(
       `pay run is ${run.run_status} — delivery records only after the run is committed; a pending run proves no payout`,
     );
   }
+  const expectedPaymentKind = programPolicy.delivery_method === "external" ? "non_cash" : "cash";
+  if (!committed) {
+    const component = (await exec.execute<{ payment_kind: string; kind: string; is_active: boolean }>(sql`
+      select payment_kind, kind, is_active from pay_components where org_id = ${orgId} and id = ${payComponentId}
+    `)).rows[0];
+    if (!component || component.kind !== "earning" || !component.is_active || component.payment_kind !== expectedPaymentKind) {
+      throw new BenefitsError("REFUSED", `the program requires an active ${expectedPaymentKind === "non_cash" ? "non-cash" : "cash"} earning component — configure the matching payroll representation before queueing`);
+    }
+  }
   if (committed) {
     const consumed = (await exec.execute<{ id: string }>(sql`
       select l.id from pay_stubs s join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
@@ -1050,10 +1108,12 @@ async function requireAwardAdjustment(
          and s.employee_party_id = ${workerPartyId} and s.employment_id = ${award.employmentId}
          and s.currency_code = ${award.currency} and l.component_id = ${payComponentId}
          and l.kind = 'earning' and l.amount = ${award.value}::numeric and l.description = ${note}
+         and l.payment_kind = ${expectedPaymentKind}
+         and (${expectedPaymentKind} = 'cash' or l.non_cash_account_id is not null)
        limit 1
     `)).rows[0];
     if (!consumed) {
-      throw new BenefitsError("REFUSED", "the committed run has no matching paid stub line for this award — review the employee's inclusion and calculation; a committed run alone does not prove the award was paid");
+      throw new BenefitsError("REFUSED", "the committed run has no matching payroll representation for this award — review the employee's inclusion and calculation; a committed run alone does not prove this benefit was processed");
     }
   }
 }
@@ -1191,9 +1251,9 @@ export async function recordPayrollDelivery(query: {
       actorId,
       awardId,
       "delivered",
-      `delivered through pay run ${payRunDocumentId} adjustment ${payRunAdjustmentId}`,
+      `processed in pay run ${payRunDocumentId} adjustment ${payRunAdjustmentId}; this is not bank-payment evidence`,
     );
-    await auditAwardWrite(db, orgId, actorId, awardId, "delivered", before, after, "payroll delivery");
+    await auditAwardWrite(db, orgId, actorId, awardId, "delivered", before, after, "processed in payroll");
     return after;
   });
 }
@@ -1201,11 +1261,9 @@ export async function recordPayrollDelivery(query: {
 /**
  * Queued → delivered through an external provider. The reference is the
  * provider's own issuance record — this service never claims the provider
- * issued anything it did not. Positive external value is taxable pay with no
- * native noncash representation: an ordinary earning adjustment would pay
- * cash on top of the provider, so delivery FAILS CLOSED until that
- * representation exists. Zero awards carry no value and deliver on the
- * provider reference alone.
+ * issued anything it did not. The exact committed non-cash payroll line is
+ * required independently of this reference: it proves the configured tax
+ * representation was processed without paying the benefit value as cash.
  */
 export async function recordExternalDelivery(query: {
   readonly orgId: string;
@@ -1226,6 +1284,10 @@ export async function recordExternalDelivery(query: {
   return withOrgTransaction(orgId, async () => {
     await requirePayrollManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
+    const linkage = (await db.execute<{ pay_run_document_id: string | null }>(sql`
+      select pay_run_document_id from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId}
+    `)).rows[0];
+    await lockAwardRun(db, orgId, awardId, linkage?.pay_run_document_id ?? null);
     const locked = (
       await db.execute<Record<string, unknown>>(sql`
         select ${AWARD_COLUMNS} from hrm_benefit_awards
@@ -1240,6 +1302,11 @@ export async function recordExternalDelivery(query: {
       );
     }
     const before = toAward(locked);
+    if (before.status === "delivered") {
+      await requireAwardEntityScope(db, orgId, actorId, before.programId);
+      if (before.externalRef === externalRef) return before;
+      throw new BenefitsError("REFUSED", "this provider fulfillment already has a different reference — preserve its recorded evidence and issue an adjusting award for a correction");
+    }
     if (before.status !== "queued") {
       throw new BenefitsError(
         "BAD_STATE",
@@ -1254,12 +1321,15 @@ export async function recordExternalDelivery(query: {
         `program ${program.code} delivers through payroll — create a pay-run adjustment, not an external reference`,
       );
     }
-    if (before.value !== "0.0000") {
-      throw new BenefitsError(
-        "REFUSED",
-        `external value ${before.value} ${before.currency} is taxable pay with no native noncash representation — an earning adjustment would pay cash on top of the provider, so this award remains undelivered; void it and create a cash reward under a payroll program if cash is intended`,
-      );
+    if (before.payRunDocumentId === null || before.payRunAdjustmentId === null || program.payComponentId === null) {
+      throw new BenefitsError("REFUSED", "this provider benefit has no native non-cash payroll linkage — add it to an editable pay run, calculate and commit that run before recording provider fulfillment");
     }
+    const employment = (await db.execute<{ worker_party_id: string }>(sql`
+      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${before.employmentId}
+    `)).rows[0];
+    if (!employment) throw new BenefitsError("NOT_FOUND", "the benefit employment is unavailable — reload the award and resolve its employment before recording fulfillment");
+    await requireCommittedAwardAdjustment(db, orgId, program.code, before, employment.worker_party_id,
+      program.payComponentId, before.payRunDocumentId, before.payRunAdjustmentId);
     const updated = requireOneRow(
       (
         await db.execute<Record<string, unknown>>(sql`
@@ -1300,9 +1370,10 @@ export async function voidBenefitAward(query: {
   if (reason.length === 0) {
     throw new BenefitsError("INVALID_INPUT", "voiding an award needs a reason — it is the row's evidence");
   }
-  return withOrgTransaction(orgId, async () => {
+  return withOrgTransaction(orgId, () => withTransactionSavepoint(db, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
+    await lockFlowSubjectDecision(orgId, BENEFIT_AWARD_SUBJECT_KIND, awardId);
     await lockAwardRun(db, orgId, awardId);
     const locked = (
       await db.execute<Record<string, unknown>>(sql`
@@ -1320,6 +1391,9 @@ export async function voidBenefitAward(query: {
     const before = toAward(locked);
     if (before.status === "delivered") {
       throw new BenefitsError("BAD_STATE", "award is delivered history — issue an adjusting award instead of voiding it");
+    }
+    if (before.status === "rejected") {
+      throw new BenefitsError("BAD_STATE", "The reward was rejected by its workflow — preserve the decision and create a new reward for a new request.");
     }
     if (before.status === "voided") {
       throw new BenefitsError("BAD_STATE", "award is voided history — issue a new award with a new source reference instead of changing it");
@@ -1364,8 +1438,12 @@ export async function voidBenefitAward(query: {
       }
     }
     const after = toAward(updated);
+    if (before.status === "pending" && before.flowRunId !== null) {
+      const { cancelDispatchRuns } = await import("../../flows/dispatch-result.ts");
+      await cancelDispatchRuns(orgId, (await awardSubmissionRuns(orgId, awardId)).map(run => run.id), { actorId });
+    }
     await appendAwardEvent(db, orgId, actorId, awardId, "voided", reason);
     await auditAwardWrite(db, orgId, actorId, awardId, "voided", before, after, reason);
     return after;
-  });
+  }));
 }

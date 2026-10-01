@@ -497,6 +497,11 @@ export async function applyRunLineAdjustments(
      order by c.sequence, a.created_at
   `));
   for (const adj of adjustments.rows) {
+    // A queued provider valuation must not lose its non-cash representation
+    // when its component is retired before this run is calculated.
+    if (adj.payment_kind === "non_cash" && adj.is_active !== true) {
+      throw new PayrollError(`non-cash payroll component "${String(adj.name)}" is inactive — re-enable this component in Payroll components, then recalculate the editable run`);
+    }
     if (adj.replace_component) {
       for (let i = lines.length - 1; i >= 0; i--) {
         if (lines[i]!.componentId === adj.id) lines.splice(i, 1);

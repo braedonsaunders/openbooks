@@ -178,7 +178,7 @@ test('independent Talent destinations remain discoverable when their parent work
 })
 
 
-test('Benefits enrollment owns windows in the main menu while local access and deliberate shortcuts survive', async () => {
+test('Enrollment windows are accessible within Enrollments without a separate menu or local tab', async () => {
   reset()
   const translate = (key: string) => translator(`nav.${key}` as never)
   const has = (key: string) => translator.has(`nav.${key}` as never)
@@ -188,13 +188,7 @@ test('Benefits enrollment owns windows in the main menu while local access and d
   assert.ok(benefits.some((item) => item.href === '/hrm/benefits?view=enrolments'))
   assert.ok(!benefits.some((item) => item.href === windowsHref))
   const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['hrm.benefits.read']) } as Parameters<typeof resolveLocalNavigation>[0])
-  assert.ok(local.groups.flat().some((tab) => tab.href === windowsHref), 'authorized enrollment work retains window access')
-  const windows = config.groups.find((group) => group.id === 'hrm')!.items.find((item) => item.kind === 'module' && item.moduleKey === 'hrm-benefits-windows')!
-  if (windows.kind !== 'module') throw new Error('Expected the registered enrollment-window destination')
-  windows.placement = 'custom'
-  windows.label = 'Annual enrollment'
-  groups = await resolveNav('company-one', () => true, [], translate, has)
-  assert.ok(groups.flatMap((group) => group.items).some((item) => item.href === windowsHref && item.label === 'Annual enrollment'))
+  assert.ok(!local.groups.flat().some((tab) => tab.href === windowsHref), 'windows are managed from enrollment instead of a separate page tab')
   const permissions = new Set(['hrm.self.read'])
   groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(permissions, key), [], translate, has)
   assert.ok(!groups.flatMap((group) => group.items).some((item) => item.href.startsWith('/hrm/benefits')), 'shortcuts cannot bypass authorization')

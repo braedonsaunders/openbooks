@@ -92,7 +92,8 @@ export function renderCell(
 }
 
 /** Shared child-tab composition for standalone setup and rehomed workspaces. */
-export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, canManage, allowedSubsidiaryIds, features, t }: {
+export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, canManage, allowedSubsidiaryIds, features, t, mutationBasePath }: {
+  mutationBasePath?: string
   entity: SetupEntity
   row: Record<string, unknown> | null
   orgId: string
@@ -114,7 +115,7 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
         label: t(`entities.${child.key}.title`),
         content: pickString(sp.setupTab) === child.key ? (
           <SetupEntitySection
-            entity={{ ...child, columns: child.columns.filter((column) => column.key !== binding.fieldKey) }}
+            entity={{ ...child, ...(entity.readOnly ? { readOnly: true } : {}), columns: child.columns.filter((column) => column.key !== binding.fieldKey) }}
             orgId={orgId}
             actorId={actorId}
             searchParams={sp}
@@ -125,6 +126,7 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
             rowParam="childRow"
             paramPrefix="child"
             stacked
+            mutationBasePath={mutationBasePath}
           />
         ) : null,
       }
@@ -146,6 +148,8 @@ export async function SetupEntitySection({
   parent,
   paramPrefix,
   stacked = false,
+  drawerOnly = false,
+  mutationBasePath,
 }: {
   entity: SetupEntity;
   /** Server-side presentation slot; list querying and drawers remain shared. */
@@ -179,6 +183,9 @@ export async function SetupEntitySection({
   /** Child search, pagination and inactive state must not change the parent list. */
   paramPrefix?: string
   stacked?: boolean
+  /** Compose the shared record editor under a host-owned unified list. */
+  drawerOnly?: boolean
+  mutationBasePath?: string
 }) {
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const gated = setupEntityForFeatureState(baseEntity, {
@@ -246,11 +253,11 @@ export async function SetupEntitySection({
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
 
   const [rowsRes, countRes, refOptions] = await Promise.all([
-    db.execute(sql`
+    drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-    db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
+    drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
     loadRefOptions(entity, orgId, allowedSubsidiaryIds),
   ])
   const rows = rowsRes.rows;
@@ -279,7 +286,7 @@ export async function SetupEntitySection({
   const features = children.length ? await resolvedFeatureState(orgId) : {}
   const childTabs = setupRecordTabs({
     entity, row: open?.row ?? null, orgId, actorId, sp, basePath,
-    canManage, allowedSubsidiaryIds, features, t,
+    canManage, allowedSubsidiaryIds, features, t, mutationBasePath,
   })
 
   const rateBookDrawerData = open && entity.key === 'item-rate-books'
@@ -379,7 +386,7 @@ export async function SetupEntitySection({
 
   return (
     <div className="space-y-4">
-      {!hideHeader ? (
+      {!hideHeader && !drawerOnly ? (
         <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -406,6 +413,7 @@ export async function SetupEntitySection({
       </div>
       ) : null}
 
+      {!drawerOnly ? <>
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t('searchPlaceholder')} paramKey={qParam} pageParamKey={pageParam} />
         {(entity.filters ?? []).map((filter) => (
@@ -469,6 +477,8 @@ export async function SetupEntitySection({
         <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} pageParamKey={pageParam} />
       ) : null}
 
+      </> : null}
+
       {open && canWriteEntity && entity.key === 'item-rate-books' && rateBookDrawerData ? (
         <RateBookDrawer
           row={open.row as Record<string, unknown> | null}
@@ -507,6 +517,7 @@ export async function SetupEntitySection({
           fixedValues={parentScope?.fixedValues}
           stacked={stacked}
           nestedTabs={childTabs}
+          mutationBasePath={mutationBasePath}
         />
       ) : null}
     </div>

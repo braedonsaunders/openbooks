@@ -11,6 +11,7 @@ import { type PayrollDeductionTreatment } from "./packs.ts";
 import { applyDeductionProtection, protectedBase, protectionConverged, protectionNeedsIteration, PROTECTION_MAX_PASSES, settleProtectionOscillation, totalShortfall, type DeductionShortfall, type ProtectionBase } from "./limits.ts";
 import { protectionTreatmentIterates } from "./treatment-bases.ts";
 import { type Line } from "./run-stub-records.ts";
+import { cashGrossEarnings } from "./non-cash-earnings.ts";
 /**
  * Deduction protection over the CURRENT line set, driven to settlement by
  * the caller's statutory pass: fast path, single re-cap, or the alternating
@@ -42,6 +43,7 @@ export async function settleDeductionProtection(args: {
       amount: l.amount,
       includeInDisposableEarnings: l.includeInDisposableEarnings ?? true,
       accrualOnly: l.accrualOnly,
+      paymentKind: l.paymentKind,
       protectedDeduction: protectedLines.includes(l),
     }));
     const unprotected = sum(lines
@@ -53,7 +55,7 @@ export async function settleDeductionProtection(args: {
     const credits = sum(lines
       .filter((l) => l.kind === "credit" && !l.accrualOnly)
       .map((l) => l.amount));
-    const available = add(add(gross, neg(unprotected)), credits);
+    const available = add(add(cashGrossEarnings(gross, lines), neg(unprotected)), credits);
     return applyDeductionProtection(
       protectedLines.map((l, index) => ({
         key: String(index),

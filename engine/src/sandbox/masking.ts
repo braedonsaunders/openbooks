@@ -191,6 +191,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_benefit_awards", columnName: "evidence", transform: "null_out" },
   { tableName: "hrm_benefit_awards", columnName: "program_snapshot", transform: "null_out" },
   { tableName: "hrm_benefit_awards", columnName: "source_snapshot", transform: "null_out" },
+  { tableName: "hrm_benefit_awards", columnName: "decision_snapshot", transform: "null_out" },
   { tableName: "hrm_benefit_awards", columnName: "external_ref", transform: "hash" },
   { tableName: "hrm_benefit_awards", columnName: "source_key", transform: "hash" },
   { tableName: "hrm_benefit_awards", columnName: "void_reason", transform: "redact" },

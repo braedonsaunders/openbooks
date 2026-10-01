@@ -10,6 +10,7 @@ import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { releaseCompCycleDecision } from "./compensation/cycles.ts";
 import { releaseHrmChangeRequest } from "./change-requests.ts";
+import { releaseBenefitAwardApproval } from "./benefits/awards.ts";
 import { releaseLeaveRequest } from "./leave.ts";
 
 /** Minimal release guard: the owning org of a compensation cycle. */
@@ -79,4 +80,9 @@ export async function releaseLeaveRequestApproval(args: ReleaseArgs): Promise<vo
     outcome,
     comment: args.comment ?? null,
   });
+}
+
+/** Release a Benefits reward only after the native gate aggregate resolves. */
+export async function releaseBenefitAwardFlowApproval(args: ReleaseArgs): Promise<void> {
+  await releaseBenefitAwardApproval({ orgId: args.ctx.orgId, actorId: args.ctx.userId ?? "", awardId: args.subjectId, outcome: args.outcome, comment: args.comment });
 }

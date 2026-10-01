@@ -10,6 +10,7 @@ export interface MyBenefitAwardRow {
   periodLabel: string
   valueLabel: string
   statusLabel: string
+  statusVariant: 'success' | 'warning' | 'outline' | 'destructive'
 }
 
 export interface MyBenefitAwardsData {
@@ -35,13 +36,18 @@ export async function loadMyBenefitAwards(authz: Authz): Promise<MyBenefitAwards
       programName: award.programName,
       periodLabel: award.periodTo ? `${award.periodFrom} – ${award.periodTo}` : award.periodFrom,
       valueLabel: money(award.value, { currency: award.currency }),
-      statusLabel: award.deliveryState === 'reversed' ? t('me.benefits.awards.reversedStatus') : t(`portfolio.awardStatus.${award.status}`),
+      statusLabel: award.deliveryState === 'reversed' ? t('me.benefits.awards.reversedStatus')
+        : award.status === 'delivered' ? award.externalRef
+          ? `${t('portfolio.awardStatus.delivered')} · ${t('portfolio.delivery.external')}`
+          : t('portfolio.payrollDelivery')
+        : t(`portfolio.awardStatus.${award.status}`),
+      statusVariant: award.status === 'rejected' ? 'destructive' : award.deliveryState === 'reversed' ? 'outline' : award.status === 'delivered' ? 'success' : 'warning',
     })
     return {
       awardsText, awardsRefusal: null,
       paidAwards: statements.flatMap((statement) => statement.paidAwards.map(project)),
       pendingAwards: statements.flatMap((statement) => statement.pendingAwards.map(project)),
-      reversedAwards: statements.flatMap((statement) => statement.reversedAwards.map(project)),
+      reversedAwards: statements.flatMap((statement) => [...statement.reversedAwards, ...statement.rejectedAwards].map(project)),
     }
   } catch (error) {
     return { awardsText, paidAwards: [], pendingAwards: [], reversedAwards: [], awardsRefusal: {

@@ -457,7 +457,9 @@
       "employee": "Empleado",
       "tax": "Impuesto",
       "lines": "Líneas de nómina",
-      "trace": "traza {engine}"
+      "trace": "traza {engine}",
+      "nonCash": "Beneficios en especie",
+      "cashGross": "Remuneración en efectivo"
     },
     "submitApproval": "Enviar a aprobación",
     "approvalSubmitted": "Enviado a aprobación con el paquete de evidencia",

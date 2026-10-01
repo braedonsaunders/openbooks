@@ -330,7 +330,7 @@ async function loadPayStubValues(
   const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
-    select l.kind, l.description, l.hours, l.rate, l.amount
+    select l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind
       from pay_stub_lines l
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
@@ -378,6 +378,7 @@ async function loadPayStubValues(
     .filter((l) => l.kind === kind)
     .map((l) => ({
       description: l.description ?? '',
+      non_cash: l.payment_kind === 'non_cash',
       hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
       rate: l.rate != null ? money(String(l.rate)) : '',
       amount: money(String(l.amount ?? '0')),
@@ -385,6 +386,8 @@ async function loadPayStubValues(
   const deductionsTotal = sum(
     lines.rows.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
   )
+
+  const nonCash = sum(lines.rows.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
 
   const values: Record<string, unknown> = {
     employee_name: stub.employee_name ?? '',
@@ -398,6 +401,9 @@ async function loadPayStubValues(
     province: stub.province ?? '',
     currency: stub.currency_code ?? '',
     gross: money(String(stub.gross ?? '0')),
+    non_cash_earnings: money(nonCash),
+    cash_gross: money(add(String(stub.gross ?? '0'), neg(nonCash))),
+    has_non_cash_earnings: !isZero(nonCash),
     total_deductions: money(deductionsTotal),
     net_pay: money(String(stub.net_pay ?? '0')),
     vacation_accrued: money(String(stub.vacation_accrued ?? '0')),
@@ -448,7 +454,7 @@ async function loadPayrollChequeValues(
   const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
-    select l.kind, l.description, l.hours, l.rate, l.amount
+    select l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind
       from pay_stub_lines l
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
@@ -457,6 +463,7 @@ async function loadPayrollChequeValues(
     .filter((l) => l.kind === kind)
     .map((l) => ({
       description: l.description ?? '',
+      non_cash: l.payment_kind === 'non_cash',
       hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
       rate: l.rate != null ? money(String(l.rate)) : '',
       amount: money(String(l.amount ?? '0')),
@@ -473,6 +480,8 @@ async function loadPayrollChequeValues(
   ].filter(Boolean).join(', ')
 
   const net = String(stub.net_pay ?? '0')
+  const nonCash = sum(lines.rows.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
+
   const values: Record<string, unknown> = {
     cheque_number: stub.cheque_number ?? '',
     employee_name: stub.employee_name ?? '',
@@ -490,6 +499,9 @@ async function loadPayrollChequeValues(
     period_start: fmtDate(stub.period_start, locale),
     period_end: fmtDate(stub.period_end, locale),
     gross: money(String(stub.gross ?? '0')),
+    non_cash_earnings: money(nonCash),
+    cash_gross: money(add(String(stub.gross ?? '0'), neg(nonCash))),
+    has_non_cash_earnings: !isZero(nonCash),
     total_deductions: money(deductionsTotal),
     net_pay: money(net),
     org_name: org.name,

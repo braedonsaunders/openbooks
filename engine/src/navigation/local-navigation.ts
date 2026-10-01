@@ -97,7 +97,6 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/hrm/benefits', iconKey: 'gift', ns: 'hrm', key: 'benefits.workspace.tabs.overview', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=programs', iconKey: 'heart-handshake', menuKey: 'hrm-benefits-programs', ns: 'hrm', key: 'benefits.workspace.tabs.programs', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=enrolments', iconKey: 'user-check', menuKey: 'hrm-benefits-enrolments', ns: 'hrm', key: 'benefits.workspace.tabs.enrollments', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=windows', iconKey: 'calendar-range', menuKey: 'hrm-benefits-windows', menuParent: 'hrm-benefits-enrolments', ns: 'hrm', key: 'benefits.windowsTitle', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=rewards', iconKey: 'award', menuKey: 'hrm-benefits-rewards', ns: 'hrm', key: 'benefits.workspace.tabs.rewards', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=incentives', iconKey: 'sparkles', menuKey: 'hrm-benefits-incentives', ns: 'hrm', key: 'benefits.workspace.tabs.incentives', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=payouts', iconKey: 'banknote-arrow-up', menuKey: 'hrm-benefits-payouts', ns: 'hrm', key: 'benefits.workspace.tabs.payouts', permission: 'hrm.benefits.read' },

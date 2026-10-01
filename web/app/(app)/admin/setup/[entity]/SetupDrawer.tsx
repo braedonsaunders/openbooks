@@ -24,7 +24,7 @@ import {
 } from '@openbooks/ui'
 import { setupFieldOptions, setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
 import { confirmDialog } from '../../../../../lib/confirm'
-import { SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
+import { coerceField, SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { countryOptions } from '../../../../../lib/countries'
 
@@ -83,6 +83,10 @@ function initialValue(field: SetupField, row: Record<string, unknown> | null): u
       return [] as string[]
     case 'stringArray':
       return Array.isArray(raw) ? raw.map(String) : ([] as string[])
+    case 'object':
+      return raw == null ? (row ? null : {}) : raw
+    case 'objectArray':
+      return raw == null ? (row ? null : []) : raw
     case 'json':
       return raw == null ? '' : JSON.stringify(raw, null, 2)
     default:
@@ -101,6 +105,7 @@ export function SetupDrawer({
   nestedTab,
   nestedTabs = [],
   stacked = false,
+  mutationBasePath = '/api/admin/setup',
 }: {
   entity: SetupEntity
   row: Record<string, unknown> | null
@@ -112,6 +117,8 @@ export function SetupDrawer({
   nestedTab?: { key: string; label: string; content: ReactNode }
   nestedTabs?: { key: string; label: string; content: ReactNode }[]
   stacked?: boolean
+  /** Host-specific authorized adapter, sharing native setup commands. */
+  mutationBasePath?: string
 }) {
   const t = useTranslations('admin.setup')
   const tCommon = useTranslations('common')
@@ -177,6 +184,10 @@ export function SetupDrawer({
 
   function validate(): string | null {
     for (const f of visibleFields) {
+      if (f.kind === 'object' || f.kind === 'objectArray') {
+        const result = coerceField(f, form[f.key])
+        if ('error' in result) return result.error
+      }
       if (!f.required || f.kind === 'boolean' || f.kind === 'multiref') continue
       if (!creating && f.lockedOnEdit) continue
       const v = form[f.key]
@@ -238,7 +249,7 @@ export function SetupDrawer({
       // silently unguarded.
       const commanded = entity.command
       if ((creating || commanded) && !createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
-      const res = await fetch(commanded ? `/api/admin/setup/${entity.key}/command` : `/api/admin/setup/${entity.key}`, {
+      const res = await fetch(commanded ? `${mutationBasePath}/${entity.key}/command` : `${mutationBasePath}/${entity.key}`, {
         method: commanded ? 'POST' : creating ? 'POST' : 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -247,8 +258,8 @@ export function SetupDrawer({
         body: JSON.stringify(body),
         signal: controller.signal,
       })
-      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
         setFieldError(errorMessage(data))
         toast.error(errorMessage(data))
         return
@@ -276,11 +287,11 @@ export function SetupDrawer({
     if (!(await confirmDialog(t('confirmDelete')))) return
     setBusy(true)
     try {
-      const res = await fetch(`/api/admin/setup/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {
+      const res = await fetch(`${mutationBasePath}/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {
         method: 'DELETE',
       })
-      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
         toast.error(errorMessage(data))
         return
       }
@@ -499,7 +510,7 @@ function FieldControl({
     ? <span className="text-red-500" aria-hidden="true"> *</span>
     : null
   const full =
-    field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray'
+    field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray' || field.kind === 'object' || field.kind === 'objectArray'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
   const lockedDisplay = field.kind === 'ref'
     ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
@@ -508,7 +519,7 @@ function FieldControl({
       : value
 
   // Locked natural keys are shown read-only when editing.
-  if (locked) {
+  if (locked && field.kind !== 'object' && field.kind !== 'objectArray') {
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
@@ -517,6 +528,32 @@ function FieldControl({
         </div>
       </div>
     )
+  }
+
+  if (field.kind === 'object' || field.kind === 'objectArray') {
+    const array = field.kind === 'objectArray'
+    const validObject = (item: unknown): item is Record<string, unknown> => item !== null && typeof item === 'object' && !Array.isArray(item)
+    const entries = array ? (value == null ? [] : Array.isArray(value) ? value : null) : value == null ? [{}] : [value]
+    if (entries === null || entries.some((entry) => !validObject(entry))) {
+      return <div className={wrap}><Label help={help}>{label}</Label><p role="alert" className="text-sm text-red-600">{t('validation.invalidStructuredValue', { field: label })}</p></div>
+    }
+    function changeEntry(index: number, childKey: string, childValue: unknown) {
+      const next = entries!.map((entry, position) => position === index ? { ...entry as Record<string, unknown>, [childKey]: childValue } : entry)
+      onChange(array ? next : next[0])
+    }
+    return <div className={wrap}>
+      <Label help={help}>{label}{requiredMark}</Label>
+      <div className="space-y-3">
+        {entries.map((entry, index) => <fieldset key={index} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          {array ? <legend className="px-1 text-sm font-medium">{t('structuredFields.row', { number: index + 1 })}</legend> : null}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {(field.fields ?? []).filter((child) => setupFieldVisible(child, entry as Record<string, unknown>)).map((child) => <FieldControl key={child.key} field={child} value={(entry as Record<string, unknown>)[child.key]} onChange={(next) => changeEntry(index, child.key, next)} creating={creating} forceLocked={Boolean(locked)} refOptions={child.ref === 'countries' ? countries : []} formValues={entry as Record<string, unknown>} t={t} />)}
+          </div>
+          {array && !locked ? <div className="mt-3 flex justify-end"><Button type="button" variant="outline" size="sm" onClick={() => onChange(entries.filter((_, position) => position !== index))}><Trash2 size={14} />{t('structuredFields.removeRow')}</Button></div> : null}
+        </fieldset>)}
+        {array && !locked ? <Button type="button" variant="outline" size="sm" onClick={() => onChange([...entries, Object.fromEntries((field.fields ?? []).map((child) => [child.key, child.defaultValue ?? (child.kind === 'boolean' ? false : child.kind === 'stringArray' ? [] : '')]))])}><Plus size={14} />{t('structuredFields.addRow')}</Button> : null}
+      </div>
+    </div>
   }
 
   if (field.kind === 'boolean') {
@@ -636,7 +673,7 @@ function FieldControl({
       <div className={wrap}>
         <Label help={help}>{label}{requiredMark}</Label>
         <Select aria-label={label} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
-          {!field.required ? <option value="">—</option> : null}
+          {!field.required ? <option value="">—</option> : value === undefined || value === null || value === '' ? <option value="" disabled>{t('selectPlaceholder')}</option> : null}
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {setupOptionLabel(o, t)}

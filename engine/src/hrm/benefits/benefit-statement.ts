@@ -56,7 +56,7 @@ export interface StatementStub {
   readonly lines: readonly StatementStubLine[];
 }
 
-export interface StatementAward extends BenefitAward {
+export interface StatementAward extends Omit<BenefitAward, "flowRunId" | "submittedBy" | "submittedAt" | "decisionSnapshot" | "approvalHref" | "payrollProcessed"> {
   /** The employer-facing policy title frozen when this award was recorded. */
   readonly programName: string;
   readonly deliveryState: "pending" | "delivered" | "reversed";
@@ -69,6 +69,8 @@ export interface BenefitStatement {
   readonly paidAwards: readonly StatementAward[];
   /** Draft/pending/approved/queued awards: not yet delivered to payroll. */
   readonly pendingAwards: readonly StatementAward[];
+  /** Rejected requests are historical decisions, never payable obligations. */
+  readonly rejectedAwards: readonly StatementAward[];
   /** Historical deliveries reversed by a native pay-run void; never counted as paid. */
   readonly reversedAwards: readonly StatementAward[];
   /** Delivered totals grouped by currency (mixed currencies never total). */
@@ -214,7 +216,8 @@ async function employmentStatement(
   const awards = await readOwnAwards(orgId, employmentId);
   const paidAwards = awards.filter((a) => a.status === "delivered" && a.deliveryState === "delivered");
   const reversedAwards = awards.filter((a) => a.deliveryState === "reversed");
-  const pendingAwards = awards.filter((a) => a.status !== "delivered" && a.status !== "voided");
+  const pendingAwards = awards.filter((a) => ["draft", "pending", "approved", "queued"].includes(a.status));
+  const rejectedAwards = awards.filter((a) => a.status === "rejected");
   const totals = new Map<string, bigint>();
   for (const award of paidAwards) {
     totals.set(award.currency, (totals.get(award.currency) ?? 0n) + toUnits(award.value));
@@ -259,7 +262,7 @@ async function employmentStatement(
       })),
     });
   }
-  return { employmentId, enrollments, paidAwards, pendingAwards, reversedAwards, paidTotals, payrollRecords };
+  return { employmentId, enrollments, paidAwards, pendingAwards, rejectedAwards, reversedAwards, paidTotals, payrollRecords };
 }
 
 /** One employment's statement (the employee themself, or a manager with scope). */

@@ -83,8 +83,9 @@ const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(valu
  * SECURITY: table and column identifiers are taken ONLY from the registry
  * (never from the request body) and interpolated with sql.raw; every value is a
  * bound parameter. The request body cannot introduce a column name. Callers
- * must already hold admin.setup.manage — the route and the tool gate both
- * check it before reaching here.
+ * authorize their configuration surface before reaching here: generic
+ * setup routes and tools require admin.setup.manage, while the Benefits
+ * adapter requires hrm.benefits.manage and accepts only plans and tiers.
  */
 
 /** The acting admin: org, user id (stamped on rows + audit), and permissions
@@ -113,7 +114,7 @@ export { resolveEntity as resolveSetupEntity }
  * (never from the request body) and interpolated with sql.raw; every value is a
  * bound parameter. The request body cannot introduce a column name.
  *
- * Gated by admin.setup.manage. Org-scoped (except the shared `currencies`
+ * Authorized by the calling configuration surface. Org-scoped (except the shared `currencies`
  * reference table) and audited to audit_log, mirroring the settings route.
  */
 
@@ -770,7 +771,7 @@ export async function validateEntityIntegrity(
     // treatments the scope declares rather than surfacing a constraint name.
     const currentComponent = rowId
       ? (((await executor.execute(sql`
-          select c.country, c.tax_treatment, c.kind, c.non_periodic,
+          select c.country, c.tax_treatment, c.kind, c.non_periodic, c.payment_kind, c.non_cash_account_id, c.system_key,
                  ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
             from pay_components c
             join pay_component_earning_classifications ec
@@ -794,6 +795,20 @@ export async function validateEntityIntegrity(
       ? (body.statutoryExemptionCategory ? String(body.statutoryExemptionCategory) : null)
       : ((currentComponent?.statutory_exemption_category as string | null) ?? null)
     const componentKind = String(body.kind ?? currentComponent?.kind ?? '')
+    const paymentKind = String(body.paymentKind ?? currentComponent?.payment_kind ?? 'cash')
+    const nonCashAccount = body.nonCashAccountId === undefined
+      ? currentComponent?.non_cash_account_id ?? null : body.nonCashAccountId || null
+    if (!['cash', 'non_cash'].includes(paymentKind)) return 'Choose cash or non-cash as the earning payment representation'
+    if (paymentKind === 'non_cash') {
+      if (componentKind !== 'earning' || currentComponent?.system_key != null) return 'Non-cash representation requires a user earning component; statutory contributions and deductions cannot create non-cash earnings'
+      if (!nonCashAccount || !isUuid(String(nonCashAccount))) return 'Choose a prepaid asset or provider clearing liability for the non-cash earning'
+      const account = (await executor.execute<{ type: string }>(sql`
+        select type from accounts where org_id = ${orgId} and id = ${String(nonCashAccount)} and is_active and not is_summary
+      `)).rows[0]
+      if (!account || !['asset_current_other', 'asset_other', 'liability_current_other', 'liability_long_term'].includes(account.type)) return 'The non-cash account must be an active posting prepaid asset or provider clearing liability; an expense account would count the benefit twice'
+    } else if (nonCashAccount !== null) {
+      return 'Cash earnings must have no non-cash clearing account; clear the account before saving cash representation'
+    }
     const nonPeriodic = body.nonPeriodic === undefined
       ? currentComponent?.non_periodic === true
       : coerceBoolean(body.nonPeriodic)
@@ -1281,7 +1296,7 @@ export async function validateEntityIntegrity(
     if (rowId) {
       const current = await executor.execute(sql`
         select family, currency, frequency, period_basis as "periodBasis",
-               legal_entity_id as "legalEntityId", pay_component_id as "payComponentId"
+               legal_entity_id as "legalEntityId", pay_component_id as "payComponentId", delivery_method as "deliveryMethod"
           from hrm_benefit_programs where id = ${rowId} and org_id = ${orgId}
       `)
       if (!current.rows[0]) return 'Benefit program not found'
@@ -1294,15 +1309,17 @@ export async function validateEntityIntegrity(
     const refs = await executor.execute(sql`
       select
         ${legalEntity ? sql`exists(select 1 from subsidiaries where id = ${legalEntity} and org_id = ${orgId} and is_active and not is_elimination)` : sql`true`} as entity_ok,
-        ${component ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${component} and org_id = ${orgId})` : sql`null`} as component
+        ${component ? sql`(select json_build_object('kind', kind, 'active', is_active, 'paymentKind', payment_kind) from pay_components where id = ${component} and org_id = ${orgId})` : sql`null`} as component
     `)
     if (!refs.rows[0]?.entity_ok) return 'The responsible legal entity is not visible in this organization'
-    const componentRow = refs.rows[0]?.component as { kind?: string | null; active?: boolean } | null
+    const componentRow = refs.rows[0]?.component as { kind?: string | null; active?: boolean; paymentKind?: string } | null
+    if (!component) return 'Link a cash earning for payroll delivery or a non-cash earning for provider delivery before saving the program'
     if (component && !componentRow?.kind) return 'The program pay component is not visible in this organization'
     if (component && componentRow?.active !== true) return 'The program pay component is inactive — reactivate it or link its replacement'
     if (component && componentRow?.kind !== 'earning') {
       return 'The program component must be kind earning so the value reaches pay with its established tax treatment'
     }
+    if (componentRow?.paymentKind !== (values.deliveryMethod === 'external' ? 'non_cash' : 'cash')) return 'Choose a cash earning for payroll delivery or a non-cash earning for provider delivery; a provider benefit must not also pay cash'
   }
   if (entity.key === 'benefit-program-scopes') {
     let values = body

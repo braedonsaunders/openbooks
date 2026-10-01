@@ -1,3 +1,5 @@
+import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
+import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import { FINANCIAL_CHANGE_SUBJECT_KIND, financialChangeSubjectProfile, financialChangesFlowAdapter } from "./financial-changes-adapter.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
@@ -94,6 +96,7 @@ import { db } from "../platform/db.ts";
 const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
+  if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
   if (subjectKind === FINANCIAL_CHANGE_SUBJECT_KIND) return financialChangesFlowAdapter;
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
   if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
@@ -144,6 +147,7 @@ export function handlerReleasedSubjectKinds(): string[] {
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
+    benefitAwardSubjectProfile,
     financialChangeSubjectProfile,
     bankAccountSubjectProfile,
     budgetScenarioSubjectProfile,

@@ -457,7 +457,9 @@
       "employee": "従業員",
       "tax": "税",
       "lines": "給与明細行",
-      "trace": "{engine} トレース"
+      "trace": "{engine} トレース",
+      "nonCash": "現物給付",
+      "cashGross": "現金給与"
     },
     "submitApproval": "承認に提出",
     "approvalSubmitted": "証跡パッケージとともに承認に送付しました",

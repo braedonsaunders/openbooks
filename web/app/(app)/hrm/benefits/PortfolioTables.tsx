@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
 import { PreparedPagedTable, type PreparedTableRow } from '../../../../components/prepared-paged-table'
-import type { PortfolioAwardRow, PortfolioProgramRow } from '../../../../lib/hrm/benefits-workspace'
+import type { PortfolioAwardRow } from '../../../../lib/hrm/benefits-workspace'
 
 /**
  * Portfolio operational lists over the prepared list sources: the shared
@@ -12,11 +12,12 @@ import type { PortfolioAwardRow, PortfolioProgramRow } from '../../../../lib/hrm
  * silent first page pretending to be everything.
  */
 
-import type { AwardTableText, ProgramTableText } from '../../../../lib/hrm/benefits-portfolio'
+import { ListFilterSelect } from '../../../../components/list-filter-select'
+import type { UnifiedProgramRow, AwardTableText, ProgramTableText } from '../../../../lib/hrm/benefits-portfolio'
 
 export type { AwardTableText, ProgramTableText }
 
-function programCells(row: PortfolioProgramRow): PreparedTableRow {
+function programCells(row: UnifiedProgramRow): PreparedTableRow {
   return {
     id: row.id,
     searchText: `${row.code} ${row.name} ${row.familyLabel} ${row.statusLabel}`,
@@ -91,16 +92,19 @@ export function ProgramPortfolioTable({
   text,
   total,
   truncated,
+  typeFilter,
 }: {
-  rows: PortfolioProgramRow[]
+  rows: UnifiedProgramRow[]
   text: ProgramTableText
   total: number
   truncated: boolean
+  typeFilter?: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
 }) {
   return (
     <PreparedPagedTable
       source="hrm_benefit_programs"
       rows={rows.map(programCells)}
+      toolbarAfter={typeFilter ? <ListFilterSelect basePath="/hrm/benefits" currentParams={typeFilter.currentParams} paramKey="type" label={typeFilter.label} allLabel={typeFilter.allLabel} options={typeFilter.options} /> : undefined}
       columns={[
         { key: 'program', header: text.program },
         { key: 'family', header: text.family },

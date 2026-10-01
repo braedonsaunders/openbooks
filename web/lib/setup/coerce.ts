@@ -178,6 +178,47 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       // filter columns "empty" is a real statement (everyone qualifies).
       return { column, value: field.arrayStorage === 'text' ? clean : JSON.stringify(clean) }
     }
+    case 'zonedDateTime': {
+      if (!present) return { column, value: null }
+      const value = typeof raw === 'string' ? raw : ''
+      const parts = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/.exec(value)
+      if (!parts || !isIsoCalendarDate(parts[1]!) || Number(parts[2]) > 23 || Number(parts[3]) > 59 || Number(parts[4]) > 59 || !Number.isFinite(Date.parse(value))) {
+        return { error: `${field.key} must be an ISO timestamp with an explicit offset, for example 2026-10-01T09:00:00-04:00` }
+      }
+      return { column, value }
+    }
+    case 'object':
+    case 'objectArray': {
+      if (!present) return { column, value: null }
+      let parsed = raw
+      if (typeof raw === 'string') {
+        try { parsed = JSON.parse(raw) } catch { return { error: `${field.key} must contain structured values` } }
+      }
+      const array = field.kind === 'objectArray'
+      if (array && !Array.isArray(parsed)) return { error: `${field.key} must be a list of records` }
+      const entries = array ? parsed as unknown[] : [parsed]
+      const values: Record<string, unknown>[] = []
+      for (const [index, entry] of entries.entries()) {
+        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return { error: `${field.key}${array ? ` row ${index + 1}` : ''} must be a record` }
+        // Retain unrelated stored keys; editing a named control does not erase
+        // other domain evidence carried by the same JSON object.
+        const object = entry as Record<string, unknown>
+        const value = { ...object }
+        for (const child of field.fields ?? []) {
+          if (!setupFieldVisible(child, object) || object[child.key] === undefined) {
+            if (child.required && setupFieldVisible(child, object)) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} is required` }
+            continue
+          }
+          if (['text', 'textarea', 'zonedDateTime'].includes(child.kind) && typeof object[child.key] !== 'string') return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} must be text` }
+          const result = coerceField(child, object[child.key])
+          if ('error' in result) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}: ${result.error}` }
+          value[child.key] = (child.kind === 'object' || child.kind === 'objectArray' || (child.kind === 'stringArray' && child.arrayStorage !== 'text')) && typeof result.value === 'string' ? JSON.parse(result.value) : result.value
+        }
+        values.push(value)
+      }
+      // JSON text is one JSONB parameter; a driver array would become a PostgreSQL array literal.
+      return { column, value: JSON.stringify(array ? values : values[0]) }
+    }
     case 'json': {
       if (!present) return { column, value: null }
       if (typeof raw === 'object') return { column, value: raw }
@@ -196,6 +237,25 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       return { column, value: String(raw) }
     }
   }
+}
+
+/** Decode structured transfer cells before domain integrity checks consume them.
+ * The same coercer validates the shape; decoding retains the supplied keys and
+ * values instead of adding defaults or substituting the coerced storage text. */
+export function decodeStructuredSetupValues(
+  entity: SetupEntity,
+  body: Record<string, unknown>,
+): { body: Record<string, unknown> } | { error: string } {
+  const decoded = { ...body }
+  for (const field of entity.fields) {
+    if (field.kind !== 'object' && field.kind !== 'objectArray') continue
+    const raw = body[field.key]
+    if (raw === undefined || raw === null || raw === '') continue
+    const checked = coerceField(field, raw, setupFieldVisible(field, body))
+    if ('error' in checked) return checked
+    decoded[field.key] = typeof raw === 'string' ? JSON.parse(raw) : raw
+  }
+  return { body: decoded }
 }
 
 /** Accept booleans, and the common string/number spellings from CSV/XLSX. */

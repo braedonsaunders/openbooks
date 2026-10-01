@@ -15,7 +15,7 @@
 // no DB, and deliberately NO eval()/new Function() — untrusted designer input
 // can never reach a JavaScript runtime.
 
-import { parseExactDecimalParts } from './decimals'
+import { compareExactDecimals, parseExactDecimalParts, type ExactDecimal } from './decimals'
 import type { DefaultValueExpression, FormulaExpression, LogicRule } from './schema'
 
 /**
@@ -25,6 +25,7 @@ import type { DefaultValueExpression, FormulaExpression, LogicRule } from './sch
  * instead of a real-looking amount. The message names the cause.
  */
 export class FormulaEvaluationError extends Error {}
+export class LogicEvaluationError extends Error {}
 
 export type FieldValueMap = Record<string, unknown>
 
@@ -59,12 +60,20 @@ function isEmpty(v: unknown): boolean {
   return false
 }
 
-function coerceNumber(v: unknown): number {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
-  if (typeof v === 'boolean') return v ? 1 : 0
-  if (v === null || v === undefined || v === '') return 0
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
+function comparisonDecimal(value: unknown, label: string, emptyAsZero = true): ExactDecimal {
+  // Empty form fields retain their established zero comparison semantics.
+  // Nonempty amounts must parse exactly; invalid input cannot take the
+  // lower-value branch of a financial approval condition.
+  if (value === null || value === undefined || value === '') {
+    if (!emptyAsZero) throw new LogicEvaluationError(`${label} requires an exact decimal threshold; enter a comparison value before continuing`)
+    return { units: 0n, scale: 0 }
+  }
+  if (typeof value === 'boolean') return { units: value ? 1n : 0n, scale: 0 }
+  const decimal = typeof value === 'number' && Number.isFinite(value)
+    ? parseExactDecimalParts(String(value))
+    : typeof value === 'string' ? parseExactDecimalParts(value) : null
+  if (!decimal) throw new LogicEvaluationError(`${label} must be an exact decimal for this comparison; correct the value or condition before continuing`)
+  return decimal
 }
 
 /**
@@ -74,15 +83,21 @@ function coerceNumber(v: unknown): number {
  * false forever, so when exactly one side is a number or boolean we coerce the
  * other side before comparing. String-vs-string stays strict.
  */
-function looseEquals(a: unknown, b: unknown): boolean {
+function looseEquals(a: unknown, b: unknown, numeric = false): boolean {
+  if (numeric) {
+    const threshold = comparisonDecimal(b, 'Comparison condition', false)
+    if (isEmpty(a)) return false
+    return compareExactDecimals(comparisonDecimal(a, 'Comparison field'), threshold) === 0
+  }
   if (a === b) return true
   if (a === null || a === undefined || b === null || b === undefined) return false
   if (typeof a === 'number' || typeof b === 'number') {
-    const na =
-      typeof a === 'number' ? a : typeof a === 'string' && a.trim() !== '' ? Number(a) : NaN
-    const nb =
-      typeof b === 'number' ? b : typeof b === 'string' && b.trim() !== '' ? Number(b) : NaN
-    return Number.isFinite(na) && Number.isFinite(nb) && na === nb
+    const decimal = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
+      ? parseExactDecimalParts(String(value))
+      : typeof value === 'string' && value.trim() !== '' ? parseExactDecimalParts(value) : null
+    const na = decimal(a)
+    const nb = decimal(b)
+    return na !== null && nb !== null && compareExactDecimals(na, nb) === 0
   }
   if (typeof a === 'boolean' || typeof b === 'boolean') {
     const toBool = (v: unknown): boolean | undefined =>
@@ -120,27 +135,34 @@ export function evaluateLogicRule(rule: LogicRule, ctx: EvalContext): boolean {
     case 'not':
       return !evaluateLogicRule(rule.rule, ctx)
     case 'eq':
-      return looseEquals(resolveFieldRef(ctx, rule.field), rule.value)
+      return looseEquals(resolveFieldRef(ctx, rule.field), rule.value, rule.valueType === 'number')
     case 'ne':
-      return !looseEquals(resolveFieldRef(ctx, rule.field), rule.value)
+      return !looseEquals(resolveFieldRef(ctx, rule.field), rule.value, rule.valueType === 'number')
     case 'gt':
-      return coerceNumber(resolveFieldRef(ctx, rule.field)) > coerceNumber(rule.value)
     case 'lt':
-      return coerceNumber(resolveFieldRef(ctx, rule.field)) < coerceNumber(rule.value)
     case 'gte':
-      return coerceNumber(resolveFieldRef(ctx, rule.field)) >= coerceNumber(rule.value)
-    case 'lte':
-      return coerceNumber(resolveFieldRef(ctx, rule.field)) <= coerceNumber(rule.value)
+    case 'lte': {
+      const comparison = compareExactDecimals(
+        comparisonDecimal(resolveFieldRef(ctx, rule.field), `Field "${rule.field}"`),
+        comparisonDecimal(rule.value, `Condition for "${rule.field}"`, false),
+      )
+      return rule.op === 'gt' ? comparison > 0 : rule.op === 'lt' ? comparison < 0
+        : rule.op === 'gte' ? comparison >= 0 : comparison <= 0
+    }
     case 'in': {
       const v = resolveFieldRef(ctx, rule.field)
       // Multi-select stores arrays — treat as "any overlap".
-      if (Array.isArray(v)) return v.some((x) => rule.value.includes(x))
-      return rule.value.includes(v)
+      const included = (value: unknown) => rule.valueType === 'number'
+        ? rule.value.some(candidate => looseEquals(value, candidate, true)) : rule.value.includes(value)
+      if (Array.isArray(v)) return v.some(included)
+      return included(v)
     }
     case 'notIn': {
       const v = resolveFieldRef(ctx, rule.field)
-      if (Array.isArray(v)) return !v.some((x) => rule.value.includes(x))
-      return !rule.value.includes(v)
+      const included = (value: unknown) => rule.valueType === 'number'
+        ? rule.value.some(candidate => looseEquals(value, candidate, true)) : rule.value.includes(value)
+      if (Array.isArray(v)) return !v.some(included)
+      return !included(v)
     }
     case 'isSet':
       return !isEmpty(resolveFieldRef(ctx, rule.field))

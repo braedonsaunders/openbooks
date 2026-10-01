@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -7,6 +8,7 @@ import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
+import { ApprovalHistory } from '../../../../components/approval-history'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { awardResourceUrl } from '../../../../lib/hrm/benefits-portfolio'
 import type { AwardDetailDrawer } from '../../../../lib/hrm/benefits-workspace'
@@ -16,8 +18,8 @@ import type { AwardDetailDrawer } from '../../../../lib/hrm/benefits-workspace'
  * param. The award's program, recipient, period, and value render the
  * stored figures — never recomputed. Each lifecycle move rides the
  * benefit-awards route with the grant its service enforces: submit for HR,
- * approve for a second manager (the creator's own approval is refused by
- * name), queue for finance, then confirm a native payroll adjustment
+ * native Flows for configured direct or staged approval, finance queueing,
+ * then confirmation of a native payroll adjustment
  * from its committed run. The list refreshes after every
  * transition; delivered and voided history stays terminal.
  */
@@ -51,7 +53,7 @@ export function AwardDrawer({
   // the run; the route creates the native adjustment, so no adjustment id
   // is ever typed.
   useEffect(() => {
-    if (!canQueue || award.status !== 'approved' || award.programDeliveryMethod !== 'payroll' || runs !== null) return
+    if (!canQueue || award.status !== 'approved' || award.programDeliveryMethod === null || runs !== null) return
     let cancelled = false
     async function load() {
       setRunsFailed(null)
@@ -167,6 +169,10 @@ export function AwardDrawer({
             <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.status')}</dt>
             <dd className="font-medium text-slate-900 dark:text-slate-100">{award.statusLabel}</dd>
           </div>
+          {award.payRunDocumentId ? <div>
+            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.queueRunLabel')}</dt>
+            <dd><Link href={`/payroll/runs/${encodeURIComponent(award.payRunDocumentId)}` as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{t('portfolio.openPayRun')}</Link></dd>
+          </div> : null}
           {award.externalRef ? (
             <div>
               <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.externalRef')}</dt>
@@ -181,6 +187,8 @@ export function AwardDrawer({
           ) : null}
         </dl>
 
+        {award.status === 'approved' && award.decisionSnapshot?.mode === 'not_required' ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{t('portfolio.noApprovalSubmissionHint')}</p> : null}
+        {award.status === 'approved' && award.decisionSnapshot?.mode === 'automatic' ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{t('portfolio.directProcessingHint')}</p> : null}
         {award.programDeliveryMethod === 'external' ? <p className="text-xs text-amber-800 dark:text-amber-200">{t('portfolio.builder.externalHint')}</p> : null}
         {canManage && award.status === 'draft' ? (
           <div className="flex justify-end">
@@ -189,16 +197,14 @@ export function AwardDrawer({
             </Button>
           </div>
         ) : null}
-        {canManage && award.status === 'pending' ? (
+        {award.status === 'pending' && award.approvalHref ? (
           <div className="flex justify-end">
-            <Button disabled={working} onClick={() => act({ action: 'approve' })}>
-              {t('portfolio.approveAward')}
-            </Button>
+            <Button asChild variant="outline"><Link href={award.approvalHref as never}>{t('portfolio.approvalControls.openApprovals')}</Link></Button>
           </div>
         ) : null}
         {canQueue && award.status === 'approved' && award.programDeliveryMethod !== null && !queueing ? (
           <div className="flex justify-end">
-            <Button disabled={working} onClick={() => award.programDeliveryMethod === 'external' ? act({ action: 'queue' }) : setQueueing(true)}>
+            <Button disabled={working} onClick={() => setQueueing(true)}>
               {t('portfolio.queueAward')}
             </Button>
           </div>
@@ -244,7 +250,7 @@ export function AwardDrawer({
         ) : null}
         {canQueue && award.status === 'queued' && !enteringRef ? (
           <div className="flex flex-col gap-3">
-            {award.payRunDocumentId && award.payRunAdjustmentId ? (
+            {award.programDeliveryMethod === 'payroll' && award.payRunDocumentId && award.payRunAdjustmentId ? (
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.linkedRunHint')}</p>
                 <div className="flex justify-end">
@@ -262,9 +268,9 @@ export function AwardDrawer({
                   </Button>
                 </div>
               </div>
-            ) : (
+            ) : !award.payRunDocumentId || !award.payRunAdjustmentId ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.unlinkedQueueHint')}</p>
-            )}
+            ) : null}
             {award.programDeliveryMethod === 'external' ? <div className="flex justify-end">
               <Button variant="outline" onClick={() => setEnteringRef(true)}>
                 {t('portfolio.externalDelivery')}
@@ -302,6 +308,7 @@ export function AwardDrawer({
             </Button>
           </div>
         ) : null}
+        {award.flowRunId ? <ApprovalHistory subjectKind="hrm_benefit_award" subjectId={award.id} showEmptyState /> : null}
         {award.status === 'delivered' || award.status === 'voided' ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">{drawer.timelineEmpty}</p>
         ) : null}

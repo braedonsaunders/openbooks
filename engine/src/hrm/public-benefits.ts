@@ -7,3 +7,7 @@ export * from './benefits/settlement.ts'
 export * from './benefits/incentives.ts'
 export * from './benefits/incentive-math.ts'
 export * from './benefits/benefit-statement.ts'
+export { listBenefitPlans, listEnrollmentPlanOptions } from './benefits/benefits-read.ts'
+export type { BenefitPlanCatalogRow } from './benefits/benefits-read.ts'
+
+export * from './benefits/approval-policies.ts'

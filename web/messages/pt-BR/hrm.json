@@ -1273,7 +1273,9 @@
         "incentives": "Incentivos",
         "payouts": "Pagamentos"
       }
-    }
+    },
+    "newEnrollment": "Nova adesão",
+    "planSettings": "Configurações dos planos"
   },
   "me": {
     "tabs": {
@@ -1538,18 +1540,18 @@
       "changeSubmit": "Salvar alteração",
       "changeFailed": "Não foi possível registrar a alteração.",
       "awards": {
-        "paidTitle": "Recompensas pagas",
-        "pendingTitle": "Recompensas aguardando pagamento",
-        "hint": "Recompensas pagas já estão incluídas na folha. Recompensas pendentes não são pagamentos.",
-        "paidEmpty": "Nenhuma recompensa paga.",
-        "pendingEmpty": "Nenhuma recompensa aguardando pagamento.",
+        "paidTitle": "Recompensas processadas",
+        "pendingTitle": "Recompensas pendentes",
+        "hint": "Recompensas processadas estão representadas na folha. Recompensas pendentes não comprovam pagamento.",
+        "paidEmpty": "Nenhuma recompensa processada.",
+        "pendingEmpty": "Nenhuma recompensa pendente.",
         "refusalTitle": "Recompensas indisponíveis",
         "program": "Programa",
         "period": "Período adquirido",
         "value": "Valor",
         "status": "Status",
-        "reversedTitle": "Pagamentos de recompensas revertidos",
-        "reversedEmpty": "Nenhum pagamento de recompensa revertido.",
+        "reversedTitle": "Recompensas rejeitadas e revertidas",
+        "reversedEmpty": "Nenhuma recompensa rejeitada ou revertida",
         "reversedStatus": "Revertido"
       }
     },
@@ -2538,7 +2540,8 @@
       "reward": "Recompensa",
       "allowance": "Auxílio",
       "incentive": "Incentivo",
-      "custom": "Personalizado"
+      "custom": "Personalizado",
+      "insured": "Plano segurado"
     },
     "familyHints": {
       "reward": "Reconhecimento único: bônus, vales-presente, prêmios espontâneos.",
@@ -2590,10 +2593,11 @@
     "awardStatus": {
       "draft": "Rascunho",
       "pending": "Aguardando aprovação",
-      "approved": "Aprovado",
-      "queued": "Na fila de pagamento",
+      "approved": "Pronto para folha",
+      "queued": "Na fila de uma folha",
       "delivered": "Entregue",
-      "voided": "Anulado"
+      "voided": "Anulado",
+      "rejected": "Rejeitado"
     },
     "columns": {
       "program": "Programa",
@@ -2707,7 +2711,7 @@
       "chooseRecipient": "Escolha um destinatário",
       "chooseBasis": "Escolha uma base",
       "basisHint": "Liquidação e folha precisam concordar no trimestre, por isso a base é parte do programa.",
-      "externalHint": "Recompensas não monetárias positivas não podem ser entregues até que a folha suporte seu tratamento tributário. Crie uma recompensa em dinheiro na folha para efetuar o pagamento.",
+      "externalHint": "Recompensas externas usam um componente não monetário para calcular impostos sem adicionar pagamento em dinheiro. Registre a entrega do fornecedor somente após confirmar a folha vinculada.",
       "reviewTitle": "Revise o programa",
       "reviewEmpty": "Nada informado ainda.",
       "reviewHint": "A criação fica em rascunho; o detalhe a relê do servidor.",
@@ -2721,13 +2725,13 @@
       "back": "Voltar",
       "next": "Avançar",
       "amountNoun": "Valor",
-      "componentPrerequisite": "Crie um componente salarial ativo na configuração da folha, atualize as opções e selecione-o. As regras da folha determinam o tratamento tributário e contábil.",
+      "componentPrerequisite": "Crie um componente monetário ou não monetário correspondente ao método de entrega e atualize as opções.",
       "openPayrollSetup": "Abrir configuração da folha",
       "accountsPrerequisite": "Nenhuma conta de medição contabilizável está visível. Adicione as contas necessárias ou peça ao financeiro para verificar o acesso à entidade jurídica e atualize as opções.",
       "openAccounts": "Abrir plano de contas",
       "refreshOptions": "Atualizar opções"
     },
-    "awardBuilderTitle": "Novo prêmio",
+    "awardBuilderTitle": "Nova recompensa",
     "awardFields": {
       "program": "Programa",
       "recipient": "Destinatário",
@@ -2742,12 +2746,11 @@
       "recordReferencePlaceholder": "Confirmação do fornecedor ou número do pedido",
       "recordReferenceHint": "A entrega externa registra esta referência no prêmio."
     },
-    "awardCreate": "Registrar prêmio",
-    "submitAward": "Enviar para aprovação",
-    "approveAward": "Aprovar",
-    "queueAward": "Por na fila de pagamento",
-    "payrollDelivery": "Pagar pela folha",
-    "externalDelivery": "Registrar entrega externa",
+    "awardCreate": "Criar recompensa",
+    "submitAward": "Enviar recompensa",
+    "queueAward": "Adicionar à folha",
+    "payrollDelivery": "Processado na folha",
+    "externalDelivery": "Registrar entrega",
     "voidAward": "Anular",
     "payrollInputLabel": "Verba de folha",
     "payrollInputPlaceholder": "Id da verba de folha existente",
@@ -2806,6 +2809,32 @@
       "heroHint": "Programas do empregador, regras de valor e datas de vigência.",
       "directoryTitle": "Gestão de benefícios",
       "payrollHint": "Todas as recompensas registradas · moedas separadas"
-    }
+    },
+    "newReward": "Nova recompensa",
+    "newIncentive": "Novo incentivo",
+    "planCostsInRecord": "Ver preços do plano",
+    "readFailedTitle": "Não foi possível carregar os programas",
+    "unknownType": "Tipo de programa desconhecido “{type}”. Escolha um tipo no filtro.",
+    "approvalControls": {
+      "title": "Controles de aprovação",
+      "openFlows": "Abrir Flows",
+      "hint": "O Flows aplica as etapas de aprovação e condições configuradas para este programa.",
+      "unconfigured": "Nenhuma política de aprovação de benefícios configurada. Configure Flows antes de enviar recompensas.",
+      "policiesHint": "As políticas ativas são avaliadas ao enviar uma recompensa.",
+      "openApprovals": "Abrir aprovações",
+      "administratorRemedy": "Peça ao administrador de fluxos de trabalho da empresa para configurar ou alterar as políticas de aprovação.",
+      "unconfiguredStatus": "Nenhuma política de aprovação de benefícios configurada.",
+      "modes": {
+        "none": "Não exige aprovações",
+        "flows": "Usar aprovações do Flows"
+      },
+      "noneHint": "Envios autorizados ficam prontos para a folha. Não é necessário configurar um fluxo nem designar um aprovador."
+    },
+    "externalPayrollProcessed": "Processado na folha · entrega pendente",
+    "openPayRun": "Abrir folha",
+    "directProcessingHint": "Flows autorizou o processamento direto; esta recompensa está pronta para a folha.",
+    "rewardProgramPrerequisite": "Crie e ative um programa de recompensas ou auxílios antes de registrar uma recompensa.",
+    "createRewardProgram": "Criar programa de recompensas",
+    "noApprovalSubmissionHint": "Não exige aprovações. O envio autorizado foi registrado; esta recompensa está pronta para a folha."
   }
 }

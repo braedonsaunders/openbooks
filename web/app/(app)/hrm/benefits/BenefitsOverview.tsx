@@ -1,5 +1,6 @@
 'use client'
 
+import { UrlDrawer } from '@openbooks/ui'
 import { useRouter } from 'next/navigation'
 import { ChoiceCards } from '../../../../components/builder/builder-kit'
 import {
@@ -30,9 +31,9 @@ const CARD_ICONS: Record<string, LucideIcon> = {
   shapes: Shapes,
 }
 
-export function BenefitTypeCards({ cards }: { cards: OverviewCard[] }) {
+export function BenefitTypeCards({ cards, closeHref, title }: { cards: OverviewCard[]; closeHref?: string; title?: string }) {
   const router = useRouter()
-  return (
+  const choices = (
     <ChoiceCards
       value=""
       ariaLabel={cards.map((card) => card.title).join(', ')}
@@ -51,4 +52,5 @@ export function BenefitTypeCards({ cards }: { cards: OverviewCard[] }) {
       }}
     />
   )
+  return closeHref ? <UrlDrawer open closeHref={closeHref} title={title ?? ''} size="lg"><div className="p-4">{choices}</div></UrlDrawer> : choices
 }

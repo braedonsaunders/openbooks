@@ -23,13 +23,19 @@ test("reconcilable account imports require currency and preserve existing denomi
     const first = await load([account,
       { sourceRef: "foreign-bank", fields: { name: "US dollar bank", type: "asset_bank", reconcilable: true, currencyRestriction: "USD" } },
       { sourceRef: "missing", fields: { name: "Missing currency", type: "asset_bank", reconcilable: true } }]);
+    assert.ok(first.accounts);
     assert.equal(first.accounts.created, 2);
     assert.equal(first.accounts.failed, 1);
+    assert.ok(first.accounts.errors[0]);
     assert.match(first.accounts.errors[0].message, /reconcilable account missing requires an explicit currency/);
-    assert.equal((await load([account])).accounts.updated, 1);
+    const replay = await load([account]);
+    assert.ok(replay.accounts);
+    assert.equal(replay.accounts.updated, 1);
     const conflict = await load([{ ...account, fields: { ...account.fields, name: "Changed card", currencyRestriction: "USD" } }]);
+    assert.ok(conflict.accounts);
     assert.equal(conflict.accounts.updated, 0);
     assert.equal(conflict.accounts.failed, 1);
+    assert.ok(conflict.accounts.errors[0]);
     assert.match(conflict.accounts.errors[0].message, /source currency conflicts with its existing currency control/);
     const stored = await withOrg(org.orgId, () => db.execute(sql`select name, currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='card'`));
     assert.deepEqual(stored.rows, [{ name: "Corporate card", currency_restriction: "CAD" }]);

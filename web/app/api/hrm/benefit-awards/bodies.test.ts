@@ -4,87 +4,26 @@ import { benefitAwardPatchBody, benefitAwardPostBody } from "./bodies";
 
 const UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
 
-// Pure boundary checks: real zod parses — civil dates, unknown and missing
-// actions, reserved settlement keys, and decimal strings. No mocks: the
-// schemas are pure validation, so the tests run them directly.
-test("award create pins program, employment, period, and exact decimal value", () => {
-  const parsed = benefitAwardPostBody.safeParse({
-    action: "create",
-    programId: UUID,
-    employmentId: UUID,
-    periodFrom: "2026-03-01",
-    value: "100.0000",
-    currency: "USD",
-  });
-  assert.equal(parsed.success, true);
+const create = { action: "create", programId: UUID, employmentId: UUID, periodFrom: "2026-03-01", value: "100.0000", currency: "USD" };
+
+test("award creation accepts an exact value and a manual source identity", () => {
+  assert.equal(benefitAwardPostBody.safeParse(create).success, true);
+  assert.equal(benefitAwardPostBody.safeParse({ ...create, sourceKey: "manual-march" }).success, true);
 });
 
-test("award create refuses bad dates and non-uuid subjects", () => {
-  assert.equal(
-    benefitAwardPostBody.safeParse({
-      action: "create",
-      programId: "not-a-uuid",
-      employmentId: UUID,
-      periodFrom: "2026-03-01",
-      value: "100.0000",
-      currency: "USD",
-    }).success,
-    false,
-  );
-  assert.equal(
-    benefitAwardPostBody.safeParse({
-      action: "create",
-      programId: UUID,
-      employmentId: UUID,
-      periodFrom: "03/01/2026",
-      value: "100.0000",
-      currency: "USD",
-    }).success,
-    false,
-  );
-});
-
-test("award create refuses JSON numbers and reserved settlement keys", () => {
-  assert.equal(
-    benefitAwardPostBody.safeParse({
-      action: "create",
-      programId: UUID,
-      employmentId: UUID,
-      periodFrom: "2026-03-01",
-      value: 100,
-      currency: "USD",
-    }).success,
-    false,
-  );
-  for (const key of ["settle:abc", "ADJUST:abc"]) {
-    const parsed = benefitAwardPostBody.safeParse({
-      action: "create",
-      programId: UUID,
-      employmentId: UUID,
-      periodFrom: "2026-03-01",
-      value: "100.0000",
-      currency: "USD",
-      sourceKey: key,
-    });
-    assert.equal(parsed.success, false);
-  }
-  assert.equal(
-    benefitAwardPostBody.safeParse({
-      action: "create",
-      programId: UUID,
-      employmentId: UUID,
-      periodFrom: "2026-03-01",
-      value: "100.0000",
-      currency: "USD",
-      sourceKey: "manual-march",
-    }).success,
-    true,
-  );
-});
+for (const [name, input] of [
+  ["non-UUID program", { ...create, programId: "not-a-uuid" }],
+  ["non-civil date", { ...create, periodFrom: "03/01/2026" }],
+  ["JSON financial number", { ...create, value: 100 }],
+  ["reserved settlement identity", { ...create, sourceKey: "settle:abc" }],
+  ["reserved correction identity", { ...create, sourceKey: "ADJUST:abc" }],
+] as const) {
+  test(`award creation refuses ${name}`, () => assert.equal(benefitAwardPostBody.safeParse(input).success, false));
+}
 
 test("award lifecycle moves pin their own proof", () => {
   assert.equal(benefitAwardPatchBody.safeParse({ action: "submit" }).success, true);
-  assert.equal(benefitAwardPatchBody.safeParse({ action: "approve" }).success, true);
+  assert.equal(benefitAwardPatchBody.safeParse({ action: "approve" }).success, false);
   assert.equal(benefitAwardPatchBody.safeParse({ action: "void" }).success, false);
   assert.equal(benefitAwardPatchBody.safeParse({ action: "void", reason: "wrong period" }).success, true);
   assert.equal(

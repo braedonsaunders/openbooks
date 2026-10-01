@@ -38,7 +38,8 @@ test('award report retains snapshot identity, exact currency and lifecycle while
         (org_id, program_id, employment_id, period_from, period_to, value, currency,
          program_snapshot, source_snapshot)
       values (${org.orgId}, ${program.id}, ${employment.employmentId}, '2026-07-01', '2026-07-31',
-              '25.0100', 'USD', '{"name":"Recorded recognition policy","family":"reward"}'::jsonb, '{}'::jsonb)
+              '25.0100', 'USD', (select jsonb_build_object('id',p.id,'name','Recorded recognition policy','family',p.family,
+                'approvalMode',p.approval_mode,'revision',p.revision) from hrm_benefit_programs p where p.org_id=${org.orgId} and p.id=${program.id}), '{}'::jsonb)
     `)
     const entity = BENEFITS_REPORT_ENTITIES.find((item) => item.key === 'hrm_benefit_awards')!
     const read = async (allowedSubsidiaryIds: string[]) => {

@@ -13,6 +13,8 @@ import { useMoney } from '../../../../components/money-provider'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import {
+  componentsForDelivery,
+  type BenefitPayComponentOption,
   BENEFIT_PROGRAMS_API,
   emptyProgramDraft,
   programResourceUrl,
@@ -63,6 +65,7 @@ function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): Program
     effectiveTo: text(seed.effectiveTo),
     payComponentId: text(seed.payComponentId),
     deliveryMethod: seed.deliveryMethod,
+    approvalMode: seed.approvalMode,
     valuation: seed.valuation,
     metric: seed.metric,
     metricScope: seed.metricScope,
@@ -91,7 +94,7 @@ function stepFields(step: Step): (keyof ProgramDraft)[] {
     case 'timing':
       return ['effectiveFrom', 'effectiveTo', 'frequency', 'periodBasis', 'paymentDelayDays']
     case 'controls':
-      return ['allocation', 'sourceAccountIds']
+      return ['approvalMode', 'allocation', 'sourceAccountIds']
     case 'delivery':
       return ['deliveryMethod', 'payComponentId']
     case 'review':
@@ -184,6 +187,7 @@ function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: stri
     effectiveTo: optional(draft.effectiveTo),
     payComponentId: draft.payComponentId === '' ? null : draft.payComponentId,
     deliveryMethod: draft.deliveryMethod,
+    approvalMode: draft.approvalMode,
     valuation: draft.valuation,
     metric: draft.family === 'incentive' && draft.metric !== '' ? draft.metric : null,
     metricScope: draft.family === 'incentive' ? draft.metricScope : null,
@@ -235,6 +239,7 @@ export function ProgramBuilderDrawer({
   mode = 'create',
   programId = null,
   editSeed = null,
+  canConfigureApprovalPolicies = false,
 }: {
   closeHref: string
   initialFamily: ProgramFamily
@@ -242,9 +247,10 @@ export function ProgramBuilderDrawer({
   subsidiaryOptions: PortfolioOption[]
   departmentOptions: PortfolioOption[]
   projectOptions: PortfolioOption[]
-  payComponentOptions: PortfolioOption[]
+  payComponentOptions: BenefitPayComponentOption[]
   accountOptions: PortfolioOption[]
   employmentsTruncated: boolean
+  canConfigureApprovalPolicies?: boolean
   mode?: 'create' | 'edit'
   programId?: string | null
   editSeed?: ProgramEditSeed | null
@@ -254,6 +260,7 @@ export function ProgramBuilderDrawer({
   const router = useRouter()
   const { money } = useMoney()
   const [draft, setDraft] = useState<ProgramDraft>(() => seedDraft(initialFamily, editSeed))
+  const deliveryComponents = componentsForDelivery(payComponentOptions, draft.deliveryMethod)
   const [step, setStep] = useState<Step>('offer')
   const [errors, setErrors] = useState<FieldErrors>({})
   const [reason, setReason] = useState('')
@@ -398,6 +405,7 @@ export function ProgramBuilderDrawer({
   addSummary(t('portfolio.builder.fields.frequency'), t(`portfolio.frequencies.${draft.frequency}`))
   if (draft.periodBasis) addSummary(t('portfolio.builder.fields.periodBasis'), t(`portfolio.periodBasis.${draft.periodBasis}`))
   addSummary(t('portfolio.builder.fields.paymentDelayDays'), draft.paymentDelayDays)
+  addSummary(t('portfolio.approvalControls.title'), t(`portfolio.approvalControls.modes.${draft.approvalMode}`))
   addSummary(t('portfolio.builder.fields.deliveryMethod'), t(`portfolio.delivery.${draft.deliveryMethod}`))
   addSummary(t('portfolio.builder.fields.payComponent'), payComponentOptions.find((option) => option.value === draft.payComponentId)?.label ?? '')
 
@@ -405,7 +413,7 @@ export function ProgramBuilderDrawer({
     <Drawer
       open
       onClose={() => void closeGuard.close()}
-      title={mode === 'edit' ? t('portfolio.builder.editTitle') : t('portfolio.builder.title')}
+      title={mode === 'edit' ? t('portfolio.builder.editTitle') : familyLocked && initialFamily === 'incentive' ? t('portfolio.newIncentive') : t('portfolio.builder.title')}
       size="lg"
     >
       <div className="flex flex-col gap-4 p-4">
@@ -751,6 +759,17 @@ export function ProgramBuilderDrawer({
             <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {t('portfolio.builder.steps.controls')}
             </legend>
+            <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <Label htmlFor="program-builder-approvalMode">{t('portfolio.approvalControls.title')}</Label>
+              <Select id="program-builder-approvalMode" value={draft.approvalMode} onChange={(event) => set('approvalMode', event.target.value as ProgramDraft['approvalMode'])}>
+                <option value="none">{t('portfolio.approvalControls.modes.none')}</option>
+                <option value="flows">{t('portfolio.approvalControls.modes.flows')}</option>
+              </Select>
+              {draft.approvalMode === 'flows' ? <>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.hint')}</p>
+                {canConfigureApprovalPolicies ? <div><Button asChild variant="outline" size="sm"><Link href="/admin/flows" target="_blank" rel="noopener noreferrer">{t('portfolio.approvalControls.openFlows')}</Link></Button></div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.administratorRemedy')}</p>}
+              </> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.noneHint')}</p>}
+            </div>
             <div>
               <Label htmlFor="program-builder-allocation">{t('portfolio.builder.fields.allocation')}</Label>
               <Select
@@ -799,15 +818,14 @@ export function ProgramBuilderDrawer({
               <Select
                 id="program-builder-delivery"
                 value={draft.deliveryMethod}
-                onChange={(e) => set('deliveryMethod', e.target.value as ProgramDraft['deliveryMethod'])}
+                onChange={(e) => { set('deliveryMethod', e.target.value as ProgramDraft['deliveryMethod']); set('payComponentId', '') }}
               >
                 <option value="payroll">{t('portfolio.delivery.payroll')}</option>
                 <option value="external">{t('portfolio.delivery.external')}</option>
               </Select>
               <FieldError id="program-builder-payComponentId-error" message={errors.payComponentId} />
             </div>
-            {draft.deliveryMethod === 'payroll' ? (
-              <div>
+            <div>
                 <Label htmlFor="program-builder-component">{t('portfolio.builder.fields.payComponent')}</Label>
                 <Select
                   id="program-builder-component"
@@ -817,22 +835,20 @@ export function ProgramBuilderDrawer({
                   aria-invalid={errors.payComponentId !== undefined}
                 >
                   <option value="">{t('portfolio.builder.chooseComponent')}</option>
-                  {payComponentOptions.map((o) => (
+                  {deliveryComponents.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
                   ))}
                 </Select>
                 <FieldError id="program-builder-payComponentId-error2" message={errors.payComponentId} />
-                {payComponentOptions.length === 0 ? <Alert className="mt-2 flex flex-col gap-2">
+                {deliveryComponents.length === 0 ? <Alert className="mt-2 flex flex-col gap-2">
                   <p>{t('portfolio.builder.componentPrerequisite')}</p>
                   <Button asChild variant="outline" size="sm"><Link href={'/admin/setup/payroll?tab=components' as never} target="_blank" rel="noopener noreferrer">{t('portfolio.builder.openPayrollSetup')}</Link></Button>
                   <Button variant="outline" size="sm" onClick={() => router.refresh()}>{t('portfolio.builder.refreshOptions')}</Button>
                 </Alert> : null}
               </div>
-            ) : (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.externalHint')}</p>
-            )}
+            {draft.deliveryMethod === 'external' ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.externalHint')}</p> : null}
           </fieldset>
         ) : null}
 

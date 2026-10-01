@@ -120,6 +120,7 @@ export type StubRow = {
     hours: string | null
     rate: string | null
     amount: string
+    payment_kind?: 'cash' | 'non_cash'
     sequence: number
     component_code: string | null
     project_name: string | null

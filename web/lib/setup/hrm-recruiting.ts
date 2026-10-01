@@ -9,16 +9,8 @@ import type { SetupEntity } from './types'
  * the kit drawer owns their authoring, so the registry carries no second
  * editor.
  *
- * Scalar fields only. Availability windows, template clauses, the kit
- * rating scale and the retention region scope are validated structures:
- * the drawer edits them as JSON and the Setup write path (web/lib/setup/
- * write.ts, HR-18 block) validates each one through the engine service
- * that owns the shape — validateAvailabilityWindows, parseClauses,
- * CANONICAL_RATING_KEYS, retentionScopeMatches — so Setup can never store
- * a row the services refuse to read. Pool membership (member_party_ids)
- * is deliberately NOT a registry field: the generic section cannot load
- * member checkboxes (members={[]}), so a multiref here would silently
- * wipe membership on every edit. Membership rides the interview panel.
+ * Structured fields share the native Setup drawer. The Setup write path
+ * validates their stored shapes through the authoritative engine validators.
  */
 
 const RETENTION_BASES = [
@@ -132,11 +124,11 @@ export const RECRUITING_INTERVIEWER_POOLS_ENTITY: SetupEntity = {
   fields: [
     { key: 'name', kind: 'text', required: true },
     { key: 'kitId', kind: 'ref', ref: 'hrm-interview-kits', helpTextKey: 'fieldHelp.hrmPoolKit' },
-    // Declared availability windows [{startsAt, endsAt, timezone}] — the
-    // windows propose-slots books from. Edited as JSON, validated by the
-    // engine validator on write; the service refuses an empty or
-    // unordered list by name before a slot is ever stored.
-    { key: 'availability', kind: 'json', helpTextKey: 'fieldHelp.hrmPoolAvailability' },
+    { key: 'availability', kind: 'objectArray', helpTextKey: 'fieldHelp.hrmPoolAvailability', fields: [
+      { key: 'startsAt', kind: 'zonedDateTime', required: true, helpTextKey: 'fieldHelp.zonedDateTime' },
+      { key: 'endsAt', kind: 'zonedDateTime', required: true, helpTextKey: 'fieldHelp.zonedDateTime' },
+      { key: 'timezone', kind: 'text', required: true, helpTextKey: 'fieldHelp.ianaTimezone' },
+    ] },
     { key: 'isActive', kind: 'boolean' },
   ],
 }
@@ -160,10 +152,12 @@ export const RECRUITING_OFFER_TEMPLATES_ENTITY: SetupEntity = {
   fields: [
     { key: 'name', kind: 'text', required: true },
     { key: 'bodyTemplate', kind: 'textarea', required: true, helpTextKey: 'fieldHelp.hrmTemplateBody' },
-    // Clause list [{key, label, body, default_on}] — edited as JSON and
-    // parsed by the same parseClauses the renderer uses, so a template
-    // that cannot render cannot be saved.
-    { key: 'clauses', kind: 'json', helpTextKey: 'fieldHelp.hrmTemplateClauses' },
+    { key: 'clauses', kind: 'objectArray', helpTextKey: 'fieldHelp.hrmTemplateClauses', fields: [
+      { key: 'key', kind: 'text', required: true },
+      { key: 'label', kind: 'text' },
+      { key: 'body', kind: 'textarea', required: true },
+      { key: 'default_on', kind: 'boolean', defaultValue: false },
+    ] },
     { key: 'approvalRequired', kind: 'boolean' },
     { key: 'isActive', kind: 'boolean' },
   ],
@@ -190,10 +184,13 @@ export const RECRUITING_RETENTION_RULES_ENTITY: SetupEntity = {
   filters: [{ key: 'basis', options: RETENTION_BASES }],
   fields: [
     { key: 'name', kind: 'text', required: true },
-    // Region scope {applies_to: all | countries, countries?[]} — edited
-    // as JSON; an unreadable scope matches nothing at runtime (fail
-    // closed), so the write path refuses malformed shapes by name.
-    { key: 'regionScope', kind: 'json', helpTextKey: 'fieldHelp.hrmRetentionScope' },
+    { key: 'regionScope', kind: 'object', defaultValue: { applies_to: 'all' }, helpTextKey: 'fieldHelp.hrmRetentionScope', fields: [
+      { key: 'applies_to', kind: 'select', required: true, options: [
+        { value: 'all', labelKey: 'options.retentionRegions.all' },
+        { value: 'countries', labelKey: 'options.retentionRegions.countries' },
+      ] },
+      { key: 'countries', kind: 'stringArray', required: true, ref: 'countries', showWhen: { field: 'applies_to', in: ['countries'] } },
+    ] },
     { key: 'basis', kind: 'select', required: true, options: RETENTION_BASES },
     { key: 'retainMonths', kind: 'integer', required: true },
     { key: 'action', kind: 'select', required: true, options: RETENTION_ACTIONS },

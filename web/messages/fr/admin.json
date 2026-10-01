@@ -1899,7 +1899,8 @@
     "deleted": "Supprimé",
     "confirmDelete": "Supprimer cet enregistrement ? Cette action est irréversible.",
     "validation": {
-      "required": "{field} est obligatoire"
+      "required": "{field} est obligatoire",
+      "invalidStructuredValue": "{field} contient un enregistrement illisible. Corrigez la configuration avant d’enregistrer."
     },
     "drawer": {
       "newTitle": "Nouveau : {name}",
@@ -3463,7 +3464,33 @@
       "cohortKey": "Cohorte",
       "biasTerms": "Termes sensibles",
       "reviewMonths": "Cadence (mois)",
-      "customerSku": "Référence client"
+      "customerSku": "Référence client",
+      "paymentKind": "Mode de versement",
+      "nonCashAccountId": "Compte de compensation des avantages en nature",
+      "family": "Famille du programme",
+      "legalEntityId": "Entité juridique",
+      "deliveryMethod": "Versement",
+      "valuation": "Évaluation",
+      "metric": "Mesuré depuis",
+      "metricScope": "Périmètre de mesure",
+      "allocation": "Répartition",
+      "percentRate": "Taux en pourcentage",
+      "fixedAmount": "Montant fixe",
+      "capAmount": "Plafond par bénéficiaire",
+      "budgetAmount": "Budget de l'enveloppe",
+      "thresholdAmount": "Seuil de versement",
+      "periodBasis": "Base de période",
+      "paymentDelayDays": "Jours de fin de période au versement",
+      "programId": "Programme d’avantages",
+      "weightBps": "Pondération en points de base",
+      "employmentId": "Emploi",
+      "role": "Rôle",
+      "startsAt": "Début",
+      "endsAt": "Fin",
+      "default_on": "Incluse par défaut",
+      "applies_to": "Couverture régionale",
+      "countries": "Pays",
+      "timezone": "Fuseau horaire"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
@@ -3559,13 +3586,13 @@
       "hrmKitInstructions": "Consignes pour le jury, imprimées sur chaque avis.",
       "hrmKitScale": "Au moins deux des clés strong_no, no, yes, strong_yes.",
       "hrmKitStage": "Le guide s'applique à cette étape, ou partout si vide.",
-      "hrmPoolAvailability": "Créneaux en liste JSON avec startsAt, endsAt et timezone.",
+      "hrmPoolAvailability": "Ajoutez des plages de disponibilité avec des décalages explicites et le fuseau horaire de planification.",
       "hrmPoolKit": "Guide par défaut pour les séances de ce groupe.",
       "hrmQuestionAttribute": "Rattache la question à un critère de ce guide.",
       "hrmRetentionLeadDays": "Jours avant expiration pour demander une prolongation ; vide sans courriel.",
-      "hrmRetentionScope": "Région en JSON : applies_to all ou countries avec codes.",
+      "hrmRetentionScope": "Choisissez toutes les régions ou les codes pays couverts par cette règle de conservation.",
       "hrmTemplateBody": "Texte avec variables pour les données de l'offre.",
-      "hrmTemplateClauses": "Clauses en liste JSON avec key, label, body et default_on.",
+      "hrmTemplateClauses": "Ajoutez les clauses nommées disponibles dans ce modèle d’offre.",
       "aiRailsZThreshold": "Signale les gains à plus de tant d'écarts-types de la moyenne (3 par défaut).",
       "aiRailsRetroThreshold": "Signale les rétroactifs dès ce montant (500 par défaut).",
       "aiRailsCohort": "Regroupe les salariés par filiale, service, calendrier ou niveau.",
@@ -3581,7 +3608,11 @@
       "benefitMetricScope": "La société mesure l’organisation ; service et projet nomment leurs lignes de périmètre.",
       "benefitAllocation": "Égal partage à parts égales ; heures pondère par le temps ; rôle par le rôle.",
       "benefitFrequency": "Fréquence de mesure : mensuelle, trimestrielle, annuelle, fin de projet ou manuelle.",
-      "benefitPeriodBasis": "Les programmes trimestriels et annuels nomment périodes de calendrier ou d’exercice."
+      "benefitPeriodBasis": "Les programmes trimestriels et annuels nomment périodes de calendrier ou d’exercice.",
+      "paymentKind": "Les avantages en nature conservent le traitement fiscal configuré sans verser leur valeur en espèces.",
+      "nonCashAccountId": "Utilisez un actif payé d’avance ou un passif de compensation du fournisseur. Les achats auprès du fournisseur doivent utiliser le même compte afin de ne pas comptabiliser la charge deux fois.",
+      "zonedDateTime": "Saisissez un horodatage ISO avec Z ou un décalage explicite, par exemple 2026-10-01T09:00:00-04:00. Le décalage est conservé.",
+      "ianaTimezone": "Saisissez un fuseau horaire IANA, par exemple Europe/Paris."
     },
     "options": {
       "usageAggregation": {
@@ -4155,6 +4186,14 @@
       "benefitPeriodBasis": {
         "calendar": "Calendrier",
         "fiscal": "Exercice"
+      },
+      "payPaymentKind": {
+        "cash": "Rémunération en espèces",
+        "nonCash": "Avantage en nature"
+      },
+      "retentionRegions": {
+        "all": "Toutes les régions",
+        "countries": "Pays sélectionnés"
       }
     },
     "laborCosting": {
@@ -5065,6 +5104,11 @@
       "empty": "Aucune valeur pour l’instant — ajoutez la première.",
       "new": "Nouvelle valeur",
       "searchPlaceholder": "Rechercher des valeurs…"
+    },
+    "structuredFields": {
+      "row": "Ligne {number}",
+      "addRow": "Ajouter une ligne",
+      "removeRow": "Supprimer la ligne"
     }
   },
   "flows": {

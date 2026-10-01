@@ -33,7 +33,7 @@ export type {
 export { FIELD_TYPES, isResponseValueField } from './field-types'
 export type { FieldOptionsSource, FieldTypeMeta, FileMeta } from './field-types'
 
-export { evaluateFormulaTree, evaluateLogicRule, FormulaEvaluationError, resolveDefaultValue } from './evaluator'
+export { evaluateFormulaTree, evaluateLogicRule, FormulaEvaluationError, LogicEvaluationError, resolveDefaultValue } from './evaluator'
 export type { EvalContext, FieldValueMap, RowMap } from './evaluator'
 
 export { validateResponse } from './validator'

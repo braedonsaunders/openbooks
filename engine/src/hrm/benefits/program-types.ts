@@ -13,6 +13,7 @@
 import {
   BENEFIT_AWARD_STATUSES as SCHEMA_AWARD_STATUSES,
   BENEFIT_PROGRAM_ALLOCATIONS as SCHEMA_ALLOCATIONS,
+  BENEFIT_PROGRAM_APPROVAL_MODES as SCHEMA_APPROVAL_MODES,
   BENEFIT_PROGRAM_DELIVERY as SCHEMA_DELIVERY,
   BENEFIT_PROGRAM_FAMILIES as SCHEMA_FAMILIES,
   BENEFIT_PROGRAM_FREQUENCIES as SCHEMA_FREQUENCIES,
@@ -22,6 +23,9 @@ import {
   BENEFIT_PROGRAM_STATUSES as SCHEMA_STATUSES,
   BENEFIT_PROGRAM_VALUATION as SCHEMA_VALUATION,
 } from "@openbooks/schema/src/benefits-programs.ts";
+
+export const BENEFIT_APPROVAL_MODES = SCHEMA_APPROVAL_MODES;
+export type BenefitApprovalMode = (typeof BENEFIT_APPROVAL_MODES)[number];
 
 export const BENEFIT_PROGRAM_FAMILIES = SCHEMA_FAMILIES;
 export type BenefitProgramFamily = (typeof BENEFIT_PROGRAM_FAMILIES)[number];
@@ -53,7 +57,7 @@ export type BenefitPeriodBasis = (typeof BENEFIT_PERIOD_BASES)[number];
 export const BENEFIT_AWARD_STATUSES = SCHEMA_AWARD_STATUSES;
 export type BenefitAwardStatus = (typeof BENEFIT_AWARD_STATUSES)[number];
 
-/** Allowed status moves for an award. Void is terminal from any open state. */
+/** Allowed program transitions. Closed programs never reopen. */
 export const PROGRAM_STATUS_TRANSITIONS: Record<
   BenefitProgramStatus,
   readonly BenefitProgramStatus[]
@@ -75,6 +79,7 @@ export interface BenefitProgram {
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
   readonly payComponentId: string | null;
+  readonly approvalMode: BenefitApprovalMode;
   readonly deliveryMethod: BenefitDeliveryMethod;
   readonly valuation: BenefitValuation;
   readonly metric: BenefitMetric | null;
@@ -119,6 +124,13 @@ export interface BenefitAward {
   readonly externalRef: string | null;
   readonly payRunDocumentId: string | null;
   readonly payRunAdjustmentId: string | null;
+  /** Exact native input consumed by a live committed run; does not prove payment. */
+  readonly payrollProcessed: boolean;
+  readonly flowRunId: string | null;
+  readonly submittedBy: string | null;
+  readonly submittedAt: string | null;
+  readonly decisionSnapshot: Record<string, unknown> | null;
+  readonly approvalHref: string | null;
   readonly approvedBy: string | null;
   readonly approvedAt: string | null;
   readonly createdBy: string | null;

@@ -10,7 +10,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
-import { buildRow, coerceBoolean, idColumn, type Coerced } from '../setup/coerce'
+import { buildRow, coerceBoolean, decodeStructuredSetupValues, idColumn, type Coerced } from '../setup/coerce'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { savePayComponentEarningClassification, validateEntityIntegrity } from '../setup/write'
@@ -97,6 +97,10 @@ const SETUP_KIND_MAP: Record<SetupField['kind'], ResourceField['kind']> = {
   ref: 'reference',
   multiref: 'multiselect',
   json: 'long_text',
+  // Structured JSON remains one exact cell; timestamps retain their offset.
+  object: 'long_text',
+  objectArray: 'long_text',
+  zonedDateTime: 'datetime',
   // String-list fields round-trip through the shared setup coercer.
   stringArray: 'long_text',
 }
@@ -371,6 +375,16 @@ async function writeSetup(
         outcome.errors.push({ row: rowNo, message: `${unavailable} is not available` })
         continue
       }
+      // Exported structured cells are JSON text. Domain validators consume
+      // records, so decode through shared setup coercion before any lookup or write.
+      const decoded = decodeStructuredSetupValues(entity, src)
+      if ('error' in decoded) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: decoded.error })
+        continue
+      }
+      Object.assign(src, decoded.body)
+
       if (entity.key === 'pay-components' && src.supplementalWageCategory != null && src.supplementalWageCategory !== '') {
         const kind = String(src.kind ?? '')
         const nonPeriodic = coerceBoolean(src.nonPeriodic)

@@ -240,7 +240,8 @@ async function seedBenefitsAwards(h: Harness): Promise<void> {
       currency, program_snapshot, source_snapshot, evidence, source_key)
     values (${awardId}, ${h.org.orgId}, ${programId}, ${h.employmentId},
       '2026-01-01', '2026-01-31', '25.0100', 'USD',
-      '{"name":"Annual sharing","code":"PROFIT","family":"incentive","percentRate":"5.0000"}'::jsonb,
+      (select jsonb_build_object('id',p.id,'name',p.name,'code',p.code,'family',p.family,'percentRate','5.0000',
+        'approvalMode',p.approval_mode,'revision',p.revision) from hrm_benefit_programs p where p.org_id=${h.org.orgId} and p.id=${programId}),
       '{"companyProfit":"PRIVATE_FINANCIAL_SOURCE","postingFacts":[{"amount":"500.2000"}]}'::jsonb,
       '{"kind":"incentive-settlement","programRevision":1,"pool":"PRIVATE_POOL","share":"0.0500"}'::jsonb,
       'dsar-award')`);

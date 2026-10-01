@@ -55,9 +55,9 @@ import {
  * with the same pure function, so a preview that shows X settles X when
  * the sources have not moved — and when they have moved, the frozen
  * snapshot tells the operator exactly what changed. Previews are never
- * obligations: only settled award rows (created draft, then approved by a
- * second actor, queued by finance, and marked delivered after the pay run
- * commits) promise payment.
+ * obligations: settled award rows follow the explicitly configured native
+ * approval policy, then finance adds the approved value to payroll. Payroll
+ * processing and provider fulfillment each retain their own evidence.
  *
  * Concurrency: settlement holds the program row FOR UPDATE and a
  * transaction-scoped advisory lock over (program, period) — two settlers
@@ -65,11 +65,9 @@ import {
  * the overlap check (existing awards carry the old revision). Corrections
  * to settled history are new adjusting awards, never rewrites.
  *
- * Delivery uses the native pay-run adjustment seam for payroll programs.
- * External programs never enter a pay run as cash: a cash earning would
- * pay the employee twice, and a bare earning component withholds no tax,
- * so external awards refuse payroll delivery by name until a native
- * tax-only representation exists.
+ * Every valued benefit uses the native pay-run adjustment seam. Payroll
+ * programs use cash earnings; provider programs use non-cash earnings whose
+ * configured statutory bases remain intact without adding a cash payment.
  */
 
 export interface PreviewIncentiveSettlementQuery {
@@ -625,7 +623,8 @@ async function buildPreview(
  * payable recipient, atomically and idempotently. A retried settlement
  * returns the existing awards when revision, sources, and values match;
  * anything else refuses and directs corrections to adjusting awards.
- * Awards are created draft — approval stays with a second actor.
+ * Awards are created draft; submission applies the configured native Flows
+ * policy, whether explicit direct processing or one or more approval gates.
  */
 export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): Promise<SettledPeriod> {
   const orgId = requireOrgId(query.orgId);
@@ -1012,8 +1011,8 @@ export interface QueueAwardForPayRunQuery {
  * adjustment on the program's earning component, then approved → queued.
  * The adjustment key derives from (award, run), so a retry replays the
  * same row and a second run refuses rather than double-paying (the award
- * is already queued). External programs never reach a pay run: no cash
- * leg, no tax guess.
+ * is already queued). Provider benefits use non-cash earning inputs so their
+ * configured statutory treatment reaches the same payroll calculation.
  */
 export async function queueAwardForPayRun(
   query: QueueAwardForPayRunQuery,
@@ -1036,6 +1035,11 @@ export async function queueAwardForPayRun(
       select id from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId} for update
     `)).rows, "locking the award");
     const award = await getBenefitAward(db, orgId, actorId, awardId);
+    if (normalizeMoney(award.value) === "0.0000") {
+      throw new BenefitsError("REFUSED", award.adjustsAwardId === null
+        ? "a zero-value reward cannot enter payroll — void this reward and create a reward with a positive value"
+        : "a zero-value adjustment cannot enter payroll — void this adjustment and record a non-zero signed correction");
+    }
     const key = adjustmentKey(awardId, runDocumentId);
     if (award.status === "queued" || award.status === "delivered") {
       const replay = await queueBenefitAward({ orgId, actorId, awardId, payRunDocumentId: runDocumentId, payRunAdjustmentId: key });
@@ -1048,12 +1052,6 @@ export async function queueAwardForPayRun(
       );
     }
     const program = await getBenefitProgram(db, orgId, actorId, award.programId);
-    if (program.deliveryMethod !== "payroll") {
-      throw new BenefitsError(
-        "REFUSED",
-        `program ${program.code} delivers externally — no cash leg ever enters a pay run (it would pay the employee twice), and a bare earning component withholds no tax. Record the provider's own reference through external delivery; tax on this non-cash value has no native payroll representation yet — classify it with payroll before relying on this record for tax`,
-      );
-    }
     if (program.payComponentId === null) {
       throw new BenefitsError(
         "REFUSED",
@@ -1074,9 +1072,9 @@ export async function queueAwardForPayRun(
     // refuses a wrong-country component before the run does.
     const component = requireOneRow(
       (await db.execute<{
-        kind: string; is_active: boolean; system_key: string | null; country: string | null;
+        kind: string; is_active: boolean; system_key: string | null; country: string | null; payment_kind: string;
       }>(sql`
-        select kind, is_active, system_key, country from pay_components
+        select kind, is_active, system_key, country, payment_kind from pay_components
          where org_id = ${orgId} and id = ${program.payComponentId}
       `)).rows,
       "the program pay component",
@@ -1087,6 +1085,8 @@ export async function queueAwardForPayRun(
         `program ${program.code} links component ${program.payComponentId}, which is ${component.is_active ? `a ${component.kind}` : "inactive"} — awards pay through an active earning component`,
       );
     }
+    const expectedPaymentKind = program.deliveryMethod === "external" ? "non_cash" : "cash";
+    if (component.payment_kind !== expectedPaymentKind) throw new BenefitsError("REFUSED", `program ${program.code} requires an active ${expectedPaymentKind === "non_cash" ? "non-cash" : "cash"} earning component — select the matching component in the program before adding it to payroll`);
     if (component.system_key !== null && !["base_pay", "overtime", "allowance", "bonus", "vacation_payout"].includes(component.system_key)) {
       throw new BenefitsError(
         "REFUSED",
@@ -1158,7 +1158,8 @@ export async function queueAwardForPayRun(
       throw error;
     }
     // The queue service validates and stores the exact native input linkage
-    // in the same transaction. Delivery later proves that input was paid.
+    // in the same transaction. Processing later proves payroll consumed it;
+    // provider fulfillment remains separate evidence for non-cash value.
     const queued = await queueBenefitAward({ orgId, actorId, awardId, payRunDocumentId: runDocumentId, payRunAdjustmentId: key });
     const stored = (await db.execute<{ id: string }>(sql`
       select id from pay_run_adjustments where org_id = ${orgId} and id = ${key}
@@ -1177,7 +1178,7 @@ export async function queueAwardForPayRun(
  * Confirm delivery after the run commits: the domain service re-verifies
  * the adjustment carries this award exactly (employee, component, value)
  * and the run is committed, then marks delivered. Call this only after
- * finalize — delivered means paid.
+ * finalize. This records payroll processing, not bank-payment evidence.
  */
 export async function confirmAwardPayrollDelivery(query: {
   readonly orgId: string;

@@ -2223,7 +2223,8 @@
     "deleted": "削除しました",
     "confirmDelete": "このレコードを削除しますか？この操作は取り消せません。",
     "validation": {
-      "required": "{field}は必須です"
+      "required": "{field}は必須です",
+      "invalidStructuredValue": "{field} に読み取れない保存済みレコードがあります。保存する前に設定を修正してください。"
     },
     "drawer": {
       "newTitle": "新規{name}",
@@ -3583,7 +3584,33 @@
       "cohortKey": "コホート",
       "biasTerms": "配慮語句",
       "reviewMonths": "レビュー周期（月）",
-      "customerSku": "顧客品番"
+      "customerSku": "顧客品番",
+      "paymentKind": "支給形態",
+      "nonCashAccountId": "現物給付の精算勘定",
+      "family": "プログラム種別",
+      "legalEntityId": "法人",
+      "deliveryMethod": "支払い方法",
+      "valuation": "評価方法",
+      "metric": "測定元",
+      "metricScope": "測定範囲",
+      "allocation": "分配方法",
+      "percentRate": "料率",
+      "fixedAmount": "固定額",
+      "capAmount": "受給者あたり上限",
+      "budgetAmount": "プール予算",
+      "thresholdAmount": "支払い基準額",
+      "periodBasis": "期間基準",
+      "paymentDelayDays": "期間末から支払いまでの日数",
+      "programId": "福利厚生プログラム",
+      "weightBps": "ベーシスポイントの重み",
+      "employmentId": "雇用",
+      "role": "役割",
+      "startsAt": "開始日時",
+      "endsAt": "終了日時",
+      "default_on": "初期設定で含める",
+      "applies_to": "対象地域",
+      "countries": "国",
+      "timezone": "タイムゾーン"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
@@ -3679,13 +3706,13 @@
       "hrmKitInstructions": "パネル向け指針。各評価に印字される。",
       "hrmKitScale": "strong_no、no、yes、strong_yesのうち2件以上。",
       "hrmKitStage": "この選考段階に適用。空欄は全体に適用。",
-      "hrmPoolAvailability": "startsAt、endsAt、timezoneのJSONリスト。",
+      "hrmPoolAvailability": "明示的なオフセットと予定管理用のタイムゾーンを含む対応可能時間を追加してください。",
       "hrmPoolKit": "このグループの面接の標準キット。",
       "hrmQuestionAttribute": "質問をこのキットの項目にひも付ける。",
       "hrmRetentionLeadDays": "期限前に延長を求める日数。空欄は通知なし。",
-      "hrmRetentionScope": "地域をJSONで指定：applies_to allまたはcountries。",
+      "hrmRetentionScope": "すべての地域、またはこの保存ルールの対象となる国コードを選択してください。",
       "hrmTemplateBody": "オファーデータの差し込み欄付き本文。",
-      "hrmTemplateClauses": "key、label、body、default_onのJSONリスト。",
+      "hrmTemplateClauses": "このオファーテンプレートで使用する名前付き条項を追加してください。",
       "aiRailsZThreshold": "平均からこの標準偏差を超える支給を検出（既定3）。",
       "aiRailsRetroThreshold": "この金額以上の遡及を検出（既定500）。",
       "aiRailsCohort": "子会社・部門・給与サイクル・職位で従業員をグルーピング。",
@@ -3701,7 +3728,11 @@
       "benefitMetricScope": "全社は組織全体。部門・プロジェクトは範囲行を指定。",
       "benefitAllocation": "均等は等分、時間は時間重み、役割は役割重み。",
       "benefitFrequency": "月次・四半期・年次・完了時・手動のいずれかで測定。",
-      "benefitPeriodBasis": "四半期・年次は暦か会計年度かを指定。"
+      "benefitPeriodBasis": "四半期・年次は暦か会計年度かを指定。",
+      "paymentKind": "現物給付には設定済みの税務処理が適用されますが、その価額は現金で追加支給されません。",
+      "nonCashAccountId": "前払資産または提供者に対する精算負債を使用します。費用の二重計上を防ぐため、提供者からの購入には同じ精算勘定を使用してください。",
+      "zonedDateTime": "Z または明示的なオフセットを含む ISO 日時を入力してください（例：2026-10-01T09:00:00-04:00）。オフセットは保持されます。",
+      "ianaTimezone": "Asia/Tokyo などの IANA タイムゾーンを入力してください。"
     },
     "options": {
       "usageAggregation": {
@@ -4275,6 +4306,14 @@
       "benefitPeriodBasis": {
         "calendar": "暦",
         "fiscal": "会計年度"
+      },
+      "payPaymentKind": {
+        "cash": "現金給与",
+        "nonCash": "現物給付"
+      },
+      "retentionRegions": {
+        "all": "すべての地域",
+        "countries": "選択した国"
       }
     },
     "invoicing": {
@@ -5065,6 +5104,11 @@
       "empty": "値はまだありません。最初を追加してください。",
       "new": "新しい値",
       "searchPlaceholder": "値を検索…"
+    },
+    "structuredFields": {
+      "row": "行 {number}",
+      "addRow": "行を追加",
+      "removeRow": "行を削除"
     }
   },
   "flows": {

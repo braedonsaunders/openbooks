@@ -10,8 +10,8 @@ import { isResponseValueField } from './field-types'
 export type LogicRule =
   | { op: 'and' | 'or'; rules: LogicRule[] }
   | { op: 'not'; rule: LogicRule }
-  | { op: 'eq' | 'ne' | 'gt' | 'lt' | 'gte' | 'lte'; field: string; value: unknown }
-  | { op: 'in' | 'notIn'; field: string; value: unknown[] }
+  | { op: 'eq' | 'ne' | 'gt' | 'lt' | 'gte' | 'lte'; field: string; value: unknown; valueType?: 'number' }
+  | { op: 'in' | 'notIn'; field: string; value: unknown[]; valueType?: 'number' }
   | { op: 'isSet' | 'isNotSet'; field: string }
 
 export const logicRuleSchema: z.ZodType<LogicRule> = z.lazy(() =>
@@ -22,11 +22,13 @@ export const logicRuleSchema: z.ZodType<LogicRule> = z.lazy(() =>
       op: z.enum(['eq', 'ne', 'gt', 'lt', 'gte', 'lte']),
       field: z.string().max(128),
       value: z.unknown(),
+      valueType: z.literal('number').optional(),
     }),
     z.object({
       op: z.enum(['in', 'notIn']),
       field: z.string().max(128),
       value: z.array(z.unknown()).max(100),
+      valueType: z.literal('number').optional(),
     }),
     z.object({ op: z.enum(['isSet', 'isNotSet']), field: z.string().max(128) }),
   ]),

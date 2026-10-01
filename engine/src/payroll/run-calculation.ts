@@ -30,6 +30,8 @@ export interface CapturedStubLine {
   hours: string | null;
   rate: string | null;
   amount: string;
+  paymentKind: "cash" | "non_cash";
+  nonCashAccountId: string | null;
   projectId: string | null;
   departmentId: string | null;
   timeTypeId: string | null;
@@ -93,7 +95,7 @@ export async function captureCalculatedStubs(
 ): Promise<CapturedStub[]> {
   const rows = (await tx.execute<Record<string, string | number | null>>(sql`
     select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost,
-           l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount,
+           l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind, l.non_cash_account_id,
            l.project_id, l.department_id, l.time_type_id, l.item_id,
            l.expense_account_id, l.expense_account_source, l.expense_account_evidence, l.sequence
       from pay_stubs s
@@ -130,6 +132,8 @@ export async function captureCalculatedStubs(
       hours: row.hours == null ? null : String(row.hours),
       rate: row.rate == null ? null : String(row.rate),
       amount: String(row.amount ?? "0"),
+      paymentKind: row.payment_kind === "non_cash" ? "non_cash" : "cash",
+      nonCashAccountId: row.non_cash_account_id == null ? null : String(row.non_cash_account_id),
       projectId: row.project_id == null ? null : String(row.project_id),
       departmentId: row.department_id == null ? null : String(row.department_id),
       timeTypeId: row.time_type_id == null ? null : String(row.time_type_id),

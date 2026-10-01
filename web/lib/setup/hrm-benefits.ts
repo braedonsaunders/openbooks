@@ -36,6 +36,7 @@ const PRORATION_BASES = [
 
 export const BENEFIT_PLANS_ENTITY: SetupEntity = {
   key: 'benefit-plans',
+  rehomed: true,
   table: 'hrm_benefit_plans',
   groupKey: 'workforce',
   featureKey: 'hrm',

@@ -457,7 +457,9 @@
       "employee": "Employee",
       "tax": "Tax",
       "lines": "Pay lines",
-      "trace": "{engine} trace"
+      "trace": "{engine} trace",
+      "nonCash": "Non-cash benefits",
+      "cashGross": "Cash earnings"
     },
     "submitApproval": "Submit for approval",
     "approvalSubmitted": "Sent for approval with the evidence package",

@@ -14,6 +14,10 @@ import {
   validateProgramDraft,
 } from './benefits-portfolio'
 
+function blankFields<const K extends string>(...keys: K[]): Record<K, string> {
+  return Object.fromEntries(keys.map((key) => [key, ''])) as Record<K, string>
+}
+
 test('totals keep one line per currency and never merge them', () => {
   const lines = totalsByCurrency([
     { value: '100.00', currency: 'USD' },
@@ -41,8 +45,9 @@ test('attention items each carry an operable destination', () => {
   })
   assert.equal(items.length, 4)
   for (const item of items) {
-    assert.match(item.href, /^\/hrm\/benefits\?/)
+    assert.match(item.href, /^(?:\/hrm\/benefits\?|\/approvals$)/)
   }
+  assert.equal(items.find((item) => item.key === 'pending-awards')?.href, '/approvals')
   assert.ok(items.some((item) => item.key === 'missing-component-p1' && item.tone === 'negative'))
 })
 
@@ -88,17 +93,7 @@ test('incentive drafts require a metric, scope picks, and a period basis', () =>
 })
 
 test('award drafts refuse missing program, recipient, period, value, and reason', () => {
-  const errors = validateAwardDraft({
-    programId: '',
-    employmentId: '',
-    periodFrom: '',
-    periodTo: '',
-    value: '',
-    currency: 'usd',
-    reason: '',
-    recipientNote: '',
-    recordReference: '',
-  })
+  const errors = validateAwardDraft({ ...blankFields('programId', 'employmentId', 'periodFrom', 'periodTo', 'value', 'reason', 'recipientNote', 'recordReference'), currency: 'usd' })
   assert.equal(errors.programId, 'portfolio.validation.awardProgram')
   assert.equal(errors.employmentId, 'portfolio.validation.awardRecipient')
   assert.ok(errors.periodFrom)
@@ -108,13 +103,7 @@ test('award drafts refuse missing program, recipient, period, value, and reason'
 })
 
 test('membership drafts refuse missing employment and start', () => {
-  const errors = validateMembershipDraft({
-    employmentId: '',
-    effectiveFrom: '',
-    effectiveTo: '',
-    weight: '',
-    role: '',
-  })
+  const errors = validateMembershipDraft(blankFields('employmentId', 'effectiveFrom', 'effectiveTo', 'weight', 'role'))
   assert.equal(errors.employmentId, 'portfolio.validation.memberEmployment')
   assert.ok(errors.effectiveFrom)
 })
@@ -122,7 +111,7 @@ test('membership drafts refuse missing employment and start', () => {
 test('portfolio views parse to canonical values with overview default', () => {
   assert.equal(parsePortfolioView(undefined), 'overview')
   assert.equal(parsePortfolioView('programs'), 'programs')
-  assert.equal(parsePortfolioView('windows'), 'windows')
+  assert.equal(parsePortfolioView('windows'), 'enrolments')
   assert.equal(parsePortfolioView('enrolments'), 'enrolments')
   assert.equal(parsePortfolioView('rewards'), 'rewards')
   assert.equal(parsePortfolioView('incentives'), 'incentives')
@@ -168,4 +157,21 @@ test('decimal comma remedies preserve the intended amount and ambiguous commas n
 test('all validation remedies resolve in each supported catalog', () => {
   const keys = ['programCode', 'programName', 'currency', 'effectiveFrom', 'effectiveTo', 'dateOrder', 'fixedAmount', 'percentRate', 'budgetAmount', 'metric', 'scopeIds', 'sourceAccounts', 'periodBasis', 'payComponent', 'paymentDelay', 'awardProgram', 'awardRecipient', 'periodFrom', 'periodTo', 'awardValue', 'awardReason', 'memberEmployment', 'membershipFrom', 'legalEntity', 'weight']
   for (const locale of locales) for (const key of keys) assert.ok(catalog(locale)(`portfolio.validation.${key}`).length > 0)
+})
+
+
+test('cash and external delivery offer only matching native payroll representations', async () => {
+  const { componentsForDelivery } = await import('./benefits-portfolio.ts')
+  const options = [{ value: 'cash', label: 'Cash bonus', paymentKind: 'cash' as const }, { value: 'noncash', label: 'Gift card', paymentKind: 'non_cash' as const }]
+  assert.deepEqual(componentsForDelivery(options, 'payroll').map((option) => option.value), ['cash'])
+  assert.deepEqual(componentsForDelivery(options, 'external').map((option) => option.value), ['noncash'])
+  const draft = emptyProgramDraft('reward')
+  draft.deliveryMethod = 'external'
+  assert.equal(validateProgramDraft(draft).payComponentId, 'portfolio.validation.payComponent', 'external value must be represented in taxable payroll')
+})
+
+test('every employer program defaults to no approvals without workflow configuration', () => {
+  for (const family of ['reward', 'allowance', 'incentive', 'custom'] as const) {
+    assert.equal(emptyProgramDraft(family).approvalMode, 'none')
+  }
 })

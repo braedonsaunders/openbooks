@@ -1899,7 +1899,8 @@
     "deleted": "Eliminado",
     "confirmDelete": "¿Eliminar este registro? Esta acción no se puede deshacer.",
     "validation": {
-      "required": "{field} es obligatorio"
+      "required": "{field} es obligatorio",
+      "invalidStructuredValue": "{field} contiene un registro guardado ilegible. Corrija la configuración antes de guardar."
     },
     "drawer": {
       "newTitle": "Nuevo: {name}",
@@ -3463,7 +3464,33 @@
       "cohortKey": "Cohorte",
       "biasTerms": "Términos sensibles",
       "reviewMonths": "Cadencia (meses)",
-      "customerSku": "Número de pieza del cliente"
+      "customerSku": "Número de pieza del cliente",
+      "paymentKind": "Forma de entrega",
+      "nonCashAccountId": "Cuenta de compensación de beneficios en especie",
+      "family": "Familia del programa",
+      "legalEntityId": "Entidad legal",
+      "deliveryMethod": "Entrega",
+      "valuation": "Valuación",
+      "metric": "Medido desde",
+      "metricScope": "Alcance de medición",
+      "allocation": "Reparto",
+      "percentRate": "Tasa porcentual",
+      "fixedAmount": "Monto fijo",
+      "capAmount": "Tope por destinatario",
+      "budgetAmount": "Presupuesto del fondo",
+      "thresholdAmount": "Umbral de pago",
+      "periodBasis": "Base del período",
+      "paymentDelayDays": "Días del fin del período al pago",
+      "programId": "Programa de beneficios",
+      "weightBps": "Peso en puntos básicos",
+      "employmentId": "Relación laboral",
+      "role": "Rol",
+      "startsAt": "Inicio",
+      "endsAt": "Fin",
+      "default_on": "Incluida por defecto",
+      "applies_to": "Cobertura regional",
+      "countries": "Países",
+      "timezone": "Zona horaria"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
@@ -3559,13 +3586,13 @@
       "hrmKitInstructions": "Orientación para el panel, impresa en cada veredicto.",
       "hrmKitScale": "Al menos dos de las claves strong_no, no, yes, strong_yes.",
       "hrmKitStage": "La guía aplica a esta etapa, o a todas si está vacía.",
-      "hrmPoolAvailability": "Ventanas como lista JSON con startsAt, endsAt y timezone.",
+      "hrmPoolAvailability": "Añada intervalos de disponibilidad con desplazamientos explícitos y la zona horaria de programación.",
       "hrmPoolKit": "Guía base para las citas de este grupo.",
       "hrmQuestionAttribute": "Asigna la pregunta a un atributo de esta guía.",
       "hrmRetentionLeadDays": "Días previos para pedir prórroga; vacío no envía correo.",
-      "hrmRetentionScope": "Región como JSON: applies_to all o countries con códigos.",
+      "hrmRetentionScope": "Seleccione todas las regiones o los códigos de país cubiertos por esta regla de retención.",
       "hrmTemplateBody": "Texto con marcadores para los datos de la oferta.",
-      "hrmTemplateClauses": "Cláusulas como lista JSON con key, label, body y default_on.",
+      "hrmTemplateClauses": "Añada las cláusulas con nombre disponibles en esta plantilla de oferta.",
       "aiRailsZThreshold": "Marca ingresos a más de estas desviaciones estándar de la media (3 por defecto).",
       "aiRailsRetroThreshold": "Marca retroactivos desde este importe (500 por defecto).",
       "aiRailsCohort": "Agrupa empleados por filial, departamento, calendario o nivel.",
@@ -3581,7 +3608,11 @@
       "benefitMetricScope": "Empresa mide la organización; departamento y proyecto nombran sus filas de alcance.",
       "benefitAllocation": "Igual reparte por igual; horas pondera por tiempo; rol por el rol del miembro.",
       "benefitFrequency": "Frecuencia de medición: mensual, trimestral, anual, fin de proyecto o manual.",
-      "benefitPeriodBasis": "Los programas trimestrales y anuales nombran períodos de calendario o de ejercicio."
+      "benefitPeriodBasis": "Los programas trimestrales y anuales nombran períodos de calendario o de ejercicio.",
+      "paymentKind": "Los beneficios en especie conservan el tratamiento fiscal configurado, pero su valor no se paga en efectivo.",
+      "nonCashAccountId": "Use un activo prepagado o un pasivo de compensación del proveedor. Las compras al proveedor deben utilizar la misma cuenta para evitar contabilizar el gasto dos veces.",
+      "zonedDateTime": "Introduzca una fecha y hora ISO con Z o un desplazamiento explícito, como 2026-10-01T09:00:00-04:00. Se conserva el desplazamiento.",
+      "ianaTimezone": "Introduzca una zona horaria IANA, como Europe/Madrid."
     },
     "options": {
       "usageAggregation": {
@@ -4155,6 +4186,14 @@
       "benefitPeriodBasis": {
         "calendar": "Calendario",
         "fiscal": "Ejercicio"
+      },
+      "payPaymentKind": {
+        "cash": "Remuneración en efectivo",
+        "nonCash": "Beneficio en especie"
+      },
+      "retentionRegions": {
+        "all": "Todas las regiones",
+        "countries": "Países seleccionados"
       }
     },
     "laborCosting": {
@@ -5065,6 +5104,11 @@
       "empty": "Aún no hay valores: añada el primero.",
       "new": "Nuevo valor",
       "searchPlaceholder": "Buscar valores…"
+    },
+    "structuredFields": {
+      "row": "Fila {number}",
+      "addRow": "Añadir fila",
+      "removeRow": "Eliminar fila"
     }
   },
   "flows": {

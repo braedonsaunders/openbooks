@@ -1273,7 +1273,9 @@
         "incentives": "Incentivos",
         "payouts": "Pagos"
       }
-    }
+    },
+    "newEnrollment": "Nueva inscripción",
+    "planSettings": "Configuración de planes"
   },
   "me": {
     "tabs": {
@@ -1538,18 +1540,18 @@
       "changeSubmit": "Guardar cambio",
       "changeFailed": "No se pudo registrar el cambio.",
       "awards": {
-        "paidTitle": "Recompensas pagadas",
-        "pendingTitle": "Recompensas pendientes de pago",
-        "hint": "Las recompensas pagadas ya están incluidas en la nómina. Las pendientes no son pagos.",
-        "paidEmpty": "Aún no hay recompensas pagadas.",
-        "pendingEmpty": "No hay recompensas pendientes de pago.",
+        "paidTitle": "Recompensas procesadas",
+        "pendingTitle": "Recompensas pendientes",
+        "hint": "Las recompensas procesadas están representadas en nómina. Las recompensas pendientes no acreditan un pago.",
+        "paidEmpty": "Aún no hay recompensas procesadas.",
+        "pendingEmpty": "No hay recompensas pendientes.",
         "refusalTitle": "Recompensas no disponibles",
         "program": "Programa",
         "period": "Período devengado",
         "value": "Valor",
         "status": "Estado",
-        "reversedTitle": "Pagos de recompensas revertidos",
-        "reversedEmpty": "No hay pagos de recompensas revertidos.",
+        "reversedTitle": "Recompensas rechazadas y revertidas",
+        "reversedEmpty": "No hay recompensas rechazadas ni revertidas",
         "reversedStatus": "Revertido"
       }
     },
@@ -2538,7 +2540,8 @@
       "reward": "Recompensa",
       "allowance": "Asignación",
       "incentive": "Incentivo",
-      "custom": "Personalizado"
+      "custom": "Personalizado",
+      "insured": "Plan asegurado"
     },
     "familyHints": {
       "reward": "Reconocimiento único: bonos, tarjetas de regalo, premios espontáneos.",
@@ -2590,10 +2593,11 @@
     "awardStatus": {
       "draft": "Borrador",
       "pending": "En espera de aprobación",
-      "approved": "Aprobado",
-      "queued": "En cola de pago",
+      "approved": "Listo para nómina",
+      "queued": "En cola en una nómina",
       "delivered": "Entregado",
-      "voided": "Anulado"
+      "voided": "Anulado",
+      "rejected": "Rechazado"
     },
     "columns": {
       "program": "Programa",
@@ -2707,7 +2711,7 @@
       "chooseRecipient": "Elija un destinatario",
       "chooseBasis": "Elija una base",
       "basisHint": "Liquidación y nómina deben coincidir en el trimestre, por eso la base es parte del programa.",
-      "externalHint": "Las recompensas no monetarias positivas no pueden entregarse hasta que la nómina admita su tratamiento fiscal. Cree una recompensa monetaria por nómina para efectuar un pago.",
+      "externalHint": "Las recompensas externas utilizan un concepto salarial no monetario para calcular impuestos sin añadir pago en efectivo. Registre la entrega del proveedor solo después de confirmar la nómina vinculada.",
       "reviewTitle": "Revise el programa",
       "reviewEmpty": "Nada capturado aún.",
       "reviewHint": "La creación queda en borrador; el detalle lo relee del servidor.",
@@ -2721,13 +2725,13 @@
       "back": "Atrás",
       "next": "Siguiente",
       "amountNoun": "Monto",
-      "componentPrerequisite": "Cree un componente salarial activo en la configuración de nómina, actualice las opciones y selecciónelo. Sus reglas de nómina determinan el tratamiento fiscal y contable.",
+      "componentPrerequisite": "Cree un concepto salarial monetario o no monetario que coincida con el método de entrega y actualice las opciones.",
       "openPayrollSetup": "Abrir configuración de nómina",
       "accountsPrerequisite": "No hay cuentas de medición contabilizables visibles. Añada las cuentas necesarias o pida a finanzas que compruebe su acceso a la entidad jurídica y actualice las opciones.",
       "openAccounts": "Abrir plan contable",
       "refreshOptions": "Actualizar opciones"
     },
-    "awardBuilderTitle": "Nuevo premio",
+    "awardBuilderTitle": "Nueva recompensa",
     "awardFields": {
       "program": "Programa",
       "recipient": "Destinatario",
@@ -2742,12 +2746,11 @@
       "recordReferencePlaceholder": "Confirmación del proveedor o número de pedido",
       "recordReferenceHint": "La entrega externa registra esta referencia en el premio."
     },
-    "awardCreate": "Registrar premio",
-    "submitAward": "Enviar a aprobación",
-    "approveAward": "Aprobar",
-    "queueAward": "Poner en cola de pago",
-    "payrollDelivery": "Pagar por nómina",
-    "externalDelivery": "Registrar entrega externa",
+    "awardCreate": "Crear recompensa",
+    "submitAward": "Enviar recompensa",
+    "queueAward": "Añadir a nómina",
+    "payrollDelivery": "Procesado en nómina",
+    "externalDelivery": "Registrar entrega",
     "voidAward": "Anular",
     "payrollInputLabel": "Concepto de nómina",
     "payrollInputPlaceholder": "Id del concepto de nómina existente",
@@ -2806,6 +2809,32 @@
       "heroHint": "Programas del empleador, reglas de valoración y fechas de vigencia.",
       "directoryTitle": "Gestión de beneficios",
       "payrollHint": "Todas las recompensas registradas · monedas separadas"
-    }
+    },
+    "newReward": "Nueva recompensa",
+    "newIncentive": "Nuevo incentivo",
+    "planCostsInRecord": "Ver precios del plan",
+    "readFailedTitle": "No se pudieron cargar los programas",
+    "unknownType": "Tipo de programa desconocido «{type}». Elija un tipo en el filtro.",
+    "approvalControls": {
+      "title": "Controles de aprobación",
+      "openFlows": "Abrir Flows",
+      "hint": "Flows aplica las etapas de aprobación y condiciones configuradas para este programa.",
+      "unconfigured": "No hay una política de aprobación de beneficios configurada. Configure Flows antes de enviar recompensas.",
+      "policiesHint": "Las políticas activas se evalúan al enviar una recompensa.",
+      "openApprovals": "Abrir aprobaciones",
+      "administratorRemedy": "Pida al administrador de flujos de trabajo de su empresa que configure o modifique las políticas de aprobación.",
+      "unconfiguredStatus": "No hay una política de aprobación de beneficios configurada.",
+      "modes": {
+        "none": "No se requieren aprobaciones",
+        "flows": "Usar aprobaciones de Flows"
+      },
+      "noneHint": "Los envíos autorizados quedan listos para nómina. No se requiere configurar un flujo ni asignar un aprobador."
+    },
+    "externalPayrollProcessed": "Procesado en nómina · entrega pendiente",
+    "openPayRun": "Abrir nómina",
+    "directProcessingHint": "Flows autorizó el procesamiento directo; esta recompensa está lista para nómina.",
+    "rewardProgramPrerequisite": "Cree y active un programa de recompensas o asignaciones antes de registrar una recompensa.",
+    "createRewardProgram": "Crear programa de recompensas",
+    "noApprovalSubmissionHint": "No se requieren aprobaciones. Se registró el envío autorizado; esta recompensa está lista para nómina."
   }
 }

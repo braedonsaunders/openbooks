@@ -2223,7 +2223,8 @@
     "deleted": "Gelöscht",
     "confirmDelete": "Diesen Datensatz löschen? Dies kann nicht rückgängig gemacht werden.",
     "validation": {
-      "required": "{field} ist erforderlich"
+      "required": "{field} ist erforderlich",
+      "invalidStructuredValue": "{field} enthält einen unlesbaren gespeicherten Datensatz. Korrigieren Sie die Konfiguration vor dem Speichern."
     },
     "drawer": {
       "newTitle": "Neu: {name}",
@@ -3583,7 +3584,33 @@
       "cohortKey": "Kohorte",
       "biasTerms": "Sprachliste",
       "reviewMonths": "Prüfrhythmus (Monate)",
-      "customerSku": "Kundenteilenummer"
+      "customerSku": "Kundenteilenummer",
+      "paymentKind": "Auszahlungsart",
+      "nonCashAccountId": "Verrechnungskonto für Sachleistungen",
+      "family": "Programmfamilie",
+      "legalEntityId": "Rechtsträger",
+      "deliveryMethod": "Auszahlung",
+      "valuation": "Bewertung",
+      "metric": "Bemessen aus",
+      "metricScope": "Bemessungsumfang",
+      "allocation": "Aufteilung",
+      "percentRate": "Prozentsatz",
+      "fixedAmount": "Festbetrag",
+      "capAmount": "Obergrenze je Empfänger",
+      "budgetAmount": "Topfbudget",
+      "thresholdAmount": "Auszahlungsschwelle",
+      "periodBasis": "Zeitraumbasis",
+      "paymentDelayDays": "Tage vom Periodenende bis zur Auszahlung",
+      "programId": "Leistungsprogramm",
+      "weightBps": "Gewichtung in Basispunkten",
+      "employmentId": "Beschäftigung",
+      "role": "Rolle",
+      "startsAt": "Beginn",
+      "endsAt": "Ende",
+      "default_on": "Standardmäßig enthalten",
+      "applies_to": "Regionsabdeckung",
+      "countries": "Länder",
+      "timezone": "Zeitzone"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count zählt die unterschiedlichen Werte des Distinct Keys jedes Datensatzes.",
@@ -3679,13 +3706,13 @@
       "hrmKitInstructions": "Hinweise für das Panel, oben auf jedem Urteil abgedruckt.",
       "hrmKitScale": "Mindestens zwei der Schlüssel strong_no, no, yes, strong_yes.",
       "hrmKitStage": "Leitfaden gilt für diese Funnelstufe, sonst überall.",
-      "hrmPoolAvailability": "Fenster als JSON-Liste mit startsAt, endsAt und timezone.",
+      "hrmPoolAvailability": "Fügen Sie Verfügbarkeitsfenster mit expliziten Offsets und der Zeitzone für die Terminplanung hinzu.",
       "hrmPoolKit": "Standardleitfaden für Termine aus dieser Gruppe.",
       "hrmQuestionAttribute": "Ordnet die Frage einem Merkmal dieses Leitfadens zu.",
       "hrmRetentionLeadDays": "Tage vor Ablauf, an denen um Verlängerung gebeten wird; leer ohne E-Mail.",
-      "hrmRetentionScope": "Region als JSON: applies_to all oder countries mit Ländern.",
+      "hrmRetentionScope": "Wählen Sie alle Regionen oder die Ländercodes, für die diese Aufbewahrungsregel gilt.",
       "hrmTemplateBody": "Angebotstext mit Platzhaltern für die Angebotsdaten.",
-      "hrmTemplateClauses": "Bausteine als JSON-Liste mit key, label, body und default_on für die Textbausteine.",
+      "hrmTemplateClauses": "Fügen Sie die benannten Klauseln dieser Angebotsvorlage hinzu.",
       "aiRailsZThreshold": "Erträge markieren, die mehr als so viele Standardabweichungen vom Kohortenmittel abweichen (Standard 3).",
       "aiRailsRetroThreshold": "Rückrechnungen ab diesem Betrag markieren (Standard 500).",
       "aiRailsCohort": "Mitarbeiter für Basiswerte nach Gesellschaft, Abteilung, Lohnturnus oder Stufe gruppieren.",
@@ -3701,7 +3728,11 @@
       "benefitMetricScope": "Unternehmen misst die Organisation; Abteilung und Projekt benennen ihre Umfangszeilen.",
       "benefitAllocation": "Gleich teilt gerade; Stunden gewichtet nach Zeit; Rolle nach Mitgliederrolle.",
       "benefitFrequency": "Wie oft das Programm misst: monatlich, quartalsweise, jährlich, Projektabschluss oder manuell.",
-      "benefitPeriodBasis": "Quartals- und Jahresprogramme benennen Kalender- oder Geschäftsjahrperioden."
+      "benefitPeriodBasis": "Quartals- und Jahresprogramme benennen Kalender- oder Geschäftsjahrperioden.",
+      "paymentKind": "Sachleistungen behalten die konfigurierte steuerliche Behandlung, werden aber nicht zusätzlich als Geld ausgezahlt.",
+      "nonCashAccountId": "Verwenden Sie ein Konto für vorausbezahlte Leistungen oder eine Verbindlichkeit gegenüber dem Anbieter. Einkäufe beim Anbieter müssen dasselbe Verrechnungskonto verwenden, damit der Aufwand nicht doppelt erfasst wird.",
+      "zonedDateTime": "Geben Sie einen ISO-Zeitstempel mit Z oder einem expliziten Offset ein, z. B. 2026-10-01T09:00:00-04:00. Der Offset bleibt erhalten.",
+      "ianaTimezone": "Geben Sie eine IANA-Zeitzone ein, z. B. Europe/Berlin."
     },
     "options": {
       "usageAggregation": {
@@ -4275,6 +4306,14 @@
       "benefitPeriodBasis": {
         "calendar": "Kalender",
         "fiscal": "Geschäftsjahr"
+      },
+      "payPaymentKind": {
+        "cash": "Barvergütung",
+        "nonCash": "Sachleistung"
+      },
+      "retentionRegions": {
+        "all": "Alle Regionen",
+        "countries": "Ausgewählte Länder"
       }
     },
     "bankFeeds": {
@@ -5065,6 +5104,11 @@
       "empty": "Noch keine Werte – fügen Sie den ersten hinzu.",
       "new": "Neuer Wert",
       "searchPlaceholder": "Werte suchen …"
+    },
+    "structuredFields": {
+      "row": "Zeile {number}",
+      "addRow": "Zeile hinzufügen",
+      "removeRow": "Zeile entfernen"
     }
   },
   "flows": {
