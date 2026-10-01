@@ -7,8 +7,11 @@
 
 <p align="center">
   <strong>The open business suite. Run on open books.</strong><br />
-  Accounting-first ERP for project-based, multi-entity organizations—open
-  source, self-hosted, and built around a PostgreSQL-enforced double-entry
+  Accounting and ERP for businesses of every size, across industries—from
+  solo operators and small teams to large, multi-entity organizations.<br />
+  Start with everyday bookkeeping; add connected operations and project
+  workflows as you grow.<br />
+  Open source, self-hosted, and built around a PostgreSQL-enforced double-entry
   ledger.
 </p>
 
@@ -21,8 +24,8 @@
 </p>
 
 <p align="center">
+  <a href="#run-it">Install with Docker</a> ·
   <a href="#see-openbooks-in-action">Screenshots</a> ·
-  <a href="#run-it">Run it</a> ·
   <a href="#what-is-implemented">Features</a> ·
   <a href="#accounting-kernel">Accounting kernel</a> ·
   <a href="TRUST.md">Trust</a> ·
@@ -43,9 +46,14 @@
 statements. Your ERP should connect to the way your business works.**
 
 OpenBooks brings accounting, operations and people into one open-source business
-suite. Follow a number from a dashboard to its report, source document and
-journal. Run multiple legal entities, cost a project, manage purchasing, or
-review payroll without assembling a collection of disconnected applications.
+suite. Start with customers, invoices, expenses and your books when you work
+solo. Add purchasing, inventory, projects and payroll as your team grows. For
+larger organizations, connect legal entities, currencies, approvals and
+consolidated reporting in the same suite.
+
+Follow a number from a dashboard to its report, source document and journal.
+Choose the capabilities that fit your business in Company Settings → Features,
+with one connected system underneath.
 
 Self-host it. Inspect the financial logic. Extend the workflows. Add users and
 companies without per-seat software licence tiers. Your infrastructure and
@@ -55,6 +63,82 @@ operating costs remain yours; the software is AGPL-3.0-or-later.
 parallel books.** OpenBooks is alpha software with a broad implementation and
 explicit accounting controls. It has not completed independent accounting or
 security certification. That distinction matters when choosing financial software.
+
+## Run it
+
+### Install the prebuilt Docker image (recommended)
+
+Use [Docker with Compose](https://docs.docker.com/compose/install/) and `curl` in
+a Linux, macOS or Windows WSL2 terminal. Download the two deployment files below;
+the installer pulls the [published OpenBooks image](https://github.com/braedonsaunders/openbooks/pkgs/container/openbooks)
+and runs it with its supporting services.
+
+```bash
+mkdir -p openbooks/scripts
+cd openbooks
+openbooks_deployment="https://raw.githubusercontent.com/braedonsaunders/openbooks/350252fc633149c572a7d7257f6ef8043d00c018"
+curl -fL "$openbooks_deployment/compose.yaml" -o compose.yaml &&
+curl -fL "$openbooks_deployment/scripts/compose-up.sh" -o scripts/compose-up.sh &&
+sh ./scripts/compose-up.sh
+```
+
+The deployment files above are pinned to a specific revision. Application
+services use the official release image, pinned by the installer to its immutable
+digest. For source builds and local development, see [Development](#development).
+
+Choose your organization's ISO country and base currency when prompted. The
+installer generates credentials, resolves the official release to an immutable
+image digest, starts the services, applies migrations, and prints the URL and
+first administrator login after health checks pass. Installation time depends
+on your connection and machine.
+
+**Open <http://localhost:4780>.** Sign in with the printed credentials and follow
+the company setup wizard: identity, fiscal calendar, chart of accounts and
+features. You can defer setup and resume it from Company Settings. Enable the
+modules you need in **Company Settings → Features**.
+
+For an unattended first install:
+
+```bash
+ORG_COUNTRY=US ORG_CURRENCY=USD sh ./scripts/compose-up.sh
+```
+
+The deployment includes PostgreSQL 16, Redis 7, MinIO, the web app and a separate
+background worker. Bootstrap provisions separate database roles for migrations,
+tenant requests and installation-wide maintenance. Generated secrets stay in
+`.env.compose`, created with owner-only permissions. Keep that file private and
+back it up securely.
+
+### A first session that shows how it fits together
+
+1. Finish company setup and explore the built-in sample-company options in Data
+   → Import. Use synthetic data for evaluation.
+2. Open the dashboard and drill into a profit and loss statement.
+3. Review a customer invoice, its journal and related project activity.
+4. Explore purchasing, inventory, approvals and audit history.
+5. Before importing real balances, validate your chart, currencies, tax and
+   payroll scope, posting rules, permissions and opening-balance reconciliation.
+
+### Keep your evaluation easy to operate
+
+```bash
+# Service status and worker health
+docker compose --env-file .env.compose ps
+curl 'http://localhost:4780/api/v1/health?include=worker'
+
+# Follow application and worker activity
+docker compose --env-file .env.compose logs -f web worker
+
+# Stop while preserving the named data volumes
+docker compose --env-file .env.compose down
+```
+
+`down -v` deletes the data volumes. Treat upgrades as reviewed releases:
+[upgrade runbook](docs/operations/upgrades.md). Before exposing an installation,
+configure TLS, backups, monitoring, email and secret management using
+[SECURITY.md](SECURITY.md) and the [backup/restore runbook](docs/operations/backup-restore.md).
+Compose runs on one host; [the HA reference](deploy/ha) describes separately
+operated infrastructure for a replicated application tier.
 
 ## See OpenBooks in action
 
@@ -119,71 +203,6 @@ security certification. That distinction matters when choosing financial softwar
   </tr>
 </table>
 </details>
-
-## Run it
-
-### Git + Docker Compose. One installer.
-
-Install [Git](https://git-scm.com/) and [Docker with Compose](https://docs.docker.com/compose/install/), then:
-
-```bash
-git clone https://github.com/braedonsaunders/openbooks.git
-cd openbooks
-./scripts/compose-up.sh
-```
-
-Choose your organization's ISO country and base currency when prompted. The
-installer generates credentials, resolves the official release to an immutable
-image digest, starts the services, applies migrations, and prints the URL and
-first administrator login after health checks pass. Installation time depends
-on your connection and machine.
-
-**Open <http://localhost:4780>.** Sign in with the printed credentials and follow
-the company setup wizard: identity, fiscal calendar, chart of accounts and
-features. You can defer setup and resume it from Company Settings. Enable the
-modules you need in **Company Settings → Features**.
-
-For an unattended first install:
-
-```bash
-ORG_COUNTRY=US ORG_CURRENCY=USD ./scripts/compose-up.sh
-```
-
-The deployment includes PostgreSQL 16, Redis 7, MinIO, the web app and a separate
-background worker. Bootstrap uses a privileged migration role; web and worker
-use a constrained database login. Generated secrets stay in the Git-ignored
-`.env.compose` file, created with owner-only permissions.
-
-### A first session that shows how it fits together
-
-1. Finish company setup and explore the built-in sample-company options in Data
-   → Import. Use synthetic data for evaluation.
-2. Open the dashboard and drill into a profit and loss statement.
-3. Review a customer invoice, its journal and related project activity.
-4. Explore purchasing, inventory, approvals and audit history.
-5. Before importing real balances, validate your chart, currencies, tax and
-   payroll scope, posting rules, permissions and opening-balance reconciliation.
-
-### Keep your evaluation easy to operate
-
-```bash
-# Service status and worker health
-docker compose --env-file .env.compose ps
-curl 'http://localhost:4780/api/v1/health?include=worker'
-
-# Follow application and worker activity
-docker compose --env-file .env.compose logs -f web worker
-
-# Stop while preserving the named data volumes
-docker compose --env-file .env.compose down
-```
-
-`down -v` deletes the data volumes. Treat upgrades as reviewed releases:
-[upgrade runbook](docs/operations/upgrades.md). Before exposing an installation,
-configure TLS, backups, monitoring, email and secret management using
-[SECURITY.md](SECURITY.md) and the [backup/restore runbook](docs/operations/backup-restore.md).
-Compose runs on one host; [the HA reference](deploy/ha) describes separately
-operated infrastructure for a replicated application tier.
 
 ## What is implemented
 
