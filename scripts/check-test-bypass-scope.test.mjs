@@ -67,6 +67,7 @@ test("setup", async () => {
   });
   await reader();
 });
+
 `,
     "web/lib/lazy.integration.test.ts": `import test from "node:test";
 test("setup", async () => {
@@ -96,6 +97,28 @@ test("setup", async () => {
     }
     assert.deepEqual(scanFile(join(root, "web/lib/support.ts"), root), []);
     assert.deepEqual(scanTree(root), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("native tenant transactions preserve coverage while adjacent bare writes remain exposed", () => {
+  const root = tree({
+    "web/lib/transaction.integration.test.ts": `import test from "node:test";
+import "./reader.ts";
+test("native transaction", async () => {
+  await withOrgTransaction(orgId, async () => {
+    await db.execute(sql\`insert into scoped_rows(id) values (1)\`);
+  });
+  await db.execute(sql\`insert into unscoped_rows(id) values (2)\`);
+});
+`,
+  });
+  try {
+    const findings = scanFile(join(root, "web/lib/transaction.integration.test.ts"), root);
+    assert.equal(findings.length, 1, "only the adjacent bare write is exposed");
+    assert.equal(findings[0].name, "native transaction");
+    assert.equal(findings[0].line, 7, "the native transaction's callback is scoped");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

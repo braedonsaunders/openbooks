@@ -36,7 +36,7 @@ const SCAN_SUBS = ["engine/src", "web", "packages", "schema", "e2e"];
 const WRITE_VERBS = new Set(["insert", "update", "delete", "merge"]);
 // Anything that installs an explicit scope: bypass blocks for seeds and
 // org blocks for tenant writes both survive the resolver replacement.
-const SCOPE_CALLS = ["withBypass", "withBypassContext", "withOrg", "withOrgContext"];
+const SCOPE_CALLS = ["withBypass", "withBypassContext", "withOrg", "withOrgContext", "withOrgTransaction"];
 
 const rel = (path, root) => (path.startsWith(root + "/") ? path.slice(root.length + 1) : path);
 const esc = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
