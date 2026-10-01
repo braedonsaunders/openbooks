@@ -1,5 +1,7 @@
 import { EmptyState, PageHeader } from '@openbooks/ui'
+import { Clock3, GitBranch, SlidersHorizontal, Zap } from 'lucide-react'
 import { ListPageLayout } from './page-layout'
+import styles from './route-state.module.css'
 
 /** House route-boundary chrome for authenticated app error and not-found surfaces. */
 export function RouteStateView({
@@ -9,6 +11,9 @@ export function RouteStateView({
   action,
   state,
   footer,
+  presentation = 'standard',
+  label,
+  secondaryAction,
 }: {
   icon?: React.ReactNode
   title: string
@@ -16,6 +21,10 @@ export function RouteStateView({
   action?: React.ReactNode
   /** Optional line under the action (the error boundary quotes its request id here). */
   footer?: React.ReactNode
+  /** Full-canvas treatment for feature availability inside the app shell. */
+  presentation?: 'standard' | 'feature'
+  label?: string
+  secondaryAction?: React.ReactNode
   /**
    * Machine-readable name for WHY this boundary is showing.
    *
@@ -29,6 +38,36 @@ export function RouteStateView({
    */
   state?: 'error' | 'not-found' | 'forbidden' | 'feature-disabled'
 }) {
+  if (presentation === 'feature') {
+    return (
+      <div className={styles.canvas} data-route-state={state} data-route-presentation="feature">
+        <div className={styles.backdrop} aria-hidden="true" />
+        <div className={styles.scroll}>
+          <div className={styles.content}>
+            <div className={styles.illustration} aria-hidden="true">
+              <div className={styles.orbit} />
+              <div className={styles.innerOrbit} />
+              <svg className={styles.connections} viewBox="0 0 440 260" fill="none">
+                <path d="M80 80H150Q170 80 170 100V110Q170 130 190 130H220M360 80H290Q270 80 270 100V110Q270 130 250 130H220M100 200H150Q170 200 170 180V150Q170 130 190 130H220M340 200H290Q270 200 270 180V150Q270 130 250 130H220" />
+              </svg>
+              <div className={`${styles.node} ${styles.nodeOne}`}><Clock3 /></div>
+              <div className={`${styles.node} ${styles.nodeTwo}`}><SlidersHorizontal /></div>
+              <div className={`${styles.node} ${styles.nodeThree}`}><GitBranch /></div>
+              <div className={`${styles.node} ${styles.nodeFour}`}><Zap /></div>
+              <div className={styles.icon}>{icon}</div>
+              <span className={`${styles.spark} ${styles.sparkOne}`} />
+              <span className={`${styles.spark} ${styles.sparkTwo}`} />
+              <span className={`${styles.spark} ${styles.sparkThree}`} />
+            </div>
+            {label ? <div className={styles.label}>{label}</div> : null}
+            <PageHeader title={title} description={description} className={styles.heading} />
+            <div className={styles.actions}>{action}{secondaryAction}</div>
+            {footer ? <p className={styles.footer}>{footer}</p> : null}
+          </div>
+        </div>
+      </div>
+    )
+  }
   // One heading + one message: the PageHeader owns the copy; the body keeps
   // icon + recovery action so the boundary never reads twice.
   return (

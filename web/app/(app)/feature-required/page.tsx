@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { Power } from 'lucide-react'
+import { ArrowRight, CircleCheck, Power, Workflow } from 'lucide-react'
 import { getMessages, getTranslations } from 'next-intl/server'
 import { Button } from '@openbooks/ui'
 import { RouteStateView } from '@/components/route-state'
@@ -40,15 +40,17 @@ export default async function FeatureRequiredPage({
   const catalogTitle = admin?.features?.[key]?.title
   const name = typeof catalogTitle === 'string' && catalogTitle.trim() ? catalogTitle : key
   const dashboard = (
-    <Button asChild>
+    <Button asChild size="lg" variant="outline">
       <Link href="/dashboard">{t('backToDashboard')}</Link>
     </Button>
   )
   if (await isFeatureEnabled(authz.user.orgId, key)) {
     return (
       <RouteStateView
+        presentation="feature"
+        label={name}
         state="feature-disabled"
-        icon={<Power />}
+        icon={<CircleCheck />}
         title={t('featureOnTitle', { name })}
         description={t('featureOnDescription')}
         action={dashboard}
@@ -59,8 +61,10 @@ export default async function FeatureRequiredPage({
   if (!can(authz, 'admin.setup.manage')) {
     return (
       <RouteStateView
+        presentation="feature"
+        label={name}
         state="feature-disabled"
-        icon={<Power />}
+        icon={key === 'automations' ? <Workflow /> : <Power />}
         title={t('featureOffTitle', { name })}
         description={`${description} ${t('askAdministrator')}`}
         action={dashboard}
@@ -69,15 +73,18 @@ export default async function FeatureRequiredPage({
   }
   return (
     <RouteStateView
+      presentation="feature"
+      label={name}
       state="feature-disabled"
-      icon={<Power />}
+      icon={key === 'automations' ? <Workflow /> : <Power />}
       title={t('featureOffTitle', { name })}
       description={description}
       action={
-        <Button asChild>
-          <Link href="/admin/setup/features">{t('turnOnFeature')}</Link>
+        <Button asChild size="lg">
+          <Link href="/admin/setup/features">{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
         </Button>
       }
+      secondaryAction={dashboard}
     />
   )
 }
