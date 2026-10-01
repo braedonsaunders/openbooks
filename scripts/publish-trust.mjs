@@ -205,6 +205,10 @@ for (const [label, report] of [["conformance", conformance], ["controls", contro
     console.error(`${label} totals do not describe the case results; refusing publication`);
     process.exit(1);
   }
+  if (label === "controls" && report.kind !== "internal-controls") {
+    console.error("controls evidence must identify internal-controls explicitly; refusing publication");
+    process.exit(1);
+  }
   const ledger = report.cases.filter(c => c.tier === "ledger" && c.support !== "not-implemented");
   if (report.pass !== true || ledger.length === 0 || ledger.some(c => c.status !== "pass") ||
       report.cases.some(c => c.status === "fail" || c.status === "skipped")) {
@@ -301,7 +305,11 @@ writeFileSync(join(stagedDir, "checkpoint.json"), `${JSON.stringify(checkpoint, 
 // Earlier execution evidence is preserved rather than replaced. The previous bundle's
 // history carries forward; the swap below keeps the trend intact.
 const historyPath = join(outAbs, "history.json");
-const history = readJson(historyPath) ?? [];
+const history = existsSync(historyPath) ? readJson(historyPath) : [];
+if (!Array.isArray(history)) {
+  rmSync(stagedDir, { recursive: true, force: true });
+  throw new Error("publication history is unreadable; restore the prior history before publishing new evidence");
+}
 
 const record = {
   at,

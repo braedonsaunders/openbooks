@@ -263,21 +263,5 @@
   "rename": {
     "fileTitle": "Datei umbenennen",
     "folderTitle": "Ordner umbenennen"
-  },
-  "postingEffects": {
-    "title": "Buchungsfolgeverarbeitung",
-    "unknown": "Unbekannter Status – Prüfung erforderlich",
-    "incomplete": "Das Journal ist gebucht. Bestands- oder Erlösverarbeitung ist noch unvollständig. Fehler prüfen und vor dem Hauptbuchabschluss auf erfolgreiche Verarbeitung warten.",
-    "retry": "Buchungsfolgen erneut ausführen",
-    "reason": "Prüfungsbegründung",
-    "reasonHelp": "Korrektur und Prüfung mit 10 bis 1000 Zeichen erläutern.",
-    "queued": "Wiederholung eingeplant. Nach der Verarbeitung den Abschlussstatus prüfen.",
-    "status": {
-      "pending": "Eingeplant",
-      "running": "In Bearbeitung",
-      "failed": "Automatische Wiederholung ausstehend",
-      "terminal_failed": "Prüfung und Wiederholung erforderlich",
-      "succeeded": "Abgeschlossen"
-    }
   }
 }

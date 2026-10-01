@@ -286,7 +286,7 @@ test('partial publication is refused and leaves the previous bundle intact', () 
   }
 })
 
-test('a full publication swaps atomically and drops stale components', () => {
+test('a full publication replaces evidence and drops stale components', () => {
   const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
   try {
     const out = join(tempDirectory, 'trust')
@@ -484,5 +484,18 @@ test('repeat publications retain execution history and publish verifiable compon
       assert.equal(createHash('sha256').update(readFileSync(join(out, name))).digest('hex'), digest, name);
     }
     assert.ok(bundle.components['verification.json']); assert.ok(bundle.components['history.json']);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('unreadable publication history is refused without replacing prior evidence', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'openbooks-evidence-history-refusal-'));
+  try {
+    const sha = 'a'.repeat(40); writeEvidence(directory, { sha });
+    const out = join(directory, 'trust'); mkdirSync(out);
+    writeFileSync(join(out, 'history.json'), '{broken');
+    const result = runPublisher({ conformance: join(directory, 'conformance'), controls: join(directory, 'controls'), checkpoint: join(directory, 'checkpoint'), out, sha });
+    assert.equal(result.status, 1); assert.match(result.stderr, /history is unreadable/);
+    assert.equal(readFileSync(join(out, 'history.json'), 'utf8'), '{broken');
+    assert.equal(existsSync(join(out, 'bundle.json')), false);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

@@ -10,14 +10,17 @@ submission are separate claims.
 Run from the repository root after `npm ci`:
 
 ```bash
-node --import tsx scripts/payroll-support-scope.ts > payroll-support.json
+node --import tsx scripts/localization-support-scope.ts > localization-support.json
 ```
 
 The inventory identifies the full source commit and whether the workspace has
 uncommitted changes. It derives countries, statutory currencies, published and
 draft table years, regional income-tax coverage, statutory components,
 effective-dated remittance schedules and their citations, original filing
-exports, and correction exports directly from the engine declarations. It does
+exports, and correction exports directly from the engine declarations. The indirect-tax inventory adds pack versions, declared completeness limitations,
+jurisdictional effective-rate schedules, return definitions and submission-channel
+metadata. A submission-channel declaration does not prove that its transport or
+certified government format is implemented. The inventory does
 not persist a second feature flag or a second statutory rate table. A published
 table year describes calculation tables; it does not establish that every
 filing builder supports that year or has been accepted by an agency.

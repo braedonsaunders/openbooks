@@ -263,21 +263,5 @@
   "rename": {
     "fileTitle": "Rename file",
     "folderTitle": "Rename folder"
-  },
-  "postingEffects": {
-    "title": "Posting effects",
-    "unknown": "Unknown status — review required",
-    "incomplete": "The journal is posted. Inventory or revenue projections remain incomplete. Review failures and wait for successful completion before closing GL.",
-    "retry": "Retry posting effects",
-    "reason": "Review reason",
-    "reasonHelp": "Explain the correction and review in 10 to 1000 characters.",
-    "queued": "Retry queued; review the completion status after the worker runs.",
-    "status": {
-      "pending": "Queued",
-      "running": "Processing",
-      "failed": "Automatic retry pending",
-      "terminal_failed": "Review and retry required",
-      "succeeded": "Complete"
-    }
   }
 }

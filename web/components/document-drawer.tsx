@@ -1081,6 +1081,7 @@ export function DocumentDrawer({
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
+  const tPostingEffects = useTranslations('common.postingEffects')
   const tReturns = useTranslations('returns')
   const router = useRouter()
   const pathname = usePathname()
@@ -1947,19 +1948,19 @@ export function DocumentDrawer({
 
   async function retryPostingEffects() {
     const reason = await promptDialog({
-      title: t('postingEffects.retry'), label: t('postingEffects.reason'),
-      placeholder: t('postingEffects.reasonHelp'),
+      title: tPostingEffects('retry'), label: tPostingEffects('reason'),
+      placeholder: tPostingEffects('reasonHelp'),
     })
     if (reason === null) return
     if (reason.trim().length < 10 || reason.trim().length > 1000) {
-      refuse(t('postingEffects.reasonHelp'), t('toasts.actionFailed'))
+      refuse(tPostingEffects('reasonHelp'), t('toasts.actionFailed'))
       return
     }
     await execute(() => fetchAction('/api/documents/actions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'retry-effects', documentId: doc.id, reason }),
     }), { fallbackMessage: t('toasts.actionFailed'),
-      successMessage: t('postingEffects.queued'), onOk: () => router.refresh() })
+      successMessage: tPostingEffects('queued'), onOk: () => router.refresh() })
   }
 
   async function remove() {
@@ -2795,14 +2796,14 @@ export function DocumentDrawer({
         {isPosted && typeof doc.posting_effect_status === 'string' ? (
           <section role="status" aria-live="polite" className="space-y-2 rounded border p-3 text-sm">
             <Badge variant={doc.posting_effect_status === 'succeeded' ? 'success' : 'warning'}>
-              {t('postingEffects.title')}: {t.has(`postingEffects.status.${doc.posting_effect_status}`)
-                ? t(`postingEffects.status.${doc.posting_effect_status}`) : t('postingEffects.unknown')}
+              {tPostingEffects('title')}: {tPostingEffects.has(`status.${doc.posting_effect_status}`)
+                ? tPostingEffects(`status.${doc.posting_effect_status}`) : tPostingEffects('unknown')}
             </Badge>
             {doc.posting_effect_status !== 'succeeded' ? <>
-              <p>{t('postingEffects.incomplete')}</p>
+              <p>{tPostingEffects('incomplete')}</p>
               {typeof doc.posting_effect_error === 'string' ? <p>{doc.posting_effect_error}</p> : null}
               {doc.posting_effect_status === 'terminal_failed' && canPost ? (
-                <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{t('postingEffects.retry')}</Button>
+                <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{tPostingEffects('retry')}</Button>
               ) : null}
             </> : null}
           </section>
