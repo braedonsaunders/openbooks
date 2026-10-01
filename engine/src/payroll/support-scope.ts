@@ -33,6 +33,8 @@ export function payrollSupportScope() {
     })),
     filings: payrollPackFilings(pack.country).yearEnd.map(filing => ({
       key: filing.key, label: filing.label, cadence: filing.cadence,
+      yearCoverage: { status: 'validate-requested-year',
+        reason: 'Calculation table editions do not establish filing-format coverage; validate the exact requested year with the filing builder and agency' },
       originalFile: Boolean(filing.download), originalFileRefusal: filing.downloadRefusal ?? null,
       correction: filing.amendment.supported,
       correctionFile: filing.amendment.supported && Boolean(filing.amendment.download),

@@ -223,7 +223,7 @@ Generate the source-labelled capability inventory with:
 
 ```bash
 npm ci
-node --import tsx scripts/payroll-support-scope.ts > payroll-support.json
+node --import tsx scripts/localization-support-scope.ts > localization-support.json
 ```
 
 The inventory comes from the calculation and filing declarations, including
