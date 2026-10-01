@@ -97,6 +97,7 @@ if [ ! -f "$env_file" ]; then
   admin_password=$(random_hex 18)
   postgres_owner_password=$(random_hex 24)
   openbooks_db_password=$(random_hex 24)
+  openbooks_bypass_db_password=$(random_hex 24)
   redis_password=$(random_hex 24)
   minio_password=$(random_hex 24)
   minio_app_password=$(random_hex 24)
@@ -111,6 +112,7 @@ if [ ! -f "$env_file" ]; then
       'OPENBOOKS_APP_URL=http://localhost:4780' \
       "POSTGRES_OWNER_PASSWORD=$postgres_owner_password" \
       "OPENBOOKS_DB_PASSWORD=$openbooks_db_password" \
+      "OPENBOOKS_BYPASS_DB_PASSWORD=$openbooks_bypass_db_password" \
       "REDIS_PASSWORD=$redis_password" \
       'MINIO_ROOT_USER=openbooks' \
       "MINIO_ROOT_PASSWORD=$minio_password" \
@@ -128,6 +130,13 @@ if [ ! -f "$env_file" ]; then
   } > "$env_file"
   chmod 600 "$env_file"
   echo "Created $env_file with random local credentials."
+fi
+
+if ! sed -n 's/^OPENBOOKS_BYPASS_DB_PASSWORD=//p' "$env_file" | grep -Eq '^.{1,}$'; then
+  echo "OPENBOOKS_BYPASS_DB_PASSWORD is missing from $env_file." >&2
+  echo "Add it with a new, separate random hex password (openssl rand -hex 24), then rerun the installer." >&2
+  echo "Keep the existing database passwords unchanged; bootstrap provisions the separate maintenance login." >&2
+  exit 1
 fi
 
 cd "$repo_dir"

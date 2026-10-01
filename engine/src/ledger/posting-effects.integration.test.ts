@@ -15,6 +15,7 @@ import {
 import { sql } from "drizzle-orm";
 import { strandedWorkFindings } from "../agents/stranded-work.ts";
 import { db, withOrgContext, withBypassContext } from "../platform/db.ts";
+import { requestDocumentVoid, DocumentVoidError } from "./document-void.ts";
 import { assertPostingEffectsSettled, incompletePostingEffectsCount } from "../periods/period-locks.ts";
 import { ATTR_KIND, ATTR_SURFACE } from "../platform/telemetry.ts";
 import {
@@ -157,6 +158,14 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
     assert.deepEqual(await strandedWorkFindings(randomUUID(), "1900-01-01"), [], "durable failures must remain tenant-scoped");
     assert.deepEqual(await strandedWorkFindings(org.orgId, "1900-01-01"), stranded, "the failure remains detectable after its initial notification");
 
+    await assert.rejects(() => requestDocumentVoid({ documentId, orgId: org.orgId, actorId,
+      reason: "Controller reviewed this invoice", reversalDate: org.date, source: "api" }),
+      (error: unknown) => error instanceof DocumentVoidError && error.code === 'posting-effects-incomplete'
+        && /Retry posting effects on the posted document/.test(error.message));
+    const unvoided = (await db.execute<{ status: string; void_requested_at: Date | null }>(sql`
+      select status, void_requested_at from documents where org_id=${org.orgId} and id=${documentId}
+    `)).rows[0]!;
+    assert.equal(unvoided.status, 'posted'); assert.equal(unvoided.void_requested_at, null);
     const closeScope = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
     assert.equal(await incompletePostingEffectsCount(db, closeScope), 1);
     await assert.rejects(() => assertPostingEffectsSettled(db, closeScope), /1 posting effects.*retry terminal failures.*before closing GL/);
