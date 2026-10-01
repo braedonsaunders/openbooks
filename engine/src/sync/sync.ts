@@ -2239,12 +2239,17 @@ export async function runSync(
         resolvedRows.map((row) => row.source_ref),
       )) {
         try {
-          await mirrorSourceDeletion({
+          const mirrored = await mirrorSourceDeletion({
             orgId: org.id,
             source: source.name,
             sourceRef: ref,
             connectionId,
           });
+          if (mirrored.documentId !== existing.get(ref)?.id) {
+            throw new Error(
+              `source deletion ${ref} did not correct local document ${existing.get(ref)?.documentNumber}: connector ownership could not be verified; check the document's source and connector configuration before retrying`,
+            );
+          }
           autoResolvedDeletions.push(ref);
           if (cancelledRefs.has(ref)) mirroredCancelledRefs.add(ref);
           deletedAtSource.delete(ref);

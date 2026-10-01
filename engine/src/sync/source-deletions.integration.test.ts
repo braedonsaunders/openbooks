@@ -111,6 +111,7 @@ test(
           open_balance: string | null;
           original_status: string;
           reversal_in_original_period: boolean;
+          sales_reversal_uses_journal_date: boolean;
           reversal_count: number;
           reversal_total: string;
           void_evidence_complete: boolean;
@@ -119,6 +120,12 @@ test(
         select d.status as document_status, d.open_balance::text,
                original.status as original_status,
                bool_and(reversal.period_id = original.period_id) as reversal_in_original_period,
+               bool_and(exists (
+                 select 1 from crm_sales_evidence sales
+                  where sales.org_id = d.org_id and sales.source_kind = 'document'
+                    and sales.source_id = d.id and sales.event_kind = 'reversal'
+                    and sales.effective_date = reversal.posting_date
+               )) as sales_reversal_uses_journal_date,
                count(distinct reversal.id)::int as reversal_count,
                coalesce(sum(reversal_line.amount), 0)::text as reversal_total,
                bool_and(
@@ -150,6 +157,7 @@ test(
         open_balance: null,
         original_status: "reversed",
         reversal_in_original_period: true,
+        sales_reversal_uses_journal_date: true,
         reversal_count: 1,
         reversal_total: "0.0000",
         void_evidence_complete: true,
