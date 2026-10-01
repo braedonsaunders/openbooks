@@ -266,7 +266,9 @@ test("the benefits copy ships with translated statuses in every section", () => 
 
 const { loadBenefitsPortfolio } = await import('../../../../lib/hrm/benefits-workspace.ts')
 const lookupCatalog = (key: string): string => {
-  const value = key.split('.').reduce((node: any, part) => node?.[part], hrmCatalog)
+  const value = key.split('.').reduce<unknown>((node, part) =>
+    node !== null && typeof node === 'object' ? (node as Record<string, unknown>)[part] : undefined,
+  hrmCatalog)
   return typeof value === 'string' ? value : key
 }
 const portfolioCatalog = Object.assign(lookupCatalog, { has: (key: string) => lookupCatalog(key) !== key })
@@ -298,9 +300,9 @@ test('Benefits header has one primary create action and windows use the native r
   stubReads([], [])
   const data = await loadBenefits(HR_BENEFITS, { view: 'windows' })
   const spec = benefitsSpec(data)
-  const header = spec.header?.find((block: any) => block.kind === 'page-header') as any
+  const header = spec.header?.find((block) => block.kind === 'page-header')
   assert.ok(header)
-  const creates = header.actions.filter((action: any) => action.widget === 'link-button' || action.name === 'link-button')
+  const creates = header.actions?.filter((action) => action.name === 'link-button') ?? []
   assert.equal(creates.length, 1)
   const serialized = JSON.stringify(spec)
   assert.ok(serialized.includes('hrm_benefits_windows'), 'window rows retain the shared registry identity')
