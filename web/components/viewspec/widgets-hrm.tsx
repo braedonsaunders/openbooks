@@ -1,3 +1,4 @@
+import { CandidatePoolCreateDrawer } from '../../app/(app)/hrm/recruiting/CandidatePoolCreateDrawer'
 import type { ComponentProps } from 'react'
 import {
   HrmBenefitsPanel,
@@ -67,6 +68,11 @@ import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
 export const HRM_WIDGETS = {
+  'hrm-pool-create': (props) => {
+    const create = props.create as ComponentProps<typeof CandidatePoolCreateDrawer>['create']
+    return create ? <CandidatePoolCreateDrawer create={create} /> : null
+  },
+
   /** One row's lifecycle actions inside the shared queue table: the existing
    *  ChangeRequestActions island over loader-resolved ids, refreshing the
    *  list after every transition. Terminal rows render nothing. */

@@ -1039,6 +1039,7 @@ NAV_MODULES.push(
     ['payroll-parallel-run', '/payroll/parallel-run', 'Parallel Run', 'payroll.read'],
     ['payroll-work-locations', '/payroll/work-locations', 'Work Locations', 'payroll.manage'],
   ].map(([key, href, label, requiredPermission]) => ({ key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: 'wallet', group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true })),
+  { key: 'hrm-performance-settings', href: '/hrm/performance?tab=settings', label: 'Performance setup', iconKey: 'settings', group: 'hrm', subgroup: 'hrm-talent', requiredPermission: 'hrm.performance.manage', featureKey: 'hrmPerformance', menuParent: 'hrm-performance', exact: true },
   { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'clipboard-check', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
   { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'shield', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
   { key: 'admin-navigation', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'settings', subgroup: 'customize', requiredPermissionsAny: ['admin.nav.manage', 'admin.customization.manage'] },

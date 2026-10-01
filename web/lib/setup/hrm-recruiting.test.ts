@@ -11,8 +11,8 @@ import {
   RECRUITING_RETENTION_RULES_ENTITY,
 } from './hrm-recruiting'
 
-// Recruiting-depth Setup: six registry entities, four rehomed onto
-// /hrm/recruiting and two nested under their kit, all hidden with the
+// Recruiting-depth Setup: six registry entities, four exposed in
+// Company Setup and two nested under their kit, all hidden with the
 // Recruiting module. Pure registry-shape assertions — the write-path
 // refusals are proved against the DB suite.
 
@@ -43,14 +43,14 @@ test('recruiting-depth entities register under their documented tables', () => {
   }
 })
 
-test('recruiting-depth top-level entities rehome to Recruiting, children nest', () => {
+test('recruiting-depth configuration is discoverable in Company Setup, with kit children nested', () => {
   for (const entity of [
     RECRUITING_KITS_ENTITY,
     RECRUITING_INTERVIEWER_POOLS_ENTITY,
     RECRUITING_OFFER_TEMPLATES_ENTITY,
     RECRUITING_RETENTION_RULES_ENTITY,
   ]) {
-    assert.equal(entity.rehomed, true, `${entity.key} never renders on the setup rail`)
+    assert.notEqual(entity.rehomed, true, `${entity.key} is editable on the setup rail`)
     assert.equal(entity.nestedUnder, undefined, `${entity.key} is top-level`)
   }
   assert.equal(RECRUITING_KIT_ATTRIBUTES_ENTITY.nestedUnder, 'hrm-interview-kits')

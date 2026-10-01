@@ -51,8 +51,8 @@ test("every page in a job shows the job's one strip with its own tab lit", () =>
 test("filters carry between views of one route, never onto another route", () => {
   const hiring = strip("/hrm/recruiting?status=open&requisition=r-1");
   assert.deepEqual(hiring?.hrefs.slice(0, 3), [
-    "/hrm/positions",
     "/hrm/recruiting?status=open",
+    "/hrm/positions",
     "/hrm/recruiting?tab=interviews&status=open",
   ]);
   assert.ok(!strip("/hrm/positions?status=open")?.hrefs.some((href) => href.includes("status")), "positions statuses are not recruiting statuses");
@@ -72,8 +72,8 @@ test("a viewer is offered only the tabs their grants and switches open", () => {
 
   const hiring = forViewer(["hrm.position.read", "hrm.recruiting.read"], ["hrmRecruiting"]);
   assert.deepEqual(strip("/hrm/positions", hiring)?.hrefs, [
-    "/hrm/positions",
     "/hrm/recruiting",
+    "/hrm/positions",
     "/hrm/recruiting?tab=interviews",
     "/hrm/recruiting?tab=offers",
     "/hrm/recruiting?tab=postings",

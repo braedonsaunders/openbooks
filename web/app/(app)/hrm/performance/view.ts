@@ -77,7 +77,8 @@ export interface PerformanceCycleRow {
   managerProgress: string
   status: string
   statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  statusVariant:
+    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   href: string
 }
 
@@ -139,6 +140,7 @@ export interface PerformancePageData {
   description: string
   tabs: { href: string; label: string; active?: boolean }[]
   canManage: boolean
+  showCreate: boolean
   canRetain: boolean
   addLabel: string
   addHref: string
@@ -229,6 +231,15 @@ export interface PerformancePageData {
   reviewError: PerformanceLoadError | null
   retention: {
     title: string
+    queueLinks: {
+      href: string
+      label: string
+      iconKey: string
+      badge: { value: string; tone: 'warning' | 'positive' }
+    }[]
+    queueLabel: string
+    interviewQueue: boolean
+    missingCount: number
     turnoverLabel: string
     turnoverValue: string
     regrettableLabel: string
@@ -283,10 +294,7 @@ export interface PerformancePageData {
   drawerOpen: boolean
   reviewOpen: boolean
   exitOpen: boolean
-  // HR-17: route sub-tabs Cycles / Calibration / Talent / Retention /
-  // Settings, on the shared subtab strip. The cycles table renders only on
-  // the Cycles tab; every other tab renders its own surface and nothing
-  // else.
+  // Each workspace owns one work surface under the shared header tabs.
   cyclesTab: boolean
   continuous: ContinuousData
   draftDrawer: AiDraftDrawerData | null
@@ -300,7 +308,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
   return page({
     route: '/hrm/performance',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'space-y-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -312,8 +320,26 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
           widget(
             'link-button',
             { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
-            f('canManage'),
+            f('showCreate'),
           ),
+          ...(data.continuous.talent &&
+          ((data.continuous.talent.cycleId && !data.continuous.talent.scaleNote) ||
+            data.continuous.talent.view === 'succession')
+            ? [
+                widget('hrm-talent-dialog', {
+                  dialog: data.continuous.talent.dialog,
+                }),
+              ]
+            : []),
+          ...(data.canManage
+            ? [
+                widget('plain-link-button', {
+                  href: '/admin/setup/performance',
+                  label: data.continuous.setupLabel,
+                  variant: 'outline',
+                }),
+              ]
+            : []),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -322,7 +348,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
       // Same bounded, gapped body as Benefits. Cycles, continuous views and
       // Retention are sibling surfaces and must share the same bottom
       // breathing room instead of each relying on incidental block margins.
-      grid('flex h-full min-h-0 flex-col gap-4', [
+      grid('grid gap-4', [
         // The cycles filter on the shared toolbar. The Talent views are the
         // page layout's strip, under the header.
         {
@@ -375,49 +401,70 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         // no card around it.
         ...(data.retention
           ? [
-              grid('grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3', [
-                statTile({
-                  iconKey: 'trending-down',
-                  accent: 'amber',
-                  label: data.retention.turnoverLabel,
-                  value: data.retention.turnoverValue,
-                  tone: 'default',
-                }),
-                statTile({
-                  iconKey: 'user-minus',
-                  accent: 'slate',
-                  label: data.retention.regrettableLabel,
-                  value: data.retention.regrettableValue,
-                  tone: 'default',
-                }),
-                statTile({
-                  iconKey: 'clipboard-list',
-                  accent: 'slate',
-                  label: data.retention.noInterviewTitle,
-                  value: String(data.retention.noInterviewCount),
-                  tone: 'default',
-                }),
-              ]),
+              grid(
+                'grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4',
+                [
+                  statTile({
+                    iconKey: 'gauge',
+                    accent: 'amber',
+                    label: data.retention.turnoverLabel,
+                    value: data.retention.turnoverValue,
+                    tone: 'default',
+                  }),
+                  statTile({
+                    iconKey: 'users',
+                    accent: 'slate',
+                    label: data.retention.regrettableLabel,
+                    value: data.retention.regrettableValue,
+                    tone: 'default',
+                  }),
+                  statTile({
+                    iconKey: 'clipboard',
+                    accent: 'slate',
+                    label: data.retention.noInterviewTitle,
+                    value: String(data.retention.noInterviewCount),
+                    tone: 'default',
+                  }),
+                  statTile({
+                    iconKey: 'list-checks',
+                    accent: 'amber',
+                    label: data.retention.gapsTitle,
+                    value: String(data.retention.missingCount),
+                    tone: 'default',
+                  }),
+                ],
+              ),
+              widgetBlock('live-directory', {
+                items: data.retention.queueLinks,
+              }),
               registeredListTable('hrm_performance_retention_gaps', {
                 variant: 'app',
                 rows: f('retention.gaps'),
                 rowKey: item('employmentHref'),
                 empty: {
-                  title: data.retention.gapsTitle,
+                  title: data.retention.queueLabel,
                   description: data.retention.gapsEmpty,
                 },
                 columns: [
                   column(
-                    data.retention.gapsTitle,
+                    data.retention.queueLabel,
                     link(item('employmentLabel'), item('employmentHref')),
                   ),
-                  column(
-                    data.retention.departmentLabel,
-                    text(item('departmentLabel')),
-                  ),
-                  column(data.columns.period, text(item('terminatedFrom')), {
-                    className: 'tabular-nums',
-                  }),
+                  ...(!data.retention.interviewQueue
+                    ? [
+                        column(
+                          data.retention.departmentLabel,
+                          text(item('departmentLabel')),
+                        ),
+                        column(
+                          data.columns.period,
+                          text(item('terminatedFrom')),
+                          {
+                            className: 'tabular-nums',
+                          },
+                        ),
+                      ]
+                    : []),
                 ],
               }),
             ]
@@ -507,16 +554,23 @@ export async function loadPerformancePage(
   const preservedParams = {
     ...(rawStatus ? { status: rawStatus } : {}),
     ...(cyclesTab ? {} : { tab: continuous.tab }),
+    ...(sp.queue === 'interviews' && continuous.tab === 'retention'
+      ? { queue: 'interviews' }
+      : {}),
   }
 
-  const cycles = await listCycleProgress({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-  })
-  const mineReviews = await listMyReviews({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-  })
+  const cycles = cyclesTab
+    ? await listCycleProgress({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+      })
+    : []
+  const mineReviews = cyclesTab
+    ? await listMyReviews({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+      })
+    : { asSubject: [], asReviewer: [] }
   const mineCycleIds = new Set(
     [...mineReviews.asSubject, ...mineReviews.asReviewer].map((r) => r.cycleId),
   )
@@ -907,6 +961,34 @@ export async function loadPerformancePage(
     })
     const trailing = overview.trailingTwelveMonths
     retention = {
+      queueLinks: [
+        {
+          href: '/hrm/performance?tab=retention',
+          label: t('performance.workspace.exitRecords'),
+          iconKey: 'list-checks',
+          badge: {
+            value: String(overview.missingExitRecords.length),
+            tone: overview.missingExitRecords.length ? 'warning' : 'positive',
+          },
+        },
+        {
+          href: '/hrm/performance?tab=retention&queue=interviews',
+          label: t('performance.workspace.exitInterviews'),
+          iconKey: 'clipboard-check',
+          badge: {
+            value: String(overview.exitRecordsWithoutInterview.length),
+            tone: overview.exitRecordsWithoutInterview.length
+              ? 'warning'
+              : 'positive',
+          },
+        },
+      ],
+      queueLabel: t(
+        sp.queue === 'interviews'
+          ? 'performance.workspace.exitInterviews'
+          : 'performance.workspace.exitRecords',
+      ),
+      missingCount: overview.missingExitRecords.length,
       title: t('retention.title'),
       turnoverLabel: t('retention.turnoverTwelveMonths'),
       turnoverValue:
@@ -916,17 +998,33 @@ export async function loadPerformancePage(
       regrettableLabel: t('retention.regrettableLeavers'),
       regrettableValue: String(overview.regrettableLeavers),
       gapsTitle: t('retention.missingExits'),
-      gapsEmpty: t('retention.noMissingExits'),
+      interviewQueue: sp.queue === 'interviews',
+      gapsEmpty: t(
+        sp.queue === 'interviews'
+          ? 'retention.noInterviewEmpty'
+          : 'retention.noMissingExits',
+      ),
       departmentLabel: t('home.groups.department'),
-      gaps: overview.missingExitRecords.map((g) => ({
-        employmentHref: performanceHref(preservedParams, {
-          status: rawStatus,
-          exit: g.employmentId,
-        }),
-        employmentLabel: g.workerName,
-        departmentLabel: g.departmentName ?? '—',
-        terminatedFrom: g.terminatedFrom,
-      })),
+      gaps:
+        sp.queue === 'interviews'
+          ? overview.exitRecordsWithoutInterview.map((g) => ({
+              employmentHref: performanceHref(
+                { ...preservedParams, queue: 'interviews' },
+                { status: rawStatus, exit: g.employmentId },
+              ),
+              employmentLabel: g.workerName,
+              departmentLabel: '—',
+              terminatedFrom: '—',
+            }))
+          : overview.missingExitRecords.map((g) => ({
+              employmentHref: performanceHref(preservedParams, {
+                status: rawStatus,
+                exit: g.employmentId,
+              }),
+              employmentLabel: g.workerName,
+              departmentLabel: g.departmentName ?? '—',
+              terminatedFrom: g.terminatedFrom,
+            })),
       noInterviewTitle: t('retention.noInterviewTitle'),
       noInterviewCount: overview.exitRecordsWithoutInterview.length,
     }
@@ -934,15 +1032,20 @@ export async function loadPerformancePage(
 
   return {
     title: t('performance.title'),
-    description: t('performance.description'),
+    description:
+      continuous.calibration?.description ??
+      continuous.talent?.description ??
+      (continuous.tab === 'retention'
+        ? t('retention.workspaceDescription')
+        : t('performance.description')),
     tabs,
     canManage,
+    showCreate: canManage && (cyclesTab || continuous.tab === 'calibration'),
     canRetain,
-    addLabel: t('performance.newCycle'),
-    addHref: performanceHref(preservedParams, {
-      status: rawStatus,
-      cycle: 'new',
-    }),
+    addLabel: continuous.calibration?.newLabel ?? t('performance.newCycle'),
+    addHref:
+      continuous.calibration?.newHref ??
+      performanceHref(preservedParams, { status: rawStatus, cycle: 'new' }),
     basePath: '/hrm/performance',
     segmentsLabel: t('performance.segmentsLabel'),
     allLabel: t('performance.allCycles'),

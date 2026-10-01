@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { requireAggregatePerformanceManage } from "../authorization.ts";
-import { HRM_FEATURE_KEY } from "../employment-read.ts";
+import { ACTIVE_WORKER_OPTIONS, HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
 import { inputGuards } from "../input-guards.ts";
 import { HRM_PERFORMANCE_KEY } from "./one-on-ones.ts";
@@ -330,6 +330,8 @@ export async function resolveTalentScales(args: {
 export async function listTalentDirectory(args: {
   orgId: string;
   actorId: string;
+  /** New assignments use live workers; historical assessments may retain the full directory. */
+  activeOnly?: boolean;
 }): Promise<{ employments: readonly { id: string; name: string }[]; positions: readonly { id: string; code: string; title: string }[] }> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
@@ -340,7 +342,7 @@ export async function listTalentDirectory(args: {
       select e.id, coalesce(p.display_name, '—') as name
         from worker_employments e
         left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-       where e.org_id = ${orgId} ${employmentScopeFilter(allowed, "e")}
+       where e.org_id = ${orgId} ${employmentScopeFilter(allowed, "e")} ${args.activeOnly ? ACTIVE_WORKER_OPTIONS : sql``}
        order by name
     `)).rows;
     // Positions are scoped by their latest live version's employer: a

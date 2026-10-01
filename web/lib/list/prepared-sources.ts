@@ -453,6 +453,12 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  hrm_calibration_sessions: { route: '/hrm/performance', rowsField: 'continuous.calibration.sessions', rowKeyField: 'id', mode: 'loaded' },
+  hrm_calibration_entries: { route: '/hrm/performance', rowsField: 'entries', rowKeyField: 'id', mode: 'loaded' },
+  hrm_talent_reviews: { route: '/hrm/performance', rowsField: 'continuous.talent.reviews', rowKeyField: 'id', mode: 'loaded' },
+  hrm_succession_candidates: { route: '/hrm/performance', rowsField: 'candidates', rowKeyField: 'id', mode: 'loaded' },
+  hrm_succession_plans: { route: '/hrm/performance', rowsField: 'continuous.talent.plans', rowKeyField: 'id', mode: 'loaded' },
+  hrm_talent_matrix: { route: '/hrm/performance', rowsField: 'continuous.talent.boxRows', rowKeyField: 'perf', mode: 'loaded' },
   hrm_performance_rows: {
     clientSearch: false,
     route: '/hrm/performance',

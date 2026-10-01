@@ -163,6 +163,7 @@ export async function loadOffersTab(authz: Authz, t: T, tab: DepthTab): Promise<
 export interface PostingTabRow {
   id: string
   requisitionId: string
+  opening: string
   board: string
   status: string
   statusVariant: DepthBadgeVariant
@@ -199,6 +200,7 @@ export async function loadPostingsTab(authz: Authz, t: T, tab: DepthTab): Promis
   return postings.map((posting) => ({
     id: posting.id,
     requisitionId: posting.requisitionId,
+    opening: titles.get(posting.requisitionId) ?? '—',
     board: t(`recruiting.depth.${posting.boardKey === 'feed' ? 'feedBoard' : 'internalBoard'}`),
     status: t(`recruiting.posting.${posting.status}`),
     statusVariant: postingVariant(posting.status),

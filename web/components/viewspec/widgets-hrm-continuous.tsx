@@ -1,7 +1,10 @@
+import { PerformanceSetupSection } from '../../app/(app)/admin/setup/performance/sections'
+import { SuccessionPlanDrawer } from '../../app/(app)/hrm/performance/SuccessionPlanDrawer'
 import type { ComponentProps } from 'react'
 import {
   CalibrationDistributionShell,
   CalibrationEntryShell,
+  CalibrationSessionShell,
   CalibrationMissingShell,
   FeedbackDialogShell,
   FeedbackSettingsShell,
@@ -20,11 +23,19 @@ import { str, type WidgetRenderer } from './widget-props'
  * a family file at 500 lines.
  */
 export const HRM_CONTINUOUS_WIDGETS = {
+  'hrm-performance-setup': (props) => {
+    const data = props.data as ComponentProps<typeof PerformanceSetupSection>['data']
+    return data ? <PerformanceSetupSection data={data} /> : null
+  },
   /** One calibration grid row: the inline rating/potential/justification editor. */
   'hrm-calibration-entry': (props) => {
     const editor = props.editor as ComponentProps<typeof CalibrationEntryShell>['editor']
     if (!editor) return null
     return <CalibrationEntryShell editor={editor} />
+  },
+  'hrm-calibration-session': (props) => {
+    const detail = props.detail as ComponentProps<typeof CalibrationSessionShell>['detail']
+    return detail ? <CalibrationSessionShell detail={detail} /> : null
   },
   /** Session open/close actions beside the grid. */
   'hrm-session-actions': (props) => (
@@ -59,6 +70,10 @@ export const HRM_CONTINUOUS_WIDGETS = {
     />
   ),
   /** The talent and succession record dialog (HR). */
+  'hrm-succession-plan': (props) => {
+    const detail = props.detail as ComponentProps<typeof SuccessionPlanDrawer>['detail']
+    return detail ? <SuccessionPlanDrawer detail={detail} /> : null
+  },
   'hrm-talent-dialog': (props) => {
     const dialog = props.dialog as ComponentProps<typeof TalentDialogShell>['dialog']
     if (!dialog) return null

@@ -123,7 +123,8 @@ export interface RecruitingRow {
   opened: string | null
   status: string
   statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  statusVariant:
+    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   href: string
 }
 
@@ -133,6 +134,17 @@ export interface RecruitingPageData {
   tabs: { href: string; label: string; active?: boolean }[]
   /** hrm.recruiting.manage: the header's New requisition button and the create form. */
   canManage: boolean
+  showCreate: boolean
+  setupHref: string | null
+  setupLabel: string
+  poolCreate: {
+    title: string
+    closeHref: string
+    nameLabel: string
+    descriptionLabel: string
+    submitLabel: string
+    failed: string
+  } | null
   addLabel: string
   /** The create form through the URL (`?requisition=new`). */
   addHref: string
@@ -159,7 +171,8 @@ export interface RecruitingPageData {
   tab: DepthTab
   /** The status filter's own label — never the strip's. */
   statusLabel: string
-  depthRows: InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null
+  depthRows:
+    InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null
   depthColumns: Record<string, string> | null
   depthEmpty: string
   /** Registry keys of the Setup sections rehomed under this tab (feature-gated). */
@@ -186,7 +199,11 @@ export interface RecruitingPageData {
      * refusal): the message with a retry link back to the same drawer —
      * never the uniform "no longer exists".
      */
-    detailError: { message: string; retryHref: string; retryLabel: string } | null
+    detailError: {
+      message: string
+      retryHref: string
+      retryLabel: string
+    } | null
     create?: RecruitingCreateProps | null
   } | null
 }
@@ -267,8 +284,17 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
           widget(
             'link-button',
             { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
-            f('canManage'),
+            f('showCreate'),
           ),
+          ...(data.setupHref
+            ? [
+                widget('plain-link-button', {
+                  href: data.setupHref,
+                  label: data.setupLabel,
+                  variant: 'outline',
+                }),
+              ]
+            : []),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -363,19 +389,10 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
               }),
             ]
           : [depthTable(data)]),
-        // HR-18: the Setup lists rehomed under this tab (kits + pools on
-        // Interviews, templates on Offers, retention rules on Pools) ride
-        // the shared setup-section widget — same component as Compliance,
-        // never a fork. Boards ride the existing sync-connections
-        // connector registry, so Postings mounts no section.
-        ...data.setupSections.map((entityKey) =>
-          widgetBlock('setup-section', {
-            entityKey,
-            sp: data.currentParams,
-            basePath: '/hrm/recruiting',
-          }),
-        ),
       ]),
+      ...(data.poolCreate
+        ? [widgetBlock('hrm-pool-create', { create: data.poolCreate })]
+        : []),
       // URL-backed drawers, portaled to <body> wherever they render.
       {
         ...widgetBlock('hrm-recruiting-drawer', { drawer: data.drawer }),
@@ -437,11 +454,14 @@ export async function loadRecruitingPage(
   const offerId =
     typeof sp.offer === 'string' && sp.offer.length > 0 ? sp.offer : null
 
-  const requisitions = await listRequisitions({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    ...(status ? { status } : {}),
-  })
+  const requisitions =
+    tab === 'openings'
+      ? await listRequisitions({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          ...(status ? { status } : {}),
+        })
+      : []
   const counts = new Map<string, number>()
   for (const row of requisitions)
     counts.set(row.status, (counts.get(row.status) ?? 0) + 1)
@@ -833,6 +853,7 @@ export async function loadRecruitingPage(
   }
   if (
     poolParam &&
+    poolParam !== 'new' &&
     !requisitionId &&
     !candidateId &&
     !offerId &&
@@ -948,6 +969,7 @@ export async function loadRecruitingPage(
         : tab === 'postings'
           ? {
               board: t('recruiting.depth.columns.board'),
+              opening: t('recruiting.depth.columns.requisition'),
               status: t('recruiting.depth.columns.status'),
               applies: t('recruiting.depth.columns.applies'),
             }
@@ -1007,11 +1029,33 @@ export async function loadRecruitingPage(
   })
   return {
     title: t('recruiting.title'),
-    description: t('recruiting.description'),
+    description: t(`recruiting.workspace.${tab}`),
     tabs,
     canManage,
-    addLabel: t('recruiting.add'),
-    addHref: recruitingHref(preservedParams, { status, requisition: 'new' }),
+    showCreate: canManage && (tab === 'openings' || tab === 'pools'),
+    setupHref:
+      can(authz, 'admin.setup.manage') && setupSections[0]
+        ? `/admin/setup/${setupSections[0]}`
+        : null,
+    setupLabel: t('recruiting.workspace.configure'),
+    poolCreate:
+      canManage && tab === 'pools' && poolParam === 'new'
+        ? {
+            title: t('recruiting.workspace.newPool'),
+            closeHref: hrefForDepth('pools', {}),
+            nameLabel: t('recruiting.depth.columns.name'),
+            descriptionLabel: t('recruiting.workspace.poolDescription'),
+            submitLabel: t('recruiting.workspace.newPool'),
+            failed: t('performance.actionFailed'),
+          }
+        : null,
+    addLabel: t(
+      tab === 'pools' ? 'recruiting.workspace.newPool' : 'recruiting.add',
+    ),
+    addHref:
+      tab === 'pools'
+        ? hrefForDepth('pools', { pool: 'new' })
+        : recruitingHref(preservedParams, { status, requisition: 'new' }),
     basePath: '/hrm/recruiting',
     tab,
     statusLabel: tc('labels.status'),
@@ -1026,9 +1070,7 @@ export async function loadRecruitingPage(
       label: statusLabel(value),
       count: counts.get(value) ?? 0,
     })),
-    // OM-18: the rehomed depth-tab sections read their New/edit drawer
-    // from sp.row (SetupEntitySection) — the tab and the status filter
-    // ride beside the section's list params, never instead of them.
+    // Retain the workspace and filter when a work record opens or closes.
     currentParams: preservedParams,
     columns: {
       number: t('recruiting.columns.number'),

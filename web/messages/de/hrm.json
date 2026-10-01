@@ -930,8 +930,18 @@
       "interviews": "Interviews",
       "offers": "Angebote",
       "openings": "Stellen",
-      "pools": "Pools",
-      "postings": "Börsen"
+      "pools": "Bewerberpools",
+      "postings": "Stellenanzeigen"
+    },
+    "workspace": {
+      "openings": "Genehmigter Personalbedarf: Stellenanforderungen, Personalplanung und Bewerbungen verwalten.",
+      "interviews": "Geplante Interviews und Bewertungen. Interviewvorlagen und Interviewergruppen werden in der Unternehmenseinrichtung verwaltet.",
+      "offers": "Angebote, Genehmigungen und Annahmen. Angebotsvorlagen werden in der Unternehmenseinrichtung verwaltet.",
+      "postings": "Genehmigte offene Stellen veröffentlichen und Bewerbungen nach Kanal verfolgen.",
+      "pools": "Bewerberpools sammeln Interessenten für zukünftige Stellen. Aufbewahrungsregeln werden in der Unternehmenseinrichtung verwaltet.",
+      "configure": "Recruiting konfigurieren",
+      "newPool": "Neuer Bewerberpool",
+      "poolDescription": "Beschreibung"
     }
   },
   "performance": {
@@ -1144,6 +1154,29 @@
         "respondLabel": "Antworten",
         "settingsLoadFailed": "Die Feedback-Einstellungen konnten nicht geladen werden. Versuchen Sie es erneut."
       }
+    },
+    "workspace": {
+      "view": "Ansicht",
+      "assessments": "Beurteilungen",
+      "succession": "Nachfolgepläne",
+      "matrix": "Neun-Felder-Matrix",
+      "noCycle": "Erstellen Sie einen Bewertungszyklus für Leistung und Potenzial. Nachfolgepläne können ohne Zyklus verwaltet werden.",
+      "newPlan": "Neuer Nachfolgeplan",
+      "setupTitle": "Leistungseinstellungen",
+      "setupDescription": "Bewertungsformulare, Skalen und Feedbackberechtigungen in der Unternehmenseinrichtung konfigurieren.",
+      "reviewForms": "Bewertungsformulare und Skalen",
+      "reviewFormsDescription": "Wiederverwendbare Bewertungsformulare und Skalen für Leistung und Potenzial definieren.",
+      "exitRecords": "Austrittsakten",
+      "exitInterviews": "Austrittsinterviews",
+      "addCandidate": "Nachfolger hinzufügen",
+      "removeCandidate": "Nachfolger entfernen",
+      "readiness": "Bereitschaft",
+      "noCandidates": "Es wurden keine Nachfolger benannt.",
+      "planNotFound": "Dieser Nachfolgeplan ist nicht verfügbar. Wählen Sie einen Plan aus dieser Liste.",
+      "noScale": "Dieser Zyklus benötigt Skalen für Leistung und Potenzial. Bitten Sie einen Administrator, das Bewertungsformular in der Unternehmenseinrichtung zu konfigurieren.",
+      "assessmentsDescription": "Bewerten Sie Leistung, Potenzial und Abwanderungsrisiko im ausgewählten Beurteilungszyklus.",
+      "successionDescription": "Planen Sie die Nachfolge für Schlüsselpositionen und verwalten Sie priorisierte Nachfolgekandidaten.",
+      "matrixDescription": "Untersuchen Sie die Einordnung nach Leistung und Potenzial im ausgewählten Beurteilungszyklus."
     }
   },
   "retention": {
@@ -1153,7 +1186,8 @@
     "missingExits": "Beendet ohne Austrittsdatensatz",
     "noMissingExits": "Jede Beendigung hat ihren Austrittsdatensatz.",
     "noInterviewTitle": "Austrittsdatensätze ohne Gespräch",
-    "noInterviewEmpty": "Jeder Austrittsdatensatz hat sein Gespräch."
+    "noInterviewEmpty": "Jeder Austrittsdatensatz hat sein Gespräch.",
+    "workspaceDescription": "Mitarbeiterbindung überwachen und ausstehende Austrittsakten und Interviews vervollständigen."
   },
   "benefits": {
     "title": "Leistungen",

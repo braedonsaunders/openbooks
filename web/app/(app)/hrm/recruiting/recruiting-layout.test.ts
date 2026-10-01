@@ -7,15 +7,9 @@ import test from 'node:test'
 const { recruitingSpec } = await import('./view.ts')
 
 /**
- * CK-32b sibling: /hrm/recruiting builds the same collapse as
- * /hrm/documents had — a bare register table (openings or depth) as a
- * shrinkable flex item (`flex h-full min-h-0 flex-col`) under a
- * viewport-locked page body, with setup-section siblings spread into
- * the SAME grid after it. Tall content collapses the table box to zero,
- * rows overflow visibly, and the setup sections paint over the row
- * links and steal their clicks. The register must be content-sized in
- * normal flow with the sections stacking after it. This drives
- * recruitingSpec (the emitted render tree), never the source text.
+ * A working list must size to its content. Viewport-clamped flex children
+ * can collapse under surrounding chrome and leave rows overlapping actions.
+ * Verify the emitted render tree and shared list composition together.
  */
 function stubData(): Record<string, unknown> {
   const columns = {
@@ -50,7 +44,10 @@ function stubData(): Record<string, unknown> {
     depthRows: null,
     depthColumns: null,
     depthEmpty: 'None',
-    setupSections: ['kit-x'],
+    setupSections: [],
+    showCreate: false,
+    setupHref: null,
+    setupLabel: 'Configure recruiting',
     drawerOpen: false,
     draftDrawer: null,
     draftDrawerOpen: false,
@@ -78,12 +75,12 @@ function tokens(className: unknown): string[] {
 
 function registerGrid(): Block {
   const grids = findBlocks(specOf().body, 'grid')
-  const matches = grids.filter((grid) => findBlocks(grid.blocks ?? [], 'table').length > 0)
+  const matches = grids.filter((grid) => findBlocks(grid.blocks ?? [], 'widget').some((block) => block.widget === 'registered-record-list'))
   assert.equal(matches.length, 1, 'the register table must live in exactly one grid')
   return matches[0]!
 }
 
-test('CK-32b: the recruiting body is not a viewport-locked flex column', () => {
+test('the recruiting body is not a viewport-locked flex column', () => {
   const className = String(specOf().bodyClassName ?? '')
   for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'h-svh', 'max-h-', 'min-h-screen']) {
     assert.ok(!className.includes(clamp), `the page body must not lock to the viewport (${clamp} collapses the register under the sections)`)
@@ -91,7 +88,7 @@ test('CK-32b: the recruiting body is not a viewport-locked flex column', () => {
   assert.ok(!tokens(className).includes('flex-col'), 'the page body must stack sections in normal block flow, not as flex items')
 })
 
-test('CK-32b: the recruiting register sizes to content, never to the viewport', () => {
+test('the recruiting register sizes to content, never to the viewport', () => {
   const className = String(registerGrid().className ?? '')
   for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'max-h-']) {
     assert.ok(!className.includes(clamp), `the register grid must not clamp height (${clamp} overflows rows under the sections)`)
@@ -101,18 +98,8 @@ test('CK-32b: the recruiting register sizes to content, never to the viewport', 
   assert.ok(!names.includes('min-h-0'), 'the register grid must not opt into shrinking below its content (min-h-0 overflows rows under the sections)')
 })
 
-test('CK-32b: recruiting setup sections stack after the register, never over it', () => {
-  const parent = registerGrid()
-  const kinds = (parent.blocks ?? []).map((block) =>
-    block.kind === 'table'
-      ? 'table'
-      : block.kind === 'widget' && (block as { widget?: unknown }).widget === 'setup-section'
-        ? 'setup-section'
-        : block.kind,
-  )
-  const lastTable = kinds.lastIndexOf('table')
-  const firstSection = kinds.indexOf('setup-section')
-  assert.ok(lastTable >= 0, 'the register table must render in the grid')
-  assert.ok(firstSection >= 0, 'the setup sections must render in the same flow')
-  assert.ok(firstSection > lastTable, 'the setup sections must stack after the register, never over it')
+test('recruiting has one registered working list and no embedded configuration lists', () => {
+  const widgets = findBlocks(registerGrid().blocks ?? [], 'widget')
+  assert.equal(widgets.filter((block) => block.widget === 'registered-record-list').length, 1)
+  assert.equal(widgets.filter((block) => block.widget === 'setup-section').length, 0)
 })

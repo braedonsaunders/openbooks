@@ -2,8 +2,8 @@ import type { SetupEntity } from './types'
 
 /**
  * Recruiting-depth Setup entities, gated on the Recruiting module. All
- * four top-level lists live rehomed on /hrm/recruiting (SetupEntitySection
- * via the shared `setup-section` widget), never on the setup rail — one
+ * four top-level lists live in Company Setup (SetupEntitySection
+ * via the shared registry list and drawer), exposed on the setup rail — one
  * configurable surface, never two. Kit attributes and questions nest under their kit in
  * the registry (served by the shared CRUD API and the kits/[id] routes);
  * the kit drawer owns their authoring, so the registry carries no second
@@ -36,7 +36,6 @@ export const RECRUITING_KITS_ENTITY: SetupEntity = {
   table: 'hrm_interview_kits',
   groupKey: 'workforce',
   featureKey: 'hrmRecruiting',
-  rehomed: true, // section on the HRM Recruiting page (Interviews tab)
   iconKey: 'clipboard-check',
   orgScoped: true,
   actorCols: true,
@@ -119,7 +118,6 @@ export const RECRUITING_INTERVIEWER_POOLS_ENTITY: SetupEntity = {
   table: 'hrm_interviewer_pools',
   groupKey: 'workforce',
   featureKey: 'hrmRecruiting',
-  rehomed: true, // section on the HRM Recruiting page (Interviews tab)
   iconKey: 'users',
   orgScoped: true,
   actorCols: true,
@@ -148,7 +146,6 @@ export const RECRUITING_OFFER_TEMPLATES_ENTITY: SetupEntity = {
   table: 'hrm_offer_templates',
   groupKey: 'workforce',
   featureKey: 'hrmRecruiting',
-  rehomed: true, // section on the HRM Recruiting page (Offers tab)
   iconKey: 'file',
   orgScoped: true,
   actorCols: true,
@@ -177,8 +174,6 @@ export const RECRUITING_RETENTION_RULES_ENTITY: SetupEntity = {
   table: 'hrm_retention_rules',
   groupKey: 'workforce',
   featureKey: 'hrmRecruiting',
-  rehomed: true, // section on the HRM Recruiting page (Pools tab: pools keep
-  // candidates, retention rules bound how long — one stewardship surface)
   iconKey: 'timer',
   orgScoped: true,
   actorCols: true,

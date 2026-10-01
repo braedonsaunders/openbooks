@@ -1,4 +1,6 @@
-import { UrlDrawer } from '@openbooks/ui'
+import Link from 'next/link'
+import { Button, EmptyState, UrlDrawer } from '@openbooks/ui'
+import { CalibrationSessionTable } from './CalibrationSessionTable'
 import {
   CalibrationEntryEditor,
   FeedbackDialog,
@@ -55,17 +57,51 @@ export function SessionActionsShell({ detail }: { detail: CalibrationDetail }) {
   )
 }
 
-export function SessionDialogShell({ create }: { create: NonNullable<NonNullable<ContinuousData['calibration']>['create']> }) {
+export function CalibrationSessionShell({
+  detail,
+}: {
+  detail: CalibrationDetail
+}) {
   return (
-    <SessionCreateForm
-      cycles={create.cycles}
-      nameLabel={create.nameLabel}
-      cycleLabel={create.cycleLabel}
-      submitLabel={create.submitLabel}
-      cancelLabel={create.cancelLabel}
-      closeHref={create.closeHref}
-      failed={create.failed}
-    />
+    <UrlDrawer
+      open
+      closeHref="/hrm/performance?tab=calibration"
+      title={detail.name}
+      description={detail.statusLabel}
+    >
+      <div className="space-y-6">
+        <SessionActionsShell detail={detail} />
+        <CalibrationDistributionShell
+          title={detail.distributionTitle}
+          distribution={detail.distribution}
+        />
+        <CalibrationSessionTable detail={detail} />
+        <CalibrationMissingShell
+          title={detail.missingTitle}
+          missing={detail.missing}
+        />
+      </div>
+    </UrlDrawer>
+  )
+}
+
+export function SessionDialogShell({
+  create,
+}: {
+  create: NonNullable<NonNullable<ContinuousData['calibration']>['create']>
+}) {
+  return (
+    <UrlDrawer open closeHref={create.closeHref} title={create.submitLabel}>
+      {create.cycles.length === 0 ? <EmptyState title={create.emptyLabel} action={<Button asChild variant="outline"><Link href="/hrm/performance?cycle=new">{create.newCycleLabel}</Link></Button>} /> : <SessionCreateForm
+        cycles={create.cycles}
+        nameLabel={create.nameLabel}
+        cycleLabel={create.cycleLabel}
+        submitLabel={create.submitLabel}
+        cancelLabel={create.cancelLabel}
+        closeHref={create.closeHref}
+        failed={create.failed}
+      />}
+    </UrlDrawer>
   )
 }
 
@@ -120,6 +156,8 @@ export function CalibrationMissingShell({
 export function TalentDialogShell({ dialog }: { dialog: Talent['dialog'] }) {
   return (
     <TalentDialog
+      initialMode={dialog.initialMode}
+      incumbentLabel={dialog.incumbentLabel}
       cycleId={dialog.cycleId}
       employments={dialog.employments}
       positions={dialog.positions}
