@@ -49,7 +49,7 @@ const opportunityLineSchema = z.strictObject({
   probability: z.number().int().min(0).max(100).nullable().optional(),
 })
 const contributionSchema = z.strictObject({
-  userId: z.string().uuid(),
+  employeeId: z.string().uuid(),
   contributionPercent: decimalText('Sales-team contribution'),
   isPrimary: z.boolean().optional(),
 })
@@ -76,6 +76,7 @@ const requestBodySchema = z.strictObject({
   rangeHigh: optionalRangeMoney('Range high'),
   rangeLow: optionalRangeMoney('Range low'),
   salesTeamId: nullableUuid,
+  salesRepId: nullableUuid.optional(),
   stageReason: z.string().nullable().optional(),
   statusId: z.string().uuid(),
   team: z.array(contributionSchema).optional(),
@@ -193,6 +194,8 @@ type LockedOpportunityRow = {
   party_id: string | null
   primary_contact_id: string | null
   owner_user_id: string | null
+  sales_rep_id?: string | null
+  subsidiary_id?: string | null
   sales_team_id: string | null
   lead_source_id: string | null
   status_id: string
@@ -272,6 +275,7 @@ export const PATCH = defineRoute({
     let partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
     let contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
     let ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
+    let salesRepId = body.salesRepId===undefined?current.sales_rep_id??null:textOrNull(body.salesRepId)
     let salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
     let leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
     if (!await orgUuidExistsWith(db, 'parties', partyId, user.orgId, false, gate.allowedSubsidiaryIds)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
@@ -406,7 +410,7 @@ export const PATCH = defineRoute({
       if (refusal) return NextResponse.json({ error: STAGE_REFUSAL_MESSAGES[refusal], code: refusal }, { status: 422 })
     }
     const team = body.team
-    const teamRows: Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> = []
+    const teamRows: Array<{ employeeId: string; contributionPercent: string; isPrimary?: boolean }> = []
     if (team) {
       if (!Array.isArray(team)) return NextResponse.json({ error: 'team must be an array' }, { status: 422 })
       for (const member of team) {
@@ -419,7 +423,7 @@ export const PATCH = defineRoute({
       }
       try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return apiErrorResponse(new OpportunityMathRefusal(error instanceof Error ? error.message : String(error))) }
       if (teamRows.filter((member) => member.isPrimary).length !== 1) return NextResponse.json({ error: 'exactly one team member must be primary' }, { status: 422 })
-      for (const member of teamRows) if (!await orgUuidExists('users', member.userId, user.orgId)) return NextResponse.json({ error: 'invalid sales team member' }, { status: 422 })
+      for (const member of teamRows) if (!await orgUuidExists('parties', member.employeeId, user.orgId)) return NextResponse.json({ error: 'invalid sales team member' }, { status: 422 })
     }
     const rangeMoney = (raw: unknown) => {
       if (raw == null || raw === '') return null
@@ -461,6 +465,7 @@ export const PATCH = defineRoute({
       partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
       contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
       ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
+      salesRepId = body.salesRepId === undefined ? current.sales_rep_id ?? null : textOrNull(body.salesRepId)
       salesTeamId = body.salesTeamId === undefined ? current.sales_team_id : textOrNull(body.salesTeamId)
       leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
       statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
@@ -490,6 +495,8 @@ export const PATCH = defineRoute({
         throw new OpportunityValidationError('invalid lead source')
       }
 
+      if(salesTeamId && !(await tx.execute(sql`select 1 from crm_sales_teams where org_id=${user.orgId} and id=${salesTeamId} and is_active and subsidiary_id is not distinct from ${current.subsidiary_id??null} for share`)).rows.length) throw new OpportunityValidationError('Select an active sales team in the opportunity legal entity. Manage teams in Sales → Teams.')
+      if(salesRepId){const nativeEmployee=(await tx.execute(sql`select 1 from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${user.orgId} and e.party_id=${salesRepId} and e.is_active and e.is_sales_rep and p.is_active and p.subsidiary_id is not distinct from ${current.subsidiary_id??null} for share of e,p`)).rows.length;if(!nativeEmployee)throw new OpportunityValidationError('Select an active sales employee in the opportunity legal entity. Manage eligibility in Sales → Representatives.')}
       // Re-read the selected status after the lock.  In particular, an
       // explicitly submitted status may have been deactivated or moved to a
       // different tenant since preflight; never use that stale row's lifecycle
@@ -611,7 +618,7 @@ export const PATCH = defineRoute({
       }
       if (team) {
         for (const member of teamRows) {
-          if (!await orgUuidExistsWith(lockedDb, 'users', member.userId, user.orgId, true)) {
+          if (!await orgUuidExistsWith(lockedDb, 'parties', member.employeeId, user.orgId, true)) {
             throw new OpportunityValidationError('invalid sales team member')
           }
         }
@@ -665,8 +672,8 @@ export const PATCH = defineRoute({
         await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`)
         for (const member of teamRows) await tx.execute(sql`
           insert into crm_opportunity_team_members
-            (org_id, opportunity_id, user_id, contribution_percent, is_primary, created_by, updated_by)
-          values (${user.orgId}, ${id}, ${member.userId}, ${member.contributionPercent}, ${member.isPrimary === true}, ${user.id}, ${user.id})`)
+            (org_id, opportunity_id, employee_id, contribution_percent, is_primary, created_by, updated_by)
+          values (${user.orgId}, ${id}, ${member.employeeId}, ${member.contributionPercent}, ${member.isPrimary === true}, ${user.id}, ${user.id})`)
       }
       const projected = calculated?.projectedAmount ?? current.projected_amount
       let weighted = calculated?.weightedAmount ?? current.weighted_amount
@@ -710,7 +717,7 @@ export const PATCH = defineRoute({
       // strings really do mean "nothing changed since you read it".
       await tx.execute(sql`
         update crm_opportunities set
-          title = ${title}, party_id = ${partyId}, primary_contact_id = ${contactId}, owner_user_id = ${ownerUserId},
+          title = ${title}, party_id = ${partyId}, primary_contact_id = ${contactId}, owner_user_id = ${ownerUserId}, sales_rep_id=${salesRepId},
           sales_team_id = ${salesTeamId}, status_id = ${statusId}, lead_source_id = ${leadSourceId},
           expected_close_date = ${expectedCloseDate !== undefined ? expectedCloseDate : sql`expected_close_date`},
           forecast_category = ${category}, probability = ${probability},
@@ -749,6 +756,8 @@ export const PATCH = defineRoute({
         values (${user.orgId}, 'crm_opportunities', ${id}, 'update', ${JSON.stringify({ before: current, requested: body })}::jsonb, ${user.id})`)
       })
     } catch (error) {
+      const cause=error instanceof Error?error.cause:null
+      if(cause&&typeof cause==='object'&&'code' in cause&&cause.code==='23514'&&'message' in cause&&/sales|reason for reopening this opportunity/i.test(String(cause.message)))return apiErrorResponse(new OpportunityValidationError(String(cause.message)),{safeStatus:422})
       if (error instanceof OpportunityDisappeared) return notFound("record")
       if (error instanceof OpportunityRevisionError) return apiErrorResponse(error, { safeStatus: 409 })
       if (error instanceof OpportunityNotFound) return notFound("record")

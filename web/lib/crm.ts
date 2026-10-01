@@ -117,8 +117,8 @@ async function loadOpportunitySnapshot(id: string, orgId: string, allowed?: Read
   const [lines, team, documents, activities, history] = await Promise.all([
     db.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${orgId} order by line_number`),
     db.execute(sql`
-      select m.*, u.name as user_name, u.email as user_email
-        from crm_opportunity_team_members m join users u on u.id = m.user_id
+      select m.*, u.display_name as user_name, u.email as user_email
+        from crm_opportunity_team_members m join parties u on u.id = m.employee_id and u.org_id=m.org_id
        where m.opportunity_id = ${id} and m.org_id = ${orgId} order by m.is_primary desc, u.name`),
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency, d.total

@@ -177,6 +177,7 @@ export const POST = defineRoute({
     if (!parsedBody.ok) return parsedBody.response;
     const body = ((parsedBody.data));
     const action = body.action;
+    if (['save-team','save-territory','save-quota'].includes(action)) return NextResponse.json({error:'Manage employee sales teams, territories and quotas in Customers → Sell & Collect → Sales.',remedy:'Open /crm/sales; sales configuration has moved out of Company Settings.'},{status:410});
     const recordId = body.id ?? null;
     return withOrgTransaction(user.orgId, async () => {
       // Defaults and the requested setup mutation are part of the same unit as

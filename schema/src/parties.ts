@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  numeric,
   jsonb,
   pgTable,
   text,
@@ -165,6 +166,8 @@ export const employeeRoles = pgTable("employee_roles", {
   orgId: orgRef(),
   partyId: uuid("party_id").notNull().unique(),
   employeeNumber: text("employee_number"),
+  isSalesRep: boolean("is_sales_rep").notNull().default(false),
+  salesRepSince: date("sales_rep_since"),
   /** Free-form operational title used for workforce planning and wage scope. */
   jobTitle: text("job_title"),
   departmentId: uuid("department_id"),
@@ -222,6 +225,10 @@ export const addresses = pgTable(
     orgId: orgRef(),
     partyId: uuid("party_id").notNull(),
     label: text("label"), // "Head office", "Site 12"
+    longitude: numeric("longitude", { precision: 10, scale: 7 }),
+    latitude: numeric("latitude", { precision: 10, scale: 7 }),
+    locationVerifiedAt: timestamp("location_verified_at", { withTimezone: true }),
+    locationVerifiedBy: uuid("location_verified_by"),
     line1: text("line1"),
     line2: text("line2"),
     city: text("city"),

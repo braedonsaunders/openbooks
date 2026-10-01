@@ -9,6 +9,7 @@
 // silently reading as the calendar year. Every definition run path (interactive,
 // export, drill, scheduled) funnels through that executor.
 
+import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { defaultRowsQuery } from './custom-query'
 import { utcCivilDate } from './fiscal-calendar'
 import { HRM_REPORT_ENTITIES, REPORT_ENTITY_MAP, entityColumn } from './entities'
@@ -315,6 +316,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
 ]
 
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
+  ...SALES_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   {
     slug: 'ap-aging-by-vendor',
     name: 'AP aging by vendor',

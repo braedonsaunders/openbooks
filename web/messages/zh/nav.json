@@ -51,7 +51,7 @@
     "compliance-vendors": "分包商",
     "continuous-close": "结账监控",
     "crm-activities": "活动",
-    "crm-forecasts": "预测与配额",
+    "crm-forecasts": "Forecasts",
     "crm-opportunities": "商机",
     "customers": "客户",
     "dashboard": "仪表板",
@@ -129,7 +129,12 @@
     "hrm-performance-calibration": "校准",
     "hrm-performance-talent": "人才与继任",
     "hrm-performance-retention": "留任",
-    "hrm-performance-settings": "绩效设置"
+    "hrm-performance-settings": "绩效设置",
+    "crm-sales": "Sales",
+    "crm-sales-representatives": "Representatives",
+    "crm-sales-teams": "Teams",
+    "crm-sales-quotas": "Quotas",
+    "crm-sales-territories": "Territories"
   },
   "groups": {
     "workforce": "员工队伍",
@@ -181,7 +186,8 @@
     "accounts-views": "会计科目表",
     "inventory-views": "库存",
     "inbox-views": "收件箱",
-    "me-views": "我的"
+    "me-views": "我的",
+    "crm-sales": "Sales"
   },
   "modulesShort": {
     "ap": "应付账款",
@@ -213,6 +219,7 @@
     "setup-depreciation": "账面折旧",
     "setup-tax-depreciation": "税务折旧",
     "setup-overhead": "间接费用",
-    "setup-payments": "付款与银行业务"
+    "setup-payments": "付款与银行业务",
+    "crm-sales": "Sales"
   }
 }

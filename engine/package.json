@@ -65,6 +65,10 @@
     "./platform/identifiers": "./src/platform/uuid.ts",
     "./hrm/org-chart/contracts": "./src/hrm/public-org-chart-contracts.ts",
     "./hrm/org-chart": "./src/hrm/public-org-chart.ts",
-    "./sales/returns/contracts": "./src/sales/public-return-contracts.ts"
+    "./sales/returns/contracts": "./src/sales/public-return-contracts.ts",
+    "./crm/sales": "./src/crm/public-sales.ts",
+    "./crm/sales/contracts": "./src/crm/public-sales-contracts.ts",
+    "./reports/definitions": "./src/reports/public-definitions.ts",
+    "./platform/business-date": "./src/platform/public-business-date.ts"
   }
 }

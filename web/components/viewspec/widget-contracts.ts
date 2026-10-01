@@ -113,6 +113,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'compliance-setup-banner': { props: ['actionHref', 'actionLabel', 'prompt'] },
   'contract-drawer': { props: ['drawer'] },
   'crm-new-button': { props: ['apiPath', 'basePath', 'body', 'failed', 'label', 'param'] },
+  'crm-sales-workspace': { props: ['data', 'params'] },
   'crm-setup-workspace': { props: [], open: true },
   'currency-basis': { props: ['baseLabel', 'basisLabel', 'currencies', 'currency', 'currencyBasis', 'currencyLabel', 'transactionLabel'] },
   'custom-field-drawer': { props: ['def', 'hiddenKinds', 'hiddenTables', 'roleOptions'] },

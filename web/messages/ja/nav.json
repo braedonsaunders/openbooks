@@ -51,7 +51,7 @@
     "compliance-vendors": "下請業者",
     "continuous-close": "決算モニター",
     "crm-activities": "活動",
-    "crm-forecasts": "予測とノルマ",
+    "crm-forecasts": "Forecasts",
     "crm-opportunities": "商談",
     "customers": "得意先",
     "dashboard": "ダッシュボード",
@@ -129,7 +129,12 @@
     "hrm-performance-calibration": "キャリブレーション",
     "hrm-performance-talent": "タレントと後継",
     "hrm-performance-retention": "定着",
-    "hrm-performance-settings": "パフォーマンス設定"
+    "hrm-performance-settings": "パフォーマンス設定",
+    "crm-sales": "Sales",
+    "crm-sales-representatives": "Representatives",
+    "crm-sales-teams": "Teams",
+    "crm-sales-quotas": "Quotas",
+    "crm-sales-territories": "Territories"
   },
   "groups": {
     "workforce": "従業員体制",
@@ -181,7 +186,8 @@
     "accounts-views": "勘定科目表",
     "inventory-views": "在庫",
     "inbox-views": "受信トレイ",
-    "me-views": "自分"
+    "me-views": "自分",
+    "crm-sales": "Sales"
   },
   "modulesShort": {
     "ap": "買掛金",
@@ -213,6 +219,7 @@
     "setup-depreciation": "帳簿減価償却",
     "setup-tax-depreciation": "税務減価償却",
     "setup-overhead": "間接費",
-    "setup-payments": "支払と銀行取引"
+    "setup-payments": "支払と銀行取引",
+    "crm-sales": "Sales"
   }
 }
