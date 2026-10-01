@@ -10,10 +10,7 @@ import {
   link,
   page,
   pageHeader,
-  panel,
   ref,
-  statTile,
-  table,
   text,
   widget,
   widgetBlock,
@@ -23,29 +20,14 @@ import {
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadBenefits, type BenefitsData } from '../../../../lib/hrm/benefits'
+import { benefitsOverviewBlocks } from './overview'
 
 /**
- * The Benefits tab, split into a loader and a spec.
- *
- * The default overview is the portfolio cockpit in the purchasing
- * composition: native statTile vitals, native tables for delivered and
- * awaiting money (one row per currency — mixed currencies never total),
- * the native attention-list queue, the six program-type cards as one panel
- * body, and native report links above the enrollment-windows table.
- * Focused views narrow the page: programs (employer-defined programs
- * beside the rehomed insured-plan section), windows, enrolments, rewards,
- * incentives, and payouts. Windows and enrolments keep their existing
- * tables and operations; the window-status filter rides the shared
- * `list-toolbar` beside them.
- *
- * The page's primary action is the shared 'link-button' widget ("New
- * program") FIRST in the page header, then the module-home-tabs strip the
- * shell owns. "New window" and "New award" stay section-level actions, so
- * the header never carries competing create buttons. The program and award
- * builders and drawers open from URL search params through small client
- * islands; pending rows carry the approve island in the row-action cell.
- * Forms use @openbooks/ui primitives, never bespoke buttons or hand-rolled
- * tables.
+ * Benefits uses the Customers module-home composition: native vitals, a
+ * registered programs list in the two-column hero, and a scrolling rail
+ * with attention, currency-separated award totals, destinations and reports.
+ * Enrollment windows and employee elections stay on their focused views.
+ * Builders and record drawers retain their existing URL-driven controls.
  */
 
 const f = ref<BenefitsData>()
@@ -54,7 +36,7 @@ const f = ref<BenefitsData>()
 // defaults to the literal route the spec declares.
 export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefits'): PageSpec {
   const showingOverview = data.portfolioView === 'overview'
-  const showingWindows = data.portfolioView === 'windows' || showingOverview
+  const showingWindows = data.portfolioView === 'windows'
   const showingPrograms = data.portfolioView === 'programs'
   const showingRewards = data.portfolioView === 'rewards'
   const showingIncentives = data.portfolioView === 'incentives'
@@ -81,82 +63,25 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
       // intact — never a success, never an empty table.
       widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),
       {
-        ...grid('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4', [
-          ...(showingOverview
-            ? [
-                grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4', [
-                  statTile({ iconKey: 'heart-pulse', accent: 'teal', label: f('overview.vitalsLabels.activePrograms'), value: f('tiles.activePrograms') }),
-                  statTile({ iconKey: 'calendar-clock', accent: 'sky', label: f('overview.vitalsLabels.openWindows'), value: f('tiles.openWindows') }),
-                  statTile({ iconKey: 'timer', accent: 'amber', label: f('overview.vitalsLabels.pendingApprovals'), value: f('tiles.pendingApprovals') }),
-                  statTile({ iconKey: 'wallet', accent: 'violet', label: f('overview.vitalsLabels.queuedPayouts'), value: f('tiles.queuedPayouts') }),
-                ]),
-                // An unreadable award population stays unknown; its named
-                // refusal appears beside omitted currency totals.
-                widgetBlock(
-                  'empty-state',
-                  { title: data.vitalsRefusal?.title ?? '', description: data.vitalsRefusal?.message },
-                  f('vitalsRefusal'),
-                ),
-                ...(data.awardsRefusal ? [] : [grid('grid shrink-0 grid-cols-1 gap-4 lg:grid-cols-2', [
-                  panel({ title: f('deliveredTitle'), iconKey: 'circle-check', className: 'shrink-0', blocks: [table({
-                    variant: 'app',
-                    rows: f('deliveredRows'),
-                    rowKey: item('currency'),
-                    columns: [
-                      column(f('moneyColumns.currency'), text(item('currency'))),
-                      column(f('moneyColumns.amount'), text(item('display')), { align: 'right', className: 'tabular-nums' }),
-                    ],
-                    empty: { title: f('deliveredTitle'), description: f('deliveredEmpty') },
-                  })] }),
-                  panel({ title: f('awaitingTitle'), iconKey: 'timer', className: 'shrink-0', blocks: [table({
-                    variant: 'app',
-                    rows: f('awaitingRows'),
-                    rowKey: item('currency'),
-                    columns: [
-                      column(f('moneyColumns.currency'), text(item('currency'))),
-                      column(f('moneyColumns.amount'), text(item('display')), { align: 'right', className: 'tabular-nums' }),
-                    ],
-                    empty: { title: f('awaitingTitle'), description: f('awaitingEmpty') },
-                  })] }),
-                ])]),
-                panel({
-                  title: f('overview.attentionTitle'),
-                  iconKey: 'triangle-alert',
-                  bodyClassName: 'p-0',
-                  className: 'shrink-0',
-                  blocks: [
-                    widgetBlock('attention-list', {
-                      items: data.overview.attention,
-                      allClear: data.overview.attentionEmpty,
-                    }),
-                  ],
-                }),
-                panel({
-                  title: f('overview.vitalsLabels.cardsTitle'),
-                  iconKey: 'list-checks',
-                  className: 'shrink-0',
-                  blocks: [widgetBlock('hrm-benefit-type-cards', { cards: data.overview.cards })],
-                }),
-                widgetBlock('directory-section', { title: data.overview.reportsTitle, items: data.overview.reportLinks.map((report) => ({ href: report.href, label: report.label, iconKey: 'chart-no-axes-combined' })) }),
-                widgetBlock(
-                  'empty-state',
-                  { title: data.reportsRefusal?.title ?? '', description: data.reportsRefusal?.message },
-                  f('reportsRefusal'),
-                ),
-              ]
-            : []),
+        ...grid(showingOverview ? 'flex h-full min-h-0 flex-col gap-4' : 'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4', [
+          ...(showingOverview ? benefitsOverviewBlocks(data) : []),
+          widgetBlock(
+            'empty-state',
+            { title: data.vitalsRefusal?.title ?? '', description: data.vitalsRefusal?.message },
+            f('vitalsRefusal'),
+          ),
           // A refused programs read renders with its message intact beside
           // the sections it blocks — never a success around missing rows.
-          widgetBlock(
+          ...(showingOverview ? [] : [widgetBlock(
             'empty-state',
             { title: data.programsRefusal?.title ?? '', description: data.programsRefusal?.message },
             f('programsRefusal'),
-          ),
-          widgetBlock(
+          )]),
+          ...(showingOverview ? [] : [widgetBlock(
             'empty-state',
             { title: data.awardsRefusal?.title ?? '', description: data.awardsRefusal?.message },
             f('awardsRefusal'),
-          ),
+          )]),
           // A refused selector lookup renders beside the builders — an empty
           // picker never pretends its catalog is empty.
           widgetBlock(
@@ -207,6 +132,7 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
             : []),
           ...(data.showingEnrolments
             ? [
+                widgetBlock('link-button', { href: `${basePath}?view=windows`, label: data.enrollmentWindowsButton, iconKey: 'calendar-clock' }),
                 registeredListTable('hrm_benefits_enrolments', {
                   variant: 'app',
                   rows: f('enrollmentRows'),

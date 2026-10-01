@@ -12,6 +12,7 @@ import {
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { benefitsCockpit } from '@openbooks/engine/src/hrm/benefits/benefits-read.ts'
 import { can, type Authz } from '../authz'
+import type { DirectoryItem } from '../../components/module-home/ui'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { loadQueueLabels } from './change-requests'
 import { listScopedDepartmentOptions } from '../scoped-options'
@@ -112,6 +113,7 @@ export interface BenefitsData {
   emptyDescription: string
   canManage: boolean
   newWindowButton: string
+  enrollmentWindowsButton: string
   newWindowHref: string
   dialogOpen: boolean
   dialogCloseHref: string
@@ -124,6 +126,10 @@ export interface BenefitsData {
   portfolioView: PortfolioView
   overview: {
     vitals: PortfolioVitals
+    heroHint: string
+    directoryTitle: string
+    directory: DirectoryItem[]
+    payrollHint: string
     vitalsLabels: VitalsLabels
     cards: OverviewCard[]
     attention: AttentionItem[]
@@ -274,6 +280,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       emptyDescription: '',
       canManage,
       newWindowButton: t('benefits.newWindow'),
+      enrollmentWindowsButton: t('benefits.windowsTitle'),
       newWindowHref: benefitsHref(basePath, rawSegment, { ...keepView, window: 'new' }),
       dialogOpen: false,
       dialogCloseHref: basePath,
@@ -424,6 +431,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     emptyDescription: showingEnrolments ? t('benefits.enrolmentsEmpty') : t('benefits.windowsEmpty'),
     canManage,
     newWindowButton: t('benefits.newWindow'),
+    enrollmentWindowsButton: t('benefits.windowsTitle'),
     newWindowHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, { ...keepView, window: 'new' }),
     dialogOpen,
     dialogCloseHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, keepView),
@@ -511,6 +519,10 @@ function emptyPortfolioFields(
   return {
     portfolioView: 'overview',
     overview: {
+      heroHint: t('portfolio.home.heroHint'),
+      directoryTitle: t('portfolio.home.directoryTitle'),
+      directory: [],
+      payrollHint: t('portfolio.home.payrollHint'),
       vitals: {
         activePrograms: 0,
         draftPrograms: 0,
@@ -730,6 +742,16 @@ function toPortfolioFields(
   return {
     portfolioView,
     overview: {
+      heroHint: t('portfolio.home.heroHint'),
+      directoryTitle: t('portfolio.home.directoryTitle'),
+      payrollHint: t('portfolio.home.payrollHint'),
+      directory: [
+        { href: viewParam('programs'), label: t('portfolio.programsTitle'), iconKey: 'heart-pulse' },
+        { href: viewParam('enrolments'), label: t('benefits.enrolmentsTitle'), iconKey: 'users' },
+        { href: viewParam('rewards'), label: t('portfolio.rewardsTitle'), iconKey: 'gift' },
+        { href: viewParam('incentives'), label: t('portfolio.incentivesTitle'), iconKey: 'trending-up' },
+        { href: viewParam('payouts'), label: t('portfolio.payoutsTitle'), iconKey: 'wallet' },
+      ],
       vitals: portfolio.vitals,
       vitalsLabels: vitalsLabels(t),
       cards,
