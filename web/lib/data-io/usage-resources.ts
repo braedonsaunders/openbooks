@@ -1,3 +1,5 @@
+import { importRowError } from './row-error'
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 /** Usage records and derived SaaS metrics data-io resources. */
 import 'server-only'
 import { sql } from 'drizzle-orm'
@@ -8,7 +10,6 @@ import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOut
 import type { DataResource, WriteCtx } from './resource-core'
 import {
   duplicateImportRowIndexes,
-  enforceExportRowLimit,
   RefResolver,
   subsidiaryReadFilter,
   type ReadCtx,
@@ -85,7 +86,7 @@ const CURRENCY_COLUMNS: Record<string, string> = {
 
 function describeRefusal(error: unknown): string {
   if (error instanceof UsageBillingError) return `${error.message} Remedy: ${error.remedy}`
-  return error instanceof Error ? error.message : 'Usage import was refused.'
+  return importRowError(error)
 }
 
 export function usageRecordsResource(orgId: string): DataResource {
@@ -94,21 +95,21 @@ export function usageRecordsResource(orgId: string): DataResource {
     async fields() { return usageRecordFields() },
     async columns() { return usageRecordFields().map(({ key, label }) => ({ key, label })) },
     async read(ctx?: ReadCtx) {
-      const result = await db.execute<{
+      const result = await readExportWindow<{
         meter_key: string; customer_id: string; subscription: string | null; occurred_on: string;
         quantity: string; distinct_key: string | null; source_ref: string | null; idempotency_key: string;
-      }>(sql`
+      }>(db, sql`
         select m.key as meter_key, r.customer_id::text as customer_id,
                r.subscription_id::text as subscription, r.occurred_on::text as occurred_on,
                r.quantity::text as quantity, r.distinct_key, r.source_ref, r.idempotency_key
-          from usage_records r
+          ${transferId(ctx, sql`r.id`)} from usage_records r
           join usage_meters m on m.org_id = r.org_id and m.id = r.meter_id
           join parties c on c.org_id = r.org_id and c.id = r.customer_id
          where r.org_id = ${orgId} and r.reverses_id is null
            ${subsidiaryReadFilter(sql`c.subsidiary_id`, ctx?.allowedSubsidiaryIds)}
-         order by r.occurred_on, r.id
-         limit 10001`)
-      enforceExportRowLimit(result.rows, USAGE_RECORDS_DESCRIPTOR.label)
+         ${transferWhere(ctx, sql`r.id`)} order by ${transferOrder(ctx, sql`r.id`, sql`r.occurred_on, r.id`)}
+         limit ${ctx?.page ? transferLimit(ctx) : 10001}`, ctx)
+      finishExportPage(result.rows, USAGE_RECORDS_DESCRIPTOR.label, ctx)
       const resolver = new RefResolver(orgId)
       const fields = usageRecordFields()
       const rows: Record<string, CellValue>[] = []
@@ -162,9 +163,10 @@ export function usageRecordsResource(orgId: string): DataResource {
           }
         }
 
-        const duplicateRows = duplicateImportRowIndexes(prepared.map((row) => 'input' in row
-          ? (row.input.meterKey && row.input.idempotencyKey ? `${row.input.meterKey}\0${row.input.idempotencyKey}` : null)
-          : row.key))
+        const identityKeys = prepared.map((row) => 'input' in row
+          ? (row.input.meterKey && row.input.idempotencyKey ? `${row.input.meterKey}\0${row.input.idempotencyKey}` : null) : row.key)
+        await ctx.recordKeys?.(identityKeys)
+        const duplicateRows = duplicateImportRowIndexes(identityKeys)
         const valid: { row: number; input: IngestUsageRecordInput }[] = []
         for (let index = 0; index < prepared.length; index++) {
           const row = prepared[index]!
@@ -234,20 +236,20 @@ export function saasMetricsFactsResource(orgId: string): DataResource {
     descriptor: SAAS_METRICS_FACTS_DESCRIPTOR,
     async fields() { return METRICS_FIELDS },
     async columns() { return METRICS_FIELDS.map(({ key, label }) => ({ key, label })) },
-    async read(_ctx?: ReadCtx) {
+    async read(ctx?: ReadCtx) {
       const columns = sql.raw(Object.entries(CURRENCY_COLUMNS).map(([key, column]) => `${column}::text as "${key}"`).join(', '))
-      const result = await db.execute(sql`
+      const result = await readExportWindow(db, sql`
         select s.name as subsidiary, f.month::text as month, ${columns},
                f.customers_start as "customersStart", f.customers_end as "customersEnd",
                f.customers_new as "customersNew", f.customers_churned as "customersChurned",
                f.customers_reactivated as "customersReactivated", f.basis, f.inputs_hash as "inputsHash",
-               f.computed_at::text as "computedAt"
+               f.computed_at::text as "computedAt"${transferId(ctx, sql`f.id`)}
           from saas_metrics_facts_monthly f
           join subsidiaries s on s.org_id = f.org_id and s.id = f.subsidiary_id
          where f.org_id = ${orgId}
-         order by f.month, s.name
-         limit 10001`) as { rows: Record<string, CellValue>[] }
-      enforceExportRowLimit(result.rows, SAAS_METRICS_FACTS_DESCRIPTOR.label)
+         ${transferWhere(ctx, sql`f.id`)} order by ${transferOrder(ctx, sql`f.id`, sql`f.month, s.name`)}
+         limit ${ctx?.page ? transferLimit(ctx) : 10001}`, ctx) as { rows: Record<string, CellValue>[] }
+      finishExportPage(result.rows, SAAS_METRICS_FACTS_DESCRIPTOR.label, ctx)
       return { fields: METRICS_FIELDS, columns: METRICS_FIELDS.map(({ key, label }) => ({ key, label })), rows: result.rows }
     },
     async write(rows: Record<string, unknown>[]): Promise<WriteOutcome> {

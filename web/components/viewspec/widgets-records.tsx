@@ -41,9 +41,8 @@ export const RECORDS_WIDGETS = {
   /** No props: `ExportClient` fetches its own resource descriptors after
    *  mount and owns every string. The `query-console` precedent. */
   'data-export': () => <ExportClient />,
-  /** Also no props: the import wizard owns its own `WizardLayout` shell and
-   *  every step's state. `bare` layout, or the chrome nests. */
-  'import-wizard': () => <ImportWizard />,
+  /** The wizard owns its step state; its loader supplies the permitted return destination. */
+  'import-wizard': (props) => <ImportWizard backHref={str(props, 'backHref')} backLabel={str(props, 'backLabel')} />,
 
   /* --- document trash --------------------------------------------------------------- */
   /** Not `pageHeader({ back })`: that slot renders UiBackLink (`← label`),

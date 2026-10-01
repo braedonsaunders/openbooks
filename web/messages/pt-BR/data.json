@@ -125,5 +125,37 @@
   },
   "resources": {
     "parties": "Pessoas e empresas"
+  },
+  "transfer": {
+    "title": "Status da transferência",
+    "queued": "Aguardando um processo de trabalho",
+    "uploaded": "{current} de {total} bytes enviados",
+    "processedOf": "{current} de {total} registros processados",
+    "processed": "{current} registros processados",
+    "committed": "Confirmados: {created} criados, {updated} atualizados, {deleted} excluídos.",
+    "reconnecting": "Conexão interrompida. Reconectando; o processamento no servidor continua.",
+    "batchPolicy": "Os lotes são confirmados separadamente. O cancelamento ou a recusa preserva os lotes anteriores e seu histórico de auditoria. Transações contabilizadas exigem seu estorno controlado habitual.",
+    "cancel": "Cancelar",
+    "cancelling": "Cancelando após o lote atual…",
+    "retry": "Tentar novamente a partir do ponto de controle",
+    "download": "Baixar exportação",
+    "issues": "Baixar todos os resultados",
+    "resumeUpload": "Para retomar um envio interrompido, selecione o mesmo arquivo original e continue.",
+    "states": {
+      "uploading": "Enviando",
+      "parsing": "Lendo origem",
+      "mapping": "Mapear colunas",
+      "previewing": "Validando",
+      "ready": "Prévia pronta",
+      "committing": "Importando",
+      "exporting": "Exportando",
+      "completed": "Concluído",
+      "failed": "Falhou",
+      "cancelled": "Cancelado"
+    },
+    "recent": "Transferências recentes",
+    "choose": "Escolher uma transferência…",
+    "loadFailed": "Não foi possível carregar as transferências recentes.",
+    "lastActivity": "Última atividade: {time}"
   }
 }

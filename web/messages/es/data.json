@@ -125,5 +125,37 @@
   },
   "resources": {
     "parties": "Personas y empresas"
+  },
+  "transfer": {
+    "title": "Estado de transferencia",
+    "queued": "Esperando un proceso de trabajo",
+    "uploaded": "{current} de {total} bytes cargados",
+    "processedOf": "{current} de {total} registros procesados",
+    "processed": "{current} registros procesados",
+    "committed": "Confirmados: {created} creados, {updated} actualizados, {deleted} eliminados.",
+    "reconnecting": "Conexión interrumpida. Reconectando; el trabajo del servidor continúa.",
+    "batchPolicy": "Los lotes se confirman de forma independiente. La cancelación o el rechazo conserva los lotes anteriores y su historial de auditoría. Las transacciones contabilizadas requieren su reversión controlada habitual.",
+    "cancel": "Cancelar",
+    "cancelling": "Cancelando después del lote actual…",
+    "retry": "Reintentar desde el punto de control",
+    "download": "Descargar exportación",
+    "issues": "Descargar todos los resultados",
+    "resumeUpload": "Para reanudar una carga interrumpida, seleccione el mismo archivo original y continúe.",
+    "states": {
+      "uploading": "Cargando",
+      "parsing": "Leyendo origen",
+      "mapping": "Asignar columnas",
+      "previewing": "Validando",
+      "ready": "Vista previa lista",
+      "committing": "Importando",
+      "exporting": "Exportando",
+      "completed": "Completado",
+      "failed": "Fallido",
+      "cancelled": "Cancelado"
+    },
+    "recent": "Transferencias recientes",
+    "choose": "Elegir una transferencia…",
+    "loadFailed": "No se pudieron cargar las transferencias recientes.",
+    "lastActivity": "Última actividad: {time}"
   }
 }

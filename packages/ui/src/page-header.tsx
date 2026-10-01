@@ -1,6 +1,7 @@
 "use client";
 
 import { useContext } from "react";
+import { PagePresentationContext } from "./page-presentation";
 import { PageHeaderNavigationContext } from "./page-header-navigation";
 // UiLink rather than a bare <a>: back-links are in-app routes, and a plain
 // anchor forces a full document reload — which replays the boot splash and
@@ -27,6 +28,8 @@ export function PageHeader({
   className?: string;
 }) {
   const navigation = useContext(PageHeaderNavigationContext);
+  const section = useContext(PagePresentationContext) === "section";
+  const Heading = section ? "h2" : "h1";
   return (
     <div className={cn("space-y-2", className)}>
       <DocumentTitle title={title} />
@@ -41,11 +44,11 @@ export function PageHeader({
           The shared route switch occupies the right end of the action rail. */}
       <header className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:items-start sm:gap-4">
         <div className="min-w-0 flex-1 basis-40 space-y-1 sm:min-w-56">
-          <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">
+          <Heading className={cn("truncate font-semibold text-slate-900 dark:text-slate-100", section ? "text-lg" : "text-xl sm:text-2xl")}>
             {titleContent ?? title}
-          </h1>
+          </Heading>
           {description ? (
-            <p className="hidden text-sm text-slate-500 sm:block dark:text-slate-400">
+            <p className={cn("text-sm text-slate-500 dark:text-slate-400", !section && "hidden sm:block")}>
               {description}
             </p>
           ) : null}

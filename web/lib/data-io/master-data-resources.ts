@@ -1,3 +1,5 @@
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
+import { importRowError } from './row-error'
 /** Master-data (accounts, items, parties) import/export resources. */
 
 import 'server-only'
@@ -11,9 +13,7 @@ import { toSnake } from '../setup/registry'
 import { coerceBoolean } from '../setup/coerce'
 import { loadFieldDefs, validateCustomValues, type CustomFieldDef } from '../custom-fields'
 import {
-  enforceExportRowLimit,
   exportCell,
-  MAX_EXPORT_ROWS,
   orgFeatureEnabled,
   RefResolver,
   subsidiaryReadFilterWithUnassigned,
@@ -300,15 +300,15 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
         m.key === 'items'
           ? sql``
           : subsidiaryReadFilterWithUnassigned(sql`subsidiary_id`, readCtx?.allowedSubsidiaryIds)
-      const result = (await db.execute(sql`
-        select ${sql.join(coreCols, sql`, `)}, custom
+      const result = (await readExportWindow(db, sql`
+        select ${sql.join(coreCols, sql`, `)}, custom${transferId(readCtx, sql`id`)}
           from ${sql.raw(m.table)}
-         where org_id = ${orgId}${scopeFilter}
-         order by ${sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0]!.column)}
-         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, unknown>[] }
+         where org_id = ${orgId}${scopeFilter}${transferWhere(readCtx, sql`id`)}
+         order by ${transferOrder(readCtx, sql`id`, sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0]!.column))}
+         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, unknown>[] }
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      enforceExportRowLimit(result.rows, masterDescriptor(m).label)
+      finishExportPage(result.rows, masterDescriptor(m).label, readCtx)
       const customDefs = fields.filter((f) => f.custom)
       const out: Record<string, CellValue>[] = []
       for (const raw of result.rows) {
@@ -354,6 +354,7 @@ async function writeMaster(
   const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
   // Earlier validated natural-key rows supply preview identity and partial values.
   const previewRows = new Map<string, Record<string, unknown>>()
+  const resolvedKeys: (string | null)[] = rows.map(() => null)
   const nkColumn = m.cols.find((c) => c.key === m.naturalKey)?.column ?? toSnake(m.naturalKey)
   const timeTrackingOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'timeTracking'))
   const inventoryOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'inventory'))
@@ -363,7 +364,7 @@ async function writeMaster(
   // (plus codes minted earlier in this file), so a synthesized shortCode is
   // unique on insert and stable on re-import. One narrow query per import —
   // never a query per row beyond the name-match below.
-  const needsPartyCodes = m.key === 'parties' &&
+  const needsPartyCodes = !ctx.recordKeys && m.key === 'parties' &&
     rows.some((r) => String(r[m.naturalKey] ?? '').trim() === '')
   const takenPartyCodes = needsPartyCodes
     ? new Set((((await db.execute(sql`
@@ -376,12 +377,19 @@ async function writeMaster(
   const statementAccountIds = m.key === 'accounts'
     ? new Set(
       ((await db.execute(sql`
-        select distinct account_id as id from bank_statements where org_id = ${ctx.orgId}`)) as {
+        select distinct account_id as id from bank_statements where org_id = ${ctx.orgId}${ctx.recordKeys ? sql` and account_id in (select id from accounts where org_id=${ctx.orgId} and number in (${sql.join(rows.map((row) => sql`${String(row[m.naturalKey] ?? '').trim()}`), sql`, `)}))` : sql``}`)) as {
         rows: { id: string }[]
       }).rows.map((r) => r.id),
     )
     : new Set<string>()
 
+  const availablePartyCode = async (displayName: string) => {
+    let code = nextPartyShortCode(displayName, takenPartyCodes)
+    if (ctx.recordKeys) {
+      while ((await db.execute(sql`select id from parties where org_id=${ctx.orgId} and short_code=${code} limit 1`)).rows.length) code = nextPartyShortCode(displayName, takenPartyCodes)
+    }
+    return code
+  }
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
     const src = rows[i]!
@@ -516,12 +524,12 @@ async function writeMaster(
           nkVal = matchedCode
           adoptedParty = { row: matched }
         } else if (matched && typeof matched.id === 'string') {
-          codeFill = nextPartyShortCode(displayName, takenPartyCodes)
+          codeFill = await availablePartyCode(displayName)
           nkVal = codeFill
           adoptedParty = { row: matched }
           identityLabel = `displayName="${displayName}"`
         } else {
-          codeFill = nextPartyShortCode(displayName, takenPartyCodes)
+          codeFill = await availablePartyCode(displayName)
           nkVal = codeFill
         }
       }
@@ -564,6 +572,7 @@ async function writeMaster(
         }
       }
       const previewRow = ctx.dryRun ? previewRows.get(nkVal) : undefined
+      resolvedKeys[i] = nkVal
       if (previewRow) {
         existingCustom = (previewRow.custom as Record<string, unknown> | undefined) ?? {}
         storedKind = typeof previewRow.kind === 'string' ? previewRow.kind : undefined
@@ -734,9 +743,10 @@ async function writeMaster(
       }
     } catch (e) {
       outcome.failed++
-      outcome.errors.push({ row: rowNo, message: (e as { message?: string })?.message ?? 'write failed' })
+      outcome.errors.push({ row: rowNo, message: importRowError(e) })
     }
   }
+  await ctx.recordKeys?.(resolvedKeys)
   return outcome
 }
 

@@ -125,5 +125,37 @@
   },
   "resources": {
     "parties": "People & companies"
+  },
+  "transfer": {
+    "title": "Transfer status",
+    "queued": "Waiting for a worker",
+    "uploaded": "{current} of {total} bytes uploaded",
+    "processedOf": "{current} of {total} records processed",
+    "processed": "{current} records processed",
+    "committed": "Committed: {created} created, {updated} updated, {deleted} deleted.",
+    "reconnecting": "Connection interrupted. Reconnecting; the server job continues.",
+    "batchPolicy": "Import batches commit independently. Cancellation or a refusal preserves earlier committed batches and their audit history. Posted transactions require their normal controlled reversal.",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling after the current batch…",
+    "retry": "Retry from checkpoint",
+    "download": "Download export",
+    "issues": "Download all findings",
+    "resumeUpload": "To resume an interrupted upload, select the same original file and continue.",
+    "states": {
+      "uploading": "Uploading",
+      "parsing": "Reading source",
+      "mapping": "Map columns",
+      "previewing": "Validating",
+      "ready": "Preview ready",
+      "committing": "Importing",
+      "exporting": "Exporting",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "recent": "Recent transfers",
+    "choose": "Choose a transfer…",
+    "loadFailed": "Could not load recent transfers.",
+    "lastActivity": "Last activity: {time}"
   }
 }

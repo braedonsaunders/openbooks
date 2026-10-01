@@ -1,3 +1,5 @@
+import { importRowError } from './row-error'
+import { readExportWindow, transferId, transferWhere, transferLimit, finishExportPage } from './export-page'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -90,7 +92,21 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
     async columns() {
       return resourceFields().map((f) => ({ key: f.key, label: f.label }))
     },
-    async read(_readCtx?: ReadCtx) {
+    async read(readCtx?: ReadCtx) {
+      if (readCtx?.page) {
+        const stored = (await readExportWindow<Record<string, CellValue>>(db, sql`
+          select tax_year as "taxYear",country,levy_key as levy,region,base_ytd::text as "baseYtd"${transferId(readCtx, sql`id`)}
+          from payroll_employer_levy_opening where org_id=${orgId}${transferWhere(readCtx, sql`id`)} order by id limit ${transferLimit(readCtx)}`, readCtx)).rows
+        finishExportPage(stored, PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR.label, readCtx)
+        const declarations = new Map<number, Map<string, string>>()
+        for (const row of stored) {
+          const year = Number(row.taxYear)
+          if (!declarations.has(year)) declarations.set(year, new Map((await declaredEmployerLevyFields(year)).map((field) => [`${field.country} ${field.levyKey}`, field.label])))
+          row.levy = declarations.get(year)!.get(`${row.country} ${row.levy}`) ?? row.levy
+        }
+        const fields = resourceFields()
+        return { fields, columns: fields.map((field) => ({ key: field.key, label: field.label })), rows: stored }
+      }
       // Employer carry-ins are org-level facts; no employee scope applies.
       const years = (await db.execute<{ tax_year: number }>(sql`
         select distinct tax_year from payroll_employer_levy_opening where org_id = ${orgId}`))
@@ -164,10 +180,11 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
           }
           prepared.push({ taxYear, country: resolved.country, levyKey: resolved.levyKey, region, baseYtd, key })
         } catch (error) {
-          prepared.push({ error: error instanceof Error ? error.message : 'write failed' })
+          prepared.push({ error: importRowError(error) })
         }
       }
 
+      await ctx.recordKeys?.(prepared.map((row) => 'error' in row ? null : row.key))
       const duplicates = duplicateImportRowIndexes(prepared.map((row) => 'error' in row ? null : row.key))
       for (const index of duplicates) {
         outcome.failed++
@@ -217,7 +234,7 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
           if (result.deleted > 0) existingByYear.get(row.taxYear)!.delete(row.key)
         } catch (error) {
           outcome.failed++
-          outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' })
+          outcome.errors.push({ row: index + 1, message: importRowError(error) })
         }
       }
       return outcome

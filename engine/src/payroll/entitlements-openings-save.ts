@@ -162,11 +162,13 @@ export async function saveEntitlementOpenings(input: {
       select plan_id, employee_party_id, amount::text as amount
         from entitlement_ledger
        where org_id = ${input.orgId} and kind = 'opening'
+         and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.rows.map((row) => row.employeePartyId))}::jsonb)::uuid)
     `));
     const storedKeys = new Set(existing.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
-    const locks = await entitlementOpeningLocks(input.orgId, tx);
-    const blocks = await entitlementOpeningBlocks(input.orgId, movementDate, tx);
+    const employeeIds = input.rows.map((row) => row.employeePartyId);
+    const locks = await entitlementOpeningLocks(input.orgId, tx, employeeIds);
+    const blocks = await entitlementOpeningBlocks(input.orgId, movementDate, tx, employeeIds);
 
     const seen = new Set<string>();
     const planned: {

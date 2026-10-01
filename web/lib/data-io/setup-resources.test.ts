@@ -196,18 +196,16 @@ test('setup imports refuse a both-off any-of entity with the shared exact remedy
       assert.deepEqual([outcome.created, outcome.updated, outcome.failed], [0, 0, 1])
       assert.equal(outcome.errors[0]?.message, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY)
     }
-    // Either member on admits through the same gate. The missing table then
-    // throws past the gate — a refusal would have returned a per-row outcome
-    // instead, so any throw here is itself the admission signal.
-    await setImportFeatures(org.orgId, { projects: false, manufacturing: true })
-    await assert.rejects(
-      setupResource(entity, org.orgId).write(
+    // Either member on passes the feature gate. The deliberately incomplete
+    // descriptor is then refused by row validation, rather than by features.
+    await setImportFeatures(org.orgId, { projects: false, inventory: true, manufacturing: true })
+    const admitted = await setupResource(entity, org.orgId).write(
         [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],
         'insert',
         { orgId: org.orgId, actorId, dryRun: false },
-      ),
-      (error: unknown) => error instanceof Error && error.message !== SETUP_PROJECTS_OR_MANUFACTURING_REMEDY,
-    )
+      )
+    assert.equal(admitted.failed, 1)
+    assert.notEqual(admitted.errors[0]?.message, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY)
   } finally {
     SETUP_ENTITY_BY_KEY.delete(probeKey)
     await dropScratchOrgReporting(org.orgId)
@@ -236,19 +234,19 @@ test('setup imports fail closed on unknown any-of keys', { skip: !process.env.OP
   }
 })
 
-test('setup imports keep single-key refusal and admit when the feature is on', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('overhead rate imports name their shared feature remedy and admit when Projects is on', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
   const actorId = await createScratchUser(org.orgId, 'Setup Import Single Admin', 'admin')
   const entity = SETUP_ENTITY_BY_KEY.get('overhead-rates')
   assert.ok(entity)
   try {
-    await setImportFeatures(org.orgId, { projects: false })
+    await setImportFeatures(org.orgId, { projects: false, manufacturing: false })
     const refused = await setupResource(entity, org.orgId).write(
       [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],
       'insert',
       { orgId: org.orgId, actorId, dryRun: false },
     )
-    assert.deepEqual([refused.created, refused.failed, refused.errors[0]?.message], [0, 1, 'resource is not available'])
+    assert.deepEqual([refused.created, refused.failed, refused.errors[0]?.message], [0, 1, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY])
     await setImportFeatures(org.orgId, { projects: true })
     const admitted = await setupResource(entity, org.orgId).write(
       [{ ratePercent: '12.5', effectiveFrom: '2026-01-01' }],

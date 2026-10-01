@@ -125,5 +125,37 @@
   },
   "resources": {
     "parties": "Personen und Unternehmen"
+  },
+  "transfer": {
+    "title": "Übertragungsstatus",
+    "queued": "Warten auf einen Worker",
+    "uploaded": "{current} von {total} Bytes hochgeladen",
+    "processedOf": "{current} von {total} Datensätzen verarbeitet",
+    "processed": "{current} Datensätze verarbeitet",
+    "committed": "Gespeichert: {created} erstellt, {updated} aktualisiert, {deleted} gelöscht.",
+    "reconnecting": "Verbindung unterbrochen. Die Verbindung wird wiederhergestellt; der Serverauftrag läuft weiter.",
+    "batchPolicy": "Importpakete werden einzeln gespeichert. Abbruch oder Ablehnung bewahren frühere Pakete und deren Prüfverlauf. Gebuchte Transaktionen erfordern eine kontrollierte Stornierung.",
+    "cancel": "Abbrechen",
+    "cancelling": "Abbruch nach dem aktuellen Paket…",
+    "retry": "Ab Prüfpunkt erneut versuchen",
+    "download": "Export herunterladen",
+    "issues": "Alle Befunde herunterladen",
+    "resumeUpload": "Zum Fortsetzen die gleiche Originaldatei auswählen und fortfahren.",
+    "states": {
+      "uploading": "Hochladen",
+      "parsing": "Quelldatei lesen",
+      "mapping": "Spalten zuordnen",
+      "previewing": "Validieren",
+      "ready": "Vorschau bereit",
+      "committing": "Importieren",
+      "exporting": "Exportieren",
+      "completed": "Abgeschlossen",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Abgebrochen"
+    },
+    "recent": "Letzte Übertragungen",
+    "choose": "Übertragung auswählen…",
+    "loadFailed": "Letzte Übertragungen konnten nicht geladen werden.",
+    "lastActivity": "Letzte Aktivität: {time}"
   }
 }

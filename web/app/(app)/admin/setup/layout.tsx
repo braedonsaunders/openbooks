@@ -1,76 +1,17 @@
 import { type ReactNode } from 'react'
 import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
 import { can, getAuthz } from '../../../../lib/authz'
 import { accessDeniedHref } from '../../../../lib/gate-targets'
-import { resolvedFeatureState, featureEnabled } from '../../../../lib/features'
-import { SETUP_ENTITIES, resolveSetupEntityGate } from '../../../../lib/setup/registry'
-import { SetupNav } from './SetupNav'
+import { SetupWorkspace } from './SetupWorkspace'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * Setup workspace shell for company administrators and domain setup managers, with
- * a back-link to the admin hub, and a two-column body: the grouped tab rail
- * (SetupNav) beside the active tab's content. The whole area scrolls together.
- */
 export default async function SetupLayout({ children }: { children: ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const canManageSetup = can(authz, 'admin.setup.manage')
-  // Domain setup managers enter the shared shell; each page enforces its own grant.
-  if (!canManageSetup && !can(authz, 'crm.setup.manage') && !can(authz, 'hrm.performance.manage')) {
+  // Setup is available to company administrators and authorized domain setup managers.
+  if (!can(authz, 'admin.setup.manage') && !can(authz, 'crm.setup.manage') && !can(authz, 'hrm.performance.manage')) {
     redirect(accessDeniedHref({ permission: 'admin.setup.manage' }))
   }
-  const t = await getTranslations('admin')
-  const canExport = can(authz, 'data.export')
-  const canImport = can(authz, 'data.import')
-  const features = await resolvedFeatureState(authz.user.orgId)
-  // One authoritative gate hides rail tabs — never a local OR over featureKey.
-  const hiddenEntityKeys = SETUP_ENTITIES.filter(
-    (entity) => !resolveSetupEntityGate(entity, features).enabled,
-  ).map((entity) => entity.key)
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* Fixed header — never scrolls */}
-      <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
-        <PageHeader
-          title={t('setup.title')}
-          description={t('setup.description')}
-          back={{ href: '/admin', label: t('hub.title') }}
-        />
-      </div>
-
-      {/* Body — the rail stacks above the content below sm so a 390px panel
-          gets full width; sm and up keep the side-by-side rail untouched. */}
-      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-        <aside className="app-scroll w-full shrink-0 overflow-x-auto border-b border-slate-200 bg-white p-2 sm:w-52 sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-3 lg:w-60 dark:border-slate-800 dark:bg-slate-900">
-          <SetupNav
-            canExport={canExport}
-            canImport={canImport}
-            canManageSetup={canManageSetup}
-            canManageCrm={can(authz, 'crm.setup.manage')}
-            canManagePerformance={can(authz, 'hrm.performance.manage') && featureEnabled(features, 'hrm') && featureEnabled(features, 'hrmPerformance')}
-            canManagePeriods={can(authz, 'periods.manage')}
-            hiddenEntityKeys={hiddenEntityKeys}
-            projectsEnabled={featureEnabled(features, 'projects')}
-            currencyEnabled={featureEnabled(features, 'multiCurrency')}
-            fixedAssetsEnabled={featureEnabled(features, 'fixedAssets')}
-            crmEnabled={featureEnabled(features, 'crm')}
-            bankFeedsEnabled={featureEnabled(features, 'bankFeeds')}
-            onlinePaymentsEnabled={featureEnabled(features, 'onlinePayments')}
-            payrollEnabled={featureEnabled(features, 'payroll')}
-            hrmEnabled={featureEnabled(features, 'hrm')}
-          />
-        </aside>
-        <div className="app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
-          <div className="mx-auto w-full max-w-5xl p-4 sm:p-6">
-            {children}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+  return <SetupWorkspace authz={authz}>{children}</SetupWorkspace>
 }

@@ -18,6 +18,7 @@ const { setPackSlotAccount } = await import("@openbooks/engine/src/payroll/packs
 const { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
 const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts");
 const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
+const { seedOntarioEhtFixture } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
@@ -145,6 +146,7 @@ test(
     try {
       await withBypassContext(async () => {
         await seedHarness(org.orgId, actorId);
+        await seedOntarioEhtFixture(org.orgId, actorId);
         await db.execute(sql`
           insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                      pay_date_offset_days, is_active, created_by, updated_by)

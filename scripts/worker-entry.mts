@@ -367,7 +367,12 @@ if (isMain) {
   // test import of this entry registers duties without starting the world:
   // engine/src/worker/index.ts self-starts on import. No top-level await:
   // tsx compiles scripts-adjacent files as CJS, where TLA is unsupported.
-  void import("../engine/src/worker/index.ts").catch((error: unknown) => {
+  void import("../engine/src/worker/index.ts").then(async () => {
+    const { startDataTransferWorker } = await import('../web/lib/data-io/transfer-worker.ts');
+    const stopTransfers = startDataTransferWorker();
+    const { registerProcessWorker } = await import('../engine/src/worker/shutdown.ts');
+    registerProcessWorker({ close: stopTransfers });
+  }).catch((error: unknown) => {
     console.error("[worker] startup failed:", error);
     process.exit(1);
   });

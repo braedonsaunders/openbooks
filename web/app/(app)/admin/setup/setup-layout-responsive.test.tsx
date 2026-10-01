@@ -86,6 +86,18 @@ test('CRM setup managers keep only their authorized setup entry', () => {
 })
 
 
+test('data tools keep links to Company Settings and sibling data pages', () => {
+  const shown = hrefs(renderNav({ ...BASE_PROPS, canImport: true, canExport: true }))
+  for (const href of ['/admin/setup/company', '/data/import', '/data/import/history', '/data/export']) {
+    assert.ok(shown.includes(href), `${href} remains reachable from the Setup rail`)
+  }
+  const denied = hrefs(renderNav(BASE_PROPS))
+  assert.ok(!denied.includes('/data/import'))
+  assert.ok(!denied.includes('/data/import/history'))
+  assert.ok(!denied.includes('/data/export'))
+})
+
+
 test('performance managers see their configuration without unrelated setup destinations', () => {
   const shown = hrefs(renderNav({ ...BASE_PROPS, hrmEnabled: true, canManageSetup: false, canManagePerformance: true }))
   assert.deepEqual(shown, ['/admin/setup/performance'])

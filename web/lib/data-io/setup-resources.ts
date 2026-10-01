@@ -1,3 +1,5 @@
+import { readExportWindow, transferId, transferWhere, transferLimit, finishExportPage } from './export-page'
+import { importRowError } from './row-error'
 /** Setup-registry import/export resources. */
 
 import 'server-only'
@@ -29,7 +31,6 @@ import { setupReadProjection, setupReadSource } from '../setup/read-shape'
 import {
   enforceExportRowLimit,
   exportCell,
-  MAX_EXPORT_ROWS,
   RefResolver,
   type DataResource,
   type WriteCtx,
@@ -213,7 +214,7 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
     async columns() {
       return setupFields(await gatedSetupEntity(entity, orgId)).map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: import('./resource-core').ReadCtx) {
       const fields = setupFields(await gatedSetupEntity(entity, orgId))
       const resolver = new RefResolver(orgId)
       const cols = fields.map((f) => toSnake(f.key))
@@ -223,15 +224,21 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
         : setupReadProjection(entity, cols)
       const result = entity.dataSource
         ? { rows: await jsonBackedRows(entity.dataSource, orgId, resourceLabel) }
-        : (await db.execute(sql`
-        select ${projection}
+        : (await readExportWindow(db, sql`
+        select ${projection}${transferId(readCtx, sql.raw(idColumn(entity)))}
           from ${setupReadSource(entity)}
-         ${entity.orgScoped ? sql`where org_id = ${orgId}` : sql``}
+         ${entity.orgScoped ? sql`where org_id = ${orgId}` : sql`where true`}${transferWhere(readCtx, sql.raw(idColumn(entity)))}
          order by ${sql.raw(idColumn(entity))}
-         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, unknown>[] }
+         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, unknown>[] }
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      if (!entity.dataSource) enforceExportRowLimit(result.rows, resourceLabel)
+      if (!entity.dataSource) finishExportPage(result.rows, resourceLabel, readCtx)
+      else if (readCtx?.page) {
+        const offset = readCtx.page.offset ?? 0
+        readCtx.page.done = offset + readCtx.page.size >= result.rows.length
+        result.rows = result.rows.slice(offset, offset + readCtx.page.size)
+        readCtx.page.next = String(offset + result.rows.length)
+      }
       const out: Record<string, CellValue>[] = []
       for (const raw of result.rows) {
         const row: Record<string, CellValue> = {}
@@ -733,7 +740,7 @@ async function writeSetup(
       // identity is composite (stock-locations, bom-components). Refuse it as
       // a duplicate naming the constraint instead of echoing storage text.
       const dup = /duplicate key value violates unique constraint "([^"]+)"/.exec(raw)
-      outcome.errors.push({ row: rowNo, message: dup ? `already exists (${dup[1]})` : raw })
+      outcome.errors.push({ row: rowNo, message: dup ? `already exists (${dup[1]})` : importRowError(e) })
     }
   }
   return outcome

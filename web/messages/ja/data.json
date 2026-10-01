@@ -125,5 +125,37 @@
   },
   "resources": {
     "parties": "個人・会社"
+  },
+  "transfer": {
+    "title": "転送状況",
+    "queued": "ワーカーを待機中",
+    "uploaded": "{total} バイト中 {current} バイトをアップロード済み",
+    "processedOf": "{total} 件中 {current} 件を処理済み",
+    "processed": "{current} 件を処理済み",
+    "committed": "確定済み：作成 {created} 件、更新 {updated} 件、削除 {deleted} 件。",
+    "reconnecting": "接続が中断されました。再接続中です。サーバーの処理は続行しています。",
+    "batchPolicy": "各インポートバッチは個別に確定されます。中止や拒否が発生しても、確定済みのバッチと監査履歴は保持されます。転記済み取引には通常の管理された取消処理が必要です。",
+    "cancel": "中止",
+    "cancelling": "現在のバッチ完了後に中止…",
+    "retry": "チェックポイントから再試行",
+    "download": "エクスポートをダウンロード",
+    "issues": "すべての指摘事項をダウンロード",
+    "resumeUpload": "中断したアップロードを再開するには、同じ元のファイルを選択して続行してください。",
+    "states": {
+      "uploading": "アップロード中",
+      "parsing": "元データを読み込み中",
+      "mapping": "列の対応付け",
+      "previewing": "検証中",
+      "ready": "プレビュー準備完了",
+      "committing": "インポート中",
+      "exporting": "エクスポート中",
+      "completed": "完了",
+      "failed": "失敗",
+      "cancelled": "中止"
+    },
+    "recent": "最近の転送",
+    "choose": "転送を選択…",
+    "loadFailed": "最近の転送を読み込めませんでした。",
+    "lastActivity": "最終更新: {time}"
   }
 }

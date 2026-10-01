@@ -33,7 +33,7 @@ export class ImportParseError extends Error {
  * data would vanish silently. Fail closed naming the header; blank headers
  * are dropped later and never collide.
  */
-function assertUniqueHeaders(headers: string[]): void {
+export function assertUniqueHeaders(headers: string[]): void {
   const seen = new Set<string>()
   for (const header of headers) {
     if (!header) continue
@@ -153,14 +153,4 @@ function parseJson(text: string): ParsedFile {
   return { headers, rows: rows.slice(0, MAX_IMPORT_ROWS), truncated: rows.length > MAX_IMPORT_ROWS }
 }
 
-/** Auto-guess a target field for a source header (exact, case-insensitive, fuzzy). */
-export function guessMapping(headers: string[], fieldKeys: string[]): Record<string, string> {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
-  const byNorm = new Map(fieldKeys.map((k) => [norm(k), k]))
-  const mapping: Record<string, string> = {}
-  for (const h of headers) {
-    const n = norm(h)
-    if (byNorm.has(n)) mapping[h] = byNorm.get(n)!
-  }
-  return mapping
-}
+export { guessMapping } from './mapping'

@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * Tiny client-side motion wrappers used by the (otherwise server) page
- * layouts. We keep these in their own file so server components can mark
+ * Tiny client-side motion wrappers shared by page layouts and embedded
+ * sections. We keep these in their own file so server components can mark
  * just the header / body regions as interactive without forcing the whole
  * layout tree into a Client Component.
  */

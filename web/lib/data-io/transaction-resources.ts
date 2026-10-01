@@ -1,3 +1,6 @@
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
+import { TRANSFER_BATCH_BYTES, TRANSFER_MAX_ROW_BYTES, TransferRefusal } from './transfer-contract'
+import { importRowError } from './row-error'
 /** Transaction (document-by-kind) import/export resources. */
 
 import 'server-only'
@@ -13,8 +16,6 @@ import { nextDocumentNumber } from "../bills.ts";
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
 import { canonicalDecimal } from '../exact-decimal'
 import {
-  enforceExportRowLimit,
-  MAX_EXPORT_ROWS,
   orgFeatureEnabled,
   RefResolver,
   type ReadCtx,
@@ -41,8 +42,8 @@ import {
  * Import is INSERT-only (never rewrites a posted document). Each row creates a
  * DRAFT via the same helpers the drawer uses (nextDocumentNumber), then — only
  * when the importer asks to post AND the caller holds the kind's post
- * permission — routes through postDocument. A posting failure leaves the draft
- * intact for review rather than corrupting the ledger.
+ * permission — routes through postDocument. Synchronous callers retain a
+ * refused draft for review; durable transfers roll back the current batch.
  */
 function transactionFields(cfg: DocKindConfig): ResourceField[] {
   const fields: ResourceField[] = [
@@ -206,9 +207,9 @@ export function transactionResource(
     async read(readCtx?: ReadCtx) {
       const resolver = new RefResolver(orgId)
       const subsidiaryScope = readCtx ? readCtx.allowedSubsidiaryIds : allowedSubsidiaryIds
-      const docs = (await db.execute(sql`
+      const docs = (await readExportWindow(db, sql`
         select d.id, d.document_number, d.document_date, d.due_date, d.currency, d.memo,
-               d.reference_number, d.status, s.name as subsidiary,
+               d.reference_number, d.status, s.name as subsidiary${transferId(readCtx, sql`d.id`)},
                -- The importer resolves parties by short code with a display-name
                -- fallback (see PARTY_ID_LOOKUP); export that same key or rows
                -- for parties without a short code come back unresolvable.
@@ -218,8 +219,8 @@ export function transactionResource(
           left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = ${cfg.kind}
            ${transactionSubsidiaryFilter(subsidiaryScope)}
-         order by d.document_date desc, d.document_number
-         limit ${MAX_EXPORT_ROWS + 1}`)) as {
+         ${transferWhere(readCtx, sql`d.id`)} order by ${transferOrder(readCtx, sql`d.id`, sql`d.document_date desc, d.document_number, d.id`)}
+         limit ${transferLimit(readCtx)}`, readCtx)) as {
         rows: {
           id: string
           document_number: string
@@ -235,10 +236,44 @@ export function transactionResource(
       }
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      enforceExportRowLimit(docs.rows, transactionDescriptor(cfg).label)
+      const includeLines = !readCtx?.page?.columns || readCtx.page.columns.includes('lines')
+      if (includeLines && readCtx?.page && docs.rows.length) {
+        const sizes = (await db.execute<{ document_id: string; bytes: string }>(sql`
+          select l.document_id,sum(octet_length(jsonb_build_object('amount',l.amount::text,'description',l.description,
+            'account',a.number,'taxCode',t.code,'distributionKey',ar.key)::text)+1)::text as bytes
+          from document_lines l left join accounts a on a.org_id=l.org_id and a.id=l.account_id
+          left join tax_codes t on t.org_id=l.org_id and t.id=l.tax_code_id
+          left join allocation_rules ar on ar.org_id=l.org_id and ar.id=l.distribution_rule_id
+          where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) group by l.document_id`)).rows
+        const byId = new Map(sizes.map((row) => [row.document_id, Number(row.bytes)]))
+        let bytes = 0, keep = 0
+        for (const doc of docs.rows) {
+          const size = (byId.get(doc.id) ?? 2) + Buffer.byteLength(JSON.stringify(doc))
+          if (size > TRANSFER_MAX_ROW_BYTES) throw new TransferRefusal(`Document ${doc.document_number} exceeds the 4 MiB transfer record limit — deselect the Lines column and create a new export.`, 422)
+          if (keep && bytes + size > TRANSFER_BATCH_BYTES) break
+          bytes += size; keep++
+        }
+        const limited = keep < docs.rows.length
+        if (limited) docs.rows.splice(keep)
+        finishExportPage(docs.rows, transactionDescriptor(cfg).label, readCtx)
+        if (limited) readCtx.page.done = false
+      } else finishExportPage(docs.rows, transactionDescriptor(cfg).label, readCtx)
       const rows: Record<string, CellValue>[] = []
+      const batchLines = !includeLines ? [] : readCtx?.page && docs.rows.length ? (await db.execute<{
+        document_id: string; amount: string; description: string | null; account: string | null; tax_code: string | null; distribution_key: string | null
+      }>(sql`
+        select l.document_id,l.amount::text as amount,l.description,a.number as account,t.code as tax_code,ar.key as distribution_key
+        from document_lines l left join accounts a on a.id=l.account_id and a.org_id=l.org_id
+        left join tax_codes t on t.id=l.tax_code_id and t.org_id=l.org_id
+        left join allocation_rules ar on ar.id=l.distribution_rule_id and ar.org_id=l.org_id
+        where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) order by l.document_id,l.line_number`)).rows : null
+      const linesByDocument = new Map<string, NonNullable<typeof batchLines>>()
+      for (const line of batchLines ?? []) {
+        const entries = linesByDocument.get(line.document_id) ?? []
+        entries.push(line); linesByDocument.set(line.document_id, entries)
+      }
       for (const d of docs.rows) {
-        const lineRows = (await db.execute(sql`
+        const lineRows = batchLines ? { rows: linesByDocument.get(d.id) ?? [] } : (await db.execute(sql`
           select l.amount, l.description, a.number as account, t.code as tax_code,
                  ar.key as distribution_key
             from document_lines l
@@ -572,17 +607,21 @@ async function writeTransactions(
       if (ctx.post && deps) {
         try {
           await postDocument(documentId, deps)
-        } catch {
-          // Draft persists for review; report why posting failed.
-          outcome.created++
-          outcome.errors.push({ row: rowNo, message: `created draft ${number}, but posting failed; review the draft and retry` })
+        } catch (error) {
+          // Legacy synchronous callers preserve a draft for review. Durable
+          // callers roll the complete batch back, including this draft.
+          if (ctx.recordKeys) outcome.failed++
+          else outcome.created++
+          outcome.errors.push({ row: rowNo, message: ctx.recordKeys
+            ? `Posting was refused and this batch was rolled back: ${importRowError(error)}`
+            : `created draft ${number}, but posting failed; review the draft and retry` })
           continue
         }
       }
       outcome.created++
-    } catch {
+    } catch (error) {
       outcome.failed++
-      outcome.errors.push({ row: rowNo, message: 'could not save this row; check its values and try again' })
+      outcome.errors.push({ row: rowNo, message: ctx.recordKeys ? importRowError(error) : 'could not save this row; check its values and try again' })
     }
   }
   return outcome

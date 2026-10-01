@@ -42,7 +42,7 @@ RUN npx esbuild scripts/bootstrap.ts \
 # the worker. Duty registration stays in composition so the worker module
 # keeps its declared dependencies and the engine module graph remains acyclic.
 RUN npx esbuild scripts/worker-entry.mts \
-      --bundle --platform=node --format=esm \
+      --bundle --platform=node --format=esm --conditions=react-server --tsconfig=web/tsconfig.json \
       --external:pg-native --external:jsdom \
       --banner:js="import { createRequire as openbooksCreateRequire } from 'node:module'; const require = openbooksCreateRequire(import.meta.url);" \
       --outfile=/out/worker.mjs

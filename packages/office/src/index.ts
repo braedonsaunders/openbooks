@@ -454,6 +454,44 @@ function sheetCellRange(ref: string): SheetCellRange | null {
   }
 }
 
+function sheetScalar(v: unknown): string | number {
+    if (v === null || v === undefined) return ''
+    if (typeof v === 'number') return v
+    if (v instanceof Date) return v.toISOString().slice(0, 10)
+    return typeof v === 'string' ? v : String(v)
+  }
+export function readSheetCellValue(v: ExcelJS.CellValue, inArrayFormula: boolean, address: string): SheetCellValue {
+    if (v === null || v === undefined) return ''
+    if (typeof v === 'object') {
+      const o = v as {
+        text?: string
+        result?: unknown
+        hyperlink?: string
+        formula?: string
+        sharedFormula?: string
+        richText?: Array<{ text?: unknown }>
+        error?: unknown
+      }
+      if (typeof o.formula === 'string' || typeof o.sharedFormula === 'string') {
+        return { kind: 'formula', value: sheetScalar(o.result) }
+      }
+      if (inArrayFormula) return { kind: 'formula', value: sheetScalar(v) }
+      // Formatted text runs ({ richText: [{ text, font }, …] }) carry no
+      // top-level .text — reading only .text imported them as empty.
+      if (Array.isArray(o.richText)) {
+        return o.richText.map((run) => (typeof run?.text === 'string' ? run.text : '')).join('')
+      }
+      if (typeof o.text === 'string') return o.text
+      if (v instanceof Date) return v.toISOString().slice(0, 10)
+      if (typeof o.error === 'string') {
+        throw new SheetReadError(address, `holds the spreadsheet error ${o.error} — fix it before importing`)
+      }
+      throw new SheetReadError(address, 'has a value this import does not understand — remove it before importing')
+    }
+    if (inArrayFormula) return { kind: 'formula', value: sheetScalar(v) }
+    return sheetScalar(v)
+  }
+
 export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; rows: SheetCellValue[][] }> {
   const wb = new ExcelJS.Workbook()
   // ExcelJS otherwise decorates hyperlinked formula cells as hyperlink values
@@ -473,43 +511,6 @@ export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; ro
       if (range) arrayFormulaRanges.push(range)
     })
   })
-  const scalar = (v: unknown): string | number => {
-    if (v === null || v === undefined) return ''
-    if (typeof v === 'number') return v
-    if (v instanceof Date) return v.toISOString().slice(0, 10)
-    return typeof v === 'string' ? v : String(v)
-  }
-  const cell = (v: ExcelJS.CellValue, inArrayFormula: boolean, address: string): SheetCellValue => {
-    if (v === null || v === undefined) return ''
-    if (typeof v === 'object') {
-      const o = v as {
-        text?: string
-        result?: unknown
-        hyperlink?: string
-        formula?: string
-        sharedFormula?: string
-        richText?: Array<{ text?: unknown }>
-        error?: unknown
-      }
-      if (typeof o.formula === 'string' || typeof o.sharedFormula === 'string') {
-        return { kind: 'formula', value: scalar(o.result) }
-      }
-      if (inArrayFormula) return { kind: 'formula', value: scalar(v) }
-      // Formatted text runs ({ richText: [{ text, font }, …] }) carry no
-      // top-level .text — reading only .text imported them as empty.
-      if (Array.isArray(o.richText)) {
-        return o.richText.map((run) => (typeof run?.text === 'string' ? run.text : '')).join('')
-      }
-      if (typeof o.text === 'string') return o.text
-      if (v instanceof Date) return v.toISOString().slice(0, 10)
-      if (typeof o.error === 'string') {
-        throw new SheetReadError(address, `holds the spreadsheet error ${o.error} — fix it before importing`)
-      }
-      throw new SheetReadError(address, 'has a value this import does not understand — remove it before importing')
-    }
-    if (inArrayFormula) return { kind: 'formula', value: scalar(v) }
-    return scalar(v)
-  }
   const matrix: SheetCellValue[][] = []
   ws.eachRow({ includeEmpty: false }, (row) => {
     const values = row.values as ExcelJS.CellValue[] // 1-based; index 0 is null
@@ -522,7 +523,7 @@ export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; ro
           column >= range.left &&
           column <= range.right,
       )
-      return cell(value, inArrayFormula, `${columnLabel(index)}${row.number}`)
+      return readSheetCellValue(value, inArrayFormula, `${columnLabel(index)}${row.number}`)
     }))
   })
   const headers = (matrix.shift() ?? []).map((h) =>
@@ -754,3 +755,5 @@ function uniqueSheetName(desired: string, used: Set<string>): string {
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) : s
 }
+
+export { readSheetRows, createDataXlsxStream } from './data-stream'

@@ -7,16 +7,13 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, Upload } from 'lucide-react'
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label, PageHeader, Select, Textarea, cn } from '@openbooks/ui'
+import { dataResourceLabel, dataFieldLabel } from '../../../../lib/data-io/labels'
 import { WizardLayout } from '../../../../components/page-layout'
-import { useBusinessToday } from '../../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
-import { exportCsv } from '../../analytics/_ui/exportCsv'
-import {
-  forgetImportCommitIdentity,
-  ImportIdentityPersistenceError,
-  resolveImportCommitIdentity,
-  type ImportCommitIdentity,
-} from './commit-identity'
+import { guessMapping } from '../../../../lib/data-io/mapping'
+import { requestTransfer, transferCommand, uploadTransfer, useTransferJob } from '../../../../lib/data-io/transfer-client'
+import { DataTransferStatus } from '../../../../components/data-transfer-status'
+import { DataTransferPicker } from '../../../../components/data-transfer-picker'
 
 interface ResourceDescriptor {
   key: string
@@ -40,14 +37,13 @@ interface Outcome {
 }
 type Step = 'source' | 'mapping' | 'preview' | 'result'
 type Format = 'csv' | 'xlsx' | 'json'
-type PreviewRequest = { resource: string; format: Format; rows: Record<string, unknown>[]; mapping: Record<string, string>; importMode: 'insert' | 'upsert'; post: boolean }
-type PreviewState = { outcome: Outcome; revision: number; request: PreviewRequest }
+type PreviewState = { outcome: Outcome; revision: number }
 
-export function ImportWizard() {
+export function ImportWizard({ backHref = '/', backLabel }: { backHref?: string; backLabel?: string } = {}) {
   const t = useTranslations('data')
   const tCatalog = useTranslations()
   const router = useRouter()
-  const today = useBusinessToday()
+  const { job, remember, connectionError, running } = useTransferJob('import')
 
   const [step, setStep] = useState<Step>('source')
   const [resources, setResources] = useState<ResourceDescriptor[]>([])
@@ -55,11 +51,12 @@ export function ImportWizard() {
   const [format, setFormat] = useState<Format>('csv')
   const [fileName, setFileName] = useState('')
   const [text, setText] = useState('')
-  const [base64, setBase64] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [totalRows, setTotalRows] = useState(0)
+  const creationKey = useRef<string | null>(null)
+  const restoredPhase = useRef<string | null>(null)
 
   const [headers, setHeaders] = useState<string[]>([])
-  const [rows, setRows] = useState<Record<string, unknown>[]>([])
-  const [truncatedMax, setTruncatedMax] = useState<number | null>(null)
   const [fields, setFields] = useState<Field[]>([])
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [importMode, setImportMode] = useState<'insert' | 'upsert'>('upsert')
@@ -68,9 +65,9 @@ export function ImportWizard() {
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const [inputRevision, setInputRevision] = useState(0)
   const [result, setResult] = useState<Outcome | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
+  const busy = working || running
   const [error, setError] = useState<string | null>(null)
-  const commitIdentity = useRef<ImportCommitIdentity | null>(null)
   const inputRevisionRef = useRef(0)
 
   const invalidateInputs = () => {
@@ -78,6 +75,7 @@ export function ImportWizard() {
     setInputRevision(revision)
     setPreview(null)
     setError(null)
+    creationKey.current = null
   }
 
   useEffect(() => {
@@ -96,15 +94,7 @@ export function ImportWizard() {
       })
   }, [t])
 
-  // Built-in names reuse the same catalogs as Setup, navigation, and records.
-  // Custom resources keep the name supplied by their own definition.
-  const resourceLabel = (item: ResourceDescriptor): string => {
-    const key = item.group === 'Setup' ? `admin.setup.entities.${item.key}.title`
-      : item.group === 'Master data' ? (item.key === 'parties' ? 'data.resources.parties' : `nav.modules.${item.key}`)
-      : item.group === 'Transactions' ? (item.key === 'txn:pay_run' ? 'nav.modules.payroll-runs' : `common.transactionTypes.${item.key.replace(/^txn:/, '').replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())}`)
-      : ''
-    return key && tCatalog.has(key) ? tCatalog(key) : item.label
-  }
+  const resourceLabel = (item: ResourceDescriptor) => dataResourceLabel(item, tCatalog)
 
   const grouped = useMemo(() => {
     const map = new Map<string, ResourceDescriptor[]>()
@@ -123,170 +113,64 @@ export function ImportWizard() {
     [resources, resource],
   )
 
-  const fieldLabel = (field: Field): string => {
-    if (field.label !== field.key) return field.label
-    const namespace = selectedResource?.group === 'Setup' || resource === 'accounts' ? 'admin.setup.fields'
-      : resource === 'parties' ? 'parties.drawer'
-      : resource === 'items' ? 'items.labels' : ''
-    const key = namespace && `${namespace}.${field.key}`
-    return key && tCatalog.has(key) ? tCatalog(key) : field.label
-  }
+  const fieldLabel = (field: Field) => dataFieldLabel(field, selectedResource, tCatalog)
+
+  /* eslint-disable react-hooks/set-state-in-effect -- Durable server phase changes restore editable form state once per phase. */
+  useEffect(() => {
+    if (!job) { restoredPhase.current = null; return }
+    const phase = `${job.id}:${job.state}`
+    if (restoredPhase.current === phase) return
+    restoredPhase.current = phase
+    // Synchronize the form with durable server phase changes; progress polls
+    // must not replace mapping edits made by the operator.
+    setResource(job.resource); setFormat(job.format); setFileName(job.filename)
+    setHeaders(job.headers); setTotalRows(job.totalRows)
+    setFields(job.fields.filter((field) => !field.readOnly))
+    if (job.state === 'mapping') {
+      setMapping(guessMapping(job.headers, job.fields.filter((field) => !field.readOnly).map((field) => field.key)))
+      setStep('mapping')
+    } else if (job.state === 'ready') {
+      setMapping(job.options.mapping ?? {}); setImportMode(job.options.importMode ?? 'upsert'); setPost(job.options.post ?? false)
+      setPreview({ outcome: job.preview, revision: inputRevisionRef.current }); setStep('preview')
+    } else if (job.state === 'completed') { setResult(job.outcome); setStep('result') }
+  }, [job])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const onFile = (file: File) => {
-    invalidateInputs()
-    const revision = inputRevisionRef.current
-    setFileName(file.name)
-    setText('')
-    setBase64('')
-    const lower = file.name.toLowerCase()
-    if (lower.endsWith('.xlsx')) {
-      setFormat('xlsx')
-      const reader = new FileReader()
-      reader.onload = () => {
-        if (inputRevisionRef.current !== revision) return
-        const dataUrl = String(reader.result)
-        setBase64(dataUrl.slice(dataUrl.indexOf(',') + 1))
-      }
-      reader.readAsDataURL(file)
-    } else {
-      setFormat(lower.endsWith('.json') ? 'json' : 'csv')
-      const reader = new FileReader()
-      reader.onload = () => {
-        if (inputRevisionRef.current !== revision) return
-        setText(String(reader.result))
-      }
-      reader.readAsText(file)
-    }
+    invalidateInputs(); setFile(file); setFileName(file.name); setText('')
+    setFormat(file.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : file.name.toLowerCase().endsWith('.json') ? 'json' : 'csv')
   }
-
   const doParse = async () => {
     if (!resource) return
-    const revision = inputRevisionRef.current
-    setBusy(true)
-    setError(null)
+    setBusy(true); setError(null)
     try {
-      const res = await fetch('/api/data/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'parse', resource, format, text, base64 }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('import.parseFailed')))
-      const d = await res.json()
-      if (inputRevisionRef.current !== revision) return
-      if (!d.headers?.length) throw new Error(t('import.noColumns'))
-      setHeaders(d.headers)
-      setRows(d.rows ?? [])
-      setTruncatedMax(d.truncated ? (typeof d.maxRows === 'number' ? d.maxRows : 20000) : null)
-      setFields(d.fields ?? [])
-      setMapping(d.mapping ?? {})
-      setStep('mapping')
-    } catch (e) {
-      if (inputRevisionRef.current === revision) {
-        setError((e as Error).message)
-        toast.error((e as Error).message)
-      }
-    } finally {
-      setBusy(false)
-    }
+      const source = file ?? new Blob([text], { type: format === 'json' ? 'application/json' : 'text/csv' })
+      if (!creationKey.current) creationKey.current = crypto.randomUUID()
+      const pending = job?.state === 'uploading' && job.resource === resource && job.format === format && job.filename === (fileName || `import.${format}`) && job.bytes === source.size
+        ? job : await requestTransfer('/api/data/transfers', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestKey: creationKey.current, kind: 'import', resource, format, filename: fileName || `import.${format}`, bytes: source.size }) })
+      remember(pending)
+      if (pending.state === 'uploading') remember(await uploadTransfer(source, pending, remember))
+      else if (pending.state === 'mapping') setStep('mapping')
+      else if (pending.state === 'ready') setStep('preview')
+    } catch (error) { setError((error as Error).message) } finally { setBusy(false) }
   }
-
   const doPreview = async () => {
-    const revision = inputRevisionRef.current
-    const request: PreviewRequest = { resource, format, rows, mapping, importMode, post }
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/data/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'preview', ...request }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('import.previewFailed')))
-      const d = await res.json()
-      if (inputRevisionRef.current !== revision) return
-      setPreview({ outcome: d.outcome, revision, request })
-      setStep('preview')
-    } catch (e) {
-      if (inputRevisionRef.current === revision) {
-        setError((e as Error).message)
-        toast.error((e as Error).message)
-      }
-    } finally {
-      setBusy(false)
-    }
+    if (!job) return
+    setBusy(true); setError(null)
+    try { remember(await transferCommand(job, 'preview', { options: { mapping, importMode, post } })) }
+    catch (error) { setError((error as Error).message) } finally { setBusy(false) }
   }
-
   const doCommit = async () => {
-    if (!preview || preview.revision !== inputRevisionRef.current) return
-    const request = preview.request
-    setBusy(true)
-    setError(null)
-    try {
-      // The key follows the exact request inputs. A lost response reuses it,
-      // including after reload; editing the import creates a distinct request.
-      let storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null = null
-      try {
-        storage = window.sessionStorage
-      } catch {
-        throw new ImportIdentityPersistenceError()
-      }
-      const identity = await resolveImportCommitIdentity(
-        { ...request, fileName },
-        commitIdentity.current,
-        storage,
-        () => crypto.randomUUID(),
-      )
-      commitIdentity.current = identity
-      const res = await fetch('/api/data/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'commit', ...request, fileName, idempotencyKey: identity.key }),
-      })
-      if (!res.ok) {
-        if (res.status === 409) throw new Error(t('import.commitConflict'))
-        throw new Error(await readApiErrorMessage(res, t('import.commitFailed')))
-      }
-      const d = await res.json()
-      setResult(d.outcome)
-      setStep('result')
-      forgetImportCommitIdentity(identity, storage)
-      commitIdentity.current = null
-    } catch (e) {
-      const message = e instanceof ImportIdentityPersistenceError ? t('import.commitPersistenceFailed') : (e as Error).message
-      setError(message)
-      toast.error(message)
-    } finally {
-      setBusy(false)
-    }
+    if (!job || !preview || preview.revision !== inputRevisionRef.current) return
+    setBusy(true); setError(null)
+    try { remember(await transferCommand(job, 'commit', { approvalHash: job.approvalHash })) }
+    catch (error) { setError((error as Error).message) } finally { setBusy(false) }
   }
-
   const reset = () => {
-    commitIdentity.current = null
-    setStep('source')
-    setError(null)
-    setFormat('csv')
-    setResource('')
-    setFileName('')
-    setText('')
-    setBase64('')
-    setHeaders([])
-    setRows([])
-    setTruncatedMax(null)
-    setFields([])
-    setMapping({})
-    setPreview(null)
-    inputRevisionRef.current += 1
-    setInputRevision(inputRevisionRef.current)
-    setResult(null)
-  }
-
-  const downloadErrors = (outcome: Outcome) => {
-    exportCsv(
-      'import-errors',
-      ['row', 'field', 'message'],
-      outcome.errors.map((e) => [e.row, e.field ?? '', e.message]),
-      today,
-    )
+    remember(null); setStep('source'); setError(null); setFile(null); setText(''); setFileName('')
+    setHeaders([]); setTotalRows(0); setFields([]); setMapping({}); setPreview(null); setResult(null)
+    invalidateInputs()
   }
 
   const stepIndex = { source: 1, mapping: 2, preview: 3, result: 4 }[step]
@@ -295,7 +179,7 @@ export function ImportWizard() {
     <PageHeader
       title={t('import.title')}
       description={t('import.description')}
-      back={{ href: '/data/import/history', label: t('nav.history') }}
+      back={{ href: backHref, label: backLabel ?? tCatalog('nav.modules.dashboard') }}
     />
   )
 
@@ -316,7 +200,7 @@ export function ImportWizard() {
           </Button>
         )}
         {step === 'source' && (
-          <Button onClick={doParse} disabled={!resource || busy || (!text && !base64)}>
+          <Button onClick={doParse} disabled={!resource || busy || (!text && !file)}>
             {busy ? t('import.parsing') : t('import.next')}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
@@ -328,9 +212,9 @@ export function ImportWizard() {
           </Button>
         )}
         {step === 'preview' && preview && (
-          <Button onClick={doCommit} disabled={busy || preview.revision !== inputRevision || preview.outcome.created + preview.outcome.updated === 0}>
+          <Button onClick={doCommit} disabled={busy || preview.revision !== inputRevision || preview.outcome.failed > 0 || preview.outcome.created + preview.outcome.updated + (job?.preview.deleted ?? 0) === 0 || job?.state !== 'ready'}>
             <Upload className="mr-2 h-4 w-4" />
-            {busy ? t('import.committing') : t('import.commit', { n: preview.outcome.created + preview.outcome.updated })}
+            {busy ? t('import.committing') : t('import.commit', { n: preview.outcome.created + preview.outcome.updated + (job?.preview.deleted ?? 0) })}
           </Button>
         )}
         {step === 'result' && (
@@ -353,7 +237,11 @@ export function ImportWizard() {
       currentStep={step}
       progressLabel={t('import.step', { n: stepIndex, total: 4 })}
     >
+      <DataTransferPicker kind="import" job={job} onChange={remember} disabled={working} />
+      {job && !busy && step !== 'result' && <Button variant="outline" size="sm" onClick={reset}>{t('import.importAnother')}</Button>}
       {error && <Alert variant="destructive">{error}</Alert>}
+      {job && <DataTransferStatus job={job} onChange={remember} connectionError={connectionError} />}
+      {!job && connectionError && <Alert variant="warning">{connectionError}</Alert>}
       {step !== 'source' && (
         <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
@@ -362,14 +250,14 @@ export function ImportWizard() {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline">{format.toUpperCase()}</Badge>
-            <Badge variant="secondary">{t('import.rowCount', { n: rows.length })}</Badge>
+            <Badge variant="secondary">{t('import.rowCount', { n: totalRows })}</Badge>
           </div>
         </Card>
       )}
       {step === 'source' && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t('import.sourceTitle')}</CardTitle>
+            <CardTitle className="text-sm">{t('import.sourceTitle')}</CardTitle>
             <CardDescription>{t('import.sourceHint')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -423,7 +311,7 @@ export function ImportWizard() {
                     invalidateInputs()
                     setText(e.target.value)
                     setFileName('')
-                    setBase64('')
+                    setFile(null)
                     if (format === 'xlsx') setFormat('csv')
                   }}
                   rows={5}
@@ -439,15 +327,10 @@ export function ImportWizard() {
       {step === 'mapping' && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t('import.steps.mapping')}</CardTitle>
+            <CardTitle className="text-sm">{t('import.steps.mapping')}</CardTitle>
             <CardDescription>{t('import.mapHint')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {truncatedMax !== null && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                {t('import.truncatedWarning', { n: truncatedMax })}
-              </div>
-            )}
             {!selectedCanPost && (
               <div className="space-y-2">
                 <Label htmlFor="import-mode">{t('import.mode')}</Label>
@@ -507,7 +390,7 @@ export function ImportWizard() {
       {step === 'preview' && preview && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t('import.preview')}</CardTitle>
+            <CardTitle className="text-sm">{t('import.preview')}</CardTitle>
             <CardDescription>{t('import.reviewHint')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -537,8 +420,8 @@ export function ImportWizard() {
           </div>
           {result.errors.length > 0 && (
             <>
-              <Button variant="outline" onClick={() => downloadErrors(result)}>
-                {t('import.downloadErrors')}
+              <Button variant="outline" asChild>
+                <a href={`/api/data/transfers/${job?.id}/issues?phase=commit`}>{t('import.downloadErrors')}</a>
               </Button>
               <ErrorTable t={t} errors={result.errors} />
             </>

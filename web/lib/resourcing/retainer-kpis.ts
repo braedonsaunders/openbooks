@@ -9,6 +9,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries.ts'
 
 /** One visible retainer with its posted drawdown total, in ledger strings. */
 type RetainerKpiRow = {
+  id: string
   currency: string
   totalAmount: string
   drawn: string
@@ -31,8 +32,12 @@ export async function loadRetainerKpis(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   today: string,
 ): Promise<RetainerKpis> {
-  const rows = (await db.execute<RetainerKpiRow>(sql`
-    select r.currency,
+  const cutoff = addCalendarDays(today, 30)
+  const byCurrency = new Map<string, { balance: string; drawn: string }>()
+  let expiringCount = 0, after: string | null = null
+  for (;;) {
+  const rows: RetainerKpiRow[] = (await db.execute<RetainerKpiRow>(sql`
+    select r.id,r.currency,
            r.total_amount::text as "totalAmount",
            coalesce(sum(d.amount) filter (where d.state = 'posted'), 0)::text as drawn,
            r.state, r.ends_on::text as "endsOn"
@@ -41,11 +46,9 @@ export async function loadRetainerKpis(
       left join res_retainer_drawdowns d on d.org_id = r.org_id and d.retainer_id = r.id
      where r.org_id = ${orgId}
      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-     group by r.id
+     ${after ? sql`and r.id > ${after}::uuid` : sql``}
+     group by r.id order by r.id limit 500
   `)).rows
-  const cutoff = addCalendarDays(today, 30)
-  const byCurrency = new Map<string, { balances: string[]; posted: string[] }>()
-  let expiringCount = 0
   for (const row of rows) {
     // The balance is the landed engine policy, never a local formula: total
     // minus posted drawdowns for this retainer, aggregated by currency.
@@ -53,17 +56,20 @@ export async function loadRetainerKpis(
       { totalAmount: row.totalAmount, currency: row.currency },
       [{ amount: row.drawn }],
     )
-    const slot = byCurrency.get(row.currency) ?? { balances: [], posted: [] }
-    slot.balances.push(amount)
-    slot.posted.push(row.drawn)
+    const slot = byCurrency.get(row.currency) ?? { balance: '0', drawn: '0' }
+    slot.balance = sum([slot.balance, amount])
+    slot.drawn = sum([slot.drawn, row.drawn])
     byCurrency.set(row.currency, slot)
     if (row.state === 'active' && row.endsOn >= today && row.endsOn <= cutoff) expiringCount += 1
+  }
+  if (rows.length < 500) break
+  after = rows[rows.length - 1]!.id
   }
   const perCurrency = [...byCurrency]
     .map(([currency, slot]) => ({
       currency,
-      balance: sum(slot.balances),
-      drawn: sum(slot.posted),
+      balance: slot.balance,
+      drawn: slot.drawn,
     }))
     .sort((left, right) => left.currency.localeCompare(right.currency))
   return { perCurrency, expiringCount }

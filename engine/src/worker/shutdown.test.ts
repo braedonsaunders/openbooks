@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shutdownWorkerProcess } from "./shutdown.ts";
+import { registerProcessWorker, shutdownWorkerProcess } from "./shutdown.ts";
 
 test("connections close only after every worker has drained", async () => {
   const events: string[] = [];
@@ -60,4 +60,12 @@ test("telemetry stopping is last and its failure is contained", async () => {
     async () => { throw new Error("telemetry down"); },
   );
   assert.deepEqual(events, ["drained", "connections-closed"]);
+});
+
+test("registered process workers release checkpoints before shared connections close", async (t) => {
+  const events: string[] = [];
+  const unregister = registerProcessWorker({ close: async () => { await Promise.resolve(); events.push('checkpoint-released'); } });
+  t.after(unregister);
+  await shutdownWorkerProcess([], async () => { events.push('connections-closed'); }, async () => { events.push('telemetry-stopped'); });
+  assert.deepEqual(events, ['checkpoint-released', 'connections-closed', 'telemetry-stopped']);
 });

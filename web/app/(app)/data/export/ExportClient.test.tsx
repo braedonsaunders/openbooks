@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { dataTransferJob } from '../../../../testing/data-transfer'
 
 // (export half): the data export must announce completion tied to the
 // actual file (real filename, real column count) and must name its disabled
@@ -12,6 +13,8 @@ const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   exportStatus: 200,
   clickedDownloads: [] as Array<string | undefined>,
+  complete: false,
+  requestKeys: [] as string[],
 }
 Object.assign(globalThis, {
   __exportTestToasts: script.toasts,
@@ -43,7 +46,7 @@ async function mountExport(t: TestContext): Promise<void> {
   const priorFetch = globalThis.fetch
   const priorCreateObjectURL = URL.createObjectURL
   const priorAnchorClick = window.HTMLAnchorElement.prototype.click
-  globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+  globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: BodyInit | null }) => {
     const url = String(input)
     if (url === '/api/data/resources' && (init?.method ?? 'GET') === 'GET') {
       return Response.json({
@@ -58,21 +61,19 @@ async function mountExport(t: TestContext): Promise<void> {
         ],
       })
     }
-    if (url === '/api/data/export') {
+    if (url === '/api/data/transfers' && (init?.method ?? 'GET') === 'GET') return Response.json({ jobs: [] })
+    if (url === '/api/data/transfers' && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body))
+      script.requestKeys.push(body.requestKey)
       if (script.exportStatus !== 200) {
         return new Response(JSON.stringify({ error: 'export failed' }), {
           status: script.exportStatus,
           headers: { 'Content-Type': 'application/json' },
         })
       }
-      return new Response('id,total\n1,2\n', {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/csv',
-          'Content-Disposition': 'attachment; filename="invoices.csv"',
-        },
-      })
+      return Response.json({ job: dataTransferJob({ kind: 'export', resource: body.resource, filename: body.filename, state: 'exporting', options: body.options, bytes: 0 }) })
     }
+    if (url.startsWith('/api/data/transfers/')) return Response.json({ job: dataTransferJob({ kind: 'export', resource: 'invoices', filename: 'invoices.csv', state: script.complete ? 'completed' : 'exporting', processedRows: script.complete ? 1_000_000 : 250, totalRows: script.complete ? 1_000_000 : 0, options: { columns: ['id', 'total'] } }) })
     throw new Error(`unexpected fetch ${url}`)
   }) as typeof fetch
   URL.createObjectURL = (() => 'blob:mock') as typeof URL.createObjectURL
@@ -93,7 +94,10 @@ async function mountExport(t: TestContext): Promise<void> {
   })
   script.toasts.length = 0
   script.clickedDownloads.length = 0
+  script.requestKeys.length = 0
   script.exportStatus = 200
+  script.complete = false
+  window.history.replaceState(null, '', '/data/export')
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -157,7 +161,7 @@ test('no columns names its disabled reason', async (t) => {
   )
 })
 
-test('completion names the actual file and column count', async (t) => {
+test('live progress precedes completion and the download names the actual file and column count', async (t) => {
   await mountExport(t)
   await chooseResource()
   const button = exportButton()
@@ -168,11 +172,16 @@ test('completion names the actual file and column count', async (t) => {
     await tick()
   })
   await tick()
-  assert.deepEqual(script.clickedDownloads, ['invoices.csv'], 'the real file must download')
+  assert.equal(document.querySelector('a[href$="/download"]'), null, 'an incomplete artifact cannot be offered as a complete export')
+  assert.match(document.querySelector('[role="status"]')?.textContent ?? '', /invoices\.csv/)
+  script.complete = true
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1100)) })
+  assert.ok(document.querySelector('a[href$="/download"]'), 'the completed server artifact must be downloadable')
   const status = document.querySelector('[role="status"]')
   assert.ok(status, 'completion must render a status, not just a toast')
   assert.match(status.textContent ?? '', /invoices\.csv/, 'completion must name the actual filename')
   assert.match(status.textContent ?? '', /2 columns/, 'completion must name the real column count')
+  assert.match(status.textContent ?? '', /1,000,000 of 1,000,000/, 'live server record counts must reach the screen')
 })
 
 test('a failed export claims no completion', async (t) => {
@@ -191,4 +200,16 @@ test('a failed export claims no completion', async (t) => {
     script.toasts.some((toast) => toast.kind === 'error'),
     'failure must surface as an error toast',
   )
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /export failed/, 'the refusal must persist on screen')
+})
+
+test('retrying an uncertain creation response reuses the durable request identity', async (t) => {
+  await mountExport(t)
+  await chooseResource()
+  script.exportStatus = 500
+  await act(async () => { exportButton().click(); await tick(); await tick() })
+  script.exportStatus = 200
+  await act(async () => { exportButton().click(); await tick(); await tick() })
+  assert.equal(script.requestKeys.length, 2)
+  assert.equal(script.requestKeys[0], script.requestKeys[1], 'A lost creation response must not dispatch a second server job')
 })

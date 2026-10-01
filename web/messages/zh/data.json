@@ -125,5 +125,37 @@
   },
   "resources": {
     "parties": "个人与公司"
+  },
+  "transfer": {
+    "title": "传输状态",
+    "queued": "等待工作进程",
+    "uploaded": "已上传 {current} / {total} 字节",
+    "processedOf": "已处理 {current} / {total} 条记录",
+    "processed": "已处理 {current} 条记录",
+    "committed": "已提交：新建 {created} 条，更新 {updated} 条，删除 {deleted} 条。",
+    "reconnecting": "连接已中断。正在重新连接；服务器任务将继续运行。",
+    "batchPolicy": "导入批次独立提交。取消或拒绝会保留之前已提交的批次及其审计记录。已过账交易需要使用正常的受控冲销流程。",
+    "cancel": "取消",
+    "cancelling": "当前批次完成后取消…",
+    "retry": "从检查点重试",
+    "download": "下载导出文件",
+    "issues": "下载所有问题",
+    "resumeUpload": "要恢复中断的上传，请选择同一个原始文件并继续。",
+    "states": {
+      "uploading": "正在上传",
+      "parsing": "读取源文件",
+      "mapping": "映射列",
+      "previewing": "正在验证",
+      "ready": "预览就绪",
+      "committing": "正在导入",
+      "exporting": "正在导出",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "recent": "最近的传输",
+    "choose": "选择传输…",
+    "loadFailed": "无法加载最近的传输。",
+    "lastActivity": "最近活动：{time}"
   }
 }

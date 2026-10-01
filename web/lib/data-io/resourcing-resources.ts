@@ -1,3 +1,4 @@
+import { importRowError } from './row-error'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -169,7 +170,8 @@ export function assignmentPlanResource(orgId: string): DataResource {
           sort: 'week',
           dir: 'asc',
           page,
-          perPage: 100,
+          perPage: ctx.page?.size ?? 100,
+          ...(ctx.page ? { cursor: { afterId: ctx.page.after } } : {}),
         })
         if (!result.ok) throw new Error(`${result.error}: ${result.remedy}`)
         for (const row of result.rows) {
@@ -183,11 +185,16 @@ export function assignmentPlanResource(orgId: string): DataResource {
             isBillable: row.is_billable === true,
           })
         }
+        if (ctx.page) {
+          ctx.page.done = !result.cursorHasMore
+          ctx.page.next = result.rows.length ? String(result.rows[result.rows.length - 1]!.id) : ctx.page.after
+          break
+        }
         if (result.rows.length < 100) break
         page += 1
         if (rows.length > MAX_EXPORT_ROWS) break
       }
-      enforceExportRowLimit(rows, 'Assignment plan')
+      if (!ctx.page) enforceExportRowLimit(rows, 'Assignment plan')
       return { fields: ASSIGNMENT_FIELDS, columns: ASSIGNMENT_FIELDS.map((f) => ({ key: f.key, label: f.label })), rows }
     },
     write: async (rows: Record<string, unknown>[], mode: ImportMode, ctx: WriteCtx): Promise<WriteOutcome> => {
@@ -225,6 +232,7 @@ export function assignmentPlanResource(orgId: string): DataResource {
       const scope = ctx.allowedSubsidiaryIds
       const definitions = await loadFieldDefs('res_assignments')
       const resolver = new RefResolver(orgId)
+      const resolvedKeys: (string | null)[] = rows.map(() => null)
       const dupes = duplicateImportRowIndexes(rows.map(duplicateKey))
       for (let index = 0; index < rows.length; index++) {
         const src = rows[index]!
@@ -246,6 +254,7 @@ export function assignmentPlanResource(orgId: string): DataResource {
           }
           const weekStart = cell(src, 'weekStart')
           if (!weekStart) throw new Error('Week starting Sunday is required')
+          resolvedKeys[index] = JSON.stringify([projectId, employeePartyId, jobTitle, weekStart])
           const customSrc = (src.custom !== undefined ? src.custom : {}) as Record<string, unknown>
           const unknownKey = unknownCustomFieldKey(definitions, customSrc)
           if (unknownKey) throw new Error(`unknown custom field: ${unknownKey}`)
@@ -294,9 +303,10 @@ export function assignmentPlanResource(orgId: string): DataResource {
           else outcome.created += 1
         } catch (error) {
           if (error instanceof ResourcingRefusal) fail(index, `${error.code}: ${error.remedy}`, error.field)
-          else fail(index, error instanceof Error ? error.message.slice(0, 300) : 'row failed')
+          else fail(index, importRowError(error))
         }
       }
+      await ctx.recordKeys?.(resolvedKeys)
       return outcome
     },
   }
@@ -326,6 +336,7 @@ export function retainerBalancesResource(orgId: string): DataResource {
         throw new Error('retainer billing feature is disabled — turn on Retainer billing under Company Settings → Features to export balances')
       }
       const kpis = await loadRetainerKpis(orgId, ctx.allowedSubsidiaryIds, await businessToday(orgId))
+      if (ctx.page) { ctx.page.done = true; ctx.page.next = null }
       const rows = kpis.perCurrency.map((slot) => ({
         currency: slot.currency,
         balance: slot.balance,

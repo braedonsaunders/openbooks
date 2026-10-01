@@ -299,7 +299,9 @@ const SOURCES = {
     route: '/data/import/history',
     rowsField: 'rows',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'server',
+    clientSearch: false,
+    paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' },
   },
   hrm_change_requests: {
     route: '/hrm/change-requests',
