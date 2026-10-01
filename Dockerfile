@@ -57,6 +57,13 @@ RUN npx esbuild engine/src/sample-companies/cli.ts \
 RUN node --check /out/sample-companies.mjs
 
 # --- PDF renderer: verified native browser archive -----------------------------
+FROM deps AS pdf-verification
+COPY scripts/verify-pdf-browser.mjs ./scripts/
+RUN npx esbuild scripts/verify-pdf-browser.mjs \
+      --bundle --platform=node --format=esm \
+      --banner:js="import { createRequire as openbooksPdfCreateRequire } from 'node:module'; const require = openbooksPdfCreateRequire(import.meta.url);" \
+      --outfile=/out/verify-pdf-browser.mjs
+
 FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS pdf-browser
 ARG TARGETARCH
 WORKDIR /browser-install
@@ -65,7 +72,7 @@ COPY scripts/pdf-browser.json scripts/install-pdf-browser.mjs ./
 RUN node install-pdf-browser.mjs "$TARGETARCH" /opt/chromium
 
 # --- runtime ------------------------------------------------------------------
-FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS runtime
+FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS runtime-base
 WORKDIR /app
 ARG OPENBOOKS_VERSION=development
 # HTML-authored reports and forms are printed by the shared Chromium renderer.
@@ -119,7 +126,11 @@ ENV NODE_ENV=production \
     PORT=3000
 COPY --from=pdf-browser /opt/chromium /opt/chromium
 RUN ln -s /opt/chromium/chrome /usr/bin/chromium
+COPY --chown=node:node scripts/pdf-browser.json ./scripts/
+COPY --chown=node:node --from=pdf-verification /out/verify-pdf-browser.mjs ./scripts/verify-pdf-browser.mjs
+RUN su -s /bin/sh node -c 'node scripts/verify-pdf-browser.mjs'
 
+FROM runtime-base AS runtime
 # Standalone output is rooted at the monorepo (outputFileTracingRoot):
 # node_modules + web/server.js + web/.next live inside it.
 COPY --chown=node:node --from=build /app/web/.next/standalone ./
@@ -129,13 +140,11 @@ COPY --chown=node:node --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
 COPY --chown=node:node --from=build /out/worker.mjs ./scripts/worker.mjs
 # The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
 COPY --chown=node:node schema/migrations ./schema/migrations
-COPY --chown=node:node scripts/pdf-browser.json scripts/verify-pdf-browser.mjs ./scripts/
 RUN set -eu; \
     output=$(node scripts/worker.mjs 2>&1) && { echo "worker unexpectedly started without database credentials" >&2; exit 1; }; \
     printf '%s' "$output" | grep -Fq 'OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login'
 RUN NODE_ENV=test OPENBOOKS_DB_URL= node --conditions=react-server --input-type=module \
     -e "const entry = await import('./scripts/worker.mjs'); const transfer = await entry.loadDataTransferWorker(); if (typeof transfer.startDataTransferWorker !== 'function') throw new Error('Transfer worker startup did not load'); console.log('Deferred transfer runtime verified');"
-RUN su -s /bin/sh node -c 'node scripts/verify-pdf-browser.mjs'
 
 EXPOSE 3000
 # Database bootstrap is intentionally not part of this process: the web server
