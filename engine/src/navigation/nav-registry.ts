@@ -655,7 +655,7 @@ export const NAV_MODULES: NavModule[] = [
     key: 'employees',
     href: '/entities/employees',
     label: 'Employees',
-    iconKey: 'clipboard-check',
+    iconKey: 'circle-user',
     group: 'hrm',
     subgroup: 'workforce',
     requiredPermission: 'parties.read',
@@ -1036,14 +1036,14 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
 /** Register explicit destinations before deriving missing local destinations. */
 NAV_MODULES.push(
   ...[
-    ['payroll-opening-balances', '/payroll/opening-balances', 'Opening Balances', 'payroll.read'],
-    ['payroll-retro', '/payroll/retro', 'Retroactive Pay', 'payroll.read'],
-    ['payroll-parallel-run', '/payroll/parallel-run', 'Parallel Run', 'payroll.read'],
-    ['payroll-work-locations', '/payroll/work-locations', 'Work Locations', 'payroll.manage'],
-  ].map(([key, href, label, requiredPermission]) => ({ key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: 'wallet', group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true })),
+    ['payroll-opening-balances', '/payroll/opening-balances', 'Opening Balances', 'payroll.read', 'book'],
+    ['payroll-retro', '/payroll/retro', 'Retroactive Pay', 'payroll.read', 'history'],
+    ['payroll-parallel-run', '/payroll/parallel-run', 'Parallel Run', 'payroll.read', 'split'],
+    ['payroll-work-locations', '/payroll/work-locations', 'Work Locations', 'payroll.manage', 'pin'],
+  ].map(([key, href, label, requiredPermission, iconKey]) => ({ key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: iconKey!, group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true })),
   { key: 'hrm-performance-settings', href: '/hrm/performance?tab=settings', label: 'Performance setup', iconKey: 'settings', group: 'hrm', subgroup: 'hrm-talent', requiredPermission: 'hrm.performance.manage', featureKey: 'hrmPerformance', menuParent: 'hrm-performance', exact: true },
-  { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'clipboard-check', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
-  { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'shield', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
+  { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'user-cog', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
+  { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'hard-hat', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
   { key: 'admin-navigation', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'settings', subgroup: 'customize', requiredPermissionsAny: ['admin.nav.manage', 'admin.customization.manage'] },
 )
 
@@ -1058,7 +1058,7 @@ for (const workspace of LOCAL_NAVIGATION) {
     const moduleKey = tab.menuKey ?? tab.href.slice(1).replaceAll('/', '-')
     NAV_MODULES.push({
       key: moduleKey, href: tab.href, label: tab.label ?? LOCAL_DESTINATION_LABELS[tab.href]!,
-      iconKey: 'list-checks', group,
+      iconKey: tab.iconKey ?? 'list-checks', group,
       subgroup: workspace.id === 'hrm-people' ? 'workforce' : workspace.id === 'hrm-hiring' ? 'hrm-talent' : workspace.id.startsWith('hrm-') ? workspace.id : workspace.id === 'payroll' ? 'payroll-work' : workspace.id,
       requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, featureKey: tab.feature ?? workspace.feature,
       exact: true,

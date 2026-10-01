@@ -8,6 +8,8 @@ export type LocalNavigationTab = {
   ns: string
   key: string
   label?: string
+  /** Semantic icon inherited by the native main-menu destination. */
+  iconKey?: string
   /** Explicit main-menu identity for a query-addressed working view. */
   menuKey?: string
   /** Registered entry-point key; detailed views stay local unless promoted. */
@@ -57,48 +59,48 @@ export function applyLocalNavigationPreferences<T extends { href: string; label:
 export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 'compensation' | 'rewards', LocalNavigationTab[]> = {
   people: [
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
-    { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.org_chart.read', 'hrm.employment.read', 'hrm.self.read'] },
-    { href: '/hrm/processes', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
-    { href: '/hrm/processes/templates', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', prefix: true },
-    { href: '/hrm/documents', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },
-    { href: '/hrm/qualifications', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
+    { href: '/hrm/org-chart', iconKey: 'network', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.org_chart.read', 'hrm.employment.read', 'hrm.self.read'] },
+    { href: '/hrm/processes', iconKey: 'workflow', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
+    { href: '/hrm/processes/templates', iconKey: 'clipboard-check', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', prefix: true },
+    { href: '/hrm/documents', iconKey: 'files', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },
+    { href: '/hrm/qualifications', iconKey: 'badge-check', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
   ],
   hiring: [
-    { href: '/hrm/recruiting', ns: 'hrm', key: 'recruiting.tabs.openings', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'] },
-    { href: '/hrm/positions', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read', menuParent: 'hrm-recruiting' },
-    ...['interviews', 'offers', 'postings', 'pools'].map((tab) => ({
-      href: `/hrm/recruiting?tab=${tab}`, menuKey: `hrm-recruiting-${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
+    { href: '/hrm/recruiting', iconKey: 'user-search', ns: 'hrm', key: 'recruiting.tabs.openings', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'] },
+    { href: '/hrm/positions', iconKey: 'briefcase-business', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read', menuParent: 'hrm-recruiting' },
+    ...([['interviews', 'messages-square'], ['offers', 'handshake'], ['postings', 'megaphone'], ['pools', 'users']] as const).map(([tab, iconKey]) => ({
+      href: `/hrm/recruiting?tab=${tab}`, iconKey, menuKey: `hrm-recruiting-${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
       menuParent: 'hrm-recruiting',
       permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'],
     })),
   ],
   timeOff: [
-    { href: '/hrm/leave', ns: 'hrm', key: 'leave.listTitle', permission: 'hrm.leave.read', carry: ['segment'] },
-    { href: '/hrm/leave?view=calendar', menuKey: 'hrm-leave-calendar', ns: 'hrm', key: 'leave.calendarTitle', permission: 'hrm.leave.read', carry: ['segment'] },
+    { href: '/hrm/leave', iconKey: 'calendar-days', ns: 'hrm', key: 'leave.listTitle', permission: 'hrm.leave.read', carry: ['segment'] },
+    { href: '/hrm/leave?view=calendar', iconKey: 'calendar-clock', menuKey: 'hrm-leave-calendar', ns: 'hrm', key: 'leave.calendarTitle', permission: 'hrm.leave.read', carry: ['segment'] },
   ],
   talent: [
-    { href: '/hrm/performance', ns: 'hrm', key: 'performance.continuous.tabs.cycles', feature: 'hrmPerformance' },
-    { href: '/hrm/performance/templates', menuKey: 'hrm-performance-templates', ns: 'hrm', key: 'performance.workspace.reviewFormsTab', permission: 'admin.setup.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance', prefix: true },
-    { href: '/hrm/performance?tab=calibration', menuKey: 'hrm-performance-calibration', ns: 'hrm', key: 'performance.continuous.tabs.calibration', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/performance?tab=talent', menuKey: 'hrm-performance-talent', ns: 'hrm', key: 'performance.workspace.assessments', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/performance?tab=succession', menuKey: 'hrm-performance-succession', ns: 'hrm', key: 'performance.workspace.succession', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/performance?tab=retention', menuKey: 'hrm-performance-retention', ns: 'hrm', key: 'retention.title', permission: 'hrm.retention.read', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
-    { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys', permission: 'hrm.surveys.manage', feature: 'hrmSurveys', menuParent: 'hrm-performance' },
+    { href: '/hrm/performance', iconKey: 'chart-no-axes-combined', ns: 'hrm', key: 'performance.continuous.tabs.cycles', feature: 'hrmPerformance' },
+    { href: '/hrm/performance/templates', iconKey: 'journal', menuKey: 'hrm-performance-templates', ns: 'hrm', key: 'performance.workspace.reviewFormsTab', permission: 'admin.setup.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance', prefix: true },
+    { href: '/hrm/performance?tab=calibration', iconKey: 'sliders-horizontal', menuKey: 'hrm-performance-calibration', ns: 'hrm', key: 'performance.continuous.tabs.calibration', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
+    { href: '/hrm/performance?tab=talent', iconKey: 'chart-scatter', menuKey: 'hrm-performance-talent', ns: 'hrm', key: 'performance.workspace.assessments', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
+    { href: '/hrm/performance?tab=succession', iconKey: 'git-branch', menuKey: 'hrm-performance-succession', ns: 'hrm', key: 'performance.workspace.succession', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
+    { href: '/hrm/performance?tab=retention', iconKey: 'heart-pulse', menuKey: 'hrm-performance-retention', ns: 'hrm', key: 'retention.title', permission: 'hrm.retention.read', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
+    { href: '/hrm/surveys', iconKey: 'message', ns: 'hrm', key: 'home.tabs.surveys', permission: 'hrm.surveys.manage', feature: 'hrmSurveys', menuParent: 'hrm-performance' },
   ],
   compensation: [
-    { href: '/hrm/compensation', ns: 'hrm', key: 'home.tabs.compensation', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },
-    { href: '/hrm/compensation/equity', ns: 'hrm', key: 'equity.title', permission: 'hrm.compensation.read', feature: 'hrmCompensation' },
+    { href: '/hrm/compensation', iconKey: 'coins', ns: 'hrm', key: 'home.tabs.compensation', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },
+    { href: '/hrm/compensation/equity', iconKey: 'scale', ns: 'hrm', key: 'equity.title', permission: 'hrm.compensation.read', feature: 'hrmCompensation' },
   ],
   // Keep the stored workspace identity so existing navigation preferences
   // survive the broader Benefits portfolio and its new destinations.
   rewards: [
-    { href: '/hrm/benefits', ns: 'hrm', key: 'benefits.workspace.tabs.overview', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=programs', menuKey: 'hrm-benefits-programs', ns: 'hrm', key: 'benefits.workspace.tabs.programs', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=enrolments', menuKey: 'hrm-benefits-enrolments', ns: 'hrm', key: 'benefits.workspace.tabs.enrollments', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=windows', menuKey: 'hrm-benefits-windows', menuParent: 'hrm-benefits-enrolments', ns: 'hrm', key: 'benefits.windowsTitle', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=rewards', menuKey: 'hrm-benefits-rewards', ns: 'hrm', key: 'benefits.workspace.tabs.rewards', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=incentives', menuKey: 'hrm-benefits-incentives', ns: 'hrm', key: 'benefits.workspace.tabs.incentives', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=payouts', menuKey: 'hrm-benefits-payouts', ns: 'hrm', key: 'benefits.workspace.tabs.payouts', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits', iconKey: 'gift', ns: 'hrm', key: 'benefits.workspace.tabs.overview', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=programs', iconKey: 'heart-handshake', menuKey: 'hrm-benefits-programs', ns: 'hrm', key: 'benefits.workspace.tabs.programs', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=enrolments', iconKey: 'user-check', menuKey: 'hrm-benefits-enrolments', ns: 'hrm', key: 'benefits.workspace.tabs.enrollments', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=windows', iconKey: 'calendar-range', menuKey: 'hrm-benefits-windows', menuParent: 'hrm-benefits-enrolments', ns: 'hrm', key: 'benefits.windowsTitle', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=rewards', iconKey: 'award', menuKey: 'hrm-benefits-rewards', ns: 'hrm', key: 'benefits.workspace.tabs.rewards', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=incentives', iconKey: 'sparkles', menuKey: 'hrm-benefits-incentives', ns: 'hrm', key: 'benefits.workspace.tabs.incentives', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=payouts', iconKey: 'banknote-arrow-up', menuKey: 'hrm-benefits-payouts', ns: 'hrm', key: 'benefits.workspace.tabs.payouts', permission: 'hrm.benefits.read' },
   ],
 }
 
@@ -174,11 +176,11 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
   ] },
   { id: 'payroll', label: 'Payroll', feature: 'payroll', tabs: [
     { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview', permission: 'payroll.read' },
-    { href: '/payroll/runs', ns: 'payroll', key: 'home.tabs.runs', permission: 'payroll.read', prefix: true },
-    { href: '/payroll/anomalies', ns: 'payroll', key: 'home.tabs.checks', permission: 'payroll.read' },
-    { href: '/payroll/remittances', ns: 'payroll', key: 'home.tabs.remittances', permission: 'payroll.read' },
-    { href: '/payroll/separations', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
-    { href: '/payroll/year-end', ns: 'payroll', key: 'home.tabs.yearEnd', permission: 'payroll.read' },
+    { href: '/payroll/runs', iconKey: 'circle-dollar-sign', ns: 'payroll', key: 'home.tabs.runs', permission: 'payroll.read', prefix: true },
+    { href: '/payroll/anomalies', iconKey: 'shield', ns: 'payroll', key: 'home.tabs.checks', permission: 'payroll.read' },
+    { href: '/payroll/remittances', iconKey: 'landmark', ns: 'payroll', key: 'home.tabs.remittances', permission: 'payroll.read' },
+    { href: '/payroll/separations', iconKey: 'user-minus', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
+    { href: '/payroll/year-end', iconKey: 'calendar-check', ns: 'payroll', key: 'home.tabs.yearEnd', permission: 'payroll.read' },
     ...[
       ['opening-balances', 'payroll.read'],
       ['retro', 'payroll.read'],
