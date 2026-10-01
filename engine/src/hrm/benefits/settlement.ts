@@ -80,7 +80,7 @@ export interface PreviewIncentiveSettlementQuery {
   readonly periodTo: string;
 }
 
-export interface SettleIncentivePeriodQuery extends PreviewIncentiveSettlementQuery {}
+export type SettleIncentivePeriodQuery = PreviewIncentiveSettlementQuery;
 
 export interface IncentivePreview {
   readonly programId: string;
