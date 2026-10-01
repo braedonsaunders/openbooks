@@ -97,7 +97,8 @@ async function payRunGlLegs(
       select l.id as line_id, s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
              c.system_key, c.country, l.expense_account_id as line_expense_account_id,
              c.expense_account_id as component_expense_account_id,
-             c.liability_account_id, c.remittance_party_id, s.net_pay
+             c.liability_account_id, c.remittance_party_id, s.net_pay,
+             l.payment_kind, l.non_cash_account_id
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
@@ -146,6 +147,12 @@ async function payRunGlLegs(
       netByEmployee.set(line.employee_party_id!, line.net_pay!);
       const amount = line.amount!;
       if (line.kind === "earning") {
+        if (line.payment_kind === "non_cash") {
+          if (!line.non_cash_account_id) throw new PayrollError(`non-cash earning "${line.description}" has no calculated clearing account — recalculate the editable run after configuring its non-cash account`);
+          accumulate(line.non_cash_account_id, neg(amount), `Non-cash benefit: ${line.description}`, {
+            projectId: line.project_id, departmentId: line.department_id,
+          });
+        }
         const isTimeDriven = line.system_key === "base_pay" || line.system_key === "overtime";
         if (isTimeDriven && wagesToClearing) {
           // Standard cost already posted to the job at approval; wash clearing.

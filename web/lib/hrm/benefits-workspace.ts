@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/platform/database'
 import { getMoneyFormatter } from '../money-server'
 
 import {
+  listBenefitApprovalPolicies,
   listBenefitAwards,
   listBenefitPrograms,
   listProgramMemberships,
@@ -21,6 +22,7 @@ import {
   buildAttentionQueue,
   portfolioHref,
   totalsByCurrency,
+  type BenefitPayComponentOption,
   type AttentionItem,
   type CurrencyTotal,
 } from './benefits-portfolio'
@@ -108,6 +110,9 @@ export interface ProgramSimulation {
 }
 
 export interface ProgramDetailDrawer {
+  canConfigureApprovalPolicies: boolean
+  approvalPolicies: Awaited<ReturnType<typeof listBenefitApprovalPolicies>> | null
+  approvalPoliciesRefusal: { title: string; message: string } | null
   editHref: string
   policyLines: { label: string; value: string }[]
   simulateHref: string
@@ -184,7 +189,7 @@ export interface PortfolioData {
   awardDrawer: AwardDetailDrawer | null
   awardCloseHref: string
   accountOptions: BuilderOption[]
-  payComponentOptions: BuilderOption[]
+  payComponentOptions: BenefitPayComponentOption[]
   departmentOptions: BuilderOption[]
   projectOptions: BuilderOption[]
   employmentOptions: BuilderOption[]
@@ -200,6 +205,7 @@ type Catalog = {
 function statusVariant(status: string): PortfolioProgramRow['statusVariant'] {
   if (status === 'active' || status === 'approved' || status === 'delivered' || status === 'open') return 'success'
   if (status === 'draft' || status === 'pending' || status === 'queued') return 'warning'
+  if (status === 'rejected') return 'destructive'
   if (status === 'closed' || status === 'voided' || status === 'cancelled') return 'outline'
   return 'default'
 }
@@ -292,7 +298,7 @@ export async function loadBenefitsPortfolio(
       programFamily: program?.family ?? null,
       programDeliveryMethod: program?.deliveryMethod ?? null,
       recipientLabel: worker?.name ?? award.employmentId,
-      statusLabel: labelOf(t, 'portfolio.awardStatus', award.status as string),
+      statusLabel: award.status === 'queued' && program?.deliveryMethod === 'external' && award.payrollProcessed ? t('portfolio.externalPayrollProcessed') : award.status === 'delivered' && program?.deliveryMethod === 'payroll' ? t('portfolio.payrollDelivery') : labelOf(t, 'portfolio.awardStatus', award.status as string),
       statusVariant: statusVariant(award.status),
       valueLabel: amountLabel(award.value, award.currency),
       awardHref: portfolioHref(basePath, sp.view, { award: award.id }),
@@ -408,8 +414,8 @@ export async function loadBenefitsPortfolio(
       : Promise.resolve({ rows: [], failure: null }),
     lookup(() =>
       db
-        .execute<{ id: string; code: string | null; name: string }>(sql`
-          select id::text as id, code, name from pay_components
+        .execute<{ id: string; code: string | null; name: string; paymentKind: 'cash' | 'non_cash' }>(sql`
+          select id::text as id, code, name, payment_kind as "paymentKind" from pay_components
            where org_id = ${orgId} and is_active and kind = 'earning'
            order by sequence, code
         `)
@@ -579,7 +585,13 @@ export async function loadBenefitsPortfolio(
       policy('deliveryMethod', t(`portfolio.delivery.${found.deliveryMethod}`))
       const component = payComponents.rows.find((component) => component.id === found.payComponentId)
       policy('payComponent', component ? `${component.code ?? ''} — ${component.name}` : null)
+      let approvalPolicies: ProgramDetailDrawer['approvalPolicies'] = null
+      let approvalPoliciesRefusal: ProgramDetailDrawer['approvalPoliciesRefusal'] = null
+      try { if (found.approvalMode === 'flows') approvalPolicies = await listBenefitApprovalPolicies({ orgId, actorId, programId: found.id }) }
+      catch (error) { approvalPoliciesRefusal = { title: t('portfolio.readFailedTitle'), message: error instanceof Error ? error.message : t('portfolio.loadFailed') } }
       programDrawer = {
+        canConfigureApprovalPolicies: can(authz, 'flows.manage'),
+        approvalPolicies, approvalPoliciesRefusal,
         policyLines,
         editHref: portfolioHref(basePath, sp.view, { program: found.id, edit: '1' }),
         simulateHref: portfolioHref(basePath, sp.view, { program: found.id }),
@@ -652,6 +664,7 @@ export async function loadBenefitsPortfolio(
     payComponentOptions: payComponents.rows.map((c) => ({
       value: c.id,
       label: `${c.code ?? ''} — ${c.name}`.trim(),
+      paymentKind: c.paymentKind,
     })),
     departmentOptions: departments.rows.map((d) => ({ value: d.id, label: d.name })),
     projectOptions: projects.rows.map((p) => ({ value: p.id, label: p.name })),

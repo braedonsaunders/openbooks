@@ -6,6 +6,35 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.28] - 2026-10-01
+
+- Consolidate Benefits into native Programs, Enrollments, Rewards, Incentives
+  and Payouts workspaces. Manage insured plans inside Benefits and enrollment
+  windows from the enrollment header, with one operational list per workspace.
+- Make approvals optional per program. No approvals required is the default;
+  employers may instead configure conditional, delegated and multi-level native
+  Flows decisions. Pin the setting and decision evidence on each reward.
+- Process cash rewards and noncash provider benefits through native payroll.
+  Noncash valuation follows the earning component's statutory treatment without
+  increasing cash pay, and posts to its configured prepaid or clearing account.
+  Record provider fulfillment separately after payroll processing.
+- Preserve precise approval thresholds, serialize concurrent decisions across
+  policies, and refuse incomplete decisions, zero-value obligations and stale
+  payroll calculations with actionable remedies.
+- Edit recruiting availability, offer clauses and retention scope through
+  native structured setup controls while preserving their stored evidence.
+- Preserve verified currencies during account imports, report unavailable
+  source denominations, scope HR scheduler work to each tenant and correct
+  Sales reversal journal dates.
+
+Apply migrations 0473 through 0475 using the native migration runner before
+starting the updated application and worker. Existing programs receive the
+audited No approvals required setting. Unprocessed pending rewards return to
+draft for resubmission; posted payroll and fulfilled rewards remain unchanged.
+Configure a noncash earning component and its posting account before issuing
+provider benefits. Active program rules change through closure and creation
+of a replacement program with a new code.
+
 ## [0.1.0-alpha.27.1] - 2026-10-01
 
 - Correct the alpha27 worker's deferred startup: live authorization and

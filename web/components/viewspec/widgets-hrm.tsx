@@ -1,3 +1,4 @@
+import { WindowsManagerDrawer } from '../../app/(app)/hrm/benefits/WindowsManagerDrawer'
 import { CandidatePoolCreateDrawer } from '../../app/(app)/hrm/recruiting/CandidatePoolCreateDrawer'
 import type { ComponentProps } from 'react'
 import {
@@ -326,6 +327,7 @@ export const HRM_WIDGETS = {
   'hrm-benefit-dialog': (props) => (
     <BenefitElectDialog
       dialog={(props.dialog as ComponentProps<typeof BenefitElectDialog>['dialog']) ?? null}
+      mode={props.mode === 'manage' ? 'manage' : 'self'}
       closeHref={str(props, 'closeHref') ?? '/me/benefits'}
     />
   ),
@@ -368,6 +370,14 @@ export const HRM_WIDGETS = {
   /* --- HR-8 benefits (window dialog, drawer, and the approve island) --- */
   /** New-window dialog, opened from the page header through the
    *  `window=new` search param; closing navigates the param away. */
+  'hrm-windows-manager': (props) => (
+    <WindowsManagerDrawer
+      rows={(props.rows as ComponentProps<typeof WindowsManagerDrawer>['rows']) ?? []}
+      closeHref={str(props, 'closeHref') ?? '/hrm/benefits?view=enrolments'}
+      newHref={str(props, 'newHref') ?? '/hrm/benefits?view=enrolments&window=new'}
+      canManage={props.canManage === true}
+    />
+  ),
   'hrm-window-dialog': (props) => (
     <WindowDialog
       closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
@@ -404,7 +414,7 @@ export const HRM_WIDGETS = {
   /** Program-type cards as one panel body: insured plans resolve to the
    *  rehomed Setup drawers, employer-defined families to the builder. */
   'hrm-benefit-type-cards': (props) => (
-    <BenefitTypeCards cards={(props.cards as ComponentProps<typeof BenefitTypeCards>['cards']) ?? []} />
+    <BenefitTypeCards cards={(props.cards as ComponentProps<typeof BenefitTypeCards>['cards']) ?? []} closeHref={str(props, 'closeHref')} title={str(props, 'title')} />
   ),
   /** Program operational list over the prepared hrm_benefit_programs
    *  source: shared PagedTable composition with the true population in
@@ -413,6 +423,7 @@ export const HRM_WIDGETS = {
     <ProgramPortfolioTable
       rows={(props.rows as ComponentProps<typeof ProgramPortfolioTable>['rows']) ?? []}
       text={(props.text as ComponentProps<typeof ProgramPortfolioTable>['text']) ?? null}
+      typeFilter={props.typeFilter as ComponentProps<typeof ProgramPortfolioTable>['typeFilter']}
       total={typeof props.total === 'number' ? props.total : 0}
       truncated={props.truncated === true}
     />
@@ -440,6 +451,7 @@ export const HRM_WIDGETS = {
           : 'reward'
       }
       familyLocked={props.familyLocked === true}
+      canConfigureApprovalPolicies={props.canConfigureApprovalPolicies === true}
       subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}
       projectOptions={(props.projectOptions as ComponentProps<typeof ProgramBuilderDrawer>['projectOptions']) ?? []}
@@ -462,6 +474,7 @@ export const HRM_WIDGETS = {
         closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
         initialFamily={seed.family}
         familyLocked
+        canConfigureApprovalPolicies={props.canConfigureApprovalPolicies === true}
         subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
         departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}
         projectOptions={(props.projectOptions as ComponentProps<typeof ProgramBuilderDrawer>['projectOptions']) ?? []}

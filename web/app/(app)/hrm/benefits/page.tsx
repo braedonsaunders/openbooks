@@ -1,6 +1,11 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
 import { SetupEntitySection } from '../../admin/setup/[entity]/SetupEntitySection'
-import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
+import { BENEFIT_PLANS_ENTITY } from '../../../../lib/setup/hrm-benefits'
+import { requirePermission, can } from '../../../../lib/authz'
+import { listBenefitPlans } from '@openbooks/engine/hrm/benefits'
+import { db } from '@openbooks/engine/platform/database'
+import { isUuid } from '../../../../lib/list-params'
+import { notFound, redirect } from 'next/navigation'
+import { ModuleView } from '../../../../components/viewspec/module-view'
 import { benefitsSpec, benefitsTitle, loadBenefitsPage } from './view'
 
 export const dynamic = 'force-dynamic'
@@ -9,42 +14,34 @@ export async function generateMetadata() {
   return { title: await benefitsTitle() }
 }
 
-/**
- * The Benefits tab. The default overview is the portfolio cockpit above the
- * enrollment-windows table; focused views narrow to programs, windows,
- * enrolments, rewards, incentives, or payouts. The insured-plan Setup
- * section rehomes onto the programs view, where the health and retirement
- * cards land — the same generic CRUD surface as the setup workspace, only
- * the base path changes, so the plan drawers stay local to this page.
- * Renders only when the hrm feature gate is on and the actor holds
- * hrm.benefits.read — the view 404s otherwise.
- */
-export default async function BenefitsPage({
-  searchParams,
-}: {
+/** Each Benefits destination renders one operational list under the shared header. */
+export default async function BenefitsPage({ searchParams }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
+  if (sp.view === 'windows') {
+    const params = new URLSearchParams(Object.entries(sp).filter((entry): entry is [string, string] => entry[1] !== undefined))
+    params.set('view', 'enrolments')
+    if (!sp.window) params.set('windows', '1')
+    redirect(`/hrm/benefits?${params}`)
+  }
   const data = await loadBenefitsPage(sp)
-  const planEntity = data.planSection ? SETUP_ENTITY_BY_KEY.get('benefit-plans') : undefined
-  return (
-    <>
-      <ModuleView spec={benefitsSpec(data, '/hrm/benefits')} data={data} searchParams={sp} trusted />
-      {data.planSection && planEntity ? (
-        <SetupEntitySection
-          entity={planEntity}
-          orgId={data.planSection.orgId}
-          actorId={data.planSection.actorId}
-          searchParams={sp}
-          basePath="/hrm/benefits"
-          canManage={data.planSection.canManage}
-          allowedSubsidiaryIds={
-            data.planSection.allowedSubsidiaryIds ? new Set(data.planSection.allowedSubsidiaryIds) : null
-          }
-          hideHeader
-          rowParam="plan"
-        />
-      ) : null}
-    </>
-  )
+  const planId = sp.plan
+  const authz = planId ? await requirePermission(planId === 'new' ? 'hrm.benefits.manage' : 'hrm.benefits.read') : null
+  const plans = authz ? await listBenefitPlans(db, authz.user.orgId, authz.user.id) : []
+  if (planId && planId !== 'new' && (!isUuid(planId) || !plans.some((plan) => plan.id === planId))) notFound()
+  return <>
+    <ModuleView spec={benefitsSpec(data)} data={data} searchParams={sp} trusted />
+    {authz && planId ? <SetupEntitySection
+      entity={planId === 'new' && (sp.kind === 'health' || sp.kind === 'retirement')
+        ? { ...BENEFIT_PLANS_ENTITY, readOnly: !can(authz, 'hrm.benefits.manage'), fields: BENEFIT_PLANS_ENTITY.fields.map((field) => field.key === 'kind' ? { ...field, defaultValue: sp.kind } : field) }
+        : { ...BENEFIT_PLANS_ENTITY, readOnly: !can(authz, 'hrm.benefits.manage') }}
+      orgId={authz.user.orgId} actorId={authz.user.id}
+      searchParams={sp} basePath="/hrm/benefits"
+      canManage={planId !== 'new' || can(authz, 'hrm.benefits.manage')}
+      allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
+      visibleRowIds={new Set(plans.map((plan) => plan.id))}
+      rowParam="plan" drawerOnly hideHeader mutationBasePath="/api/hrm/benefit-plan-configuration"
+    /> : null}
+  </>
 }

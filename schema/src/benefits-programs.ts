@@ -33,6 +33,7 @@ import { auditColumns, id, orgRef } from "./helpers";
 
 export const BENEFIT_PROGRAM_FAMILIES = ["reward", "allowance", "incentive", "custom"] as const;
 export const BENEFIT_PROGRAM_STATUSES = ["draft", "active", "closed"] as const;
+export const BENEFIT_PROGRAM_APPROVAL_MODES = ["none", "flows"] as const;
 export const BENEFIT_PROGRAM_DELIVERY = ["payroll", "external"] as const;
 export const BENEFIT_PROGRAM_VALUATION = ["fixed", "percent", "pool"] as const;
 export const BENEFIT_PROGRAM_METRICS = [
@@ -51,9 +52,11 @@ export const BENEFIT_PROGRAM_FREQUENCIES = [
   "manual",
 ] as const;
 export const BENEFIT_PROGRAM_PERIOD_BASES = ["calendar", "fiscal"] as const;
+export const BENEFIT_AWARD_SUBJECT_KIND = "hrm_benefit_award";
 export const BENEFIT_AWARD_STATUSES = [
   "draft",
   "pending",
+  "rejected",
   "approved",
   "queued",
   "delivered",
@@ -78,6 +81,7 @@ export const benefitPrograms = pgTable(
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     payComponentId: uuid("pay_component_id"),
+    approvalMode: text("approval_mode", { enum: [...BENEFIT_PROGRAM_APPROVAL_MODES] }).notNull().default("none"),
     deliveryMethod: text("delivery_method", { enum: [...BENEFIT_PROGRAM_DELIVERY] })
       .notNull()
       .default("payroll"),
@@ -117,6 +121,7 @@ export const benefitPrograms = pgTable(
     check("hrm_benefit_programs_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("hrm_benefit_programs_window", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
     check("hrm_benefit_programs_delay", sql`${t.paymentDelayDays} >= 0`),
+    check("hrm_benefit_programs_approval_mode", sql`${t.approvalMode} in ('none','flows')`),
     check("hrm_benefit_programs_revision", sql`${t.revision} >= 1`),
   ],
 );
@@ -232,6 +237,10 @@ export const benefitAwards = pgTable(
     externalRef: text("external_ref"),
     payRunDocumentId: uuid("pay_run_document_id"),
     payRunAdjustmentId: uuid("pay_run_adjustment_id"),
+    flowRunId: uuid("flow_run_id"),
+    submittedBy: uuid("submitted_by"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    decisionSnapshot: jsonb("decision_snapshot").$type<Record<string, unknown>>(),
     approvedBy: uuid("approved_by"),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     voidReason: text("void_reason"),

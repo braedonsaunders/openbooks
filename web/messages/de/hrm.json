@@ -1273,7 +1273,9 @@
         "incentives": "Anreize",
         "payouts": "Auszahlungen"
       }
-    }
+    },
+    "newEnrollment": "Neue Anmeldung",
+    "planSettings": "Planeinstellungen"
   },
   "me": {
     "tabs": {
@@ -1538,18 +1540,18 @@
       "changeSubmit": "Änderung speichern",
       "changeFailed": "Die Änderung konnte nicht gespeichert werden.",
       "awards": {
-        "paidTitle": "Ausgezahlte Prämien",
-        "pendingTitle": "Prämien vor Auszahlung",
-        "hint": "Ausgezahlte Prämien sind bereits im Gehalt enthalten. Offene Prämien sind keine Zahlungen.",
-        "paidEmpty": "Noch keine ausgezahlten Prämien.",
-        "pendingEmpty": "Keine Prämien vor Auszahlung.",
+        "paidTitle": "Verarbeitete Prämien",
+        "pendingTitle": "Ausstehende Prämien",
+        "hint": "Verarbeitete Prämien sind in der Gehaltsabrechnung erfasst. Ausstehende Prämien sind kein Zahlungsnachweis.",
+        "paidEmpty": "Noch keine verarbeiteten Prämien.",
+        "pendingEmpty": "Keine ausstehenden Prämien.",
         "refusalTitle": "Prämien nicht verfügbar",
         "program": "Programm",
         "period": "Erarbeiteter Zeitraum",
         "value": "Wert",
         "status": "Status",
-        "reversedTitle": "Stornierte Prämienzahlungen",
-        "reversedEmpty": "Keine stornierten Prämienzahlungen.",
+        "reversedTitle": "Abgelehnte und rückgängig gemachte Prämien",
+        "reversedEmpty": "Keine abgelehnten oder rückgängig gemachten Prämien",
         "reversedStatus": "Storniert"
       }
     },
@@ -2538,7 +2540,8 @@
       "reward": "Prämie",
       "allowance": "Zulage",
       "incentive": "Anreiz",
-      "custom": "Eigen"
+      "custom": "Eigen",
+      "insured": "Versicherter Leistungsplan"
     },
     "familyHints": {
       "reward": "Einmalige Anerkennung: Boni, Geschenkkarten, Spontanprämien.",
@@ -2590,10 +2593,11 @@
     "awardStatus": {
       "draft": "Entwurf",
       "pending": "Wartet auf Genehmigung",
-      "approved": "Genehmigt",
-      "queued": "Angereiht zur Auszahlung",
+      "approved": "Bereit für Gehaltsabrechnung",
+      "queued": "In einer Abrechnung eingeplant",
       "delivered": "Ausgezahlt",
-      "voided": "Storniert"
+      "voided": "Storniert",
+      "rejected": "Abgelehnt"
     },
     "columns": {
       "program": "Programm",
@@ -2707,7 +2711,7 @@
       "chooseRecipient": "Empfänger wählen",
       "chooseBasis": "Basis wählen",
       "basisHint": "Abrechnung und Lohnabrechnung müssen sich über das Quartal einig sein, daher ist die Basis Teil des Programms.",
-      "externalHint": "Positive Sachprämien können erst ausgegeben werden, wenn die Abrechnung ihre steuerliche Behandlung unterstützt. Erstellen Sie für eine Auszahlung eine Geldprämie über die Abrechnung.",
+      "externalHint": "Externe Prämien verwenden eine Sachbezugskomponente, damit die Gehaltsabrechnung Steuern berechnet, ohne eine Barauszahlung hinzuzufügen. Erfassen Sie die Anbietererfüllung erst nach dem Festschreiben der verknüpften Abrechnung.",
       "reviewTitle": "Programm prüfen",
       "reviewEmpty": "Noch nichts erfasst.",
       "reviewHint": "Die Anlage landet als Entwurf; die Detailansicht liest ihn vom Server zurück.",
@@ -2721,13 +2725,13 @@
       "back": "Zurück",
       "next": "Weiter",
       "amountNoun": "Betrag",
-      "componentPrerequisite": "Erstellen Sie in der Abrechnungseinrichtung eine aktive Entgeltkomponente. Aktualisieren Sie danach die Optionen und wählen Sie sie aus. Ihre Abrechnungsregeln bestimmen Steuer- und Buchungsbehandlung.",
+      "componentPrerequisite": "Erstellen Sie eine zur gewählten Lieferung passende Bar- oder Sachbezugskomponente und aktualisieren Sie die Optionen.",
       "openPayrollSetup": "Abrechnungseinrichtung öffnen",
       "accountsPrerequisite": "Keine buchbaren Bemessungskonten sichtbar. Ergänzen Sie die benötigten Konten oder lassen Sie Ihren Rechtsträgerzugriff von der Finanzabteilung prüfen. Aktualisieren Sie danach die Optionen.",
       "openAccounts": "Kontenplan öffnen",
       "refreshOptions": "Optionen aktualisieren"
     },
-    "awardBuilderTitle": "Neue Zuwendung",
+    "awardBuilderTitle": "Neue Anerkennung",
     "awardFields": {
       "program": "Programm",
       "recipient": "Empfänger",
@@ -2742,12 +2746,11 @@
       "recordReferencePlaceholder": "Anbieterbestätigung oder Bestellnummer",
       "recordReferenceHint": "Die externe Auszahlung erfasst diese Referenz auf der Zuwendung."
     },
-    "awardCreate": "Zuwendung erfassen",
-    "submitAward": "Zur Genehmigung einreichen",
-    "approveAward": "Genehmigen",
-    "queueAward": "Zur Auszahlung anreihen",
-    "payrollDelivery": "Über die Abrechnung auszahlen",
-    "externalDelivery": "Externe Auszahlung erfassen",
+    "awardCreate": "Anerkennung erstellen",
+    "submitAward": "Prämie einreichen",
+    "queueAward": "Zur Gehaltsabrechnung hinzufügen",
+    "payrollDelivery": "In der Gehaltsabrechnung verarbeitet",
+    "externalDelivery": "Erfüllung erfassen",
     "voidAward": "Stornieren",
     "payrollInputLabel": "Abrechnungsposition",
     "payrollInputPlaceholder": "Bestehende Abrechnungspositionsnummer",
@@ -2806,6 +2809,32 @@
       "heroHint": "Arbeitgeberprogramme, Wertregeln und Gültigkeitszeiträume.",
       "directoryTitle": "Leistungsverwaltung",
       "payrollHint": "Alle erfassten Prämien · Währungen bleiben getrennt"
-    }
+    },
+    "newReward": "Neue Anerkennung",
+    "newIncentive": "Neuer Anreiz",
+    "planCostsInRecord": "Planpreise anzeigen",
+    "readFailedTitle": "Programme konnten nicht geladen werden",
+    "unknownType": "Unbekannter Programmtyp „{type}“. Wählen Sie einen Typ im Filter.",
+    "approvalControls": {
+      "title": "Genehmigungskontrollen",
+      "openFlows": "Flows öffnen",
+      "hint": "Flows wendet die konfigurierten Genehmigungsstufen und Bedingungen für dieses Programm an.",
+      "unconfigured": "Keine Genehmigungsrichtlinie für Leistungen konfiguriert. Konfigurieren Sie Flows vor dem Einreichen von Prämien.",
+      "policiesHint": "Aktive Richtlinien werden beim Einreichen einer Prämie ausgewertet.",
+      "openApprovals": "Genehmigungen öffnen",
+      "administratorRemedy": "Bitten Sie den Workflow-Administrator Ihres Unternehmens, Genehmigungsrichtlinien zu konfigurieren oder zu ändern.",
+      "unconfiguredStatus": "Keine Genehmigungsrichtlinie für Leistungen konfiguriert.",
+      "modes": {
+        "none": "Keine Genehmigungen erforderlich",
+        "flows": "Genehmigungen über Flows"
+      },
+      "noneHint": "Autorisierte Einreichungen werden für die Lohnabrechnung bereitgestellt. Eine Workflow-Konfiguration oder genehmigende Person ist nicht erforderlich."
+    },
+    "externalPayrollProcessed": "In der Gehaltsabrechnung verarbeitet · Erfüllung ausstehend",
+    "openPayRun": "Gehaltsabrechnung öffnen",
+    "directProcessingHint": "Flows hat die direkte Verarbeitung autorisiert; diese Prämie ist bereit für die Gehaltsabrechnung.",
+    "rewardProgramPrerequisite": "Erstellen und aktivieren Sie vor dem Erfassen einer Prämie ein Prämien- oder Zulagenprogramm.",
+    "createRewardProgram": "Prämienprogramm erstellen",
+    "noApprovalSubmissionHint": "Keine Genehmigungen erforderlich. Die autorisierte Einreichung wurde protokolliert; diese Prämie ist für die Lohnabrechnung bereit."
   }
 }

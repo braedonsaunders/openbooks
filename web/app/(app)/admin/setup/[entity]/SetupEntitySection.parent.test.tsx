@@ -14,7 +14,7 @@ stubModules({
 
 const React = await import('react')
 Object.assign(globalThis, { React })
-const { SetupEntitySection } = await import('./SetupEntitySection.tsx')
+const { SetupEntitySection, setupRecordTabs } = await import('./SetupEntitySection.tsx')
 const { SetupDrawer } = await import('./SetupDrawer.tsx')
 const { SETUP_ENTITY_BY_KEY } = await import('../../../../../lib/setup/registry.ts')
 const dialect = new PgDialect()
@@ -80,4 +80,26 @@ test('nested setup lists, edit selection and new values stay bound to the owning
     assert.match(String(drawer.props.closeHref), new RegExp(`row=${ownerId}`))
     await assert.rejects(() => SetupEntitySection({ ...props, parent: undefined, searchParams: {} }), /A parent record is required/)
   }
+})
+
+
+test('a host-owned unified list mounts only the native editor and preserves its mutation adapter on pricing tiers', async () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('benefit-plans')!
+  const queries: string[] = []
+  Object.assign(globalThis, { __setupParentExecute: (query: SQL) => { queries.push(dialect.sqlToQuery(query).sql); return Promise.resolve({ rows: [] }) } })
+  const node = await SetupEntitySection({ entity, orgId: '11111111-1111-4111-8111-111111111111', basePath: '/hrm/benefits',
+    searchParams: { view: 'programs', plan: 'new' }, canManage: true, rowParam: 'plan', drawerOnly: true,
+    mutationBasePath: '/api/hrm/benefit-plan-configuration', visibleRowIds: new Set() })
+  const all = elements(node)
+  assert.equal(all.filter((item) => item.type === SetupDrawer).length, 1)
+  assert.equal(all.find((item) => item.type === SetupDrawer)?.props.mutationBasePath, '/api/hrm/benefit-plan-configuration')
+  assert.ok(!queries.some((query) => /from hrm_benefit_plans/.test(query)), 'the editor does not append or query a second plan list')
+  const tabs = setupRecordTabs({ entity, row: { id: 'plan-id' }, orgId: 'org', sp: { setupTab: 'benefit-plan-levels' },
+    basePath: '/hrm/benefits', canManage: true, allowedSubsidiaryIds: null, features: { hrm: true }, t: (key) => key,
+    mutationBasePath: '/api/hrm/benefit-plan-configuration' })
+  const levels = tabs.find((tab) => tab.key === 'benefit-plan-levels')?.content
+  assert.ok(React.isValidElement<Record<string, unknown>>(levels))
+  assert.equal(levels.props.mutationBasePath, '/api/hrm/benefit-plan-configuration')
+  assert.deepEqual(levels.props.parent, { recordKey: 'benefit-plans', value: 'plan-id' })
+  assert.equal(levels.props.basePath, '/hrm/benefits')
 })

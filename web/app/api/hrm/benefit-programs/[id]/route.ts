@@ -6,6 +6,7 @@ import {
   activateBenefitProgram,
   addProgramMembership,
   closeBenefitProgram,
+  listBenefitApprovalPolicies,
   listProgramMemberships,
   removeProgramMembership,
   updateBenefitProgram,
@@ -35,7 +36,8 @@ export const GET = defineRoute({
     try {
       const program = await getBenefitProgram(db, gate.user.orgId, gate.user.id, id);
       const members = await listProgramMemberships({ orgId: gate.user.orgId, actorId: gate.user.id, programId: id });
-      return NextResponse.json({ program, members });
+      const approvalPolicies = await listBenefitApprovalPolicies({ orgId: gate.user.orgId, actorId: gate.user.id, programId: id });
+      return NextResponse.json({ program, members, approvalPolicies });
     } catch (e) {
       return benefitsErrorResponse(e);
     }

@@ -1273,7 +1273,9 @@
         "incentives": "激励",
         "payouts": "发放"
       }
-    }
+    },
+    "newEnrollment": "新增加入",
+    "planSettings": "计划设置"
   },
   "me": {
     "tabs": {
@@ -1538,18 +1540,18 @@
       "changeSubmit": "保存变更",
       "changeFailed": "无法记录该变更。",
       "awards": {
-        "paidTitle": "已发放奖励",
-        "pendingTitle": "待付款奖励",
-        "hint": "已发放奖励已计入工资。待付款奖励不等于已付款。",
-        "paidEmpty": "暂无已发放奖励。",
-        "pendingEmpty": "暂无待付款奖励。",
+        "paidTitle": "已处理的奖励",
+        "pendingTitle": "待处理的奖励",
+        "hint": "已处理的奖励已计入工资单。待处理的奖励不能证明已付款。",
+        "paidEmpty": "暂无已处理的奖励。",
+        "pendingEmpty": "没有待处理的奖励。",
         "refusalTitle": "奖励不可用",
         "program": "计划",
         "period": "获得期间",
         "value": "金额",
         "status": "状态",
-        "reversedTitle": "已冲销奖励付款",
-        "reversedEmpty": "暂无已冲销奖励付款。",
+        "reversedTitle": "已拒绝和已冲销的奖励",
+        "reversedEmpty": "没有已拒绝或已冲销的奖励",
         "reversedStatus": "已冲销"
       }
     },
@@ -2538,7 +2540,8 @@
       "reward": "奖励",
       "allowance": "津贴",
       "incentive": "激励",
-      "custom": "自定义"
+      "custom": "自定义",
+      "insured": "保险福利计划"
     },
     "familyHints": {
       "reward": "一次性表彰:奖金、礼品卡、即时奖励。",
@@ -2590,10 +2593,11 @@
     "awardStatus": {
       "draft": "草稿",
       "pending": "待审批",
-      "approved": "已批准",
-      "queued": "排队发放",
+      "approved": "待添加到工资单",
+      "queued": "已加入工资单",
       "delivered": "已发放",
-      "voided": "已作废"
+      "voided": "已作废",
+      "rejected": "已拒绝"
     },
     "columns": {
       "program": "计划",
@@ -2707,7 +2711,7 @@
       "chooseRecipient": "选择领取人",
       "chooseBasis": "选择基准",
       "basisHint": "结算与工资须对季度口径一致，因此基准是计划的一部分。",
-      "externalHint": "在工资系统支持税务处理之前，不能发放正金额的非现金奖励。需要付款时，请创建通过工资发放的现金奖励。",
+      "externalHint": "外部奖励使用非现金收入项目，使工资计算税款时不会增加现金工资。仅在关联工资单确认后记录供应商履行情况。",
       "reviewTitle": "复核计划",
       "reviewEmpty": "尚未填写任何内容。",
       "reviewHint": "创建将保存为草稿。详情抽屉将从服务器读回。",
@@ -2721,13 +2725,13 @@
       "back": "上一步",
       "next": "下一步",
       "amountNoun": "金额",
-      "componentPrerequisite": "请在工资设置中创建有效的收入项目，然后刷新选项并选择该项目。其工资规则决定税务和记账处理。",
+      "componentPrerequisite": "创建与所选发放方式匹配的现金或非现金收入项目，然后刷新选项。",
       "openPayrollSetup": "打开工资设置",
       "accountsPrerequisite": "没有可见的可记账计量科目。请添加所需科目或请财务部门检查法人实体访问权限，然后刷新选项。",
       "openAccounts": "打开会计科目表",
       "refreshOptions": "刷新选项"
     },
-    "awardBuilderTitle": "新建奖励",
+    "awardBuilderTitle": "新增奖励",
     "awardFields": {
       "program": "计划",
       "recipient": "领取人",
@@ -2742,12 +2746,11 @@
       "recordReferencePlaceholder": "供应商确认号或订单号",
       "recordReferenceHint": "外部发放将在奖励上记录该参考号。"
     },
-    "awardCreate": "记录奖励",
-    "submitAward": "提交审批",
-    "approveAward": "批准",
-    "queueAward": "排队发放",
-    "payrollDelivery": "通过工资发放",
-    "externalDelivery": "记录外部发放",
+    "awardCreate": "创建奖励",
+    "submitAward": "提交奖励",
+    "queueAward": "添加到工资单",
+    "payrollDelivery": "已在工资单中处理",
+    "externalDelivery": "记录履行",
     "voidAward": "作废",
     "payrollInputLabel": "工资项目",
     "payrollInputPlaceholder": "既有工资项目编号",
@@ -2806,6 +2809,32 @@
       "heroHint": "雇主定义的计划、金额规则和生效日期。",
       "directoryTitle": "福利管理",
       "payrollHint": "所有已记录奖励 · 各币种分别汇总"
-    }
+    },
+    "newReward": "新增奖励",
+    "newIncentive": "新增激励",
+    "planCostsInRecord": "查看计划定价",
+    "readFailedTitle": "无法加载方案",
+    "unknownType": "未知方案类型“{type}”。请在筛选器中选择类型。",
+    "approvalControls": {
+      "title": "审批控制",
+      "openFlows": "打开Flows",
+      "hint": "Flows 根据此计划配置的审批阶段和条件执行审批。",
+      "unconfigured": "尚未配置福利审批策略。提交奖励前请配置Flows。",
+      "policiesHint": "提交奖励时会评估已启用的策略。",
+      "openApprovals": "打开审批",
+      "administratorRemedy": "请联系公司的工作流管理员配置或修改审批策略。",
+      "unconfiguredStatus": "尚未配置福利审批策略。",
+      "modes": {
+        "none": "无需审批",
+        "flows": "使用 Flows 审批"
+      },
+      "noneHint": "经授权提交后即可进入工资处理，无需配置工作流或指定审批人。"
+    },
+    "externalPayrollProcessed": "已在工资单中处理 · 等待履行",
+    "openPayRun": "打开工资单",
+    "directProcessingHint": "Flows已授权直接处理；此奖励已可添加到工资单。",
+    "rewardProgramPrerequisite": "记录奖励前，请创建并启用奖励或津贴方案。",
+    "createRewardProgram": "创建奖励方案",
+    "noApprovalSubmissionHint": "无需审批。授权提交已记录，此奖励已可进入工资处理。"
   }
 }

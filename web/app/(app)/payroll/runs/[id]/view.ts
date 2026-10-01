@@ -200,7 +200,7 @@ export async function loadPayRunWizard(
          where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
          order by p.display_name`),
       db.execute<(StubRow['lines'])[number]>(sql`
-        select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
+        select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence, l.payment_kind,
                c.code as component_code, pr.name as project_name, dep.name as department_name
           from pay_stub_lines l
           join pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id

@@ -34,7 +34,6 @@ export const createAwardBody = z.object({
 export const benefitAwardPostBody = createAwardBody;
 
 export const submitAwardBody = z.object({ action: z.literal("submit") });
-export const approveAwardBody = z.object({ action: z.literal("approve") });
 export const queueAwardBody = z.object({
   action: z.literal("queue"),
   payRunDocumentId: uuid.nullish(),
@@ -59,7 +58,6 @@ export const voidAwardBody = z.object({ action: z.literal("void"), reason });
 
 export const benefitAwardPatchBody = z.discriminatedUnion("action", [
   submitAwardBody,
-  approveAwardBody,
   queueAwardBody,
   payrollDeliveryBody,
   externalDeliveryBody,

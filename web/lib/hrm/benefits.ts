@@ -1,10 +1,13 @@
 import 'server-only'
+import type { BenefitElectDialogStrings } from '../../app/(app)/me/islands'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  listBenefitPlans,
   listEnrollmentWindows,
+  listEnrollmentPlanOptions,
   listEnrollments,
   type EnrollmentSummary,
   type EnrollmentWindowSummary,
@@ -19,7 +22,9 @@ import { listScopedDepartmentOptions } from '../scoped-options'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
   parsePortfolioView,
+  type UnifiedProgramRow,
   type AwardTableText,
+  type BenefitPayComponentOption,
   type BuilderOption,
   type ProgramEditSeed,
   type ProgramTableText,
@@ -40,8 +45,9 @@ import {
 } from './benefits-workspace'
 
 /**
- * Benefits workspace loader — windows and enrolments behind the Benefits
- * tab. Rows come from the benefits read service (loader-resolved, newest
+ * Benefits workspace loader — unified programs, employee enrollments,
+ * rewards, incentive policies and the payroll delivery queue. Enrollment
+ * windows are record management within the Enrollments header drawer. Rows come from the benefits read service (loader-resolved, newest
  * first, subsidiary scope inside), never a direct benefits-table read from
  * the web app. Worker names resolve through the shared loadQueueLabels
  * helper keyed strictly by ids the service already authorized. Segments
@@ -114,6 +120,12 @@ export interface BenefitsData {
   canManage: boolean
   newWindowButton: string
   enrollmentWindowsButton: string
+  enrollmentWindowsHref: string
+  windowsManagerOpen: boolean
+  windowsCloseHref: string
+  newEnrollmentButton: string
+  newEnrollmentHref: string
+  enrollmentDialog: BenefitElectDialogStrings | null
   newWindowHref: string
   dialogOpen: boolean
   dialogCloseHref: string
@@ -143,6 +155,11 @@ export interface BenefitsData {
   programTableText: ProgramTableText
   awardTableText: AwardTableText
   programRows: PortfolioProgramRow[]
+  unifiedProgramRows: UnifiedProgramRow[]
+  programTypeFilter: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
+  programTypePickerOpen: boolean
+  programTypePickerTitle: string
+  canConfigureApprovalPolicies: boolean
   incentiveProgramRows: PortfolioProgramRow[]
   programsTitle: string
   programsEmptyTitle: string
@@ -151,6 +168,7 @@ export interface BenefitsData {
   awardColumns: { program: string; recipient: string; period: string; value: string; status: string }
   awardRows: PortfolioAwardRow[]
   rewardAwardRows: PortfolioAwardRow[]
+  payoutAwardRows: PortfolioAwardRow[]
   incentiveAwardRows: PortfolioAwardRow[]
   rewardsTitle: string
   incentivesTitle: string
@@ -168,7 +186,7 @@ export interface BenefitsData {
   awardBuilderOpen: boolean
   defaultAwardCurrency: string
   accountOptions: BuilderOption[]
-  payComponentOptions: BuilderOption[]
+  payComponentOptions: BenefitPayComponentOption[]
   employmentOptions: BuilderOption[]
   employmentsTruncated: boolean
   programDrawer: ProgramDetailDrawer | null
@@ -195,12 +213,7 @@ export interface BenefitsData {
   scopeProjects: BuilderOption[]
   programEditOpen: boolean
   programEditSeed: ProgramEditSeed | null
-  planSection: {
-    orgId: string
-    actorId: string
-    canManage: boolean
-    allowedSubsidiaryIds: string[] | null
-  } | null
+
 }
 
 type BenefitsCatalog = {
@@ -248,7 +261,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const canManage = can(authz, 'hrm.benefits.manage')
   const rawSegment = sp.segment ?? 'all'
   const segment = (SEGMENTS as readonly string[]).includes(rawSegment) ? rawSegment : null
-  const showingEnrolments = sp.view === 'enrolments'
+  const showingEnrolments = sp.view === 'enrolments' || sp.view === 'windows'
   const portfolioView = parsePortfolioView(showingEnrolments ? 'enrolments' : sp.view)
   const tabs = await hrmGroupTabs(authz, basePath)
   const keepView: Record<string, string> = showingEnrolments
@@ -281,6 +294,12 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       canManage,
       newWindowButton: t('benefits.newWindow'),
       enrollmentWindowsButton: t('benefits.windowsTitle'),
+      enrollmentWindowsHref: `${basePath}?view=enrolments&windows=1`,
+      windowsManagerOpen: false,
+      windowsCloseHref: `${basePath}?view=enrolments`,
+      newEnrollmentButton: t('benefits.newEnrollment'),
+      newEnrollmentHref: `${basePath}?view=enrolments&enrollment=new`,
+      enrollmentDialog: null,
       newWindowHref: benefitsHref(basePath, rawSegment, { ...keepView, window: 'new' }),
       dialogOpen: false,
       dialogCloseHref: basePath,
@@ -327,7 +346,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     statusLabel: statusLabel(t, w.status),
     statusVariant: statusVariant(w.status),
     rangeLabel: `${w.opensOn} – ${w.closesOn}`,
-    windowHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, { window: w.id }),
+    windowHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, { view: 'enrolments', window: w.id }),
     openLabel: t('benefits.openWindow'),
   }))
 
@@ -382,6 +401,43 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const portfolio = await loadBenefitsPortfolio(authz, sp, { openCount, pendingEnrollments: pendingEnrollmentCount }, t)
   const portfolioFields = toPortfolioFields(t, authz, canManage, basePath, sp, portfolio, segment === 'all' ? undefined : segment)
 
+  try {
+    const plans = await listBenefitPlans(db, orgId, actorId)
+    const insuredRows: UnifiedProgramRow[] = plans.map((plan) => ({
+      id: `plan:${plan.id}`, code: plan.code, name: plan.name, family: 'insured',
+      familyLabel: `${t('portfolio.families.insured')} · ${plan.kind}`,
+      valueLabel: t('portfolio.planCostsInRecord'),
+      effectiveFrom: plan.effectiveFrom, effectiveTo: plan.effectiveTo,
+      statusLabel: t(plan.isActive ? 'benefits.statusNames.active' : 'benefits.statusNames.closed'),
+      statusVariant: plan.isActive ? 'success' : 'outline',
+      programHref: `${basePath}?view=programs&plan=${encodeURIComponent(plan.id)}`,
+    }))
+    const type = sp.type
+    if (type && !['insured', 'allowance', 'reward', 'incentive', 'custom'].includes(type)) {
+      portfolioFields.programsRefusal = { title: t('portfolio.readFailedTitle'), message: t('portfolio.unknownType', { type }) }
+    }
+    portfolioFields.unifiedProgramRows = [...insuredRows, ...portfolio.programs]
+      .filter((row) => !type || row.family === type)
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+  } catch (error) {
+    portfolioFields.programsRefusal = { title: t('portfolio.readFailedTitle'), message: error instanceof Error ? error.message : t('benefits.actionFailed') }
+  }
+
+  let enrollmentDialog: BenefitElectDialogStrings | null = null
+  if (sp.enrollment === 'new' && showingEnrolments && canManage && !portfolio.optionsRefusal) {
+    const plans = await listEnrollmentPlanOptions(db, orgId, actorId)
+    enrollmentDialog = {
+      title: t('benefits.newEnrollment'), description: t('me.benefits.electDescription'),
+      employmentLabel: t('benefits.columns.employee'), employments: portfolio.employmentOptions,
+      planLabel: t('me.benefits.columns.plan'), plans,
+      levelLabel: t('me.benefits.columns.coverage'), windowLabel: t('me.benefits.columns.window'),
+      windows: windows.filter((window) => window.status === 'open').map((window) => ({ value: window.id, label: `${window.name} (${window.opensOn} – ${window.closesOn})` })),
+      fromLabel: t('me.benefits.fromLabel'), lifeEventLabel: t('me.benefits.lifeEventLabel'),
+      lifeEventPlaceholder: t('me.benefits.lifeEventPlaceholder'),
+      submitLabel: t('benefits.newEnrollment'), cancelLabel: t('benefits.cancel'), submitFailed: t('me.benefits.electFailed'),
+    }
+  }
+
   const listTitle =
     showingEnrolments || portfolioView === 'enrolments'
       ? t('benefits.enrolmentsTitle')
@@ -432,13 +488,19 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     canManage,
     newWindowButton: t('benefits.newWindow'),
     enrollmentWindowsButton: t('benefits.windowsTitle'),
-    newWindowHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, { ...keepView, window: 'new' }),
+    enrollmentWindowsHref: `${basePath}?view=enrolments&windows=1`,
+    windowsManagerOpen: (sp.windows === '1' || sp.view === 'windows') && !sp.window,
+    windowsCloseHref: `${basePath}?view=enrolments`,
+    newEnrollmentButton: t('benefits.newEnrollment'),
+    newEnrollmentHref: `${basePath}?view=enrolments&enrollment=new`,
+    enrollmentDialog,
+    newWindowHref: `${basePath}?view=enrolments&window=new`,
     dialogOpen,
     dialogCloseHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, keepView),
     subsidiaryOptions,
     departmentOptions,
     drawer,
-    drawerCloseHref: benefitsHref(basePath, segment === 'all' ? undefined : segment, {}),
+    drawerCloseHref: `${basePath}?view=enrolments&windows=1`,
     approveLabel: t('benefits.approve'),
     actionFailed: t('benefits.actionFailed'),
     ...portfolioFields,
@@ -461,6 +523,11 @@ function emptyPortfolioFields(
   | 'programColumns'
   | 'programTableText'
   | 'awardTableText'
+  | 'unifiedProgramRows'
+  | 'programTypeFilter'
+  | 'programTypePickerOpen'
+  | 'canConfigureApprovalPolicies'
+  | 'programTypePickerTitle'
   | 'programRows'
   | 'incentiveProgramRows'
   | 'programsTitle'
@@ -470,6 +537,7 @@ function emptyPortfolioFields(
   | 'awardColumns'
   | 'awardRows'
   | 'rewardAwardRows'
+  | 'payoutAwardRows'
   | 'incentiveAwardRows'
   | 'rewardsTitle'
   | 'incentivesTitle'
@@ -514,7 +582,6 @@ function emptyPortfolioFields(
   | 'scopeProjects'
   | 'programEditOpen'
   | 'programEditSeed'
-  | 'planSection'
 > {
   return {
     portfolioView: 'overview',
@@ -546,6 +613,11 @@ function emptyPortfolioFields(
     programTableText: programTableText(t),
     awardTableText: awardTableText(t),
     programRows: [],
+    unifiedProgramRows: [],
+    programTypeFilter: { label: t('portfolio.columns.family'), allLabel: t('benefits.allLabel'), options: [], currentParams: {} },
+    programTypePickerOpen: false,
+    programTypePickerTitle: t('portfolio.newProgram'),
+    canConfigureApprovalPolicies: false,
     incentiveProgramRows: [],
     programsTitle: t('portfolio.programsTitle'),
     programsEmptyTitle: '',
@@ -554,6 +626,7 @@ function emptyPortfolioFields(
     awardColumns: awardColumns(t),
     awardRows: [],
     rewardAwardRows: [],
+    payoutAwardRows: [],
     incentiveAwardRows: [],
     rewardsTitle: t('portfolio.rewardsTitle'),
     incentivesTitle: t('portfolio.incentivesTitle'),
@@ -563,7 +636,7 @@ function emptyPortfolioFields(
     awardsRefusal: null,
     newProgramButton: t('portfolio.newProgram'),
     newProgramHref: `${basePath}?program=new`,
-    newAwardButton: t('portfolio.newAward'),
+    newAwardButton: t('portfolio.newReward'),
     newAwardHref: `${basePath}?award=new`,
     programBuilderOpen: false,
     programBuilderFamily: 'reward',
@@ -598,7 +671,6 @@ function emptyPortfolioFields(
     scopeProjects: [],
     programEditOpen: false,
     programEditSeed: null,
-    planSection: null,
   }
 }
 
@@ -688,7 +760,7 @@ function toPortfolioFields(
       key: 'health',
       title: t('portfolio.cards.health.title'),
       description: t('portfolio.cards.health.description'),
-      href: `${basePath}?view=programs&plan=new`,
+      href: `${basePath}?view=programs&plan=new&kind=health`,
       iconKey: 'heart-pulse',
       countLabel: null,
     },
@@ -696,7 +768,7 @@ function toPortfolioFields(
       key: 'retirement',
       title: t('portfolio.cards.retirement.title'),
       description: t('portfolio.cards.retirement.description'),
-      href: `${basePath}?view=programs&plan=new`,
+      href: `${basePath}?view=programs&plan=new&kind=retirement`,
       iconKey: 'piggy-bank',
       countLabel: null,
     },
@@ -754,7 +826,7 @@ function toPortfolioFields(
       ],
       vitals: portfolio.vitals,
       vitalsLabels: vitalsLabels(t),
-      cards,
+      cards: can(authz, 'hrm.benefits.manage') ? cards : cards.filter((card) => card.key !== 'health' && card.key !== 'retirement'),
       attention: portfolio.attention,
       attentionTitle: portfolio.attentionTitle,
       attentionEmpty: t('portfolio.attentionEmpty'),
@@ -766,6 +838,15 @@ function toPortfolioFields(
     programTableText: programTableText(t),
     awardTableText: awardTableText(t),
     programRows: portfolio.programs,
+    unifiedProgramRows: portfolio.programs,
+    programTypeFilter: {
+      label: t('portfolio.columns.family'), allLabel: t('benefits.allLabel'),
+      options: ['insured', 'allowance', 'reward', 'incentive', 'custom'].map((value) => ({ value, label: t(`portfolio.families.${value}`) })),
+      currentParams: { view: 'programs', ...(sp.type ? { type: sp.type } : {}) },
+    },
+    programTypePickerOpen: sp.program === 'new' && !requestedFamily && portfolioView !== 'incentives' && canManage && portfolio.optionsRefusal === null,
+    programTypePickerTitle: t('portfolio.newProgram'),
+    canConfigureApprovalPolicies: can(authz, 'flows.manage'),
     incentiveProgramRows: portfolio.programs.filter((p) => p.family === 'incentive'),
     programsTitle: t('portfolio.programsTitle'),
     programsEmptyTitle: t('portfolio.programsEmptyTitle'),
@@ -773,7 +854,8 @@ function toPortfolioFields(
     programsRefusal: portfolio.programsRefusal,
     awardColumns: awardColumns(t),
     awardRows: portfolio.awards,
-    rewardAwardRows: portfolio.awards.filter((a) => a.programFamily === 'reward' || a.programFamily === 'allowance'),
+    rewardAwardRows: portfolio.awards.filter((a) => a.programFamily !== 'incentive'),
+    payoutAwardRows: portfolio.awards.filter((award) => ['approved', 'queued', 'delivered'].includes(award.status) || (award.status === 'voided' && Boolean(award.payRunDocumentId) && Boolean(award.payRunAdjustmentId))),
     incentiveAwardRows: portfolio.awards.filter((a) => a.programFamily === 'incentive'),
     rewardsTitle: t('portfolio.rewardsTitle'),
     incentivesTitle: t('portfolio.incentivesTitle'),
@@ -781,13 +863,13 @@ function toPortfolioFields(
     awardsEmptyTitle: t('portfolio.awardsEmptyTitle'),
     awardsEmptyDescription: t('portfolio.awardsEmptyDescription'),
     awardsRefusal: portfolio.awardsRefusal,
-    newProgramButton: portfolio.newProgramButton,
+    newProgramButton: portfolioView === 'incentives' ? t('portfolio.newIncentive') : portfolio.newProgramButton,
     newProgramHref: portfolioHrefFor(basePath, segment, sp.view, { program: 'new' }),
-    newAwardButton: t('portfolio.newAward'),
+    newAwardButton: t('portfolio.newReward'),
     newAwardHref: portfolioHrefFor(basePath, segment, sp.view, { award: 'new' }),
-    programBuilderOpen: sp.program === 'new' && canManage && portfolio.optionsRefusal === null,
-    programBuilderFamily: requestedFamily ?? 'reward',
-    programBuilderLocked: requestedFamily !== null,
+    programBuilderOpen: sp.program === 'new' && (requestedFamily !== null || portfolioView === 'incentives') && canManage && portfolio.optionsRefusal === null,
+    programBuilderFamily: portfolioView === 'incentives' ? 'incentive' : requestedFamily ?? 'reward',
+    programBuilderLocked: portfolioView === 'incentives' || requestedFamily !== null,
     awardBuilderOpen: sp.award === 'new' && canManage && portfolio.optionsRefusal === null,
     defaultAwardCurrency,
     accountOptions: portfolio.accountOptions,
@@ -841,6 +923,7 @@ function toPortfolioFields(
         effectiveTo: seed.effectiveTo,
         payComponentId: seed.payComponentId,
         deliveryMethod: seed.deliveryMethod,
+        approvalMode: seed.approvalMode,
         valuation: seed.valuation,
         metric: seed.metric ?? '',
         metricScope: seed.metricScope ?? 'company',
@@ -864,18 +947,6 @@ function toPortfolioFields(
     awardProgramOptions: portfolio.programs
       .filter((program) => program.status === 'active' && program.family !== 'incentive')
       .map((program) => ({ value: program.id, label: `${program.code} — ${program.name}`, currency: program.currency, fixedAmount: program.valuation === 'fixed' ? program.fixedAmount : null })),
-    // The insured-plan Setup section rehomes onto the programs view, where
-    // the health and retirement cards land. Every other view keeps the
-    // portfolio tables; the section reads its own rows, never the loader's.
-    planSection:
-      portfolioView === 'programs'
-        ? {
-            orgId: authz.user.orgId,
-            actorId: authz.user.id,
-            canManage,
-            allowedSubsidiaryIds: authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null,
-          }
-        : null,
   }
 }
 

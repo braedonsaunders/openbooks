@@ -278,6 +278,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-talent-dialog',
   // HR-17 end
   'hrm-window-dialog',
+  'hrm-windows-manager',
   'hrm-window-drawer',
   'hrm-benefit-type-cards',
   'hrm-program-table',

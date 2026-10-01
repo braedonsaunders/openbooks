@@ -1273,7 +1273,9 @@
         "incentives": "インセンティブ",
         "payouts": "支払い"
       }
-    }
+    },
+    "newEnrollment": "新規加入",
+    "planSettings": "プラン設定"
   },
   "me": {
     "tabs": {
@@ -1538,18 +1540,18 @@
       "changeSubmit": "変更を保存",
       "changeFailed": "変更を記録できませんでした。",
       "awards": {
-        "paidTitle": "支給済み報奨",
-        "pendingTitle": "支給待ち報奨",
-        "hint": "支給済み報奨は給与に含まれています。支給待ち報奨は支払いではありません。",
-        "paidEmpty": "支給済み報奨はありません。",
-        "pendingEmpty": "支給待ち報奨はありません。",
+        "paidTitle": "処理済みの報奨",
+        "pendingTitle": "保留中の報奨",
+        "hint": "処理済みの報奨は給与計算に反映されています。保留中の報奨は支払いの証明ではありません。",
+        "paidEmpty": "処理済みの報奨はありません。",
+        "pendingEmpty": "保留中の報奨はありません。",
         "refusalTitle": "報奨を利用できません",
         "program": "プログラム",
         "period": "対象期間",
         "value": "金額",
         "status": "状態",
-        "reversedTitle": "取消済み報奨支払い",
-        "reversedEmpty": "取消済み報奨支払いはありません。",
+        "reversedTitle": "却下・取消済みの報奨",
+        "reversedEmpty": "却下・取消済みの報奨はありません",
         "reversedStatus": "取消済み"
       }
     },
@@ -2538,7 +2540,8 @@
       "reward": "報奨",
       "allowance": "手当",
       "incentive": "インセンティブ",
-      "custom": "カスタム"
+      "custom": "カスタム",
+      "insured": "保険給付プラン"
     },
     "familyHints": {
       "reward": "単発の表彰:賞与、ギフトカード、スポット表彰。",
@@ -2590,10 +2593,11 @@
     "awardStatus": {
       "draft": "下書き",
       "pending": "承認待ち",
-      "approved": "承認済み",
-      "queued": "支払い待ち",
+      "approved": "給与計算待ち",
+      "queued": "給与計算に追加済み",
       "delivered": "支払い済み",
-      "voided": "無効"
+      "voided": "無効",
+      "rejected": "却下"
     },
     "columns": {
       "program": "プログラム",
@@ -2707,7 +2711,7 @@
       "chooseRecipient": "受給者を選択",
       "chooseBasis": "基準を選択",
       "basisHint": "精算と給与で四半期の区切りを一致させるため、基準はプログラムの一部です。",
-      "externalHint": "給与システムが税務処理をサポートするまで、正の金額の現物報奨は支給できません。支給する場合は、給与で支払う現金報奨を作成してください。",
+      "externalHint": "外部報奨は現物給与項目を使用し、現金支給を増やさずに給与計算で税額を計算します。関連する給与計算を確定してから提供者の履行を記録してください。",
       "reviewTitle": "プログラムの確認",
       "reviewEmpty": "まだ何も入力されていません。",
       "reviewHint": "作成は下書きとして保存され、詳細画面でサーバーから読み戻します。",
@@ -2721,13 +2725,13 @@
       "back": "戻る",
       "next": "次へ",
       "amountNoun": "金額",
-      "componentPrerequisite": "給与設定で有効な給与項目を作成し、選択肢を更新して選択してください。給与ルールによって税務と会計処理が決まります。",
+      "componentPrerequisite": "選択した支給方法に対応する現金または現物の給与項目を作成し、選択肢を更新してください。",
       "openPayrollSetup": "給与設定を開く",
       "accountsPrerequisite": "記帳可能な測定勘定科目が表示されていません。必要な科目を追加するか、財務担当者に責任法人へのアクセスを確認してもらい、選択肢を更新してください。",
       "openAccounts": "勘定科目表を開く",
       "refreshOptions": "選択肢を更新"
     },
-    "awardBuilderTitle": "新規褒賞",
+    "awardBuilderTitle": "新規報酬",
     "awardFields": {
       "program": "プログラム",
       "recipient": "受給者",
@@ -2742,12 +2746,11 @@
       "recordReferencePlaceholder": "事業者の確認番号または注文番号",
       "recordReferenceHint": "外部支払いではこの参照番号を褒賞に記録します。"
     },
-    "awardCreate": "褒賞を記録",
-    "submitAward": "承認に提出",
-    "approveAward": "承認",
-    "queueAward": "支払い待ちに登録",
-    "payrollDelivery": "給与で支払う",
-    "externalDelivery": "外部支払いを記録",
+    "awardCreate": "報酬を作成",
+    "submitAward": "報奨を提出",
+    "queueAward": "給与計算に追加",
+    "payrollDelivery": "給与計算で処理済み",
+    "externalDelivery": "履行を記録",
     "voidAward": "無効化",
     "payrollInputLabel": "給与項目",
     "payrollInputPlaceholder": "既存の給与項目ID",
@@ -2806,6 +2809,32 @@
       "heroHint": "雇用主が定義したプログラム、金額の規則、適用期間。",
       "directoryTitle": "福利厚生の管理",
       "payrollHint": "記録済みの全報奨 · 通貨ごとに集計"
-    }
+    },
+    "newReward": "新規報酬",
+    "newIncentive": "新規インセンティブ",
+    "planCostsInRecord": "プランの料金を表示",
+    "readFailedTitle": "プログラムを読み込めませんでした",
+    "unknownType": "不明なプログラム種類「{type}」です。フィルターで種類を選択してください。",
+    "approvalControls": {
+      "title": "承認管理",
+      "openFlows": "Flowsを開く",
+      "hint": "Flows はこのプログラムに設定された承認段階と条件を適用します。",
+      "unconfigured": "福利厚生の承認ポリシーが未設定です。報奨を提出する前にFlowsを設定してください。",
+      "policiesHint": "有効なポリシーは報奨の提出時に評価されます。",
+      "openApprovals": "承認を開く",
+      "administratorRemedy": "会社のワークフロー管理者に承認ポリシーの設定または変更を依頼してください。",
+      "unconfiguredStatus": "福利厚生の承認ポリシーが未設定です。",
+      "modes": {
+        "none": "承認不要",
+        "flows": "Flows の承認を使用"
+      },
+      "noneHint": "権限を持つ担当者が提出すると給与処理の準備が整います。ワークフローの設定や承認者は不要です。"
+    },
+    "externalPayrollProcessed": "給与計算で処理済み · 履行待ち",
+    "openPayRun": "給与計算を開く",
+    "directProcessingHint": "Flowsが直接処理を承認しました。この報奨は給与計算に追加できます。",
+    "rewardProgramPrerequisite": "報奨を記録する前に、報奨または手当のプログラムを作成して有効にしてください。",
+    "createRewardProgram": "報奨プログラムを作成",
+    "noApprovalSubmissionHint": "承認は不要です。権限に基づく提出が記録され、この報酬は給与処理の準備が整っています。"
   }
 }

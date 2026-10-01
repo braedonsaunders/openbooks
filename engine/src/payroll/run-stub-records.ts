@@ -105,6 +105,8 @@ export interface Line {
   protectionMaxPercent?: string | null;
   protectionPriority?: number;
   includeInDisposableEarnings?: boolean;
+  paymentKind?: "cash" | "non_cash";
+  nonCashAccountId?: string | null;
 }
 
 /**
@@ -334,6 +336,7 @@ export async function insertPayStubLineRows(
                                   amount, project_id, department_id, time_type_id, item_id, sequence,
                                   expense_account_id, expense_account_source, expense_account_evidence,
                                   statutory_reporting_code,
+                                  payment_kind, non_cash_account_id,
                                   created_by, updated_by)
       values (${args.orgId}, ${args.stubId}, ${line.componentId}, ${line.kind}, ${line.description},
               ${line.hours ?? null}, ${line.rate ?? null},
@@ -346,6 +349,7 @@ export async function insertPayStubLineRows(
                 formCode: reporting.formCode, boxCode: reporting.boxCode,
                 code: reporting.code, label: reporting.label,
               }) : null}::jsonb,
+              ${line.paymentKind ?? "cash"}, ${line.nonCashAccountId ?? null},
               ${args.actorId}, ${args.actorId})
     `);
   }

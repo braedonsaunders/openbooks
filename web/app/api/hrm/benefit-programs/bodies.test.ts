@@ -77,3 +77,18 @@ test("draft source replacement survives the boundary and rejects foreign-shaped 
   if (parsed.action === "update") assert.deepEqual(parsed.sourceAccountIds, [UUID]);
   assert.equal(benefitProgramPatchBody.safeParse({ ...body, sourceAccountIds: ["not-an-id"] }).success, false);
 });
+
+
+test("approval setting accepts only no approvals or native Flows for create and edit", () => {
+  const create = { action: "create", code: "REWARD", name: "Recognition", family: "reward", currency: "USD", effectiveFrom: "2026-01-01" };
+  for (const approvalMode of ["none", "flows"]) {
+    const parsed = benefitProgramPostBody.parse({ ...create, approvalMode });
+    assert.equal(parsed.action, "create");
+    if (parsed.action === "create") assert.equal(parsed.approvalMode, approvalMode);
+    const update = benefitProgramPatchBody.parse({ action: "update", approvalMode, reason: "Revised controls" });
+    assert.equal(update.action, "update");
+    if (update.action === "update") assert.equal(update.approvalMode, approvalMode);
+  }
+  assert.equal(benefitProgramPostBody.safeParse({ ...create, approvalMode: "manual" }).success, false);
+  assert.equal(benefitProgramPatchBody.safeParse({ action: "update", approvalMode: "manual", reason: "Revised controls" }).success, false);
+});

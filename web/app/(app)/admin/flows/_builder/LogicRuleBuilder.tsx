@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Input, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, LogicRule } from '@openbooks/forms-core'
 import type { OrgUser } from './graph'
+import { withRuleValueType } from './logic-rule-builder'
 
 /**
  * Recursive LogicRule editor — the one condition language shared with the
@@ -68,9 +69,9 @@ function ValueInput({
   const t = useTranslations('admin.flows.logic')
   if (VALUELESS_OPS.has(rule.op as LeafOp)) return null
   const value = 'value' in rule ? rule.value : undefined
-  const set = (v: unknown) => onChange({ ...rule, value: v } as LogicRule)
   const field = profile.fields.find((f) => f.key === rule.field)
   const fieldType = field?.type ?? 'text'
+  const set = (v: unknown) => onChange(withRuleValueType({ ...rule, value: v } as LogicRule, fieldType))
 
   if (LIST_OPS.has(rule.op as LeafOp)) {
     const list = Array.isArray(value) ? value : []
@@ -109,7 +110,7 @@ function ValueInput({
         placeholder={t('listPlaceholder')}
         onChange={(e) => {
           const parts = e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-          set(fieldType === 'number' ? parts.map((p) => (Number.isNaN(Number(p)) ? p : Number(p))) : parts)
+          set(parts)
         }}
       />
     )
@@ -130,7 +131,7 @@ function ValueInput({
         placeholder={t('valuePlaceholder')}
         onChange={(e) => {
           const raw = e.target.value
-          set(raw === '' || Number.isNaN(Number(raw)) ? raw : Number(raw))
+          set(raw)
         }}
       />
     )
@@ -198,10 +199,10 @@ function LeafEditor({
       <SearchSelect
         value={rule.field}
         options={profile.fields.map((f) => ({ value: f.key, label: f.label, hint: f.key }))}
-        onChange={(field) => onChange({ ...rule, field } as LogicRule)}
+        onChange={(field) => onChange(withRuleValueType({ ...rule, field } as LogicRule, profile.fields.find(item => item.key === field)?.type ?? 'text'))}
       />
       <div className="grid grid-cols-2 gap-1.5">
-        <Select value={rule.op} onChange={(e) => onChange(withOp(rule, e.target.value as LeafOp))}>
+        <Select value={rule.op} onChange={(e) => onChange(withRuleValueType(withOp(rule, e.target.value as LeafOp), profile.fields.find(item => item.key === rule.field)?.type ?? 'text'))}>
           {LEAF_OPS.map((op) => (
             <option key={op} value={op}>
               {t(`ops.${op}`)}

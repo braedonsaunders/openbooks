@@ -457,7 +457,9 @@
       "employee": "Funcionário",
       "tax": "Imposto",
       "lines": "Linhas da folha",
-      "trace": "trilha {engine}"
+      "trace": "trilha {engine}",
+      "nonCash": "Benefícios não monetários",
+      "cashGross": "Remuneração em dinheiro"
     },
     "submitApproval": "Enviar para aprovação",
     "approvalSubmitted": "Enviada para aprovação com o dossiê de evidências",

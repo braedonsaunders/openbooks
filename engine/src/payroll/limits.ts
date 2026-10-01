@@ -101,6 +101,8 @@ export interface DisposableEarningsLine {
   accrualOnly?: boolean;
   /** This deduction is itself competing for the pool (see below). */
   protectedDeduction?: boolean;
+  /** Non-cash value does not create disposable cash or take-home pay. */
+  paymentKind?: "cash" | "non_cash";
 }
 
 export interface DisposableEarningsOptions {
@@ -130,6 +132,7 @@ export function disposableEarnings(
   const signed: string[] = [];
   for (const line of lines) {
     if (line.accrualOnly) continue;
+    if (line.kind === "earning" && line.paymentKind === "non_cash") continue;
     if (line.includeInDisposableEarnings === false) continue;
     if (line.kind === "earning") signed.push(normalizeMoney(line.amount));
     else if (line.kind === "deduction") {
@@ -163,9 +166,10 @@ export function protectedBase(
       lines.filter((line) => line.kind === "earning" && !line.accrualOnly).map((line) => line.amount),
     ));
   }
+  const cashLines = lines.filter((line) => line.kind !== "earning" || line.paymentKind !== "non_cash");
   const unflagged = base === "net_pay"
-    ? lines.map((line) => ({ ...line, includeInDisposableEarnings: true }))
-    : lines;
+    ? cashLines.map((line) => ({ ...line, includeInDisposableEarnings: true }))
+    : cashLines;
   return disposableEarnings(unflagged, options);
 }
 

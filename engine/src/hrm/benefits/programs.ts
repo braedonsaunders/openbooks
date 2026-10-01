@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { fitsLedgerRange, normalizeMoney } from "../../money/money.ts";
+import { cmp, fitsLedgerRange, normalizeMoney } from "../../money/money.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { businessTodayInTx } from "../../platform/business-date.ts";
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
@@ -23,6 +23,7 @@ import {
 } from "./shared.ts";
 import type {
   BenefitAllocation,
+  BenefitApprovalMode,
   BenefitDeliveryMethod,
   BenefitFrequency,
   BenefitMetric,
@@ -60,6 +61,7 @@ import {
 // Re-export the shared vocabulary so callers import one module.
 export type {
   BenefitAllocation,
+  BenefitApprovalMode,
   BenefitDeliveryMethod,
   BenefitFrequency,
   BenefitMetric,
@@ -76,7 +78,7 @@ const PROGRAM_COLUMNS = sql`id, code, name, family,
   description, legal_entity_id as "legalEntityId", currency, status,
   effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
   pay_component_id as "payComponentId",
-  delivery_method as "deliveryMethod", valuation,
+  approval_mode as "approvalMode", delivery_method as "deliveryMethod", valuation,
   metric, metric_scope as "metricScope",
   allocation, period_basis as "periodBasis", percent_rate::text as "percentRate",
   fixed_amount::text as "fixedAmount", cap_amount::text as "capAmount",
@@ -102,6 +104,11 @@ function asFamily(value: unknown, field: string): BenefitProgramFamily {
 function asStatus(value: unknown): BenefitProgramStatus {
   if (value === "draft" || value === "active" || value === "closed") return value;
   throw new BenefitsError("REFUSED", "benefit program carries an unknown status — reload and retry");
+}
+
+function asApprovalMode(value: unknown): BenefitApprovalMode {
+  if (value === "none" || value === "flows") return value;
+  throw new BenefitsError("INVALID_INPUT", "approvalMode is none or flows — choose no approvals or native Flows approval for this program");
 }
 
 function asDelivery(value: unknown): BenefitDeliveryMethod {
@@ -210,6 +217,7 @@ function toProgram(row: Record<string, unknown>, scopeIds: readonly string[] = [
     effectiveFrom: String(row.effectiveFrom).slice(0, 10),
     effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
     payComponentId: row.payComponentId != null ? String(row.payComponentId) : null,
+    approvalMode: asApprovalMode(row.approvalMode),
     deliveryMethod: asDelivery(row.deliveryMethod),
     valuation: asValuation(row.valuation),
     metric: asMetric(row.metric),
@@ -368,11 +376,9 @@ async function requireLegalEntityVisibleToActor(
 /**
  * Pay-component validation for programs. Payroll delivery requires an
  * earning component (so the value reaches pay through an established
- * taxable representation, never a manual net-pay edit); the component must
- * be active and in the same org. External delivery carries no component
- * unless the org keeps an established payroll representation for the value —
- * a positive external award without one is refused at delivery, never
- * silently untaxed.
+ * taxable representation, never a manual net-pay edit). Provider-delivered
+ * value uses an explicit non-cash earning so the same tax machinery sees
+ * the benefit without paying its value to the employee a second time.
  */
 async function requireProgramPayComponent(
   exec: SqlExecutor,
@@ -382,17 +388,11 @@ async function requireProgramPayComponent(
   deliveryMethod: BenefitDeliveryMethod,
 ): Promise<void> {
   if (payComponentId === null) {
-    if (deliveryMethod === "payroll") {
-      throw new BenefitsError(
-        "REFUSED",
-        `program ${programCode} pays through payroll but names no pay component — link an earning component in program setup; delivery uses pay-run inputs, never manual net-pay edits`,
-      );
-    }
-    return;
+    throw new BenefitsError("REFUSED", `program ${programCode} names no pay component — link ${deliveryMethod === "external" ? "a non-cash" : "a cash"} earning component in the program; all valued benefits require their native payroll representation`);
   }
   const row = (
-    await exec.execute<{ kind: string; isActive: boolean }>(sql`
-      select kind, is_active as "isActive" from pay_components
+    await exec.execute<{ kind: string; isActive: boolean; paymentKind: string }>(sql`
+      select kind, is_active as "isActive", payment_kind as "paymentKind" from pay_components
        where org_id = ${orgId} and id = ${payComponentId}
     `)
   ).rows[0];
@@ -414,6 +414,8 @@ async function requireProgramPayComponent(
       `program ${programCode} names a pay component of kind ${row.kind} — the program component must be kind earning so the value reaches pay with its established tax treatment; relink it in program setup`,
     );
   }
+  const expectedKind = deliveryMethod === "external" ? "non_cash" : "cash";
+  if (row.paymentKind !== expectedKind) throw new BenefitsError("REFUSED", `program ${programCode} requires a ${expectedKind === "cash" ? "cash" : "non-cash"} earning component — provider benefits must not also pay cash, and payroll rewards must create cash entitlement`);
 }
 
 interface ProgramRuleInput {
@@ -440,6 +442,9 @@ function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
       "REFUSED",
       `program ${code} values fixed awards but names no fixed amount — enter the per-award amount in program setup`,
     );
+  }
+  if (rules.valuation === "fixed" && rules.fixedAmount !== null && cmp(rules.fixedAmount, "0") <= 0) {
+    throw new BenefitsError("REFUSED", `program ${code} needs a positive fixed reward amount — enter a positive denomination before creating or activating its payroll obligations`);
   }
   if (rules.valuation === "percent" && rules.percentRate === null) {
     throw new BenefitsError(
@@ -709,6 +714,7 @@ export interface CreateBenefitProgramQuery {
   readonly effectiveFrom: string;
   readonly effectiveTo?: string | null;
   readonly payComponentId?: string | null;
+  readonly approvalMode?: BenefitApprovalMode;
   readonly deliveryMethod?: BenefitDeliveryMethod;
   readonly valuation?: BenefitValuation;
   readonly metric?: BenefitMetric | null;
@@ -753,6 +759,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
   if (effectiveTo !== null && effectiveTo < effectiveFrom) {
     throw new BenefitsError("INVALID_INPUT", "effectiveTo ends on or after effectiveFrom");
   }
+  const approvalMode = query.approvalMode === undefined ? "none" : asApprovalMode(query.approvalMode);
   const deliveryMethod = query.deliveryMethod === undefined ? "payroll" : asDelivery(query.deliveryMethod);
   const valuation = query.valuation === undefined ? "fixed" : asValuation(query.valuation);
   const metric = query.metric === undefined ? null : asMetric(query.metric);
@@ -801,14 +808,14 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
         await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_programs
             (org_id, code, name, family, description, legal_entity_id, currency,
-             effective_from, effective_to, pay_component_id, delivery_method,
+             effective_from, effective_to, pay_component_id, approval_mode, delivery_method,
              valuation, metric, metric_scope, allocation,
              percent_rate, fixed_amount, cap_amount, budget_amount,
              threshold_amount, frequency, period_basis, payment_delay_days,
              created_by, updated_by)
           values (${orgId}, ${code}, ${name}, ${family}, ${description}, ${legalEntityId},
                   ${currency}, ${effectiveFrom}::date, ${effectiveTo}::date,
-                  ${payComponentId}, ${deliveryMethod}, ${valuation}, ${metric},
+                  ${payComponentId}, ${approvalMode}, ${deliveryMethod}, ${valuation}, ${metric},
                   ${metricScope}, ${allocation},
                   ${rules.percentRate}, ${rules.fixedAmount}, ${rules.capAmount},
                   ${rules.budgetAmount}, ${rules.thresholdAmount}, ${frequency},
@@ -858,6 +865,7 @@ export interface UpdateBenefitProgramQuery {
   readonly effectiveFrom?: string;
   readonly effectiveTo?: string | null;
   readonly payComponentId?: string | null;
+  readonly approvalMode?: BenefitApprovalMode;
   readonly deliveryMethod?: BenefitDeliveryMethod;
   readonly valuation?: BenefitValuation;
   readonly metric?: BenefitMetric | null;
@@ -876,7 +884,7 @@ export interface UpdateBenefitProgramQuery {
   readonly reason: string;
 }
 
-/** Edit a draft program. Active programs change through close + new revision, never in place. */
+/** Edit a draft program. Close active programs and create replacements with new codes; rules never change in place. */
 export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Promise<BenefitProgram> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -906,7 +914,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
     if (before.status !== "draft") {
       throw new BenefitsError(
         "BAD_STATE",
-        `program ${before.code} is ${before.status} — active programs close and reopen as a new revision; only drafts edit in place`,
+        `program ${before.code} is ${before.status} — close this program and create a replacement program with a new code; only drafts edit in place`,
       );
     }
     const next = {
@@ -923,6 +931,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
             ? null
             : requireCivilDate(query.effectiveTo, "effectiveTo"),
       payComponentId: query.payComponentId === undefined ? before.payComponentId : query.payComponentId,
+      approvalMode: query.approvalMode === undefined ? before.approvalMode : asApprovalMode(query.approvalMode),
       deliveryMethod: query.deliveryMethod === undefined ? before.deliveryMethod : asDelivery(query.deliveryMethod),
       valuation: query.valuation === undefined ? before.valuation : asValuation(query.valuation),
       metric: query.metric === undefined ? before.metric : asMetric(query.metric),
@@ -985,7 +994,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
                  effective_from = ${next.effectiveFrom}::date,
                  effective_to = ${next.effectiveTo}::date,
                  pay_component_id = ${next.payComponentId},
-                 delivery_method = ${next.deliveryMethod}, valuation = ${next.valuation},
+                 approval_mode = ${next.approvalMode}, delivery_method = ${next.deliveryMethod}, valuation = ${next.valuation},
                  metric = ${next.metric}, metric_scope = ${next.metricScope},
                  allocation = ${next.allocation}, percent_rate = ${next.percentRate},
                  fixed_amount = ${next.fixedAmount}, cap_amount = ${next.capAmount},
@@ -1251,7 +1260,7 @@ export async function addProgramMembership(query: {
     if (program.status === "closed") {
       throw new BenefitsError(
         "BAD_STATE",
-        `program ${program.code} is closed — closed programs take no new members; open a new revision`,
+        `program ${program.code} is closed — closed programs take no new members; create a replacement program with a new code`,
       );
     }
     if (program.legalEntityId !== null) {

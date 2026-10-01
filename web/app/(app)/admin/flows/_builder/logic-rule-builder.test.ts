@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { LogicRule } from '@openbooks/forms-core'
-import { makeGroup } from './logic-rule-builder.ts'
+import { evaluateLogicRule, logicRuleSchema, type LogicRule } from '@openbooks/forms-core'
+import { makeGroup, withRuleValueType } from './logic-rule-builder.ts'
 
 const child = (field: string): LogicRule => ({ op: 'isSet', field })
 
@@ -53,3 +53,24 @@ test('creating a NOT group without a source group uses the fallback leaf', () =>
     rule: { op: 'isSet', field: 'fallback' },
   })
 })
+
+
+test('numeric scalar thresholds retain decimal text and exact comparison after serialization', () => {
+  const authored = withRuleValueType({ op: 'eq', field: 'value', value: '100.00' }, 'number');
+  const saved = logicRuleSchema.parse(JSON.parse(JSON.stringify(authored)));
+  assert.equal('value' in saved ? saved.value : null, '100.00');
+  assert.equal(evaluateLogicRule(saved, { values: { value: '100.0000' }, rows: {} }), true);
+  const threshold = withRuleValueType({ op: 'gt', field: 'value', value: '999999999999900.01' }, 'number');
+  assert.equal(evaluateLogicRule(logicRuleSchema.parse(threshold), { values: { value: '999999999999900.02' }, rows: {} }), true);
+});
+
+test('numeric list equality stays exact while switching to a text field restores identifier semantics', () => {
+  const numeric = withRuleValueType({ op: 'in', field: 'value', value: ['100.00', '200.00'] }, 'number');
+  assert.equal(evaluateLogicRule(logicRuleSchema.parse(numeric), { values: { value: '100.0000' }, rows: {} }), true);
+  const text = withRuleValueType({ ...numeric, field: 'code' } as LogicRule, 'text');
+  assert.equal('valueType' in text, false);
+  assert.equal(evaluateLogicRule(logicRuleSchema.parse(text), { values: { code: '100.0000' }, rows: {} }), false);
+  const identifier = withRuleValueType({ op: 'eq', field: 'code', value: '01' }, 'text');
+  assert.equal(evaluateLogicRule(identifier, { values: { code: '1' }, rows: {} }), false);
+  assert.deepEqual(withRuleValueType({ op: 'isSet', field: 'value' }, 'number'), { op: 'isSet', field: 'value' });
+});

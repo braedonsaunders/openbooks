@@ -26,6 +26,67 @@ export interface BenefitPlanSummary {
   readonly effectiveTo: string | null;
 }
 
+export interface BenefitPlanCatalogRow extends BenefitPlanSummary, Record<string, unknown> {
+  readonly employerSubsidiaryId: string | null;
+  readonly employeeCostBasis: string;
+  readonly employeeCost: string | null;
+  readonly employerCostBasis: string;
+  readonly employerCost: string | null;
+}
+
+/** The Benefits catalog includes inactive plans without widening its entity fence. */
+export async function listBenefitPlans(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<BenefitPlanCatalogRow[]> {
+  const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
+  const entityFence = scope === null ? sql`true` : sql`(p.employer_subsidiary_id is null or p.employer_subsidiary_id = any (${`{${[...scope].join(",")}}`}::uuid[]))`;
+  return (await exec.execute<BenefitPlanCatalogRow>(sql`
+    select p.id::text as id, p.code, p.name, p.kind, p.currency, p.is_active as "isActive",
+           p.effective_from::text as "effectiveFrom", p.effective_to::text as "effectiveTo",
+           p.employer_subsidiary_id::text as "employerSubsidiaryId",
+           p.employee_cost_basis as "employeeCostBasis", p.employee_cost::text as "employeeCost",
+           p.employer_cost_basis as "employerCostBasis", p.employer_cost::text as "employerCost"
+      from hrm_benefit_plans p
+     where p.org_id = ${orgId}::uuid and ${entityFence}
+     order by p.code, p.id
+  `)).rows;
+}
+
+export interface EnrollmentPlanOption {
+  readonly value: string;
+  readonly label: string;
+  readonly levels: { value: string; label: string }[];
+}
+
+/** Active plan selectors share the aggregate reader's legal-entity fence. */
+export async function listEnrollmentPlanOptions(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<EnrollmentPlanOption[]> {
+  const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
+  const entityFence = scope === null ? sql`true` : sql`(p.employer_subsidiary_id is null or p.employer_subsidiary_id = any (${`{${[...scope].join(",")}}`}::uuid[]))`;
+  const rows = (await exec.execute<{ id: string; code: string; name: string; levelKey: string | null; levelLabel: string | null }>(sql`
+    select p.id::text as id, p.code, p.name, l.level_key as "levelKey", l.label as "levelLabel"
+      from hrm_benefit_plans p
+      left join hrm_benefit_plan_levels l on l.org_id = p.org_id and l.plan_id = p.id
+     where p.org_id = ${orgId}::uuid and p.is_active and ${entityFence}
+     order by p.code, p.id, l.position, l.id
+  `)).rows;
+  const plans = new Map<string, EnrollmentPlanOption>();
+  for (const row of rows) {
+    let plan = plans.get(row.id);
+    if (!plan) {
+      plan = { value: row.id, label: `${row.code} — ${row.name}`, levels: [] };
+      plans.set(row.id, plan);
+    }
+    if (row.levelKey !== null) plan.levels.push({ value: row.levelKey, label: row.levelLabel ?? row.levelKey });
+  }
+  return [...plans.values()];
+}
+
 export interface EnrollmentWindowSummary {
   readonly id: string;
   readonly name: string;

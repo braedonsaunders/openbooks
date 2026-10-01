@@ -34,6 +34,7 @@ import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarnin
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
+import { applyEarningPaymentKinds, cashGrossEarnings, nonCashEarnings } from "./non-cash-earnings.ts";
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
   ctx: {
@@ -378,6 +379,12 @@ export async function calculateStub(
     lines, entitlementMovements, entitlementWarnings,
   });
 
+  await applyEarningPaymentKinds(tx, {
+    orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    currency: run.doc_currency!, components: ctx.components, lines,
+    wageExpenseAccountId: ctx.wageExpenseAccountId,
+  });
+
   // ---- Statutory lines: one helper, one declared recomputation class -------
   //
   // Every statutory amount the packs emit goes through `pushStatutory`, which
@@ -665,8 +672,12 @@ export async function calculateStub(
   // the tax authority (F24 compensation for IT), so the P&L cost is nil and
   // the GL projection debits the reclaimed liability instead (see payRunGlLegs).
   const credits = sum(lines.filter((l) => l.kind === "credit").map((l) => l.amount));
-  const net = add(add(gross, neg(deductions)), credits);
-  if (cmp(net, "0") < 0) throw new PayrollError(`net pay is negative (${net})`);
+  const nonCash = nonCashEarnings(lines);
+  const net = add(add(cashGrossEarnings(gross, lines), neg(deductions)), credits);
+  if (cmp(net, "0") < 0) throw new PayrollError(cmp(nonCash, "0") !== 0
+    ? `cash pay cannot cover required deductions (${net} remaining after ${nonCash} of non-cash benefits) — add sufficient cash earnings to this editable pay run or move the benefit to a run with sufficient cash pay; taxes cannot be skipped`
+    : `net pay is negative (${net})`);
+  if (cmp(nonCash, "0") !== 0) factors.NON_CASH_EARNINGS = nonCash;
   const employerCost = sum(
     lines.filter((l) => l.kind === "employer_contribution").map((l) => l.amount),
   );

@@ -438,7 +438,7 @@ export function GoalProgressDialog({
   )
 }
 
-interface BenefitElectDialogStrings {
+export interface BenefitElectDialogStrings {
   title: string
   description: string
   employmentLabel: string
@@ -462,9 +462,11 @@ interface BenefitElectDialogStrings {
 export function BenefitElectDialog({
   dialog,
   closeHref,
+  mode = 'self',
 }: {
   dialog: BenefitElectDialogStrings | null
   closeHref: string
+  mode?: 'self' | 'manage'
 }) {
   const router = useRouter()
   const [employmentId, setEmploymentId] = useState('')
@@ -487,10 +489,11 @@ export function BenefitElectDialog({
     setBusy(true)
     setStatus(null)
     try {
-      const res = await fetch('/api/hrm/me/benefits/elect', {
+      const res = await fetch(mode === 'manage' ? '/api/hrm/enrollments' : '/api/hrm/me/benefits/elect', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          ...(mode === 'manage' ? { action: 'elect', selfService: false } : {}),
           employmentId: boundEmployment,
           planId,
           windowId: windowId === '' ? null : windowId,
@@ -514,7 +517,7 @@ export function BenefitElectDialog({
   return (
     <UrlDrawer open closeHref={closeHref} title={dialog.title} description={dialog.description}>
       <div className="flex flex-col gap-4 p-4">
-        {dialog.employments.length > 1 ? (
+        {mode === 'manage' || dialog.employments.length > 1 ? (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="me-elect-employment">{dialog.employmentLabel}</Label>
             <Select id="me-elect-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
@@ -564,7 +567,7 @@ export function BenefitElectDialog({
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-elect-from">{dialog.fromLabel}</Label>
-          <Input id="me-elect-from" value={from} placeholder="2026-04-01" onChange={(event) => setFrom(event.target.value)} />
+          <Input id="me-elect-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-elect-life-event">{dialog.lifeEventLabel}</Label>

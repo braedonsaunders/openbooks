@@ -158,7 +158,7 @@ function payStubStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplat
     `</tr></tbody></table>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
     `<tr>${th('Earnings')}${th('Hours', 'right', '70px')}${th('Rate', 'right', '80px')}${th('Amount', 'right', '92px')}</tr>` +
-    `<tr data-each="earnings">${td('description')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
+    `<tr data-each="earnings">${td('description').replace('</td>', '<span data-if="non_cash" style="font-size:9px;color:#64748b;"> · Non-cash</span></td>')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
     `</tbody></table>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
     `<tr>${th('Deductions')}${th('Amount', 'right', '92px')}</tr>` +
@@ -175,6 +175,8 @@ function payStubStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplat
     `<td style="vertical-align:top;text-align:right;width:280px;">` +
     `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
     totalsRow('Gross pay', 'gross') +
+    totalsRow('Non-cash benefits', 'non_cash_earnings').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
+    totalsRow('Cash earnings', 'cash_gross').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
     totalsRow('Total deductions', 'total_deductions') +
     totalsRow('Net pay', 'net_pay', { strong: true, accent }) +
     `</tbody></table>` +
@@ -231,7 +233,7 @@ function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate
     `Statement of earnings · {{document_number}} · {{period_start}} – {{period_end}}</div>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
     `<tr>${th('Earnings')}${th('Hours', 'right', '70px')}${th('Rate', 'right', '80px')}${th('Amount', 'right', '92px')}</tr>` +
-    `<tr data-each="earnings">${td('description')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
+    `<tr data-each="earnings">${td('description').replace('</td>', '<span data-if="non_cash" style="font-size:9px;color:#64748b;"> · Non-cash</span></td>')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
     `</tbody></table>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
     `<tr>${th('Deductions')}${th('Amount', 'right', '92px')}</tr>` +
@@ -239,6 +241,8 @@ function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate
     `</tbody></table>` +
     `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
     totalsRow('Gross pay', 'gross') +
+    totalsRow('Non-cash benefits', 'non_cash_earnings').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
+    totalsRow('Cash earnings', 'cash_gross').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
     totalsRow('Total deductions', 'total_deductions') +
     totalsRow('Net pay', 'net_pay', { strong: true, accent }) +
     `</tbody></table>` +

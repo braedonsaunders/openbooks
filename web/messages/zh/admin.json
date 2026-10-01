@@ -1944,7 +1944,8 @@
     "deleted": "已删除",
     "confirmDelete": "删除此记录？此操作无法撤销。",
     "validation": {
-      "required": "{field} 为必填项"
+      "required": "{field} 为必填项",
+      "invalidStructuredValue": "{field} 含有无法读取的已存储记录。请先修正配置再保存。"
     },
     "drawer": {
       "newTitle": "新建 {name}",
@@ -3508,7 +3509,33 @@
       "cohortKey": "分组",
       "biasTerms": "敏感措辞",
       "reviewMonths": "评审周期（月）",
-      "customerSku": "客户商品编号"
+      "customerSku": "客户商品编号",
+      "paymentKind": "发放形式",
+      "nonCashAccountId": "非现金福利结算账户",
+      "family": "计划类型",
+      "legalEntityId": "法人实体",
+      "deliveryMethod": "发放方式",
+      "valuation": "计值方式",
+      "metric": "计量来源",
+      "metricScope": "计量范围",
+      "allocation": "分配方式",
+      "percentRate": "比例",
+      "fixedAmount": "固定金额",
+      "capAmount": "人均上限",
+      "budgetAmount": "奖金池预算",
+      "thresholdAmount": "发放门槛",
+      "periodBasis": "期间基准",
+      "paymentDelayDays": "期后至发放天数",
+      "programId": "福利计划",
+      "weightBps": "基点权重",
+      "employmentId": "雇佣关系",
+      "role": "角色",
+      "startsAt": "开始时间",
+      "endsAt": "结束时间",
+      "default_on": "默认包含",
+      "applies_to": "区域覆盖范围",
+      "countries": "国家",
+      "timezone": "时区"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
@@ -3604,13 +3631,13 @@
       "hrmKitInstructions": "给面试小组的指引，印于每份评价顶部。",
       "hrmKitScale": "至少包含strong_no、no、yes、strong_yes中的两项。",
       "hrmKitStage": "该指南适用于此招聘阶段，留空则全局适用。",
-      "hrmPoolAvailability": "JSON列表，含startsAt、endsAt和timezone。",
+      "hrmPoolAvailability": "添加可用时间段，并明确填写偏移及排程使用的时区。",
       "hrmPoolKit": "该分组面试的默认指南。",
       "hrmQuestionAttribute": "将问题关联到本指南的某一评分项。",
       "hrmRetentionLeadDays": "到期前请求延长的天数，留空则不发邮件。",
-      "hrmRetentionScope": "JSON地区：applies_to all或countries及代码。",
+      "hrmRetentionScope": "选择所有区域，或此保留规则覆盖的国家代码。",
       "hrmTemplateBody": "正文，含录用数据的占位符。",
-      "hrmTemplateClauses": "JSON条款列表，含key、label、body和default_on。",
+      "hrmTemplateClauses": "添加此录用模板提供的命名条款。",
       "aiRailsZThreshold": "标记超过均值此标准差倍数的收入（默认 3）。",
       "aiRailsRetroThreshold": "标记达到此金额的追溯（默认 500）。",
       "aiRailsCohort": "按子公司、部门、发薪周期或职级分组员工。",
@@ -3626,7 +3653,11 @@
       "benefitMetricScope": "公司衡量整个组织；部门与项目指定范围行。",
       "benefitAllocation": "平均均分；工时按时间加权；角色按成员角色加权。",
       "benefitFrequency": "衡量频率：按月、按季、按年、项目完成或手动。",
-      "benefitPeriodBasis": "按季和按年项目注明日历或财年期间。"
+      "benefitPeriodBasis": "按季和按年项目注明日历或财年期间。",
+      "paymentKind": "非现金福利保留已配置的税务处理，但不会额外以现金支付其价值。",
+      "nonCashAccountId": "使用预付资产或供应商结算负债账户。向供应商采购时必须使用同一结算账户，以免重复计入费用。",
+      "zonedDateTime": "输入包含 Z 或明确时区偏移的 ISO 时间戳，例如 2026-10-01T09:00:00-04:00。偏移将原样保留。",
+      "ianaTimezone": "输入 IANA 时区，例如 Asia/Shanghai。"
     },
     "options": {
       "usageAggregation": {
@@ -4200,6 +4231,14 @@
       "benefitPeriodBasis": {
         "calendar": "日历",
         "fiscal": "财年"
+      },
+      "payPaymentKind": {
+        "cash": "现金薪酬",
+        "nonCash": "非现金福利"
+      },
+      "retentionRegions": {
+        "all": "所有区域",
+        "countries": "选定国家"
       }
     },
     "payroll": {
@@ -5065,6 +5104,11 @@
         "actionDone": "复核结账",
         "actionReview": "打开结账工作区"
       }
+    },
+    "structuredFields": {
+      "row": "第 {number} 行",
+      "addRow": "添加行",
+      "removeRow": "删除行"
     }
   },
   "flows": {

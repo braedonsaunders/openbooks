@@ -21,3 +21,10 @@ export function makeGroup(
   }
   return { op, rules: children }
 }
+
+/** Preserve entered decimal text and carry its numeric meaning independently of storage type. */
+export function withRuleValueType(rule: LogicRule, fieldType: string): LogicRule {
+  if (!("value" in rule)) return rule;
+  const { valueType: _valueType, ...base } = rule;
+  return fieldType === "number" ? { ...base, valueType: "number" } : base;
+}

@@ -112,6 +112,10 @@ export const payComponents = pgTable(
     }).notNull().default("fixed_amount"),
     /** Default amount / hourly rate / percent, overridable per employee. */
     value: money("value"),
+    /** Non-cash earnings retain their statutory bases but create no cash entitlement. */
+    paymentKind: text("payment_kind", { enum: ["cash", "non_cash"] }).notNull().default("cash"),
+    /** Explicit prepaid asset or provider liability credited for non-cash value. */
+    nonCashAccountId: uuid("non_cash_account_id"),
     /** Earnings: statutory treatment of the amount. */
     taxable: boolean("taxable").notNull().default(true),
     pensionable: boolean("pensionable").notNull().default(true),
@@ -201,6 +205,14 @@ export const payComponents = pgTable(
     // regenerate this index from the declaration alone.
     uniqueIndex("pay_components_org_system").on(t.orgId, t.country, t.systemKey, t.kind),
     index("pay_components_org_kind").on(t.orgId, t.kind),
+    check("pay_components_payment_kind", sql`${t.paymentKind} in ('cash', 'non_cash')`),
+    check("pay_components_non_cash_shape", sql`
+      (${t.paymentKind} = 'cash' and ${t.nonCashAccountId} is null) or
+      (${t.paymentKind} = 'non_cash' and ${t.kind} = 'earning' and ${t.systemKey} is null and ${t.nonCashAccountId} is not null)
+    `),
+    foreignKey({ name: "pay_components_non_cash_account_tenant_fkey",
+      columns: [t.orgId, t.nonCashAccountId], foreignColumns: [accounts.orgId, accounts.id],
+    }),
     // Statutory keys are pack-declared (0176): the database enforces that a
     // system key LOOKS like a stable machine identifier — lowercase
     // snake_case — never which identifiers may exist. A typo ('CPP',
@@ -572,6 +584,9 @@ export const payStubLines = pgTable(
     earnedFrom: date("earned_from", { mode: "string" }),
     earnedTo: date("earned_to", { mode: "string" }),
     amount: money("amount").notNull(),
+    /** Calculated payment representation, frozen independently of component edits. */
+    paymentKind: text("payment_kind", { enum: ["cash", "non_cash"] }).notNull().default("cash"),
+    nonCashAccountId: uuid("non_cash_account_id"),
     projectId: uuid("project_id"),
     departmentId: uuid("department_id"),
     timeTypeId: uuid("time_type_id"),
@@ -608,6 +623,14 @@ export const payStubLines = pgTable(
   },
   (t) => [
     index("pay_stub_lines_stub").on(t.stubId, t.sequence),
+    check("pay_stub_lines_payment_kind", sql`${t.paymentKind} in ('cash', 'non_cash')`),
+    check("pay_stub_lines_non_cash_shape", sql`
+      (${t.paymentKind} = 'cash' and ${t.nonCashAccountId} is null) or
+      (${t.paymentKind} = 'non_cash' and ${t.kind} = 'earning' and ${t.nonCashAccountId} is not null)
+    `),
+    foreignKey({ name: "pay_stub_lines_non_cash_account_tenant_fkey",
+      columns: [t.orgId, t.nonCashAccountId], foreignColumns: [accounts.orgId, accounts.id],
+    }),
     index("pay_stub_lines_project").on(t.orgId, t.projectId),
     check("pay_stub_lines_earning_dates_pair", sql`
       (${t.earnedFrom} is null and ${t.earnedTo} is null) or

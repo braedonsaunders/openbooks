@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { type TestContext } from 'node:test'
 import { isUuid } from '../../../../../lib/list-params'
 
 declare global {
@@ -67,10 +67,12 @@ interface SeenRequest {
 }
 
 async function mountDrawer(
+  t: TestContext,
   row: Record<string, unknown> | null,
   responder: (seen: SeenRequest[]) => Response | Promise<Response>,
   entityKey: string = ENTITY_KEY,
   initialValues?: Record<string, unknown>,
+  mutationBasePath?: string,
 ) {
   const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
   assert.ok(entity, `the registry must declare ${entityKey}`)
@@ -107,23 +109,19 @@ async function mountDrawer(
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <SetupDrawer entity={entity} row={row} members={[]} refOptions={{}} initialValues={initialValues} />
+        <SetupDrawer entity={entity} row={row} members={[]} refOptions={{}} initialValues={initialValues} mutationBasePath={mutationBasePath} />
       </NextIntlClientProvider>,
     )
     await tick()
   })
   await tick()
-  return {
-    pushes,
-    seen,
-    async unmount() {
-      await act(async () => {
-        root.unmount()
-      })
-      host.remove()
-      globalThis.fetch = prior
-    },
-  }
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = prior
+  })
+  return { pushes, seen }
+
 }
 
 function setTextInput(label: string, value: string) {
@@ -165,84 +163,61 @@ async function fillValidCreate() {
   await tick()
 }
 
-test('required setup fields are visibly marked, and only those validate enforces', async () => {
-  const { unmount } = await mountDrawer(null, () => Response.json({ ok: true }))
-  try {
-    const labels = [...document.querySelectorAll('label')].map((el) => el.textContent ?? '')
-    for (const key of ['key', 'name', 'dimension']) {
+test('required setup fields are visibly marked, and only those validate enforces', async (t) => {
+  await mountDrawer(t, null, () => Response.json({ ok: true }))
+  const labels = [...document.querySelectorAll('label')].map((el) => el.textContent ?? '')
+  for (const [keys, required] of [[['key', 'name', 'dimension'], true], [['sortOrder', 'isActive'], false]] as const) {
+    for (const key of keys) {
       const label = labels.find((text) => text.startsWith(FIELD_LABEL[key]!))
       assert.ok(label, `expected a label for ${key}`)
-      assert.ok(label!.endsWith('*'), `${key} is required so its label must carry the mark`)
+      assert.equal(label.endsWith('*'), required, `${key} marker must match whether its blank blocks saving`)
     }
-    // keepDefault blanks are legal input and booleans are never required:
-    // neither may wear the mark or the mark lies about what blocks saving.
-    for (const key of ['sortOrder', 'isActive']) {
-      const label = labels.find((text) => text.startsWith(FIELD_LABEL[key]!))
-      assert.ok(label, `expected a label for ${key}`)
-      assert.ok(!label!.endsWith('*'), `${key} never blocks saving so it must not wear the mark`)
-    }
-  } finally {
-    await unmount()
   }
 })
 
-test('a blank required save keeps an inline alert naming the field, with no write', async () => {
-  const { seen, unmount } = await mountDrawer(null, () => Response.json({ ok: true }))
-  try {
-    await clickSave(true)
-    assert.deepEqual(seen, [], 'a blocked save must not reach the API')
-    assert.equal(alertText(), requiredCopy(FIELD_LABEL.key!), 'the alert names the first missing field')
-  } finally {
-    await unmount()
-  }
+test('a blank required save keeps an inline alert naming the field, with no write', async (t) => {
+  const { seen } = await mountDrawer(t, null, () => Response.json({ ok: true }))
+  await clickSave(true)
+  assert.deepEqual(seen, [], 'a blocked save must not reach the API')
+  assert.equal(alertText(), requiredCopy(FIELD_LABEL.key!), 'the alert names the first missing field')
 })
 
-test('blank keepDefault fields never block saving', async () => {
+const ownershipValues = {
+  parentSubsidiaryId: 'sub-parent',
+  subsidiaryId: 'sub-child',
+  effectiveFrom: '2026-01-01',
+  ownershipPercent: '80',
+  acquisitionDate: '2026-01-02',
+  investmentAccountId: 'acc-invest',
+  equityIncomeAccountId: 'acc-equity',
+}
+const savedOwnership = () => Response.json({ ok: true, id: 'own-1' })
+
+test('blank keepDefault fields never block saving', async (t) => {
   // account-groups.sortOrder is keepDefault but NOT required, so it cannot
   // prove the branch: subsidiary-ownership-interests declares required AND
   // keepDefault together (method, acquisitionCost, acquisitionRate, …) with
   // the server applying its DB default to blanks. Every one of those stays
   // blank here; the save must still POST.
-  const { seen, pushes, unmount } = await mountDrawer(
-    null,
-    () => Response.json({ ok: true, id: 'own-1' }),
-    'subsidiary-ownership-interests',
-    {
-      parentSubsidiaryId: 'sub-parent',
-      subsidiaryId: 'sub-child',
-      effectiveFrom: '2026-01-01',
-      ownershipPercent: '80',
-      acquisitionDate: '2026-01-02',
-      investmentAccountId: 'acc-invest',
-      equityIncomeAccountId: 'acc-equity',
-    },
-  )
-  try {
-    await clickSave(true)
-    assert.equal(seen.length, 1, 'blank keepDefault fields must not block the create')
-    assert.equal(seen[0]!.method, 'POST')
-    assert.deepEqual(pushes.length, 1, 'a successful create navigates home')
-  } finally {
-    await unmount()
-  }
+  const { seen, pushes } = await mountDrawer(t, null, savedOwnership, 'subsidiary-ownership-interests', ownershipValues)
+  await clickSave(true)
+  assert.equal(seen.length, 1, 'blank keepDefault fields must not block the create')
+  assert.equal(seen[0]!.method, 'POST')
+  assert.deepEqual(pushes.length, 1, 'a successful create navigates home')
 })
 
-test('a failed transport releases the button with an inline error', async () => {
-  const { unmount } = await mountDrawer(null, () => {
+test('a failed transport releases the button with an inline error', async (t) => {
+  await mountDrawer(t, null, () => {
     throw new Error('down')
   })
-  try {
-    await fillValidCreate()
-    await clickSave(true)
-    assert.equal(alertText(), String(commonCatalog.feedback?.saveFailed), 'the transport failure names itself inline')
-    assert.equal(
-      clickButton(String(commonCatalog.actions?.create)).disabled,
-      false,
-      'the Create button must release after a transport failure',
-    )
-  } finally {
-    await unmount()
-  }
+  await fillValidCreate()
+  await clickSave(true)
+  assert.equal(alertText(), String(commonCatalog.feedback?.saveFailed), 'the transport failure names itself inline')
+  assert.equal(
+    clickButton(String(commonCatalog.actions?.create)).disabled,
+    false,
+    'the Create button must release after a transport failure',
+  )
 })
 
 for (const [name, body, status, expected, message] of [
@@ -275,99 +250,47 @@ for (const [name, body, status, expected, message] of [
     'an overlap maps to localized copy',
   ],
 ] as Array<[string, Record<string, string>, number, string, string]>) {
-  test(name, async () => {
-    const { unmount } = await mountDrawer(null, () => Response.json(body, { status }))
-    try {
-      await fillValidCreate()
-      await clickSave(true)
-      assert.equal(alertText(), expected, message)
-    } finally {
-      await unmount()
-    }
+  test(name, async (t) => {
+    await mountDrawer(t, null, () => Response.json(body, { status }))
+    await fillValidCreate()
+    await clickSave(true)
+    assert.equal(alertText(), expected, message)
   })
 }
 
-test('creates mint one idempotency key per mounted session and reuse it across retries', async () => {
+test('creates mint one idempotency key per mounted session and reuse it across retries', async (t) => {
   let attempt = 0
-  const { seen, unmount } = await mountDrawer(null, () => {
+  const { seen } = await mountDrawer(t, null, () => {
     attempt += 1
     if (attempt === 1) throw new Error('ambiguous failure')
     return Response.json({ ok: true, id: 'ag-1' })
   })
-  try {
-    await fillValidCreate()
-    await clickSave(true)
-    assert.equal(clickButton(String(commonCatalog.actions?.create)).disabled, false, 'the retry must be clickable')
-    await clickSave(true)
-    const posts = seen.filter((request) => request.method === 'POST')
-    assert.equal(posts.length, 2, 'the retry replays the create')
-    const first = posts[0]!.headers['idempotency-key'] ?? ''
-    assert.ok(isUuid(first), 'the create carries a UUID idempotency key')
-    assert.equal(posts[1]!.headers['idempotency-key'], first, 'the retry reuses the session key, never a fresh one')
-  } finally {
-    await unmount()
-  }
+  await fillValidCreate()
+  await clickSave(true)
+  assert.equal(clickButton(String(commonCatalog.actions?.create)).disabled, false, 'the retry must be clickable')
+  await clickSave(true)
+  const posts = seen.filter((request) => request.method === 'POST')
+  assert.equal(posts.length, 2, 'the retry replays the create')
+  const first = posts[0]!.headers['idempotency-key'] ?? ''
+  assert.ok(isUuid(first), 'the create carries a UUID idempotency key')
+  assert.equal(posts[1]!.headers['idempotency-key'], first, 'the retry reuses the session key, never a fresh one')
 })
 
-test('decimal inputs post canonicalized, unparseable text posts raw for the server to refuse', async () => {
-  // The drawer sends canonical decimals (same grammar the server
-  // coerces with) instead of raw operator text. Anything the grammar cannot
-  // parse posts untouched, so the refusal — and its remedy — stays
-  // server-side in one place.
-  const initial = {
-    parentSubsidiaryId: 'sub-parent',
-    subsidiaryId: 'sub-child',
-    effectiveFrom: '2026-01-01',
-    ownershipPercent: '80',
-    acquisitionDate: '2026-01-02',
-    investmentAccountId: 'acc-invest',
-    equityIncomeAccountId: 'acc-equity',
-  }
-  const { seen, unmount } = await mountDrawer(
-    null,
-    () => Response.json({ ok: true, id: 'own-1' }),
-    'subsidiary-ownership-interests',
-    initial,
-  )
-  try {
-    await act(async () => {
-      setTextInput(FIELD_LABEL.ownershipPercent!, '.5')
-    })
+for (const [input, expected, message] of [
+  ['.5', '0.5', 'a typed decimal posts canonically'],
+  ['12,34', '12,34', 'unparseable text reaches the authoritative server refusal unchanged'],
+] as const) {
+  test(`decimal inputs preserve ${input} through the native save`, async (t) => {
+    const { seen } = await mountDrawer(t, null, savedOwnership, 'subsidiary-ownership-interests', ownershipValues)
+    await act(async () => setTextInput(FIELD_LABEL.ownershipPercent!, input!))
     await tick()
     await clickSave(true)
-    assert.equal(seen.length, 1, 'the canonicalized save must POST once')
-    assert.equal(
-      (seen[0]!.body as Record<string, unknown>).ownershipPercent,
-      '0.5',
-      'a typed ".5" posts as canonical "0.5"',
-    )
-  } finally {
-    await unmount()
-  }
-  const second = await mountDrawer(
-    null,
-    () => Response.json({ ok: true, id: 'own-2' }),
-    'subsidiary-ownership-interests',
-    initial,
-  )
-  try {
-    await act(async () => {
-      setTextInput(FIELD_LABEL.ownershipPercent!, '12,34')
-    })
-    await tick()
-    await clickSave(true)
-    assert.equal(second.seen.length, 1, 'an unparseable save still reaches the server refusal')
-    assert.equal(
-      (second.seen[0]!.body as Record<string, unknown>).ownershipPercent,
-      '12,34',
-      'unparseable text posts raw, never client-coerced',
-    )
-  } finally {
-    await second.unmount()
-  }
-})
+    assert.equal(seen.length, 1, 'the save reaches the native API once')
+    assert.equal((seen[0]!.body as Record<string, unknown>).ownershipPercent, expected, message)
+  })
+}
 
-test('the idempotency key travels only on create POSTs, never on PATCH', async () => {
+test('the idempotency key travels only on create POSTs, never on PATCH', async (t) => {
   const row = {
     id: 'ag-1',
     key: 'grp-1',
@@ -377,20 +300,75 @@ test('the idempotency key travels only on create POSTs, never on PATCH', async (
     sortOrder: 1,
     isActive: true,
   }
-  const { seen, unmount } = await mountDrawer(row, () => Response.json({ ok: true }))
-  try {
-    await clickSave(false)
-    assert.equal(seen.length, 1, 'the edit must save once')
-    assert.equal(seen[0]!.method, 'PATCH')
-    assert.ok(!('idempotency-key' in seen[0]!.headers), 'an edit must never replay as a create')
-  } finally {
-    await unmount()
-  }
+  const { seen } = await mountDrawer(t, row, () => Response.json({ ok: true }))
+  await clickSave(false)
+  assert.equal(seen.length, 1, 'the edit must save once')
+  assert.equal(seen[0]!.method, 'PATCH')
+  assert.ok(!('idempotency-key' in seen[0]!.headers), 'an edit must never replay as a create')
 })
 
-test('command-owned entities save through their setup command', async () => {
-  const { seen, unmount } = await mountDrawer(null, () => Response.json({ ok: true }), 'fund-pairs', { fromFundId: '1', toFundId: '2', dueFromAccountId: '3', dueToAccountId: '4', reason: 'r' })
+test('command-owned entities save through their setup command', async (t) => {
+  const { seen } = await mountDrawer(t, null, () => Response.json({ ok: true }), 'fund-pairs', { fromFundId: '1', toFundId: '2', dueFromAccountId: '3', dueToAccountId: '4', reason: 'r' })
   await clickSave(true)
   assert.deepEqual([seen[0]?.method, seen[0]?.url], ['POST', '/api/admin/setup/fund-pairs/command'])
-  await unmount()
+})
+
+
+test('rehomed plan editor uses the authorized Benefits adapter and retains request identity across a refusal', async (t) => {
+  const { seen } = await mountDrawer(t, null,
+    () => Response.json({ error: 'Choose a payroll component in this legal entity.' }, { status: 422 }),
+    'benefit-plans', {
+      code: 'HEALTH', name: 'Health coverage', kind: 'health', currency: 'USD',
+      employeeCostBasis: 'per_month', employerCostBasis: 'per_month', prorationBasis: 'daily', effectiveFrom: '2026-01-01',
+    }, '/api/hrm/benefit-plan-configuration')
+  const shell = document.querySelector('[role="dialog"]')
+  await clickSave(true)
+  await clickSave(true)
+  assert.equal(seen.length, 2)
+  assert.ok(seen.every((request) => request.url === '/api/hrm/benefit-plan-configuration/benefit-plans'))
+  assert.ok(isUuid(seen[0]!.headers['idempotency-key']!))
+  assert.equal(seen[0]!.headers['idempotency-key'], seen[1]!.headers['idempotency-key'])
+  assert.equal(alertText(), 'Choose a payroll component in this legal entity.')
+  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  assert.equal((seen[0]!.body as Record<string, unknown>).kind, 'health')
+})
+
+test('availability rows use named inputs and preserve zoned instants while editing in one drawer', async (t) => {
+  const windows = [{ startsAt: '2026-10-01T09:00:00-04:00', endsAt: '2026-10-01T10:00:00-04:00', timezone: 'America/Toronto', source: 'declared' }]
+  const ui = await mountDrawer(t, { id: 'pool', name: 'Interview panel', availability: windows, is_active: true }, () => Response.json({ id: 'pool' }), 'hrm-interviewer-pools')
+  const shell = document.querySelector('[role="dialog"]')
+  assert.equal(document.querySelectorAll('textarea').length, 0)
+  await act(async () => setTextInput(FIELD_LABEL.endsAt!, '2026-10-01T11:00:00-04:00'))
+  await clickSave(false)
+  assert.equal(ui.seen.length, 1)
+  assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).availability, [{ ...windows[0], endsAt: '2026-10-01T11:00:00-04:00' }])
+  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  await act(async () => clickButton(adminCatalog.structuredFields!.addRow!).click())
+  assert.equal(document.querySelectorAll('fieldset').length, 2)
+  await clickSave(false)
+  assert.equal(ui.seen.length, 1, 'an incomplete new window is refused before a write')
+  assert.match(alertText() ?? '', /availability row 2: startsAt is required/)
+})
+
+test('clause controls retain underscore storage keys and explicitly toggle default inclusion', async (t) => {
+  const clause = { key: 'notice', label: 'Notice', body: 'Two weeks', default_on: false }
+  const ui = await mountDrawer(t, { id: 'template', name: 'Offer', body_template: 'Offer content', clauses: [clause] }, () => Response.json({ id: 'template' }), 'hrm-offer-templates')
+  const fieldset = document.querySelector('fieldset')!
+  assert.ok(fieldset)
+  assert.equal(fieldset.querySelectorAll('textarea').length, 1, 'only the human clause text is a textarea')
+  assert.equal((fieldset.querySelector('textarea') as HTMLTextAreaElement).value, clause.body)
+  const checkbox = fieldset.querySelector('input[type="checkbox"]') as HTMLInputElement
+  await act(async () => checkbox.click())
+  await clickSave(false)
+  assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).clauses, [{ ...clause, default_on: true }])
+})
+
+test('retention scope shows native region choices and country chips without a JSON editor', async (t) => {
+  const region = { applies_to: 'countries', countries: ['CA', 'US'] }
+  const ui = await mountDrawer(t, { id: 'rule', name: 'Retention', region_scope: region, basis: 'inactivity', retain_months: 24, action: 'anonymize' }, () => Response.json({ id: 'rule' }), 'hrm-retention-rules')
+  assert.equal(document.querySelectorAll('textarea').length, 0)
+  assert.ok(document.body.textContent?.includes('CA'))
+  assert.ok(document.body.textContent?.includes('US'))
+  await clickSave(false)
+  assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).regionScope, region)
 })

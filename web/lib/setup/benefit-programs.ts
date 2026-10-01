@@ -72,6 +72,7 @@ const PERIOD_BASES = [
 
 export const BENEFIT_PROGRAMS_ENTITY: SetupEntity = {
   key: 'benefit-programs',
+  rehomed: true,
   readOnly: true,
   allowCreate: false,
   allowDelete: false,

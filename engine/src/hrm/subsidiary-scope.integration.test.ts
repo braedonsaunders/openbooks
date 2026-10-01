@@ -16,7 +16,7 @@ import {
 } from "./processes.ts";
 import { electEnrollment } from "./benefits/enrollments.ts";
 import { generateBenefitPayrollInputs, voidBenefitPayrollInput } from "./benefits/benefits-payroll.ts";
-import { listEnrollmentWindows } from "./benefits/benefits-read.ts";
+import { listEnrollmentWindows, listEnrollmentPlanOptions, listBenefitPlans } from "./benefits/benefits-read.ts";
 import { closeEnrollmentWindow, createEnrollmentWindow, getEnrollmentWindow, openEnrollmentWindow } from "./benefits/windows.ts";
 import { HrmConstructionError } from "./construction/errors.ts";
 import {
@@ -374,6 +374,29 @@ scopeMatrix([
         db.execute(sql`update worker_employments set employer_subsidiary_id = ${w.subB} where org_id = ${w.orgId} and id = ${empA}`),
         refusalMatches(/employer_subsidiary_id is immutable/),
       );
+    },
+  }),
+  scopeRow({
+    name: "enrollment plan selectors fence legal entities and retain declared coverage levels",
+    permissions: BENEFITS,
+    seed: async (w) => {
+      const a = await seedPlan(w.orgId, { employer_subsidiary_id: w.subA, levels: true });
+      const b = await seedPlan(w.orgId, { employer_subsidiary_id: w.subB });
+      const shared = await seedPlan(w.orgId);
+      const inactive = await seedPlan(w.orgId, { is_active: false });
+      return { a: a.planId, b: b.planId, shared: shared.planId, inactive: inactive.planId };
+    },
+    read: async (w, ids) => {
+      const full = await listEnrollmentPlanOptions(db, w.orgId, w.admin);
+      assert.ok(full.some((plan) => plan.value === ids.b));
+      const scoped = await listEnrollmentPlanOptions(db, w.orgId, w.scoped);
+      assert.deepEqual(new Set(scoped.map((plan) => plan.value)), new Set([ids.a, ids.shared]));
+      assert.deepEqual(scoped.find((plan) => plan.value === ids.a)?.levels.map((level) => level.value), ['single', 'family']);
+      assert.ok(!scoped.some((plan) => plan.value === ids.inactive));
+      const catalog = await listBenefitPlans(db, w.orgId, w.scoped);
+      assert.deepEqual(new Set(catalog.map((plan) => plan.id)), new Set([ids.a, ids.shared, ids.inactive]));
+      assert.equal(catalog.find((plan) => plan.id === ids.inactive)?.isActive, false);
+      assert.equal(catalog.find((plan) => plan.id === ids.a)?.employeeCost, '250.0000');
     },
   }),
   scopeRow({

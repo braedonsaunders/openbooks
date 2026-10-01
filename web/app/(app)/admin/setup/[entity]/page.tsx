@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { ModuleView } from '../../../../../components/viewspec/module-view'
 import { loadSetupEntity, setupEntitySpec } from './view'
 
@@ -23,6 +24,12 @@ export default async function SetupEntityPage({
 }) {
   const sp = await searchParams
   const { entity: entityKey } = await params
+  if (entityKey === 'benefit-plans' || entityKey === 'benefit-programs') {
+    const params = new URLSearchParams({ view: 'programs' })
+    const row = typeof sp.row === 'string' ? sp.row : undefined
+    if (row) params.set(entityKey === 'benefit-plans' ? 'plan' : 'program', row)
+    redirect(`/hrm/benefits?${params}`)
+  }
   const data = await loadSetupEntity(entityKey, sp)
   return <ModuleView spec={setupEntitySpec(data)} data={data} searchParams={sp} trusted />
 }

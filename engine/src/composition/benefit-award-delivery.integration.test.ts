@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchUser, dropScratchOrg, seedApprovalFlow } from "../testing/fixtures.ts";
 import { grantPermissions } from "../testing/hrm-harness.ts";
 import { seedAdoption, calculatedRun } from "../payroll/filing-test-fixtures.ts";
 import { calculatePayRun } from "../payroll/run-calculation.ts";
@@ -10,10 +10,13 @@ import { commitPayRun } from "../payroll/run-commit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { activateBenefitProgram, addProgramMembership, createBenefitProgram } from "../hrm/benefits/programs.ts";
-import { approveBenefitAward, createBenefitAward, submitBenefitAward } from "../hrm/benefits/awards.ts";
+import { createBenefitAward, submitBenefitAward } from "../hrm/benefits/awards.ts";
 import { confirmAwardPayrollDelivery, queueAwardForPayRun } from "../hrm/benefits/settlement.ts";
 import { measureMoneySource } from "../hrm/benefits/incentives.ts";
 import { employmentBenefitStatement } from "../hrm/benefits/benefit-statement.ts";
+
+import { installEngineSeams } from "./install.ts";
+import { decideGate } from "../flows/gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -27,16 +30,18 @@ test("cash reward delivery proves its exact line through native payroll calculat
       insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at)
       values (${fx.orgId}, ${fx.employmentId}, 1, 'active', '2026-01-01'::date, now())
     `);
+    installEngineSeams();
     const approverId = await createScratchUser(fx.orgId, "Benefits Approver", "admin");
     await grantPermissions(fx.orgId, fx.actorId, ["hrm.benefits.read", "hrm.benefits.manage", "gl.read"]);
     await grantPermissions(fx.orgId, approverId, ["hrm.benefits.read", "hrm.benefits.manage"]);
+    await seedApprovalFlow(fx.orgId, { subjectKind: "hrm_benefit_award", assignees: [{type: "user", userId: approverId}], mode: "any", preventSelfApproval: true });
     const component = (await db.execute<{id: string}>(sql`
       select id from pay_components where org_id = ${fx.orgId} and system_key = 'bonus' and (country = 'CA' or country is null) order by country nulls last
     `)).rows[0]!;
     assert.ok(component, "the native payroll fixture has its Canadian bonus component");
     const created = await createBenefitProgram({
       orgId: fx.orgId, actorId: fx.actorId, code: "CASH_RECOGNITION", name: "Cash recognition",
-      family: "reward", currency: "CAD", legalEntityId: fx.subsidiaryId,
+      family: "reward", approvalMode: "flows", currency: "CAD", legalEntityId: fx.subsidiaryId,
       effectiveFrom: "2026-01-01", payComponentId: component.id, deliveryMethod: "payroll",
       valuation: "fixed", fixedAmount: "25.0000", frequency: "manual",
     });
@@ -44,7 +49,9 @@ test("cash reward delivery proves its exact line through native payroll calculat
     await addProgramMembership({ orgId: fx.orgId, actorId: fx.actorId, programId: program.id, employmentId: fx.employmentId, effectiveFrom: "2026-01-01" });
     const award = await createBenefitAward({ orgId: fx.orgId, actorId: fx.actorId, programId: program.id, employmentId: fx.employmentId, periodFrom: "2026-07-05", periodTo: "2026-07-18", value: "25.0000", currency: "CAD", evidence: {kind: "recognition"} });
     await submitBenefitAward({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id });
-    await approveBenefitAward({ orgId: fx.orgId, actorId: approverId, awardId: award.id });
+    const gate = (await db.execute<{id: string}>(sql`select id from flow_gates where org_id = ${fx.orgId} and subject_id = ${award.id} and subject_kind = 'hrm_benefit_award' and status = 'pending'`)).rows[0];
+    assert.ok(gate, "native Benefits policy creates its required approval gate");
+    await decideGate({gateId: gate.id, userId: approverId, decision: "approved"});
     const { input } = await calculatedRun(fx);
     const queued = await queueAwardForPayRun({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id, runDocumentId: input.documentId });
     assert.equal(queued.award.payRunDocumentId, input.documentId);

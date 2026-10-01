@@ -457,7 +457,9 @@
       "employee": "Employé",
       "tax": "Impôt",
       "lines": "Lignes de paie",
-      "trace": "trace {engine}"
+      "trace": "trace {engine}",
+      "nonCash": "Avantages en nature",
+      "cashGross": "Rémunération en espèces"
     },
     "submitApproval": "Soumettre à l'approbation",
     "approvalSubmitted": "Envoyée à l'approbation avec le dossier de preuves",

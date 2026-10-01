@@ -319,6 +319,15 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
       { key: 'kind', kind: 'select', required: true, options: PAY_COMPONENT_KINDS },
+      {
+        key: 'paymentKind', kind: 'select', keepDefault: true, defaultValue: 'cash',
+        options: [{ value: 'cash', labelKey: 'options.payPaymentKind.cash' }, { value: 'non_cash', labelKey: 'options.payPaymentKind.nonCash' }],
+        showWhen: { field: 'kind', in: ['earning'] }, helpTextKey: 'fieldHelp.paymentKind',
+      },
+      {
+        key: 'nonCashAccountId', kind: 'ref', ref: 'accounts',
+        showWhen: { field: 'paymentKind', in: ['non_cash'] }, helpTextKey: 'fieldHelp.nonCashAccountId',
+      },
       // Every installable pack, resolved at render time — the static pair
       // is the fallback for surfaces that render without resolving.
       { key: 'country', kind: 'select', options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-component-countries' },

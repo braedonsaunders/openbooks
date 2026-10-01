@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -210,6 +211,15 @@ export function ProgramDrawer({
             <dd className="font-medium text-slate-900 dark:text-slate-100">{line.value}</dd>
           </div>)}
         </dl>
+
+        <section className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <h3 className="text-sm font-semibold">{t('portfolio.approvalControls.title')}</h3>
+          {program.approvalMode === 'none' ? <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.modes.none')} · {t('portfolio.approvalControls.noneHint')}</p> : drawer.approvalPoliciesRefusal ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{drawer.approvalPoliciesRefusal.message}</p> : <>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t(drawer.approvalPolicies?.configured ? 'portfolio.approvalControls.policiesHint' : 'portfolio.approvalControls.unconfiguredStatus')}</p>
+            {drawer.approvalPolicies?.policies.map((policy) => drawer.canConfigureApprovalPolicies ? <Link key={policy.id} href={policy.href as never} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">{policy.name}</Link> : <p key={policy.id} className="text-sm font-medium">{policy.name}</p>)}
+            {drawer.canConfigureApprovalPolicies ? <div><Button asChild variant="outline" size="sm"><Link href={(drawer.approvalPolicies?.href ?? '/admin/flows') as never}>{t('portfolio.approvalControls.openFlows')}</Link></Button></div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.administratorRemedy')}</p>}
+          </>}
+        </section>
 
         {!drawer.drawerRefusal ? <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.membersTitle')}</h3>

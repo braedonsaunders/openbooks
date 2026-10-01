@@ -286,3 +286,31 @@ test('carrier storage checks answer with the named refusal, never the raw CHECK'
   assert.equal(carrierCheckRefusal('carriers', check('some_other_check')), null)
   assert.equal(carrierCheckRefusal('carriers', new Error('nope')), null)
 })
+
+test('structured availability binds JSONB text and preserves offset-bearing timestamps and evidence', () => {
+  const field = SETUP_ENTITY_BY_KEY.get('hrm-interviewer-pools')!.fields.find((entry) => entry.key === 'availability')!
+  const windows = [{ startsAt: '2026-10-01T09:00:00.123456-04:00', endsAt: '2026-10-01T10:00:00-04:00', timezone: 'America/Toronto', source: 'declared' }]
+  assert.deepEqual(coerceField(field, windows), { column: 'availability', value: JSON.stringify(windows) })
+  for (const startsAt of ['2026-10-01T09:00:00', '2026-02-30T09:00:00Z', '2026-10-01T24:00:00Z']) {
+    const result = coerceField(field, [{ ...windows[0], startsAt }])
+    assert.ok('error' in result)
+    assert.match(result.error, /availability row 1: startsAt must be an ISO timestamp with an explicit offset/)
+  }
+  assert.ok('error' in coerceField(field, { startsAt: '2026-10-01T09:00:00Z' }))
+})
+
+test('structured clauses preserve exact storage keys, omitted defaults and meaningful boolean choices', () => {
+  const field = SETUP_ENTITY_BY_KEY.get('hrm-offer-templates')!.fields.find((entry) => entry.key === 'clauses')!
+  const clauses = [{ key: 'notice', body: 'Two weeks', default_on: false }, { key: 'leave', label: 'Leave', body: 'Paid leave', default_on: true }]
+  assert.deepEqual(coerceField(field, clauses), { column: 'clauses', value: JSON.stringify(clauses) })
+  assert.ok('error' in coerceField(field, [{ key: 'notice', body: 42 }]))
+  assert.ok('error' in coerceField(field, [{ key: 'notice', body: 'Text', default_on: 'maybe' }]))
+})
+
+test('structured region scope refuses missing choices and uses native country arrays without double encoding', () => {
+  const field = SETUP_ENTITY_BY_KEY.get('hrm-retention-rules')!.fields.find((entry) => entry.key === 'regionScope')!
+  const regions = { applies_to: 'countries', countries: ['CA', 'US'] }
+  assert.deepEqual(coerceField(field, regions), { column: 'region_scope', value: JSON.stringify(regions) })
+  assert.deepEqual(coerceField(field, { applies_to: 'all' }), { column: 'region_scope', value: '{"applies_to":"all"}' })
+  for (const invalid of [{}, { applies_to: 'other' }, { applies_to: 'countries', countries: [] }]) assert.ok('error' in coerceField(field, invalid))
+})

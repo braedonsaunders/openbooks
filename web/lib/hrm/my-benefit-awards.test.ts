@@ -21,12 +21,15 @@ const authz = { user: { orgId: 'org', id: 'employee-login' } } as never
 
 test('self-service award view separates paid from pending and projects no company evidence or actor ids', async () => {
   const base = { id: 'award', programName: 'Recognition', periodFrom: '2026-01-01', periodTo: '2026-01-31', currency: 'USD', value: '25.00', evidence: { companyProfit: '999999.00' }, approvedBy: 'private-actor', employmentId: 'private-employment' }
-  state.__statementRows = [{ paidAwards: [{ ...base, status: 'delivered' }], pendingAwards: [{ ...base, id: 'pending', status: 'approved' }], reversedAwards: [{ ...base, id: 'reversed', status: 'delivered', deliveryState: 'reversed' }] }]
+  state.__statementRows = [{ paidAwards: [{ ...base, status: 'delivered' }], pendingAwards: [{ ...base, id: 'pending', status: 'approved' }], reversedAwards: [{ ...base, id: 'reversed', status: 'delivered', deliveryState: 'reversed' }], rejectedAwards: [{ ...base, id: 'rejected', status: 'rejected' }] }]
   const data = await loadMyBenefitAwards(authz)
   assert.deepEqual(state.__statementQuery, { orgId: 'org', actorId: 'employee-login' })
   assert.equal(data.paidAwards.length, 1)
   assert.equal(data.pendingAwards.length, 1)
-  assert.equal(data.reversedAwards.length, 1)
+  assert.equal(data.reversedAwards.length, 2)
+  assert.equal(data.reversedAwards[1]?.statusLabel, 'Rejected')
+  assert.equal(data.reversedAwards[1]?.statusVariant, 'destructive')
+  assert.equal(data.paidAwards[0]?.statusLabel, 'Processed in payroll')
   assert.equal(data.reversedAwards[0]?.statusLabel, 'Reversed')
   assert.equal(data.paidAwards[0]?.programName, 'Recognition')
   assert.ok(!JSON.stringify(data).includes('999999'))
@@ -42,4 +45,11 @@ test('a computed ownership refusal reaches self-service with its remedy', async 
     assert.deepEqual(data.paidAwards, [])
     assert.deepEqual(data.pendingAwards, [])
   } finally { state.__statementFailure = undefined }
+})
+
+test('employee history distinguishes provider fulfillment from payroll processing without disclosing the reference', async () => {
+  state.__statementRows = [{ paidAwards: [{ id: 'gift', programName: 'Recognition', periodFrom: '2026-01-01', periodTo: null, currency: 'USD', value: '100.00', status: 'delivered', externalRef: 'PRIVATE-PROVIDER-REFERENCE' }], pendingAwards: [], reversedAwards: [], rejectedAwards: [] }]
+  const data = await loadMyBenefitAwards(authz)
+  assert.equal(data.paidAwards[0]?.statusLabel, 'Delivered · External provider')
+  assert.ok(!JSON.stringify(data).includes('PRIVATE-PROVIDER-REFERENCE'))
 })

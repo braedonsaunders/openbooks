@@ -65,10 +65,14 @@ export function setupChildEntities(parentKey: string): SetupEntity[] {
 
 /** Collection links lead to the owning records, where the child tab is opened. */
 export function setupEntityHref(entity: SetupEntity): string {
+  if (entity.key === 'benefit-programs') return '/hrm/benefits?view=programs'
+  if (entity.key === 'benefit-plans') return '/hrm/benefits?view=programs'
   const parentKey = entity.parentRecords?.[0]?.entityKey
   if (!parentKey) return `/admin/setup/${entity.key}`
   const parentHomes: Record<string, string> = {
     items: '/items',
+    'benefit-plans': '/hrm/benefits?view=programs',
+    'benefit-programs': '/hrm/benefits?view=programs',
     'tax-regimes': '/admin/setup/tax-depreciation?tab=regimes',
     'entitlement-plans': '/admin/setup/payroll?tab=entitlements',
     'pay-components': '/admin/setup/payroll?tab=components',

@@ -7,6 +7,11 @@ export type SetupFieldKind =
   | 'country'
   | 'textarea'
   | 'json'
+  /** Named structured controls stored in one JSON object or array. */
+  | 'object'
+  | 'objectArray'
+  /** ISO timestamp with an explicit UTC offset; preserved as entered. */
+  | 'zonedDateTime'
   /** A jsonb array of free-text strings (e.g. job titles). Renders as the
    *  TagInput chip control — never as raw JSON — with type-ahead over the
    *  field's `ref` option source and free entry for values the list lacks. */
@@ -88,6 +93,8 @@ export type SetupDynamicOptionsSource =
 export interface SetupField {
   key: string
   kind: SetupFieldKind
+  /** Nested keys are stored verbatim, preserving the domain JSON contract. */
+  fields?: SetupField[]
   /** Storage type for stringArray fields; defaults to jsonb. */
   arrayStorage?: 'jsonb' | 'text'
   required?: boolean
@@ -118,7 +125,7 @@ export interface SetupField {
   /** decimal/integer default shown as placeholder text (message key). */
   defaultHintKey?: string
   /** Initial value for a new record; database defaults remain authoritative. */
-  defaultValue?: string | number | boolean
+  defaultValue?: string | number | boolean | Record<string, unknown> | unknown[]
   /** Persisted field managed by another visible control; omit it from drawers. */
   hidden?: boolean
   /** Optional explanatory copy rendered directly beneath the control. */

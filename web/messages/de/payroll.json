@@ -457,7 +457,9 @@
       "employee": "Mitarbeiter",
       "tax": "Steuer",
       "lines": "Lohnzeilen",
-      "trace": "{engine}-Nachvollzug"
+      "trace": "{engine}-Nachvollzug",
+      "nonCash": "Sachleistungen",
+      "cashGross": "Barvergütung"
     },
     "submitApproval": "Zur Genehmigung einreichen",
     "approvalSubmitted": "Mit dem Nachweispaket zur Genehmigung gesendet",

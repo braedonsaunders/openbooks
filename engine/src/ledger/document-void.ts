@@ -253,7 +253,7 @@ export async function requestDocumentVoid(
     // the pay-run document sits in draft while committed, so the zero-row
     // reservation below would otherwise answer with the generic draft/status
     // refusal and the operator would never see the file number or its remedy.
-    await refuseReleasedPayRunBankFile(db, input.orgId, input.documentId);
+    await refuseUnavailablePayRunVoid(db, input.orgId, input.documentId);
     if (current.status === "posted") await assertPostingEffectsCompleteForVoid(db, input.orgId, input.documentId);
     // This compare-and-set is the single-winner claim. PostgreSQL locks the
     // aggregate row and rechecks the predicate after a concurrent waiter
@@ -635,7 +635,7 @@ async function assertRetainageDrawVoidable(
 }
 
 /**
- * A released payroll bank file locks its pay run against voiding.
+ * A released payroll bank file or fulfilled non-cash benefit locks its pay run against voiding.
  * Runs in the REQUEST path before the reservation, so the operator sees the
  * file number and its remedy instead of the generic draft/status refusal the
  * zero-row reservation falls back to — and again at COMPLETION, which stays
@@ -644,11 +644,22 @@ async function assertRetainageDrawVoidable(
  * finishes first and is refused here, or waits until the void makes the run
  * ineligible for release.
  */
-async function refuseReleasedPayRunBankFile(
+async function refuseUnavailablePayRunVoid(
   executor: Pick<typeof db, "execute">,
   orgId: string,
   documentId: string,
 ): Promise<void> {
+  // Provider fulfillment is independent of a bank payment. Reversing its
+  // payroll representation does not revoke the delivered gift or benefit;
+  // correction must preserve that issuance evidence and adjust payroll.
+  const fulfilled = (await executor.execute<{ code: string; external_ref: string }>(sql`
+    select p.code, a.external_ref from hrm_benefit_awards a
+      join hrm_benefit_programs p on p.org_id = a.org_id and p.id = a.program_id
+     where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
+       and a.status = 'delivered' and p.delivery_method = 'external' and a.external_ref is not null
+     order by a.id for update of a
+  `)).rows[0];
+  if (fulfilled) throw new DocumentVoidError(`this pay run represents fulfilled non-cash benefit ${fulfilled.code} (provider reference ${fulfilled.external_ref}); voiding payroll does not cancel provider fulfillment — record an adjusting benefit award and a correcting payroll run instead`);
   const bankFiles = (await executor.execute<{
     file_number: string;
     release_count: number;
@@ -685,7 +696,7 @@ export async function completeRequestedDocumentVoid(
     } = await db.transaction(async (tx) => {
       // Completion-time backstop for the request-path check above: a release
       // landing between request and completion is refused here instead.
-      await refuseReleasedPayRunBankFile(tx, orgId, documentId);
+      await refuseUnavailablePayRunVoid(tx, orgId, documentId);
 
       // Discover the source entry and all currently live application endpoints
       // before taking locks. lockApplicationEvidence then acquires the shared

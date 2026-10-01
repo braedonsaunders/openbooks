@@ -1273,7 +1273,9 @@
         "incentives": "Intéressement",
         "payouts": "Versements"
       }
-    }
+    },
+    "newEnrollment": "Nouvelle inscription",
+    "planSettings": "Paramètres des régimes"
   },
   "me": {
     "tabs": {
@@ -1538,18 +1540,18 @@
       "changeSubmit": "Enregistrer la modification",
       "changeFailed": "La modification n'a pas pu être enregistrée.",
       "awards": {
-        "paidTitle": "Récompenses versées",
-        "pendingTitle": "Récompenses en attente de versement",
-        "hint": "Les récompenses versées sont déjà incluses dans la paie. Les récompenses en attente ne sont pas des paiements.",
-        "paidEmpty": "Aucune récompense versée.",
-        "pendingEmpty": "Aucune récompense en attente de versement.",
+        "paidTitle": "Récompenses traitées",
+        "pendingTitle": "Récompenses en attente",
+        "hint": "Les récompenses traitées sont représentées dans la paie. Les récompenses en attente ne prouvent pas un paiement.",
+        "paidEmpty": "Aucune récompense traitée.",
+        "pendingEmpty": "Aucune récompense en attente.",
         "refusalTitle": "Récompenses indisponibles",
         "program": "Programme",
         "period": "Période acquise",
         "value": "Valeur",
         "status": "Statut",
-        "reversedTitle": "Versements de récompenses annulés",
-        "reversedEmpty": "Aucun versement de récompense annulé.",
+        "reversedTitle": "Récompenses rejetées et annulées",
+        "reversedEmpty": "Aucune récompense rejetée ou annulée",
         "reversedStatus": "Annulé"
       }
     },
@@ -2538,7 +2540,8 @@
       "reward": "Récompense",
       "allowance": "Allocation",
       "incentive": "Intéressement",
-      "custom": "Sur mesure"
+      "custom": "Sur mesure",
+      "insured": "Régime assuré"
     },
     "familyHints": {
       "reward": "Reconnaissance ponctuelle : bonus, cartes cadeaux, primes spontanées.",
@@ -2590,10 +2593,11 @@
     "awardStatus": {
       "draft": "Brouillon",
       "pending": "En attente d'approbation",
-      "approved": "Approuvée",
-      "queued": "En file de versement",
+      "approved": "Prêt pour la paie",
+      "queued": "En file dans une paie",
       "delivered": "Versée",
-      "voided": "Annulée"
+      "voided": "Annulée",
+      "rejected": "Rejeté"
     },
     "columns": {
       "program": "Programme",
@@ -2707,7 +2711,7 @@
       "chooseRecipient": "Choisir un bénéficiaire",
       "chooseBasis": "Choisir une base",
       "basisHint": "Liquidation et paie doivent s'accorder sur le trimestre, donc la base fait partie du programme.",
-      "externalHint": "Les récompenses non monétaires positives ne peuvent pas être versées tant que la paie ne prend pas en charge leur traitement fiscal. Créez une récompense monétaire en paie pour un versement.",
+      "externalHint": "Les récompenses externes utilisent un élément de rémunération non monétaire pour calculer l’impôt sans ajouter de paiement en espèces. Enregistrez la livraison du fournisseur uniquement après la validation de la paie liée.",
       "reviewTitle": "Contrôlez le programme",
       "reviewEmpty": "Rien saisi pour l'instant.",
       "reviewHint": "La création atterrit en brouillon ; le détail le relit depuis le serveur.",
@@ -2721,13 +2725,13 @@
       "back": "Retour",
       "next": "Suivant",
       "amountNoun": "Montant",
-      "componentPrerequisite": "Créez une composante de rémunération active dans la configuration de paie, puis actualisez les options et sélectionnez-la. Ses règles de paie déterminent le traitement fiscal et comptable.",
+      "componentPrerequisite": "Créez un élément de rémunération monétaire ou non monétaire correspondant au mode de livraison, puis actualisez les options.",
       "openPayrollSetup": "Ouvrir la configuration de paie",
       "accountsPrerequisite": "Aucun compte de mesure imputable n’est visible. Ajoutez les comptes nécessaires au plan comptable ou faites vérifier votre accès à l’entité juridique par les finances, puis actualisez les options.",
       "openAccounts": "Ouvrir le plan comptable",
       "refreshOptions": "Actualiser les options"
     },
-    "awardBuilderTitle": "Nouvelle prime",
+    "awardBuilderTitle": "Nouvelle récompense",
     "awardFields": {
       "program": "Programme",
       "recipient": "Bénéficiaire",
@@ -2742,12 +2746,11 @@
       "recordReferencePlaceholder": "Confirmation du prestataire ou numéro de commande",
       "recordReferenceHint": "Le versement externe enregistre cette référence sur la prime."
     },
-    "awardCreate": "Enregistrer la prime",
-    "submitAward": "Soumettre à approbation",
-    "approveAward": "Approuver",
-    "queueAward": "Mettre en file de versement",
-    "payrollDelivery": "Verser par la paie",
-    "externalDelivery": "Enregistrer le versement externe",
+    "awardCreate": "Créer une récompense",
+    "submitAward": "Soumettre la récompense",
+    "queueAward": "Ajouter à la paie",
+    "payrollDelivery": "Traité dans la paie",
+    "externalDelivery": "Enregistrer la livraison",
     "voidAward": "Annuler",
     "payrollInputLabel": "Rubrique de paie",
     "payrollInputPlaceholder": "Identifiant de la rubrique existante",
@@ -2806,6 +2809,32 @@
       "heroHint": "Programmes de l’employeur, règles de valorisation et dates d’effet.",
       "directoryTitle": "Gestion des avantages",
       "payrollHint": "Toutes les récompenses enregistrées · devises séparées"
-    }
+    },
+    "newReward": "Nouvelle récompense",
+    "newIncentive": "Nouvelle prime",
+    "planCostsInRecord": "Voir les tarifs du régime",
+    "readFailedTitle": "Impossible de charger les programmes",
+    "unknownType": "Type de programme inconnu « {type} ». Choisissez un type dans le filtre.",
+    "approvalControls": {
+      "title": "Contrôles d’approbation",
+      "openFlows": "Ouvrir Flows",
+      "hint": "Flows applique les étapes d’approbation et les conditions configurées pour ce programme.",
+      "unconfigured": "Aucune politique d’approbation des avantages n’est configurée. Configurez Flows avant de soumettre des récompenses.",
+      "policiesHint": "Les politiques actives sont évaluées lors de la soumission d’une récompense.",
+      "openApprovals": "Ouvrir les approbations",
+      "administratorRemedy": "Demandez à l’administrateur des workflows de votre entreprise de configurer ou modifier les politiques d’approbation.",
+      "unconfiguredStatus": "Aucune politique d’approbation des avantages n’est configurée.",
+      "modes": {
+        "none": "Aucune approbation requise",
+        "flows": "Utiliser les approbations Flows"
+      },
+      "noneHint": "Les soumissions autorisées sont prêtes pour la paie. Aucune configuration de workflow ni aucun approbateur ne sont requis."
+    },
+    "externalPayrollProcessed": "Traité dans la paie · livraison en attente",
+    "openPayRun": "Ouvrir la paie",
+    "directProcessingHint": "Flows a autorisé le traitement direct ; cette récompense est prête pour la paie.",
+    "rewardProgramPrerequisite": "Créez et activez un programme de récompense ou d’indemnité avant d’enregistrer une récompense.",
+    "createRewardProgram": "Créer un programme de récompense",
+    "noApprovalSubmissionHint": "Aucune approbation requise. La soumission autorisée a été enregistrée ; cette récompense est prête pour la paie."
   }
 }

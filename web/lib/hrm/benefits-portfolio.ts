@@ -35,7 +35,6 @@ export type ProgramAction = (typeof PROGRAM_ACTIONS)[number]
 export const AWARD_ACTIONS = [
   'create',
   'submit',
-  'approve',
   'queue',
   'payrollDelivery',
   'externalDelivery',
@@ -66,11 +65,12 @@ import { decimalNullCause, suppliedValue } from '../payroll-decimal-refusal'
  * existing insured-enrollment tables; programs, rewards, incentives, and
  * payouts focus the employer-defined portfolio.
  */
-export const PORTFOLIO_VIEWS = ['overview', 'programs', 'windows', 'enrolments', 'rewards', 'incentives', 'payouts'] as const
+export const PORTFOLIO_VIEWS = ['overview', 'programs', 'enrolments', 'rewards', 'incentives', 'payouts'] as const
 export type PortfolioView = (typeof PORTFOLIO_VIEWS)[number]
 
 export function parsePortfolioView(value: string | undefined): PortfolioView {
-  if (value === 'programs' || value === 'windows' || value === 'rewards' || value === 'incentives') return value
+  if (value === 'windows') return 'enrolments'
+  if (value === 'programs' || value === 'rewards' || value === 'incentives') return value
   if (value === 'enrolments' || value === 'payouts') return value
   return 'overview'
 }
@@ -139,6 +139,7 @@ export interface ProgramDraft {
   effectiveTo: string
   payComponentId: string
   deliveryMethod: DeliveryMethod
+  approvalMode: 'none' | 'flows'
   valuation: Valuation
   metric: '' | BenefitMetric
   metricScope: MetricScope
@@ -167,6 +168,7 @@ export function emptyProgramDraft(family: ProgramFamily): ProgramDraft {
     effectiveTo: '',
     payComponentId: '',
     deliveryMethod: 'payroll',
+    approvalMode: 'none',
     valuation: family === 'incentive' ? 'pool' : 'fixed',
     metric: family === 'incentive' ? 'revenue' : '',
     metricScope: 'company',
@@ -243,7 +245,7 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
   if ((draft.frequency === 'quarterly' || draft.frequency === 'annual') && draft.periodBasis === '') {
     errors.periodBasis = 'portfolio.validation.periodBasis'
   }
-  if (draft.deliveryMethod === 'payroll' && draft.payComponentId.trim() === '') {
+  if (draft.payComponentId.trim() === '') {
     errors.payComponentId = 'portfolio.validation.payComponent'
   }
   const delay = draft.paymentDelayDays.trim()
@@ -269,6 +271,7 @@ export interface ProgramEditSeed {
   effectiveTo: string | null
   payComponentId: string | null
   deliveryMethod: ProgramDraft['deliveryMethod']
+  approvalMode: ProgramDraft['approvalMode']
   valuation: ProgramDraft['valuation']
   metric: ProgramDraft['metric']
   metricScope: ProgramDraft['metricScope']
@@ -357,7 +360,7 @@ export function buildAttentionQueue(input: {
       key: 'pending-awards',
       tone: 'warning',
       text: input.format('portfolio.attention.pendingAwards', { count: input.pendingAwards }),
-      href: portfolioHref(input.basePath, 'payouts', {}),
+      href: '/approvals',
     })
   }
   if (input.queuedAwards > 0) {
@@ -393,7 +396,30 @@ export interface BuilderOption {
   label: string
 }
 
+/** Native earnings with an explicit cash or non-cash payroll representation. */
+export interface BenefitPayComponentOption extends BuilderOption {
+  paymentKind: 'cash' | 'non_cash'
+}
+
+export function componentsForDelivery(options: BenefitPayComponentOption[], delivery: DeliveryMethod): BenefitPayComponentOption[] {
+  return options.filter((option) => option.paymentKind === (delivery === 'external' ? 'non_cash' : 'cash'))
+}
+
 /** Loader-resolved text for the program portfolio table. */
+export interface UnifiedProgramRow {
+  id: string
+  code: string
+  name: string
+  family: ProgramFamily | 'insured'
+  familyLabel: string
+  valueLabel: string
+  effectiveFrom: string
+  effectiveTo: string | null
+  statusLabel: string
+  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  programHref: string
+}
+
 export interface ProgramTableText {
   program: string
   family: string

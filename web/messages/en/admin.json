@@ -1944,7 +1944,8 @@
     "deleted": "Deleted",
     "confirmDelete": "Delete this record? This cannot be undone.",
     "validation": {
-      "required": "{field} is required"
+      "required": "{field} is required",
+      "invalidStructuredValue": "{field} contains an unreadable stored record. Correct the configuration before saving."
     },
     "drawer": {
       "newTitle": "New {name}",
@@ -3508,7 +3509,33 @@
       "cohortKey": "Cohort",
       "biasTerms": "Bias terms",
       "reviewMonths": "Review cadence (months)",
-      "customerSku": "Customer part number"
+      "customerSku": "Customer part number",
+      "paymentKind": "Payment representation",
+      "nonCashAccountId": "Non-cash clearing account",
+      "family": "Program family",
+      "legalEntityId": "Legal entity",
+      "deliveryMethod": "Delivery",
+      "valuation": "Valuation",
+      "metric": "Measured from",
+      "metricScope": "Measure scope",
+      "allocation": "Allocation",
+      "percentRate": "Percent rate",
+      "fixedAmount": "Fixed amount",
+      "capAmount": "Cap per recipient",
+      "budgetAmount": "Pool budget",
+      "thresholdAmount": "Payout threshold",
+      "periodBasis": "Period basis",
+      "paymentDelayDays": "Days from period end to payout",
+      "programId": "Benefit program",
+      "weightBps": "Weight in basis points",
+      "employmentId": "Employment",
+      "role": "Role",
+      "startsAt": "Starts at",
+      "endsAt": "Ends at",
+      "default_on": "Included by default",
+      "applies_to": "Region coverage",
+      "countries": "Countries",
+      "timezone": "Time zone"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
@@ -3604,13 +3631,13 @@
       "hrmKitInstructions": "Guidance for the panel, printed atop every scorecard.",
       "hrmKitScale": "At least two of the keys strong_no, no, yes, strong_yes.",
       "hrmKitStage": "The kit applies to this funnel stage, or everywhere when empty.",
-      "hrmPoolAvailability": "Windows as a JSON list of startsAt, endsAt, and timezone.",
+      "hrmPoolAvailability": "Add availability windows with explicit offsets and the time zone used for scheduling.",
       "hrmPoolKit": "Default kit for sittings from this pool.",
       "hrmQuestionAttribute": "Pins the question to one attribute of this kit.",
       "hrmRetentionLeadDays": "Days before expiry to request an extension; empty sends no email.",
-      "hrmRetentionScope": "Region as JSON: applies_to all or countries with country codes.",
+      "hrmRetentionScope": "Choose all regions or the country codes covered by this retention rule.",
       "hrmTemplateBody": "Letter body with placeholders for the offer data.",
-      "hrmTemplateClauses": "Clauses as a JSON list of key, label, body, and default_on.",
+      "hrmTemplateClauses": "Add the named clauses available in this offer template.",
       "aiRailsZThreshold": "Flag earnings more than this many standard deviations from the cohort mean (default 3).",
       "aiRailsRetroThreshold": "Flag retro-pay adjustments at or above this amount (default 500).",
       "aiRailsCohort": "Group employees for baselines by subsidiary, department, pay schedule or job level.",
@@ -3626,7 +3653,11 @@
       "benefitMetricScope": "Company measures the org; department and project name their scope rows.",
       "benefitAllocation": "Equal splits evenly; hours weights by time; role weights by member role.",
       "benefitFrequency": "How often the program measures: monthly, quarterly, annual, project complete, or manual.",
-      "benefitPeriodBasis": "Quarterly and annual programs name calendar or fiscal periods so settlement and payroll agree."
+      "benefitPeriodBasis": "Quarterly and annual programs name calendar or fiscal periods so settlement and payroll agree.",
+      "paymentKind": "Non-cash earnings retain the configured statutory treatment but do not pay their value as cash.",
+      "nonCashAccountId": "Use a prepaid asset or provider clearing liability. Payroll debits benefit expense and credits this account; provider purchases must use the same clearing account to avoid counting expense twice.",
+      "zonedDateTime": "Enter an ISO timestamp with Z or an explicit offset, such as 2026-10-01T09:00:00-04:00. The offset is preserved.",
+      "ianaTimezone": "Enter an IANA time zone, such as America/Toronto."
     },
     "options": {
       "usageAggregation": {
@@ -4200,6 +4231,14 @@
       "benefitPeriodBasis": {
         "calendar": "Calendar",
         "fiscal": "Fiscal"
+      },
+      "payPaymentKind": {
+        "cash": "Cash earnings",
+        "nonCash": "Non-cash benefit"
+      },
+      "retentionRegions": {
+        "all": "All regions",
+        "countries": "Selected countries"
       }
     },
     "payroll": {
@@ -5065,6 +5104,11 @@
         "actionDone": "Review closes",
         "actionReview": "Open close workspace"
       }
+    },
+    "structuredFields": {
+      "row": "Row {number}",
+      "addRow": "Add row",
+      "removeRow": "Remove row"
     }
   },
   "flows": {

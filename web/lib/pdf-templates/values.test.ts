@@ -20,6 +20,7 @@ interface StubRow {
 }
 
 const state = {
+  nonCashBenefit: false,
   ytdQuery: '',
   ytdValues: [] as unknown[],
   stub: {
@@ -59,6 +60,7 @@ const harness = {
         rows: [
           { kind: 'earning', description: 'Regular', hours: '80', rate: '50', amount: '4000.0000' },
           { kind: 'deduction', description: 'Federal income tax', hours: null, rate: null, amount: '312.3100' },
+          ...(state.nonCashBenefit ? [{ kind: 'earning', description: 'Gift card', hours: null, rate: null, amount: '100.0000', payment_kind: 'non_cash' }] : []),
         ],
       }
     }
@@ -217,4 +219,30 @@ test('US pay-stub YTD income tax aggregates persisted income-tax lines and prese
   assert.equal(record.values.ytd_tax, '$312.31')
   assert.equal(record.values.ytd_gross, '$4,000.00')
   assert.equal(record.values.ytd_net, '$3,281.69')
+})
+
+
+test('pay-stub benefits reconcile reported gross to cash earnings without increasing the persisted cash payment', async () => {
+  state.nonCashBenefit = true
+  const previousGross = state.stub.gross
+  state.stub.gross = '4100.0000'
+  try {
+    const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id, null)
+    assert.ok(record)
+    assert.equal(record.values.gross, '$4,100.00')
+    assert.equal(record.values.non_cash_earnings, '$100.00')
+    assert.equal(record.values.cash_gross, '$4,000.00')
+    assert.equal(record.values.net_pay, '$3,281.69', 'the PDF uses persisted cash net rather than paying the benefit again')
+    assert.equal(record.values.has_non_cash_earnings, true)
+    const earnings = record.values.earnings as Array<{ description: string; non_cash: boolean }>
+    assert.equal(earnings.find(line => line.description === 'Gift card')?.non_cash, true)
+  } finally {
+    state.nonCashBenefit = false
+    state.stub.gross = previousGross
+  }
+  const cashRecord = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id, null)
+  assert.ok(cashRecord)
+  assert.equal(cashRecord.values.non_cash_earnings, '$0.00')
+  assert.equal(cashRecord.values.cash_gross, cashRecord.values.gross)
+  assert.equal(cashRecord.values.has_non_cash_earnings, false)
 })

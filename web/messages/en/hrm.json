@@ -1273,7 +1273,9 @@
         "incentives": "Incentives",
         "payouts": "Payouts"
       }
-    }
+    },
+    "newEnrollment": "New enrolment",
+    "planSettings": "Plan settings"
   },
   "me": {
     "tabs": {
@@ -1538,18 +1540,18 @@
       "changeSubmit": "Save change",
       "changeFailed": "The change could not be recorded.",
       "awards": {
-        "paidTitle": "Delivered rewards",
-        "pendingTitle": "Awards awaiting payment",
-        "hint": "Delivered awards are already included in payroll pay. Pending awards are not payments.",
-        "paidEmpty": "No delivered rewards yet.",
-        "pendingEmpty": "No awards awaiting payment.",
+        "paidTitle": "Processed rewards",
+        "pendingTitle": "Pending rewards",
+        "hint": "Processed rewards are represented in payroll. Pending rewards are not proof of payment.",
+        "paidEmpty": "No processed rewards yet.",
+        "pendingEmpty": "No pending rewards.",
         "refusalTitle": "Awards unavailable",
         "program": "Program",
         "period": "Earned period",
         "value": "Value",
         "status": "Status",
-        "reversedTitle": "Reversed award payments",
-        "reversedEmpty": "No reversed award payments.",
+        "reversedTitle": "Rejected and reversed rewards",
+        "reversedEmpty": "No rejected or reversed rewards",
         "reversedStatus": "Reversed"
       }
     },
@@ -2538,7 +2540,8 @@
       "reward": "Reward",
       "allowance": "Allowance",
       "incentive": "Incentive",
-      "custom": "Custom"
+      "custom": "Custom",
+      "insured": "Insured plan"
     },
     "familyHints": {
       "reward": "One-off recognition: bonuses, gift cards, spot awards.",
@@ -2590,10 +2593,11 @@
     "awardStatus": {
       "draft": "Draft",
       "pending": "Pending approval",
-      "approved": "Approved",
-      "queued": "Queued for payout",
+      "approved": "Ready for payroll",
+      "queued": "Queued on a pay run",
       "delivered": "Delivered",
-      "voided": "Voided"
+      "voided": "Voided",
+      "rejected": "Rejected"
     },
     "columns": {
       "program": "Program",
@@ -2707,7 +2711,7 @@
       "chooseRecipient": "Choose a recipient",
       "chooseBasis": "Choose a basis",
       "basisHint": "Settlement and payroll must agree on the quarter, so the basis is part of the program.",
-      "externalHint": "Positive non-cash awards cannot be delivered until payroll supports their tax treatment. Create a cash payroll reward for a payable award.",
+      "externalHint": "External rewards use a non-cash earning component so payroll calculates tax without adding cash pay. Record provider fulfillment only after that linked payroll run is committed.",
       "reviewTitle": "Review the program",
       "reviewEmpty": "Nothing entered yet.",
       "reviewHint": "Creation lands as a draft; the detail drawer reads it back from the server.",
@@ -2721,13 +2725,13 @@
       "back": "Back",
       "next": "Next",
       "amountNoun": "Amount",
-      "componentPrerequisite": "Create an active earning component in Payroll Setup, then refresh options and select it. Its native payroll rules determine tax and posting treatment.",
+      "componentPrerequisite": "Create a cash or non-cash earning component matching the selected delivery method, then refresh these options.",
       "openPayrollSetup": "Open Payroll Setup",
       "accountsPrerequisite": "No postable measurement accounts are visible. Add the required accounts in the chart of accounts or ask finance to check legal-entity access, then refresh options.",
       "openAccounts": "Open chart of accounts",
       "refreshOptions": "Refresh options"
     },
-    "awardBuilderTitle": "New award",
+    "awardBuilderTitle": "New reward",
     "awardFields": {
       "program": "Program",
       "recipient": "Recipient",
@@ -2742,12 +2746,11 @@
       "recordReferencePlaceholder": "Provider confirmation or order number",
       "recordReferenceHint": "External delivery records this reference on the award."
     },
-    "awardCreate": "Record award",
-    "submitAward": "Submit for approval",
-    "approveAward": "Approve",
-    "queueAward": "Queue for payout",
-    "payrollDelivery": "Deliver through payroll",
-    "externalDelivery": "Record external delivery",
+    "awardCreate": "Create reward",
+    "submitAward": "Submit reward",
+    "queueAward": "Add to payroll",
+    "payrollDelivery": "Processed in payroll",
+    "externalDelivery": "Record fulfillment",
     "voidAward": "Void",
     "payrollInputLabel": "Payroll input",
     "payrollInputPlaceholder": "Existing payroll input id",
@@ -2806,6 +2809,32 @@
       "heroHint": "Employer-defined programs, value rules and effective dates.",
       "directoryTitle": "Benefits workspace",
       "payrollHint": "All recorded awards · currencies remain separate"
-    }
+    },
+    "newReward": "New reward",
+    "newIncentive": "New incentive",
+    "planCostsInRecord": "View plan pricing",
+    "readFailedTitle": "Programs could not be loaded",
+    "unknownType": "Unknown program type “{type}”. Choose a type from the filter.",
+    "approvalControls": {
+      "title": "Approval controls",
+      "openFlows": "Open Flows",
+      "hint": "Flows applies the configured approval stages and conditions for this program.",
+      "unconfigured": "No Benefits approval policy is configured. Configure Flows before submitting rewards.",
+      "policiesHint": "Enabled policies are evaluated when a reward is submitted.",
+      "openApprovals": "Open Approvals",
+      "administratorRemedy": "Ask your company workflow administrator to configure or change approval policies.",
+      "unconfiguredStatus": "No Benefits approval policy is configured.",
+      "modes": {
+        "none": "No approvals required",
+        "flows": "Use Flows approvals"
+      },
+      "noneHint": "Authorized submissions become ready for payroll. No workflow configuration or approver is required."
+    },
+    "externalPayrollProcessed": "Processed in payroll · awaiting fulfillment",
+    "openPayRun": "Open pay run",
+    "directProcessingHint": "Flows authorized direct processing; this reward is ready for payroll.",
+    "rewardProgramPrerequisite": "Create and activate a reward or allowance program before recording a reward.",
+    "createRewardProgram": "Create reward program",
+    "noApprovalSubmissionHint": "No approvals required. The authorized submission was recorded; this reward is ready for payroll."
   }
 }

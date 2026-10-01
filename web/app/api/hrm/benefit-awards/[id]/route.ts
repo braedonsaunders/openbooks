@@ -2,7 +2,6 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
-  approveBenefitAward,
   createAdjustingAward,
   getBenefitAward,
   queueAwardForPayRun,
@@ -23,7 +22,7 @@ import { benefitAwardPatchBody } from "../bodies";
 export const runtime = "nodejs";
 
 /**
- * One award's lifecycle: submit, approve (second actor), queue for payout,
+ * One reward's lifecycle: native workflow submission, payroll queue,
  * record payroll or external delivery, or void with a reason. The grant
  * follows the move — HR authors with hrm.benefits.manage, finance releases
  * payout with payroll.manage — enforced again inside the engine.
@@ -62,10 +61,6 @@ export const PATCH = defineRoute({
       switch (body.action) {
         case "submit": {
           const award = await submitBenefitAward(base);
-          return NextResponse.json({ award });
-        }
-        case "approve": {
-          const award = await approveBenefitAward(base);
           return NextResponse.json({ award });
         }
         case "queue": {

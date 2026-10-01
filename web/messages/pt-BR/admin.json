@@ -1944,7 +1944,8 @@
     "deleted": "Excluído",
     "confirmDelete": "Excluir este registro? Esta ação não pode ser desfeita.",
     "validation": {
-      "required": "{field} é obrigatório"
+      "required": "{field} é obrigatório",
+      "invalidStructuredValue": "{field} contém um registro armazenado ilegível. Corrija a configuração antes de salvar."
     },
     "drawer": {
       "newTitle": "Novo {name}",
@@ -3508,7 +3509,33 @@
       "cohortKey": "Coorte",
       "biasTerms": "Termos sensíveis",
       "reviewMonths": "Cadência (meses)",
-      "customerSku": "Código de produto do cliente"
+      "customerSku": "Código de produto do cliente",
+      "paymentKind": "Forma de entrega",
+      "nonCashAccountId": "Conta de compensação de benefício não monetário",
+      "family": "Família do programa",
+      "legalEntityId": "Entidade legal",
+      "deliveryMethod": "Entrega",
+      "valuation": "Avaliação",
+      "metric": "Medido a partir de",
+      "metricScope": "Alcance da medição",
+      "allocation": "Rateio",
+      "percentRate": "Taxa percentual",
+      "fixedAmount": "Valor fixo",
+      "capAmount": "Teto por destinatário",
+      "budgetAmount": "Orçamento do fundo",
+      "thresholdAmount": "Limite de pagamento",
+      "periodBasis": "Base do período",
+      "paymentDelayDays": "Dias do fim do período ao pagamento",
+      "programId": "Programa de benefícios",
+      "weightBps": "Peso em pontos-base",
+      "employmentId": "Vínculo empregatício",
+      "role": "Função",
+      "startsAt": "Início",
+      "endsAt": "Fim",
+      "default_on": "Incluída por padrão",
+      "applies_to": "Cobertura regional",
+      "countries": "Países",
+      "timezone": "Fuso horário"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
@@ -3604,13 +3631,13 @@
       "hrmKitInstructions": "Orientação ao painel, impressa em cada veredito.",
       "hrmKitScale": "Ao menos duas das chaves strong_no, no, yes, strong_yes.",
       "hrmKitStage": "O roteiro vale para esta etapa, ou todas se vazio.",
-      "hrmPoolAvailability": "Janelas como lista JSON com startsAt, endsAt e timezone.",
+      "hrmPoolAvailability": "Adicione janelas de disponibilidade com deslocamentos explícitos e o fuso usado no agendamento.",
       "hrmPoolKit": "Roteiro base para as sessões deste grupo.",
       "hrmQuestionAttribute": "Vincula a pergunta a um atributo deste roteiro.",
       "hrmRetentionLeadDays": "Dias antes para pedir prorrogação; vazio não envia e-mail.",
-      "hrmRetentionScope": "Região como JSON: applies_to all ou countries com códigos.",
+      "hrmRetentionScope": "Escolha todas as regiões ou os códigos de país cobertos por esta regra de retenção.",
       "hrmTemplateBody": "Texto com marcadores para os dados da oferta.",
-      "hrmTemplateClauses": "Cláusulas como lista JSON com key, label, body e default_on.",
+      "hrmTemplateClauses": "Adicione as cláusulas nomeadas disponíveis neste modelo de proposta.",
       "aiRailsZThreshold": "Sinaliza proventos além destes desvios-padrão da média (padrão 3).",
       "aiRailsRetroThreshold": "Sinaliza retroativos a partir deste valor (padrão 500).",
       "aiRailsCohort": "Agrupa funcionários por filial, departamento, calendário ou nível.",
@@ -3626,7 +3653,11 @@
       "benefitMetricScope": "Empresa mede a organização; departamento e projeto nomeiam suas linhas.",
       "benefitAllocation": "Igual divide igualmente; horas pondera por tempo; papel pelo papel do membro.",
       "benefitFrequency": "Frequência de medição: mensal, trimestral, anual, conclusão do projeto ou manual.",
-      "benefitPeriodBasis": "Programas trimestrais e anuais nomeiam períodos de calendário ou de exercício."
+      "benefitPeriodBasis": "Programas trimestrais e anuais nomeiam períodos de calendário ou de exercício.",
+      "paymentKind": "Os benefícios não monetários mantêm o tratamento tributário configurado, mas seu valor não é pago em dinheiro.",
+      "nonCashAccountId": "Use um ativo pré-pago ou um passivo de compensação do fornecedor. As compras do fornecedor devem usar a mesma conta para evitar contabilizar a despesa duas vezes.",
+      "zonedDateTime": "Digite uma data e hora ISO com Z ou deslocamento explícito, como 2026-10-01T09:00:00-04:00. O deslocamento é preservado.",
+      "ianaTimezone": "Digite um fuso horário IANA, como America/Sao_Paulo."
     },
     "options": {
       "usageAggregation": {
@@ -4200,6 +4231,14 @@
       "benefitPeriodBasis": {
         "calendar": "Calendário",
         "fiscal": "Exercício"
+      },
+      "payPaymentKind": {
+        "cash": "Remuneração em dinheiro",
+        "nonCash": "Benefício não monetário"
+      },
+      "retentionRegions": {
+        "all": "Todas as regiões",
+        "countries": "Países selecionados"
       }
     },
     "payroll": {
@@ -5065,6 +5104,11 @@
         "actionDone": "Revisar fechamentos",
         "actionReview": "Abrir workspace de fechamento"
       }
+    },
+    "structuredFields": {
+      "row": "Linha {number}",
+      "addRow": "Adicionar linha",
+      "removeRow": "Remover linha"
     }
   },
   "flows": {

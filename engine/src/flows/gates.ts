@@ -20,6 +20,7 @@ import {
 } from "./targets.ts";
 import { activeDelegationPrincipal, activeDelegationPrincipals } from "./delegations.ts";
 import { emailActionUrls } from "./email-tokens.ts";
+import { lockFlowSubjectDecision } from "./decision-lock.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
@@ -462,11 +463,13 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
     }
   }
 
-  // -- Serialized decision: one xact lock per run holds through the flip →
-  // quorum → cancel → resume → release sequence, so concurrent deciders can
+  // -- Serialized decision: a subject lock coordinates every governing policy,
+  // then a run lock holds through flip → quorum → cancel → resume → release.
+  // Concurrent deciders can
   // never both resume (double-post) and the whole decision is atomic (a crash
   // rolls back to a still-pending gate, safely re-decidable). ----------------
   return withOrg(pre.orgId, async () => {
+    await lockFlowSubjectDecision(pre.orgId, pre.subjectKind, pre.subjectId);
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
 
     // Whole-decision savepoint: withOrg joins an ambient transaction when the
@@ -1266,10 +1269,11 @@ export async function delegateGate(
   // One atomic unit: the reassignment, the delegate's notice, and the audit
   // evidence commit together, so a hand-off that changes who may release the
   // document can never persist without its actor-attributed trail.
-  // The same per-run lock decide/escalate hold: a concurrent decide that
+  // The same subject-then-run locks decide/escalate hold: a concurrent decide that
   // flips pending → decided must win, and this write must then match zero
   // rows and refuse — never notify/audit a delegation that did not land.
   await withOrg(gate.orgId, async () => {
+    await lockFlowSubjectDecision(gate.orgId, gate.subjectKind, gate.subjectId);
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${gate.runId}))`);
     try {
       const delegated = await db
@@ -1541,11 +1545,12 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   const pre = await withBypassContext(() => loadGate(gateId));
   if (!pre || pre.status !== "pending") return false;
 
-  // Serialize with decisions on the same run via the shared per-run xact lock:
+  // Serialize against decisions and cancellations for every policy on this subject:
   // an escalation and a decision can never interleave, so replacement rows
   // inserted here are always visible to a concurrent quorum resolution (and a
   // decision that resolves the node first leaves nothing here to escalate).
   return withOrg(pre.orgId, async () => {
+    await lockFlowSubjectDecision(pre.orgId, pre.subjectKind, pre.subjectId);
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
     const gate = await loadGate(gateId, pre.orgId);
     if (!gate || gate.status !== "pending") return false;

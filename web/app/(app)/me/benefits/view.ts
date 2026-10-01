@@ -93,7 +93,7 @@ export function meBenefitsSpec(data: MeBenefitsPageData): PageSpec {
               column(f('awardsText.program'), text(item('programName'))),
               column(f('awardsText.period'), text(item('periodLabel'))),
               column(f('awardsText.value'), text(item('valueLabel')), { align: 'right', className: 'tabular-nums' }),
-              column(f('awardsText.status'), badge(item('statusLabel'), { variant: 'outline' })),
+              column(f('awardsText.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
             ], empty: { title: f('awardsText.reversedEmpty') },
           }),
           ]),

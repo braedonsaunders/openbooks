@@ -1,10 +1,11 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Alert, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
@@ -26,8 +27,8 @@ import {
  * exactly as typed; the award service canonicalizes it and refuses
  * duplicates by source key, so a retried submit lands once. Delivery never
  * edits net pay: payroll programs settle through payroll inputs, external
- * programs retain their provider evidence pending supported non-cash tax
- * treatment. A provider reference alone never marks a payable award delivered.
+ * programs use non-cash payroll inputs for tax treatment and retain
+ * their provider fulfillment evidence. A provider reference alone never marks a payable award delivered.
  */
 
 function FieldError({ id, message }: { id: string; message: string | undefined }) {
@@ -184,6 +185,11 @@ export function AwardBuilderDrawer({
             ))}
           </Select>
           <FieldError id="award-builder-programId-error" message={errors.programId} />
+          {programOptions.length === 0 ? <Alert className="mt-2 flex flex-col gap-2">
+            <p>{t('portfolio.rewardProgramPrerequisite')}</p>
+            <div><Button asChild variant="outline" size="sm"><Link href="/hrm/benefits?view=programs&program=new&family=reward">{t('portfolio.createRewardProgram')}</Link></Button></div>
+            <div><Button variant="outline" size="sm" onClick={() => router.refresh()}>{t('portfolio.builder.refreshOptions')}</Button></div>
+          </Alert> : null}
         </div>
         <div>
           <Label htmlFor="award-builder-recipient">{t('portfolio.awardFields.recipient')}</Label>

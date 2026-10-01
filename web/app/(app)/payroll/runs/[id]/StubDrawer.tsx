@@ -11,6 +11,7 @@ import { Button, Drawer, FieldHelp, cn } from '@openbooks/ui'
 import { MoneyInput, moneyFieldError } from '../../../../../components/money-input'
 import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 import { type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
+import { add, cmp, neg, sum } from '@openbooks/engine/money'
 
 /** One employee's stub — the house flyout: header facts, pay lines, the T4127
  * factor trace, and the variance flag, with the paystub PDF one click away.
@@ -53,6 +54,7 @@ export function StubDrawer({
   const t = useTranslations('payroll')
   const tCommon = useTranslations('common')
   const held = withholding(stub, buckets)
+  const nonCash = sum(stub.lines.filter(line => line.kind === 'earning' && line.payment_kind === 'non_cash').map(line => line.amount))
   // The trace heads the filing regime the numbers were computed under
   // (T4127 for CA, Pub 15-T for US) — never a hardcoded country.
   const traceEngine = traceEngines[stub.country ?? ''] ?? Object.values(traceEngines)[0] ?? ''
@@ -141,6 +143,10 @@ export function StubDrawer({
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <HeaderFact label={regionLabel}>{stub.province}</HeaderFact>
           <HeaderFact label={t('columns.gross')}>{fmt(stub.gross)}</HeaderFact>
+          {cmp(nonCash, '0') !== 0 && <>
+            <HeaderFact label={t('run.stub.nonCash')}>{fmt(nonCash)}</HeaderFact>
+            <HeaderFact label={t('run.stub.cashGross')}>{fmt(add(stub.gross, neg(nonCash)))}</HeaderFact>
+          </>}
           <HeaderFact label={t('columns.net')}>{fmt(stub.net_pay)}</HeaderFact>
           {buckets.map((bucket, index) => (
             <HeaderFact key={bucket.code} label={bucket.label}>{fmt(held.amounts[index] ?? '0')}</HeaderFact>
@@ -167,6 +173,7 @@ export function StubDrawer({
                   </SharedTableCell>
                   <SharedTableCell className="py-1 pr-2">
                     {line.description}
+                    {line.payment_kind === 'non_cash' && <span className="ml-1 text-xs text-slate-500 dark:text-slate-400">{t('run.stub.nonCash')}</span>}
                     {(line.project_name || line.department_name) && (
                       <span className="ml-1 text-xs text-slate-400">
                         {[line.project_name, line.department_name].filter(Boolean).join(' · ')}
