@@ -43,9 +43,7 @@ const TABS: CrmSetupTab[] = [
   "accountStatuses",
   "opportunityStatuses",
   "sources",
-  "territories",
-  "teams",
-  "quotas",
+
 ];
 
 const COLUMNS: Record<CrmSetupTab, string[]> = {

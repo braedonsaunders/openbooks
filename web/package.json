@@ -48,6 +48,7 @@
     "grapesjs": "^0.22.16",
     "jszip": "^3.10.1",
     "lucide-react": "^1.24.0",
+    "maplibre-gl": "^6.11.2",
     "next": "16.3.4",
     "next-intl": "^4.13.2",
     "pdf-lib": "^1.17.1",
@@ -61,6 +62,8 @@
     "sharp": "0.35.4",
     "sonner": "^2.0.7",
     "ssh2": "^1.17.0",
+    "terra-draw": "^1.35.0",
+    "terra-draw-maplibre-gl-adapter": "^1.4.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

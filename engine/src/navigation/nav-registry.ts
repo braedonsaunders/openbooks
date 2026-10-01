@@ -157,12 +157,14 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'crm-forecasts',
     href: '/crm/forecasts',
-    label: 'Forecasts & Quotas',
+    label: 'Forecasts',
     iconKey: 'target',
     group: 'customers',
     subgroup: 'pipeline',
     requiredPermission: 'crm.forecasts.read',
   },
+
+  { key: 'crm-sales', href: '/crm/sales', label: 'Sales', iconKey: 'users', group: 'customers', subgroup: 'sell-collect', requiredPermissionsAny: ['crm.setup.manage', 'crm.forecasts.read'] },
 
   // Customer records and the sell-to-collect workflow.
   {

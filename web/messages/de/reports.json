@@ -963,6 +963,14 @@
         "label": "Auftragsprognose",
         "description": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung."
       },
+      "sales_evidence": {
+        "label": "Sales evidence",
+        "description": "Immutable attributed sales credits and reversals, including historical attribution gaps."
+      },
+      "sales_quota_attainment": {
+        "label": "Sales quota attainment",
+        "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "Leistungseingaben für die Lohnabrechnung",
         "description": "Monatliche Deckungsbeträge, Arbeitnehmerabzüge, Arbeitgeberbeiträge und zugehörige Abrechnungsläufe."
@@ -2261,6 +2269,37 @@
         "month": "Monat",
         "bill_status": "Abrechnungsstatus",
         "cost_status": "Arbeitskostenstatus"
+      },
+      "sales_evidence": {
+        "id": "Evidence key",
+        "source_id": "Source record",
+        "source_kind": "Source kind",
+        "source_number": "Source number",
+        "employee": "Employee",
+        "employee_id": "Employee key",
+        "team": "Team",
+        "effective_date": "Effective date",
+        "metric": "Measure",
+        "event_kind": "Event",
+        "currency": "Currency",
+        "amount": "Amount"
+      },
+      "sales_quota_attainment": {
+        "id": "Quota key",
+        "name": "Quota",
+        "target": "Target",
+        "employee_id": "Employee key",
+        "sales_team_id": "Team key",
+        "parent_quota_id": "Parent quota",
+        "supersedes_id": "Replaces quota",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "lifecycle": "Lifecycle",
+        "metric": "Measure",
+        "currency": "Currency",
+        "amount": "Target amount",
+        "actual": "Actual",
+        "attainment": "Attainment percent"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "Deckung ab",

@@ -120,6 +120,8 @@ export const TENANT_TABLE_POLICIES = {
   "crm_opportunity_stage_events": "clone:catalog-uuid-rebase",
   "crm_opportunity_statuses": "clone:catalog-uuid-rebase",
   "crm_opportunity_team_members": "clone:catalog-uuid-rebase",
+  "crm_sales_evidence": "clone:catalog-uuid-rebase",
+  "crm_sales_territory_versions": "skip:no-copy",
   "crm_sales_quotas": "clone:catalog-uuid-rebase",
   "crm_sales_team_members": "clone:catalog-uuid-rebase",
   "crm_sales_teams": "clone:catalog-uuid-rebase",

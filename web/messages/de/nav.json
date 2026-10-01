@@ -51,7 +51,7 @@
     "compliance-vendors": "Subunternehmer",
     "continuous-close": "Abschlussmonitor",
     "crm-activities": "Aktivitäten",
-    "crm-forecasts": "Prognosen & Ziele",
+    "crm-forecasts": "Forecasts",
     "crm-opportunities": "Verkaufschancen",
     "customers": "Kunden",
     "dashboard": "Dashboard",
@@ -130,6 +130,11 @@
     "hrm-performance-talent": "Talent & Nachfolge",
     "hrm-performance-retention": "Bindung",
     "hrm-performance-settings": "Leistungseinstellungen",
+    "crm-sales": "Sales",
+    "crm-sales-representatives": "Representatives",
+    "crm-sales-teams": "Teams",
+    "crm-sales-quotas": "Quotas",
+    "crm-sales-territories": "Territories",
     "hrm-benefits-programs": "Programme",
     "hrm-benefits-enrolments": "Teilnahmen",
     "hrm-benefits-windows": "Anmeldezeiträume",
@@ -188,6 +193,7 @@
     "inventory-views": "Bestand",
     "inbox-views": "Posteingang",
     "me-views": "Ich",
+    "crm-sales": "Sales",
     "hrm-compensation": "Vergütung"
   },
   "modulesShort": {
@@ -221,6 +227,7 @@
     "setup-tax-depreciation": "Steuerliche Abschreibung",
     "setup-overhead": "Gemeinkosten",
     "setup-payments": "Zahlungen & Banking",
+    "crm-sales": "Sales",
     "hrm-compensation": "Vergütung"
   }
 }

@@ -101,6 +101,9 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
 }
 
 export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
+  { id: 'crm-sales', label: 'Sales', feature: 'salesManagement', tabs: [
+    ...['overview', 'representatives', 'teams', 'quotas', 'territories'].map((tab) => ({ href: tab==='overview'?'/crm/sales':`/crm/sales/${tab}`, ns: 'crm', key: `sales.tabs.${tab}`, permissionsAny: ['crm.setup.manage', 'crm.forecasts.read'], carry: ['periodStart', 'periodEnd'] })),
+  ] },
   ...Object.entries(HRM_LOCAL_NAVIGATION).map(([id, tabs]) => ({ id: `hrm-${id}`, label: ({ people: 'Employees', hiring: 'Hiring', timeOff: 'Time Off', talent: 'Talent', compensation: 'Compensation', rewards: 'Benefits' } as Record<string, string>)[id]!, feature: 'hrm', tabs })),
   { id: 'time', label: 'Time', feature: 'timeTracking', tabs: [
     { href: '/timesheets', ns: 'timesheets', key: 'field.timesheetsTab', label: 'Timesheets', permission: 'time.read' },

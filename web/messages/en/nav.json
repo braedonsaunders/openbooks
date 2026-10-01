@@ -51,7 +51,7 @@
     "compliance-vendors": "Subcontractors",
     "continuous-close": "Agents",
     "crm-activities": "Activities",
-    "crm-forecasts": "Forecasts & Quotas",
+    "crm-forecasts": "Forecasts",
     "crm-opportunities": "Opportunities",
     "customers": "Customers",
     "dashboard": "Dashboard",
@@ -130,6 +130,11 @@
     "hrm-performance-talent": "Talent & succession",
     "hrm-performance-retention": "Retention",
     "hrm-performance-settings": "Performance settings",
+    "crm-sales": "Sales",
+    "crm-sales-representatives": "Representatives",
+    "crm-sales-teams": "Teams",
+    "crm-sales-quotas": "Quotas",
+    "crm-sales-territories": "Territories",
     "hrm-benefits-programs": "Programs",
     "hrm-benefits-enrolments": "Enrollments",
     "hrm-benefits-windows": "Enrollment windows",
@@ -193,6 +198,7 @@
     "inventory-views": "Inventory",
     "inbox-views": "Inbox",
     "me-views": "Me",
+    "crm-sales": "Sales",
     "hrm-compensation": "Compensation"
   },
   "localWorkspaces": {
@@ -221,6 +227,7 @@
     "setup-tax-depreciation": "Tax Depreciation",
     "setup-overhead": "Overhead",
     "setup-payments": "Payments & Banking",
+    "crm-sales": "Sales",
     "hrm-compensation": "Compensation"
   }
 }

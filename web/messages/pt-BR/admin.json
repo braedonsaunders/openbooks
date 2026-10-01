@@ -5617,6 +5617,14 @@
     "aiGovernanceLedger": {
       "title": "Registro de governança de IA",
       "description": "Espelho de capacidades, log imutável, avisos e cadência."
+    },
+    "salesManagement": {
+      "description": "Employee representatives, sales teams, approved quotas and dated territories.",
+      "title": "Sales management"
+    },
+    "geographicTerritories": {
+      "description": "Country, province/state and county boundaries with drawn coverage and verified customer locations.",
+      "title": "Geographic territories"
     }
   },
   "backupsManager": {
