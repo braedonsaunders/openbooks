@@ -73,6 +73,8 @@ test('compact Talent defaults preserve stored navigation and deliberate placemen
   assert.deepEqual(result, before)
   assert.deepEqual(saved, before)
   const calibration = details.find((item) => item.kind === 'module' && item.moduleKey === 'hrm-performance-calibration')!
+  assert.equal(calibration.kind, 'module')
+  if (calibration.kind !== 'module') throw new Error('Calibration must be a module navigation item')
   assert.equal(isDefaultLocalNavigationItem('hrm', { ...calibration, placement: 'custom' }), false)
   assert.equal(isDefaultLocalNavigationItem('custom-work', calibration), false)
   assert.equal(isDefaultLocalNavigationItem('hrm', { kind: 'link', href: '/hrm/performance?tab=calibration', label: 'Calibration shortcut' }), false)
