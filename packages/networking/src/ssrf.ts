@@ -348,9 +348,15 @@ export async function guardedFetch(
   const target = new URL(req.url);
   const verified = await resolveVerifiedAddresses(target, opts.lookup);
   const pinned = verified[0]!;
-  const family = isIP(stripIpv6Brackets(pinned));
-  const pinnedLookup: LookupFunction = (_hostname, _options, callback) => {
-    callback(null, pinned, family === 6 ? 6 : 4);
+  const family = isIP(stripIpv6Brackets(pinned)) === 6 ? 6 : 4;
+  const pinnedLookup: LookupFunction = (_hostname, options, callback) => {
+    // Node's automatic family selection requests all addresses. Honor its
+    // callback shape while keeping the socket pinned to the verified target.
+    if (options.all) {
+      callback(null, [{ address: pinned, family }]);
+    } else {
+      callback(null, pinned, family);
+    }
   };
 
   const headers: Record<string, string> = {};

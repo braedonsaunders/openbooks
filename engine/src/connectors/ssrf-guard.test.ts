@@ -238,3 +238,40 @@ test("guardedFetch pins the request to the public address checked before a DNS r
   assert.equal(dnsReads, 1, "connection must not re-resolve the hostname");
   assert.equal(socketAddress, "93.184.216.34", "socket lookup must use the address that passed validation");
 });
+
+for (const [pinned, family] of [["93.184.216.34", 4], ["2606:4700:4700::1111", 6]] as const) {
+  for (const all of [false, true]) {
+    test(`guardedFetch preserves the verified IPv${family} address when socket lookup all=${all}`, async () => {
+      let dnsReads = 0;
+      let callbacks = 0;
+      const response = Readable.from([]) as IncomingMessage;
+      Object.assign(response, { statusCode: 200, statusMessage: "OK", headers: {} });
+      const result = await guardedFetch("https://connector.example/resource", {}, {
+        lookup: async () => {
+          dnsReads += 1;
+          return dnsReads === 1 ? [pinned, "1.1.1.1"] : ["10.0.0.7"];
+        },
+        request: (_url, options, onResponse) => {
+          options.lookup!("connector.example", { all }, (error, address, resolvedFamily) => {
+            callbacks += 1;
+            assert.equal(error, null);
+            if (all) {
+              assert.deepEqual(address, [{ address: pinned, family }]);
+            } else {
+              assert.equal(address, pinned);
+              assert.equal(resolvedFamily, family);
+            }
+          });
+          queueMicrotask(() => onResponse(response));
+          return Object.assign(new EventEmitter(), {
+            write: () => true,
+            end: () => undefined as unknown as ClientRequest,
+          }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
+        },
+      });
+      assert.equal(result.status, 200);
+      assert.equal(callbacks, 1, "the socket must receive exactly one lookup result");
+      assert.equal(dnsReads, 1, "the socket must not resolve an unverified replacement address");
+    });
+  }
+}
