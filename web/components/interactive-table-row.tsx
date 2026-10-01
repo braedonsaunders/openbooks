@@ -42,7 +42,8 @@ export function InteractiveTableRow({
   const hasInteractiveChild = containsInteractiveControl(children)
   const handleClick = (event: MouseEvent<HTMLTableRowElement>) => {
     const target = event.target as Element | null
-    if (target !== event.currentTarget && target?.closest?.(ACTION_DESCENDANT)) return
+    const action = target?.closest?.(ACTION_DESCENDANT)
+    if (target !== event.currentTarget && action && action !== event.currentTarget) return
     onClick?.(event)
   }
 

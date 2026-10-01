@@ -72,13 +72,33 @@ export type SalesRecord = {
   is_sales_rep?: boolean;
   sales_rep_since?: string | null;
   employee_number?: string | null;
+  job_title?: string | null;
+  department_name?: string | null;
+  repSummary?: {
+    customers: number | null;
+    openOpportunities: number | null;
+    teams: number;
+    quotas: number;
+  };
 };
 export type SalesOption = {
   id: string;
   name: string;
   subsidiary_id: string | null;
 };
+export type SalesCustomerLocation = {
+  id: string;
+  name: string;
+  longitude: number;
+  latitude: number;
+  employeeId: string | null;
+  territoryId: string | null;
+};
 export type SalesWorkspaceData = {
+  departments: SalesOption[];
+  customerLocations: SalesCustomerLocation[];
+  customerLocationStats: { total: number; located: number };
+  mapTerritories: SalesRecord[];
   reports: { quota: string; evidence: string };
   quotaOptions: (SalesOption & {
     lifecycle: string;

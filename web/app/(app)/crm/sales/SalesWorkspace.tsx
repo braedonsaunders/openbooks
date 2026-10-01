@@ -3,7 +3,14 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Badge, Button, EmptyState, Input, PageHeader } from "@openbooks/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+} from "@openbooks/ui";
 import type {
   SalesRecord,
   SalesWorkspaceData,
@@ -198,7 +205,19 @@ export function SalesWorkspace({
             actions={
               data.canManage && data.page !== "overview" ? (
                 <Button onClick={() => router.push(href({ row: "new" }))}>
-                  {t(data.page === "representatives" ? "designate" : "new")}
+                  {t(
+                    (
+                      {
+                        representatives: "designate",
+                        teams: "newTeam",
+                        quotas: "newQuota",
+                        territories: "newTerritory",
+                      } as const
+                    )[
+                      data.page as
+                        "representatives" | "teams" | "quotas" | "territories"
+                    ],
+                  )}
                 </Button>
               ) : undefined
             }
@@ -212,6 +231,53 @@ export function SalesWorkspace({
                 aria-label={t("search")}
                 className="max-w-sm"
               />
+              {data.page === "territories" ? (
+                <>
+                  <input
+                    type="hidden"
+                    name="view"
+                    value={params.view ?? "list"}
+                  />
+                  {(
+                    [
+                      [
+                        "department",
+                        "department",
+                        "allDepartments",
+                        data.departments,
+                      ],
+                      ["salesTeam", "team", "allTeams", data.teams],
+                      [
+                        "subsidiary",
+                        "legalEntity",
+                        "allEntities",
+                        data.subsidiaries,
+                      ],
+                      [
+                        "salesRep",
+                        "representative",
+                        "allRepresentatives",
+                        data.representatives,
+                      ],
+                    ] as const
+                  ).map(([key, label, all, options]) => (
+                    <Select
+                      key={key}
+                      name={key}
+                      aria-label={t(label)}
+                      defaultValue={params[key] ?? ""}
+                      className="max-w-48"
+                    >
+                      <option value="">{t(all)}</option>
+                      {options.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </Select>
+                  ))}
+                </>
+              ) : null}
               <Button variant="outline" type="submit">
                 {t("search")}
               </Button>
@@ -372,8 +438,27 @@ export function SalesWorkspace({
           {data.page === "territories" &&
           params.view === "map" &&
           data.mapEnabled ? (
+            <p className="text-xs text-slate-500">
+              {t("customerMapSummary", {
+                shown: data.customerLocations.length,
+                located: data.customerLocationStats.located,
+                missing:
+                  data.customerLocationStats.total -
+                  data.customerLocationStats.located,
+              })}{" "}
+              ·{" "}
+              {t("territoryMapSummary", {
+                shown: data.mapTerritories.length,
+                total: data.total,
+              })}
+            </p>
+          ) : null}
+          {data.page === "territories" &&
+          params.view === "map" &&
+          data.mapEnabled ? (
             <TerritoryMap
-              territories={data.rows}
+              territories={data.mapTerritories}
+              customers={data.customerLocations}
               onTerritoryClick={(id) => router.push(href({ row: id }))}
             />
           ) : (
@@ -393,13 +478,15 @@ export function SalesWorkspace({
               emptyAsRow
             />
           )}
-          <Pagination
-            basePath={base}
-            currentParams={params}
-            total={data.total}
-            page={data.currentPage}
-            perPage={data.perPage}
-          />
+          {data.total > 0 ? (
+            <Pagination
+              basePath={base}
+              currentParams={params}
+              total={data.total}
+              page={data.currentPage}
+              perPage={data.perPage}
+            />
+          ) : null}
         </>
       )}
       {(data.selected || data.creating) && data.page !== "overview" ? (

@@ -113,12 +113,10 @@ export function ListTable<T>({
                       // Buttons, links and inputs retain their own action; opening a
                       // record must not cover an action's result or refusal.
                       const target = event.target as Element | null
-                      if (
-                        target?.closest?.(
-                          'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [data-row-action]',
-                        )
+                      const action = target?.closest?.(
+                        'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [data-row-action]',
                       )
-                        return
+                      if (action && action !== event.currentTarget) return
                       onRowClick(row)
                     }
                   : undefined
