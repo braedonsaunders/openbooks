@@ -30,8 +30,8 @@ const checkboxClass =
 
 /**
  * A client-side searched + paginated table for data already loaded into the
- * flyout/page (repository conventions: ALL tables are paginated). For server-driven lists
- * use RecordListView / EntityListView instead.
+ * flyout/page. Registered server windows retain the domain reader's rows;
+ * RegisteredListTable owns their server pagination controls.
  */
 export function PagedTable<T>({
   rows,
@@ -139,6 +139,7 @@ export function PagedTable<T>({
               setQuery(e.target.value)
               setPage(0)
             }}
+            aria-label={t('actions.search')}
             placeholder={t('actions.search')}
             className="pl-8"
           />
@@ -152,6 +153,7 @@ export function PagedTable<T>({
           setQuery(e.target.value)
           setPage(0)
         }}
+        aria-label={t('actions.search')}
         placeholder={t('actions.search')}
         className="max-w-xs"
       />
