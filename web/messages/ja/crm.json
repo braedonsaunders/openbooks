@@ -565,6 +565,9 @@
     "removeRepTitle": "Remove this sales rep?",
     "removeRepBody": "Remove the employee’s sales-rep designation. Their employee record and sales history remain available. Active responsibilities must be reassigned first.",
     "nativeEmployee": "Employee profile",
+    "salesOverTime": "売上の推移",
+    "noSalesHistory": "過去12か月間に帰属する売上はありません。",
+    "salesTrendBasis": "過去12か月 · 成約と計上済み請求売上（取消を含む）。通貨ごとに表示します。",
     "repActivity": "Responsibilities",
     "repIdentity": "Employee details"
   }
