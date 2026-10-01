@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, matchesGlob, posix } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { rendererArchive } from "./install-pdf-browser.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -79,6 +80,20 @@ for (const [index, line] of dockerfile.split(/\r?\n/).entries()) {
   }
   if (stage) localStages.add(stage);
 }
+
+// Both native renderers must be immutable inputs. Image builds then exercise
+// the selected binary's version and PDF output as the non-root runtime user.
+for (const architecture of ["amd64", "arm64"]) rendererArchive(architecture);
+requirePattern(
+  dockerfile,
+  /RUN node install-pdf-browser\.mjs "\$TARGETARCH" \/opt\/chromium/,
+  "the native PDF browser is not installed through the checksum-verified installer",
+);
+requirePattern(
+  dockerfile,
+  /RUN su -s \/bin\/sh node -c 'node scripts\/verify-pdf-browser\.mjs'/,
+  "the production PDF renderer is not exercised as the runtime user",
+);
 
 // Validate host inputs against the tracked checkout, not ignored local files.
 // Docker still validates .dockerignore rules and the full build semantics.

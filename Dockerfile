@@ -56,6 +56,14 @@ RUN npx esbuild engine/src/sample-companies/cli.ts \
       --outfile=/out/sample-companies.mjs
 RUN node --check /out/sample-companies.mjs
 
+# --- PDF renderer: verified native browser archive -----------------------------
+FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS pdf-browser
+ARG TARGETARCH
+WORKDIR /browser-install
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates unzip
+COPY scripts/pdf-browser.json scripts/install-pdf-browser.mjs ./
+RUN node install-pdf-browser.mjs "$TARGETARCH" /opt/chromium
+
 # --- runtime ------------------------------------------------------------------
 FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS runtime
 WORKDIR /app
@@ -64,11 +72,11 @@ ARG OPENBOOKS_VERSION=development
 # Ship the renderer and deterministic multilingual fonts in the production
 # image so PDF availability and typography never depend on the host machine.
 # qpdf encrypts confidential record PDFs (pay stubs): neither renderer can
-# write an encrypted file, so encryption is a post-processing pass. Chromium
-# follows Debian's security suite because superseded browser builds are removed
-# from the repository; the fonts stay pinned for deterministic typography.
+# write an encrypted file, so encryption is a post-processing pass. The browser
+# uses Google's versioned native releases, checksum-pinned for both supported
+# architectures; the fonts stay pinned for deterministic typography.
 # The renderer runs sandboxed by default (packages/pdf/src/browser-pool.ts)
-# even though this image runs as non-root node: Debian Chromium sandboxes via
+# even though this image runs as non-root node: Chrome sandboxes via
 # unprivileged user namespaces, which needs no root. Swarm's default seccomp
 # profile denies the unshare the sandbox needs, so there the launch falls
 # back to --no-sandbox with a warning (or set OPENBOOKS_CHROMIUM_NO_SANDBOX=1
@@ -81,7 +89,10 @@ RUN apt-get update \
     # OS security fixes land without disturbing the pinned font set below.
     && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
-      chromium \
+      libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 \
+      libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 \
+      libgtk-3-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 \
+      libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
       qpdf \
       fonts-liberation=1:2.1.5-3 \
       fonts-noto-core=20201225-2 \
@@ -106,6 +117,8 @@ ENV NODE_ENV=production \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     HOSTNAME=0.0.0.0 \
     PORT=3000
+COPY --from=pdf-browser /opt/chromium /opt/chromium
+RUN ln -s /opt/chromium/chrome /usr/bin/chromium
 
 # Standalone output is rooted at the monorepo (outputFileTracingRoot):
 # node_modules + web/server.js + web/.next live inside it.
@@ -116,11 +129,13 @@ COPY --chown=node:node --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
 COPY --chown=node:node --from=build /out/worker.mjs ./scripts/worker.mjs
 # The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
 COPY --chown=node:node schema/migrations ./schema/migrations
+COPY --chown=node:node scripts/pdf-browser.json scripts/verify-pdf-browser.mjs ./scripts/
 RUN set -eu; \
     output=$(node scripts/worker.mjs 2>&1) && { echo "worker unexpectedly started without database credentials" >&2; exit 1; }; \
     printf '%s' "$output" | grep -Fq 'OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login'
 RUN NODE_ENV=test OPENBOOKS_DB_URL= node --conditions=react-server --input-type=module \
     -e "const entry = await import('./scripts/worker.mjs'); const transfer = await entry.loadDataTransferWorker(); if (typeof transfer.startDataTransferWorker !== 'function') throw new Error('Transfer worker startup did not load'); console.log('Deferred transfer runtime verified');"
+RUN su -s /bin/sh node -c 'node scripts/verify-pdf-browser.mjs'
 
 EXPOSE 3000
 # Database bootstrap is intentionally not part of this process: the web server

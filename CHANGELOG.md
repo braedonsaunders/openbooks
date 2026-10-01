@@ -6,6 +6,16 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.28.2] - 2026-10-01
+
+- Pin the production PDF browser to the patched official native release on
+  both AMD64 and ARM64. Verify archive integrity, browser version and actual
+  PDF output during image builds, independently of distribution package lag.
+- Include the English Enrollment wording and Benefits table-footer corrections
+  prepared in alpha.28.1.
+
+No additional migrations or operator configuration are required.
+
 ## [0.1.0-alpha.28.1] - 2026-10-01
 
 - Use Enrollment consistently throughout English Benefits buttons, headings,
