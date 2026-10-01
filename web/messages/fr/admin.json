@@ -1126,7 +1126,8 @@
     "hrm_surveys_manage": "Gérer les enquêtes",
     "time_clock": "Pointer sur le terrain",
     "time_crew_enter": "Saisir les lots d'équipe",
-    "time_kiosk_manage": "Gérer bornes et PIN"
+    "time_kiosk_manage": "Gérer bornes et PIN",
+    "hrm_org_chart_read": "Consulter l’organigramme"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -5063,7 +5064,10 @@
         "connectAction": "Connecter",
         "connectPlaceholder": "Choisir une étape…",
         "connectEmpty": "Il n’y a pas encore d’autre étape — ajoutez d’abord un nœud."
-      }
+      },
+      "ungatedOutcomeLabel": "Si aucune étape d’approbation ne s’applique",
+      "ungatedApply": "Appliquer immédiatement",
+      "ungatedRequireApproval": "Exiger une étape d’approbation"
     },
     "node": {
       "trigger": "Déclencheur",

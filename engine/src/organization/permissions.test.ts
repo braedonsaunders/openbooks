@@ -107,6 +107,7 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
  */
 test("hrm permissions are catalogued, grouped, and split between admin-only and every-role self keys", () => {
   const keys: CataloguePermission[] = [
+    "hrm.org_chart.read",
     "hrm.employment.read",
     "hrm.employment.manage",
     "hrm.employment.approve",
@@ -167,9 +168,9 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
   assert.ok(group, "hrm needs its own catalogue group for the role picker");
   assert.equal(group.labelKey, "permissions.groups.hrm");
   assert.deepEqual(group.permissions.map((entry) => entry.key), [
-    ...keys.slice(0, 18),
+    ...keys.slice(0, 19),
     ...selfKeys,
-    ...keys.slice(18),
+    ...keys.slice(19),
   ]);
 
   const holds = (role: string, perm: string) =>

@@ -30,9 +30,9 @@ import { tableScope } from "./subject-scope.ts";
  * Release is where the governed decision lands: the status flip plus the
  * decision snapshot plus the all-or-nothing canonical application happen in
  * releaseHrmChangeRequest, inside decideGate's savepoint — so a throw rolls
- * the whole decision back and the gate stays pending. Self-approval is
- * forbidden outright: independence of the decider is an HRM control, not a
- * tenant preference (period-close precedent).
+ * the whole decision back and the gate stays pending. Human approval requires an independent decider. Explicit automatic
+ * submission policies are applied by the native submission service without
+ * inventing a human approval or routing a gate to the author.
  */
 
 const REQUEST_STATUSES = [
@@ -47,6 +47,7 @@ const REQUEST_STATUSES = [
 export const hrmChangeRequestSubjectProfile: FlowSubjectProfile = {
   subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
   label: "Employment change request",
+  supportsUngatedSubmission: true,
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
   statuses: [...REQUEST_STATUSES],
@@ -55,6 +56,10 @@ export const hrmChangeRequestSubjectProfile: FlowSubjectProfile = {
     { key: "employmentId", label: "Employment", type: "text" },
     { key: "changeKind", label: "Change kind", type: "text" },
     { key: "status", label: "Status", type: "enum" },
+    { key: "changedFields", label: "Changed employment fields", type: "text" },
+    { key: "departmentId", label: "Proposed department", type: "text" },
+    { key: "managerEmploymentId", label: "Proposed manager", type: "text" },
+    { key: "effectiveFrom", label: "Effective date", type: "date" },
     { key: "expectedEmploymentRevision", label: "Expected employment revision", type: "number" },
     { key: "payloadDigest", label: "Payload digest", type: "text" },
     { key: "submittedBy", label: "Submitted by", type: "user" },
@@ -122,6 +127,10 @@ export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjec
         payloadDigest: request.payload_digest,
         submittedBy: request.submitted_by,
         reason: request.reason,
+        changedFields: Object.keys(payload).filter((key) => !['kind', 'assignmentKey', 'effectiveFrom', 'effectiveTo'].includes(key)),
+        departmentId: payload.departmentId ?? null,
+        managerEmploymentId: payload.managerEmploymentId ?? null,
+        effectiveFrom: payload.effectiveFrom ?? payload.effectiveDate ?? null,
         payload,
       },
       submitterUserId: request.submitted_by,

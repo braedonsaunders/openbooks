@@ -31,7 +31,7 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Alert, AlertDescription, AlertTitle, Button, EmptyState, cn } from '@openbooks/ui'
+import { Alert, AlertDescription, AlertTitle, Button, EmptyState, Label, Select, cn } from '@openbooks/ui'
 import {
   lintAutomationGraph,
   profileFieldIds,
@@ -104,6 +104,7 @@ export default function FlowBuilder({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [name, setName] = useState(flow.name)
   const [enabled, setEnabled] = useState(flow.enabled)
+  const [ungatedOutcome, setUngatedOutcome] = useState<'apply' | undefined>(flow.graph.ungatedOutcome)
   const [tab, setTab] = useState<'canvas' | 'runs'>('canvas')
   const [dirty, setDirty] = useState(false)
   const [revision, setRevision] = useState(flow.updatedAt)
@@ -125,8 +126,8 @@ export default function FlowBuilder({
 
   // Live author-time lint — same rules the server reports on save.
   const warnings = useMemo(
-    () => lintAutomationGraph(fromFlow(nodes, edges), profileFieldIds(profile), profile),
-    [nodes, edges, profile],
+    () => lintAutomationGraph(fromFlow(nodes, edges, ungatedOutcome), profileFieldIds(profile), profile),
+    [nodes, edges, profile, ungatedOutcome],
   )
 
   const markDirtyOnNodesChange = useCallback(
@@ -200,7 +201,7 @@ export default function FlowBuilder({
       const res = await fetch(`/api/admin/flows/${flow.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expectedUpdatedAt: revision, name: name.trim() || flow.name, graph: fromFlow(nodes, edges) }),
+        body: JSON.stringify({ expectedUpdatedAt: revision, name: name.trim() || flow.name, graph: fromFlow(nodes, edges, ungatedOutcome) }),
       })
       if (!res.ok) {
         const failure = (await res.json().catch(() => null)) as {
@@ -243,7 +244,7 @@ export default function FlowBuilder({
           expectedUpdatedAt: revision,
           enabled: next,
           ...(next && dirty
-            ? { name: name.trim() || flow.name, graph: fromFlow(nodes, edges) }
+            ? { name: name.trim() || flow.name, graph: fromFlow(nodes, edges, ungatedOutcome) }
             : {}),
         }),
       })
@@ -322,6 +323,13 @@ export default function FlowBuilder({
           </button>
           {t('builder.enabledToggle')}
         </label>
+        {profile.supportsUngatedSubmission && <div className="flex items-center gap-2">
+          <Label htmlFor="flow-ungated-outcome">{t('builder.ungatedOutcomeLabel')}</Label>
+          <Select id="flow-ungated-outcome" value={ungatedOutcome ?? ''} disabled={busy} onChange={(event) => { setUngatedOutcome(event.target.value === 'apply' ? 'apply' : undefined); markDirty() }}>
+            <option value="">{t('builder.ungatedRequireApproval')}</option>
+            <option value="apply">{t('builder.ungatedApply')}</option>
+          </Select>
+        </div>}
         <Button onClick={save} disabled={busy || !dirty}>
           <Save size={15} /> {t('builder.save')}
         </Button>

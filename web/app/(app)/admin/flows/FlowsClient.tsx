@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, SearchSelect, cn } from '@openbooks/ui'
+import { Button, Drawer, Input, Label, SearchSelect, Select, cn } from '@openbooks/ui'
 import { ApiResponseError, apiJson } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
 
@@ -14,7 +14,7 @@ import { confirmDialog } from '../../../../lib/confirm'
  * from the profiles API) and per-row enable/delete controls.
  */
 
-type ProfileOption = { subjectKind: string; label?: string; labelKey?: string }
+type ProfileOption = { subjectKind: string; label?: string; labelKey?: string; supportsUngatedSubmission?: boolean }
 
 export function NewFlowButton() {
   const t = useTranslations('admin.flows')
@@ -23,8 +23,11 @@ export function NewFlowButton() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [subjectKind, setSubjectKind] = useState('')
+  const [ungatedOutcome, setUngatedOutcome] = useState<'apply' | undefined>()
   const [profiles, setProfiles] = useState<ProfileOption[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const supportsDirect = profiles?.find(profile => profile.subjectKind === subjectKind)?.supportsUngatedSubmission === true
+
 
   function openDrawer() {
     setOpen(true)
@@ -37,6 +40,7 @@ export function NewFlowButton() {
               subjectKind: p.subjectKind,
               label: p.label,
               labelKey: p.labelKey,
+              supportsUngatedSubmission: p.supportsUngatedSubmission,
             })),
           ),
         )
@@ -52,7 +56,7 @@ export function NewFlowButton() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), subjectKind }),
+          body: JSON.stringify({ name: name.trim(), subjectKind, ...(supportsDirect && ungatedOutcome ? { ungatedOutcome } : {}) }),
         },
         t('new.failed'),
       )
@@ -105,9 +109,16 @@ export function NewFlowButton() {
               }))}
               placeholder={t('new.subjectPlaceholder')}
               loading={profiles === null}
-              onChange={setSubjectKind}
+              onChange={(value) => { setSubjectKind(value); setUngatedOutcome(undefined) }}
             />
           </div>
+          {supportsDirect && <div className="space-y-1.5">
+            <Label htmlFor="new-flow-ungated">{t('builder.ungatedOutcomeLabel')}</Label>
+            <Select id="new-flow-ungated" value={ungatedOutcome ?? ''} onChange={(event) => setUngatedOutcome(event.target.value === 'apply' ? 'apply' : undefined)}>
+              <option value="">{t('builder.ungatedRequireApproval')}</option>
+              <option value="apply">{t('builder.ungatedApply')}</option>
+            </Select>
+          </div>}
         </div>
       </Drawer>
     </>

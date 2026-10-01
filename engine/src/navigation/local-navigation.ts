@@ -57,7 +57,7 @@ export function applyLocalNavigationPreferences<T extends { href: string; label:
 export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 'rewards', LocalNavigationTab[]> = {
   people: [
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
-    { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.employment.read', 'hrm.self.read'] },
+    { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart', permissionsAny: ['hrm.org_chart.read', 'hrm.employment.read', 'hrm.self.read'] },
     { href: '/hrm/processes', ns: 'hrm', key: 'processes.title', permission: 'hrm.process.read', prefix: true },
     { href: '/hrm/processes/templates', ns: 'hrm', key: 'processes.templates.title', permission: 'hrm.process.manage', prefix: true },
     { href: '/hrm/documents', ns: 'hrm', key: 'home.tabs.documents', permission: 'hrm.documents.read', feature: 'hrmDocuments' },

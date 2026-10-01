@@ -1126,7 +1126,8 @@
     "hrm_surveys_manage": "管理调查",
     "time_clock": "外勤打卡",
     "time_crew_enter": "录入班组批次",
-    "time_kiosk_manage": "管理终端与PIN"
+    "time_kiosk_manage": "管理终端与PIN",
+    "hrm_org_chart_read": "查看组织结构图"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -5063,7 +5064,10 @@
         "connectAction": "连接",
         "connectPlaceholder": "选择一个步骤…",
         "connectEmpty": "还没有其他步骤 — 请先添加一个节点。"
-      }
+      },
+      "ungatedOutcomeLabel": "没有适用的审批步骤时",
+      "ungatedApply": "立即应用",
+      "ungatedRequireApproval": "必须有审批步骤"
     },
     "node": {
       "trigger": "触发器",

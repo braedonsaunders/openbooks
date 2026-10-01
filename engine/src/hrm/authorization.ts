@@ -791,7 +791,7 @@ export async function loadActorPartyId(
 }
 
 /**
- * Org-chart read: anyone with hrm.employment.read OR hrm.self.read.
+ * Org-chart read: a dedicated chart grant, employment read, or scoped self-service.
  * Self-service users see names, titles and managers through this gate —
  * the org-chart service never returns pay or private fields to anyone,
  * so one gate covers both audiences.
@@ -801,10 +801,11 @@ export async function requireOrgChartRead(
   orgId: string,
   actorId: string,
 ): Promise<void> {
+  if (await actorHasPermission(exec, orgId, actorId, "hrm.org_chart.read")) return;
   if (await actorHasPermission(exec, orgId, actorId, "hrm.employment.read")) return;
   if (await actorHasPermission(exec, orgId, actorId, "hrm.self.read")) return;
   throw new HrmAuthorizationError(
-    "Org chart access requires the hrm.employment.read or hrm.self.read permission — ask an administrator to grant it in /admin/roles.",
+    "Org chart access requires hrm.org_chart.read, hrm.employment.read or hrm.self.read — ask an administrator to grant it in /admin/roles.",
   );
 }
 // HR-19 end

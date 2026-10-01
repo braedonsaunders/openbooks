@@ -231,6 +231,8 @@ export const MAX_FLOW_EDGES = 400
 
 export const automationGraphSchema = z.object({
   schemaVersion: z.literal(1),
+  /** Explicit tenant policy for a matched submission path that reaches no approval gate. */
+  ungatedOutcome: z.literal('apply').optional(),
   nodes: z.array(automationNodeSchema).max(MAX_FLOW_NODES),
   edges: z.array(automationEdgeSchema).max(MAX_FLOW_EDGES),
 })
@@ -321,6 +323,7 @@ export type TriggerEvent = (
 export type PlannedGate = { nodeId: string; gate: GateData }
 export type PlannedAction = { nodeId: string; action: ActionData }
 export type AutomationPlan = {
+  ungatedOutcome?: 'apply'
   actions: ActionData[]
   actionNodes: PlannedAction[]
   gates: PlannedGate[]
@@ -421,7 +424,8 @@ export function planAutomation(
     startIds.push(node.id)
   }
   if (startIds.length === 0) return { ...EMPTY_PLAN }
-  return collect(graph, evalCtx, startIds)
+  const plan = collect(graph, evalCtx, startIds)
+  return event.kind === 'on_submit' && graph.ungatedOutcome === 'apply' ? { ...plan, ungatedOutcome: 'apply' } : plan
 }
 
 /**
@@ -455,6 +459,7 @@ export function lintAutomationGraph(
   profile?: FlowSubjectProfile,
 ): string[] {
   const errors: string[] = []
+  if (graph.ungatedOutcome && profile && !profile.supportsUngatedSubmission) errors.push(`${profile.label} does not support automatic submission release.`)
   const ids = new Set(graph.nodes.map((n) => n.id))
 
   if (graph.nodes.length > MAX_FLOW_NODES) {
@@ -497,7 +502,7 @@ export function lintAutomationGraph(
   // with one branch intentionally ends the run on the other.
   const outboundFrom = new Set(graph.edges.map((e) => e.source))
   for (const n of graph.nodes) {
-    if (n.data.kind === 'trigger' && !outboundFrom.has(n.id)) {
+    if (n.data.kind === 'trigger' && !outboundFrom.has(n.id) && !(graph.ungatedOutcome === 'apply' && n.data.trigger.trigger === 'on_submit')) {
       errors.push(`Trigger ${n.id} has no outgoing step — connect it to the first step or the flow never runs.`)
     }
   }

@@ -46,11 +46,13 @@ export const HRM_DOCUMENT_WIDGETS = {
   'org-chart-tree': (props) => (
     <OrgChartTree
       chart={props.chart as ComponentProps<typeof OrgChartTree>['chart']}
+      layout={props.layout as ComponentProps<typeof OrgChartTree>['layout']}
+      canEditLayout={props.canEditLayout === true}
       canManage={props.canManage === true}
       today={str(props, 'today')}
       departmentOptions={props.departmentOptions as ComponentProps<typeof OrgChartTree>['departmentOptions']}
       personBaseHref={str(props, 'personBaseHref') ?? '/hrm/org-chart'}
-      labels={(props.labels as ComponentProps<typeof OrgChartTree>['labels']) ?? {}}
+      labels={props.labels as ComponentProps<typeof OrgChartTree>['labels']}
     />
   ),
   /** The org-chart person drawer, closing by navigation. */
@@ -60,12 +62,13 @@ export const HRM_DOCUMENT_WIDGETS = {
     return (
       <OrgChartPerson
         selected={selected}
+        canReadEmployee={props.canReadEmployee === true}
         manager={props.manager as ComponentProps<typeof OrgChartPerson>['manager']}
         canManage={props.canManage === true}
         today={str(props, 'today')}
         departmentOptions={props.departmentOptions as ComponentProps<typeof OrgChartPerson>['departmentOptions']}
         closeHref={str(props, 'closeHref') ?? '/hrm/org-chart'}
-        labels={(props.labels as ComponentProps<typeof OrgChartPerson>['labels']) ?? {}}
+        labels={props.labels as ComponentProps<typeof OrgChartPerson>['labels']}
       />
     )
   },

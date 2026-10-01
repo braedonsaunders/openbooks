@@ -1126,7 +1126,8 @@
     "hrm_surveys_manage": "Gerenciar pesquisas",
     "time_clock": "Bater ponto em campo",
     "time_crew_enter": "Lançar lotes de equipe",
-    "time_kiosk_manage": "Gerenciar quiosques e PINs"
+    "time_kiosk_manage": "Gerenciar quiosques e PINs",
+    "hrm_org_chart_read": "Ver organograma"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -5063,7 +5064,10 @@
         "connectAction": "Conectar",
         "connectPlaceholder": "Escolha uma etapa…",
         "connectEmpty": "Ainda não há outra etapa — adicione um nó primeiro."
-      }
+      },
+      "ungatedOutcomeLabel": "Quando nenhuma etapa de aprovação se aplica",
+      "ungatedApply": "Aplicar imediatamente",
+      "ungatedRequireApproval": "Exigir uma etapa de aprovação"
     },
     "node": {
       "trigger": "Gatilho",

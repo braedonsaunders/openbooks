@@ -3,27 +3,16 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
-import { loadDirectory, loadOrgChart } from '@openbooks/engine/src/hrm/org-chart.ts'
+import { loadDirectory } from '@openbooks/engine/hrm/org-chart'
+import { loadOrgChartWorkspace } from '@openbooks/engine/hrm/org-chart'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { can, getAuthz, type Authz } from '../authz'
 import { requireFeatureEnabled } from '../feature-gates'
 import { listScopedDepartmentOptions } from '../scoped-options'
 
-/**
- * Org chart loader (0230, HR-19).
- *
- * The tree and the directory resolve through the canonical engine
- * reads (loadOrgChart, loadDirectory) as of a civil date — names,
- * titles, departments, and managers only, never pay or private
- * fields. Renders when hrm is on and the actor holds
- * hrm.employment.read OR hrm.self.read — a switched-off feature redirects
- * to its remedy instead.
- * The Directory sub-tab renders the same loader rows through the
- * shared `table` block: RecordListView's registry serves document
- * record types only, and bending its document drawer machinery around
- * people rows would fork it — the loader-resolved table is the house
- * HRM pattern.
- */
+/** The chart resolves native names, titles and reporting lines only. A dedicated
+ * chart permission grants this basic read without opening employment records.
+ * Self-service readers retain their own and direct-report scope. */
 
 export interface OrgChartHomeAuthz {
   orgId: string
@@ -34,7 +23,7 @@ export interface OrgChartHomeAuthz {
 export async function orgChartAuthz(): Promise<OrgChartHomeAuthz | null> {
   const gate = await getAuthz()
   if (!gate) return null
-  if (!can(gate, 'hrm.employment.read') && !can(gate, 'hrm.self.read')) return null
+  if (!can(gate, 'hrm.org_chart.read') && !can(gate, 'hrm.employment.read') && !can(gate, 'hrm.self.read')) return null
   await requireFeatureEnabled(gate.user.orgId, 'hrm')
   return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
 }
@@ -61,15 +50,17 @@ export async function loadOrgChartHome(
           description: t('positions.invalidDate', { date: rawAsOf, today: asOf }),
         }
       : null
-  const view = sp.view === 'directory' ? 'directory' : 'tree'
+  const canReadEmployee = can(authz.session, 'hrm.employment.read')
+  const canReadDirectory = canReadEmployee || can(authz.session, 'hrm.self.read')
+  const view = sp.view === 'directory' && canReadDirectory ? 'directory' : 'tree'
   const search = typeof sp.q === 'string' ? sp.q.trim().toLowerCase() : ''
   const requestedDirectoryPage = Number(sp.page ?? 1)
   const directoryPageNumber = Number.isSafeInteger(requestedDirectoryPage) && requestedDirectoryPage > 0
     ? requestedDirectoryPage
     : 1
 
-  const [chart, directoryPage] = await Promise.all([
-    loadOrgChart({ orgId: authz.orgId, actorId: authz.userId, asOf }),
+  const [workspace, directoryPage] = await Promise.all([
+    loadOrgChartWorkspace({ orgId: authz.orgId, actorId: authz.userId, asOf }),
     view === 'directory'
       ? loadDirectory({
           orgId: authz.orgId,
@@ -82,6 +73,7 @@ export async function loadOrgChartHome(
       : Promise.resolve({ entries: [], totalCount: 0, page: 1, pageSize: 50 }),
   ])
 
+  const { chart, layout } = workspace
   const canManage = can(authz.session, 'hrm.employment.manage') && can(authz.session, 'hrm.employment.read')
   const departmentOptions = canManage
     ? (await listScopedDepartmentOptions(authz.orgId, authz.session.allowedSubsidiaryIds)).map((row) => ({ value: row.id, label: row.name }))
@@ -145,7 +137,10 @@ export async function loadOrgChartHome(
     // a list-toolbar view filter, not a second tab strip.
     search,
     chart,
+    layout,
     canManage,
+    canReadEmployee,
+    canEditLayout: canManage && authz.session.allowedSubsidiaryIds === null && asOf === today,
     departmentOptions,
     directoryRows,
     directoryTotal: directoryPage.totalCount,
@@ -186,13 +181,72 @@ export async function loadOrgChartHome(
       collapse: t('orgChart.labels.collapse'),
       noMatch: t('orgChart.labels.noMatch'),
       empty: t('orgChart.labels.empty'),
-      ...Object.fromEntries([
-        'allDepartments', 'noDepartment', 'expandAll', 'collapseAll', 'editStructure', 'doneEditing',
-        'focus', 'wholeOrganization', 'missingFocus', 'matches', 'clearFilters', 'edit', 'openEmployee',
-        'noReports', 'noVisibleManager', 'openPosition', 'panHint', 'connectHint', 'approvalHint',
-        'zoomIn', 'zoomOut', 'fit', 'minimap', 'managerConnector', 'employeeConnector',
-        'invalidConnection', 'preparingEdit', 'editFailed', 'noAssignment',
-      ].map((key) => [key, t(`orgChart.labels.${key}`)])),
+      allDepartments: t('orgChart.labels.allDepartments'),
+      noDepartment: t('orgChart.labels.noDepartment'),
+      expandAll: t('orgChart.labels.expandAll'),
+      collapseAll: t('orgChart.labels.collapseAll'),
+      editStructure: t('orgChart.labels.editStructure'),
+      doneEditing: t('orgChart.labels.doneEditing'),
+      focus: t('orgChart.labels.focus'),
+      wholeOrganization: t('orgChart.labels.wholeOrganization'),
+      missingFocus: t('orgChart.labels.missingFocus'),
+      matches: t('orgChart.labels.matches'),
+      clearFilters: t('orgChart.labels.clearFilters'),
+      edit: t('orgChart.labels.edit'),
+      openEmployee: t('orgChart.labels.openEmployee'),
+      noReports: t('orgChart.labels.noReports'),
+      noVisibleManager: t('orgChart.labels.noVisibleManager'),
+      openPosition: t('orgChart.labels.openPosition'),
+      panHint: t('orgChart.labels.panHint'),
+      connectHint: t('orgChart.labels.connectHint'),
+      approvalHint: t('orgChart.labels.approvalHint'),
+      zoomIn: t('orgChart.labels.zoomIn'),
+      zoomOut: t('orgChart.labels.zoomOut'),
+      fit: t('orgChart.labels.fit'),
+      minimap: t('orgChart.labels.minimap'),
+      managerConnector: t('orgChart.labels.managerConnector'),
+      employeeConnector: t('orgChart.labels.employeeConnector'),
+      invalidConnection: t('orgChart.labels.invalidConnection'),
+      preparingEdit: t('orgChart.labels.preparingEdit'),
+      editFailed: t('orgChart.labels.editFailed'),
+      noAssignment: t('orgChart.labels.noAssignment'),
+      unavailablePerson: t('orgChart.labels.unavailablePerson'),
+      unavailableHint: t('orgChart.labels.unavailableHint'),
+      removeCard: t('orgChart.labels.removeCard'),
+      startEmpty: t('orgChart.labels.startEmpty'),
+      startHint: t('orgChart.labels.startHint'),
+      readOnlyEmpty: t('orgChart.labels.readOnlyEmpty'),
+      canvasTitle: t('orgChart.labels.canvasTitle'),
+      cardsPlaced: t('orgChart.labels.cardsPlaced'),
+      unsaved: t('orgChart.labels.unsaved'),
+      saving: t('orgChart.labels.saving'),
+      saveLayout: t('orgChart.labels.saveLayout'),
+      saved: t('orgChart.labels.saved'),
+      saveFailed: t('orgChart.labels.saveFailed'),
+      sidebarTitle: t('orgChart.labels.sidebarTitle'),
+      sidebarSearch: t('orgChart.labels.sidebarSearch'),
+      addPlaceholder: t('orgChart.labels.addPlaceholder'),
+      team: t('orgChart.labels.team'),
+      role: t('orgChart.labels.role'),
+      placeholder: t('orgChart.labels.placeholder'),
+      onChart: t('orgChart.labels.onChart'),
+      addToChart: t('orgChart.labels.addToChart'),
+      applyPlaceholder: t('orgChart.labels.applyPlaceholder'),
+      placeholderType: t('orgChart.labels.placeholderType'),
+      placeholderName: t('orgChart.labels.placeholderName'),
+      placeholderNote: t('orgChart.labels.placeholderNote'),
+      discardPlaceholder: t('orgChart.labels.discardPlaceholder'),
+      managerChangeConfirm: t.raw('orgChart.labels.managerChangeConfirm') as string,
+      managerChangeTitle: t('orgChart.labels.managerChangeTitle'),
+      reviewChange: t('orgChart.labels.reviewChange'),
+      reconnectHint: t('orgChart.labels.reconnectHint'),
+      linkedEdgeHint: t('orgChart.labels.linkedEdgeHint'),
+      removeConnectionConfirm: t('orgChart.labels.removeConnectionConfirm'),
+      removeConnection: t('orgChart.labels.removeConnection'),
+      syncHint: t('orgChart.labels.syncHint'),
+      placeholderHint: t('orgChart.labels.placeholderHint'),
+      discardLayout: t('orgChart.labels.discardLayout'),
+      discard: t('orgChart.labels.discard'),
       retry: common('actions.retry'),
       cancel: common('actions.cancel'),
     },

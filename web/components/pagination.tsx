@@ -16,6 +16,8 @@ export function Pagination({
   page,
   perPage,
   pageParamKey = 'page',
+  onPageChange,
+  compact = false,
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
@@ -24,6 +26,9 @@ export function Pagination({
   perPage: number
   /** URL param that carries the page number. Sub-tables pass a prefixed key. */
   pageParamKey?: string
+  /** Keep pagination local for a palette or embedded editor. */
+  onPageChange?: (page: number) => void
+  compact?: boolean
 }) {
   const t = useTranslations('ui.pagination')
   const { number } = useViewerFormat()
@@ -66,6 +71,7 @@ export function Pagination({
       {isOutOfRange ? (
         <PageButton
           href={lastPageHref}
+          onClick={onPageChange ? () => onPageChange(pageCount) : undefined}
           overlayNav={overlayNav}
           aria-label={t('goToLastPageAria', { page: number(pageCount) })}
         >
@@ -74,15 +80,15 @@ export function Pagination({
         </PageButton>
       ) : pageCount > 1 ? (
         <div className="flex items-center gap-1">
-          <PageButton href={prevHref} overlayNav={overlayNav} disabled={page <= 1} aria-label={t('previousPageAria')}>
+          <PageButton href={prevHref} onClick={onPageChange ? () => onPageChange(Math.max(1, page - 1)) : undefined} overlayNav={overlayNav} disabled={page <= 1} aria-label={t('previousPageAria')}>
             <ChevronLeft size={14} />
-            {t('prev')}
+            {!compact && t('prev')}
           </PageButton>
-          <span className="px-2 text-slate-500 dark:text-slate-400">
+          {!compact && <span className="px-2 text-slate-500 dark:text-slate-400">
             {t('pageOf', { page, pages: pageCount })}
-          </span>
-          <PageButton href={nextHref} overlayNav={overlayNav} disabled={page >= pageCount} aria-label={t('nextPageAria')}>
-            {tCommon('actions.next')}
+          </span>}
+          <PageButton href={nextHref} onClick={onPageChange ? () => onPageChange(Math.min(pageCount, page + 1)) : undefined} overlayNav={overlayNav} disabled={page >= pageCount} aria-label={t('nextPageAria')}>
+            {!compact && tCommon('actions.next')}
             <ChevronRight size={14} />
           </PageButton>
         </div>
@@ -96,13 +102,15 @@ function PageButton({
   disabled,
   overlayNav,
   children,
+  onClick,
   ...rest
 }: {
   href: string
   disabled?: boolean
   overlayNav?: boolean
   children: React.ReactNode
-} & React.HTMLAttributes<HTMLAnchorElement>) {
+  onClick?: () => void
+} & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'onClick'>) {
   const className = "inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60"
   if (disabled) {
     return (
@@ -114,6 +122,7 @@ function PageButton({
       </span>
     )
   }
+  if (onClick) return <button type="button" className={className} onClick={onClick} {...(rest as object)}>{children}</button>
   if (overlayNav) {
     return (
       <OverlayLink href={href} className={className} {...(rest as object)}>

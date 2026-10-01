@@ -5,6 +5,7 @@ import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import {
+  HrmAuthorizationError,
   loadOwnEmploymentIds,
   loadTeamEmploymentIdsForManager,
   requireOrgChartRead,
@@ -26,12 +27,12 @@ import { HrmOrgChartError } from "./documents/errors.ts";
  * change reads through automatically: only edges covering asOf join.
  *
  * Privacy: names, titles, departments and managers only — never pay or
- * private fields. Readers holding hrm.employment.read see every
+ * private fields. Readers holding hrm.employment.read or hrm.org_chart.read see every
  * in-scope employment (their subsidiary allowlist filters rows, exactly
  * like every other employment list). Self-service (hrm.self.read alone)
  * sees only its own employments plus one level of direct reports as of
  * the query date — the same team boundary team-read.ts enforces — and
- * no vacancy nodes. Nobody enumerates the org through this surface.
+ * no vacancy nodes. The dedicated chart grant does not open employment records or the employee directory.
  */
 
 export interface OrgChartNode {
@@ -105,8 +106,9 @@ async function resolveOrgChartScope(
   orgId: string,
   actorId: string,
   asOf: string,
+  allowChartGrant = true,
 ): Promise<OrgChartScope> {
-  if (await actorHasPermission(db, orgId, actorId, "hrm.employment.read")) {
+  if (await actorHasPermission(db, orgId, actorId, "hrm.employment.read") || (allowChartGrant && await actorHasPermission(db, orgId, actorId, "hrm.org_chart.read"))) {
     return { kind: "hr", allowed: await actorAllowedSubsidiaryIds(db, orgId, actorId) };
   }
   await requireOrgChartRead(db, orgId, actorId);
@@ -296,12 +298,15 @@ export async function loadDirectory(query: {
   limit?: number;
   page?: number;
 }): Promise<DirectoryPage> {
+  if (!await actorHasPermission(db, query.orgId, query.actorId, "hrm.employment.read") && !await actorHasPermission(db, query.orgId, query.actorId, "hrm.self.read")) {
+    throw new HrmAuthorizationError("The employee directory requires hrm.employment.read or hrm.self.read. Ask an administrator to grant the appropriate permission in /admin/roles.");
+  }
   // Use one selected as-of date for both visibility and effective dating,
   // defaulting to the organization's business date. SQL current_date follows
   // the database session timezone instead.
   const asOf = query.asOf ?? await businessToday(query.orgId);
   parseCivilDate(asOf);
-  const scope = await resolveOrgChartScope(query.orgId, query.actorId, asOf);
+  const scope = await resolveOrgChartScope(query.orgId, query.actorId, asOf, false);
   const selfFilter = scope.kind === "self"
     ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
     : sql``;
