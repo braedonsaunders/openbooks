@@ -11,7 +11,8 @@ import test from 'node:test'
 const { qualificationsSpec } = await import('./view')
 
 type SpecData = Parameters<typeof qualificationsSpec>[0]
-type Block = { kind?: string; blocks?: Block[]; columns?: { header: unknown }[]; rowKey?: { $?: string } }
+type TableShape = { columns?: { header: unknown }[]; rowKey?: { $?: string } }
+type Block = { kind?: string; widget?: string; props?: { table?: TableShape }; blocks?: Block[] } & TableShape
 
 const TYPES = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8']
 
@@ -31,11 +32,17 @@ const data = {
 function coverageTable(): { header: unknown }[] {
   const spec = qualificationsSpec(data) as unknown as { body: Block[] }
   const tables: { header: unknown }[][] = []
+  const collect = (table: TableShape | undefined): void => {
+    if (table?.rowKey?.$ === 'employmentId' && table.columns) {
+      tables.push(table.columns)
+    }
+  }
   const walk = (blocks: Block[] | undefined): void => {
     for (const block of blocks ?? []) {
-      if (block.kind === 'table' && block.rowKey?.$ === 'employmentId' && block.columns) {
-        tables.push(block.columns)
-      }
+      if (block.kind === 'table') collect(block)
+      // The matrix rides the shared registered list: its table config
+      // lives on the widget's props.table, never as a bare table block.
+      if (block.kind === 'widget' && block.widget === 'registered-record-list') collect(block.props?.table)
       walk(block.blocks)
     }
   }
