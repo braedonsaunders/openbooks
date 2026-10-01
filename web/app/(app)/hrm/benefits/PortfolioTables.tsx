@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
+import { Badge, TableCell, TableRow } from '@openbooks/ui'
 import { PreparedPagedTable, type PreparedTableRow } from '../../../../components/prepared-paged-table'
 import type { PortfolioAwardRow } from '../../../../lib/hrm/benefits-workspace'
 
@@ -80,10 +80,12 @@ function emptyBlock(title: string, description: string) {
 
 function footerBlock(totalLabel: string, total: number, truncatedLabel: string, truncated: boolean) {
   return (
-    <p className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-      {totalLabel} · {total}
-      {truncated ? ` · ${truncatedLabel}` : ''}
-    </p>
+    <TableRow>
+      <TableCell colSpan={5} className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+        {totalLabel} · {total}
+        {truncated ? ` · ${truncatedLabel}` : ''}
+      </TableCell>
+    </TableRow>
   )
 }
 
