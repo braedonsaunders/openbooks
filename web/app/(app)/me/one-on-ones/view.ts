@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
@@ -7,12 +8,11 @@ import {
   column,
   field as item,
   grid,
+  heading,
   link,
-  panel,
   page,
   pageHeader,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
@@ -126,58 +126,42 @@ export function meOneOnOnesSpec(data: MeOneOnOnesData): PageSpec {
       }),
     ],
     body: [
+      // Upcoming, past and open requests render as direct lists under
+      // house headings — no panel repeats the section name.
       grid('flex h-full min-h-0 flex-col gap-4', [
-        panel({
-          title: f('upcomingTitle'),
-          iconKey: 'calendar',
-          bodyClassName: 'min-h-0 overflow-y-auto p-0',
-          blocks: [
-            table({
-              variant: 'app',
-              rows: f('upcoming'),
-              rowKey: item('id'),
-              empty: { title: f('upcomingEmpty') },
-              columns: [
-                column(data.cols.when, link(item('when'), item('href'))),
-                column(data.cols.with, text(item('other'))),
-                column(data.cols.status, badge(item('statusLabel'), { variant: 'secondary' })),
-              ],
-            }),
+        heading(2, f('upcomingTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+        registeredListTable('me_one_on_ones_upcoming', {
+          variant: 'app',
+          rows: f('upcoming'),
+          rowKey: item('id'),
+          empty: { title: f('upcomingEmpty') },
+          columns: [
+            column(data.cols.when, link(item('when'), item('href'))),
+            column(data.cols.with, text(item('other'))),
+            column(data.cols.status, badge(item('statusLabel'), { variant: 'secondary' })),
           ],
         }),
-        panel({
-          title: f('pastTitle'),
-          iconKey: 'history',
-          bodyClassName: 'min-h-0 overflow-y-auto p-0',
-          blocks: [
-            table({
-              variant: 'app',
-              rows: f('past'),
-              rowKey: item('id'),
-              empty: { title: f('pastEmpty') },
-              columns: [
-                column(data.cols.when, link(item('when'), item('href'))),
-                column(data.cols.with, text(item('other'))),
-                column(data.cols.status, badge(item('statusLabel'), { variant: 'secondary' })),
-              ],
-            }),
+        heading(2, f('pastTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+        registeredListTable('me_one_on_ones_past', {
+          variant: 'app',
+          rows: f('past'),
+          rowKey: item('id'),
+          empty: { title: f('pastEmpty') },
+          columns: [
+            column(data.cols.when, link(item('when'), item('href'))),
+            column(data.cols.with, text(item('other'))),
+            column(data.cols.status, badge(item('statusLabel'), { variant: 'secondary' })),
           ],
         }),
-        panel({
-          title: f('requestsTitle'),
-          iconKey: 'message-square',
-          bodyClassName: 'min-h-0 overflow-y-auto p-0',
-          blocks: [
-            table({
-              variant: 'app',
-              rows: f('requests'),
-              rowKey: item('id'),
-              empty: { title: f('requestsEmpty') },
-              columns: [
-                column(data.requestsTitle, link(item('body'), item('href'))),
-                column(data.cols.with, text(item('subject'))),
-              ],
-            }),
+        heading(2, f('requestsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+        registeredListTable('me_one_on_ones_requests', {
+          variant: 'app',
+          rows: f('requests'),
+          rowKey: item('id'),
+          empty: { title: f('requestsEmpty') },
+          columns: [
+            column(data.requestsTitle, link(item('body'), item('href'))),
+            column(data.cols.with, text(item('subject'))),
           ],
         }),
       ]),

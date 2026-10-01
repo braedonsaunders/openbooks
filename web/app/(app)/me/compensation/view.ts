@@ -1,14 +1,15 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   column,
   field as item,
+  heading,
   page,
   pageHeader,
   panel,
-  table,
   text,
   widget,
   widgetBlock,
@@ -70,21 +71,21 @@ export function myCompSpec(data: NonNullable<Awaited<ReturnType<typeof loadMyCom
         }),
         when: f('hasContent'),
       },
+      // Statements render as a direct list under a house heading; the
+      // placement panel above stays — it is the summary, not a list.
       {
-        ...panel({
-          title: f('statementsTitle'),
-          bodyClassName: 'min-h-0 overflow-y-auto p-0',
-          blocks: [
-            table({
-              variant: 'app',
-              rows: f('statements'),
-              rowKey: item('id'),
-              empty: { title: f('statementsEmpty') },
-              columns: [
-                column(f('statementsColumns.period'), text(item('period'))),
-                column(f('statementsColumns.generated'), text(item('generated'))),
-              ],
-            }),
+        ...heading(2, f('statementsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+        when: f('hasContent'),
+      },
+      {
+        ...registeredListTable('me_compensation_statements', {
+          variant: 'app',
+          rows: f('statements'),
+          rowKey: item('id'),
+          empty: { title: f('statementsEmpty') },
+          columns: [
+            column(f('statementsColumns.period'), text(item('period'))),
+            column(f('statementsColumns.generated'), text(item('generated'))),
           ],
         }),
         when: f('hasContent'),

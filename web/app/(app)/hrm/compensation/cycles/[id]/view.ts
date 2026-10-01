@@ -1,15 +1,16 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import {
   badge,
   column,
   field as item,
+  heading,
   link,
   page,
   pageHeader,
   panel,
-  table,
   text,
   widget,
   widgetBlock,
@@ -57,45 +58,51 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
         }),
         when: f('move'),
       },
-      widgetBlock('filter-chips', {
-        basePath: f('cycleHref'),
-        currentParams: data.currentParams,
-        paramKey: 'department',
-        label: f('linesTitle'),
-        allLabel: f('backLabel'),
-        options: data.departments,
-      }),
-      panel({
-        title: f('linesTitle'),
-        bodyClassName: 'min-h-0 overflow-y-auto p-0',
-        className: 'min-h-0 flex-1',
-        blocks: [
-          table({
-            variant: 'app',
-            rows: f('lines'),
-            rowKey: item('id'),
-            empty: { title: f('linesEmpty') },
-            columns: [
-              column(f('columns.employee'), link(item('employeeName'), item('lineHref'))),
-              column(f('columns.current'), text(item('current')), { align: 'right', className: 'tabular-nums' }),
-              column(
-                f('columns.placement'),
-                widgetCell('hrm-placement-bar', {
-                  min: item('placementMin'),
-                  target: item('placementTarget'),
-                  max: item('placementMax'),
-                  rate: item('placementRate'),
-                  label: item('placementLabel'),
-                }),
-              ),
-              column(f('columns.rating'), text(item('rating'))),
-              column(f('columns.guideline'), text(item('guideline'))),
-              column(f('columns.proposed'), text(item('proposedPct')), { align: 'right', className: 'tabular-nums' }),
-              column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+      // The team grid renders as a direct list under a house heading —
+      // the department filter rides the list's toolbar slot, never a lone
+      // chips row duplicating the heading below it.
+      heading(2, f('linesTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+      registeredListTable(
+        'hrm_compensation_cycle_lines',
+        {
+          variant: 'app',
+          rows: f('lines'),
+          rowKey: item('id'),
+          empty: { title: f('linesEmpty') },
+          columns: [
+            column(f('columns.employee'), link(item('employeeName'), item('lineHref'))),
+            column(f('columns.current'), text(item('current')), { align: 'right', className: 'tabular-nums' }),
+            column(
+              f('columns.placement'),
+              widgetCell('hrm-placement-bar', {
+                min: item('placementMin'),
+                target: item('placementTarget'),
+                max: item('placementMax'),
+                rate: item('placementRate'),
+                label: item('placementLabel'),
+              }),
+            ),
+            column(f('columns.rating'), text(item('rating'))),
+            column(f('columns.guideline'), text(item('guideline'))),
+            column(f('columns.proposed'), text(item('proposedPct')), { align: 'right', className: 'tabular-nums' }),
+            column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+          ],
+        },
+        [
+          widget('list-toolbar', {
+            basePath: data.cycleHref,
+            currentParams: data.currentParams,
+            filters: [
+              {
+                paramKey: 'department',
+                label: f('linesTitle'),
+                allLabel: f('backLabel'),
+                options: data.departments,
+              },
             ],
           }),
         ],
-      }),
+      ),
       {
         ...widgetBlock('hrm-comp-line-drawer', {
           drawer: {

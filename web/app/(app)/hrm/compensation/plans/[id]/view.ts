@@ -1,15 +1,15 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import {
   badge,
   column,
   field as item,
+  heading,
   page,
   pageHeader,
-  panel,
   rootRef,
-  table,
   text,
   widget,
   widgetCell,
@@ -67,19 +67,16 @@ export function compPlanSpec(data: NonNullable<Awaited<ReturnType<typeof loadHea
       }),
     ],
     body: [
-      panel({
-        title: f('linesTitle'),
-        bodyClassName: 'min-h-0 overflow-y-auto p-0',
-        className: 'min-h-0 flex-1',
-        blocks: [
-          table({
-            variant: 'app',
-            rows: f('lines'),
-            rowKey: item('id'),
-            empty: { title: f('linesEmpty') },
-            columns,
-          }),
-        ],
+      // Costed plan lines render as a direct list under a house heading —
+      // no panel repeats the section name. Approval still rides the
+      // per-line island button the loader arms.
+      heading(2, f('linesTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+      registeredListTable('hrm_compensation_plan_lines', {
+        variant: 'app',
+        rows: f('lines'),
+        rowKey: item('id'),
+        empty: { title: f('linesEmpty') },
+        columns,
       }),
     ],
   })
