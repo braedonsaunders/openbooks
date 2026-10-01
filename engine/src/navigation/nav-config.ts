@@ -1,4 +1,12 @@
-import { MODULE_BY_KEY, NAV_GROUP_BY_KEY, NAV_MODULES, defaultNavConfig, type NavGroupConfig, type NavGroupKey, type OrgNavConfig } from './nav-registry.ts'
+import { MODULE_BY_KEY, NAV_GROUP_BY_KEY, NAV_MODULES, defaultNavConfig, type NavGroupConfig, type NavGroupKey, type NavItemConfig, type OrgNavConfig } from './nav-registry.ts'
+
+/** Local detail views stay out of their default menu section. Explicit moves
+ * and promotions retain the company's shortcut without changing local tabs. */
+export function isDefaultLocalNavigationItem(groupId: string, item: NavItemConfig): boolean {
+  if (item.kind !== 'module') return false
+  const module = MODULE_BY_KEY.get(item.moduleKey)
+  return !!module?.menuParent && groupId === module.group && item.placement !== 'custom'
+}
 
 /**
  * Reconcile shipped destinations without replacing company-defined groups,
