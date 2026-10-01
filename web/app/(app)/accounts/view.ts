@@ -4,6 +4,7 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { registeredListTable } from '../../../lib/list/prepared-spec'
 import {
   column,
   drill,
@@ -15,7 +16,6 @@ import {
   pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -495,7 +495,10 @@ export function accountsSpec(data: AccountsData): PageSpec {
         when: f('onList'),
       },
       {
-        ...table({
+        // Flat search results use the shared registered list composition —
+        // the loader's server window (total/currentPage/perPage below), never
+        // a client reslice. The hierarchy tree and entity list stay as-is.
+        ...registeredListTable('accounts_search', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
