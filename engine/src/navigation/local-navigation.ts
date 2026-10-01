@@ -159,6 +159,14 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     { href: '/payroll/remittances', ns: 'payroll', key: 'home.tabs.remittances', permission: 'payroll.read' },
     { href: '/payroll/separations', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
     { href: '/payroll/year-end', ns: 'payroll', key: 'home.tabs.yearEnd', permission: 'payroll.read' },
+    ...[
+      ['opening-balances', 'payroll.read'],
+      ['retro', 'payroll.read'],
+      ['parallel-run', 'payroll.read'],
+      ['work-locations', 'payroll.manage'],
+    ].map(([route, permission]) => ({
+      href: `/payroll/${route}`, ns: 'nav', key: `modules.payroll-${route}`, permission,
+    })),
   ] },
   { id: 'resourcing', label: 'Resourcing', feature: 'resourcing', tabs: [
     ...[['', 'overview'], ['/board', 'board'], ['/assignments', 'assignments'], ['/requests', 'requests'], ['/demand', 'demand'], ['/retainers', 'retainers']].map(([suffix, key]) => ({
