@@ -30,6 +30,15 @@ export const EMPTY_TERRITORY_GEOGRAPHY: TerritoryGeography = {
   excludes: [],
   polygons: [],
 };
+export type SalesRepTrend = {
+  months: string[];
+  points: {
+    month: string;
+    currency: string;
+    metric: SalesMetric;
+    amount: string;
+  }[];
+};
 export type SalesRecord = {
   id: string;
   name: string;
@@ -74,6 +83,7 @@ export type SalesRecord = {
   employee_number?: string | null;
   job_title?: string | null;
   department_name?: string | null;
+  repTrend?: SalesRepTrend;
   repSummary?: {
     customers: number | null;
     openOpportunities: number | null;

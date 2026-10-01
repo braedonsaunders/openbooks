@@ -565,6 +565,9 @@
     "removeRepTitle": "Remove this sales rep?",
     "removeRepBody": "Remove the employee’s sales-rep designation. Their employee record and sales history remain available. Active responsibilities must be reassigned first.",
     "nativeEmployee": "Employee profile",
+    "salesOverTime": "Évolution des ventes",
+    "noSalesHistory": "Aucune vente attribuée au cours des 12 derniers mois.",
+    "salesTrendBasis": "12 derniers mois · Affaires gagnées et ventes facturées comptabilisées, annulations incluses. Les devises sont présentées séparément.",
     "repActivity": "Responsibilities",
     "repIdentity": "Employee details"
   }
