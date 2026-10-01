@@ -580,7 +580,8 @@
         "acknowledgement": "Accusé de réception",
         "attachment": "Pièce jointe"
       }
-    }
+    },
+    "employeeUnavailable": "Cet employé n’est plus disponible pour une nouvelle liste de contrôle. Choisissez un employé actif."
   },
   "leave": {
     "title": "Congés",

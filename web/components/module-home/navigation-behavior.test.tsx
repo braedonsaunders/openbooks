@@ -75,7 +75,7 @@ test('hiding every managed choice cannot restore a legacy header strip', async (
 })
 
 
-test('Employees, Org chart and Processes share one route switch inside the page header action rail', async () => {
+test('Employees, Org chart, checklists and templates share one route switch inside the page header action rail', async () => {
   const { ViewTabsProvider } = await import('./navigation-context')
   const { ModuleHomeTabs } = await import('./tabs')
   const { ListPageLayout } = await import('../page-layout')
@@ -83,7 +83,8 @@ test('Employees, Org chart and Processes share one route switch inside the page 
   const group = [
     { href: '/entities/employees', label: 'Employees' },
     { href: '/hrm/org-chart', label: 'Org chart' },
-    { href: '/hrm/processes', label: 'Processes' },
+    { href: '/hrm/processes', label: 'Process checklists' },
+    { href: '/hrm/processes/templates', label: 'Checklist templates' },
   ]
   try {
     for (const current of group) {
@@ -102,4 +103,27 @@ test('Employees, Org chart and Processes share one route switch inside the page 
       } finally { await screen.close() }
     }
   } finally { window.history.replaceState({}, '', '/hrm') }
+})
+
+
+test('header overflow preserves order, names the active destination and returns keyboard focus', async () => {
+  const { ModuleHomeTabs } = await import('./tabs')
+  const original = HTMLElement.prototype.getBoundingClientRect
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    const width = this.hasAttribute('data-subtabs') ? 160 : this.hasAttribute('data-tab-measure') ? 110 : 0
+    return new window.DOMRect(0, 0, width, 40)
+  }
+  const screen = await mount(<ModuleHomeTabs tabs={[{href:'/one',label:'One'}, {href:'/two',label:'Two'}, {href:'/three',label:'Three',active:true}]} />)
+  try {
+    const opener = screen.host.querySelector<HTMLButtonElement>('button[aria-haspopup=menu]')!
+    assert.match(opener.textContent!, /More: Three/)
+    opener.focus(); await press(opener, 'ArrowDown')
+    const menu = document.querySelector<HTMLElement>('[role=menu]')!
+    const entries = [...menu.querySelectorAll<HTMLElement>('[role=menuitem]')]
+    assert.deepEqual(entries.map(item=>item.textContent), ['One','Two','Three'])
+    assert.equal(document.activeElement, entries[0])
+    await press(entries[0]!, 'End'); assert.equal(document.activeElement, entries[2])
+    assert.equal(entries[2]!.getAttribute('aria-current'), 'page')
+    await press(entries[2]!, 'Escape'); assert.equal(opener.getAttribute('aria-expanded'), 'false'); assert.equal(document.activeElement, opener)
+  } finally { await screen.close(); HTMLElement.prototype.getBoundingClientRect = original }
 })

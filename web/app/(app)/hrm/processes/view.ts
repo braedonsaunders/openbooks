@@ -53,18 +53,8 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
           widget(
-            'hrm-process-new-menu',
-            {
-              newLabel: f('newLabel'),
-              busyLabel: f('newBusyLabel'),
-              checklistLabel: f('newChecklistLabel'),
-              templateLabel: f('newTemplateLabel'),
-            },
-            f('canManage'),
-          ),
-          widget(
             'link-button',
-            { href: '/hrm/processes/templates', label: f('templatesLabel') },
+            { href: f('newHref'), label: f('newChecklistLabel'), iconKey: 'plus' },
             f('canManage'),
           ),
           widget('module-home-tabs', { tabs: data.tabs }),

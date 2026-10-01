@@ -2,7 +2,7 @@ import 'server-only'
 
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { isUuid } from '../list-params'
+import { isUuid, mergeHref } from '../list-params'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmProcessError } from '@openbooks/engine/src/hrm/processes.ts'
 import { getProcess, listProcesses, type ProcessDetail, type ProcessSegment } from '@openbooks/engine/src/hrm/processes-read.ts'
@@ -79,6 +79,7 @@ export interface ProcessesPageData {
   empty: string
   canManage: boolean
   newLabel: string
+  newHref: string
   newBusyLabel: string
   newChecklistLabel: string
   newTemplateLabel: string
@@ -262,6 +263,7 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
     empty: t('processes.empty'),
     canManage,
     newLabel: tc('actions.newRecord'),
+    newHref: mergeHref('/hrm/processes', { ...sp, segment }, { new: '1', process: undefined, draft: undefined }),
     newBusyLabel: tc('actions.creating'),
     newChecklistLabel: t('processes.newChecklist'),
     newTemplateLabel: t('processes.templates.newTemplate'),

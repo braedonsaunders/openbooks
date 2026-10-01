@@ -65,8 +65,8 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
     if (preview) {
       const type = preview.objects.recordTypes.find(item => item.key === screen.typeKey)
       const fields = type ? lintRecordFields(type.fields, type.name) : null
-      if (fields?.success) return <PageHeaderNavigationProvider navigation={tabs}><DraftRecordPreview sections={fields.sections} typeKey={screen.typeKey} typeName={type!.name}
-        title={screen.title} basePath={`/admin/apps/preview/${preview.id}`} searchParams={{ ...searchParams, screen: selected }} header={notice} /></PageHeaderNavigationProvider>
+      if (fields?.success) return <DraftRecordPreview sections={fields.sections} typeKey={screen.typeKey} typeName={type!.name}
+        title={screen.title} basePath={`/admin/apps/preview/${preview.id}`} searchParams={{ ...searchParams, screen: selected }} header={notice} headerNavigation={tabs} />
       return <ListPageLayout header={<>{notice}<PageHeader title={screen.title} actions={tabs} /></>}><p>{t('existingRecordsPreview')}</p></ListPageLayout>
     }
     if (!grants.includes('records.read') || !can(authz, 'records.read')) notFound()
@@ -75,7 +75,7 @@ export async function NativeScreens({ ui, appKey, name, description, grants, sea
     data.canCreate = data.canCreate && grants.includes('records.create')
     if (data.drawerProps) data.drawerProps.canEdit = data.drawerProps.canEdit && grants.includes('records.create')
     const spec = recordModuleSpec(data)
-    return <ListPageLayout header={<><PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></PageHeaderNavigationProvider></>}><BlockList blocks={spec.body} scope={data} searchParams={searchParams} /></ListPageLayout>
+    return <ListPageLayout header={<PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></PageHeaderNavigationProvider>}><BlockList blocks={spec.body} scope={data} searchParams={searchParams} /></ListPageLayout>
   }
   const scope = { name, description, key: appKey }
   const header = <>{notice}<PageHeaderNavigationProvider navigation={tabs}><BlockList blocks={screen.spec.header} scope={scope} searchParams={searchParams} /></PageHeaderNavigationProvider></>

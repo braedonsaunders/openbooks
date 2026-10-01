@@ -295,3 +295,27 @@ test("people options key directory holders by party for the exit-interviewer pic
     await dropScratchOrg(org.orgId);
   }
 });
+
+
+test('authoring options exclude inactive workers while stored historical selections remain readable', {skip}, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actor = await createScratchUser(org.orgId, 'HR options reader', 'hrm_reader')
+    await grantRead(org.orgId, 'hrm_reader'); await enableHrm(org.orgId)
+    const current = await mkParty(org.orgId, 'Current worker')
+    const currentEmployment = await mkEmployment(org.orgId,current,org.subsidiaryId)
+    const retired = await mkParty(org.orgId, 'Retired worker')
+    const retiredEmployment = await mkEmployment(org.orgId,retired,org.subsidiaryId)
+    await db.execute(sql`update parties set is_active=false where org_id=${org.orgId} and id=${retired}`)
+    const roleRetired = await mkParty(org.orgId, 'Retired employee role')
+    await mkEmployment(org.orgId,roleRetired,org.subsidiaryId)
+    await db.execute(sql`insert into employee_roles(org_id,party_id,is_active) values(${org.orgId},${roleRetired},false)
+      on conflict(org_id,party_id) do update set is_active=false`)
+    const query = {orgId:org.orgId,actorId:actor}
+    assert.deepEqual((await listEmploymentOptions(query)).map(row=>row.employmentId),[currentEmployment])
+    assert.deepEqual((await listPeopleOptions(query)).map(row=>row.partyId),[current])
+    assert.ok((await listEmploymentOptions({...query,includeEmploymentId:retiredEmployment})).some(row=>row.employmentId===retiredEmployment))
+    assert.ok(!(await listEmploymentOptions({...query,includeEmploymentId:retiredEmployment,activeOnly:true})).some(row=>row.employmentId===retiredEmployment))
+    assert.ok(!(await listPeopleOptions({...query,includePartyId:retired,activeOnly:true})).some(row=>row.partyId===retired))
+  } finally { await dropScratchOrg(org.orgId) }
+})

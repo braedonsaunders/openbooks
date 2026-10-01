@@ -98,6 +98,10 @@ export const GET = defineRoute({
         { status: 400 },
       );
     }
+    const active = url.searchParams.get('active');
+    if (active !== null && active !== 'true' && active !== 'false') {
+      return NextResponse.json({ error: 'active must be true or false' }, { status: 400 });
+    }
     const base = {
       orgId: gate.user.orgId,
       actorId: gate.user.id,
@@ -139,8 +143,8 @@ export const GET = defineRoute({
         source === "employments"
           ? await listEmploymentOptions(
               include === null
-                ? base
-                : { ...base, includeEmploymentId: include },
+                ? { ...base, ...(active === null ? {} : { activeOnly: active === 'true' }) }
+                : { ...base, includeEmploymentId: include, ...(active === null ? {} : { activeOnly: active === 'true' }) },
             )
           : source === "locations"
             ? await listLocationOptions(
@@ -154,8 +158,8 @@ export const GET = defineRoute({
                 // grant and subsidiary scope as the employment picker.
                 await listPeopleOptions(
                   include === null
-                    ? base
-                    : { ...base, includePartyId: include },
+                    ? { ...base, ...(active === null ? {} : { activeOnly: active === 'true' }) }
+                    : { ...base, includePartyId: include, ...(active === null ? {} : { activeOnly: active === 'true' }) },
                 )
               : await listPositionOptions(
                   include === null

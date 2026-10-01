@@ -580,7 +580,8 @@
         "acknowledgement": "確認",
         "attachment": "添付ファイル"
       }
-    }
+    },
+    "employeeUnavailable": "この従業員には新しいチェックリストを作成できません。有効な従業員を選択してください。"
   },
   "leave": {
     "title": "休暇",

@@ -41,13 +41,13 @@ stubModules({ intl: true, navigation: {}, authz: false, features: false, extra: 
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/extensions/projections.ts') {
+    if (specifier === '@openbooks/engine/src/extensions/projections.ts' || specifier === '@openbooks/engine/extensions/navigation') {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export async function listActiveExtensionContributions() { return [] }',
       }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/src/platform/db.ts' || specifier === '@openbooks/engine/platform/database') {
       return {
         shortCircuit: true,
         url: `data:text/javascript,${encodeURIComponent(`

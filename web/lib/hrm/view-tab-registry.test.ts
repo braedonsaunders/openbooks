@@ -29,7 +29,7 @@ test("every page in a job shows the job's one strip with its own tab lit", () =>
   for (const url of ["/hrm/org-chart?view=directory", "/hrm/processes", "/hrm/documents", "/hrm/qualifications"]) {
     assert.deepEqual(strip(url)?.hrefs, people?.hrefs, `${url} shows the Employees strip`);
   }
-  assert.deepEqual(strip("/hrm/processes/templates")?.active, ["home.tabs.processes"], "child routes light their parent");
+  assert.deepEqual(strip("/hrm/processes/templates")?.active, ["processes.templates.title"], "templates select their own destination");
 
   const positions = strip("/hrm/positions?status=open");
   assert.deepEqual(positions?.active, ["home.tabs.positions"]);
@@ -60,7 +60,7 @@ test("filters carry between views of one route, never onto another route", () =>
 
 function forViewer(grants: string[], switches: string[]) {
   return hrmViewTabGroupsFor(
-    (def) => (!def.permission || grants.includes(def.permission)) && (!def.feature || switches.includes(def.feature)),
+    (def) => (def.permissionsAny ? def.permissionsAny.some((permission) => grants.includes(permission)) : !def.permission || grants.includes(def.permission)) && (!def.feature || switches.includes(def.feature)),
     key,
   );
 }

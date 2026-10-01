@@ -74,6 +74,16 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
   const measureRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState(tabs.length);
   const [open, setOpen] = useState(false);
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const firstFocus = useRef<'first' | 'last'>('first');
+
+  function openMenu(edge: 'first' | 'last' = 'first') {
+    firstFocus.current = edge;
+    setOpen(true);
+    const entries = menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]');
+    if (entries?.length) (edge === 'last' ? entries[entries.length - 1] : entries[0])?.focus();
+  }
 
   useLayoutEffect(() => {
     const track = trackRef.current;
@@ -180,13 +190,20 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
           open={open}
           onOpenChange={setOpen}
           align="end"
-          className="min-w-[13rem] p-1"
+          className="max-h-[min(28rem,calc(100dvh-8rem))] min-w-[13rem] overflow-y-auto p-1"
           trigger={
             <button
+              ref={openerRef}
               type="button"
               aria-haspopup="menu"
               aria-expanded={open}
-              onClick={() => setOpen((v) => !v)}
+              onClick={() => open ? setOpen(false) : openMenu()}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  openMenu(event.key === 'ArrowUp' ? 'last' : 'first');
+                }
+              }}
               className={cn(PILL, activeOverflow ? PILL_ACTIVE : PILL_IDLE)}
             >
               {activeOverflow ? `${moreLabel}: ${activeOverflow.label}` : moreLabel}
@@ -194,11 +211,30 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
             </button>
           }
         >
-          <div role="menu" className="flex flex-col">
+          <div role="menu" aria-label={ariaLabel ?? shell('localNavigation')} className="flex flex-col"
+            ref={(element) => {
+              menuRef.current = element;
+              const entries = element?.querySelectorAll<HTMLElement>('[role="menuitem"]');
+              if (entries?.length) (firstFocus.current === 'last' ? entries[entries.length - 1] : entries[0])?.focus();
+            }}
+            onKeyDown={(event) => {
+              const entries = [...event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+              const index = entries.indexOf(document.activeElement as HTMLElement);
+              if (event.key === 'Escape' || event.key === 'Tab') {
+                if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
+                setOpen(false); openerRef.current?.focus();
+              } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                event.preventDefault();
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? entries.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + entries.length) % entries.length;
+                entries[next]?.focus();
+              }
+            }}>
+
             {overflow.map((tab) => (
               <Link
                 key={tab.href}
                 role="menuitem"
+                tabIndex={-1}
                 href={tab.href as never}
                 onClick={() => setOpen(false)}
                 aria-current={tab.active ? "page" : undefined}

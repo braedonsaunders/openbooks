@@ -1,3 +1,4 @@
+import { PageHeaderNavigationProvider } from '@openbooks/ui'
 import { getTranslations } from 'next-intl/server'
 import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import { BlockList } from '@/components/viewspec/blocks'
@@ -7,9 +8,9 @@ import { formatFieldValue, isNumericField, listableFields } from '@/lib/record-s
 import { recordModuleSpec, type RecordModuleData } from '../../records/[typeKey]/view'
 
 /** The native record workspace over local examples, never a tenant query. */
-export async function DraftRecordPreview({ sections, typeKey, typeName, title, basePath, searchParams, header }: {
+export async function DraftRecordPreview({ sections, typeKey, typeName, title, basePath, searchParams, header, headerNavigation }: {
   sections: FormSection[]; typeKey: string; typeName: string; title: string; basePath: string;
-  searchParams: Record<string, string | string[] | undefined>; header: React.ReactNode
+  searchParams: Record<string, string | string[] | undefined>; header: React.ReactNode; headerNavigation?: React.ReactNode
 }) {
   const t = await getTranslations('admin.extensions.native')
   const tr = await getTranslations('records.module')
@@ -66,7 +67,7 @@ export async function DraftRecordPreview({ sections, typeKey, typeName, title, b
       canEdit: true, preview: true, closeHref } : null,
   }
   const spec = recordModuleSpec(data)
-  return <ListPageLayout header={<>{header}<BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></>}>
+  return <ListPageLayout header={<>{header}<PageHeaderNavigationProvider navigation={headerNavigation}><BlockList blocks={spec.header} scope={data} searchParams={searchParams} /></PageHeaderNavigationProvider></>}>
     <BlockList blocks={spec.body} scope={data} searchParams={searchParams} />
   </ListPageLayout>
 }

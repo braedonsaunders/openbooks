@@ -969,10 +969,20 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
   "/entities/employees": "Employees",
   "/hrm/org-chart": "Org chart",
   "/hrm/processes": "Processes",
+  "/hrm/processes/templates": "Checklist templates",
   "/hrm/documents": "Documents",
   "/hrm/qualifications": "Qualifications",
   "/hrm/positions": "Positions",
   "/hrm/recruiting": "Openings",
+  "/hrm/recruiting?tab=interviews": "Interviews",
+  "/hrm/recruiting?tab=offers": "Offers",
+  "/hrm/recruiting?tab=postings": "Job postings",
+  "/hrm/recruiting?tab=pools": "Talent pools",
+  "/hrm/leave?view=calendar": "Leave calendar",
+  "/hrm/performance?tab=calibration": "Calibration",
+  "/hrm/performance?tab=talent": "Talent & succession",
+  "/hrm/performance?tab=retention": "Retention",
+  "/hrm/performance?tab=settings": "Performance settings",
   "/hrm/leave": "Leave requests",
   "/hrm/performance": "Cycles",
   "/hrm/surveys": "Surveys",
@@ -1015,15 +1025,15 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
 for (const workspace of LOCAL_NAVIGATION) {
   if (workspace.inline) continue
   for (const tab of workspace.tabs) {
-    if (tab.href.includes('?') || NAV_MODULES.some((module) => module.href === tab.href)) continue
+    if ((tab.href.includes('?') && !tab.menuKey) || NAV_MODULES.some((module) => module.href === tab.href)) continue
     const group: NavGroupKey = workspace.id.startsWith('hrm-') || workspace.id === 'payroll'
       ? 'hrm' : workspace.id === 'resourcing' || workspace.id === 'warehouse' || workspace.id === 'time' ? 'operations'
       : workspace.id === 'compliance' ? 'purchasing' : 'accounting'
-    const moduleKey = tab.href.slice(1).replaceAll('/', '-')
+    const moduleKey = tab.menuKey ?? tab.href.slice(1).replaceAll('/', '-')
     NAV_MODULES.push({
       key: moduleKey, href: tab.href, label: tab.label ?? LOCAL_DESTINATION_LABELS[tab.href]!,
       iconKey: 'list-checks', group,
-      subgroup: workspace.id === 'hrm-people' ? 'workforce' : workspace.id.startsWith('hrm-') ? workspace.id : workspace.id === 'payroll' ? 'payroll-work' : workspace.id,
+      subgroup: workspace.id === 'hrm-people' ? 'workforce' : workspace.id === 'hrm-hiring' ? 'hrm-talent' : workspace.id.startsWith('hrm-') ? workspace.id : workspace.id === 'payroll' ? 'payroll-work' : workspace.id,
       requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, featureKey: tab.feature ?? workspace.feature,
       exact: true,
     })
@@ -1100,7 +1110,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'returns',
     'equipment',
   ],
-  hrm: ['hrm', 'employees', 'hrm-change-requests', 'hrm-org-chart', 'hrm-processes', 'hrm-documents', 'hrm-qualifications', 'hrm-positions', 'hrm-recruiting', 'hrm-leave', 'hrm-performance', 'hrm-surveys', 'hrm-compensation', 'hrm-compensation-equity', 'hrm-benefits', 'hrm-compliance', 'payroll', 'payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll-separations', 'payroll-year-end', 'payroll-opening-balances', 'payroll-retro', 'payroll-parallel-run', 'payroll-work-locations'],
+  hrm: ['hrm', 'employees', 'hrm-change-requests', 'hrm-org-chart', 'hrm-processes', 'hrm-processes-templates', 'hrm-documents', 'hrm-qualifications', 'hrm-positions', 'hrm-recruiting', 'hrm-recruiting-interviews', 'hrm-recruiting-offers', 'hrm-recruiting-postings', 'hrm-recruiting-pools', 'hrm-leave', 'hrm-leave-calendar', 'hrm-performance', 'hrm-performance-calibration', 'hrm-performance-talent', 'hrm-performance-retention', 'hrm-surveys', 'hrm-performance-settings', 'hrm-compensation', 'hrm-compensation-equity', 'hrm-benefits', 'hrm-compliance', 'payroll', 'payroll-runs', 'payroll-anomalies', 'payroll-remittances', 'payroll-separations', 'payroll-year-end', 'payroll-opening-balances', 'payroll-retro', 'payroll-parallel-run', 'payroll-work-locations'],
   banking: [
     'banking',
     'banking-cash',

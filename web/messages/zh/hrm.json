@@ -580,7 +580,8 @@
         "acknowledgement": "确认",
         "attachment": "附件"
       }
-    }
+    },
+    "employeeUnavailable": "该员工已无法用于新建清单。请选择在职员工。"
   },
   "leave": {
     "title": "休假",

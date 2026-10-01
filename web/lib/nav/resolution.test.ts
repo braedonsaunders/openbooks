@@ -100,6 +100,21 @@ test('custom URLs and local choices cannot grant access around permission or fea
   }
 })
 
+test('checklist templates are discoverable beside checklists only with the management grant', async () => {
+  reset()
+  const authz = { user: { orgId: 'company-one' }, permissions: new Set(['parties.read', 'hrm.process.read']) } as Parameters<typeof resolveLocalNavigation>[0]
+  let local = await resolveLocalNavigation(authz)
+  assert.ok(local.groups.flat().some((tab) => tab.href === '/hrm/processes'))
+  assert.ok(!local.groups.flat().some((tab) => tab.href === '/hrm/processes/templates'))
+  authz.permissions.add('hrm.process.manage')
+  local = await resolveLocalNavigation(authz)
+  const people = local.groups.find((group) => group.some((tab) => tab.href === '/hrm/processes'))!
+  assert.equal(people.findIndex((tab) => tab.href === '/hrm/processes/templates'), people.findIndex((tab) => tab.href === '/hrm/processes') + 1)
+  assert.equal(people.find((tab) => tab.href === '/hrm/processes/templates')!.label, 'Checklist templates')
+  const groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(authz.permissions, key), [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  assert.ok(groups.flatMap((group) => group.items).some((item) => item.href === '/hrm/processes/templates' && item.subgroup === 'Workforce'))
+})
+
 test('installed local contributions require a placed shortcut and their native permission', async () => {
   reset()
   contributions = [{ kind: 'nav', href: '/apps/team-tools', label: 'Team planning', group: 'hrm', requiredPermission: 'apps.use', workspaceKey: 'hrm-people' }]
@@ -109,4 +124,18 @@ test('installed local contributions require a placed shortcut and their native p
   assert.equal((await resolveLocalNavigation(authz)).groups.flat().find((tab) => tab.href.startsWith('/apps/team-tools'))!.label, 'Our planning')
   features.apps = false
   assert.ok(!(await resolveLocalNavigation(authz)).groups.flat().some((tab) => tab.href.startsWith('/apps/team-tools')))
+})
+
+
+test('Talent includes recruitment and every authorized performance view without a Cycles umbrella', async () => {
+  reset()
+  let groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  const people = groups.find((group) => group.id === 'hrm')!
+  const destinations = ['/hrm/positions','/hrm/recruiting','/hrm/recruiting?tab=interviews','/hrm/recruiting?tab=offers','/hrm/recruiting?tab=postings','/hrm/recruiting?tab=pools','/hrm/performance','/hrm/performance?tab=calibration','/hrm/performance?tab=talent','/hrm/performance?tab=retention','/hrm/surveys','/hrm/performance?tab=settings']
+  for (const href of destinations) assert.ok(people.items.some((item) => item.href === href && item.subgroup === 'Talent'), href)
+  assert.equal(people.items.find((item) => item.href === '/hrm/performance')!.label, 'Performance')
+  const permissions = new Set(['hrm.self.read'])
+  config.groups[0]!.items.push({kind:'link',href:'/hrm/performance?tab=settings',label:'Settings shortcut'})
+  groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(permissions,key), [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  assert.ok(!groups.flatMap((group) => group.items).some((item) => item.href === '/hrm/performance?tab=settings' || item.href === '/hrm/performance?tab=calibration'))
 })
