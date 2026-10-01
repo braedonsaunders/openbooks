@@ -1,4 +1,4 @@
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /** Native list drawers use the same loaders and renderers as their full-page
  * entry points. Full-page records (including pay-run wizards) are excluded. */
