@@ -1,17 +1,8 @@
 /**
- * Worker process composition entry (HR-16).
+ * Worker process composition entry. Cross-module duties are assembled
+ * outside the bounded engine module graph, then registered before boot.
  *
- * The worker boot (engine/src/worker/index.ts) cannot import the
- * automations engine module: worker sits inside the pinned engine
- * dependency cycle and automations reaches back into it through flows,
- * so that edge would grow the pinned cycle the boundary check refuses.
- * Composition therefore lives HERE, outside the engine module graph
- * (like web/instrumentation.node.ts for the web process): this file
- * registers process duties into the engine/src/worker duty registry and
- * then boots the worker. No engine file imports automations; the
- * dependency points from this entry into automations only.
- *
- * Run directly (`tsx scripts/worker-entry.ts`, the `worker` npm script,
+ * Run directly (`tsx scripts/worker-entry.mts`, the `worker` npm script,
  * the Dockerfile worker bundle source). Importing without running (tests)
  * registers duties without booting: the worker boot below runs only when
  * this file IS the process entry point.
@@ -25,7 +16,7 @@ import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "../engine/sr
 import { runQualificationAlertScan } from "../engine/src/hrm/qualifications/alerts.ts";
 import { SYSTEM_ACTOR_ID } from "../engine/src/banking/banking.ts";
 import { activeRetentionRuleIdsForDuty, evaluateRetentionRule } from "../engine/src/hrm/recruiting/retention.ts";
-import { db, pool, withBypassContext, withOrgTransaction } from "../engine/src/platform/db.ts";
+import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from "../engine/src/platform/db.ts";
 import { businessToday } from "../engine/src/platform/business-date.ts";
 import { runRetentionTick } from "../engine/src/hrm/documents/retention.ts";
 import { drainExportQueue } from "../engine/src/hrm/documents/dsar.ts";
@@ -62,8 +53,9 @@ import {
  * record the reminded event. These three scan orgs with HR documents on;
  * hrm-candidate-retention runs each active retention rule for orgs with
  * Recruiting on. Every duty claims one org-day at a time on its own
- * advisory key, and logs instead of throwing — a duty that throws aborts
- * its siblings.
+ * advisory key. Organizations run in isolated tenant contexts; failures
+ * are collected after continuing the scan and raised to the duty registry.
+ * The registry reports a failed duty without aborting its siblings.
  */
 async function orgsWithFeature(feature: string): Promise<string[]> {
   // Resolve the requirement chain from the registry — the same graph the
@@ -93,6 +85,32 @@ async function orgsWithFeature(feature: string): Promise<string[]> {
     `),
   );
   return rows.rows.map((r) => r.id);
+}
+
+/**
+ * Only discovery bypasses tenant isolation. Resolve the business calendar
+ * and execute all organization work in the same native tenant context.
+ * Context alone does not hold a transaction across file or network work;
+ * domain services retain ownership of their transactions.
+ */
+export async function runHrmOrganizationDuty(
+  key: string,
+  feature: "hrmDocuments" | "hrmRecruiting",
+  run: (orgId: string, today: string) => Promise<void>,
+): Promise<void> {
+  const failures: Error[] = [];
+  for (const orgId of await orgsWithFeature(feature)) {
+    try {
+      await withOrgContext(orgId, async () => {
+        await run(orgId, await businessToday(orgId));
+      });
+    } catch (cause) {
+      failures.push(new Error(`organization ${orgId}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause }));
+    }
+  }
+  if (failures.length) {
+    throw new AggregateError(failures, `${key} failed: ${failures.map((error) => error.message).join("; ")}`);
+  }
 }
 
 /**
@@ -139,59 +157,47 @@ async function withOrgClaim(
   }
 }
 
-async function runRetentionDuty(now: Date): Promise<void> {
-  for (const orgId of await orgsWithFeature("hrmDocuments")) {
-    const today = await businessToday(orgId);
+export async function runRetentionDuty(): Promise<void> {
+  await runHrmOrganizationDuty("hrm-retention-tick", "hrmDocuments", async (orgId, today) => {
     await withOrgClaim("hrm-retention-tick", orgId, today, async () => {
-    try {
       const result = await runRetentionTick(orgId, today);
       console.log(`[worker] hrm-retention-tick ${orgId}: ${JSON.stringify(result)}`);
-    } catch (e) {
-      console.error(`[worker] hrm-retention-tick ${orgId} failed:`, (e as Error).message);
-    }
     });
-  }
-  void now;
+  });
 }
 
-async function runRecruitingRetentionDuty(): Promise<void> {
-  for (const orgId of await orgsWithFeature("hrmRecruiting")) {
-    const today = await businessToday(orgId);
+export async function runRecruitingRetentionDuty(): Promise<void> {
+  await runHrmOrganizationDuty("hrm-candidate-retention", "hrmRecruiting", async (orgId, today) => {
+    const failures: Error[] = [];
     for (const ruleId of await activeRetentionRuleIdsForDuty(orgId)) {
-      await withOrgClaim("hrm-candidate-retention", orgId, `${today}:${ruleId}`, async () => {
-        try {
+      try {
+        await withOrgClaim("hrm-candidate-retention", orgId, `${today}:${ruleId}`, async () => {
           const run = await evaluateRetentionRule(
             { orgId, actorId: SYSTEM_ACTOR_ID, ruleId },
             { runner: { kind: "system" }, claimBusinessDay: today },
           );
           console.log(`[worker] hrm-candidate-retention ${orgId}/${ruleId}/${today}: ${run.id}`);
-        } catch (error) {
-          console.error(`[worker] hrm-candidate-retention ${orgId}/${ruleId} failed:`, (error as Error).message);
-        }
-      });
+        });
+      } catch (cause) {
+        failures.push(new Error(`retention rule ${ruleId}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause }));
+      }
     }
-  }
+    if (failures.length) throw new AggregateError(failures, failures.map((error) => error.message).join("; "));
+  });
 }
 
-async function runDsarDuty(): Promise<void> {
-  for (const orgId of await orgsWithFeature("hrmDocuments")) {
-    const today = await businessToday(orgId);
+export async function runDsarDuty(): Promise<void> {
+  await runHrmOrganizationDuty("hrm-dsar-exports", "hrmDocuments", async (orgId, today) => {
     await withOrgClaim("hrm-dsar-exports", orgId, today, async () => {
-    try {
       const done = await drainExportQueue(orgId, 5);
       if (done > 0) console.log(`[worker] hrm-dsar-exports ${orgId}: built ${done}`);
-    } catch (e) {
-      console.error(`[worker] hrm-dsar-exports ${orgId} failed:`, (e as Error).message);
-    }
     });
-  }
+  });
 }
 
-async function runReminderDuty(): Promise<void> {
-  for (const orgId of await orgsWithFeature("hrmDocuments")) {
-    const today = await businessToday(orgId);
+export async function runReminderDuty(): Promise<void> {
+  await runHrmOrganizationDuty("hrm-document-reminders", "hrmDocuments", async (orgId, today) => {
     await withOrgClaim("hrm-document-reminders", orgId, today, async () => {
-    try {
       await withOrgTransaction(orgId, async () => {
         const due = await dueReminderSigners(db, orgId, 3);
         for (const signer of due) {
@@ -268,11 +274,8 @@ async function runReminderDuty(): Promise<void> {
           if (delivered) await recordDocumentReminded(db, orgId, signer.signerId);
         }
       });
-    } catch (e) {
-      console.error(`[worker] hrm-document-reminders ${orgId} failed:`, (e as Error).message);
-    }
     });
-  }
+  });
 }
 
 export function registerWorkerDuties(): void {
@@ -300,7 +303,7 @@ export function registerWorkerDuties(): void {
       await runAutomationTickClaimed(now);
     },
   });
-  // HR-14 begin: the daily qualification-expiry scan. Idempotent per
+  // The daily qualification-expiry scan. Idempotent per
   // (qualification, lead_days) and self-serializing per org on its own
   // advisory key, so the 60-second tick simply re-runs it: off-schedule
   // days change nothing and a second replica changes nothing.
@@ -311,12 +314,11 @@ export function registerWorkerDuties(): void {
       await runQualificationAlertScan(now);
     },
   });
-  // HR-14 end
   console.log("[worker] duty registered: hrm-retention-tick");
   registerWorkerDuty({
     key: "hrm-retention-tick",
-    run: async (now: Date) => {
-      await runRetentionDuty(now);
+    run: async () => {
+      await runRetentionDuty();
     },
   });
   console.log("[worker] duty registered: hrm-candidate-retention");
