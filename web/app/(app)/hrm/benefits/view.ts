@@ -53,7 +53,11 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
-          widget('link-button', { href: f('newProgramHref'), label: f('newProgramButton'), iconKey: 'plus' }, f('canManage')),
+          widget('link-button', {
+            href: showingWindows ? f('newWindowHref') : showingRewards || showingPayouts ? f('newAwardHref') : f('newProgramHref'),
+            label: showingWindows ? f('newWindowButton') : showingRewards || showingPayouts ? f('newAwardButton') : f('newProgramButton'),
+            iconKey: 'plus',
+          }, f('canManage')),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -101,7 +105,9 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
             : []),
           ...((showingRewards || showingIncentives || showingPayouts) && !data.awardsRefusal
             ? [
-                widgetBlock('link-button', { href: f('newAwardHref'), label: f('newAwardButton'), iconKey: 'plus' }, f('canManage')),
+                ...(showingIncentives ? [grid('flex shrink-0 items-center gap-2', [
+                  widgetBlock('link-button', { href: f('newAwardHref'), label: f('newAwardButton'), iconKey: 'plus' }, f('canManage')),
+                ])] : []),
                 widgetBlock('hrm-award-table', {
                   rows: awardRows,
                   text: data.awardTableText,
@@ -112,7 +118,6 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
             : []),
           ...(showingWindows
             ? [
-                widgetBlock('link-button', { href: f('newWindowHref'), label: f('newWindowButton'), iconKey: 'plus' }, f('canManage')),
                 registeredListTable('hrm_benefits_windows', {
                   variant: 'app',
                   rows: f('windowRows'),
@@ -132,7 +137,9 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
             : []),
           ...(data.showingEnrolments
             ? [
-                widgetBlock('link-button', { href: `${basePath}?view=windows`, label: data.enrollmentWindowsButton, iconKey: 'calendar-clock' }),
+                grid('flex shrink-0 items-center gap-2', [
+                  widgetBlock('link-button', { href: `${basePath}?view=windows`, label: data.enrollmentWindowsButton }),
+                ]),
                 registeredListTable('hrm_benefits_enrolments', {
                   variant: 'app',
                   rows: f('enrollmentRows'),
