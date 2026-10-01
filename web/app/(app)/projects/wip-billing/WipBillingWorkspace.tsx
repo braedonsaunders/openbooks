@@ -53,7 +53,8 @@ import type {
   PrebillListRow,
   WipAnalytics,
 } from "../../../../lib/wip-billing";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { PagedTable } from "../../../../components/paged-table";
+import { readApiErrorMessage } from "../../../../lib/api-error";
 
 type ProjectOption = {
   id: string;
@@ -71,12 +72,11 @@ const STATUS_VARIANT = {
   void: "outline",
 } as const;
 
-
 async function requestJson(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? "Request failed");
-  return body;
+  if (!response.ok)
+    throw new Error(await readApiErrorMessage(response, "Request failed"));
+  return response.json();
 }
 
 function DetailMetric({
@@ -149,7 +149,10 @@ export function WipBillingWorkspace({
     approved: tCommon("status.approved"),
     converted: t("status.converted"),
     void: tCommon("status.voided"),
-  } satisfies Record<"draft" | "review" | "approved" | "converted" | "void", string>;
+  } satisfies Record<
+    "draft" | "review" | "approved" | "converted" | "void",
+    string
+  >;
   const [creating, setCreating] = useState(false);
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [periodStart, setPeriodStart] = useState("");
@@ -276,7 +279,9 @@ export function WipBillingWorkspace({
           })}
           icon="calendar-clock"
           accent="red"
-          tone={decimalCmp(analytics.aging.over90, "0") > 0 ? "negative" : "neutral"}
+          tone={
+            decimalCmp(analytics.aging.over90, "0") > 0 ? "negative" : "neutral"
+          }
         />
         <HomeStatTile
           label={t("tiles.realization")}
@@ -298,115 +303,120 @@ export function WipBillingWorkspace({
             amount: money(analytics.leakage.heldOver90),
           })}
           icon="triangle-alert"
-          accent={decimalCmp(analytics.leakage.total, "0") > 0 ? "red" : "amber"}
-          tone={decimalCmp(analytics.leakage.total, "0") > 0 ? "negative" : "neutral"}
+          accent={
+            decimalCmp(analytics.leakage.total, "0") > 0 ? "red" : "amber"
+          }
+          tone={
+            decimalCmp(analytics.leakage.total, "0") > 0
+              ? "negative"
+              : "neutral"
+          }
         />
       </section>
 
-      <Card className="min-w-0 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="flex flex-col items-stretch justify-between gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
-            <div>
-              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {t("list.title")}
-              </div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {t("list.description")}
-              </div>
-            </div>
-            {canManage ? (
-              <Button
-                disabled={projects.length === 0}
-                onClick={() => setCreating(true)}
-              >
-                <Plus className="mr-2 size-4" />
-                {t("list.newPrebill")}
-              </Button>
-            ) : null}
-          </div>
-          <div className="overflow-x-auto">
-            {prebills.length === 0 ? (
-              <EmptyState
-                className="m-6"
-                icon={<FileText />}
-                title={
-                  projects.length === 0
-                    ? t("empty.noProjectsTitle")
-                    : t("empty.noPrebillsTitle")
-                }
-                description={
-                  projects.length === 0
-                    ? t("empty.noProjectsDescription")
-                    : t("empty.noPrebillsDescription")
-                }
-                action={
-                  canManage ? (
-                    projects.length > 0 ? (
-                      <Button onClick={() => setCreating(true)}>
-                        <Plus className="mr-2 size-4" />
-                        {t("empty.createPrebill")}
-                      </Button>
-                    ) : (
-                      <Button asChild variant="outline">
-                        <Link href="/projects">{t("empty.goToProjects")}</Link>
-                      </Button>
-                    )
-                  ) : undefined
-                }
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("table.worksheet")}</TableHead>
-                    <TableHead>{t("table.project")}</TableHead>
-                    <TableHead>{t("table.status")}</TableHead>
-                    <TableHead className="text-right">
-                      {t("table.proposed")}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {prebills.map((row) => (
-                    <InteractiveTableRow
-                      key={row.id}
-                      className={cn(
-                        "cursor-pointer",
-                        selected?.id === row.id &&
-                          "bg-teal-50/70 dark:bg-teal-950/20",
-                      )}
-                      onClick={() =>
-                        router.push(`/projects/wip-billing?prebill=${row.id}`)
-                      }
-                    >
-                      <TableCell>
-                        <p className="font-medium">{row.worksheetNumber}</p>
-                        <p className="text-xs text-slate-500">
-                          {t("table.through", { periodEnd: row.periodEnd })}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <p>{row.projectName}</p>
-                        <p className="text-xs text-slate-500">
-                          {row.customerName ?? t("table.noCustomer")}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_VARIANT[row.status]}>
-                          {enumLabel(row.status, prebillStatusLabels, tCommon("labels.unknownValue"))}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {money(row.proposedBillAmount)}
-                      </TableCell>
-                    </InteractiveTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <PagedTable
+        source="projects_wip_prebills"
+        rows={prebills}
+        rowKey={(row) => row.id}
+        searchable
+        emptyAsRow
+        onRowClick={(row) =>
+          router.push(`/projects/wip-billing?prebill=${row.id}`)
+        }
+        rowSelected={(row) => selected?.id === row.id}
+        rowClassName={(row) =>
+          selected?.id === row.id
+            ? "bg-teal-50/70 dark:bg-teal-950/20"
+            : undefined
+        }
+        toolbarAfter={
+          canManage ? (
+            <Button
+              disabled={projects.length === 0}
+              onClick={() => setCreating(true)}
+            >
+              <Plus className="mr-2 size-4" />
+              {t("list.newPrebill")}
+            </Button>
+          ) : undefined
+        }
+        empty={
+          <EmptyState
+            icon={<FileText />}
+            title={
+              projects.length === 0
+                ? t("empty.noProjectsTitle")
+                : t("empty.noPrebillsTitle")
+            }
+            description={
+              projects.length === 0
+                ? t("empty.noProjectsDescription")
+                : t("empty.noPrebillsDescription")
+            }
+            action={
+              canManage && projects.length === 0 ? (
+                <Button asChild variant="outline">
+                  <Link href="/projects">{t("empty.goToProjects")}</Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        }
+        columns={[
+          {
+            key: "worksheet",
+            header: t("table.worksheet"),
+            search: (row) => row.worksheetNumber,
+            cell: (row) => (
+              <>
+                <p className="font-medium">{row.worksheetNumber}</p>
+                <p className="text-xs text-slate-500">
+                  {t("table.through", { periodEnd: row.periodEnd })}
+                </p>
+              </>
+            ),
+          },
+          {
+            key: "project",
+            header: t("table.project"),
+            search: (row) => `${row.projectName} ${row.customerName ?? ""}`,
+            cell: (row) => (
+              <>
+                <p>{row.projectName}</p>
+                <p className="text-xs text-slate-500">
+                  {row.customerName ?? t("table.noCustomer")}
+                </p>
+              </>
+            ),
+          },
+          {
+            key: "status",
+            header: t("table.status"),
+            search: (row) =>
+              enumLabel(
+                row.status,
+                prebillStatusLabels,
+                tCommon("labels.unknownValue"),
+              ),
+            cell: (row) => (
+              <Badge variant={STATUS_VARIANT[row.status]}>
+                {enumLabel(
+                  row.status,
+                  prebillStatusLabels,
+                  tCommon("labels.unknownValue"),
+                )}
+              </Badge>
+            ),
+          },
+          {
+            key: "proposed",
+            header: t("table.proposed"),
+            align: "right",
+            className: "tabular-nums",
+            cell: (row) => money(row.proposedBillAmount),
+          },
+        ]}
+      />
 
       <Drawer
         open={creating}
@@ -432,7 +442,9 @@ export function WipBillingWorkspace({
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="wip-project">{t("createDrawer.projectLabel")}</Label>
+            <Label htmlFor="wip-project">
+              {t("createDrawer.projectLabel")}
+            </Label>
             <Select
               id="wip-project"
               value={projectId}
@@ -496,7 +508,11 @@ export function WipBillingWorkspace({
             <span className="flex items-center gap-2.5">
               <span>{selected.worksheetNumber}</span>
               <Badge variant={STATUS_VARIANT[selected.status]}>
-                {enumLabel(selected.status, prebillStatusLabels, tCommon("labels.unknownValue"))}
+                {enumLabel(
+                  selected.status,
+                  prebillStatusLabels,
+                  tCommon("labels.unknownValue"),
+                )}
               </Badge>
             </span>
           }
@@ -657,9 +673,7 @@ export function WipBillingWorkspace({
             {selected.status === "approved" ? (
               <Alert>
                 <Lock className="size-4" />
-                <AlertDescription>
-                  {t("lockedAlert")}
-                </AlertDescription>
+                <AlertDescription>{t("lockedAlert")}</AlertDescription>
               </Alert>
             ) : null}
             <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
@@ -744,7 +758,10 @@ function PrebillLine({
   const [holdReason, setHoldReason] = useState("");
   const [holdEvidence, setHoldEvidence] = useState("");
   const exactAmount = canonicalDecimal(amount, 4);
-  const amountComparison = exactAmount === null ? null : decimalCmp(exactAmount, line.originalBillAmount);
+  const amountComparison =
+    exactAmount === null
+      ? null
+      : decimalCmp(exactAmount, line.originalBillAmount);
   const changed = amountComparison !== 0;
   const t = useTranslations("projects.wipBilling");
 
