@@ -114,3 +114,18 @@ test('loaded list filters remain beside search when the collection is empty', as
     )
   }
 })
+
+
+test('server controls share the universal toolbar and fixed readers omit ineffective page-size controls', () => {
+  const toolbar = <button>Status</button>
+  const result = RegisteredListTable({
+    source: 'hrm_org_chart_directory',
+    rows: [], rowKey: (row: { id: string }) => row.id,
+    empty: 'No employees', columns: [],
+    state: { total: 0, page: 1, perPage: 50 },
+    toolbarAfter: toolbar,
+  })
+  assert.equal(result.type, ServerPagedTable)
+  assert.equal(result.props.toolbar, toolbar, 'domain controls belong to the shared table toolbar')
+  assert.equal(result.props.showPerPage, false, 'fixed readers cannot honor another page size')
+})

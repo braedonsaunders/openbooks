@@ -8,6 +8,8 @@ export interface PreparedListSource {
   mode: 'loaded' | 'server' | 'external'
   basePathField?: string
   clientSearch?: boolean
+  /** Fixed-size readers do not expose a selector they cannot honor. */
+  showPerPage?: boolean
   paging?: {
     totalField: string
     pageField: string
@@ -143,6 +145,7 @@ const SOURCES = {
     },
   },
   accounts_search: {
+    showPerPage: false,
     clientSearch: false,
     route: '/accounts',
     rowsField: 'rows',
@@ -324,6 +327,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   knowledge_views: {
+    showPerPage: false,
     clientSearch: false,
     route: '/knowledge/views',
     rowsField: 'rows',
@@ -398,6 +402,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_org_chart_directory: {
+    showPerPage: false,
     route: '/hrm/org-chart',
     rowsField: 'directoryRows',
     rowKeyField: 'id',
