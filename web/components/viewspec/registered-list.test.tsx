@@ -114,3 +114,34 @@ test('registered widget composition renders typed cells through the shared table
     'the shared renderer must not slice the server window',
   )
 })
+
+
+test('coverage windows retain the domain pager and every worker returned by its reader', async () => {
+  const React = await import('react')
+  Object.assign(globalThis, { React })
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { NextIntlClientProvider } = await import('next-intl')
+  const messages = (await import('../../messages/en')).default
+  const { BlockView } = await import('./blocks')
+  const { registeredListTable } = await import('../../lib/list/prepared-spec')
+  const rows = Array.from({ length: 50 }, (_, index) => ({
+    employmentId: `worker-${index}`, workerName: `Worker ${index}`,
+  }))
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+      <BlockView
+        block={registeredListTable('hrm_qualifications_coverage', {
+          variant: 'app', rows: field('coverageRows'), rowKey: field('employmentId'),
+          columns: [column('Worker', text(field('workerName')))],
+        })}
+        scope={{ coverageRows: rows, coverageTotal: 125, coveragePage: 2, coveragePerPage: 50 }}
+        searchParams={{ crewPage: '2' }}
+      />
+    </NextIntlClientProvider>,
+  )
+  assert.equal((html.match(/<td/g) ?? []).length, 50, 'a 50-worker server page must not be sliced to ten workers')
+  for (const row of rows) assert.ok(html.includes(row.workerName), row.employmentId)
+  assert.ok(!html.includes('<input'), 'a client search cannot cover the remaining server pages')
+  assert.ok(!html.includes('<select'), 'the fixed-size crew reader cannot honor another page size')
+  assert.ok(!html.includes('Page 1'), 'the spec-owned crew pager must not gain a second pager')
+})
