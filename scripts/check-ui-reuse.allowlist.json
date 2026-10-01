@@ -18,7 +18,7 @@
     },
     {
       "path": "web/app/(app)/close/posting-periods/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
+      "reason": "Thin workflow route delegates to a registered client collection whose view composes the shared ListPageLayout."
     },
     {
       "path": "web/app/(app)/feature-required/page.tsx",
@@ -58,7 +58,7 @@
     },
     {
       "path": "web/app/(app)/projects/duplicates/page.tsx",
-      "reason": "Bespoke workflow page with its own shell rather than the module list shell."
+      "reason": "Thin workflow route delegates to a registered client collection whose view composes the shared ListPageLayout."
     }
   ]
 }
