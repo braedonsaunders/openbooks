@@ -172,7 +172,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
       where org_id=${org.orgId} and key='posting-effects-operator'`);
     await assert.rejects(() => replayTerminalPostingEffect({ orgId: org.orgId, id: effectId, actorId,
       reason: "Controller reviewed the failure before retrying." }), /posting permission and legal-entity access/);
-    await db.execute(sql`update app_roles set subsidiary_restriction=null where org_id=${org.orgId} and key='posting-effects-operator'`);
+    await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='posting-effects-operator'`);
     const replayAt = new Date("2026-07-20T13:00:00.000Z");
     await replayTerminalPostingEffect({
       orgId: org.orgId,
