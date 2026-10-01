@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
+import { PagedTable } from "../../../components/paged-table";
 import { compareDecimal } from "../../../lib/exact-decimal";
 import { confirmDialog } from "@/lib/confirm";
 import { Empty, Small, Status } from "./workspace-ui";
@@ -45,18 +46,17 @@ export function CamTable({
   const pools = propertyId
     ? data.camPools.filter((pool) => pool.propertyId === propertyId)
     : data.camPools;
-  if (!pools.length)
-    return (
-      <Empty
-        title="No CAM pools yet"
-        detail={propertyId
-          ? "Create this property's first operating-expense pool and tenant reconciliation."
-          : "Create an annual operating-expense pool, allocate actual GL costs, and invoice tenant true-ups."}
-      />
-    );
-  return (
-    <div className="divide-y divide-slate-200 dark:divide-slate-800">
-      {pools.map((pool) => {
+  // The pool collection renders through the shared table (one card per row)
+  // so search, paging and the empty state match every other collection. Each
+  // card keeps its lifecycle actions and its pinned refusal; the per-pool
+  // allocation breakdown stays a detail table inside the card.
+  const poolSearchText = (pool: CamPool) => {
+    const property = data.properties.find((item) => item.id === pool.propertyId);
+    return [pool.name, String(pool.fiscalYear), property?.name, pool.status, pool.allocationBasis]
+      .map((value) => String(value ?? ""))
+      .join(" ");
+  };
+  const poolCard = (pool: CamPool) => {
         const property = data.properties.find(
           (item) => item.id === pool.propertyId,
         );
@@ -65,7 +65,7 @@ export function CamTable({
         );
         const moneyOptions = camMoneyOptions(property?.currency);
         return (
-          <div key={pool.id} className="space-y-3 p-4">
+          <div className="space-y-3 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="font-medium">
@@ -236,7 +236,29 @@ export function CamTable({
             ) : null}
           </div>
         );
-      })}
-    </div>
+  };
+  return (
+    <PagedTable
+      source="property_cam_pools"
+      rows={pools}
+      rowKey={(pool) => pool.id}
+      searchable
+      empty={(
+        <Empty
+          title="No CAM pools yet"
+          detail={propertyId
+            ? "Create this property's first operating-expense pool and tenant reconciliation."
+            : "Create an annual operating-expense pool, allocate actual GL costs, and invoice tenant true-ups."}
+        />
+      )}
+      columns={[
+        {
+          key: "pool",
+          header: <span className="sr-only">CAM pool</span>,
+          cell: poolCard,
+          search: poolSearchText,
+        },
+      ]}
+    />
   );
 }

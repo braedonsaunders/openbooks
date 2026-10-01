@@ -115,6 +115,10 @@ const forecastMocks = new Map<string, string>([
       export function text(value) { return value }
       export function widget(kind, props) { return { kind, ...props } }
       export function widgetBlock(kind, props) { return { kind, ...props } }
+      // The registered-list registry resolves display values through the
+      // shared resolver. Loader-only tests never render a spec, so this
+      // stays a link-time stub that fails loudly if ever invoked.
+      export function resolvePath() { throw new Error('unexpected spec render') }
     `,
   ],
 ])

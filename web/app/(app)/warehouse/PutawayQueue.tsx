@@ -70,6 +70,7 @@ export function PutawayQueue({ rows, canPost }: { rows: StagedStockRowView[]; ca
 
   return (
     <PagedTable<StagedStockRowView>
+      source="warehouse_putaway"
       rows={rows}
       rowKey={rowId}
       searchable

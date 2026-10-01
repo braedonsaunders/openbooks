@@ -23,6 +23,7 @@ import Link from "next/link";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { PagedTable, type PagedColumn } from "../../../components/paged-table";
+import { ListPageLayout } from "../../../components/page-layout";
 import {
   Badge,
   Button,
@@ -701,22 +702,24 @@ export function PlatformClient() {
   }
 
   return (
-    <div>
-      <PageHeader
-        back={{ href: "/admin", label: tHub("title") }}
-        title={t("title")}
-        description={t("description")}
-      />
-
-      <div className="mt-6 flex items-center justify-between">
+    <ListPageLayout
+      header={
+        <PageHeader
+          back={{ href: "/admin", label: tHub("title") }}
+          title={t("title")}
+          description={t("description")}
+          actions={canManage ? (
+            <Button onClick={() => setDrawer({ editing: null })}>
+              <Plus size={15} /> {t("connections.add")}
+            </Button>
+          ) : undefined}
+        />
+      }
+    >
+      <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
           {t("connections.heading")}
         </h2>
-        {canManage ? (
-          <Button onClick={() => setDrawer({ editing: null })}>
-            <Plus size={15} /> {t("connections.add")}
-          </Button>
-        ) : null}
       </div>
 
       {loading ? (
@@ -1042,6 +1045,7 @@ export function PlatformClient() {
             {t("runs.heading")}
           </h2>
           <PagedTable
+            source="sync_runs"
             rows={data.runs}
             columns={runColumns}
             pageSize={15}
@@ -1067,7 +1071,7 @@ export function PlatformClient() {
           }}
         />
       ) : null}
-    </div>
+    </ListPageLayout>
   );
 }
 

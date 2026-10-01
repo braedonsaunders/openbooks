@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
   badge,
   column,
@@ -12,7 +13,6 @@ import {
   pageHeader,
   ref,
   rootRef,
-  table,
   text,
   textBlock,
   widget,
@@ -220,7 +220,7 @@ export function informationReturnsSpec(data: InformationReturnsData): PageSpec {
       },
       {
         ...grid(PANEL, [
-          table({
+          registeredListTable('compliance_information_returns', {
             variant: 'app',
             rows: f('rows'),
             rowKey: item('id'),
@@ -270,7 +270,7 @@ export function informationReturnsSpec(data: InformationReturnsData): PageSpec {
           },
           {
             ...grid(PANEL, [
-              table({
+              registeredListTable('compliance_information_return_readiness', {
                 variant: 'app',
                 rows: f('readiness'),
                 rowKey: item('partyId'),
