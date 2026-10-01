@@ -302,7 +302,7 @@ test('Benefits header has one primary create action and windows use the native r
   const spec = benefitsSpec(data)
   const header = spec.header?.find((block) => block.kind === 'page-header')
   assert.ok(header)
-  const creates = header.actions?.filter((action) => action.name === 'link-button') ?? []
+  const creates = header.actions?.filter((action) => action.widget === 'link-button') ?? []
   assert.equal(creates.length, 1)
   const serialized = JSON.stringify(spec)
   assert.ok(serialized.includes('hrm_benefits_windows'), 'window rows retain the shared registry identity')
