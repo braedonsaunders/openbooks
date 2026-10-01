@@ -259,10 +259,10 @@ test('Enrollment windows are a header action and drawer, never a second page or 
   assert.equal(legacy.windowsManagerOpen, true)
 })
 
-test('New enrolment binds the native controlled election form to the HR filing API', async () => {
+test('New enrollment binds the native controlled election form to the HR filing API', async () => {
   stubReads([windowRow('open', 'open'), windowRow('draft', 'draft')], [])
   const data = await loadBenefits(HR_BENEFITS, { view: 'enrolments', enrollment: 'new' })
-  assert.equal(data.enrollmentDialog?.title, 'New enrolment')
+  assert.equal(data.enrollmentDialog?.title, 'New enrollment')
   assert.deepEqual(data.enrollmentDialog?.windows.map((window) => window.value), ['open'])
   const serialized = JSON.stringify(benefitsSpec(data))
   assert.ok(serialized.includes('"mode":"manage"'))
