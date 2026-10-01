@@ -1,12 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Download } from 'lucide-react'
-import { Button, PageHeader, Select, cn } from '@openbooks/ui'
+import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Label, PageHeader, Select } from '@openbooks/ui'
+import { dataResourceLabel, dataFieldLabel } from '../../../../lib/data-io/labels'
 import { readApiErrorMessage } from '../../../../lib/api-error'
-import { downloadExportFile } from '../../../../lib/export-download'
+import { requestTransfer, useTransferJob } from '../../../../lib/data-io/transfer-client'
+import { DataTransferStatus } from '../../../../components/data-transfer-status'
+import { DataTransferPicker } from '../../../../components/data-transfer-picker'
 
 interface ResourceDescriptor {
   key: string
@@ -24,18 +27,19 @@ type Format = (typeof FORMATS)[number]
 
 export function ExportClient() {
   const t = useTranslations('data')
+  const tCatalog = useTranslations()
+  const { job, remember, connectionError, running } = useTransferJob('export')
   const [resources, setResources] = useState<ResourceDescriptor[]>([])
   const [resource, setResource] = useState('')
   const [columns, setColumns] = useState<Column[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [format, setFormat] = useState<Format>('csv')
   const [loadingCols, setLoadingCols] = useState(false)
-  const [busy, setBusy] = useState(false)
-  // Last completed download, tied to the actual file: filename read back
-  // from the response disposition and the columns it contains. Cleared
-  // whenever the export context changes so success never trails a new run.
-  const [done, setDone] = useState<{ filename: string; columns: number } | null>(null)
-
+  const [working, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const restoredJobId = useRef<string | null>(null)
+  const creationRequest = useRef<{ key: string; inputs: string } | null>(null)
+  const busy = working || running
   useEffect(() => {
     fetch('/api/data/resources')
       .then(async (r) => {
@@ -58,7 +62,7 @@ export function ExportClient() {
     return [...map.entries()]
   }, [resources])
 
-  const loadColumns = useCallback((key: string) => {
+  const loadColumns = useCallback((key: string, restoredColumns?: string[]) => {
     if (!key) {
       setColumns([])
       setSelected(new Set())
@@ -73,7 +77,7 @@ export function ExportClient() {
       .then((d) => {
         const cols: Column[] = d.columns ?? []
         setColumns(cols)
-        setSelected(new Set(cols.map((c) => c.key)))
+        setSelected(new Set(restoredColumns ?? cols.map((c) => c.key)))
       })
       .catch((e) => {
         toast.error((e as Error).message)
@@ -83,14 +87,25 @@ export function ExportClient() {
       .finally(() => setLoadingCols(false))
   }, [t])
 
+  useEffect(() => {
+    if (!job) { restoredJobId.current = null; return }
+    if (restoredJobId.current === job.id) return
+    restoredJobId.current = job.id
+    setResource(job.resource); setFormat(job.format)
+    loadColumns(job.resource, job.options.columns)
+  }, [job, loadColumns])
+
+  const selectedResource = resources.find((item) => item.key === resource)
+  const columnLabel = (field: Column) => dataFieldLabel(field, selectedResource, tCatalog)
+
   const onResourceChange = (key: string) => {
     setResource(key)
-    setDone(null)
+    remember(null)
     loadColumns(key)
   }
 
   const toggle = (key: string) => {
-    setDone(null)
+    remember(null)
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -102,22 +117,20 @@ export function ExportClient() {
   const runExport = async () => {
     if (!resource) return
     setBusy(true)
-    setDone(null)
+    setError(null)
+    remember(null)
     try {
       const chosen = columns.filter((c) => selected.has(c.key)).map((c) => c.key)
-      // Completion is claimed only now: the bytes arrive inside the shared
-      // helper and the download starts with the real filename.
-      const filename = await downloadExportFile(
-        '/api/data/export',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ resource, format, columns: chosen }),
-        },
-        { fallbackFilename: `${resource}.${format}`, failedMessage: t('export.failed') },
-      )
-      setDone({ filename, columns: chosen.length })
+      const inputs = JSON.stringify({ resource, format, columns: chosen })
+      if (creationRequest.current?.inputs !== inputs) creationRequest.current = { key: crypto.randomUUID(), inputs }
+      remember(await requestTransfer('/api/data/transfers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestKey: creationRequest.current.key, kind: 'export', resource, format,
+          filename: `${resource.replace(/[^a-zA-Z0-9_-]/g, '_')}.${format}`, bytes: 0, options: { columns: chosen } }),
+      }))
+      creationRequest.current = null
     } catch (e) {
+      setError((e as Error).message)
       toast.error((e as Error).message)
     } finally {
       setBusy(false)
@@ -135,108 +148,84 @@ export function ExportClient() {
   return (
     <div className="space-y-6">
       <PageHeader title={t('export.title')} description={t('export.description')} />
+      <DataTransferPicker kind="export" job={job} onChange={remember} disabled={working} />
+      {(error || (!job && connectionError)) && <Alert variant="destructive">{error || connectionError}</Alert>}
+      {job && <DataTransferStatus job={job} onChange={remember} connectionError={connectionError} />}
 
-      <div className="max-w-2xl space-y-6">
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-muted-foreground">{t('export.resource')}</label>
-          <Select
-            value={resource}
-            onChange={(e) => onResourceChange(e.target.value)}
-            placeholder={t('export.resourcePlaceholder')}
-          >
-            <option value="">{t('export.resourcePlaceholder')}</option>
-            {grouped.map(([group, list]) => (
-              <optgroup key={group} label={group}>
-                {list.map((r) => (
-                  <option key={r.key} value={r.key}>
-                    {r.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </Select>
-        </div>
-
-        {resource && (
+      <Card>
+        <CardContent className="grid gap-5 p-4 sm:grid-cols-2 sm:p-5">
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-muted-foreground">{t('export.columns')}</label>
-              {columns.length > 0 && (
-                <div className="flex gap-2 text-xs">
-                  <button
-                    type="button"
-                    className="text-primary hover:underline"
-                    onClick={() => {
-                      setDone(null)
-                      setSelected(new Set(columns.map((c) => c.key)))
-                    }}
-                  >
-                    {t('export.selectAll')}
-                  </button>
-                  <span className="text-muted-foreground">·</span>
-                  <button
-                    type="button"
-                    className="text-primary hover:underline"
-                    onClick={() => {
-                      setDone(null)
-                      setSelected(new Set())
-                    }}
-                  >
-                    {t('export.clearAll')}
-                  </button>
-                </div>
-              )}
-            </div>
+            <Label htmlFor="export-resource">{t('export.resource')}</Label>
+            <Select
+              id="export-resource"
+              value={resource}
+              disabled={busy}
+              onChange={(e) => onResourceChange(e.target.value)}
+            >
+              <option value="">{t('export.resourcePlaceholder')}</option>
+              {grouped.map(([group, list]) => (
+                <optgroup key={group} label={group}>
+                  {list.map((r) => <option key={r.key} value={r.key}>{dataResourceLabel(r, tCatalog)}</option>)}
+                </optgroup>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="export-format">{t('export.format')}</Label>
+            <Select id="export-format" value={format} disabled={busy} onChange={(e) => {
+              remember(null)
+              setFormat(e.target.value as Format)
+            }}>
+              {FORMATS.map((f) => <option key={f} value={f}>{f.toUpperCase()}</option>)}
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {resource && (
+        <Card>
+          <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-2 space-y-0">
+            <CardTitle className="text-sm">{t('export.columns')}</CardTitle>
+            {columns.length > 0 && (
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => {
+                  remember(null)
+                  setSelected(new Set(columns.map((c) => c.key)))
+                }}>{t('export.selectAll')}</Button>
+                <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => {
+                  remember(null)
+                  setSelected(new Set())
+                }}>{t('export.clearAll')}</Button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent>
             {loadingCols ? (
               <p className="text-sm text-muted-foreground">…</p>
             ) : columns.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t('export.noColumns')}</p>
             ) : (
-              <div className="grid grid-cols-2 gap-2 rounded-lg border border-border p-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {columns.map((c) => (
-                  <label key={c.key} className="flex items-center gap-2 text-sm">
+                  <Label key={c.key} htmlFor={`export-column-${c.key}`} className="flex min-w-0 items-center gap-2 font-normal">
                     <input
+                      id={`export-column-${c.key}`}
                       type="checkbox"
-                      className="h-4 w-4 rounded border-border"
+                      className="h-4 w-4 shrink-0 rounded border-border"
                       checked={selected.has(c.key)}
+                      disabled={busy}
                       onChange={() => toggle(c.key)}
                     />
-                    <span className="truncate" title={c.label}>
-                      {c.label}
-                    </span>
-                  </label>
+                    <span className="truncate" title={columnLabel(c)}>{columnLabel(c)}</span>
+                  </Label>
                 ))}
               </div>
             )}
-          </div>
-        )}
+          </CardContent>
+        </Card>
+      )}
 
-        {resource && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">{t('export.format')}</label>
-            <div className="flex gap-2">
-              {FORMATS.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => {
-                    setDone(null)
-                    setFormat(f)
-                  }}
-                  className={cn(
-                    'rounded-md border px-4 py-2 text-sm font-medium uppercase',
-                    format === f
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-muted-foreground hover:bg-muted',
-                  )}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
+      <div className="ff-footer space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
         <Button
           onClick={runExport}
           disabled={!resource || busy || selected.size === 0}
@@ -248,11 +237,6 @@ export function ExportClient() {
         {disabledReason ? (
           <p id="data-export-hint" className="text-sm text-muted-foreground">
             {disabledReason}
-          </p>
-        ) : null}
-        {done && !disabledReason ? (
-          <p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">
-            {t('export.exported', { filename: done.filename, count: done.columns })}
           </p>
         ) : null}
       </div>

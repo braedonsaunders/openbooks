@@ -1,3 +1,5 @@
+import { importRowError } from './row-error'
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 /** Property-management migration import/export resources. */
 
 import 'server-only'
@@ -22,8 +24,6 @@ import {
 import { coerceBoolean } from '../setup/coerce'
 import { INVENTORY_ITEM_KINDS } from './master-data-resources'
 import {
-  enforceExportRowLimit,
-  MAX_EXPORT_ROWS,
   orgFeatureEnabled,
   RefResolver,
   type DataResource,
@@ -139,23 +139,23 @@ function propertyResource(orgId: string): DataResource {
     async columns() {
       return (await propertyFields(await orgFeatureEnabled(orgId, 'fixedAssets'), await orgFeatureEnabled(orgId, 'multiCurrency'))).map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: import('./resource-core').ReadCtx) {
       const fields = await propertyFields(await orgFeatureEnabled(orgId, 'fixedAssets'), await orgFeatureEnabled(orgId, 'multiCurrency'))
-      const rows = (await db.execute(sql`
+      const rows = (await readExportWindow(db, sql`
         select p.code,p.name,p.property_type as "propertyType",p.status,s.name as subsidiary,l.code as location,
           fa.asset_number as "fixedAsset",p.currency,p.address->>'street' as street,p.address->>'city' as city,
           p.address->>'region' as region,p.address->>'postalCode' as "postalCode",ra.number as "rentIncomeAccount",
           ca.number as "camIncomeAccount",da.number as "depositLiabilityAccount",ba.number as "defaultBankAccount"
-        from managed_properties p join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
+       ${transferId(readCtx, sql`p.id`)} from managed_properties p join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
         left join locations l on l.id=p.location_id and l.org_id=p.org_id
         left join fixed_assets fa on fa.id=p.fixed_asset_id and fa.org_id=p.org_id
         left join accounts ra on ra.id=p.rent_income_account_id and ra.org_id=p.org_id
         left join accounts ca on ca.id=p.cam_income_account_id and ca.org_id=p.org_id
         left join accounts da on da.id=p.deposit_liability_account_id and da.org_id=p.org_id
         left join accounts ba on ba.id=p.default_bank_account_id and ba.org_id=p.org_id
-        where p.org_id=${orgId} order by p.code limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+        where p.org_id=${orgId} ${transferWhere(readCtx, sql`p.id`)} order by ${transferOrder(readCtx, sql`p.id`, sql`p.code`)} limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(rows.rows, 'Properties')
+      finishExportPage(rows.rows, 'Properties', readCtx)
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: rows.rows }
     },
     async write(rows, mode, ctx) {
@@ -214,7 +214,7 @@ function propertyResource(orgId: string): DataResource {
           }
         } catch (error) {
           outcome.failed++
-          outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' })
+          outcome.errors.push({ row: index + 1, message: importRowError(error) })
         }
       }
       return outcome
@@ -239,10 +239,10 @@ function unitResource(orgId: string): DataResource {
   return {
     descriptor: PROPERTY_DESCRIPTOR_BY_KEY.get('property-units')!,
     async fields() { return fields }, async columns() { return fields.map((f) => ({ key: f.key, label: f.label })) },
-    async read() {
-      const result = (await db.execute(sql`select p.code as "propertyCode",u.code,u.name,u.unit_type as "unitType",u.rentable_area as "rentableArea",u.bedrooms,u.status from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${orgId} order by p.code,u.code limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+    async read(readCtx?: import('./resource-core').ReadCtx) {
+      const result = (await readExportWindow(db, sql`select p.code as "propertyCode",u.code,u.name,u.unit_type as "unitType",u.rentable_area as "rentableArea",u.bedrooms,u.status${transferId(readCtx, sql`u.id`)} from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${orgId} ${transferWhere(readCtx, sql`u.id`)} order by ${transferOrder(readCtx, sql`u.id`, sql`p.code,u.code`)} limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(result.rows, 'Property units')
+      finishExportPage(result.rows, 'Property units', readCtx)
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: result.rows }
     },
     async write(rows, mode, ctx) {
@@ -263,7 +263,7 @@ function unitResource(orgId: string): DataResource {
           }
         }
         if (found.rows[0]) outcome.updated++; else outcome.created++
-      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
+      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: importRowError(error) }) }
       return outcome
     },
   }
@@ -297,10 +297,10 @@ function leaseResource(orgId: string): DataResource {
   return {
     descriptor: PROPERTY_DESCRIPTOR_BY_KEY.get('property-leases')!,
     async fields() { return fields }, async columns() { return fields.map((f) => ({ key: f.key, label: f.label })) },
-    async read() {
-      const result = (await db.execute(sql`select l.lease_number as "leaseNumber",p.code as "propertyCode",u.code as "unitCode",t.short_code as tenant,l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",c.amount as "baseRent",l.billing_day as "billingDay",l.payment_terms_days as "paymentTermsDays",l.security_deposit_required as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent as "camSharePercent",l.late_fee_type as "lateFeeType",l.late_fee_value as "lateFeeValue",l.grace_days as "graceDays",l.auto_invoice as "autoInvoice",l.auto_post as "autoPost" from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id left join property_units u on u.id=l.unit_id and u.org_id=l.org_id join parties t on t.id=l.tenant_id and t.org_id=l.org_id left join lateral(select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1)c on true where l.org_id=${orgId} order by l.lease_number limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+    async read(readCtx?: import('./resource-core').ReadCtx) {
+      const result = (await readExportWindow(db, sql`select l.lease_number as "leaseNumber",p.code as "propertyCode",u.code as "unitCode",t.short_code as tenant,l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",c.amount as "baseRent",l.billing_day as "billingDay",l.payment_terms_days as "paymentTermsDays",l.security_deposit_required as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent as "camSharePercent",l.late_fee_type as "lateFeeType",l.late_fee_value as "lateFeeValue",l.grace_days as "graceDays",l.auto_invoice as "autoInvoice",l.auto_post as "autoPost"${transferId(readCtx, sql`l.id`)} from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id left join property_units u on u.id=l.unit_id and u.org_id=l.org_id join parties t on t.id=l.tenant_id and t.org_id=l.org_id left join lateral(select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1)c on true where l.org_id=${orgId} ${transferWhere(readCtx, sql`l.id`)} order by ${transferOrder(readCtx, sql`l.id`, sql`l.lease_number`)} limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(result.rows, 'Property leases')
+      finishExportPage(result.rows, 'Property leases', readCtx)
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: result.rows }
     },
     async write(rows, mode, ctx) {
@@ -326,7 +326,7 @@ function leaseResource(orgId: string): DataResource {
           }
         }
         if (current) outcome.updated++; else outcome.created++
-      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
+      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: importRowError(error) }) }
       return outcome
     },
   }
@@ -355,11 +355,11 @@ function leaseChargeResource(orgId: string): DataResource {
     async columns() {
       return (await leaseChargeFields(await orgFeatureEnabled(orgId, 'inventory'))).map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: import('./resource-core').ReadCtx) {
       const fields = await leaseChargeFields(await orgFeatureEnabled(orgId, 'inventory'))
-      const result = (await db.execute(sql`select l.lease_number as "leaseNumber",c.charge_type as "chargeType",c.description,c.amount,c.frequency,c.effective_from as "effectiveFrom",c.effective_to as "effectiveTo",a.number as "incomeAccount",i.code as item,t.code as "taxCode" from lease_charges c join property_leases l on l.id=c.lease_id and l.org_id=c.org_id left join accounts a on a.id=c.income_account_id and a.org_id=c.org_id left join items i on i.id=c.item_id and i.org_id=c.org_id left join tax_codes t on t.id=c.tax_code_id and t.org_id=c.org_id where c.org_id=${orgId} and c.charge_type<>'base_rent' order by l.lease_number,c.effective_from,c.description limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+      const result = (await readExportWindow(db, sql`select l.lease_number as "leaseNumber",c.charge_type as "chargeType",c.description,c.amount,c.frequency,c.effective_from as "effectiveFrom",c.effective_to as "effectiveTo",a.number as "incomeAccount",i.code as item,t.code as "taxCode"${transferId(readCtx, sql`c.id`)} from lease_charges c join property_leases l on l.id=c.lease_id and l.org_id=c.org_id left join accounts a on a.id=c.income_account_id and a.org_id=c.org_id left join items i on i.id=c.item_id and i.org_id=c.org_id left join tax_codes t on t.id=c.tax_code_id and t.org_id=c.org_id where c.org_id=${orgId} and c.charge_type<>'base_rent' ${transferWhere(readCtx, sql`c.id`)} order by ${transferOrder(readCtx, sql`c.id`, sql`l.lease_number,c.effective_from,c.description`)} limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(result.rows, 'Lease charges')
+      finishExportPage(result.rows, 'Lease charges', readCtx)
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: result.rows }
     },
     async write(rows, mode, ctx) {
@@ -404,7 +404,7 @@ function leaseChargeResource(orgId: string): DataResource {
           if (['active', 'notice'].includes(lease.rows[0].status)) await scheduleLeaseCharges(ctx.orgId, ctx.actorId, ctx.allowedSubsidiaryIds ?? null, lease.rows[0].id)
         }
         outcome.created++
-      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
+      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: importRowError(error) }) }
       return outcome
     },
   }
@@ -422,10 +422,10 @@ function depositOpeningResource(orgId: string): DataResource {
   return {
     descriptor: PROPERTY_DESCRIPTOR_BY_KEY.get('security-deposit-opening-balances')!,
     async fields() { return fields }, async columns() { return fields.map((f) => ({ key: f.key, label: f.label })) },
-    async read() {
-      const result = (await db.execute(sql`select d.import_key as "externalKey",l.lease_number as "leaseNumber",d.occurred_on as "occurredOn",d.amount,a.number as "offsetAccount",d.memo from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id left join accounts a on a.id=d.offset_account_id and a.org_id=d.org_id where d.org_id=${orgId} and d.import_key is not null order by d.occurred_on,d.import_key limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+    async read(readCtx?: import('./resource-core').ReadCtx) {
+      const result = (await readExportWindow(db, sql`select d.import_key as "externalKey",l.lease_number as "leaseNumber",d.occurred_on as "occurredOn",d.amount,a.number as "offsetAccount",d.memo${transferId(readCtx, sql`d.id`)} from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id left join accounts a on a.id=d.offset_account_id and a.org_id=d.org_id where d.org_id=${orgId} and d.import_key is not null ${transferWhere(readCtx, sql`d.id`)} order by ${transferOrder(readCtx, sql`d.id`, sql`d.occurred_on,d.import_key`)} limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(result.rows, 'Security deposit opening balances')
+      finishExportPage(result.rows, 'Security deposit opening balances', readCtx)
       return { fields, columns: fields.map((f) => ({ key: f.key, label: f.label })), rows: result.rows }
     },
     async write(rows, mode, ctx) {
@@ -461,7 +461,7 @@ function depositOpeningResource(orgId: string): DataResource {
         }
         if (!ctx.dryRun) await recordSecurityDeposit({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null, leaseId: lease.rows[0].id, kind: 'adjustment_increase', occurredOn, amount, offsetAccountId, memo, importKey: externalKey })
         outcome.created++
-      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: error instanceof Error ? error.message : 'write failed' }) }
+      } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: importRowError(error) }) }
       return outcome
     },
   }

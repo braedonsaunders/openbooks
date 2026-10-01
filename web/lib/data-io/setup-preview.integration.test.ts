@@ -40,7 +40,13 @@ test('setup preview evaluates storage checks and keeps successful mixed rows tem
       assert.equal(preview.created,1);assert.equal(preview.failed,1);
       assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`)).rows.length,0);
       assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='pay_components'`)).rows.length,0);
-      assert.deepEqual(await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:false}),preview);
+      const committed=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:false});
+      const counts=(outcome: typeof preview)=>({created:outcome.created,updated:outcome.updated,failed:outcome.failed,rows:outcome.errors.map(error=>error.row)});
+      assert.deepEqual(counts(committed),counts(preview));
+      for(const outcome of [preview,committed]) {
+        assert.match(outcome.errors[0]!.message,/inspect log reference [a-f0-9-]+, correct the cause, then retry/);
+        assert.doesNotMatch(outcome.errors[0]!.message,/Failed query|insert into|INVALID/);
+      }
     } finally {await dropScratchOrg(org.orgId);}
   });
 

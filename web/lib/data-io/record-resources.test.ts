@@ -181,12 +181,12 @@ test('custom-record XLSX import coerces schema-owned text and choice fields to d
 
 async function catalogModules() {
   const { getResource, listResources } = await import('./resources.ts')
-  const { SETUP_ENTITY_BY_KEY } = await import('../setup/registry.ts')
+  const { SETUP_ENTITY_BY_KEY, SETUP_ENTITIES } = await import('../setup/registry.ts')
   const { resolvedFeatureState } = await import('../features.ts')
   const { sql } = await import('drizzle-orm')
   const { db } = await import('@openbooks/engine/src/platform/db.ts')
   const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
-  return { getResource, listResources, SETUP_ENTITY_BY_KEY, resolvedFeatureState, sql, db, createScratchOrg, dropScratchOrgReporting }
+  return { getResource, listResources, SETUP_ENTITY_BY_KEY, SETUP_ENTITIES, resolvedFeatureState, sql, db, createScratchOrg, dropScratchOrgReporting }
 }
 
 /** Pin the org's feature flags, then read the state back so a zero-row write
@@ -213,6 +213,7 @@ function registerCatalogProbe(modules: Awaited<ReturnType<typeof catalogModules>
     columns: [],
     fields: [],
   })
+  modules.SETUP_ENTITIES.push(modules.SETUP_ENTITY_BY_KEY.get(key)!)
 }
 
 test('setup resource catalog honors an any-of descriptor through the shared gate', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -227,12 +228,13 @@ test('setup resource catalog honors an any-of descriptor through the shared gate
     assert.equal(await modules.getResource(org.orgId, probeKey), null)
     // Either member on admits through the same helper — describing the
     // resource needs no storage behind the gate.
-    await setCatalogFeatures(modules, org.orgId, { projects: false, manufacturing: true })
+    await setCatalogFeatures(modules, org.orgId, { projects: false, inventory: true, manufacturing: true })
     const admitted = await modules.listResources(org.orgId)
     assert.ok(admitted.some((descriptor) => descriptor.key === probeKey), 'one member on lists the entity')
     assert.ok(await modules.getResource(org.orgId, probeKey), 'one member on resolves the resource')
   } finally {
     modules.SETUP_ENTITY_BY_KEY.delete(probeKey)
+    modules.SETUP_ENTITIES.splice(modules.SETUP_ENTITIES.findIndex((entity) => entity.key === probeKey), 1)
     await modules.dropScratchOrgReporting(org.orgId)
   }
 })
@@ -249,6 +251,7 @@ test('setup resource catalog fails closed on unknown keys', { skip: !process.env
     assert.equal(await modules.getResource(org.orgId, probeKey), null)
   } finally {
     modules.SETUP_ENTITY_BY_KEY.delete(probeKey)
+    modules.SETUP_ENTITIES.splice(modules.SETUP_ENTITIES.findIndex((entity) => entity.key === probeKey), 1)
     await modules.dropScratchOrgReporting(org.orgId)
   }
 })

@@ -51,6 +51,14 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
+  // Transfers and their immutable source evidence execute only in the original environment.
+  "data_transfer_jobs",
+  "data_transfer_chunks",
+  "data_transfer_rows",
+  "data_transfer_keys",
+  "data_transfer_issues",
+  "data_transfer_events",
+
   // Published sales definitions may contain authored names and coverage.
   // Masked sandboxes require newly reviewed routing definitions.
   "crm_sales_territory_versions",

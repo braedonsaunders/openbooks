@@ -642,6 +642,7 @@ export async function openingBalanceLocks(
   taxYear: number,
   runner: Pick<typeof db, "execute"> = db,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+  employeePartyIds?: readonly string[],
 ): Promise<Map<string, { documentNumber: string | null; payDate: string }>> {
   const rows = (await runner.execute<LockRow>(sql`
     select distinct on (s.employee_party_id)
@@ -651,6 +652,7 @@ export async function openingBalanceLocks(
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
       left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and r.run_status = 'committed'
+       ${employeePartyIds === undefined ? sql`` : sql`and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by s.employee_party_id, s.pay_date
   `));
@@ -952,7 +954,8 @@ export async function saveOpeningBalances(input: {
       tx,
       input.rows.map((row) => employeeTaxYearFenceKey(input.orgId, row.employeePartyId, year)),
     );
-    const locks = await openingBalanceLocks(input.orgId, year, tx, input.allowedSubsidiaryIds);
+    const employeeIds = input.rows.map((row) => row.employeePartyId);
+    const locks = await openingBalanceLocks(input.orgId, year, tx, input.allowedSubsidiaryIds, employeeIds);
 
     // Employees must belong to this org. Resolving names in one pass also
     // gives every error message something a human can act on.
@@ -975,6 +978,7 @@ export async function saveOpeningBalances(input: {
     const existing = (await tx.execute<{ id: string; employee_party_id: string; updated_at: string | null }>(sql`
       select id, employee_party_id, updated_at::text as updated_at from payroll_opening_balances
        where org_id = ${input.orgId} and tax_year = ${year}
+         and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
     `));
     const hasRow = new Set(existing.rows.map((r) => r.employee_party_id));
     // The stored version per row, for the lost-update guard below. Compared
@@ -989,6 +993,7 @@ export async function saveOpeningBalances(input: {
         from payroll_opening_balance_components oc
         join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
        where oc.org_id = ${input.orgId} and b.tax_year = ${year}
+         and b.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
     `));
     const storedByEmployee = new Map<string, OpeningComponentAmounts>();
     for (const row of storedComponents.rows) {
@@ -1005,6 +1010,7 @@ export async function saveOpeningBalances(input: {
       select employee_party_id, program_key, insurable_ytd
         from payroll_opening_program_bases
        where org_id = ${input.orgId} and tax_year = ${year}
+         and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
     `));
     const storedProgramsByEmployee = new Map<string, OpeningProgramAmounts>();
     for (const row of storedPrograms.rows) {
@@ -1019,6 +1025,7 @@ export async function saveOpeningBalances(input: {
       select employee_party_id, program_key, filing_account_id, region, insurable_ytd
         from payroll_opening_account_bases
        where org_id = ${input.orgId} and tax_year = ${year}
+         and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
     `);
     const storedAccountBasesByEmployee = new Map<string, OpeningAccountBase[]>();
     for (const row of storedAccountBases.rows) {

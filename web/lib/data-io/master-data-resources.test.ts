@@ -189,23 +189,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:registry',
-    `
-      export function toSnake(value) {
-        return String(value).replace(/[A-Z]/g, (match) => '_' + match.toLowerCase())
-      }
-    `,
-  ],
-  [
-    'mock:coerce',
-    `
-      export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      export function coerceBoolean(value) {
-        return value === true || value === 1 || String(value).toLowerCase() === 'true'
-      }
-    `,
-  ],
-  [
     'mock:custom-fields',
     `
       const state = globalThis[Symbol.for('openbooks.master-data-import-test')]
@@ -276,8 +259,6 @@ const hooks = registerHooks({
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-      ['../setup/registry', 'mock:registry'],
-      ['../setup/coerce', 'mock:coerce'],
       ['../custom-fields', 'mock:custom-fields'],
       ['./resource-core', 'mock:resource-core'],
     ]).get(specifier)

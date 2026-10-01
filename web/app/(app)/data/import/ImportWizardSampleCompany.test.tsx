@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { dataTransferJob } from '../../../../testing/data-transfer'
 
 // a failed sample-company create must leave a persistent inline error
 // beside the company picker (not just a transient toast), keep the
@@ -70,6 +71,7 @@ const script = {
   resources: [] as { key: string; label: string; group: string; supportsImport?: boolean }[],
   importRequests: [] as { mode?: string }[],
   importFailureMode: null as string | null,
+  job: dataTransferJob(),
 }
 
 function stubFetch(): void {
@@ -92,23 +94,40 @@ function stubFetch(): void {
       }
       return Response.json({ ok: true, orgId: 'org-new', created: true, templateGenerated: false })
     }
-    if (url === '/api/data/import' && method === 'POST') {
-      const body = JSON.parse(String(init?.body ?? '{}')) as { mode?: string }
-      script.importRequests.push(body)
-      if (body.mode === script.importFailureMode) return new Response('<html>upstream unavailable</html>', { status: 502 })
-      if (body.mode === 'parse') {
-        return Response.json({ headers: ['Name'], rows: [{ Name: 'Acme' }], mapping: { Name: 'name' }, fields: [{ key: 'name', label: 'Name', kind: 'text' }] })
+    if (url === '/api/data/transfers' && method === 'GET') return Response.json({ jobs: [] })
+    if (url === '/api/data/transfers' && method === 'POST') {
+      script.importRequests.push({ mode: 'parse' })
+      if (script.importFailureMode === 'parse') return new Response('<html>upstream unavailable</html>', { status: 502 })
+      const body = JSON.parse(String(init?.body))
+      script.job = dataTransferJob({ resource: body.resource, format: body.format, filename: body.filename, bytes: body.bytes })
+      return Response.json({ job: script.job })
+    }
+    if (url.includes('/chunks/') && method === 'PUT') {
+      script.job = { ...script.job, uploadedBytes: script.job.bytes }
+      return Response.json({ job: script.job })
+    }
+    if (url.startsWith('/api/data/transfers/') && method === 'GET') {
+      if (script.job.state === 'parsing') script.job = { ...script.job, state: 'mapping', totalRows: 1, processedRows: 0 }
+      if (script.job.state === 'previewing') script.job = { ...script.job, state: 'ready', processedRows: 1, approvalHash: 'approved-source', preview: { created: 1, updated: 0, failed: 0, errors: [] } }
+      if (script.job.state === 'committing') script.job = { ...script.job, state: 'completed', processedRows: 1, outcome: { created: 1, updated: 0, failed: 0, errors: [] } }
+      return Response.json({ job: script.job })
+    }
+    if (url.startsWith('/api/data/transfers/') && method === 'POST') {
+      const body = JSON.parse(String(init?.body))
+      if (body.action === 'preview' || body.action === 'commit') {
+        script.importRequests.push({ mode: body.action })
+        if (body.action === script.importFailureMode) return new Response('<html>upstream unavailable</html>', { status: 502 })
       }
-      if (body.mode === 'preview') {
-        return Response.json({ outcome: { created: 1, updated: 0, failed: 0, errors: [] } })
-      }
-      return Response.json({ outcome: { created: 1, updated: 0, failed: 0, errors: [] } })
+      script.job = { ...script.job, revision: script.job.revision + 1,
+        state: body.action === 'finish-upload' ? 'parsing' : body.action === 'preview' ? 'previewing' : 'committing',
+        options: body.options ?? script.job.options }
+      return Response.json({ job: script.job })
     }
     throw new Error(`unexpected fetch ${method} ${url}`)
   }) as typeof fetch
 }
 
-async function mountWizard(t: TestContext, sample = false): Promise<void> {
+async function mountWizard(t: TestContext, sample = false, back?: { backHref: string; backLabel: string }): Promise<void> {
   globalThis.__sampleTestRouter = { pushes: [] }
   globalThis.__sampleTestToasts = []
   globalThis.__sampleTestEnteredOrgs = []
@@ -117,6 +136,7 @@ async function mountWizard(t: TestContext, sample = false): Promise<void> {
   script.postBody = { error: 'sample-company-clone-failed', stage: 'clone' }
   script.importRequests = []
   script.importFailureMode = null
+  window.history.replaceState(null, '', '/data/import')
   stubFetch()
   const rootHandle = createRoot(document.body)
   t.after(async () => {
@@ -129,7 +149,7 @@ async function mountWizard(t: TestContext, sample = false): Promise<void> {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-09-23">
-          {sample ? <SampleCompanyPicker /> : <ImportWizard />}
+          {sample ? <SampleCompanyPicker /> : <ImportWizard {...back} />}
         </BusinessDateProvider>
       </NextIntlClientProvider>,
     )
@@ -189,7 +209,13 @@ async function chooseImportSource(): Promise<void> {
 }
 
 async function clickImportAction(label: string): Promise<void> {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const ready = [...document.querySelectorAll('button')].find((item) => (item.textContent ?? '').includes(label) && !item.disabled)
+    if (ready) break
+    await act(async () => { await tick() })
+  }
   const button = importAction(label)
+  assert.equal(button.disabled, false)
   await act(async () => {
     button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await tick()
@@ -237,7 +263,7 @@ test('a subsequent success clears the error and enters the new company', async (
   )
 })
 
-test('the wizard does not send a commit when retry-key session storage cannot persist', async (t) => {
+test('the durable server job preserves retry identity when session storage is unavailable', async (t) => {
   script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data', supportsImport: true }]
   const original = Object.getOwnPropertyDescriptor(window, 'sessionStorage')
   Object.defineProperty(window, 'sessionStorage', {
@@ -256,35 +282,18 @@ test('the wizard does not send a commit when retry-key session storage cannot pe
   assert.equal(document.querySelector('#sample-companies'), null)
   await chooseImportSource()
 
-  const button = (label: string) => [...document.querySelectorAll('button')].find((candidate) =>
-    (candidate.textContent ?? '').includes(label),
-  ) as HTMLButtonElement | undefined
-  assert.ok(button('Continue') && !button('Continue')?.disabled, 'source data is ready to parse')
-  await act(async () => {
-    button('Continue')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-  })
-  await act(async () => {
-    button('Preview')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-  })
-  await act(async () => {
-    button('Import 1 row')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-  })
+  await clickImportAction('Continue')
+  await clickImportAction('Preview')
+  await clickImportAction('Import 1 row')
+  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse', 'preview', 'commit'])
+  assert.equal(new URL(window.location.href).searchParams.get('transfer'), script.job.id)
+  assert.equal(document.querySelector('[role="alert"]'), null)
 
-  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse', 'preview'])
-  assert.ok((globalThis.__sampleTestToasts ?? []).some(
-    ({ kind, message }) => kind === 'error' && /browser could not save the import retry key, so no import was sent/.test(message),
-  ))
 })
 
 for (const stage of [
-  { mode: 'parse' as const, clicks: ['Continue'], requests: ['parse'], error: /Could not read the import file\. \(status 502\)/ },
-  { mode: 'preview' as const, clicks: ['Continue', 'Preview'], requests: ['parse', 'preview'], error: /Could not preview this import\. \(status 502\)/ },
+  { mode: 'parse' as const, clicks: ['Continue'], requests: ['parse'], error: /The transfer request could not be completed\. \(status 502\)/ },
+  { mode: 'preview' as const, clicks: ['Continue', 'Preview'], requests: ['parse', 'preview'], error: /The transfer request could not be completed\. \(status 502\)/ },
 ]) {
   test(`a non-JSON ${stage.mode} refusal is shown by name instead of a JSON syntax error`, async (t) => {
     script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data', supportsImport: true }]
@@ -295,8 +304,15 @@ for (const stage of [
 
     assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', stage.error)
     assert.deepEqual(script.importRequests.map(({ mode }) => mode), stage.requests)
-    assert.ok((globalThis.__sampleTestToasts ?? []).some(
-      ({ kind, message }) => kind === 'error' && stage.error.test(message),
-    ))
+    assert.doesNotMatch(document.querySelector('[role="alert"]')?.textContent ?? '', /Unexpected token|JSON syntax/)
   })
 }
+
+
+test('the import header returns to Company Settings instead of history', async (t) => {
+  await mountWizard(t, false, { backHref: '/admin/setup/company', backLabel: 'Company Settings' })
+  const back = document.querySelector<HTMLAnchorElement>('a[href="/admin/setup/company"]')
+  assert.ok(back)
+  assert.match(back.textContent ?? '', /Company Settings/)
+  assert.equal(document.querySelector('a[href="/data/import/history"]'), null)
+})

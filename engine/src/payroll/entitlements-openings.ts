@@ -103,6 +103,7 @@ export function assertMovementDate(value: unknown): string {
 export async function entitlementOpeningLocks(
   orgId: string,
   executor: Executor = db,
+  employeePartyIds?: readonly string[],
 ): Promise<Map<string, EntitlementOpeningLock>> {
   const r = (await executor.execute<{ plan_id: string; employee_party_id: string; document_number: string | null; pay_date: string }>(sql`
     select distinct on (l.plan_id, l.employee_party_id)
@@ -113,6 +114,7 @@ export async function entitlementOpeningLocks(
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
      where l.org_id = ${orgId} and l.kind = 'opening' and r.run_status = 'committed'
+       ${employeePartyIds === undefined ? sql`` : sql`and l.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
      order by l.plan_id, l.employee_party_id, s.pay_date
   `));
   return new Map(
@@ -133,6 +135,7 @@ export async function entitlementOpeningBlocks(
   orgId: string,
   asOf: string,
   executor: Executor = db,
+  employeePartyIds?: readonly string[],
 ): Promise<Map<string, EntitlementOpeningLock>> {
   const r = (await executor.execute<{ employee_party_id: string; document_number: string | null; pay_date: string }>(sql`
     select distinct on (s.employee_party_id)
@@ -141,6 +144,7 @@ export async function entitlementOpeningBlocks(
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
      where s.org_id = ${orgId} and r.run_status = 'committed' and s.pay_date >= ${asOf}
+       ${employeePartyIds === undefined ? sql`` : sql`and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
      order by s.employee_party_id, s.pay_date
   `));
   return new Map(

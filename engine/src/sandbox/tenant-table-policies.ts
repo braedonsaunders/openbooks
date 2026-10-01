@@ -1,5 +1,13 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  // Transfer execution and source artifacts belong to their original environment.
+  "data_transfer_jobs": "skip:no-copy",
+  "data_transfer_chunks": "skip:no-copy",
+  "data_transfer_rows": "skip:no-copy",
+  "data_transfer_keys": "skip:no-copy",
+  "data_transfer_issues": "skip:no-copy",
+  "data_transfer_events": "skip:no-copy",
+
   "assembly_disassemblies": "clone:catalog-uuid-rebase",
   "provision_obligations": "clone:catalog-uuid-rebase",
   "account_group_members": "clone:catalog-uuid-rebase",

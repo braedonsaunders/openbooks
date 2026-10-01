@@ -6,11 +6,13 @@
  * the vocabulary without converging. Both render paths import these.
  */
 
-/** Resource name over its optional source filename. */
-export function ResourceCell({ label, fileName }: { label: string; fileName: string | null }) {
+import Link from 'next/link'
+
+/** Resource name over its optional source filename, with durable job recovery. */
+export function ResourceCell({ label, fileName, href }: { label: string; fileName: string | null; href?: string | null }) {
   return (
     <>
-      <div className="font-medium">{label}</div>
+      <div className="font-medium">{href ? <Link className="text-primary hover:underline" href={href}>{label}</Link> : label}</div>
       {fileName && <div className="text-xs text-muted-foreground">{fileName}</div>}
     </>
   )

@@ -1,3 +1,5 @@
+import { importRowError } from './row-error'
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -29,9 +31,7 @@ import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOut
 import type { DataResource, WriteCtx } from './resources'
 import {
   duplicateImportRowIndexes,
-  enforceExportRowLimit,
   importRowAction,
-  MAX_EXPORT_ROWS,
   subsidiaryReadFilterWithUnassigned,
   type ReadCtx,
 } from './resource-core'
@@ -260,8 +260,8 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
       // Employee visibility is decided by the PARTY's subsidiary, in SQL —
       // never by matching the exported employee label afterwards, which a
       // same-named employee in another legal entity would also match.
-      const result = (await db.execute(sql`
-        select b.id as "__rowId",
+      const result = (await readExportWindow(db, sql`
+        select b.id as "__rowId"${transferId(readCtx, sql`b.id`)},
                b.employee_party_id as "__employeeId",
                coalesce(er.employee_number, p.short_code, p.display_name) as "employee",
                p.display_name as "employeeName",
@@ -271,10 +271,10 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
           left join employee_roles er on er.party_id = p.id and er.org_id = b.org_id
          where b.org_id = ${orgId}${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
-         order by b.tax_year desc, p.display_name
-         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+         ${transferWhere(readCtx, sql`b.id`)} order by ${transferOrder(readCtx, sql`b.id`, sql`b.tax_year desc, p.display_name, b.id`)}
+         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(result.rows, PAYROLL_OPENING_BALANCES_DESCRIPTOR.label)
+      finishExportPage(result.rows, PAYROLL_OPENING_BALANCES_DESCRIPTOR.label, readCtx)
 
       // Component openings pivot onto their parent row. Joining them in SQL
       // would multiply the rows; the export is one row per carry-in.
@@ -282,7 +282,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
         select oc.opening_balance_id, c.code, oc.ytd_amount::text as amount
           from payroll_opening_balance_components oc
           join pay_components c on c.id = oc.component_id and c.org_id = oc.org_id
-         where oc.org_id = ${orgId}`)) as {
+         where oc.org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and oc.opening_balance_id in (${sql.join(result.rows.map((row) => sql`${row.__rowId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`)) as {
         rows: { opening_balance_id: string; code: string; amount: string }[]
       }
       const byRow = new Map<string, Record<string, string>>()
@@ -296,7 +296,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
       const programRows = (await db.execute(sql`
         select employee_party_id, tax_year, program_key, insurable_ytd::text as amount
           from payroll_opening_program_bases
-         where org_id = ${orgId}`)) as {
+         where org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and (employee_party_id,tax_year) in (${sql.join(result.rows.map((row) => sql`(${row.__employeeId}::uuid,${row.taxYear}::int)`), sql`, `)})` : sql` and false`) : sql``}`)) as {
         rows: { employee_party_id: string; tax_year: number; program_key: string; amount: string }[]
       }
       const programsByEmployeeYear = new Map<string, Record<string, string>>()
@@ -348,7 +348,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
         try {
           taxYear = assertTaxYear(src.taxYear)
         } catch (error) {
-          taxError = error instanceof Error ? error.message : 'write failed'
+          taxError = importRowError(error)
         }
         let employeeId: string | null = null
         let employeeError: string | null = null
@@ -363,6 +363,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
         }
         preflight.push({ employeeId, employeeError, taxYear, taxError, scopeError })
       }
+      await ctx.recordKeys?.(preflight.map((row) => row.employeeId !== null && row.taxYear !== null && row.scopeError === null ? `${row.employeeId} ${row.taxYear}` : null))
       const keyUses = new Map<string, number>()
       for (const p of preflight) {
         if (p.employeeId !== null && p.taxYear !== null && p.scopeError === null) {
@@ -414,10 +415,10 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           }
 
           if (!lockCache.has(taxYear)) {
-            lockCache.set(taxYear, await openingBalanceLocks(ctx.orgId, taxYear))
+            lockCache.set(taxYear, await openingBalanceLocks(ctx.orgId, taxYear, db, ctx.allowedSubsidiaryIds, ctx.recordKeys ? preflight.flatMap((row) => row.employeeId ? [row.employeeId] : []) : undefined))
             const existing = (await db.execute(sql`
               select employee_party_id from payroll_opening_balances
-               where org_id = ${ctx.orgId} and tax_year = ${taxYear}`)) as {
+               where org_id = ${ctx.orgId} and tax_year = ${taxYear}${ctx.recordKeys ? sql` and employee_party_id in (${sql.join(preflight.filter((row) => row.employeeId !== null).map((row) => sql`${row.employeeId}::uuid`), sql`, `)})` : sql``}`)) as {
               rows: { employee_party_id: string }[]
             }
             existingCache.set(taxYear, new Set(existing.rows.map((r) => r.employee_party_id)))
@@ -482,7 +483,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           outcome.failed++
           outcome.errors.push({
             row: rowNo,
-            message: error instanceof Error ? error.message : 'write failed',
+            message: importRowError(error),
           })
         }
       }
@@ -567,36 +568,30 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
       const resourceFields = entitlementFields(await loadPlans())
       const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }))
       // Same identity-based employee scope as the balances read above.
-      const result = (await db.execute(sql`
+      const result = (await readExportWindow(db, sql`
         select coalesce(er.employee_number, p.short_code, p.display_name) as "employee",
                p.display_name as "employeeName",
                pl.code as "plan",
                l.movement_date::text as "asOf",
-               l.amount::text as "amount"
+               l.amount::text as "amount"${transferId(readCtx, sql`l.id`)}
           from entitlement_ledger l
           join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id
           join parties p on p.id = l.employee_party_id and p.org_id = l.org_id
           left join employee_roles er on er.party_id = p.id and er.org_id = l.org_id
          where l.org_id = ${orgId} and l.kind = 'opening'${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
-         order by pl.code, p.display_name
-         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+         ${transferWhere(readCtx, sql`l.id`)} order by ${transferOrder(readCtx, sql`l.id`, sql`pl.code, p.display_name, l.id`)}
+         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(result.rows, PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR.label)
+      finishExportPage(result.rows, PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR.label, readCtx)
       return { fields: resourceFields, columns, rows: result.rows }
     },
     async write(rows, mode: ImportMode, ctx: WriteCtx) {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       const plans = await loadPlans()
       const planByCode = new Map(plans.map((plan) => [plan.code.trim().toLowerCase(), plan]))
-      const locks = await entitlementOpeningLocks(ctx.orgId)
       // Preview must report what commit will do: classify each row against
       // the openings already stored, so an existing carry-in previews as an
       // update (or an insert conflict), never as a creation.
-      const storedRows = (await db.execute(sql`
-        select plan_id, employee_party_id from entitlement_ledger
-         where org_id = ${ctx.orgId} and kind = 'opening'
-      `)) as { rows: { plan_id: string; employee_party_id: string }[] }
-      const storedKeys = new Set(storedRows.rows.map((row) => `${row.plan_id}:${row.employee_party_id}`))
 
       // Resolve the natural keys before saving any row. This resource calls
       // saveEntitlementOpenings once per row, so that function's per-call
@@ -611,6 +606,14 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
         const plan = planByCode.get(String(src.plan ?? '').trim().toLowerCase())
         resolvedKeys.push(plan ? `${employee.id}:${plan.id}` : null)
       }
+      await ctx.recordKeys?.(resolvedKeys)
+      const employeeIds = resolvedKeys.flatMap((key) => key ? [key.split(':')[0]!] : [])
+      const locks = await entitlementOpeningLocks(ctx.orgId, db, ctx.recordKeys ? employeeIds : undefined)
+      const storedRows = (await db.execute(sql`
+        select plan_id,employee_party_id from entitlement_ledger where org_id=${ctx.orgId} and kind='opening'
+        ${ctx.recordKeys ? sql`and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)` : sql``}
+      `)) as { rows: { plan_id: string; employee_party_id: string }[] }
+      const storedKeys = new Set(storedRows.rows.map((row) => `${row.plan_id}:${row.employee_party_id}`))
       const duplicateRows = duplicateImportRowIndexes(resolvedKeys)
 
       for (let index = 0; index < rows.length; index++) {
@@ -721,7 +724,7 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           outcome.failed++
           outcome.errors.push({
             row: rowNo,
-            message: error instanceof Error ? error.message : 'write failed',
+            message: importRowError(error),
           })
         }
       }

@@ -1,3 +1,5 @@
+import { importRowError } from './row-error'
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 /** Custom-record-type import/export resources. */
 
 import 'server-only'
@@ -12,9 +14,7 @@ import { loadRecordTypeByKey, buildSearchText } from '../records'
 import { lintRecordFields, recordNumberPrefix, stripUnknownData, validateRecordData, withComputedFormulas } from '../record-schema'
 import { auditSetupChange } from '../setup/audit'
 import {
-  enforceExportRowLimit,
   exportCell,
-  MAX_EXPORT_ROWS,
   RefResolver,
   type DataResource,
   type ReadCtx,
@@ -173,16 +173,16 @@ export function recordResource(orgId: string, typeKey: string, sections: FormSec
           : readCtx.allowedSubsidiaryIds.size > 0
             ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...readCtx.allowedSubsidiaryIds])}::text[])`
             : sql`and false`
-      const result = (await db.execute(sql`
-        select record_number, status, data from custom_records
+      const result = (await readExportWindow(db, sql`
+        select record_number, status, data${transferId(readCtx, sql`id`)} from custom_records
          where org_id = ${orgId} and type_key = ${typeKey}
            ${subsidiaryScope}
-         order by record_number limit ${MAX_EXPORT_ROWS + 1}`)) as {
+         ${transferWhere(readCtx, sql`id`)} order by ${transferOrder(readCtx, sql`id`, sql`record_number`)} limit ${transferLimit(readCtx)}`, readCtx)) as {
         rows: { record_number: string; status: string; data: FieldValueMap }[]
       }
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      enforceExportRowLimit(result.rows, descriptor.label)
+      finishExportPage(result.rows as (typeof result.rows[number] & Record<string, unknown>)[], descriptor.label, readCtx)
       const out: Record<string, CellValue>[] = []
       for (const rec of result.rows) {
         const row: Record<string, CellValue> = { record_number: rec.record_number, status: rec.status }
@@ -386,7 +386,7 @@ async function writeRecords(
       if (ctx.dryRun && recNo) previewNumbers.add(recNo)
     } catch (e) {
       outcome.failed++
-      outcome.errors.push({ row: rowNo, message: (e as { message?: string })?.message ?? 'write failed' })
+      outcome.errors.push({ row: rowNo, message: importRowError(e) })
     }
   }
   return outcome

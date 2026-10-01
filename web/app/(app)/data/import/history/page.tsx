@@ -9,6 +9,6 @@ export default async function ImportHistoryPage({
   searchParams?: Promise<Record<string, string | undefined>>
 }) {
   const sp = (await searchParams) ?? {}
-  const data = await loadImportHistory()
+  const data = await loadImportHistory(sp)
   return <ModuleView spec={importHistorySpec()} data={data} searchParams={sp} trusted />
 }

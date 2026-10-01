@@ -133,7 +133,7 @@ function filterReferenceScopedRows(
   }
 }
 
-async function propertyVisibleKeys(orgId: string, scope: SubsidiaryScope): Promise<{
+async function propertyVisibleKeys(orgId: string, scope: SubsidiaryScope, page?: { field: string; keys: string[] }): Promise<{
   propertyCodes: Set<string>
   leaseNumbers: Set<string>
 }> {
@@ -143,7 +143,7 @@ async function propertyVisibleKeys(orgId: string, scope: SubsidiaryScope): Promi
     select p.code as property_code, l.lease_number
       from managed_properties p
       left join property_leases l on l.property_id = p.id and l.org_id = p.org_id
-     where p.org_id = ${orgId}${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}`)) as {
+     where p.org_id = ${orgId}${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}${page ? (page.keys.length ? sql` and ${page.field === 'leaseNumber' ? sql`l.lease_number` : sql`p.code`} in (${sql.join(page.keys.map((key) => sql`${key}`), sql`, `)})` : sql` and false`) : sql``}`)) as {
     rows: { property_code: string; lease_number: string | null }[]
   }
   for (const row of result.rows) {
@@ -169,9 +169,9 @@ async function filterPropertyRows(
       rows: result.rows.filter((row) => names.has(String(row.subsidiary ?? ''))),
     }
   }
-  const visible = await propertyVisibleKeys(orgId, scope)
   const useLease = key === 'property-leases' || key === 'lease-charges' || key === 'security-deposit-opening-balances'
   const field = useLease ? 'leaseNumber' : 'propertyCode'
+  const visible = await propertyVisibleKeys(orgId, scope, { field, keys: result.rows.map((row) => String(row[field] ?? '')) })
   const keys = useLease ? visible.leaseNumbers : visible.propertyCodes
   return {
     ...result,
@@ -189,8 +189,8 @@ function bindReadScope(resource: DataResource, orgId: string, scope?: Subsidiary
       const forwardedActor = readCtx && Object.hasOwn(readCtx, 'actorId') ? readCtx.actorId : undefined
       const result = await resource.read(
         forwardedActor === undefined
-          ? { allowedSubsidiaryIds: effectiveScope }
-          : { allowedSubsidiaryIds: effectiveScope, actorId: forwardedActor },
+          ? { ...readCtx, allowedSubsidiaryIds: effectiveScope }
+          : { ...readCtx, allowedSubsidiaryIds: effectiveScope, actorId: forwardedActor },
       )
       if (effectiveScope === null) return result
 

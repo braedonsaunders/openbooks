@@ -29,6 +29,7 @@ import {
   type EntityAdhoc,
 } from "../customization/entity-list-query.ts";
 import { entityListSource, entityOrderClause, plannedPageClauses } from "./entity-sources.ts";
+import { readExportWindow, type ExportPage } from '../data-io/export-page';
 
 /**
  * The single bounded server reader for entity lists. `EntityListView` and
@@ -50,6 +51,8 @@ export type EntityReaderScope = ReadonlySet<string> | null;
 
 /** Safe input: the actor is re-resolved; capabilities are derived, never passed. */
 export type RegisteredEntityListQuery = {
+  /** Worker keyset scan; totals are not computed and totalKnown is false. */
+  cursor?: { afterId: string | null };
   recordType: string;
   orgId: string;
   actorId: string;
@@ -78,6 +81,8 @@ export type EntityReaderSuccess = {
   rows: EntityReaderRow[];
   /** Count under the identical WHERE as the page SELECT (never the id-restricted page). */
   filteredTotal: number;
+  totalKnown?: boolean;
+  cursorHasMore?: boolean;
   page: number;
   perPage: number;
   sort: string;
@@ -120,7 +125,7 @@ export async function readResolvedEntityListPageForView(
   );
 }
 
-const SAFE_QUERY_KEYS = new Set([
+const SAFE_QUERY_KEYS = new Set(["cursor",
   "recordType", "orgId", "actorId", "allowedSubsidiaryIds", "filters",
   "q", "showInactive", "sort", "dir", "page", "perPage",
 ]);
@@ -167,6 +172,9 @@ export async function readEntityListPage(query: RegisteredEntityListQuery): Prom
       "pass allowedSubsidiaryIds as a Set of subsidiary ids or null, never an array or object",
       "allowedSubsidiaryIds",
     );
+  }
+  if (query.cursor && (typeof query.cursor !== 'object' || !Object.hasOwn(query.cursor, 'afterId') || (query.cursor.afterId !== null && !isUuid(query.cursor.afterId)))) {
+    return refuse('invalid_cursor', 'pass a null starting cursor or the UUID of the last returned row', 'cursor');
   }
   const authz = await resolveAuthzByUserId(query.orgId, query.actorId);
   if (!authz) {
@@ -219,6 +227,7 @@ export async function readEntityListPage(query: RegisteredEntityListQuery): Prom
       adhoc: { q: query.q, filters: {}, showInactive: query.showInactive },
       sort: query.sort ?? null,
       dir: query.dir ?? null,
+      cursor: query.cursor,
       page: query.page,
       perPage: query.perPage,
     },
@@ -227,6 +236,7 @@ export async function readEntityListPage(query: RegisteredEntityListQuery): Prom
 }
 
 type ExecutorInput = {
+  cursor?: { afterId: string | null };
   recordType: string;
   orgId: string;
   /** Present on the safe path (re-resolved grants checked); absent on the trusted UI path (its page owns the permission). */
@@ -521,13 +531,13 @@ async function executeEntityListPage(
     : input.recordType === "employee"
       ? employeeBaseJoins(features.hrm, today, input.allowedSubsidiaryIds)
       : (typeof countJoinsSource === "function" ? countJoinsSource(input.allowedSubsidiaryIds, today) : countJoinsSource);
-  const plannedIds = source.orderedPageIds
+  const plannedIds = !input.cursor && source.orderedPageIds
     ? await source.orderedPageIds({ orgId: input.orgId, sort, dir, tableSql, baseJoins, where })
     : null;
   const planned = plannedIds ? plannedPageClauses(plannedIds, idExpr) : null;
-  const pageWhere = planned ? planned.where : where;
-  const pageOrder = planned ? planned.order : entityOrderClause(source, orderExpr, dir);
-  const earlyPage = source.pageBeforeJoins?.sorts.includes(sort) && !planned;
+  const pageWhere = input.cursor?.afterId ? sql`(${where}) and ${idExpr}>${input.cursor.afterId}::uuid` : planned ? planned.where : where;
+  const pageOrder = input.cursor ? sql`${idExpr} asc` : planned ? planned.order : entityOrderClause(source, orderExpr, dir);
+  const earlyPage = !input.cursor && source.pageBeforeJoins?.sorts.includes(sort) && !planned;
   const select = sql`${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}`;
   // Header sorts need only the visibility/filter joins. Hydrate aggregates
   // after the bounded page; aggregate sorts retain their global SQL order.
@@ -535,17 +545,18 @@ async function executeEntityListPage(
     ? sql`with list_page as materialized (
         select ${idExpr} as id from ${tableSql} ${countJoins}
          where ${where} order by ${pageOrder}
-         limit ${perPage} offset ${(page - 1) * perPage}
+         limit ${perPage} offset ${input.cursor ? 0 : (page - 1) * perPage}
       )
       select ${select} from ${sql.raw(`${source.pageBeforeJoins!.table} ${source.alias}`)}
         join list_page on list_page.id = ${idExpr} ${baseJoins}
        where ${where} order by ${pageOrder}`
     : sql`select ${select} from ${tableSql} ${baseJoins}
        where ${pageWhere} order by ${pageOrder}
-       limit ${perPage} offset ${(page - 1) * perPage}`;
+       limit ${perPage} offset ${input.cursor ? 0 : (page - 1) * perPage}`;
+  const exportPage: ExportPage | undefined = input.cursor ? { size: perPage, after: input.cursor.afterId, next: null, done: false } : undefined;
   const [rowsRes, totalRow] = await Promise.all([
-    db.execute(rowQuery),
-    db.execute<{ n: string }>(sql`
+    readExportWindow(db, rowQuery, exportPage ? { page: exportPage, allowedSubsidiaryIds: input.allowedSubsidiaryIds, actorId: input.actorId } : undefined, 'id'),
+    input.cursor ? Promise.resolve({ rows: [{ n: "0" }] }) : db.execute<{ n: string }>(sql`
       select count(*) as n from ${tableSql}
         ${countJoins}
        where ${where}`),
@@ -558,6 +569,8 @@ async function executeEntityListPage(
     ok: true,
     rows,
     filteredTotal: Number(totalRow.rows[0]?.n ?? 0),
+    totalKnown: !input.cursor,
+    ...(exportPage ? { cursorHasMore: !!exportPage.truncated || rows.length === perPage } : {}),
     page,
     perPage,
     sort,

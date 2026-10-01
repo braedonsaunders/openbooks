@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@openbooks/reports": "*",
-    "exceljs": "^4.4.0"
+    "exceljs": "^4.4.0",
+    "unzipper": "0.10.14"
   },
   "devDependencies": {
     "@types/node": "^24"

@@ -1,3 +1,5 @@
+import { importRowError } from './row-error'
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -24,9 +26,7 @@ import {
 import type { DataResource, WriteCtx } from './resources'
 import {
   duplicateImportRowIndexes,
-  enforceExportRowLimit,
   importRowAction,
-  MAX_EXPORT_ROWS,
   subsidiaryReadFilterWithUnassigned,
   type ReadCtx,
 } from './resource-core'
@@ -226,7 +226,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
       // Identity-based employee scope: the register stores its own employee
       // label per stub, so a post-filter on that label cannot tell two
       // same-named employees apart — the party join decides, in SQL.
-      const rows = (await db.execute(sql`
+      const rows = (await readExportWindow(db, sql`
         select g.name as "register", g.provider_name as "providerName",
                coalesce(er.employee_number, p.short_code, s.employee_label) as "employee",
                p.display_name as "employeeName",
@@ -234,22 +234,22 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
                g.period_end::text as "periodEnd",
                g.pay_date::text as "payDate",
                s.gross, s.net_pay, s.employer_cost,
-               s.id as "stubId"
+               s.id as "stubId"${transferId(readCtx, sql`s.id`)}
           from payroll_prior_stubs s
           join payroll_prior_registers g on g.id = s.register_id and g.org_id = s.org_id
           left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
           left join employee_roles er on er.party_id = s.employee_party_id and er.org_id = s.org_id
          where s.org_id = ${orgId}${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
-         order by g.pay_date desc, p.display_name
-         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+         ${transferWhere(readCtx, sql`s.id`)} order by ${transferOrder(readCtx, sql`s.id`, sql`g.pay_date desc, p.display_name, s.id`)}
+         limit ${transferLimit(readCtx)}`, readCtx)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
-      enforceExportRowLimit(rows.rows, PRIOR_PAYROLL_REGISTER_DESCRIPTOR.label)
+      finishExportPage(rows.rows, PRIOR_PAYROLL_REGISTER_DESCRIPTOR.label, readCtx)
 
       const amounts = (await db.execute(sql`
         select a.prior_stub_id, a.kind, a.slot, a.amount
           from payroll_prior_amounts a
           join payroll_prior_stubs s on s.id = a.prior_stub_id and s.org_id = a.org_id
-         where a.org_id = ${orgId}`)) as {
+         where a.org_id = ${orgId}${readCtx?.page ? (rows.rows.length ? sql` and a.prior_stub_id in (${sql.join(rows.rows.map((row) => sql`${row.stubId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`)) as {
         rows: { prior_stub_id: string; kind: string; slot: string; amount: string }[]
       }
       // Slot → the field key it exports under, so an export re-imports cleanly.
@@ -357,6 +357,12 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
         tuples.add(tuple)
         tuplesByName.set(registerName, tuples)
       }
+      await ctx.recordKeys?.(resolvedKeys)
+      await ctx.recordConstraints?.(rows.map((src, index) => resolvedKeys[index] ? {
+        key: String(src.register ?? '').trim(),
+        value: [src.periodStart, src.periodEnd, src.payDate].map((value) => String(value ?? '').trim()).join('\0'),
+        label: `Register "${String(src.register ?? '').trim()}" has conflicting period start, period end, or pay date values — use one period tuple per register name and upload the corrected file.`,
+      } : null))
       const duplicateRows = duplicateImportRowIndexes(resolvedKeys)
       const conflictingNames = new Set([...tuplesByName].filter(([, tuples]) => tuples.size > 1).map(([name]) => name))
       const refusedRows = new Set<number>()
@@ -516,7 +522,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           outcome.failed++
           outcome.errors.push({
             row: rowNo,
-            message: error instanceof Error ? error.message : 'write failed',
+            message: importRowError(error),
           })
         }
       }

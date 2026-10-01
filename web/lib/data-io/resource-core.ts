@@ -43,6 +43,8 @@ export interface ReadResult {
  * cannot accidentally fall back to an org-only read.
  */
 export interface ReadCtx {
+  /** Worker-only bounded read; the cursor is advanced before visibility post-filters. */
+  page?: import('./export-page').ExportPage
   allowedSubsidiaryIds: ReadonlySet<string> | null
   /**
    * Acting user, threaded by the export route. Existing resources ignore it;
@@ -52,6 +54,10 @@ export interface ReadCtx {
 }
 
 export interface WriteCtx {
+  /** Collect resolved uniqueness keys for whole-file duplicate validation. */
+  recordKeys?: (keys: readonly (string | null)[]) => Promise<void>
+  /** One value per grouping key must agree across every source batch. */
+  recordConstraints?: (values: readonly ({ key: string; value: string; label: string } | null)[]) => Promise<void>
   orgId: string
   actorId: string
   /** The caller's effective grants, used by resources with entity-specific write permissions. */

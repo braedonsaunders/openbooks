@@ -1,3 +1,5 @@
+import { importRowError } from './row-error'
+import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -10,8 +12,6 @@ import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal } from '../exact-decimal'
 import { pgErrorCode, pgErrorConstraint } from '../setup/coerce'
 import {
-  enforceExportRowLimit,
-  MAX_EXPORT_ROWS,
   orgFeatureEnabled,
   RefResolver,
   subsidiaryReadFilter,
@@ -513,7 +513,7 @@ export function fixedAssetsResource(orgId: string): DataResource {
       return FIELDS.map((f) => ({ key: f.key, label: f.label }))
     },
     async read(readCtx?: ReadCtx) {
-      const rows = (await db.execute<Record<string, CellValue>>(sql`
+      const rows = (await readExportWindow<Record<string, CellValue>>(db, sql`
         select a.asset_number as "assetNumber",
                a.name as "name",
                a.description as "description",
@@ -535,7 +535,7 @@ export function fixedAssetsResource(orgId: string): DataResource {
                a.opening_accumulated_depreciation::text as "openingAccumulated",
                a.opening_accumulated_as_of::text as "openingAsOf",
                a.serial_number as "serialNumber"
-          from fixed_assets a
+          ${transferId(readCtx, sql`a.id`)} from fixed_assets a
           join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
           join subsidiaries s on s.id = a.subsidiary_id and s.org_id = a.org_id
           left join accounts aa on aa.id = a.asset_account_id and aa.org_id = a.org_id
@@ -543,11 +543,11 @@ export function fixedAssetsResource(orgId: string): DataResource {
           left join accounts ae on ae.id = a.depreciation_expense_account_id and ae.org_id = a.org_id
          where a.org_id = ${orgId}
            ${subsidiaryReadFilter(sql`a.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
-         order by a.asset_number
-         limit ${MAX_EXPORT_ROWS + 1}`)).rows
+         ${transferWhere(readCtx, sql`a.id`)} order by ${transferOrder(readCtx, sql`a.id`, sql`a.asset_number, a.id`)}
+         limit ${transferLimit(readCtx)}`, readCtx)).rows
       // Sentinel read: one row past the cap proves overflow; exactly at the
       // cap proves completeness. Refuse rather than truncate silently.
-      enforceExportRowLimit(rows, FIXED_ASSETS_DESCRIPTOR.label)
+      finishExportPage(rows, FIXED_ASSETS_DESCRIPTOR.label, readCtx)
       return { fields: FIELDS, columns: FIELDS.map((f) => ({ key: f.key, label: f.label })), rows }
     },
     async write(rows, mode, ctx: WriteCtx) {
@@ -625,7 +625,7 @@ export function fixedAssetsResource(orgId: string): DataResource {
                 await buildAllSchedulesWithRunner(tx, assetId, ctx.orgId, ctx.actorId, allowedSubsidiaries)
               } catch (error) {
                 throw new Error(
-                  `schedule build failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+                  `schedule build failed: ${importRowError(error)}`,
                 )
               }
             }
@@ -707,7 +707,7 @@ export function fixedAssetsResource(orgId: string): DataResource {
               await buildAllSchedulesWithRunner(tx, stored.id, ctx.orgId, ctx.actorId, allowedSubsidiaries)
             } catch (error) {
               throw new Error(
-                `schedule build failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+                `schedule build failed: ${importRowError(error)}`,
               )
             }
           }
@@ -720,7 +720,7 @@ export function fixedAssetsResource(orgId: string): DataResource {
           const message =
             pgErrorCode(error) === '23505' && pgErrorConstraint(error) === 'fixed_assets_org_asset_number_unique'
               ? 'the asset row could not be imported; check your access and input, then retry'
-              : error instanceof Error ? error.message : 'write failed'
+              : importRowError(error)
           outcome.errors.push({
             row: rowNo,
             message,

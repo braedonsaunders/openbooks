@@ -125,5 +125,37 @@
   },
   "resources": {
     "parties": "Personnes et entreprises"
+  },
+  "transfer": {
+    "title": "État du transfert",
+    "queued": "En attente d’un processus de travail",
+    "uploaded": "{current} octets sur {total} téléversés",
+    "processedOf": "{current} enregistrements sur {total} traités",
+    "processed": "{current} enregistrements traités",
+    "committed": "Validés : {created} créés, {updated} modifiés, {deleted} supprimés.",
+    "reconnecting": "Connexion interrompue. Reconnexion en cours ; le traitement du serveur continue.",
+    "batchPolicy": "Les lots sont validés séparément. Une annulation ou un refus conserve les lots précédents et leur historique d’audit. Les opérations comptabilisées nécessitent leur contrepassation contrôlée habituelle.",
+    "cancel": "Annuler",
+    "cancelling": "Annulation après le lot actuel…",
+    "retry": "Réessayer depuis le point de reprise",
+    "download": "Télécharger l’export",
+    "issues": "Télécharger tous les constats",
+    "resumeUpload": "Pour reprendre un téléversement interrompu, sélectionnez le même fichier original et continuez.",
+    "states": {
+      "uploading": "Téléversement",
+      "parsing": "Lecture du fichier",
+      "mapping": "Associer les colonnes",
+      "previewing": "Validation",
+      "ready": "Aperçu prêt",
+      "committing": "Importation",
+      "exporting": "Exportation",
+      "completed": "Terminé",
+      "failed": "Échec",
+      "cancelled": "Annulé"
+    },
+    "recent": "Transferts récents",
+    "choose": "Choisir un transfert…",
+    "loadFailed": "Impossible de charger les transferts récents.",
+    "lastActivity": "Dernière activité : {time}"
   }
 }
