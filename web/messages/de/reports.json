@@ -962,6 +962,14 @@
       "resourcing_engagement": {
         "label": "Auftragsprognose",
         "description": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung."
+      },
+      "hrm_benefit_payroll_inputs": {
+        "label": "Leistungseingaben für die Lohnabrechnung",
+        "description": "Monatliche Deckungsbeträge, Arbeitnehmerabzüge, Arbeitgeberbeiträge und zugehörige Abrechnungsläufe."
+      },
+      "hrm_benefit_awards": {
+        "label": "Prämien und Auszahlungen",
+        "description": "Mitarbeiterprämien, Genehmigungsnachweise, Zustellungsreferenzen und Verknüpfungen zur Lohnabrechnung."
       }
     },
     "columns": {
@@ -2253,6 +2261,37 @@
         "month": "Monat",
         "bill_status": "Abrechnungsstatus",
         "cost_status": "Arbeitskostenstatus"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "coverage_from": "Deckung ab",
+        "coverage_to": "Deckung bis",
+        "person": "Mitarbeiter",
+        "employer": "Rechtsträger",
+        "plan": "Leistungsplan",
+        "kind": "Eingabeart",
+        "component": "Lohnkomponente",
+        "amount": "Deckungsbetrag",
+        "currency": "Währung",
+        "status": "Eingabestatus",
+        "payroll_run_id": "Zugehöriger Abrechnungslauf",
+        "id": "Eingabe-ID"
+      },
+      "hrm_benefit_awards": {
+        "period_from": "Erworben ab",
+        "period_to": "Erworben bis",
+        "person": "Mitarbeiter",
+        "employer": "Rechtsträger",
+        "program": "Programm",
+        "family": "Programmfamilie",
+        "value": "Prämienwert",
+        "currency": "Währung",
+        "status": "Prämienstatus",
+        "approved_at": "Genehmigt am",
+        "external_reference": "Externe Zustellungsreferenz",
+        "source_key": "Quellreferenz",
+        "id": "Prämien-ID",
+        "pay_run_document_id": "Gehaltslauf",
+        "pay_run_adjustment_id": "Gehaltsanpassung"
       }
     },
     "enumValues": {

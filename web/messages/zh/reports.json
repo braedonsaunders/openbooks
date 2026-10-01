@@ -962,6 +962,14 @@
       "resourcing_engagement": {
         "label": "项目预测",
         "description": "按月份和币种预测工时、收入、人工成本和利润。"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "label": "福利工资输入",
+        "description": "每月保障金额、员工扣款、雇主供款及对应的工资批次。"
+      },
+      "hrm_benefit_awards": {
+        "label": "福利奖励与支付",
+        "description": "员工计划奖励、审批证据、交付凭据及工资输入追溯。"
       }
     },
     "columns": {
@@ -2253,6 +2261,37 @@
         "month": "月份",
         "bill_status": "计费状态",
         "cost_status": "人工成本状态"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "coverage_from": "保障开始日期",
+        "coverage_to": "保障结束日期",
+        "person": "员工",
+        "employer": "法律实体",
+        "plan": "福利计划",
+        "kind": "输入类型",
+        "component": "工资组成项",
+        "amount": "保障金额",
+        "currency": "货币",
+        "status": "输入状态",
+        "payroll_run_id": "对应工资批次",
+        "id": "输入编号"
+      },
+      "hrm_benefit_awards": {
+        "period_from": "赚取开始日期",
+        "period_to": "赚取结束日期",
+        "person": "员工",
+        "employer": "法律实体",
+        "program": "计划",
+        "family": "计划类别",
+        "value": "奖励价值",
+        "currency": "货币",
+        "status": "奖励状态",
+        "approved_at": "审批时间",
+        "external_reference": "外部交付凭据",
+        "source_key": "来源凭据",
+        "id": "奖励编号",
+        "pay_run_document_id": "工资运行",
+        "pay_run_adjustment_id": "工资调整"
       }
     },
     "enumValues": {

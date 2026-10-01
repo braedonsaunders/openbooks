@@ -17,7 +17,7 @@ export function hrmStripParentHref(pageHref: string): string {
   const path = pathOf(pageHref)
   const rules: { prefix: string; parent: string }[] = [
     { prefix: '/hrm/compensation', parent: '/hrm/compensation' },
-    { prefix: '/hrm/benefits', parent: '/hrm/compensation' },
+    { prefix: '/hrm/benefits', parent: '/hrm/benefits' },
     { prefix: '/hrm/positions', parent: '/hrm/recruiting' },
     { prefix: '/hrm/recruiting', parent: '/hrm/recruiting' },
     { prefix: '/hrm/org-chart', parent: '/entities/employees' },

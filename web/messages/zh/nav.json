@@ -95,7 +95,7 @@
     "hrm-surveys": "调查",
     "hrm-compensation": "薪酬",
     "hrm-compensation-equity": "薪酬公平",
-    "hrm-benefits": "参保窗口",
+    "hrm-benefits": "概览",
     "payroll-runs": "工资核算",
     "payroll-anomalies": "检查",
     "payroll-remittances": "代缴",
@@ -129,7 +129,13 @@
     "hrm-performance-calibration": "校准",
     "hrm-performance-talent": "人才与继任",
     "hrm-performance-retention": "留任",
-    "hrm-performance-settings": "绩效设置"
+    "hrm-performance-settings": "绩效设置",
+    "hrm-benefits-programs": "计划",
+    "hrm-benefits-enrolments": "参保登记",
+    "hrm-benefits-windows": "参保窗口",
+    "hrm-benefits-rewards": "奖励",
+    "hrm-benefits-incentives": "激励",
+    "hrm-benefits-payouts": "发放"
   },
   "groups": {
     "workforce": "员工队伍",
@@ -169,7 +175,7 @@
     "hrm-hiring": "招聘",
     "hrm-timeoff": "休假",
     "hrm-talent": "人才",
-    "hrm-rewards": "薪酬福利",
+    "hrm-rewards": "福利",
     "payroll": "工资",
     "resourcing": "资源规划",
     "warehouse": "仓库",
@@ -181,7 +187,8 @@
     "accounts-views": "会计科目表",
     "inventory-views": "库存",
     "inbox-views": "收件箱",
-    "me-views": "我的"
+    "me-views": "我的",
+    "hrm-compensation": "薪酬"
   },
   "modulesShort": {
     "ap": "应付账款",
@@ -193,7 +200,7 @@
     "hrm-hiring": "招聘",
     "hrm-timeOff": "休假",
     "hrm-talent": "人才",
-    "hrm-rewards": "薪酬福利",
+    "hrm-rewards": "福利",
     "payroll": "工资",
     "resourcing": "资源规划",
     "warehouse": "仓库",
@@ -213,6 +220,7 @@
     "setup-depreciation": "账面折旧",
     "setup-tax-depreciation": "税务折旧",
     "setup-overhead": "间接费用",
-    "setup-payments": "付款与银行业务"
+    "setup-payments": "付款与银行业务",
+    "hrm-compensation": "薪酬"
   }
 }

@@ -77,6 +77,9 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_succession_plans", domain: "reviews", linkage: "direct" },
   { table: "hrm_talent_reviews", domain: "reviews", linkage: "direct" },
   { table: "hrm_benefit_enrollments", domain: "benefits", linkage: "direct" },
+  { table: "hrm_benefit_program_members", domain: "benefits", linkage: "direct" },
+  { table: "hrm_benefit_awards", domain: "benefits", linkage: "direct" },
+  { table: "hrm_benefit_award_events", domain: "benefits", linkage: "transitive" },
   { table: "hrm_benefit_dependents", domain: "benefits", linkage: "direct" },
   { table: "hrm_documents", domain: "documents", linkage: "direct" },
   { table: "hrm_document_signers", domain: "documents", linkage: "direct" },
@@ -289,6 +292,9 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason: "foreman-side capture envelopes; ops time capture.",
   },
   { table: "wip_prebill_lines", reason: "construction billing detail. Ops remit." },
+  { table: "hrm_benefit_programs", reason: "Employer policy configuration; the subject's memberships and award policy identity are exported." },
+  { table: "hrm_benefit_program_sources", reason: "Employer financial account configuration; subject awards are exported without company ledger source snapshots." },
+  { table: "hrm_benefit_program_scopes", reason: "Employer department and project measurement configuration; subject memberships and awards are exported." },
   {
     table: "hrm_benefit_plans",
     reason:

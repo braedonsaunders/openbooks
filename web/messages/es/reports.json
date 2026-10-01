@@ -962,6 +962,14 @@
       "resourcing_engagement": {
         "label": "Previsión de proyectos",
         "description": "Horas, ingresos, costes laborales y margen previstos por mes y moneda."
+      },
+      "hrm_benefit_payroll_inputs": {
+        "label": "Entradas de nómina de beneficios",
+        "description": "Importes mensuales de cobertura, deducciones del empleado, aportaciones del empleador y nóminas asociadas."
+      },
+      "hrm_benefit_awards": {
+        "label": "Premios y pagos de beneficios",
+        "description": "Premios de empleados, pruebas de aprobación, referencias de entrega y trazabilidad de nómina."
       }
     },
     "columns": {
@@ -2253,6 +2261,37 @@
         "month": "Mes",
         "bill_status": "Estado de facturación",
         "cost_status": "Estado del coste laboral"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "coverage_from": "Inicio de cobertura",
+        "coverage_to": "Fin de cobertura",
+        "person": "Empleado",
+        "employer": "Entidad jurídica",
+        "plan": "Plan de beneficios",
+        "kind": "Tipo de entrada",
+        "component": "Componente de nómina",
+        "amount": "Importe de cobertura",
+        "currency": "Moneda",
+        "status": "Estado de la entrada",
+        "payroll_run_id": "Nómina asociada",
+        "id": "ID de entrada"
+      },
+      "hrm_benefit_awards": {
+        "period_from": "Devengado desde",
+        "period_to": "Devengado hasta",
+        "person": "Empleado",
+        "employer": "Entidad jurídica",
+        "program": "Programa",
+        "family": "Familia de programa",
+        "value": "Valor del premio",
+        "currency": "Moneda",
+        "status": "Estado del premio",
+        "approved_at": "Aprobado el",
+        "external_reference": "Referencia de entrega externa",
+        "source_key": "Referencia de origen",
+        "id": "ID del premio",
+        "pay_run_document_id": "Ejecución de nómina",
+        "pay_run_adjustment_id": "Ajuste de nómina"
       }
     },
     "enumValues": {

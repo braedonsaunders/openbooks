@@ -962,6 +962,14 @@
       "resourcing_engagement": {
         "label": "Engagement forecast",
         "description": "Forecast assignment hours, revenue, labor cost, and margin by month and currency."
+      },
+      "hrm_benefit_payroll_inputs": {
+        "label": "Benefit payroll inputs",
+        "description": "Monthly coverage amounts, employee deductions, employer contributions and consuming payroll runs."
+      },
+      "hrm_benefit_awards": {
+        "label": "Benefit awards and payouts",
+        "description": "Employee program awards, approval evidence, delivery references and payroll input lineage."
       }
     },
     "columns": {
@@ -2253,6 +2261,37 @@
         "month": "Month",
         "bill_status": "Billing status",
         "cost_status": "Labor cost status"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "coverage_from": "Coverage from",
+        "coverage_to": "Coverage to",
+        "person": "Employee",
+        "employer": "Legal entity",
+        "plan": "Benefit plan",
+        "kind": "Input type",
+        "component": "Pay component",
+        "amount": "Coverage amount",
+        "currency": "Currency",
+        "status": "Input status",
+        "payroll_run_id": "Consuming payroll run",
+        "id": "Input ID"
+      },
+      "hrm_benefit_awards": {
+        "period_from": "Earned from",
+        "period_to": "Earned to",
+        "person": "Employee",
+        "employer": "Legal entity",
+        "program": "Program",
+        "family": "Program family",
+        "value": "Award value",
+        "currency": "Currency",
+        "status": "Award status",
+        "approved_at": "Approved at",
+        "external_reference": "External delivery reference",
+        "source_key": "Source reference",
+        "id": "Award ID",
+        "pay_run_document_id": "Payroll run",
+        "pay_run_adjustment_id": "Pay-run adjustment"
       }
     },
     "enumValues": {

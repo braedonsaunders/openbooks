@@ -95,7 +95,7 @@
     "hrm-surveys": "Enquêtes",
     "hrm-compensation": "Rémunération",
     "hrm-compensation-equity": "Équité salariale",
-    "hrm-benefits": "Fenêtres d'adhésion",
+    "hrm-benefits": "Vue d’ensemble",
     "payroll-runs": "Paies",
     "payroll-anomalies": "Contrôles",
     "payroll-remittances": "Versements",
@@ -129,7 +129,13 @@
     "hrm-performance-calibration": "Calibrage",
     "hrm-performance-talent": "Talents & succession",
     "hrm-performance-retention": "Rétention",
-    "hrm-performance-settings": "Paramètres de performance"
+    "hrm-performance-settings": "Paramètres de performance",
+    "hrm-benefits-programs": "Programmes",
+    "hrm-benefits-enrolments": "Adhésions",
+    "hrm-benefits-windows": "Périodes d’adhésion",
+    "hrm-benefits-rewards": "Récompenses",
+    "hrm-benefits-incentives": "Primes incitatives",
+    "hrm-benefits-payouts": "Versements"
   },
   "modulesShort": {
     "ap": "Fournisseurs",
@@ -174,7 +180,7 @@
     "hrm-hiring": "Recrutement",
     "hrm-timeoff": "Congés",
     "hrm-talent": "Talents",
-    "hrm-rewards": "Rémunération",
+    "hrm-rewards": "Avantages",
     "payroll": "Paie",
     "resourcing": "Planification des ressources",
     "warehouse": "Entrepôt",
@@ -186,14 +192,15 @@
     "accounts-views": "Plan comptable",
     "inventory-views": "Stocks",
     "inbox-views": "Boîte de réception",
-    "me-views": "Moi"
+    "me-views": "Moi",
+    "hrm-compensation": "Rémunération"
   },
   "localWorkspaces": {
     "hrm-people": "Employés",
     "hrm-hiring": "Recrutement",
     "hrm-timeOff": "Congés",
     "hrm-talent": "Talents",
-    "hrm-rewards": "Rémunération",
+    "hrm-rewards": "Avantages",
     "payroll": "Paie",
     "resourcing": "Planification des ressources",
     "warehouse": "Entrepôt",
@@ -213,6 +220,7 @@
     "setup-depreciation": "Amortissement comptable",
     "setup-tax-depreciation": "Amortissement fiscal",
     "setup-overhead": "Frais généraux",
-    "setup-payments": "Paiements et services bancaires"
+    "setup-payments": "Paiements et services bancaires",
+    "hrm-compensation": "Rémunération"
   }
 }

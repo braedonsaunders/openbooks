@@ -61,6 +61,11 @@
     "./navigation": "./src/navigation/public.ts",
     "./organization/features": "./src/organization/public-features.ts",
     "./extensions/navigation": "./src/extensions/public-navigation.ts",
-    "./platform/database": "./src/platform/public-database.ts"
+    "./platform/database": "./src/platform/public-database.ts",
+    "./hrm/benefits": "./src/hrm/public-benefits.ts",
+    "./money": "./src/money/public.ts",
+    "./money/decimal": "./src/money/exact-decimal.ts",
+    "./reports": "./src/reports/public.ts",
+    "./hrm/benefits/calculation": "./src/hrm/public-benefit-calculation.ts"
   }
 }
