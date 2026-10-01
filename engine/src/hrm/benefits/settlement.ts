@@ -1196,4 +1196,3 @@ export async function confirmAwardPayrollDelivery(query: {
     payRunAdjustmentId: requireId(query.adjustmentId, "adjustmentId"),
   });
 }
-
