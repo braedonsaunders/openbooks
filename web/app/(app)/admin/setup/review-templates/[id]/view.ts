@@ -17,6 +17,8 @@ import type { CompetencyChoice } from '../ReviewTemplateBuilder'
  */
 
 export interface ReviewTemplateBuilderData {
+  basePath?: string
+  cycleHref?: string | null
   template: ReviewTemplateNode
   competencies: CompetencyChoice[] | null
 }
@@ -34,11 +36,11 @@ export async function loadReviewTemplateBuilder(id: string): Promise<ReviewTempl
 
 export function reviewTemplateBuilderSpec(data: ReviewTemplateBuilderData): PageSpec {
   return page({
-    route: '/admin/setup/review-templates/[id]',
+    route: `${data.basePath ?? '/admin/setup/review-templates'}/[id]`,
     // One client island: the outline, the inspector drafts, drag state and
     // the live preview all share state a spec cannot name.
     layout: 'bare',
     header: [],
-    body: [widgetBlock('review-template-builder', { template: data.template, competencies: data.competencies })],
+    body: [widgetBlock('review-template-builder', { template: data.template, competencies: data.competencies, basePath: data.basePath, cycleHref: data.cycleHref })],
   })
 }

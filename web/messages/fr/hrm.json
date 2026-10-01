@@ -1040,7 +1040,7 @@
       "tabs": {
         "cycles": "Cycles",
         "calibration": "Calibrage",
-        "talent": "Talents & succession",
+        "talent": "Évaluations",
         "settings": "Paramètres"
       },
       "calibration": {
@@ -1085,7 +1085,7 @@
         "detailLoadFailed": "Le détail du calibrage n'a pas pu être chargé. Réessayez."
       },
       "talent": {
-        "title": "Talents & succession",
+        "title": "Évaluations",
         "description": "La grille à 9 cases sur les échelles déclarées, le tableau des talents et les plans de succession.",
         "newRecord": "Nouvel enregistrement",
         "cycleLabel": "Cycle d'évaluation",
@@ -1160,7 +1160,7 @@
       "assessments": "Évaluations",
       "succession": "Plans de succession",
       "matrix": "Matrice à neuf cases",
-      "noCycle": "Créez un cycle pour évaluer la performance et le potentiel. Les plans de succession peuvent être gérés sans cycle.",
+      "noCycle": "Créez un cycle d’évaluation pour enregistrer les évaluations de performance et de potentiel.",
       "newPlan": "Nouveau plan de succession",
       "setupTitle": "Configuration de la performance",
       "setupDescription": "Configurez les formulaires, les échelles et les autorisations de feedback dans la configuration de l’entreprise.",
@@ -1176,7 +1176,10 @@
       "noScale": "Ce cycle nécessite des échelles de performance et de potentiel. Demandez à un administrateur de configurer son formulaire dans la configuration de l’entreprise.",
       "assessmentsDescription": "Évaluez la performance, le potentiel et le risque de départ pour le cycle d’évaluation sélectionné.",
       "successionDescription": "Planifiez la relève des postes clés et gérez les candidats classés par ordre de priorité.",
-      "matrixDescription": "Explorez le positionnement selon la performance et le potentiel pour le cycle d’évaluation sélectionné."
+      "matrixDescription": "Explorez le positionnement selon la performance et le potentiel pour le cycle d’évaluation sélectionné.",
+      "reviewFormsTab": "Formulaires d’évaluation",
+      "newReviewForm": "Nouveau formulaire d’évaluation",
+      "noReviewForms": "Créez un formulaire d’évaluation avec son échelle de notation et ses questions avant de démarrer un cycle d’évaluation."
     }
   },
   "retention": {

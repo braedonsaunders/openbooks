@@ -26,6 +26,7 @@ import {
   ContextMenu,
   Input,
   Label,
+  PageHeader,
   SearchSelect,
   TagInput,
   Textarea,
@@ -33,6 +34,7 @@ import {
   useContextMenu,
   type ContextMenuEntry,
 } from '@openbooks/ui'
+import { ListPageLayout } from '../../../../../components/page-layout'
 import { Switch } from '../../../../../components/switch'
 import {
   BuilderHeader,
@@ -106,13 +108,18 @@ function decimalOrNull(value: string): number | null {
 export function ReviewTemplateBuilder({
   template,
   competencies,
+  basePath = '/admin/setup/review-templates',
+  cycleHref,
 }: {
+  basePath?: string
+  cycleHref?: string | null
   template: ReviewTemplateNode
   competencies: CompetencyChoice[] | null
 }) {
   const t = useTranslations('admin.setup.reviewBuilder')
   const tb = useTranslations('admin.setup.builder')
   const tc = useTranslations('common')
+  const th = useTranslations('hrm')
   const router = useRouter()
   const menu = useContextMenu()
   const [menuItems, setMenuItems] = useState<ContextMenuEntry[]>([])
@@ -262,7 +269,7 @@ export function ReviewTemplateBuilder({
       return
     }
     toast.success(t('templateDeleted'))
-    router.push('/admin/setup/review-templates')
+    router.push(basePath)
     router.refresh()
   }
 
@@ -503,32 +510,52 @@ export function ReviewTemplateBuilder({
     )
   }
 
-  return (
+  const headerActions = (
+    <>
+      {cycleHref ? (
+        <Button
+          type="button"
+          disabled={!template.isActive || issues.length > 0 || reordering}
+          onClick={async () => {
+            if (dirtyRef.current && !(await confirmDialog({ message: tb('discardChanges'), tone: 'danger', confirmLabel: tb('discard') }))) return
+            router.push(cycleHref)
+          }}
+        >
+          {th('performance.newCycle')}
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={template.cycleCount > 0}
+        title={template.cycleCount > 0 ? t('deleteBlocked') : undefined}
+        onClick={() => void removeTemplate()}
+      >
+        <Trash2 size={14} /> {tc('actions.delete')}
+      </Button>
+    </>
+  )
+  const badges = (
+    <>
+      <Badge variant={template.isActive ? 'success' : 'secondary'}>{template.isActive ? tb('active') : tb('inactive')}</Badge>
+      {template.cycleCount > 0 ? <Badge variant="outline">{t('cycleCount', { count: template.cycleCount })}</Badge> : null}
+    </>
+  )
+  const status = reordering ? <span className="text-xs text-slate-500 dark:text-slate-400">{tc('actions.saving')}</span> : null
+  const inPerformance = basePath === '/hrm/performance/templates'
+  const header = inPerformance ? (
+    <PageHeader
+      title={template.name}
+      titleContent={<span className="flex flex-wrap items-center gap-2">{template.name}{badges}</span>}
+      back={{ href: basePath, label: th('performance.workspace.reviewFormsTab') }}
+      actions={<>{status}{headerActions}</>}
+    />
+  ) : (
+    <BuilderHeader backHref={basePath} backLabel={t('backToTemplates')} title={template.name} badges={badges} status={status} actions={headerActions} />
+  )
+  const content = (
     <div>
-      <BuilderHeader
-        backHref="/admin/setup/review-templates"
-        backLabel={t('backToTemplates')}
-        title={template.name}
-        badges={
-          <>
-            {template.isActive ? <Badge variant="success">{tb('active')}</Badge> : <Badge variant="secondary">{tb('inactive')}</Badge>}
-            {template.cycleCount > 0 ? <Badge variant="outline">{t('cycleCount', { count: template.cycleCount })}</Badge> : null}
-          </>
-        }
-        status={reordering ? <span className="text-xs text-slate-500 dark:text-slate-400">{tc('actions.saving')}</span> : null}
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={template.cycleCount > 0}
-            title={template.cycleCount > 0 ? t('deleteBlocked') : undefined}
-            onClick={() => void removeTemplate()}
-          >
-            <Trash2 size={14} /> {tc('actions.delete')}
-          </Button>
-        }
-      />
       <BuilderSplit outline={outline}>
         <BuilderIssues issues={issueList} />
         {inspector}
@@ -543,6 +570,7 @@ export function ReviewTemplateBuilder({
       <ContextMenu open={menu.open} position={menu.position} items={menuItems} onClose={menu.close} />
     </div>
   )
+  return inPerformance ? <ListPageLayout header={header}>{content}</ListPageLayout> : <div>{header}{content}</div>
 }
 
 function TemplateInspector({

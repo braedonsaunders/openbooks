@@ -127,7 +127,7 @@
     "hrm-recruiting-pools": "候选人才库",
     "hrm-leave-calendar": "按部门查看日历",
     "hrm-performance-calibration": "校准",
-    "hrm-performance-talent": "人才与继任",
+    "hrm-performance-talent": "评估",
     "hrm-performance-retention": "留任",
     "hrm-performance-settings": "绩效设置",
     "crm-sales": "Sales",
@@ -140,7 +140,9 @@
     "hrm-benefits-windows": "参保窗口",
     "hrm-benefits-rewards": "奖励",
     "hrm-benefits-incentives": "激励",
-    "hrm-benefits-payouts": "发放"
+    "hrm-benefits-payouts": "发放",
+    "hrm-performance-succession": "继任计划",
+    "hrm-performance-templates": "考核表单"
   },
   "groups": {
     "workforce": "员工队伍",

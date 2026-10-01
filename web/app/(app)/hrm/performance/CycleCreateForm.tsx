@@ -1,8 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Button, EmptyState, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 
@@ -15,6 +16,8 @@ import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 export interface CycleCreateProps {
   closeHref: string
   templates: { value: string; label: string }[]
+  initialTemplateId?: string
+  emptyTemplates: string
   templateLabel: string
   nameLabel: string
   startLabel: string
@@ -22,20 +25,20 @@ export interface CycleCreateProps {
   submitLabel: string
   cancelLabel: string
   setupHint: string
-  setupHref: string
+  setupHref: string | null
   failed: string
 }
 
 export function CycleCreateForm(props: CycleCreateProps) {
   const router = useRouter()
-  const [templateId, setTemplateId] = useState(props.templates[0]?.value ?? '')
+  const [templateId, setTemplateId] = useState(props.initialTemplateId ?? '')
   const [name, setName] = useState('')
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const close = useDirtyUrlDrawer(
-    name !== '' || templateId !== (props.templates[0]?.value ?? '') || periodStart !== '' || periodEnd !== '',
+    name !== '' || templateId !== (props.initialTemplateId ?? '') || periodStart !== '' || periodEnd !== '',
     busy,
   )
 
@@ -78,23 +81,24 @@ export function CycleCreateForm(props: CycleCreateProps) {
     <form onSubmit={submit} className="space-y-4">
       <div>
         <Label htmlFor="cycle-template">{props.templateLabel}</Label>
-        <Select
+        {props.templates.length ? <Select
           id="cycle-template"
           value={templateId}
           onChange={(e) => setTemplateId(e.target.value)}
           required
         >
+          <option value="">{props.templateLabel}</option>
           {props.templates.map((tpl) => (
             <option key={tpl.value} value={tpl.value}>
               {tpl.label}
             </option>
           ))}
-        </Select>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          <a className="underline" href={props.setupHref}>
+        </Select> : <EmptyState title={props.templateLabel} description={props.emptyTemplates} />}
+        {props.setupHref ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <Link className="underline" href={props.setupHref} onClick={(event) => { event.preventDefault(); void close(props.setupHref ?? undefined) }}>
             {props.setupHint}
-          </a>
-        </p>
+          </Link>
+        </p> : null}
       </div>
       <div>
         <Label htmlFor="cycle-name">{props.nameLabel}</Label>
@@ -114,7 +118,7 @@ export function CycleCreateForm(props: CycleCreateProps) {
         </p>
       ) : null}
       <div className="flex gap-2">
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || !templateId || !name.trim() || !periodStart || !periodEnd}>
           {props.submitLabel}
         </Button>
         <Button type="button" variant="outline" onClick={() => void close()}>

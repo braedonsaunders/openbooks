@@ -1040,7 +1040,7 @@
       "tabs": {
         "cycles": "サイクル",
         "calibration": "キャリブレーション",
-        "talent": "タレントと後継",
+        "talent": "評価",
         "settings": "設定"
       },
       "calibration": {
@@ -1085,7 +1085,7 @@
         "detailLoadFailed": "キャリブレーションの詳細を読み込めませんでした。もう一度お試しください。"
       },
       "talent": {
-        "title": "タレントと後継",
+        "title": "評価",
         "description": "宣言スケール上の9ボックス、タレント表、後継計画。",
         "newRecord": "新規記録",
         "cycleLabel": "評価サイクル",
@@ -1160,7 +1160,7 @@
       "assessments": "評価",
       "succession": "後継者計画",
       "matrix": "9ボックス",
-      "noCycle": "業績と潜在能力を評価するには評価サイクルを作成してください。後継者計画はサイクルなしでも管理できます。",
+      "noCycle": "業績と潜在能力の評価を記録するための評価サイクルを作成してください。",
       "newPlan": "新規後継者計画",
       "setupTitle": "業績管理の設定",
       "setupDescription": "会社設定で評価フォーム、評価尺度、フィードバック権限を設定します。",
@@ -1176,7 +1176,10 @@
       "noScale": "このサイクルには業績と潜在能力の評価尺度が必要です。会社設定の管理者に評価フォームの設定を依頼してください。",
       "assessmentsDescription": "選択した評価サイクルの業績、潜在能力、離職リスクを評価します。",
       "successionDescription": "重要な役職の後継者を計画し、候補者の優先順位を管理します。",
-      "matrixDescription": "選択した評価サイクルの業績と潜在能力の分布を確認します。"
+      "matrixDescription": "選択した評価サイクルの業績と潜在能力の分布を確認します。",
+      "reviewFormsTab": "評価フォーム",
+      "newReviewForm": "新しい評価フォーム",
+      "noReviewForms": "評価サイクルを開始する前に、評価尺度と質問を含む評価フォームを作成してください。"
     }
   },
   "retention": {

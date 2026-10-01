@@ -281,6 +281,8 @@ export interface PerformancePageData {
     title: string
     closeHref: string
     templates: { value: string; label: string }[]
+    initialTemplateId: string
+    emptyTemplates: string
     templateLabel: string
     nameLabel: string
     startLabel: string
@@ -288,7 +290,7 @@ export interface PerformancePageData {
     submitLabel: string
     cancelLabel: string
     setupHint: string
-    setupHref: string
+    setupHref: string | null
     failed: string
   } | null
   drawerOpen: boolean
@@ -328,15 +330,6 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
             ? [
                 widget('hrm-talent-dialog', {
                   dialog: data.continuous.talent.dialog,
-                }),
-              ]
-            : []),
-          ...(data.canManage
-            ? [
-                widget('plain-link-button', {
-                  href: '/admin/setup/performance',
-                  label: data.continuous.setupLabel,
-                  variant: 'outline',
                 }),
               ]
             : []),
@@ -542,7 +535,7 @@ export async function loadPerformancePage(
   const canManage = can(authz, 'hrm.performance.manage')
   const canRetain = can(authz, 'hrm.retention.read')
 
-  // HR-17: the continuous tabs resolve first. Retention is one of them now,
+  // The continuous tabs resolve first. Retention is one of them now,
   // so the cycles list, the calibration grid, the talent grid, the feedback
   // settings and the retention figures each get the page to themselves.
   // Loaded here (not beside the retention panel) so every drawer href below
@@ -879,14 +872,16 @@ export async function loadPerformancePage(
       templates: templates
         .filter((tpl) => tpl.isActive)
         .map((tpl) => ({ value: tpl.id, label: tpl.name })),
+      initialTemplateId: templates.some((tpl) => tpl.id === sp.template && tpl.isActive) ? sp.template! : '',
+      emptyTemplates: t('performance.workspace.noReviewForms'),
       templateLabel: t('performance.templateLabel'),
       nameLabel: t('performance.newCycleName'),
       startLabel: t('performance.periodStart'),
       endLabel: t('performance.periodEnd'),
       submitLabel: t('performance.createCycle'),
       cancelLabel: t('performance.cancel'),
-      setupHint: t('performance.templateSetupHint'),
-      setupHref: '/admin/setup/review-templates',
+      setupHint: t('performance.workspace.newReviewForm'),
+      setupHref: can(authz, 'admin.setup.manage') ? '/hrm/performance/templates?template=new' : null,
       failed: t('performance.actionFailed'),
     }
   }
