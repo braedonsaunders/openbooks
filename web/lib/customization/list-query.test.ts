@@ -1,13 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sql } from "drizzle-orm";
 
 // SQL builders only. The server-only seam is stubbed the same way as
 // list-where-fail-closed.integration.test.ts — no database.
-const { documentWhere } = await import("./list-query.ts");
+const { documentWhere, columnDescriptors } = await import("./list-query.ts");
 const { defaultListView } = await import("@openbooks/customization");
 
 const KINDS = ["vendor_bill", "vendor_credit"] as const;
 const view = { ...defaultListView("vendor_bill"), filters: [] };
+
+test("account saved views omit the retired row action and keep the account link", () => {
+  const accountView = defaultListView("account");
+  assert.ok(!accountView.columns.some((column) => column.key === "_actions"));
+  const legacyView = { ...accountView, columns: [...accountView.columns, { key: "_actions", visible: true }] };
+  const cols = columnDescriptors("account", legacyView, [], { name: sql`a.name` }, {});
+  assert.ok(!cols.some((column) => column.kind === "actions"));
+  assert.ok(cols.some((column) => column.key === "name" && column.kind === "reference"));
+  assert.ok(columnDescriptors("vendor_bill", view, [], {}, {}).some((column) => column.kind === "actions"));
+});
 
 function sqlText(query: { queryChunks?: unknown[] } | null | undefined): string {
   const top = query == null ? undefined : query.queryChunks;

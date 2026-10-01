@@ -34,11 +34,14 @@ export interface ArCockpitData {
 export async function loadArCockpit(): Promise<ArCockpitData> {
   const authz = await requirePermission('ar.read')
   const canCreate = can(authz, 'ar.create')
-  const t = await getTranslations('ar')
-  const locale = await getLocale()
-
-
-  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
+  // Navigation and configuration are independent reads; neither should wait
+  // for the complete cash forecast before the page can finish loading.
+  const [t, locale, cfg, tabs] = await Promise.all([
+    getTranslations('ar'),
+    getLocale(),
+    analyticsConfig(authz.user.orgId, 'cashflow'),
+    customerGroupTabs(authz, '/ar'),
+  ])
   const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
   const position = await arPosition(authz.user.orgId, 4, apSettings, undefined, authz.allowedSubsidiaryIds, locale)
   // The schedule bars need each week's label and amount; the week drill
@@ -77,7 +80,7 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
     ],
     newBasePath: '/ar/invoices',
     newTriggerLabel: t('actions.new'),
-    tabs: await customerGroupTabs(authz, '/ar'),
+    tabs,
     data,
   }
 }

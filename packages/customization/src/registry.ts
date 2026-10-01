@@ -893,7 +893,6 @@ const ACCOUNT: RecordTypeMeta = {
     { key: "balance", labelKey: "common.labels.balance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 140 },
     { key: "is_summary", labelKey: "accounts.list.badges.summary", kind: "text", defaultHidden: true },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 100 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {

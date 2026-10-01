@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { resolveValue } from '@braedonsaunders/appkit-viewspec'
 import { stubModules } from '../../../testing/stub-modules'
 
 const state = { canCreate: true, ordersEnabled: true, unexpected: false }
@@ -39,6 +40,28 @@ registerViewHooks({
 })
 
 const { loadPurchasing, purchasingSpec } = await import('./view')
+
+test('purchasing vitals retain five readable metrics with optional features disabled', async () => {
+  const base = await loadPurchasing({})
+  for (const ordersEnabled of [false, true]) {
+    for (const expensesEnabled of [false, true]) {
+      const data = { ...base, ordersEnabled, posAllowed: ordersEnabled, expensesEnabled }
+      const grid = purchasingSpec(data).body.find((block) => block.kind === 'grid')
+      assert.ok(grid?.kind === 'grid')
+      const vitals = grid.blocks[0]
+      assert.ok(vitals?.kind === 'grid')
+      assert.equal(vitals.blocks.filter((block) => !block.when || resolveValue(block.when, data)).length, 5,
+        `Orders=${ordersEnabled}, Expenses=${expensesEnabled}`)
+      const unreadable = { ...data, apAllowed: false, posAllowed: false, expensesEnabled: false }
+      const protectedGrid = purchasingSpec(unreadable).body.find((block) => block.kind === 'grid')
+      assert.ok(protectedGrid?.kind === 'grid')
+      const protectedVitals = protectedGrid.blocks[0]
+      assert.ok(protectedVitals?.kind === 'grid')
+      assert.equal(protectedVitals.blocks.filter((block) => !block.when || resolveValue(block.when, unreadable)).length, 1,
+        'without AP or Expenses access only the vendor count is readable')
+    }
+  }
+})
 
 function block(data: Awaited<ReturnType<typeof loadPurchasing>>, type: string) {
   const find = (value: unknown): Record<string, unknown> | undefined => {

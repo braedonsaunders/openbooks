@@ -93,7 +93,7 @@
     "roster": {
       "title": "Accounts",
       "hint": "Balances from the posted ledger",
-      "empty": "No reconcilable accounts yet. Flag your bank and card accounts as reconcilable in the Chart of Accounts.",
+      "empty": "No active bank or card accounts yet. Add them in the Chart of Accounts.",
       "bankSection": "Bank accounts",
       "cardSection": "Credit cards",
       "reconciledThrough": "Reconciled through {date}",
@@ -390,6 +390,8 @@
   },
   "account": {
     "description": "{details} — import statements, then match and sign off.",
+    "configure": "Configure account",
+    "setupDescription": "To import statements or reconcile this account, enable Reconcilable and choose a settlement currency in the Chart of Accounts.",
     "stats": {
       "glBalance": "GL balance (posted)",
       "reconciledThrough": "Reconciled through",

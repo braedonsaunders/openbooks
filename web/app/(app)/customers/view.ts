@@ -103,6 +103,12 @@ export interface CustomersData {
   pipelineLabel: string
   pipelineValue: string
   pipelineSub: string
+  openArLabel: string
+  openArSub: string
+  overdueLabel: string
+  overdueSub: string
+  dsoLabel: string
+  dsoSub: string
   closedQuarterLabel: string
   closedQuarterValue: string
   quotesOrdersLabel: string
@@ -261,6 +267,12 @@ export async function loadCustomers(
     pipelineLabel: t('home.vitals.pipeline'),
     pipelineValue: moneyCompact(data.pipeline.total),
     pipelineSub: t('home.vitals.pipelineSub', { weighted: moneyCompact(data.pipeline.weighted) }),
+    openArLabel: t('home.vitals.openAr'),
+    openArSub: t('home.vitals.openArSub', { count: data.openInvoices }),
+    overdueLabel: t('home.vitals.overdue'),
+    overdueSub: t('home.vitals.overdueSub', { count: data.overdueInvoices }),
+    dsoLabel: t('home.vitals.dso'),
+    dsoSub: t('home.vitals.dsoSub'),
     closedQuarterLabel: t('home.vitals.closedQuarter'),
     closedQuarterValue: moneyCompact(data.pipeline.closed),
     quotesOrdersLabel: t('home.vitals.quotesOrders'),
@@ -369,35 +381,44 @@ export function customersSpec(data: CustomersData): PageSpec {
         },
       }, f('ratesBlocked')),
       grid('flex h-full min-h-0 flex-col gap-4', [
-        // Vitals strip. The pipeline pair is CRM-gated and the quotes/orders
-        // tile is orders-gated; `when` expresses that without the spec
-        // gaining a conditional.
+        // Optional capabilities use their own metrics while enabled. Otherwise
+        // show receivables metrics under the same AR read permission as the pulse.
         grid('grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5', [
           // The count reads behind parties.read.
           statTile({ iconKey: 'users', accent: 'teal', label: f('activeCustomersLabel'), value: f('activeCustomersValue'), when: f('partiesAllowed') }),
-          statTile({
+          data.crmEnabled ? statTile({
             iconKey: 'trending-up',
             accent: 'violet',
             label: f('pipelineLabel'),
             value: f('pipelineValue'),
             sub: f('pipelineSub'),
             when: f('crmEnabled'),
+          }) : statTile({
+            iconKey: 'wallet', accent: 'sky', label: f('openArLabel'),
+            value: f('arOutstanding'), sub: f('openArSub'), when: f('arAllowed'),
           }),
-          statTile({
+          data.crmEnabled ? statTile({
             iconKey: 'check-circle',
             accent: 'emerald',
             label: f('closedQuarterLabel'),
             value: f('closedQuarterValue'),
             tone: 'positive',
             when: f('crmEnabled'),
+          }) : statTile({
+            iconKey: 'triangle-alert', accent: 'red', label: f('overdueLabel'),
+            value: f('arOverdue'), sub: f('overdueSub'),
+            tone: data.arOverdueIsNegative ? 'negative' : undefined, when: f('arAllowed'),
           }),
-          statTile({
+          data.ordersEnabled ? statTile({
             iconKey: 'clipboard',
             accent: 'sky',
             label: f('quotesOrdersLabel'),
             value: f('quotesOrdersValue'),
             sub: f('quotesOrdersSub'),
             when: f('ordersEnabled'),
+          }) : statTile({
+            iconKey: 'timer', accent: 'violet', label: f('dsoLabel'),
+            value: f('dsoText'), sub: f('dsoSub'), when: f('arAllowed'),
           }),
           statTile({
             iconKey: 'wallet',

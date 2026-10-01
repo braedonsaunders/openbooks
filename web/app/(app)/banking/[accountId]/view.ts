@@ -28,12 +28,12 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can, subsidiaryScopeAllows } from '../../../../lib/authz'
-import { reconcilableBankAccount } from '../../../../lib/banking-accounts'
+import { bankAccount } from '../../../../lib/banking-accounts'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'
 
 /**
- * A reconcilable bank/card account, split into a loader and a spec.
+ * An active bank/card account, split into a loader and a spec.
  *
  * Two independent prefixed lists — statements (`stmt*`) and reconciliations
  * (`recon*`) — each with its own search, filter, sort and pager, plus a
@@ -155,6 +155,9 @@ export interface BankingAccountData {
   backHref: string
   backLabel: string
   canReconcile: boolean
+  canConfigure: boolean
+  configureHref: string
+  configureLabel: string
   accountId: string
   openReconciliationId: string | null
   glBalance: string
@@ -229,7 +232,6 @@ export async function loadBankingAccount(
 ): Promise<BankingAccountData> {
   const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
-  const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
   const locale = await getLocale()
@@ -242,15 +244,15 @@ export async function loadBankingAccount(
   const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone })
   const formatTimestamp = (value: string) => timestampFormatter.format(new Date(value))
 
-  // Membership comes from the ONE banking reader — the same
-  // reconcilable/active/bank-type predicate the overview roster and the
-  // Match picker filter through — so a non-bank page never renders for an
-  // account its siblings refuse to list.
+  // Read every active bank/card account shown by the overview, including
+  // accounts awaiting reconciliation setup. Workflow actions remain gated
+  // by both the account configuration and the caller's permission.
   // Membership plus ownership: a session, balance, and unmatched queue for
   // another entity's account (or a shared account, for a restricted reader)
   // do not exist as far as this page is concerned.
-  const membership = await reconcilableBankAccount(orgId, accountId)
+  const membership = await bankAccount(orgId, accountId)
   if (!membership || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, membership.subsidiaryId)) notFound()
+  const canReconcile = membership.reconcilable && can(authz, 'banking.reconcile')
   const accountRes = (await db.execute<AccountRow>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
            coalesce((select sum(jl.amount) from journal_lines jl
@@ -414,10 +416,15 @@ export async function loadBankingAccount(
     basePath,
     currentParams: sp,
     headerTitle: [account.number, account.name].filter(Boolean).join(' · '),
-    headerDescription: t('account.description', { details: accountDetails }),
+    headerDescription: membership.reconcilable
+      ? t('account.description', { details: accountDetails })
+      : t('account.setupDescription'),
     backHref: '/banking',
     backLabel: t('home.title'),
     canReconcile,
+    canConfigure: !membership.reconcilable && can(authz, 'gl.manage'),
+    configureHref: `/accounts?account=${accountId}`,
+    configureLabel: t('account.configure'),
     accountId: account.id,
     openReconciliationId: account.open_reconciliation_id,
     glBalance: String(account.balance),
@@ -521,6 +528,9 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
         description: f('headerDescription'),
         actionsClassName: 'flex items-center gap-2',
         actions: [
+          widget('link-button', {
+            href: f('configureHref'), label: f('configureLabel'), iconKey: 'settings', variant: 'outline',
+          }, f('canConfigure')),
           widget('import-statement', { accountId: data.accountId }, f('canReconcile')),
           widget(
             'start-reconciliation',
