@@ -188,6 +188,13 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: full-verification
+          path: .local/verification
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build badges, matrix, and history
         # On workflow_run the default GITHUB_SHA is the trust branch tip, not
         # the tested commit. Stamp the corpus with the head SHA of the test
@@ -197,6 +204,7 @@ jobs:
             --conformance .local/conformance \
             --controls .local/controls \
             --checkpoint engine/harness-checkpoints \
+            --verification .local/verification/verification.json \
             --out docs/trust \
             --sha "${{ github.event.workflow_run.head_sha }}"
 

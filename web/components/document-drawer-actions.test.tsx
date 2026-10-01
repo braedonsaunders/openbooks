@@ -70,7 +70,7 @@ function scriptFetch(handler: (url: string) => Response | null) {
   };
 }
 
-async function mountApprovedBill() {
+async function mountApprovedBill(options: { status?: string; effectStatus?: string; canPost?: boolean } = {}) {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
   const host = document.createElement("div");
@@ -79,7 +79,8 @@ async function mountApprovedBill() {
   const doc = {
     id: randomUUID(),
     kind: "vendor_bill",
-    status: "approved",
+    status: options.status ?? "approved",
+    posting_effect_status: options.effectStatus,
     document_number: "BILL-00005",
     currency: "USD",
     updated_at: "2026-09-17T12:00:00.000000Z",
@@ -111,7 +112,7 @@ async function mountApprovedBill() {
             headerDefs={[]}
             lineDefs={[]}
             canCreate
-            canPost
+            canPost={options.canPost ?? true}
             layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
           />
         </MoneyProvider>
@@ -176,4 +177,28 @@ test("a 422 post refusal persists as a drawer-header alert", async (t) => {
   assert.match(alert.textContent ?? "", /AP is closed/i);
   const errors = (globalThis.__drawerToasts ?? []).filter((toast) => toast.kind === "error");
   assert.equal(errors.length, 1, "the toast still fires alongside the persistent alert");
+});
+
+
+test("posted documents display downstream completion and only authorized terminal retries", async () => {
+  const restore = scriptFetch(() => null);
+  try {
+    for (const [effectStatus, label, canPost, retry] of [
+      ['pending', 'Queued', true, false],
+      ['running', 'Processing', true, false],
+      ['failed', 'Automatic retry pending', true, false],
+      ['terminal_failed', 'Review and retry required', true, true],
+      ['terminal_failed', 'Review and retry required', false, false],
+      ['succeeded', 'Complete', true, false],
+    ] as const) {
+      const { host, root } = await mountApprovedBill({ status: 'posted', effectStatus, canPost });
+      try {
+        const status = [...document.querySelectorAll('[role="status"]')].find(node => node.textContent?.includes('Posting effects:'));
+        assert.ok(status, 'the record must expose its posting-effect status');
+        assert.ok(status.textContent?.includes(label), `expected a readable ${label} status`);
+        assert.equal([...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Retry posting effects'), retry);
+        assert.equal(status.textContent?.includes('before closing GL'), effectStatus !== 'succeeded');
+      } finally { await act(async () => root.unmount()); host.remove(); }
+    }
+  } finally { restore(); }
 });

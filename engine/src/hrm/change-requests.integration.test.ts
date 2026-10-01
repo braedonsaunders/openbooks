@@ -857,3 +857,87 @@ test("concurrent two-session apply: exactly one wins", { skip: !DB }, async () =
     );
   });
 });
+
+async function seedDirectEmploymentPolicy(orgId: string): Promise<string> {
+  const id = randomUUID();
+  const graph = { schemaVersion: 1, ungatedOutcome: 'apply', nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }], edges: [] };
+  await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph) values (${id}, ${orgId}, 'Save employee edits', 'hrm_employment_change_request', true, ${JSON.stringify(graph)}::jsonb)`);
+  return id;
+}
+
+test('explicit direct policy applies through the canonical writer with pinned execution evidence and no human approval', { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    const flowId = await seedDirectEmploymentPolicy(h.org.orgId);
+    const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, displayName: 'Owner operator' });
+    await db.execute(sql`update users set party_id = ${workerPartyId} where id = ${h.submitterId}`);
+    const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.submitterId, employmentId, payload: { kind: 'hire', status: 'active', effectiveFrom: '2026-09-01' } });
+    const result = await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Start employment' });
+    assert.equal(result.status, 'applied');
+    assert.equal(await requestStatus(draft.id), 'applied');
+    const stored = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { flowId: string; graph: { ungatedOutcome: string } } }; revision: number; status: string }>(sql`
+      select r.decision_snapshot as snapshot, e.revision as revision, v.status
+      from hrm_employment_change_requests r join worker_employments e on e.id = r.employment_id
+      join worker_employment_versions v on v.employment_id = e.id and v.superseded_by is null
+      where r.id = ${draft.id}
+    `)).rows[0]!;
+    assert.equal(stored.status, 'active');
+    assert.equal(stored.revision, 2);
+    assert.equal(stored.snapshot.mode, 'automatic');
+    assert.deepEqual(stored.snapshot.gates, []);
+    assert.equal(stored.snapshot.policy.flowId, flowId);
+    assert.equal(stored.snapshot.policy.graph.ungatedOutcome, 'apply');
+    assert.equal((await changeRows(employmentId)).length, 1);
+    assert.equal((await db.execute(sql`select id from flow_gates where subject_id = ${draft.id}`)).rows.length, 0);
+    await assert.rejects(submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Retry' }), /draft/);
+    assert.equal((await changeRows(employmentId)).length, 1, 'retry cannot apply a second time');
+  });
+});
+
+test('approval gates take precedence over an explicit direct policy', { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    await seedDirectEmploymentPolicy(h.org.orgId);
+    await seedFlow(h.org.orgId, h.approver1Id);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false });
+    const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.submitterId, employmentId, payload: { kind: 'hire', status: 'active', effectiveFrom: '2026-09-01' } });
+    const result = await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Hire' });
+    assert.equal(result.status, 'pending_approval');
+    assert.equal((await changeRows(employmentId)).length, 0);
+    await decideGate({ gateId: (await gateOf(draft.id)).id, decision: 'approved', userId: h.approver1Id });
+    assert.equal(await requestStatus(draft.id), 'applied');
+  });
+});
+
+test('a failed sibling workflow blocks direct application and leaves the canonical employee untouched', { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async h => {
+    await seedDirectEmploymentPolicy(h.org.orgId);
+    await db.execute(sql`insert into flows (org_id, name, subject_kind, enabled, graph) values (${h.org.orgId}, 'Invalid employment policy', 'hrm_employment_change_request', true, '{"schemaVersion":99}'::jsonb)`);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false });
+    const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.submitterId, employmentId, payload: { kind: 'hire', status: 'active', effectiveFrom: '2026-09-01' } });
+    await assert.rejects(submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Hire' }), /Invalid employment policy/);
+    assert.equal(await requestStatus(draft.id), 'draft');
+    assert.equal((await changeRows(employmentId)).length, 0);
+    assert.equal((await db.execute(sql`select id from worker_employment_versions where employment_id = ${employmentId}`)).rows.length, 0);
+  });
+});
+
+test('four sequential approval layers keep the employee unchanged until the final decision', { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async h => {
+    const nodes = [ { id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+      ...Array.from({ length: 4 }, (_, index) => ({ id: `approval-${index}`, position: { x: 220 * (index + 1), y: 0 }, data: { kind: 'gate', gate: { title: `Approval level ${index + 1}`, assignees: [{ type: 'user', userId: h.approver1Id }], mode: 'any' } } })) ];
+    const edges = Array.from({ length: 4 }, (_, index) => ({ id: `edge-${index}`, source: index === 0 ? 'submit' : `approval-${index - 1}`, target: `approval-${index}`, sourceHandle: index === 0 ? 'next' : 'approve' }));
+    await db.execute(sql`insert into flows (org_id, name, subject_kind, enabled, graph) values (${h.org.orgId}, 'Four approval levels', 'hrm_employment_change_request', true, ${JSON.stringify({ schemaVersion: 1, ungatedOutcome: 'apply', nodes, edges })}::jsonb)`);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false });
+    const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.submitterId, employmentId, payload: { kind: 'hire', status: 'active', effectiveFrom: '2026-09-01' } });
+    await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Hire' });
+    for (let index = 0; index < 4; index++) {
+      assert.equal(await requestStatus(draft.id), 'pending_approval');
+      assert.equal((await changeRows(employmentId)).length, 0);
+      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where subject_id = ${draft.id} and status = 'pending'`)).rows;
+      assert.equal(gate.length, 1);
+      await decideGate({ gateId: gate[0]!.id, decision: 'approved', userId: h.approver1Id });
+      if (index === 0) await db.execute(sql`update flows set graph = ${JSON.stringify({ schemaVersion: 1, nodes: [], edges: [] })}::jsonb where org_id = ${h.org.orgId}`);
+    }
+    assert.equal(await requestStatus(draft.id), 'applied');
+    assert.equal((await changeRows(employmentId)).length, 1);
+  });
+});

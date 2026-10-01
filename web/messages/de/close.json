@@ -175,6 +175,10 @@
     "material-variances": {
       "title": "Wesentliche Schwankungen erfordern eine Erläuterung",
       "message": "{count, plural, one {# Konto überschreitet die konfigurierten Wesentlichkeitsschwellen.} other {# Konten überschreiten die konfigurierten Wesentlichkeitsschwellen.}}"
+    },
+    "posting-effects-incomplete": {
+      "title": "Unvollständige Buchungsfolgen",
+      "message": "Gebuchte Belege haben unvollständige Bestands- oder Erlösverarbeitung. Fehler beheben, endgültig fehlgeschlagene Verarbeitung am Beleg mit Prüfungsbegründung erneut ausführen und vor dem Hauptbuchabschluss auf den Abschluss warten."
     }
   },
   "severity": {

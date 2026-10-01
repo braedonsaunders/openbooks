@@ -94,7 +94,7 @@ test('custom URLs and local choices cannot grant access around permission or fea
   assert.ok(!local.groups.some((group) => group.some((tab) => tab.href.startsWith('/payroll'))))
   assert.ok(!groups.flatMap((group) => group.items).some((item) => item.href === '/hrm/org-chart'))
   assert.ok(!local.groups.flat().some((tab) => tab.href === '/hrm/org-chart'))
-  for (const permission of ['hrm.employment.read', 'hrm.self.read']) {
+  for (const permission of ['hrm.org_chart.read', 'hrm.employment.read', 'hrm.self.read']) {
     const authorized = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set([permission]) } as Parameters<typeof resolveLocalNavigation>[0])
     assert.ok(authorized.groups.flat().some((tab) => tab.href === '/hrm/org-chart'), permission)
   }

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/database'
 import type { AuditListRow } from '../app/(app)/admin/audit/AuditRows'
 import type { AuditEvent } from '../app/(app)/admin/audit/AuditEventDrawer'
 import { parseImportJson } from './data-io/import-parse'

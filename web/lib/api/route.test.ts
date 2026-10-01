@@ -251,3 +251,14 @@ test("unknown errors rethrow instead of becoming a response", async () => {
   });
   await assert.rejects(() => handler(get()), /boom/);
 });
+
+test('routes may declare a larger bounded payload without widening the shared default', async () => {
+  reset();
+  const body = z.object({ text: z.string() });
+  const large = { text: 'x'.repeat(1024 * 1024 + 16) };
+  const handler = defineRoute({ permission: 'x', feature: { none: 'test surface' }, body, maxBodyBytes: 2 * 1024 * 1024, handler: async ({ body }) => NextResponse.json({ length: body.text.length }) });
+  assert.equal((await handler(post(large))).status, 200);
+  const defaultHandler = defineRoute({ permission: 'x', feature: { none: 'test surface' }, body, handler: async () => NextResponse.json({ ok: true }) });
+  assert.equal((await defaultHandler(post(large))).status, 413);
+  assert.equal((await handler(post({ text: 'x'.repeat(2 * 1024 * 1024 + 16) }))).status, 413);
+});

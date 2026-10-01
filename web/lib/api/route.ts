@@ -42,6 +42,8 @@ interface CommonOptions<
    * contract may opt in without changing the shared parser's default.
    */
   invalidBodyStatus?: number;
+  /** Per-route bounded JSON payload limit; defaults to the shared 1 MiB ceiling. */
+  maxBodyBytes?: number;
   handler: (ctx: {
     request: Request;
     authz: A;
@@ -119,6 +121,7 @@ interface LooseOptions {
   params?: z.ZodType;
   body?: z.ZodType;
   opaque?: Record<string, string>;
+  maxBodyBytes?: number;
   invalidBodyStatus?: number;
   handler: LooseHandler;
 }
@@ -242,6 +245,7 @@ export function defineRoute(options: LooseOptions) {
       if (options.body) {
         const parsedBody = await parseJsonBody(request, options.body as z.ZodType, {
           status: options.invalidBodyStatus ?? 400,
+          maxBodyBytes: options.maxBodyBytes,
         });
         if (!parsedBody.ok) return parsedBody.response;
         body = parsedBody.data;

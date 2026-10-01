@@ -30,6 +30,8 @@ import { executeFlowPlan } from "./execute.ts";
  */
 
 export interface RecordFlowRun {
+  /** A successful matched flow explicitly permits release when the dispatch has no approval gates. */
+  ungatedOutcome?: 'apply';
   runId: string;
   flowId: string;
   /** Display name of the flow — refusals name the flow, never a bare uuid. */
@@ -166,7 +168,7 @@ function mergePlans(a: AutomationPlan, b: AutomationPlan): AutomationPlan {
   const seenGates = new Set(a.gates.map((g) => g.nodeId));
   const actionNodes = [...a.actionNodes, ...b.actionNodes.filter((n) => !seenActions.has(n.nodeId))];
   const gates = [...a.gates, ...b.gates.filter((g) => !seenGates.has(g.nodeId))];
-  return { actions: actionNodes.map((n) => n.action), actionNodes, gates };
+  return { actions: actionNodes.map((n) => n.action), actionNodes, gates, ...(a.ungatedOutcome ? { ungatedOutcome: a.ungatedOutcome } : {}) };
 }
 
 /** Lifecycle events that also co-fire a graph's on_field_value triggers. */
@@ -277,7 +279,9 @@ export async function runRecordFlows(
         // matches (the flow execution contract); merged so converging nodes dedupe.
         plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
       }
-      if (planIsEmpty(plan)) continue;
+      const automaticSubmission = event.kind === 'on_submit' && plan.ungatedOutcome === 'apply' && adapter.profile.supportsUngatedSubmission === true;
+      if (planIsEmpty(plan) && !automaticSubmission) continue;
+      const dispatchValues = { ...subject.values, ...(adapter.profile.supportsUngatedSubmission ? { submissionPolicy: { ungatedOutcome: graph.ungatedOutcome ?? 'require_approval', graph, flowId: flow.id } } : {}) };
 
       // Deterministic dispatch identity: when the caller supplies an
       // occurrenceKey (close automations use their execution id), every flow
@@ -300,7 +304,7 @@ export async function runRecordFlows(
           subjectId,
           trigger: event.kind,
           // jsonb snapshot: strip non-serializable values (Dates → ISO).
-          context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
+          context: JSON.parse(JSON.stringify(dispatchValues)) as Record<string, unknown>,
           createdBy: ctx.userId ?? null,
         });
         runId = adoption.runId;
@@ -317,7 +321,7 @@ export async function runRecordFlows(
               trigger: event.kind,
               status: "running",
               // jsonb snapshot: strip non-serializable values (Dates → ISO).
-              context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
+              context: JSON.parse(JSON.stringify(dispatchValues)) as Record<string, unknown>,
               createdBy: ctx.userId ?? null,
             })
             .returning({ id: schema.flowRuns.id })
@@ -374,7 +378,7 @@ export async function runRecordFlows(
         }
       }
 
-      result.runs.push({ runId, flowId: flow.id, flowName: flow.name, status, gatesCreated, error: runError });
+      result.runs.push({ runId, flowId: flow.id, flowName: flow.name, status, gatesCreated, error: runError, ...(!adoptedStatus && automaticSubmission && status === 'completed' && gatesCreated === 0 ? { ungatedOutcome: 'apply' as const } : {}) });
       result.gatesCreated += gatesCreated;
       if (status === "failed") result.failed = true;
     }

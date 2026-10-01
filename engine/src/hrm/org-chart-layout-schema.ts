@@ -18,8 +18,8 @@ const node = z.object({
 
 /** Presentation-only diagram; its connectors never mutate employment reporting lines. */
 export const orgChartLayoutSchema = z.object({
-  nodes: z.array(node).max(500),
-  edges: z.array(z.object({ source: z.string().uuid(), target: z.string().uuid() }).strict()).max(500),
+  nodes: z.array(node).max(10000),
+  edges: z.array(z.object({ source: z.string().uuid(), target: z.string().uuid() }).strict()).max(10000),
 }).strict().superRefine((layout, ctx) => {
   const ids = new Set<string>()
   const references = new Set<string>()
@@ -32,20 +32,24 @@ export const orgChartLayoutSchema = z.object({
       references.add(key)
     }
   }
+  const kinds = new Map(layout.nodes.map((item) => [item.id, item.kind]))
   const parents = new Map<string, string>()
   for (const edge of layout.edges) {
+    if (kinds.get(edge.source) === 'employee' && kinds.get(edge.target) === 'employee') ctx.addIssue({ code: 'custom', message: 'Employee reporting lines must come from native employment records. Edit the employee’s manager instead of saving a separate relationship.' })
     if (!ids.has(edge.source) || !ids.has(edge.target)) ctx.addIssue({ code: 'custom', message: 'Connect only cards that are on the chart.' })
     if (parents.has(edge.target)) ctx.addIssue({ code: 'custom', message: 'Each card may have one parent. Remove its existing connection first.' })
     parents.set(edge.target, edge.source)
   }
+  const checked = new Set<string>()
   for (const id of ids) {
     const seen = new Set<string>()
     let next: string | undefined = id
-    while (next !== undefined) {
+    while (next !== undefined && !checked.has(next)) {
       if (seen.has(next)) { ctx.addIssue({ code: 'custom', message: 'A chart connection cannot create a cycle. Choose a parent outside this branch.' }); break }
       seen.add(next)
       next = parents.get(next)
     }
+    for (const visited of seen) checked.add(visited)
   }
 })
 export type OrgChartLayout = z.infer<typeof orgChartLayoutSchema>

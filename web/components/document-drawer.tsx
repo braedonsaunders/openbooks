@@ -1081,6 +1081,7 @@ export function DocumentDrawer({
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
+  const tPostingEffects = useTranslations('common.postingEffects')
   const tReturns = useTranslations('returns')
   const router = useRouter()
   const pathname = usePathname()
@@ -1945,6 +1946,23 @@ export function DocumentDrawer({
     )
   }
 
+  async function retryPostingEffects() {
+    const reason = await promptDialog({
+      title: tPostingEffects('retry'), label: tPostingEffects('reason'),
+      placeholder: tPostingEffects('reasonHelp'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 10 || reason.trim().length > 1000) {
+      refuse(tPostingEffects('reasonHelp'), t('toasts.actionFailed'))
+      return
+    }
+    await execute(() => fetchAction('/api/documents/actions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'retry-effects', documentId: doc.id, reason }),
+    }), { fallbackMessage: t('toasts.actionFailed'),
+      successMessage: tPostingEffects('queued'), onOk: () => router.refresh() })
+  }
+
   async function remove() {
     if (
       !(await confirmDialog({
@@ -2775,6 +2793,21 @@ export function DocumentDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.actionFailed')} />
+        {isPosted && typeof doc.posting_effect_status === 'string' ? (
+          <section role="status" aria-live="polite" className="space-y-2 rounded border p-3 text-sm">
+            <Badge variant={doc.posting_effect_status === 'succeeded' ? 'success' : 'warning'}>
+              {tPostingEffects('title')}: {tPostingEffects.has(`status.${doc.posting_effect_status}`)
+                ? tPostingEffects(`status.${doc.posting_effect_status}`) : tPostingEffects('unknown')}
+            </Badge>
+            {doc.posting_effect_status !== 'succeeded' ? <>
+              <p>{tPostingEffects('incomplete')}</p>
+              {typeof doc.posting_effect_error === 'string' ? <p>{doc.posting_effect_error}</p> : null}
+              {doc.posting_effect_status === 'terminal_failed' && canPost ? (
+                <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{tPostingEffects('retry')}</Button>
+              ) : null}
+            </> : null}
+          </section>
+        ) : null}
           {config.kind==='customer_invoice' && (editable || nativeGoods) ? <div className="space-y-3 border-b p-4">
             <div className="space-y-1"><FieldLabel fieldName={tCommon('nativeGoodsTax.title')}>{tCommon('nativeGoodsTax.title')}</FieldLabel>
               {editable ? <Select value={nativeGoods ? 'native' : 'manual'} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:event.target.value==='native'

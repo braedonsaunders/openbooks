@@ -747,6 +747,7 @@ jobs:
   # serial workers — exactly as when they were steps. Pairs are balanced on
   # measured runtime so no job is left holding the two slowest suites.
   e2e-workflows:
+    name: e2e-workflows (${{ matrix.group }})
     needs: [scope, typecheck]
     if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.browser == 'true'
     runs-on: ubuntu-latest
@@ -921,10 +922,24 @@ jobs:
     #
     # Do not add `if: always()`. Its whole value is that it cannot exist
     # unless everything it needs really passed.
-    needs: [scope, typecheck, unit, database, simulation, integration, e2e-app, e2e-workflows]
+    needs: [scope, typecheck, unit, database, simulation, integration, restore-drill, e2e-app, e2e-workflows]
     if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
       - name: Record exhaustive verification
-        run: echo "full matrix executed for ${{ github.sha }}"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verification-receipt.mjs verification.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: full-verification
+          path: verification.json
+          if-no-files-found: error

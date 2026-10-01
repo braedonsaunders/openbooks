@@ -23,11 +23,8 @@ import {
 } from "../../../../lib/hrm/org-chart-home";
 
 /**
- * Org chart tab: the tree widget (collapsible nodes, vacancy nodes,
- * as-of picker, search-to-node, person drawer) with a Directory
- * sub-view over the registered shared list. Renders when hrm is on and
- * the actor holds hrm.employment.read OR hrm.self.read — the loader
- * 404s otherwise.
+ * The editor uses the same bare canvas composition as the native FlowBuilder.
+ * The optional directory keeps its registered list and house page layout.
  */
 
 const f = field;
@@ -59,17 +56,17 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
   };
   return page({
     route: "/hrm/org-chart",
-    layout: "list",
+    layout: data.view === "directory" ? "list" : "bare",
     bodyClassName: "flex h-full min-h-0 flex-col",
-    header: [
+    header: data.view === "directory" ? [
       pageHeader({
         title: f("title"),
         description: f("description"),
         actionsClassName: "flex flex-wrap items-center gap-3",
       }),
-    ],
+    ] : [],
     body: [
-      grid("flex h-full min-h-0 flex-col gap-4", [
+      grid(data.view === "directory" ? "flex h-full min-h-0 flex-col gap-4" : "flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden", [
         // An impossible bookmarked date corrects to the business date in
         // the loader; the correction is named above the chart, never
         // silent and never a route error.
@@ -80,15 +77,6 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
           }),
           when: f("dateRefusal"),
         },
-        // The as-of/search controls on the shared toolbar. The Employees
-        // view switch is the page layout's, in the header action rail.
-        ...(data.view === "directory"
-          ? []
-          : [
-              grid("flex shrink-0 flex-wrap items-center gap-3", [
-                widgetBlock("list-toolbar", toolbar),
-              ]),
-            ]),
         ...(data.view === "directory"
           ? [
               // The directory uses one registered list and toolbar. The
@@ -135,6 +123,8 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
               grid("min-h-0 flex-1", [
                 widgetBlock("org-chart-tree", {
                   chart: data.chart,
+                  layout: data.layout,
+                  canEditLayout: data.canEditLayout,
                   personBaseHref: data.personBaseHref,
                   labels: data.labels,
                   canManage: data.canManage,
@@ -149,6 +139,7 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
           selected: data.selected,
           manager: data.manager,
           canManage: data.canManage,
+          canReadEmployee: data.canReadEmployee,
           today: data.today,
           departmentOptions: data.departmentOptions,
           closeHref: data.personCloseHref,
