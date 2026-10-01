@@ -746,7 +746,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     if (row.status !== "building" || row.claimed_by !== owner) return;
     // A disable between request and build must fail the build inside this
     // transaction rather than assemble the zip anyway; the catch below
-    // records the refusal on the row instead of throwing to the worker.
+    // records the refusal on the row before raising it to the worker.
     await assertDataSubjectExportFeature(db, orgId);
     const partyId = row.party_id;
     const requesterId = row.requested_by;
@@ -1941,6 +1941,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     await withOrgTransaction(orgId, async () => {
       await failExport(db, orgId, exportId, owner, describeExportError(e));
     });
+    throw e;
   });
 }
 
@@ -1966,12 +1967,20 @@ function describeExportError(e: unknown): string {
  */
 export async function drainExportQueue(orgId: string, limit = 5): Promise<number> {
   let done = 0;
+  const failures: Error[] = [];
   for (let i = 0; i < limit; i++) {
     const claimed = await withOrgTransaction(orgId, () => claimQueuedExport(db, orgId));
     if (!claimed) break;
-    await buildExport(orgId, claimed.id, { owner: claimed.claimedBy });
-    done += 1;
+    try {
+      await buildExport(orgId, claimed.id, { owner: claimed.claimedBy });
+      done += 1;
+    } catch (cause) {
+      failures.push(new Error(`subject-access export ${claimed.id}: ${describeExportError(cause)}`, { cause }));
+    }
   }
+  // Keep draining independent requests, but never report a failed build as
+  // completed work. The persisted error remains visible to its requester.
+  if (failures.length) throw new AggregateError(failures, failures.map((error) => error.message).join("; "));
   return done;
 }
 
