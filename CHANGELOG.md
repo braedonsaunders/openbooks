@@ -6,6 +6,17 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.28.3] - 2026-10-01
+
+- Verify production PDF generation through the application's pinned Puppeteer
+  driver, close the browser explicitly and check PDF structure with qpdf.
+- Run native renderer verification before copying the application bundle so
+  browser failures surface early in image builds.
+- Include the Benefits wording, table-footer and patched native browser
+  changes prepared in alpha.28.1 and alpha.28.2.
+
+No additional migrations or operator configuration are required.
+
 ## [0.1.0-alpha.28.2] - 2026-10-01
 
 - Pin the production PDF browser to the patched official native release on
