@@ -27,8 +27,10 @@ export function RegisteredListTable<T>({
   sortParamKey,
   dirParamKey,
   pageParamKey,
+  perPageParamKey,
   searchable = true,
   paging = true,
+  showPerPage,
 }: {
   source: PreparedListSourceKey
   rows: T[]
@@ -47,8 +49,10 @@ export function RegisteredListTable<T>({
   sortParamKey?: string
   dirParamKey?: string
   pageParamKey?: string
+  perPageParamKey?: string
   searchable?: boolean
   paging?: boolean
+  showPerPage?: boolean
 }) {
   const definition = preparedListSource(source)
   const ids = rows.map(rowKey)
@@ -77,8 +81,9 @@ export function RegisteredListTable<T>({
         sortParamKey={sortParamKey}
         dirParamKey={dirParamKey}
         pageParamKey={pageParamKey}
+        perPageParamKey={perPageParamKey}
         paging={Boolean(state) && paging}
-        showPerPage={Boolean(state)}
+        showPerPage={showPerPage ?? Boolean(state)}
         leading={leading}
         footer={footer}
         rowClassName={rowClassName}

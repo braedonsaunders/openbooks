@@ -51,6 +51,12 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  admin_backups: {
+    route: '/admin/backups',
+    rowsField: 'runs',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   admin_custom_fields: {
     clientSearch: false,
     route: '/admin/custom-fields',
@@ -106,6 +112,12 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  admin_sandboxes: {
+    route: '/admin/sandboxes',
+    rowsField: 'sandboxes',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   admin_scripts: {
     clientSearch: false,
     route: '/admin/scripts',
@@ -127,6 +139,18 @@ const SOURCES = {
     paging: {
       totalField: 'submittedTotal',
       pageField: 'page',
+      perPageField: 'perPage',
+    },
+  },
+  accounts_search: {
+    clientSearch: false,
+    route: '/accounts',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    paging: {
+      totalField: 'total',
+      pageField: 'currentPage',
       perPageField: 'perPage',
     },
   },
@@ -281,6 +305,24 @@ const SOURCES = {
       perPageField: 'perPage',
     },
   },
+  inventory_bom: {
+    route: '/inventory',
+    rowsField: 'assemblies',
+    rowKeyField: 'assemblyItemId',
+    mode: 'loaded',
+  },
+  inventory_count_lines: {
+    route: '/inventory',
+    rowsField: 'lines',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  inventory_counts: {
+    route: '/inventory',
+    rowsField: 'counts',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   knowledge_views: {
     clientSearch: false,
     route: '/knowledge/views',
@@ -330,6 +372,25 @@ const SOURCES = {
       perPageField: 'perPage',
     },
   },
+  sync_runs: {
+    route: '/sync',
+    rowsField: 'runs',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  payments_runs: {
+    clientSearch: false,
+    route: '/payments',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    basePathField: 'basePath',
+    paging: {
+      totalField: 'total',
+      pageField: 'page',
+      perPageField: 'perPage',
+    },
+  },
   payroll_anomalies: {
     route: '/payroll/anomalies',
     rowsField: 'rows',
@@ -364,6 +425,30 @@ const SOURCES = {
   compliance_vendors: { route: '/compliance/vendors', mode: 'loaded' },
   documents_trash: { route: '/documents/trash', mode: 'loaded' },
   tax_provisions: { route: '/tax/provisions', mode: 'loaded' },
+  time_clock_pairs: {
+    route: '/time/clock',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  time_crew_batches: {
+    route: '/time/crew',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  warehouse_list: {
+    route: '/warehouse',
+    rowsField: 'rows',
+    rowKeyField: 'warehouseId',
+    mode: 'loaded',
+  },
+  warehouse_putaway: {
+    route: '/warehouse',
+    rowsField: 'staged',
+    rowKeyField: 'stagingLocationId',
+    mode: 'loaded',
+  },
 } satisfies Record<string, PreparedListSource>
 
 export type PreparedListSourceKey = keyof typeof SOURCES

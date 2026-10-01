@@ -4,15 +4,14 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
   badge,
   column,
   field as item,
   page,
   pageHeader,
-  panel,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
@@ -275,27 +274,23 @@ export function clockSpec(data: ClockPageData): PageSpec {
       }),
           ]
         : []),
-      panel({
-        title: f('pairsTitle'),
-        bodyClassName: 'p-0',
-        blocks: [
-          table({
-            variant: 'app',
-            rows: f('rows'),
-            rowKey: item('id'),
-            columns: [
-              column(f('inLabel'), text(item('clockIn'))),
-              column(f('outLabel'), text(item('clockOut'))),
-              column(f('projectLabel'), text(item('project'))),
-              column(f('hoursLabel'), text(item('hours')), {
-                align: 'right',
-                className: 'tabular-nums',
-              }),
-              column(f('geoLabel'), badge(item('geo'), { variant: 'secondary' })),
-            ],
-            empty: { title: f('pairsTitle'), description: f('emptyPairs') },
+      // Today's pairs render as the shared registered list directly — no
+      // duplicate titled panel around a table carrying the same title.
+      registeredListTable('time_clock_pairs', {
+        variant: 'app',
+        rows: f('rows'),
+        rowKey: item('id'),
+        columns: [
+          column(f('inLabel'), text(item('clockIn'))),
+          column(f('outLabel'), text(item('clockOut'))),
+          column(f('projectLabel'), text(item('project'))),
+          column(f('hoursLabel'), text(item('hours')), {
+            align: 'right',
+            className: 'tabular-nums',
           }),
+          column(f('geoLabel'), badge(item('geo'), { variant: 'secondary' })),
         ],
+        empty: { title: f('pairsTitle'), description: f('emptyPairs') },
       }),
     ],
   })

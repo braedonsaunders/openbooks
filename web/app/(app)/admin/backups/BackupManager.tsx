@@ -1,6 +1,6 @@
 "use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
+import { PagedTable, type PagedColumn } from "../../../../components/paged-table";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -135,6 +135,116 @@ export function BackupManager({
       router.refresh();
     });
   };
+
+  // Stored runs as the shared collection table: search, paging and empty
+  // states come from PagedTable over the registered admin_backups source.
+  // The schedule editor above and the run-now/delete mutations stay as-is.
+  const backupColumns: PagedColumn<BackupRunRow>[] = [
+    {
+      key: 'created',
+      header: t("table.created"),
+      cell: (run) => <span className="whitespace-nowrap">{formatWhen(run.createdAt)}</span>,
+      search: (run) => `${run.fileName ?? ''} ${formatWhen(run.createdAt)}`,
+    },
+    {
+      key: 'kind',
+      header: t("table.kind"),
+      cell: (run) => <Badge variant="outline">{t(`table.kinds.${run.kind}`)}</Badge>,
+      search: (run) => run.kind,
+    },
+    {
+      key: 'status',
+      header: t("table.status"),
+      cell: (run) => (
+        <>
+          <Badge variant={STATUS_VARIANT[run.status] ?? "secondary"}>{t(`table.statuses.${run.status}`)}</Badge>
+          {run.error && (
+            <div className="mt-1 max-w-64 text-xs break-words text-red-600 dark:text-red-400">
+              {run.error}
+            </div>
+          )}
+        </>
+      ),
+      search: (run) => `${run.status} ${run.error ?? ''}`,
+    },
+    {
+      key: 'size',
+      header: t("table.size"),
+      cell: (run) => <span className="whitespace-nowrap">{formatBytes(run.byteSize)}</span>,
+    },
+    {
+      key: 'contents',
+      header: t("table.contents"),
+      cell: (run) => (
+        <span className="whitespace-nowrap">
+          {run.rowCount !== null
+            ? t("table.rowsTables", { rows: number(run.rowCount), tables: run.tableCount ?? 0 })
+            : "—"}
+        </span>
+      ),
+    },
+    {
+      key: 'sha256',
+      header: t("table.sha256"),
+      cell: (run) => (
+        <span className="block max-w-72 font-mono text-xs break-all text-slate-500 dark:text-slate-400">
+          {run.sha256 ?? "—"}
+        </span>
+      ),
+      search: (run) => run.sha256 ?? '',
+    },
+    {
+      key: 'retention',
+      header: t("table.retention"),
+      cell: (run) => (
+        run.purgedAt ? (
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {t("table.purged", { reason: run.purgeReason ? t(`table.reasons.${run.purgeReason}`) : "", when: formatWhen(run.purgedAt) })}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-500 dark:text-slate-400">{t("table.kept")}</span>
+        )
+      ),
+    },
+    {
+      key: 'actions',
+      header: <span className="sr-only">{t("table.actionsSr")}</span>,
+      className: 'text-right whitespace-nowrap',
+      cell: (run) => {
+        const active = run.status === "queued" || run.status === "running";
+        const downloadable = run.status === "completed" && !run.purgedAt;
+        return (
+          <>
+            {downloadable && (
+              <>
+                <a
+                  href={`/api/admin/backups/${run.id}/download`}
+                  className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  {t("table.archive")}
+                </a>
+                <a
+                  href={`/api/admin/backups/${run.id}/manifest`}
+                  className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  {t("table.manifest")}
+                </a>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => deleteRun(run)}
+                  className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                >
+                  {t("table.delete")}
+                </button>
+              </>
+            )}
+            {active && <span className="text-xs text-slate-400">{t("table.inProgress")}</span>}
+          </>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -291,97 +401,17 @@ export function BackupManager({
           </Button>
         </div>
 
-        {runs.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">{t("storedCard.noneYet")}</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <SharedTable className="w-full text-left text-sm">
-              <SharedTableHeader>
-                <SharedTableRow className="border-b border-slate-200 text-xs tracking-wider text-slate-400 uppercase dark:border-slate-800 dark:text-slate-500">
-                  <SharedTableHead className="py-2 pr-4 font-medium">{t("table.created")}</SharedTableHead>
-                  <SharedTableHead className="py-2 pr-4 font-medium">{t("table.kind")}</SharedTableHead>
-                  <SharedTableHead className="py-2 pr-4 font-medium">{t("table.status")}</SharedTableHead>
-                  <SharedTableHead className="py-2 pr-4 font-medium">{t("table.size")}</SharedTableHead>
-                  <SharedTableHead className="py-2 pr-4 font-medium">{t("table.contents")}</SharedTableHead>
-                  <SharedTableHead className="py-2 pr-4 font-medium">{t("table.sha256")}</SharedTableHead>
-                  <SharedTableHead className="py-2 pr-4 font-medium">{t("table.retention")}</SharedTableHead>
-                  <SharedTableHead className="py-2 font-medium"><span className="sr-only">{t("table.actionsSr")}</span></SharedTableHead>
-                </SharedTableRow>
-              </SharedTableHeader>
-              <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {runs.map((run) => {
-                  const active = run.status === "queued" || run.status === "running";
-                  const downloadable = run.status === "completed" && !run.purgedAt;
-                  return (
-                    <SharedTableRow key={run.id} className="align-top">
-                      <SharedTableCell className="py-2.5 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
-                        {formatWhen(run.createdAt)}
-                      </SharedTableCell>
-                      <SharedTableCell className="py-2.5 pr-4">
-                        <Badge variant="outline">{t(`table.kinds.${run.kind}`)}</Badge>
-                      </SharedTableCell>
-                      <SharedTableCell className="py-2.5 pr-4">
-                        <Badge variant={STATUS_VARIANT[run.status] ?? "secondary"}>{t(`table.statuses.${run.status}`)}</Badge>
-                        {run.error && (
-                          <div className="mt-1 max-w-64 text-xs break-words text-red-600 dark:text-red-400">
-                            {run.error}
-                          </div>
-                        )}
-                      </SharedTableCell>
-                      <SharedTableCell className="py-2.5 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
-                        {formatBytes(run.byteSize)}
-                      </SharedTableCell>
-                      <SharedTableCell className="py-2.5 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
-                        {run.rowCount !== null
-                          ? t("table.rowsTables", { rows: number(run.rowCount), tables: run.tableCount ?? 0 })
-                          : "—"}
-                      </SharedTableCell>
-                      <SharedTableCell className="max-w-72 py-2.5 pr-4 font-mono text-xs break-all text-slate-500 dark:text-slate-400">
-                        {run.sha256 ?? "—"}
-                      </SharedTableCell>
-                      <SharedTableCell className="py-2.5 pr-4 whitespace-nowrap">
-                        {run.purgedAt ? (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            {t("table.purged", { reason: run.purgeReason ? t(`table.reasons.${run.purgeReason}`) : "", when: formatWhen(run.purgedAt) })}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{t("table.kept")}</span>
-                        )}
-                      </SharedTableCell>
-                      <SharedTableCell className="py-2.5 text-right whitespace-nowrap">
-                        {downloadable && (
-                          <>
-                            <a
-                              href={`/api/admin/backups/${run.id}/download`}
-                              className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
-                            >
-                              {t("table.archive")}
-                            </a>
-                            <a
-                              href={`/api/admin/backups/${run.id}/manifest`}
-                              className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
-                            >
-                              {t("table.manifest")}
-                            </a>
-                            <button
-                              type="button"
-                              disabled={pending}
-                              onClick={() => deleteRun(run)}
-                              className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
-                            >
-                              {t("table.delete")}
-                            </button>
-                          </>
-                        )}
-                        {active && <span className="text-xs text-slate-400">{t("table.inProgress")}</span>}
-                      </SharedTableCell>
-                    </SharedTableRow>
-                  );
-                })}
-              </SharedTableBody>
-            </SharedTable>
-          </div>
-        )}
+        <div className="mt-4">
+          <PagedTable
+            source="admin_backups"
+            rows={runs}
+            rowKey={(run) => run.id}
+            searchable
+            emptyAsRow
+            empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t("storedCard.noneYet")}</p>}
+            columns={backupColumns}
+          />
+        </div>
       </Card>
     </div>
   );

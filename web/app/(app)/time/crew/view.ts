@@ -4,6 +4,7 @@ import { redirect  } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
   badge,
   column,
@@ -11,9 +12,7 @@ import {
   link,
   page,
   pageHeader,
-  panel,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
@@ -317,38 +316,42 @@ export function crewSpec(data: CrewPageData, basePath: string = '/time/crew'): P
         },
         f('refusal'),
       ),
-      widgetBlock('filter-chips', {
-        basePath,
-        currentParams: data.currentParams,
-        paramKey: 'segment',
-        label: data.segmentsLabel,
-        allLabel: data.allLabel,
-        options: data.segments,
-      }),
-      panel({
-        title: f('listTitle'),
-        iconKey: 'users',
-        bodyClassName: 'min-h-0 overflow-y-auto p-0',
-        className: 'min-h-0 flex-1',
-        blocks: [
-          table({
-            variant: 'app',
-            rows: f('rows'),
-            rowKey: item('id'),
-            columns: [
-              column(f('columns.foreman'), text(item('foreman'))),
-              column(f('columns.project'), text(item('project'))),
-              column(f('columns.workedOn'), text(item('workedOn'))),
-              column(f('columns.status'), badge(item('status'), { variant: 'secondary' })),
-              column(f('columns.hours'), text(item('hours')), { align: 'right', className: 'tabular-nums' }),
-              column(f('columns.workers'), text(item('workers')), { align: 'right', className: 'tabular-nums' }),
-              column('', link(item('foreman'), item('href'))),
+      // Batches use the shared registered list with the status segments in
+      // its toolbar slot — the same composition as the change-request queue:
+      // a direct list, no duplicate titled panel, no hand-rolled tabs.
+      registeredListTable(
+        'time_crew_batches',
+        {
+          variant: 'app',
+          rows: f('rows'),
+          rowKey: item('id'),
+          columns: [
+            column(f('columns.foreman'), text(item('foreman'))),
+            column(f('columns.project'), text(item('project'))),
+            column(f('columns.workedOn'), text(item('workedOn'))),
+            column(f('columns.status'), badge(item('status'), { variant: 'secondary' })),
+            column(f('columns.hours'), text(item('hours')), { align: 'right', className: 'tabular-nums' }),
+            column(f('columns.workers'), text(item('workers')), { align: 'right', className: 'tabular-nums' }),
+            column('', link(item('foreman'), item('href'))),
+          ],
+          empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+        },
+        [
+          widget('list-toolbar', {
+            basePath,
+            currentParams: data.currentParams,
+            filters: [
+              {
+                paramKey: 'segment',
+                label: data.segmentsLabel,
+                allLabel: data.allLabel,
+                options: data.segments,
+              },
             ],
-            empty: { title: f('emptyTitle'), description: f('emptyDescription') },
           }),
-          widgetBlock('hrm-crew-workspace', { ...(data.workspace ?? {}), batchId: data.workspace?.batchId ?? '', create: data.createForm }, f('drawerOpen')),
         ],
-      }),
+      ),
+      widgetBlock('hrm-crew-workspace', { ...(data.workspace ?? {}), batchId: data.workspace?.batchId ?? '', create: data.createForm }, f('drawerOpen')),
     ],
   })
 }
