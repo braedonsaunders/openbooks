@@ -20,6 +20,7 @@ import {
   UserRound,
   Settings2,
 } from "lucide-react";
+import { SalesRepPerformance } from "./SalesRepPerformance";
 import { Panel } from "../../analytics/_ui/Panel";
 import { KpiCard } from "../../analytics/_ui/KpiCard";
 import { confirmDialog } from "@/lib/confirm";
@@ -412,6 +413,12 @@ export function SalesDrawer({
                 />
               </div>
             ) : null}
+            {row?.is_sales_rep && row.repTrend ? (
+              <SalesRepPerformance
+                trend={row.repTrend}
+                reportHref={data.reports.evidence}
+              />
+            ) : null}
             <div className="grid gap-4 lg:grid-cols-2">
               <Panel title={t("repIdentity")} icon={UserRound}>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
@@ -446,13 +453,11 @@ export function SalesDrawer({
                 icon={Settings2}
                 bodyClassName="space-y-4"
               >
-                <Field label={t("employee")}>
-                  {row ? (
-                    <Input value={row.name} readOnly />
-                  ) : (
+                {!row ? (
+                  <Field label={t("employee")}>
                     <Select
                       value={repId}
-                      disabled={!!row || !editable}
+                      disabled={!editable}
                       onChange={(e) => {
                         setRep(e.target.value);
                         router.push(
@@ -462,8 +467,8 @@ export function SalesDrawer({
                     >
                       {options(data.employees)}
                     </Select>
-                  )}
-                </Field>
+                  </Field>
+                ) : null}
                 <Field label={t("eligibility")}>
                   <Select
                     value={enabled ? "yes" : "no"}

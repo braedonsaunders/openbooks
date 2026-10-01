@@ -565,6 +565,9 @@
     "removeRepTitle": "Remove this sales rep?",
     "removeRepBody": "Remove the employee’s sales-rep designation. Their employee record and sales history remain available. Active responsibilities must be reassigned first.",
     "nativeEmployee": "Employee profile",
+    "salesOverTime": "销售趋势",
+    "noSalesHistory": "过去12个月没有归属的销售记录。",
+    "salesTrendBasis": "过去12个月 · 已赢商机和已过账发票销售额，包含冲销。各币种分别显示。",
     "repActivity": "Responsibilities",
     "repIdentity": "Employee details"
   }
