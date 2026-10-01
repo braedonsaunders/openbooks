@@ -227,7 +227,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-note': { props: ['note'] },
   'hrm-onboarding-panel': { props: ['empty', 'noDueSoon', 'openCount', 'openLabel', 'overdue', 'overdueLabel', 'upcoming', 'upcomingLabel', 'viewAll', 'viewAllHref'] },
   'hrm-one-on-one-drawer': { props: ['detail'] },
-  'hrm-org-chart-person': { props: ['canManage', 'closeHref', 'departmentOptions', 'labels', 'manager', 'selected', 'today'] },
+  'hrm-org-chart-person': { props: ['canManage', 'canReadEmployee', 'closeHref', 'departmentOptions', 'labels', 'manager', 'selected', 'today'] },
   'hrm-pacing-bar': { props: ['note', 'pct'] },
   'hrm-pay-info-request': { props: ['cancel', 'employmentId', 'failed', 'requestLabel', 'requestStatus', 'submit'] },
   'hrm-pending-requests': { props: ['empty', 'items', 'notAvailable', 'refusal', 'viewAllHref', 'viewAllLabel'] },

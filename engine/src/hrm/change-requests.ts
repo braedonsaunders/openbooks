@@ -793,13 +793,11 @@ export interface SubmitChangeRequestQuery {
 }
 
 /**
- * Submit a draft for governed approval. Opens the native approval run
- * through the flows planning entrypoint (lazy import: the flows registry
- * loads this service's adapter, so a static import would cycle). A draft
- * whose proposal no enabled flow gates is refused with the configuration
- * remedy — never auto-approved. A flow that matched but errored fails
- * closed the same way, after its stray gates/runs are cancelled so nothing
- * dangling can later release the request.
+ * Submit through native Flows. Reached gates pause the change; a successful
+ * flow may explicitly apply a gate-free path through the same canonical
+ * writer. Missing policy and every dispatch failure refuse the whole change.
+ * Each application retains the proposal, exact revision, policy graph and
+ * execution evidence; automatic application never invents a human approver.
  */
 export async function submitChangeRequest(query: SubmitChangeRequestQuery): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
@@ -832,7 +830,9 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
       { orgId, userId: actorId },
     );
     const gatedRun = flowResult.runs.find((run) => run.gatesCreated > 0);
-    if (flowResult.failed || !gatedRun) {
+    const automaticRun = flowResult.runs.find((run) => run.ungatedOutcome === 'apply' && run.status === 'completed' && run.gatesCreated === 0);
+    const governingRun = gatedRun ?? automaticRun;
+    if (flowResult.failed || !governingRun) {
       const strayRunIds = flowResult.runs.map((run) => run.runId);
       if (strayRunIds.length > 0) {
         await db.execute(sql`
@@ -851,12 +851,12 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
       if (flowResult.failed) {
         throw new HrmChangeRequestError(
           "FLOW_ERROR",
-          "approval routing failed for this change — fix the approval flow, then submit again",
+          `Employee update workflow${flowResult.runs.filter(run => run.status === 'failed').map(run => ` “${run.flowName}”`).join(',')} failed. Review its configuration in Admin → Flows, then save again.`,
         );
       }
       throw new HrmChangeRequestError(
         "NO_FLOW",
-        "no enabled approval flow produced an approval gate for employment change requests — configure a flow for employment change requests before submitting",
+        "no enabled approval flow produced an approval gate for employment change requests or explicitly permitted automatic application — configure a flow with approval steps or the apply-without-approval outcome before saving",
       );
     }
 
@@ -871,7 +871,7 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
              action = coalesce(${query.action ?? null}::text, action),
              reason_code = coalesce(${query.reasonCode ?? null}::text, reason_code),
              submitted_by = ${actorId}, submitted_at = now(),
-             flow_run_id = ${gatedRun.runId},
+             flow_run_id = ${governingRun.runId},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
@@ -881,6 +881,26 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
         "BAD_STATE",
         "the request changed while submission was being recorded — reload it and submit again",
       );
+    }
+    if (!gatedRun && automaticRun) {
+      const run = (await db.execute<{ context: Record<string, unknown>; status: string }>(sql`
+        select context, status from flow_runs where org_id = ${orgId} and id = ${automaticRun.runId}
+          and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId}
+      `)).rows[0];
+      const policy = run?.context.submissionPolicy as { ungatedOutcome?: unknown } | undefined;
+      if (run?.status !== 'completed' || policy?.ungatedOutcome !== 'apply') throw new HrmChangeRequestError('REFUSED', 'The automatic change policy has no completed execution evidence. Review the workflow before saving again.');
+      const snapshot = { ...buildDecisionSnapshot({ request: submitted, outcome: 'approved', gates: [] }), mode: 'automatic', policy: run.context.submissionPolicy, evaluatedRuns: flowResult.runs.map((item) => ({ runId: item.runId, flowId: item.flowId, status: item.status })) };
+      const approved = (await db.execute<RequestRow>(sql`
+        update hrm_employment_change_requests set status = 'approved', decision_snapshot = ${JSON.stringify(snapshot)}::jsonb,
+          updated_by = ${actorId}, updated_at = now()
+         where org_id = ${orgId} and id = ${requestId} and status = 'pending_approval'
+        returning ${REQUEST_COLUMNS}
+      `)).rows[0];
+      if (!approved) throw new HrmChangeRequestError('BAD_STATE', 'The employment change moved while saving. Reload the employee before trying again.');
+      await applyApprovedRequest(db, { orgId, actorId, request: approved, payload });
+      const applied = await loadRequestForUpdate(db, orgId, requestId);
+      if (applied.status !== 'applied') throw new HrmChangeRequestError('REFUSED', 'The employment change was not applied. Reload the employee and review the workflow before trying again.');
+      return toDTO(applied);
     }
     return toDTO(submitted);
   });
@@ -1151,16 +1171,16 @@ type DecidedGate = {
   comment: string | null;
 };
 
-async function decidedGatesOfRun(
+async function decidedGatesOfRequest(
   exec: SqlExecutor,
   orgId: string,
-  runId: string,
+  requestId: string,
 ): Promise<DecidedGate[]> {
   const rows = (await exec.execute<DecidedGate>(sql`
     select id as gate_id, status as decision, decided_by, on_behalf_of_user_id,
            decided_at, comment
       from flow_gates
-     where org_id = ${orgId} and run_id = ${runId}
+     where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId}
        and status in ('approved', 'rejected')
      order by decided_at, id
   `)).rows;
@@ -1228,12 +1248,13 @@ export async function releaseHrmChangeRequest(
       subjectWorkerPartyId: subject.workerPartyId,
     });
 
-    const gates = await decidedGatesOfRun(db, orgId, current.flow_run_id);
-    const snapshot = buildDecisionSnapshot({
+    const gates = await decidedGatesOfRequest(db, orgId, requestId);
+    const policies = (await db.execute<{ policy: unknown }>(sql`select context->'submissionPolicy' as policy from flow_runs where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId} order by started_at, id`)).rows.map(row => row.policy).filter(Boolean);
+    const snapshot = { ...buildDecisionSnapshot({
       request: current,
       outcome: query.outcome,
       gates,
-    });
+    }), mode: 'approval', policies };
     const flipped = (await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = ${query.outcome},

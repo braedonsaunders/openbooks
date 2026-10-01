@@ -223,3 +223,34 @@ test('restricted flows.manage cannot create, edit or delete org-wide flow policy
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('direct employee policy creation is explicit, disabled until enabled, and refused for unsupported subjects', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableFlows(org.orgId)
+    await seedUser(org.orgId, 'direct_policy_editor', ['flows.manage'], null)
+    const { HRM_CHANGE_REQUEST_SUBJECT_KIND } = await import('@openbooks/schema/src/hrm-change-requests.ts')
+    const request = (subjectKind: string) => new Request('http://admin.test/api/admin/flows', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Routine employee updates', subjectKind, ungatedOutcome: 'apply' }),
+    })
+    const created = await withOrgContext(org.orgId, () => create(request(HRM_CHANGE_REQUEST_SUBJECT_KIND)))
+    assert.equal(created.status, 200)
+    const { id } = await created.json() as { id: string }
+    const row = (await withBypassContext(() => db.execute<{ enabled: boolean; graph: { ungatedOutcome?: string; nodes: { data: { kind: string; trigger: { trigger: string } } }[] } }>(sql`
+      select enabled, graph from flows where org_id = ${org.orgId} and id = ${id}`))).rows[0]!
+    assert.equal(row.enabled, false)
+    assert.equal(row.graph.ungatedOutcome, 'apply')
+    assert.equal(row.graph.nodes.length, 1)
+    assert.equal(row.graph.nodes[0]!.data.kind, 'trigger')
+    assert.equal(row.graph.nodes[0]!.data.trigger.trigger, 'on_submit')
+    const refused = await withOrgContext(org.orgId, () => create(request('vendor_bill')))
+    assert.equal(refused.status, 400)
+    assert.match(JSON.stringify(await refused.json()), /does not support saving without approval steps/)
+    assert.equal((await withBypassContext(() => db.execute<{ count: number }>(sql`
+      select count(*)::int as count from flows where org_id = ${org.orgId}`))).rows[0]!.count, 1)
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

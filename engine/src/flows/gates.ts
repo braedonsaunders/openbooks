@@ -271,7 +271,7 @@ export async function gateDecisionCapability(
   const adapter = getFlowAdapter(gate.subjectKind);
   const subject = await adapter?.loadContext(gate.subjectId);
   if (subject && sodBlockedIds(subject).has(userId)) {
-    const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId);
+    const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId);
     if (
       adapter?.selfApprovalPolicy === "forbidden" ||
       !node ||
@@ -284,10 +284,15 @@ export async function gateDecisionCapability(
 }
 
 /** The gate node's authored GateData, for escalation targets. */
-async function gateNodeData(orgId: string, flowId: string, nodeId: string): Promise<GateData | null> {
+async function gateNodeData(orgId: string, flowId: string, nodeId: string, runId: string): Promise<GateData | null> {
   const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, flowId), eq(schema.flows.orgId, orgId)));
   if (!flow) return null;
-  const graph = parseFlowGraph(flow.id, flow.graph);
+  const dispatch = await loadRunDispatchValues(orgId, runId);
+  const policy = getFlowAdapter(flow.subjectKind)?.profile.supportsUngatedSubmission
+    ? dispatch?.submissionPolicy as { graph?: unknown } | undefined
+    : undefined;
+  // Older runs have no pinned policy; retain their established interpretation.
+  const graph = parseFlowGraph(flow.id, policy?.graph ?? flow.graph);
   if (!graph) return null;
   const node = graph.nodes.find((n) => n.id === nodeId);
   return node && node.data.kind === "gate" ? node.data.gate : null;
@@ -444,7 +449,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
   const preAdapter = getFlowAdapter(pre.subjectKind);
   const preSubject = await preAdapter?.loadContext(pre.subjectId);
   if (preSubject && sodBlockedIds(preSubject).has(userId)) {
-    const node = await gateNodeData(pre.orgId, pre.flowId, pre.nodeId);
+    const node = await gateNodeData(pre.orgId, pre.flowId, pre.nodeId, pre.runId);
     if (
       preAdapter?.selfApprovalPolicy === "forbidden" ||
       !node ||
@@ -567,7 +572,11 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
           cause: "flow definition or subject adapter is unavailable",
         });
       }
-      const graph = parseFlowGraph(flow.id, flow.graph);
+      const dispatchValues = await loadRunDispatchValues(gate.orgId, gate.runId);
+      const policy = adapter.profile.supportsUngatedSubmission
+        ? dispatchValues?.submissionPolicy as { graph?: unknown } | undefined
+        : undefined;
+      const graph = parseFlowGraph(flow.id, policy?.graph ?? flow.graph);
       if (!graph) {
         throw new DecisionFailedError({
           decision,
@@ -601,7 +610,8 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
       }
 
       // Release a fully-approved aggregate before executing its approve branch.
-      // This makes an authored post_document action consume an APPROVED record;
+      // A continuation that reaches another gate remains awaiting approval.
+      // This makes a terminal authored post_document action consume an APPROVED record;
       // the action can never use its flow context to bypass lifecycle controls.
       //
       // A release throw rolls back to the whole-decision savepoint above: the
@@ -613,6 +623,8 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
       // failed RUN would be wrong here — its gate checkpoint is already
       // stamped, so a re-drive would skip release and complete vacuously —
       // the truthful remedy is retrying the DECISION.
+      const continuationContext = subject ? { values: { ...subject.values }, rows: subject.rows ?? {} } : null;
+      const continuationPlan = continuationContext ? planFromGate(graph, gate.nodeId, outcome.resume, continuationContext) : null;
       const release = adapter.releaseApproval;
       // Dispatch-time subject snapshot for engine-enforced release: adapters
       // whose release spends dispatch-time vetting bind to this run's pinned
@@ -620,13 +632,14 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
       // stale gate. Loaded once for every release below.
       const releaseRun = {
         id: gate.runId,
-        dispatchValues: await loadRunDispatchValues(gate.orgId, gate.runId),
+        dispatchValues,
       };
       let releasedBeforeActions = false;
       if (
         subject &&
         outcome.resume === "approve" &&
         release &&
+        continuationPlan?.gates.length === 0 &&
         (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
       ) {
         try {
@@ -656,11 +669,11 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         hadFailure = true;
         error = "subject record no longer exists";
       } else {
-        const evalCtx = { values: { ...subject.values }, rows: subject.rows ?? {} };
-        const plan = planFromGate(graph, gate.nodeId, outcome.resume, evalCtx);
+        const evalCtx = continuationContext!;
+        const plan = continuationPlan!;
         if (plan.actionNodes.length > 0 || plan.gates.length > 0) {
           const res = await executeFlowPlan(ctx, adapter, {
-            flow: { id: flow.id, name: flow.name, subjectKind: gate.subjectKind, graph: flow.graph },
+            flow: { id: flow.id, name: flow.name, subjectKind: gate.subjectKind, graph },
             runId: gate.runId,
             subjectId: gate.subjectId,
             plan,
@@ -1539,7 +1552,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
 
     const adapter = getFlowAdapter(gate.subjectKind);
     const subject = adapter ? await adapter.loadContext(gate.subjectId) : null;
-  const nodeGate = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId);
+    const nodeGate = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId);
 
   const submitterUserId = subject?.submitterUserId ?? null;
   const values = subject?.values ?? {};

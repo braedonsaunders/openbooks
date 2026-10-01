@@ -144,7 +144,7 @@ test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async 
     assert.equal(focused.roots[0]!.name, "Mira Manager");
 
     // Directory carries names, titles, and managers — never pay.
-    const directory = await loadDirectory({ orgId: h.org.orgId, actorId: h.readerId, search: "Eddie" });
+    const directory = await loadDirectory({ orgId: h.org.orgId, actorId: h.readerId, asOf: "2026-09-21", search: "Eddie" });
     assert.equal(directory.totalCount, 1);
     assert.equal(directory.entries.length, 1);
     assert.equal(directory.entries[0]!.title, "Associate");

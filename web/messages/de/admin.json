@@ -1126,7 +1126,8 @@
     "hrm_surveys_manage": "Umfragen verwalten",
     "time_clock": "Vor Ort stempeln",
     "time_crew_enter": "Team-Chargen erfassen",
-    "time_kiosk_manage": "Kioskgeräte und PINs verwalten"
+    "time_kiosk_manage": "Kioskgeräte und PINs verwalten",
+    "hrm_org_chart_read": "Organigramm anzeigen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -5063,7 +5064,10 @@
         "connectAction": "Verbinden",
         "connectPlaceholder": "Schritt wählen…",
         "connectEmpty": "Es gibt noch keinen anderen Schritt — füge zuerst einen Knoten hinzu."
-      }
+      },
+      "ungatedOutcomeLabel": "Wenn kein Genehmigungsschritt gilt",
+      "ungatedApply": "Sofort anwenden",
+      "ungatedRequireApproval": "Genehmigungsschritt erforderlich"
     },
     "node": {
       "trigger": "Auslöser",

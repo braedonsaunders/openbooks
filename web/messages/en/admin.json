@@ -1126,7 +1126,8 @@
     "hrm_surveys_manage": "Manage surveys",
     "time_clock": "Clock in from the field",
     "time_crew_enter": "Enter crew time batches",
-    "time_kiosk_manage": "Manage kiosk devices and PINs"
+    "time_kiosk_manage": "Manage kiosk devices and PINs",
+    "hrm_org_chart_read": "View org chart"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -5063,7 +5064,10 @@
         "connectAction": "Connect",
         "connectPlaceholder": "Choose a step…",
         "connectEmpty": "There is no other step yet — add a node first."
-      }
+      },
+      "ungatedOutcomeLabel": "When no approval step applies",
+      "ungatedApply": "Apply immediately",
+      "ungatedRequireApproval": "Require an approval step"
     },
     "node": {
       "trigger": "Trigger",
