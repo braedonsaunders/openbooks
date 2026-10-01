@@ -1,7 +1,11 @@
-// source-pin-contract: production deploy workflow policy (deploy-production.yml, publish-container.yml): tag-only trigger, attested digest, LAN runner, audited migrate-first release script, version-gated completion
+// source-pin-contract: production deploy workflow policy (deploy-production.yml, publish-container.yml, deploy/swarm-release.sh): tag-only trigger, attested digest, LAN runner, audited migrate-first release script, version-gated completion
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 /**
  * Production deploy contract. The swarm release must run on the LAN runner,
@@ -100,6 +104,32 @@ test("the job only goes green once production serves the expected version", () =
   const releaseAt = deployWorkflow.indexOf("- name: Release the digest");
   const waitAt = deployWorkflow.indexOf("- name: Wait for the new version to serve");
   assert.ok(releaseAt < waitAt, "verification follows the release");
+  assert.match(wait, /include=worker/, "a live web process cannot hide a stopped worker");
+  assert.match(wait, /\[ "\$ready_samples" -ge 5 \]/, "readiness must outlast the previous heartbeat expiry");
+  assert.match(wait, /else\n\s+ready_samples=0/, "a refusal resets the consecutive readiness evidence");
+});
+
+test("image repinning handles independent worker recovery and refuses a concurrent configuration write", () => {
+  const source = readFileSync(new URL('../deploy/swarm-release.sh', import.meta.url), 'utf8');
+  const functionBody = /^repoint_images\(\) \{\n[\s\S]*?^\}/m.exec(source)?.[0];
+  assert.ok(functionBody, 'the release must expose its image repinning operation');
+  const directory = mkdtempSync(join(tmpdir(), 'openbooks-release-pins-'));
+  const first = `sha256:${'a'.repeat(64)}`, second = `sha256:${'b'.repeat(64)}`, next = `sha256:${'c'.repeat(64)}`;
+  try {
+    for (const pins of [[first, first], [first, second]]) {
+      writeFileSync(join(directory, 'composeFile.yml'), pins.map(pin => `image: ghcr.io/openbooks@${pin}`).join('\n'));
+      const fixture = `${functionBody}\nBK="$1"; APP=openbooks; BASELINE_COMPOSE=c25hcHNob3Q=; NEW="$2"; dokploy_sql() { printf '%s\\n' "$1" >&2; printf '%s\\n' "$3"; }; repoint_images`;
+      for (const affected of ['1', '0']) {
+        const script = fixture.replace('"$3"', JSON.stringify(affected));
+        const result = spawnSync('bash', ['-c', script, 'pins', directory, next], { encoding: 'utf8' });
+        assert.equal(result.status, affected === '1' ? 0 : 1, result.stderr);
+        for (const pin of new Set(pins)) assert.ok(result.stderr.includes(pin), 'every previous image is replaced');
+        assert.ok(result.stderr.includes(next));
+        assert.match(result.stderr, /BASE64|base64/);
+        if (affected === '0') assert.match(result.stderr, /configuration changed.*review the current pins and retry/);
+      }
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test("the manual entry point carries the same contract as the tag path", () => {

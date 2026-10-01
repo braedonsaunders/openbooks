@@ -14,7 +14,7 @@ import {
   type FilterClause,
   type ListViewConfig,
 } from "@openbooks/customization";
-import { can, resolveAuthzByUserId, type Authz } from "../authz.ts";
+import { can, resolveAuthzByUserId, type Authz } from "../authz-core";
 import { loadFieldDefs } from "../custom-fields.ts";
 import { isFeatureEnabled } from "../features.ts";
 import { clamp } from "../list-params.ts";

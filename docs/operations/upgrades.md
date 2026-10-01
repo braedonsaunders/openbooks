@@ -75,7 +75,7 @@ manager over ssh with a dedicated deploy key and executes
 `deploy/swarm-release.sh` for the attested digest: migrations apply first from
 the exact image being released, both service pins swap only if the migration
 chain succeeds, and the job stays red until the health endpoint reports the
-tagged version. Manual edge publishes never deploy.
+tagged version with sustained worker readiness. Manual edge publishes never deploy.
 
 The deploy job reads its settings from the `production` GitHub environment,
 whose deployment policy admits only `v*` tags:

@@ -119,6 +119,8 @@ COPY --chown=node:node schema/migrations ./schema/migrations
 RUN set -eu; \
     output=$(node scripts/worker.mjs 2>&1) && { echo "worker unexpectedly started without database credentials" >&2; exit 1; }; \
     printf '%s' "$output" | grep -Fq 'OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login'
+RUN NODE_ENV=test OPENBOOKS_DB_URL= node --conditions=react-server --input-type=module \
+    -e "const entry = await import('./scripts/worker.mjs'); const transfer = await entry.loadDataTransferWorker(); if (typeof transfer.startDataTransferWorker !== 'function') throw new Error('Transfer worker startup did not load'); console.log('Deferred transfer runtime verified');"
 
 EXPOSE 3000
 # Database bootstrap is intentionally not part of this process: the web server

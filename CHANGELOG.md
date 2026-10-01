@@ -6,6 +6,23 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.27.1] - 2026-10-01
+
+- Correct the alpha27 worker's deferred startup: live authorization and
+  shared validation schemas no longer initialize HTTP framework adapters
+  in the standalone transfer worker.
+- Verify deferred transfer dependencies in the final production image and
+  load them before the worker starts publishing readiness.
+- Require sustained worker readiness when verifying deployment completion;
+  a live web process or a previous worker heartbeat cannot satisfy that gate.
+- Preserve independent web and worker image pins during recovery, then
+  repin both atomically after migration verification. Refuse if deployment
+  configuration changed during verification.
+
+This correction adds no migration. It preserves the immutable alpha27 tag
+and all staged transfer data. Update both web and worker to alpha27.1 before
+running background imports and exports.
+
 ## [0.1.0-alpha.27] - 2026-10-01
 
 ### Durable import and export

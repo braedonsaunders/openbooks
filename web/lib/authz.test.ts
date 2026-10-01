@@ -91,7 +91,7 @@ stubModules({ navigation: false, intl: false, authz: { source: routeAuthzSource 
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier === "@openbooks/engine/platform/database") {
       return { shortCircuit: true, url: "mock:db" };
     }
     return nextResolve(specifier, context);

@@ -343,7 +343,7 @@ const provisionPostSources = new Map<string, string>([
 
 const provisionPostHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts' || (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/organization/extension-permission-availability.ts'))) {
+    if (specifier === '@openbooks/engine/src/platform/db.ts' || specifier === '@openbooks/engine/platform/database' || (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/organization/extension-permission-availability.ts'))) {
       return { url: 'mock:provision-post-db', shortCircuit: true }
     }
     if (specifier === '@openbooks/engine/src/tax-returns/income-tax-provision.ts') {
@@ -354,7 +354,7 @@ const provisionPostHooks = registerHooks({
     if (specifier === './auth' || specifier.endsWith('/lib/auth')) {
       return { url: 'mock:provision-post-auth', shortCircuit: true }
     }
-    if ((specifier === './subsidiaries' || specifier.endsWith('/lib/subsidiaries')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
+    if ((specifier === './subsidiaries' || specifier.endsWith('/lib/subsidiaries')) && (/\/web\/lib\/authz(?:-core)?\.ts$/.test(context.parentURL ?? ''))) {
       return { url: 'mock:provision-post-subsidiaries', shortCircuit: true }
     }
     return nextResolve(specifier, context)
