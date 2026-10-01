@@ -1,11 +1,10 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { scopedRetroSchedules } from '../../../../lib/payroll-scoped-views'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
 import type { RetroSchedule } from './RetroWorkspace'
 
 /**
@@ -39,7 +38,6 @@ import type { RetroSchedule } from './RetroWorkspace'
 export interface PayrollRetroData {
   title: string
   description: string
-  viewTabs: { href: string; label: string; active?: boolean }[]
   workspace: {
     schedules: RetroSchedule[]
     canRun: boolean
@@ -57,15 +55,12 @@ export async function loadPayrollRetro(): Promise<PayrollRetroData> {
 
   const schedules: RetroSchedule[] = await scopedRetroSchedules(authz)
 
-  const tabs = await groupTabs('payroll', '/payroll/retro', { orgId })
-
   return {
     title: text('retro.title', 'Retroactive pay'),
     description: text(
       'retro.description',
       'A raise backdated over periods that have already been paid. Recalculate each of those periods, see what it should have paid against what it did, and pay the difference — taxed as the jurisdiction requires and costed to the jobs the hours were charged to.',
     ),
-    viewTabs: tabs,
     workspace: {
       schedules,
       canRun: can(authz, 'payroll.run'),
@@ -80,10 +75,11 @@ export function payrollRetroSpec(_data: PayrollRetroData): PageSpec {
     route: '/payroll/retro',
     layout: 'list',
     header: [
+      // Module tabs live in the shared payroll navigation; the header keeps
+      // only the title the loader resolves.
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: _data.viewTabs })],
       }),
     ],
     body: [
