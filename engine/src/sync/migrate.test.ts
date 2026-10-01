@@ -8,6 +8,36 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 
+test("reconcilable account imports require currency and preserve existing denomination controls", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const source: MigrationSource = {
+    name: "migration-test", refKey: "migrationTest", baseCurrency: "CAD",
+    accountingPeriods: async () => [], entities: async () => [],
+    nativeChanges: async () => { throw new Error("not used"); },
+    trialBalance: async () => [], monthlyActivity: async () => [],
+  };
+  const load = (records: import("./source.ts").SourceEntity[]) => withOrg(org.orgId, () =>
+    loadEntities(source, org.orgId, null, undefined, undefined, [{ resource: "accounts", records }]));
+  try {
+    const account = { sourceRef: "card", fields: { number: "2200.67", name: "Corporate card", type: "liability_card", reconcilable: true, currencyRestriction: "CAD" } };
+    const first = await load([account,
+      { sourceRef: "foreign-bank", fields: { name: "US dollar bank", type: "asset_bank", reconcilable: true, currencyRestriction: "USD" } },
+      { sourceRef: "missing", fields: { name: "Missing currency", type: "asset_bank", reconcilable: true } }]);
+    assert.equal(first.accounts.created, 2);
+    assert.equal(first.accounts.failed, 1);
+    assert.match(first.accounts.errors[0].message, /reconcilable account missing requires an explicit currency/);
+    assert.equal((await load([account])).accounts.updated, 1);
+    const conflict = await load([{ ...account, fields: { ...account.fields, name: "Changed card", currencyRestriction: "USD" } }]);
+    assert.equal(conflict.accounts.updated, 0);
+    assert.equal(conflict.accounts.failed, 1);
+    assert.match(conflict.accounts.errors[0].message, /source currency conflicts with its existing currency control/);
+    const stored = await withOrg(org.orgId, () => db.execute(sql`select name, currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='card'`));
+    assert.deepEqual(stored.rows, [{ name: "Corporate card", currency_restriction: "CAD" }]);
+    const foreign = await withOrg(org.orgId, () => db.execute(sql`select currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='foreign-bank'`));
+    assert.deepEqual(foreign.rows, [{ currency_restriction: "USD" }]);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
 test(
   "master-data row upsert failures are reported separately with their source error",
   { skip: !DB },
@@ -358,4 +388,3 @@ test(
     }
   },
 );
-

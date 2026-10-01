@@ -65,6 +65,28 @@ export function netSuiteReconcilableAccount(accttype: string, reconcile: unknown
   return reconcile === "T" || reconcile === true;
 }
 
+/** Preserve an explicit account denomination; single-currency sources use their subsidiary. */
+export function netSuiteAccountCurrency(
+  account: { id: string; accttype: string; currency?: string; subsidiary?: string },
+  subsidiaries: SourceEntity[],
+  currencies: Map<string, string>,
+): string | null {
+  if (account.accttype !== "Bank" && account.accttype !== "CredCard") return null;
+  if (s(account.currency)) {
+    const currency = currencies.get(String(account.currency)) ?? netSuiteCurrencyIso(account.currency);
+    if (currency) return currency;
+    throw new Error(`Cannot resolve currency for NetSuite account ${account.id} (${account.currency}); check source currency access and configuration before retrying`);
+  }
+  const candidates = s(account.subsidiary)
+    ? subsidiaries.filter((subsidiary) => subsidiary.sourceRef === String(account.subsidiary))
+    : subsidiaries;
+  if (candidates.length === 1) {
+    const currency = netSuiteCurrencyIso(candidates[0].fields.baseCurrency);
+    if (currency) return currency;
+  }
+  throw new Error(`Cannot resolve currency for NetSuite account ${account.id}; check its source subsidiary and currency configuration before retrying`);
+}
+
 /** One SuiteQL transactionline cleared state, normalized for the mirror. */
 export interface NetSuiteClearedLineState {
   docRef: string;
@@ -734,9 +756,10 @@ export class NetSuiteSource implements MigrationSource {
     // the tiny structural streams (subsidiaries, accounts, departments, terms,
     // time types) always pull in full: they're a handful of rows and must never
     // go stale. A full migration (since=null) pulls everything.
+    const subsidiaries = await this.subsidiaries();
     return [
-      { resource: "subsidiaries", records: await this.subsidiaries() },
-      { resource: "accounts", records: await this.accounts() },
+      { resource: "subsidiaries", records: subsidiaries },
+      { resource: "accounts", records: await this.accounts(subsidiaries) },
       { resource: "tax_codes", records: await this.taxCodes() },
       { resource: "departments", records: await this.departments() },
       { resource: "payment_terms", records: await this.paymentTerms() },
@@ -866,16 +889,23 @@ export class NetSuiteSource implements MigrationSource {
     });
   }
 
-  private async accounts(): Promise<SourceEntity[]> {
+  private async accounts(subsidiaries: SourceEntity[]): Promise<SourceEntity[]> {
     const rows = await this.q<{
       id: string; acctnumber?: string; fullname?: string; dispname?: string;
       accttype: string; parent?: string; issummary?: string; isinactive?: string;
-      eliminate?: string; reconcile?: string;
+      eliminate?: string; reconcilewithmatching?: string; accountsearchdisplaynamecopy?: string;
+      currency?: string; subsidiary?: string;
     }>(`
-      SELECT id, acctnumber, fullname, accountsearchdisplaynamecopy AS dispname,
-             accttype, parent, issummary, isinactive, eliminate,
-             reconcilewithmatching AS reconcile
-        FROM account`);
+      SELECT account.* FROM account`);
+    // Currency is absent from the account schema when Multiple Currencies is
+    // disabled. Selecting the record avoids referring to that unavailable column.
+    const currencies = new Map<string, string>();
+    if (rows.some((row) => s(row.currency))) {
+      for (const currency of await this.q<Record<string, string>>("SELECT id, symbol, name FROM currency")) {
+        const iso = netSuiteCurrencyIso(currency.symbol);
+        if (iso) currencies.set(String(currency.id), iso);
+      }
+    }
     const out: SourceEntity[] = [];
     for (const a of rows) {
       const type = NS_ACCOUNT_TYPE[a.accttype];
@@ -886,12 +916,13 @@ export class NetSuiteSource implements MigrationSource {
         parentRef: a.parent ? String(a.parent) : null,
         fields: {
           number: a.acctnumber || null,
-          name: a.dispname ?? a.fullname ?? `Account ${a.id}`,
+          name: a.accountsearchdisplaynamecopy ?? a.dispname ?? a.fullname ?? `Account ${a.id}`,
           type,
           isSummary: isT(a.issummary),
           isActive: !isT(a.isinactive),
           eliminate: isT(a.eliminate),
-          reconcilable: netSuiteReconcilableAccount(a.accttype, a.reconcile),
+          reconcilable: netSuiteReconcilableAccount(a.accttype, a.reconcilewithmatching),
+          currencyRestriction: netSuiteAccountCurrency(a, subsidiaries, currencies),
         },
       });
     }
