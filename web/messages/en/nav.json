@@ -95,7 +95,7 @@
     "hrm-surveys": "Surveys",
     "hrm-compensation": "Compensation",
     "hrm-compensation-equity": "Pay equity",
-    "hrm-benefits": "Enrollment windows",
+    "hrm-benefits": "Overview",
     "payroll-runs": "Pay runs",
     "payroll-anomalies": "Checks",
     "payroll-remittances": "Remittances",
@@ -129,7 +129,13 @@
     "hrm-performance-calibration": "Calibration",
     "hrm-performance-talent": "Talent & succession",
     "hrm-performance-retention": "Retention",
-    "hrm-performance-settings": "Performance settings"
+    "hrm-performance-settings": "Performance settings",
+    "hrm-benefits-programs": "Programs",
+    "hrm-benefits-enrolments": "Enrollments",
+    "hrm-benefits-windows": "Enrollment windows",
+    "hrm-benefits-rewards": "Rewards",
+    "hrm-benefits-incentives": "Incentives",
+    "hrm-benefits-payouts": "Payouts"
   },
   "modulesShort": {
     "ap": "Payables",
@@ -174,7 +180,7 @@
     "hrm-hiring": "Hiring",
     "hrm-timeoff": "Time Off",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Rewards",
+    "hrm-rewards": "Benefits",
     "payroll": "Payroll",
     "resourcing": "Resourcing",
     "warehouse": "Warehouse",
@@ -186,14 +192,15 @@
     "accounts-views": "Chart of Accounts",
     "inventory-views": "Inventory",
     "inbox-views": "Inbox",
-    "me-views": "Me"
+    "me-views": "Me",
+    "hrm-compensation": "Compensation"
   },
   "localWorkspaces": {
     "hrm-people": "Employees",
     "hrm-hiring": "Hiring",
     "hrm-timeOff": "Time Off",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Rewards",
+    "hrm-rewards": "Benefits",
     "payroll": "Payroll",
     "resourcing": "Resourcing",
     "warehouse": "Warehouse",
@@ -213,6 +220,7 @@
     "setup-depreciation": "Book Depreciation",
     "setup-tax-depreciation": "Tax Depreciation",
     "setup-overhead": "Overhead",
-    "setup-payments": "Payments & Banking"
+    "setup-payments": "Payments & Banking",
+    "hrm-compensation": "Compensation"
   }
 }

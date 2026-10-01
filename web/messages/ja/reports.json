@@ -962,6 +962,14 @@
       "resourcing_engagement": {
         "label": "案件予測",
         "description": "月および通貨別に、予定時間、売上、労務費、利益を予測します。"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "label": "福利厚生の給与入力",
+        "description": "月次保障額、従業員控除、雇用主拠出および関連する給与計算。"
+      },
+      "hrm_benefit_awards": {
+        "label": "福利厚生の報奨と支払い",
+        "description": "従業員の報奨、承認証跡、交付参照および給与入力の追跡。"
       }
     },
     "columns": {
@@ -2253,6 +2261,37 @@
         "month": "月",
         "bill_status": "請求価格の状態",
         "cost_status": "労務費の状態"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "coverage_from": "保障開始日",
+        "coverage_to": "保障終了日",
+        "person": "従業員",
+        "employer": "法人",
+        "plan": "福利厚生プラン",
+        "kind": "入力種別",
+        "component": "給与項目",
+        "amount": "保障額",
+        "currency": "通貨",
+        "status": "入力状況",
+        "payroll_run_id": "関連給与計算",
+        "id": "入力ID"
+      },
+      "hrm_benefit_awards": {
+        "period_from": "獲得開始日",
+        "period_to": "獲得終了日",
+        "person": "従業員",
+        "employer": "法人",
+        "program": "プログラム",
+        "family": "プログラム種別",
+        "value": "報奨額",
+        "currency": "通貨",
+        "status": "報奨状況",
+        "approved_at": "承認日時",
+        "external_reference": "外部交付参照",
+        "source_key": "出典参照",
+        "id": "報奨ID",
+        "pay_run_document_id": "給与計算実行",
+        "pay_run_adjustment_id": "給与調整"
       }
     },
     "enumValues": {

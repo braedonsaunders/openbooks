@@ -95,7 +95,7 @@
     "hrm-surveys": "Pesquisas",
     "hrm-compensation": "Remuneração",
     "hrm-compensation-equity": "Equidade salarial",
-    "hrm-benefits": "Janelas de inscrição",
+    "hrm-benefits": "Visão geral",
     "payroll-runs": "Folhas",
     "payroll-anomalies": "Verificações",
     "payroll-remittances": "Recolhimentos",
@@ -129,7 +129,13 @@
     "hrm-performance-calibration": "Calibração",
     "hrm-performance-talent": "Talento e sucessão",
     "hrm-performance-retention": "Retenção",
-    "hrm-performance-settings": "Configurações de desempenho"
+    "hrm-performance-settings": "Configurações de desempenho",
+    "hrm-benefits-programs": "Programas",
+    "hrm-benefits-enrolments": "Inscrições",
+    "hrm-benefits-windows": "Períodos de inscrição",
+    "hrm-benefits-rewards": "Recompensas",
+    "hrm-benefits-incentives": "Incentivos",
+    "hrm-benefits-payouts": "Pagamentos"
   },
   "groups": {
     "workforce": "Força de trabalho",
@@ -169,7 +175,7 @@
     "hrm-hiring": "Recrutamento",
     "hrm-timeoff": "Ausências",
     "hrm-talent": "Talentos",
-    "hrm-rewards": "Remuneração",
+    "hrm-rewards": "Benefícios",
     "payroll": "Folha de pagamento",
     "resourcing": "Planejamento de recursos",
     "warehouse": "Armazém",
@@ -181,7 +187,8 @@
     "accounts-views": "Plano de contas",
     "inventory-views": "Estoque",
     "inbox-views": "Caixa de entrada",
-    "me-views": "Eu"
+    "me-views": "Eu",
+    "hrm-compensation": "Remuneração"
   },
   "modulesShort": {
     "ap": "Contas a pagar",
@@ -193,7 +200,7 @@
     "hrm-hiring": "Recrutamento",
     "hrm-timeOff": "Ausências",
     "hrm-talent": "Talentos",
-    "hrm-rewards": "Remuneração",
+    "hrm-rewards": "Benefícios",
     "payroll": "Folha de pagamento",
     "resourcing": "Planejamento de recursos",
     "warehouse": "Armazém",
@@ -213,6 +220,7 @@
     "setup-depreciation": "Depreciação contábil",
     "setup-tax-depreciation": "Depreciação fiscal",
     "setup-overhead": "Custos indiretos",
-    "setup-payments": "Pagamentos e Bancos"
+    "setup-payments": "Pagamentos e Bancos",
+    "hrm-compensation": "Remuneração"
   }
 }

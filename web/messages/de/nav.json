@@ -95,7 +95,7 @@
     "hrm-surveys": "Befragungen",
     "hrm-compensation": "Vergütung",
     "hrm-compensation-equity": "Entgeltgleichheit",
-    "hrm-benefits": "Anmeldefenster",
+    "hrm-benefits": "Übersicht",
     "payroll-runs": "Lohnläufe",
     "payroll-anomalies": "Prüfungen",
     "payroll-remittances": "Abführungen",
@@ -129,7 +129,13 @@
     "hrm-performance-calibration": "Kalibrierung",
     "hrm-performance-talent": "Talent & Nachfolge",
     "hrm-performance-retention": "Bindung",
-    "hrm-performance-settings": "Leistungseinstellungen"
+    "hrm-performance-settings": "Leistungseinstellungen",
+    "hrm-benefits-programs": "Programme",
+    "hrm-benefits-enrolments": "Teilnahmen",
+    "hrm-benefits-windows": "Anmeldezeiträume",
+    "hrm-benefits-rewards": "Prämien",
+    "hrm-benefits-incentives": "Anreize",
+    "hrm-benefits-payouts": "Auszahlungen"
   },
   "groups": {
     "workforce": "Belegschaft",
@@ -169,7 +175,7 @@
     "hrm-hiring": "Personalgewinnung",
     "hrm-timeoff": "Abwesenheiten",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Vergütung",
+    "hrm-rewards": "Zusatzleistungen",
     "payroll": "Gehaltsabrechnung",
     "resourcing": "Ressourcenplanung",
     "warehouse": "Lager",
@@ -181,7 +187,8 @@
     "accounts-views": "Kontenplan",
     "inventory-views": "Bestand",
     "inbox-views": "Posteingang",
-    "me-views": "Ich"
+    "me-views": "Ich",
+    "hrm-compensation": "Vergütung"
   },
   "modulesShort": {
     "ap": "Kreditoren",
@@ -193,7 +200,7 @@
     "hrm-hiring": "Personalgewinnung",
     "hrm-timeOff": "Abwesenheiten",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Vergütung",
+    "hrm-rewards": "Zusatzleistungen",
     "payroll": "Gehaltsabrechnung",
     "resourcing": "Ressourcenplanung",
     "warehouse": "Lager",
@@ -213,6 +220,7 @@
     "setup-depreciation": "Buch-Abschreibung",
     "setup-tax-depreciation": "Steuerliche Abschreibung",
     "setup-overhead": "Gemeinkosten",
-    "setup-payments": "Zahlungen & Banking"
+    "setup-payments": "Zahlungen & Banking",
+    "hrm-compensation": "Vergütung"
   }
 }

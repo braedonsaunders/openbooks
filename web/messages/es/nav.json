@@ -95,7 +95,7 @@
     "hrm-surveys": "Encuestas",
     "hrm-compensation": "Retribución",
     "hrm-compensation-equity": "Equidad salarial",
-    "hrm-benefits": "Ventanas de inscripción",
+    "hrm-benefits": "Resumen",
     "payroll-runs": "Nóminas",
     "payroll-anomalies": "Comprobaciones",
     "payroll-remittances": "Remesas",
@@ -129,7 +129,13 @@
     "hrm-performance-calibration": "Calibración",
     "hrm-performance-talent": "Talento y sucesión",
     "hrm-performance-retention": "Retención",
-    "hrm-performance-settings": "Configuración del desempeño"
+    "hrm-performance-settings": "Configuración del desempeño",
+    "hrm-benefits-programs": "Programas",
+    "hrm-benefits-enrolments": "Inscripciones",
+    "hrm-benefits-windows": "Períodos de inscripción",
+    "hrm-benefits-rewards": "Recompensas",
+    "hrm-benefits-incentives": "Incentivos",
+    "hrm-benefits-payouts": "Pagos"
   },
   "modulesShort": {
     "ap": "Por pagar",
@@ -174,7 +180,7 @@
     "hrm-hiring": "Contratación",
     "hrm-timeoff": "Ausencias",
     "hrm-talent": "Talento",
-    "hrm-rewards": "Compensación",
+    "hrm-rewards": "Beneficios",
     "payroll": "Nómina",
     "resourcing": "Planificación de recursos",
     "warehouse": "Almacén",
@@ -186,14 +192,15 @@
     "accounts-views": "Plan de cuentas",
     "inventory-views": "Inventario",
     "inbox-views": "Bandeja de entrada",
-    "me-views": "Yo"
+    "me-views": "Yo",
+    "hrm-compensation": "Compensación"
   },
   "localWorkspaces": {
     "hrm-people": "Empleados",
     "hrm-hiring": "Contratación",
     "hrm-timeOff": "Ausencias",
     "hrm-talent": "Talento",
-    "hrm-rewards": "Compensación",
+    "hrm-rewards": "Beneficios",
     "payroll": "Nómina",
     "resourcing": "Planificación de recursos",
     "warehouse": "Almacén",
@@ -213,6 +220,7 @@
     "setup-depreciation": "Depreciación contable",
     "setup-tax-depreciation": "Depreciación fiscal",
     "setup-overhead": "Gastos generales",
-    "setup-payments": "Pagos y banca"
+    "setup-payments": "Pagos y banca",
+    "hrm-compensation": "Compensación"
   }
 }

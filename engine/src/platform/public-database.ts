@@ -1,2 +1,2 @@
-export { db } from './db.ts'
+export { db, withOrgTransaction } from './db.ts'
 export type { SqlExecutor } from './db.ts'

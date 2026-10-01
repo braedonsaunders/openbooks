@@ -962,6 +962,14 @@
       "resourcing_engagement": {
         "label": "Prévision des missions",
         "description": "Prévision des heures, revenus, coûts de main-d’œuvre et marges par mois et devise."
+      },
+      "hrm_benefit_payroll_inputs": {
+        "label": "Entrées de paie des avantages",
+        "description": "Montants mensuels de couverture, retenues salariales, cotisations patronales et traitements de paie associés."
+      },
+      "hrm_benefit_awards": {
+        "label": "Récompenses et versements",
+        "description": "Récompenses des employés, preuves d’approbation, références de remise et liens vers les entrées de paie."
       }
     },
     "columns": {
@@ -2253,6 +2261,37 @@
         "month": "Mois",
         "bill_status": "État de facturation",
         "cost_status": "État du coût de main-d’œuvre"
+      },
+      "hrm_benefit_payroll_inputs": {
+        "coverage_from": "Début de couverture",
+        "coverage_to": "Fin de couverture",
+        "person": "Employé",
+        "employer": "Entité juridique",
+        "plan": "Régime d’avantages",
+        "kind": "Type d’entrée",
+        "component": "Élément de paie",
+        "amount": "Montant de couverture",
+        "currency": "Devise",
+        "status": "Statut de l’entrée",
+        "payroll_run_id": "Traitement de paie associé",
+        "id": "Identifiant de l’entrée"
+      },
+      "hrm_benefit_awards": {
+        "period_from": "Période acquise du",
+        "period_to": "Période acquise au",
+        "person": "Employé",
+        "employer": "Entité juridique",
+        "program": "Programme",
+        "family": "Famille de programme",
+        "value": "Valeur de la récompense",
+        "currency": "Devise",
+        "status": "Statut de la récompense",
+        "approved_at": "Approuvé le",
+        "external_reference": "Référence de remise externe",
+        "source_key": "Référence source",
+        "id": "Identifiant de la récompense",
+        "pay_run_document_id": "Exécution de paie",
+        "pay_run_adjustment_id": "Ajustement de paie"
       }
     },
     "enumValues": {

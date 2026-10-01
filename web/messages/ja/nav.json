@@ -95,7 +95,7 @@
     "hrm-surveys": "調査",
     "hrm-compensation": "報酬",
     "hrm-compensation-equity": "給与の公平性",
-    "hrm-benefits": "加入期間",
+    "hrm-benefits": "概要",
     "payroll-runs": "給与計算",
     "payroll-anomalies": "チェック",
     "payroll-remittances": "納付",
@@ -129,7 +129,13 @@
     "hrm-performance-calibration": "キャリブレーション",
     "hrm-performance-talent": "タレントと後継",
     "hrm-performance-retention": "定着",
-    "hrm-performance-settings": "パフォーマンス設定"
+    "hrm-performance-settings": "パフォーマンス設定",
+    "hrm-benefits-programs": "プログラム",
+    "hrm-benefits-enrolments": "加入登録",
+    "hrm-benefits-windows": "加入期間",
+    "hrm-benefits-rewards": "褒賞",
+    "hrm-benefits-incentives": "インセンティブ",
+    "hrm-benefits-payouts": "支給"
   },
   "groups": {
     "workforce": "従業員体制",
@@ -169,7 +175,7 @@
     "hrm-hiring": "採用",
     "hrm-timeoff": "休暇",
     "hrm-talent": "タレント",
-    "hrm-rewards": "報酬・福利厚生",
+    "hrm-rewards": "福利厚生",
     "payroll": "給与",
     "resourcing": "リソース計画",
     "warehouse": "倉庫",
@@ -181,7 +187,8 @@
     "accounts-views": "勘定科目表",
     "inventory-views": "在庫",
     "inbox-views": "受信トレイ",
-    "me-views": "自分"
+    "me-views": "自分",
+    "hrm-compensation": "報酬"
   },
   "modulesShort": {
     "ap": "買掛金",
@@ -193,7 +200,7 @@
     "hrm-hiring": "採用",
     "hrm-timeOff": "休暇",
     "hrm-talent": "タレント",
-    "hrm-rewards": "報酬・福利厚生",
+    "hrm-rewards": "福利厚生",
     "payroll": "給与",
     "resourcing": "リソース計画",
     "warehouse": "倉庫",
@@ -213,6 +220,7 @@
     "setup-depreciation": "帳簿減価償却",
     "setup-tax-depreciation": "税務減価償却",
     "setup-overhead": "間接費",
-    "setup-payments": "支払と銀行取引"
+    "setup-payments": "支払と銀行取引",
+    "hrm-compensation": "報酬"
   }
 }

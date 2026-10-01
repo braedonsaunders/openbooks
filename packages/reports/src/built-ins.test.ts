@@ -7,6 +7,7 @@ import {
 } from './built-ins'
 import { REPORT_ENTITY_MAP } from './entities'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
+import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
 import { compileRule, SqlParams } from './filters'
 import { PERIOD_PRESETS, resolvePreset, PERIOD_PRESET_IDS } from './period-presets'
 import { validateCustomQuery } from './validate'
@@ -102,7 +103,8 @@ describe('built-in report definitions', () => {
   })
 
   it('materialises every governed HRM source in the one built-in catalog', () => {
-    const hrmEntityKeys = new Set(HRM_REPORT_ENTITIES.map((entity) => entity.key))
+    const workforceEntities = [...HRM_REPORT_ENTITIES, ...BENEFITS_REPORT_ENTITIES]
+    const hrmEntityKeys = new Set(workforceEntities.map((entity) => entity.key))
     const catalogEntityKeys = new Set(
       BUILT_IN_REPORT_DEFINITIONS
         .map((definition) => definition.query.entity)
@@ -111,7 +113,7 @@ describe('built-in report definitions', () => {
     assert.deepEqual(catalogEntityKeys, hrmEntityKeys)
     assert.equal(
       BUILT_IN_REPORT_DEFINITIONS.filter((definition) => definition.slug.startsWith('workforce-')).length,
-      HRM_REPORT_ENTITIES.length - 1,
+      workforceEntities.length - 1,
       'headcount uses its curated statement; every other HRM source gets one workforce built-in',
     )
   })

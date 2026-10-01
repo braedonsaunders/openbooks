@@ -11,6 +11,7 @@
 
 import { defaultRowsQuery } from './custom-query'
 import { utcCivilDate } from './fiscal-calendar'
+import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
 import { HRM_REPORT_ENTITIES, REPORT_ENTITY_MAP, entityColumn } from './entities'
 import type { ReportCustomQuery, ReportFilterOperator, ReportRule } from './types'
 
@@ -888,6 +889,12 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   },
   ...SAAS_METRICS_BUILT_IN_REPORTS,
   ...WORKFORCE_BUILT_IN_REPORT_DEFINITIONS,
+  ...BENEFITS_REPORT_ENTITIES.map((entity) => ({
+    slug: `workforce-${entity.key.replace(/^hrm_/, '').replaceAll('_', '-')}`,
+    name: entity.label,
+    description: entity.description,
+    query: { ...defaultRowsQuery(entity), columns: entity.columns.map((column) => column.key) },
+  })),
   {
     slug: 'headcount-statement',
     name: 'Headcount statement',

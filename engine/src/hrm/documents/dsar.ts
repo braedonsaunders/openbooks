@@ -1145,6 +1145,39 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
          )
          order by e.effective_from
       `)).rows;
+      const benefitSubjectEmployments = sql`select id from worker_employments
+        where org_id = ${orgId} and worker_party_id = ${partyId}`;
+      payload.benefitProgramMemberships = (await db.execute<Record<string, unknown>>(sql`
+        select id, program_id, employment_id, effective_from::text as effective_from,
+               effective_to::text as effective_to, weight::text as weight, role
+          from hrm_benefit_program_members
+         where org_id = ${orgId} and employment_id in (${benefitSubjectEmployments})
+         order by effective_from, id
+      `)).rows;
+      // Export the subject's award and its policy identity. Company ledger
+      // measurements remain in the controlled source snapshot, which is not
+      // a personal record about the subject or a component of their payment.
+      payload.benefitAwards = (await db.execute<Record<string, unknown>>(sql`
+        select id, program_id, employment_id, period_from::text as period_from,
+               period_to::text as period_to, value::text as value, currency, status,
+               program_snapshot->>'name' as program_name,
+               program_snapshot->>'code' as program_code,
+               program_snapshot->>'family' as program_family,
+               case when evidence->>'kind' = 'incentive-settlement' then
+                 jsonb_build_object('kind', evidence->'kind', 'programRevision', evidence->'programRevision')
+                 else evidence end as evidence,
+               external_ref, pay_run_document_id, pay_run_adjustment_id, approved_at, void_reason
+          from hrm_benefit_awards
+         where org_id = ${orgId} and employment_id in (${benefitSubjectEmployments})
+         order by period_from, id
+      `)).rows;
+      payload.benefitAwardEvents = (await db.execute<Record<string, unknown>>(sql`
+        select event.id, event.award_id, event.kind, event.reason, event.recorded_at
+          from hrm_benefit_award_events event
+          join hrm_benefit_awards award on award.org_id = event.org_id and award.id = event.award_id
+         where event.org_id = ${orgId} and award.employment_id in (${benefitSubjectEmployments})
+         order by event.recorded_at, event.id
+      `)).rows;
       // Dependents are third parties, but their records live on the
       // subject's employment file — the export carries them as part of
       // that file, like any other HR record about the subject's account.
