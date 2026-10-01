@@ -25,6 +25,12 @@ import { GenerateDialog } from '../../app/(app)/hrm/compliance/GenerateDialog'
 import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRowActions'
 import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
 import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
+import { AwardBuilderDrawer } from '../../app/(app)/hrm/benefits/AwardBuilderDrawer'
+import { AwardDrawer } from '../../app/(app)/hrm/benefits/AwardDrawer'
+import { BenefitTypeCards } from '../../app/(app)/hrm/benefits/BenefitsOverview'
+import { AwardPortfolioTable, ProgramPortfolioTable } from '../../app/(app)/hrm/benefits/PortfolioTables'
+import { ProgramBuilderDrawer } from '../../app/(app)/hrm/benefits/ProgramBuilderDrawer'
+import { ProgramDrawer } from '../../app/(app)/hrm/benefits/ProgramDrawer'
 import { HrmFacts } from '../../app/(app)/me/sections'
 // HR-21 begin: the Explain drawer (verbatim adapter only).
 import { ExplainDrawer } from '../../app/(app)/me/sections'
@@ -389,6 +395,116 @@ export const HRM_WIDGETS = {
       canManage={props.canManage === true}
     />
   ),
+  /** Program-type cards as one panel body: insured plans resolve to the
+   *  rehomed Setup drawers, employer-defined families to the builder. */
+  'hrm-benefit-type-cards': (props) => (
+    <BenefitTypeCards cards={(props.cards as ComponentProps<typeof BenefitTypeCards>['cards']) ?? []} />
+  ),
+  /** Program operational list over the prepared hrm_benefit_programs
+   *  source: shared PagedTable composition with the true population in
+   *  the footer. */
+  'hrm-program-table': (props) => (
+    <ProgramPortfolioTable
+      rows={(props.rows as ComponentProps<typeof ProgramPortfolioTable>['rows']) ?? []}
+      text={(props.text as ComponentProps<typeof ProgramPortfolioTable>['text']) ?? null}
+      total={typeof props.total === 'number' ? props.total : 0}
+      truncated={props.truncated === true}
+    />
+  ),
+  /** Award operational list over the prepared hrm_benefit_awards source:
+   *  shared PagedTable composition with the true population and the
+   *  truncation notice in the footer. */
+  'hrm-award-table': (props) => (
+    <AwardPortfolioTable
+      rows={(props.rows as ComponentProps<typeof AwardPortfolioTable>['rows']) ?? []}
+      text={(props.text as ComponentProps<typeof AwardPortfolioTable>['text']) ?? null}
+      total={typeof props.total === 'number' ? props.total : 0}
+      truncated={props.truncated === true}
+    />
+  ),
+  /** New-program builder, opened from the page header through
+   *  `program=new` (cards preselect `family=`); closing navigates the
+   *  params away. */
+  'hrm-program-builder': (props) => (
+    <ProgramBuilderDrawer
+      closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
+      initialFamily={
+        props.initialFamily === 'allowance' || props.initialFamily === 'incentive' || props.initialFamily === 'custom'
+          ? props.initialFamily
+          : 'reward'
+      }
+      familyLocked={props.familyLocked === true}
+      subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
+      departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}
+      projectOptions={(props.projectOptions as ComponentProps<typeof ProgramBuilderDrawer>['projectOptions']) ?? []}
+      payComponentOptions={(props.payComponentOptions as ComponentProps<typeof ProgramBuilderDrawer>['payComponentOptions']) ?? []}
+      accountOptions={(props.accountOptions as ComponentProps<typeof ProgramBuilderDrawer>['accountOptions']) ?? []}
+      employmentsTruncated={props.employmentsTruncated === true}
+    />
+  ),
+  /** Draft-program editor, opened from a program drawer through
+   *  `program=<id>&edit=1`. The seed resolves from the authoritative
+   *  drawer row; saving patches the program with the required reason. */
+  'hrm-program-builder-edit': (props) => {
+    const seed = props.editSeed as ComponentProps<typeof ProgramBuilderDrawer>['editSeed']
+    if (!seed || typeof props.programId !== 'string' || props.programId === '') return null
+    return (
+      <ProgramBuilderDrawer
+        mode="edit"
+        programId={props.programId}
+        editSeed={seed}
+        closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
+        initialFamily={seed.family}
+        familyLocked
+        subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
+        departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}
+        projectOptions={(props.projectOptions as ComponentProps<typeof ProgramBuilderDrawer>['projectOptions']) ?? []}
+        payComponentOptions={(props.payComponentOptions as ComponentProps<typeof ProgramBuilderDrawer>['payComponentOptions']) ?? []}
+        accountOptions={(props.accountOptions as ComponentProps<typeof ProgramBuilderDrawer>['accountOptions']) ?? []}
+        employmentsTruncated={props.employmentsTruncated === true}
+      />
+    )
+  },
+  /** The program flyout: loader-resolved policy, memberships, and
+   *  incentive source accounts. Null payload renders nothing — the spec's
+   *  `when` gate already omits it, so this is the second half of the same
+   *  guard. */
+  'hrm-program-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof ProgramDrawer>['drawer']
+    if (!drawer) return null
+    return (
+      <ProgramDrawer
+        drawer={drawer}
+        closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
+        canManage={props.canManage === true}
+        employmentOptions={(props.employmentOptions as ComponentProps<typeof ProgramDrawer>['employmentOptions']) ?? []}
+      />
+    )
+  },
+  /** New-award builder, opened through `award=new`; submit records one
+   *  award with its reason and record reference, then opens the detail. */
+  'hrm-award-builder': (props) => (
+    <AwardBuilderDrawer
+      closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
+      programOptions={(props.programOptions as ComponentProps<typeof AwardBuilderDrawer>['programOptions']) ?? []}
+      employmentOptions={(props.employmentOptions as ComponentProps<typeof AwardBuilderDrawer>['employmentOptions']) ?? []}
+      defaultCurrency={str(props, 'defaultCurrency') ?? ''}
+    />
+  ),
+  /** The award flyout: stored figures with the lifecycle moves the
+   *  viewer's grants allow. Null payload renders nothing. */
+  'hrm-award-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof AwardDrawer>['drawer']
+    if (!drawer) return null
+    return (
+      <AwardDrawer
+        drawer={drawer}
+        closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
+        canManage={props.canManage === true}
+        canQueue={props.canQueue === true}
+      />
+    )
+  },
   // HR-13 begin: construction-compliance islands. One row-action island
   // per table (findings, per-diem entries, certified runs) driven by the
   // row's own status, and the certified-generate dialog driven by the

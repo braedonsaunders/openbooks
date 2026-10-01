@@ -3064,6 +3064,26 @@
         "title": "Códigos de produto do cliente",
         "singular": "Código de produto do cliente",
         "description": "Códigos específicos do cliente associados aos itens que ele encomenda."
+      },
+      "benefit-programs": {
+        "title": "Programas de prêmios",
+        "singularTitle": "Programa de prêmio",
+        "description": "Prêmios, auxílios, incentivos e programas próprios definidos pelo empregador, com regras tipadas, fontes e adesão. Saúde e aposentadoria seguem nos planos."
+      },
+      "benefit-program-scopes": {
+        "title": "Abrangência do programa",
+        "singularTitle": "Abrangência do programa",
+        "description": "Departamentos e projetos medidos, resolvidos por chaves. O âmbito da empresa não tem linhas."
+      },
+      "benefit-program-sources": {
+        "title": "Fontes do programa",
+        "singularTitle": "Fonte do programa",
+        "description": "Contas de financiamento por programa, como tabela filha tipada."
+      },
+      "benefit-program-members": {
+        "title": "Membros do programa",
+        "singularTitle": "Membro do programa",
+        "description": "Vínculos vinculados ao programa com vigência, peso e papel para rateio."
       }
     },
     "fields": {
@@ -3594,7 +3614,18 @@
       "aiRailsRetroThreshold": "Sinaliza retroativos a partir deste valor (padrão 500).",
       "aiRailsCohort": "Agrupa funcionários por filial, departamento, calendário ou nível.",
       "aiRailsBiasTerms": "Palavras e frases da organização sinalizadas no exato, uma por linha.",
-      "aiRailsReviewMonths": "Cadência em meses (1–36); capacidades vencidas avisam o inbox de setup."
+      "aiRailsReviewMonths": "Cadência em meses (1–36); capacidades vencidas avisam o inbox de setup.",
+      "benefitProgramFamily": "Prêmio, auxílio, incentivo ou próprio. Saúde e aposentadoria seguem nos planos.",
+      "benefitProgramDescription": "O que este programa paga e por quê, em linguagem clara.",
+      "benefitProgramEntity": "Entidade jurídica responsável. Obrigatória antes da ativação.",
+      "benefitProgramComponent": "Componente de provento que paga o valor. Obrigatório para folha e valor externo tributável.",
+      "benefitDeliveryMethod": "Folha paga por entradas de folha; externo registra a referência do provedor.",
+      "benefitValuation": "Fixo paga um valor, percentual paga uma taxa, orçamento reparte um total.",
+      "benefitMetric": "Grandeza medida: receita, lucro bruto, lucro líquido ou horas aprovadas.",
+      "benefitMetricScope": "Empresa mede a organização; departamento e projeto nomeiam suas linhas.",
+      "benefitAllocation": "Igual divide igualmente; horas pondera por tempo; papel pelo papel do membro.",
+      "benefitFrequency": "Frequência de medição: mensal, trimestral, anual, conclusão do projeto ou manual.",
+      "benefitPeriodBasis": "Programas trimestrais e anuais nomeiam períodos de calendário ou de exercício."
     },
     "options": {
       "usageAggregation": {
@@ -4121,6 +4152,53 @@
         "upc": "UPC",
         "ean": "EAN",
         "internal": "Interno"
+      },
+      "benefitProgramFamily": {
+        "reward": "Prêmio",
+        "allowance": "Auxílio",
+        "incentive": "Incentivo",
+        "custom": "Próprio"
+      },
+      "benefitProgramStatus": {
+        "draft": "Rascunho",
+        "active": "Ativo",
+        "closed": "Encerrado"
+      },
+      "benefitDeliveryMethod": {
+        "payroll": "Folha",
+        "external": "Externo"
+      },
+      "benefitValuation": {
+        "fixed": "Fixo",
+        "percent": "Percentual",
+        "pool": "Orçamento"
+      },
+      "benefitMetric": {
+        "revenue": "Receita",
+        "gross_profit": "Lucro bruto",
+        "net_profit": "Lucro líquido",
+        "approved_hours": "Horas aprovadas"
+      },
+      "benefitMetricScope": {
+        "company": "Empresa",
+        "department": "Departamento",
+        "project": "Projeto"
+      },
+      "benefitAllocation": {
+        "equal": "Igual",
+        "hours": "Horas",
+        "role": "Papel"
+      },
+      "benefitFrequency": {
+        "monthly": "Mensal",
+        "quarterly": "Trimestral",
+        "annual": "Anual",
+        "project_complete": "Conclusão do projeto",
+        "manual": "Manual"
+      },
+      "benefitPeriodBasis": {
+        "calendar": "Calendário",
+        "fiscal": "Exercício"
       }
     },
     "payroll": {
@@ -4901,7 +4979,9 @@
       "holidayElection": "Opção sobre feriado legal",
       "holidayCompanyDay": "Feriado da empresa",
       "benefitCosts": "Custos e rateio",
-      "benefitComponents": "Componentes de folha"
+      "benefitComponents": "Componentes de folha",
+      "benefitDelivery": "Pagamento",
+      "benefitRules": "Regras"
     },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"

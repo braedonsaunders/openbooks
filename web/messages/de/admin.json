@@ -3139,6 +3139,26 @@
         "title": "Kundenteilenummern",
         "singular": "Kundenteilenummer",
         "description": "Kundenspezifische Produktcodes, die den bestellten Artikeln zugeordnet sind."
+      },
+      "benefit-programs": {
+        "title": "Prämienprogramme",
+        "singularTitle": "Prämienprogramm",
+        "description": "Arbeitgeberdefinierte Prämien, Zulagen, Anreize und eigene Programme mit typisierten Regeln, Finanzierung und Mitgliedschaft. Gesundheit und Rente bleiben bei den Leistungsplänen."
+      },
+      "benefit-program-scopes": {
+        "title": "Programmumfang",
+        "singularTitle": "Programmumfang",
+        "description": "Abteilungen und Projekte, die ein Programm misst, über Mandantenschlüssel. Unternehmensumfang braucht keine Zeilen."
+      },
+      "benefit-program-sources": {
+        "title": "Programmquellen",
+        "singularTitle": "Programmquelle",
+        "description": "Finanzierungskonten je Programm als typisierte Untertabelle."
+      },
+      "benefit-program-members": {
+        "title": "Programmitglieder",
+        "singularTitle": "Programmitglied",
+        "description": "Beschäftigungen mit Gültigkeitsdaten, Gewichtung und Rolle für die Verteilung."
       }
     },
     "fields": {
@@ -3669,7 +3689,18 @@
       "aiRailsRetroThreshold": "Rückrechnungen ab diesem Betrag markieren (Standard 500).",
       "aiRailsCohort": "Mitarbeiter für Basiswerte nach Gesellschaft, Abteilung, Lohnturnus oder Stufe gruppieren.",
       "aiRailsBiasTerms": "Organisationsweite Wörter und Wendungen, die die Entwurfsprüfung wortgenau markiert, eine pro Zeile.",
-      "aiRailsReviewMonths": "Prüfrhythmus in Monaten (1–36); überfällige Fähigkeiten melden sich im Setup-Postfach."
+      "aiRailsReviewMonths": "Prüfrhythmus in Monaten (1–36); überfällige Fähigkeiten melden sich im Setup-Postfach.",
+      "benefitProgramFamily": "Prämie, Zulage, Anreiz oder eigen. Gesundheit und Rente bleiben bei den Leistungsplänen.",
+      "benefitProgramDescription": "Was dieses Programm zahlt und warum, in klarer Sprache.",
+      "benefitProgramEntity": "Verantwortliche rechtliche Einheit. Vor Aktivierung erforderlich.",
+      "benefitProgramComponent": "Verdienstkomponente für den Wert. Erforderlich für Abrechnung und steuerpflichtige externe Werte.",
+      "benefitDeliveryMethod": "Abrechnung zahlt über Abrechnungseingaben; extern erfasst die Anbieterreferenz.",
+      "benefitValuation": "Fest zahlt einen Betrag, Prozent einen Satz, Topf teilt ein Budget.",
+      "benefitMetric": "Messgröße für Anreize: Umsatz, Rohertrag, Reingewinn oder genehmigte Stunden.",
+      "benefitMetricScope": "Unternehmen misst die Organisation; Abteilung und Projekt benennen ihre Umfangszeilen.",
+      "benefitAllocation": "Gleich teilt gerade; Stunden gewichtet nach Zeit; Rolle nach Mitgliederrolle.",
+      "benefitFrequency": "Wie oft das Programm misst: monatlich, quartalsweise, jährlich, Projektabschluss oder manuell.",
+      "benefitPeriodBasis": "Quartals- und Jahresprogramme benennen Kalender- oder Geschäftsjahrperioden."
     },
     "options": {
       "usageAggregation": {
@@ -4196,6 +4227,53 @@
         "upc": "UPC",
         "ean": "EAN",
         "internal": "Intern"
+      },
+      "benefitProgramFamily": {
+        "reward": "Prämie",
+        "allowance": "Zulage",
+        "incentive": "Anreiz",
+        "custom": "Eigen"
+      },
+      "benefitProgramStatus": {
+        "draft": "Entwurf",
+        "active": "Aktiv",
+        "closed": "Geschlossen"
+      },
+      "benefitDeliveryMethod": {
+        "payroll": "Abrechnung",
+        "external": "Extern"
+      },
+      "benefitValuation": {
+        "fixed": "Fest",
+        "percent": "Prozent",
+        "pool": "Topf"
+      },
+      "benefitMetric": {
+        "revenue": "Umsatz",
+        "gross_profit": "Rohertrag",
+        "net_profit": "Reingewinn",
+        "approved_hours": "Genehmigte Stunden"
+      },
+      "benefitMetricScope": {
+        "company": "Unternehmen",
+        "department": "Abteilung",
+        "project": "Projekt"
+      },
+      "benefitAllocation": {
+        "equal": "Gleich",
+        "hours": "Stunden",
+        "role": "Rolle"
+      },
+      "benefitFrequency": {
+        "monthly": "Monatlich",
+        "quarterly": "Quartalsweise",
+        "annual": "Jährlich",
+        "project_complete": "Projektabschluss",
+        "manual": "Manuell"
+      },
+      "benefitPeriodBasis": {
+        "calendar": "Kalender",
+        "fiscal": "Geschäftsjahr"
       }
     },
     "bankFeeds": {
@@ -4973,7 +5051,9 @@
       "holidayCompanyDay": "Firmenfeiertag",
       "holidayElection": "Wahl zu einem gesetzlichen Feiertag",
       "benefitCosts": "Kosten und Anteilberechnung",
-      "benefitComponents": "Abrechnungskomponenten"
+      "benefitComponents": "Abrechnungskomponenten",
+      "benefitDelivery": "Auszahlung",
+      "benefitRules": "Regeln"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",

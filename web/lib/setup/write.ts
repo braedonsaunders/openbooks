@@ -47,6 +47,7 @@ import { normalizeHrmCompensationInput } from './hrm-compensation'
 import { validateCategoryKey } from '@openbooks/engine/src/hrm/documents/categories.ts'
 import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templates.ts'
 import { benefitPlanShapeProblem, normalizeHrmBenefitPlanInput } from './hrm-benefits'
+import { benefitProgramShapeProblem } from './benefit-programs'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
 import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
@@ -1271,6 +1272,98 @@ export async function validateEntityIntegrity(
       ? (await executor.execute(sql`select exists(select 1 from hrm_benefit_plans where id = ${plan} and org_id = ${orgId}) as ok`)).rows[0]?.ok
       : false
     if (!planOk) return 'The parent benefit plan is not visible in this organization'
+  }
+  // Employer-defined benefit programs: shape plus tenant references. The
+  // service owns status moves; the registry edits draft configuration with
+  // the same component and entity proofs.
+  if (entity.key === 'benefit-programs') {
+    let values: Record<string, unknown> = body as Record<string, unknown>
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select family, currency, frequency, period_basis as "periodBasis",
+               legal_entity_id as "legalEntityId", pay_component_id as "payComponentId"
+          from hrm_benefit_programs where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit program not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...values }
+    }
+    const shape = benefitProgramShapeProblem(values)
+    if (shape) return shape
+    const legalEntity = (values.legalEntityId ?? null) as string | null
+    const component = (values.payComponentId ?? null) as string | null
+    const refs = await executor.execute(sql`
+      select
+        ${legalEntity ? sql`exists(select 1 from subsidiaries where id = ${legalEntity} and org_id = ${orgId} and is_active and not is_elimination)` : sql`true`} as entity_ok,
+        ${component ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${component} and org_id = ${orgId})` : sql`null`} as component
+    `)
+    if (!refs.rows[0]?.entity_ok) return 'The responsible legal entity is not visible in this organization'
+    const componentRow = refs.rows[0]?.component as { kind?: string | null; active?: boolean } | null
+    if (component && !componentRow?.kind) return 'The program pay component is not visible in this organization'
+    if (component && componentRow?.active !== true) return 'The program pay component is inactive — reactivate it or link its replacement'
+    if (component && componentRow?.kind !== 'earning') {
+      return 'The program component must be kind earning so the value reaches pay with its established tax treatment'
+    }
+  }
+  if (entity.key === 'benefit-program-scopes') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select program_id as "programId" from hrm_benefit_program_scopes where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit program scope not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const program = (values.programId ?? null) as string | null
+    const department = (values.departmentId ?? null) as string | null
+    const project = (values.projectId ?? null) as string | null
+    if ((department ? 1 : 0) + (project ? 1 : 0) !== 1) return 'A program scope names exactly one department or one project'
+    const refs = await executor.execute(sql`
+      select
+        ${program ? sql`exists(select 1 from hrm_benefit_programs where id = ${program} and org_id = ${orgId})` : sql`false`} as program_ok,
+        ${department ? sql`exists(select 1 from departments where id = ${department} and org_id = ${orgId})` : sql`true`} as department_ok,
+        ${project ? sql`exists(select 1 from projects where id = ${project} and org_id = ${orgId})` : sql`true`} as project_ok
+    `)
+    if (!refs.rows[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
+    if (!refs.rows[0]?.department_ok) return 'The scope department is not visible in this organization'
+    if (!refs.rows[0]?.project_ok) return 'The scope project is not visible in this organization'
+  }
+  if (entity.key === 'benefit-program-sources') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select program_id as "programId" from hrm_benefit_program_sources where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit program source not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const program = (values.programId ?? null) as string | null
+    const account = (values.accountId ?? null) as string | null
+    const refs = await executor.execute(sql`
+      select
+        ${program ? sql`exists(select 1 from hrm_benefit_programs where id = ${program} and org_id = ${orgId})` : sql`false`} as program_ok,
+        ${account ? sql`exists(select 1 from accounts where id = ${account} and org_id = ${orgId} and is_active and not is_summary)` : sql`false`} as account_ok
+    `)
+    if (!refs.rows[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
+    if (!refs.rows[0]?.account_ok) return 'The source account is not a postable account of this organization'
+  }
+  if (entity.key === 'benefit-program-members') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select program_id as "programId" from hrm_benefit_program_members where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Benefit program membership not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const program = (values.programId ?? null) as string | null
+    const employment = (values.employmentId ?? null) as string | null
+    const refs = await executor.execute(sql`
+      select
+        ${program ? sql`exists(select 1 from hrm_benefit_programs where id = ${program} and org_id = ${orgId})` : sql`false`} as program_ok,
+        ${employment ? sql`exists(select 1 from worker_employments where id = ${employment} and org_id = ${orgId})` : sql`false`} as employment_ok
+    `)
+    if (!refs.rows[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
+    if (!refs.rows[0]?.employment_ok) return 'The member employment is not visible in this organization'
   }
   // HRM process template steps (0193): named owners must be visible parties
   // (named_party needs exactly one, other owners need none), and the parent

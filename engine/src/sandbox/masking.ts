@@ -176,6 +176,17 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_feedback", columnName: "context", transform: "null_out" },
   // HR-8: covered-dependent names are PII like party display names.
   { tableName: "hrm_benefit_dependents", columnName: "display_name", transform: "faker_name" },
+  // Award proof and free text can identify employees or external recipients.
+  { tableName: "hrm_benefit_awards", columnName: "evidence", transform: "null_out" },
+  { tableName: "hrm_benefit_awards", columnName: "program_snapshot", transform: "null_out" },
+  { tableName: "hrm_benefit_awards", columnName: "source_snapshot", transform: "null_out" },
+  { tableName: "hrm_benefit_awards", columnName: "external_ref", transform: "hash" },
+  { tableName: "hrm_benefit_awards", columnName: "source_key", transform: "hash" },
+  { tableName: "hrm_benefit_awards", columnName: "void_reason", transform: "redact" },
+  { tableName: "hrm_benefit_award_events", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_benefit_program_members", columnName: "role", transform: "redact" },
+  { tableName: "hrm_benefit_programs", columnName: "name", transform: "faker_name" },
+  { tableName: "hrm_benefit_programs", columnName: "description", transform: "redact" },
   // HR-9 self-service (0198): the emergency contact is candidate PII —
   // nulled in sandboxes like tax_ids, never faked into a plausible lie.
   { tableName: "parties", columnName: "emergency_contact", transform: "null_out" },

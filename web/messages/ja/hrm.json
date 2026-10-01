@@ -1222,6 +1222,16 @@
       "active": "有効",
       "ended": "終了済",
       "cancelled": "取消済"
+    },
+    "workspace": {
+      "tabs": {
+        "overview": "概要",
+        "programs": "プログラム",
+        "enrollments": "加入",
+        "rewards": "報奨",
+        "incentives": "インセンティブ",
+        "payouts": "支払い"
+      }
     }
   },
   "me": {
@@ -1485,7 +1495,19 @@
       "changeDescription": "受付中ウィンドウ内の日付から変更 — 旧行は前日に終了します。",
       "changeReasonPlaceholder": "保障を変更する理由",
       "changeSubmit": "変更を保存",
-      "changeFailed": "変更を記録できませんでした。"
+      "changeFailed": "変更を記録できませんでした。",
+      "awards": {
+        "paidTitle": "支給済み報奨",
+        "pendingTitle": "支給待ち報奨",
+        "hint": "支給済み報奨は給与に含まれています。支給待ち報奨は支払いではありません。",
+        "paidEmpty": "支給済み報奨はありません。",
+        "pendingEmpty": "支給待ち報奨はありません。",
+        "refusalTitle": "報奨を利用できません",
+        "program": "プログラム",
+        "period": "対象期間",
+        "value": "金額",
+        "status": "状態"
+      }
     },
     "qualifications": {
       "columns": {
@@ -2356,5 +2378,343 @@
     "biasFlags": "見直すべき表現",
     "loading": "引用記録から起草中…",
     "copied": "編集可能な欄がありません — 下書きをクリップボードにコピーしました。"
+  },
+  "portfolio": {
+    "overviewTitle": "福利厚生ポートフォリオ",
+    "programsTitle": "福利厚生プログラム",
+    "rewardsTitle": "報奨と手当",
+    "incentivesTitle": "インセンティブ",
+    "payoutsTitle": "褒賞の支払い",
+    "newProgram": "新規プログラム",
+    "newAward": "新規褒賞",
+    "programsEmptyTitle": "福利厚生プログラムがありません",
+    "programsEmptyDescription": "報奨・手当・インセンティブを付与する最初の雇用主プログラムを作成してください。",
+    "awardsEmptyTitle": "褒賞がありません",
+    "awardsEmptyDescription": "プログラムが付与すると褒賞がここに表示されます。",
+    "loadFailed": "福利厚生ワークスペースを読み込めませんでした。",
+    "loadFailedTitle": "福利厚生を利用できません",
+    "awardsTruncated": "最初の500件を表示",
+    "totalLabel": "総レコード数",
+    "drawerFailedTitle": "プログラム詳細が不完全です",
+    "attentionTitle": "要対応",
+    "attentionEmpty": "対応が必要な項目はありません。",
+    "reportsTitle": "福利厚生レポート",
+    "reportsEmpty": "利用可能な福利厚生レポートはありません。",
+    "reportsFailedTitle": "レポートを利用できません",
+    "optionsFailedTitle": "選択肢を利用できません",
+    "vitalsFailedTitle": "合計が不完全です",
+    "openProgram": "開く",
+    "openAward": "開く",
+    "programActionFailed": "プログラムの変更に失敗しました。",
+    "awardActionFailed": "褒賞の変更に失敗しました。",
+    "awardCreateFailed": "褒賞を記録できませんでした。",
+    "attention": {
+      "pendingEnrollments": "承認待ちの加入が{count}件あります",
+      "pendingAwards": "承認待ちの褒賞が{count}件あります",
+      "queuedAwards": "支払い待ちの褒賞が{count}件あります",
+      "draftPrograms": "未稼働の下書きプログラムが{count}件あります",
+      "missingComponent": "プログラム{code}は給与経由で支払いますが給与項目が未設定です"
+    },
+    "vitals": {
+      "activePrograms": "稼働中のプログラム",
+      "openWindows": "受付中の期間",
+      "pendingApprovals": "承認待ち",
+      "queuedPayouts": "支払い待ち",
+      "deliveredTitle": "支払い済み",
+      "awaitingTitle": "支払い待ち",
+      "deliveredEmpty": "支払い済みの褒賞はありません。",
+      "awaitingEmpty": "支払い待ちの褒賞はありません。"
+    },
+    "cardsTitle": "プログラム種別",
+    "cards": {
+      "count": "{count}件のプログラム",
+      "health": {
+        "title": "健康・保険",
+        "description": "医療・歯科・眼科・生命の保険プラン。"
+      },
+      "retirement": {
+        "title": "退職・貯蓄",
+        "description": "年金・退職貯蓄プラン。"
+      },
+      "allowance": {
+        "title": "手当・利用枠",
+        "description": "給与経由で支払う定期的な利用手当。"
+      },
+      "reward": {
+        "title": "報奨・表彰",
+        "description": "単発の表彰・ギフトカード。"
+      },
+      "incentive": {
+        "title": "インセンティブ・利益分配",
+        "description": "メンバーで分配する測定ベースの支払い。"
+      },
+      "custom": {
+        "title": "カスタムプログラム",
+        "description": "その他、会社が付与するもの。"
+      }
+    },
+    "families": {
+      "reward": "報奨",
+      "allowance": "手当",
+      "incentive": "インセンティブ",
+      "custom": "カスタム"
+    },
+    "familyHints": {
+      "reward": "単発の表彰:賞与、ギフトカード、スポット表彰。",
+      "allowance": "定期的な利用枠:食事、交通、福利。",
+      "incentive": "測定ベースの分配:利益・売上・時間を精算。",
+      "custom": "他の種別に当てはまらない付与。"
+    },
+    "valuations": {
+      "fixed": "固定額",
+      "percent": "基準の割合",
+      "pool": "分配プール"
+    },
+    "metrics": {
+      "revenue": "売上",
+      "gross_profit": "売上総利益",
+      "net_profit": "純利益",
+      "approved_hours": "承認済み時間"
+    },
+    "scopes": {
+      "company": "会社全体",
+      "department": "部門",
+      "project": "プロジェクト"
+    },
+    "allocations": {
+      "equal": "均等分配",
+      "hours": "時間按分",
+      "role": "役割ウェイト"
+    },
+    "frequencies": {
+      "monthly": "毎月",
+      "quarterly": "四半期",
+      "annual": "年次",
+      "project_complete": "プロジェクト完了時",
+      "manual": "手動"
+    },
+    "periodBasis": {
+      "calendar": "暦年",
+      "fiscal": "会計年度"
+    },
+    "delivery": {
+      "payroll": "給与経由",
+      "external": "外部事業者"
+    },
+    "programStatus": {
+      "draft": "下書き",
+      "active": "稼働中",
+      "closed": "終了"
+    },
+    "awardStatus": {
+      "draft": "下書き",
+      "pending": "承認待ち",
+      "approved": "承認済み",
+      "queued": "支払い待ち",
+      "delivered": "支払い済み",
+      "voided": "無効"
+    },
+    "columns": {
+      "program": "プログラム",
+      "family": "種別",
+      "value": "金額",
+      "effective": "有効期間",
+      "status": "状態",
+      "recipient": "受給者",
+      "period": "対象期間",
+      "currency": "通貨",
+      "externalRef": "事業者参照番号",
+      "voidReason": "無効理由"
+    },
+    "membersTitle": "メンバー",
+    "membersEmpty": "メンバーがいません。",
+    "members": {
+      "weight": "ウェイト",
+      "weightPlaceholder": "1",
+      "weightHint": "プール分配の按分ウェイト。空欄は均等。",
+      "role": "役割",
+      "rolePlaceholder": "担当",
+      "roleHint": "役割ウェイト分配に使用する役割。"
+    },
+    "addMember": "メンバーを追加",
+    "removeMember": "メンバーシップを終了",
+    "removeReasonPrompt": "このメンバーシップが終了する理由は?",
+    "removeReasonRequired": "メンバーシップ終了の理由を入力してください。",
+    "sourcesTitle": "測定勘定",
+    "sourcesEmpty": "測定勘定がありません。",
+    "settlementPending": "期間確定後にこれらの勘定で精算します。",
+    "activateProgram": "稼働開始",
+    "closeProgram": "終了",
+    "closeReasonLabel": "このプログラムを終了する理由は?",
+    "editProgram": "編集",
+    "reports": {
+      "enrollments": "福利厚生の加入",
+      "inputs": "福利厚生の給与項目",
+      "awards": "福利厚生の褒賞"
+    },
+    "simulate": {
+      "title": "精算シミュレーション",
+      "periodFrom": "対象期間(自)",
+      "periodTo": "対象期間(至)",
+      "run": "シミュレーション実行",
+      "estimate": "見積り:未転記・未承認の ソース が期間内にあり、精算額が変わる可能性があります。",
+      "noRecipients": "この期間の支払い対象者はいません。",
+      "totalHours": "承認済み時間",
+      "entries": "ソース仕訳",
+      "revenue": "売上",
+      "expenses": "費用",
+      "measured": "測定基準額",
+      "totalAwarded": "付与総額",
+      "settle": "期間を精算"
+    },
+    "simulateFailedTitle": "シミュレーションに失敗しました",
+    "simulatePeriodRequired": "シミュレーション対象期間を選択してください。",
+    "builder": {
+      "title": "福利厚生プログラムの新規作成",
+      "editTitle": "福利厚生プログラムの編集",
+      "stepsLabel": "プログラムの手順",
+      "steps": {
+        "offer": "内容",
+        "eligibility": "対象",
+        "value": "金額",
+        "timing": "時期",
+        "controls": "管理",
+        "delivery": "支払い",
+        "review": "確認"
+      },
+      "fields": {
+        "family": "プログラム種別",
+        "code": "プログラムコード",
+        "name": "プログラム名",
+        "description": "説明",
+        "legalEntity": "法人",
+        "currency": "通貨",
+        "valuation": "評価方法",
+        "fixedAmount": "固定額",
+        "percentRate": "料率",
+        "budgetAmount": "プール予算",
+        "metric": "測定元",
+        "metricScope": "測定範囲",
+        "departments": "部門",
+        "projects": "プロジェクト",
+        "capAmount": "受給者あたり上限",
+        "thresholdAmount": "支払い基準額",
+        "effectiveFrom": "有効開始日",
+        "effectiveTo": "有効終了日",
+        "frequency": "頻度",
+        "periodBasis": "期間基準",
+        "paymentDelayDays": "期間末から支払いまでの日数",
+        "allocation": "分配方法",
+        "measuredAccountIds": "測定勘定",
+        "deliveryMethod": "支払い方法",
+        "payComponent": "給与項目",
+        "reason": "変更理由"
+      },
+      "allEntities": "すべての法人",
+      "entityHint": "空欄はプログラムが適用可能なすべての法人を意味します。",
+      "employmentsTruncated": "雇用リストは最初の500名を表示します。メンバー登録は対象の雇用であれば可能です。",
+      "searchDepartments": "部門を検索…",
+      "searchProjects": "プロジェクトを検索…",
+      "searchAccounts": "勘定を検索…",
+      "noDepartments": "対象の部門がありません。",
+      "noProjects": "対象のプロジェクトがありません。",
+      "noAccounts": "対象の転記勘定がありません。",
+      "measuredHint": "測定勘定を指定するのは金額系インセンティブのみです。精算はこれらから算定します。",
+      "payComponentMapsValue": "金額は下の給与項目経由で給与に反映されます。資金リストは不要です。",
+      "chooseComponent": "給与項目を選択",
+      "chooseProgram": "プログラムを選択",
+      "chooseRecipient": "受給者を選択",
+      "chooseBasis": "基準を選択",
+      "basisHint": "精算と給与で四半期の区切りを一致させるため、基準はプログラムの一部です。",
+      "externalHint": "給与システムが税務処理をサポートするまで、正の金額の現物報奨は支給できません。支給する場合は、給与で支払う現金報奨を作成してください。",
+      "reviewTitle": "プログラムの確認",
+      "reviewEmpty": "まだ何も入力されていません。",
+      "reviewHint": "作成は下書きとして保存され、詳細画面でサーバーから読み戻します。",
+      "reasonPlaceholder": "何をなぜ変更したか",
+      "reasonRequired": "変更理由を入力してください。",
+      "fixFields": "強調表示の項目を修正してください。",
+      "createFailed": "プログラムを作成できませんでした。",
+      "create": "プログラムを作成",
+      "saveChanges": "変更を保存",
+      "cancel": "キャンセル",
+      "back": "戻る",
+      "next": "次へ",
+      "amountNoun": "金額"
+    },
+    "awardBuilderTitle": "新規褒賞",
+    "awardFields": {
+      "program": "プログラム",
+      "recipient": "受給者",
+      "periodFrom": "対象期間(自)",
+      "periodTo": "対象期間(至)",
+      "value": "金額",
+      "currency": "通貨",
+      "reason": "理由",
+      "reasonPlaceholder": "この褒賞を付与する理由は?",
+      "recipientNote": "受給者へのメモ",
+      "recordReference": "記録参照番号",
+      "recordReferencePlaceholder": "事業者の確認番号または注文番号",
+      "recordReferenceHint": "外部支払いではこの参照番号を褒賞に記録します。"
+    },
+    "awardCreate": "褒賞を記録",
+    "submitAward": "承認に提出",
+    "approveAward": "承認",
+    "queueAward": "支払い待ちに登録",
+    "payrollDelivery": "給与で支払う",
+    "externalDelivery": "外部支払いを記録",
+    "voidAward": "無効化",
+    "payrollInputLabel": "給与項目",
+    "payrollInputPlaceholder": "既存の給与項目ID",
+    "externalRefLabel": "事業者参照番号",
+    "externalRefPlaceholder": "事業者の確認番号または注文番号",
+    "voidReasonPrompt": "この褒賞を無効にする理由は?",
+    "voidReasonRequired": "無効の理由を入力してください。",
+    "awardTimelineEmpty": "支払い済み・無効の褒賞は履歴を保持します。以降の操作はありません。",
+    "queueRunLabel": "給与計算",
+    "queueRunsLoading": "給与計算を読み込み中…",
+    "queueRunsEmpty": "処理中の給与計算がありません。",
+    "queueRunChoose": "給与計算を選択",
+    "queueRunHint": "キュー登録で給与計算にネイティブ調整が作成されます。",
+    "linkedRunHint": "支払いは保存済みの連携を確認します。",
+    "unlinkedQueueHint": "連携なしでキュー登録済み — 支払い時に指定します。",
+    "runsUnavailable": "給与計算を利用できません。",
+    "validation": {
+      "programCode": "プログラムコードを入力してください。",
+      "programName": "プログラム名を入力してください。",
+      "currency": "USD など、大文字3文字の通貨コードを入力してください。",
+      "effectiveFrom": "有効な開始日を選択してください（YYYY-MM-DD）。",
+      "effectiveTo": "有効な終了日を選択するか、空欄にしてください（YYYY-MM-DD）。",
+      "dateOrder": "終了日は開始日以降にしてください。",
+      "fixedAmount": "受給者ごとの固定額を入力してください。",
+      "percentRate": "測定基準に適用する割合を入力してください。",
+      "budgetAmount": "受給者間で配分する予算を入力してください。",
+      "metric": "インセンティブの測定指標を選択してください。",
+      "scopeIds": "部門またはプロジェクトを1つ以上選択してください。",
+      "sourceAccounts": "基準額を決める勘定科目を選択してください。",
+      "periodBasis": "暦年または会計年度の期間を選択してください。",
+      "payComponent": "給与支給に使用する給与項目を選択してください。",
+      "paymentDelay": "期間末から支給までの整数日数、または0を入力してください。",
+      "awardProgram": "報奨を付与するプログラムを選択してください。",
+      "awardRecipient": "受給者の雇用記録を選択してください。",
+      "periodFrom": "有効な期間開始日を選択してください（YYYY-MM-DD）。",
+      "periodTo": "有効な期間終了日を選択するか、空欄にしてください（YYYY-MM-DD）。",
+      "awardValue": "報奨額を入力してください。",
+      "awardReason": "報奨の理由を記録してください。",
+      "memberEmployment": "メンバーの雇用記録を選択してください。",
+      "membershipFrom": "有効な加入開始日を選択してください（YYYY-MM-DD）。",
+      "legalEntity": "このプログラムの責任法人を選択してください。",
+      "weight": "小数点以下4桁までの正の重みを入力してください。"
+    },
+    "decimal": {
+      "json-number": "{field}：JSON の数値ではなく、小数のテキストを入力してください。",
+      "scale": "{field}：小数点以下は {places} 桁までにしてください。",
+      "separator": "{field}：桁区切りを除き、小数点を使って {value} を入力し直してください。",
+      "decimal-comma": "{field}：小数点を使って {value} を {dotted} と書き直してください。",
+      "ambiguous-comma": "{field}：{value} は {grouped} または {dotted} と解釈できます。桁区切りを除き、小数点を使って意図した値を入力してください。",
+      "currency": "{field}：通貨記号 {symbol} を除き、金額だけ入力してください。",
+      "scientific": "{field}：科学表記ではなく、{value} を通常の小数で完全に記述してください。",
+      "not-a-number": "{field}：読み取れる小数の金額を入力してください。"
+    },
+    "description": "福利厚生、表彰、インセンティブ：明確な資格、管理された承認、給与での支給。"
   }
 }

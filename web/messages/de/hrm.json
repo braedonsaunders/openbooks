@@ -1222,6 +1222,16 @@
       "active": "Aktiv",
       "ended": "Beendet",
       "cancelled": "Storniert"
+    },
+    "workspace": {
+      "tabs": {
+        "overview": "Überblick",
+        "programs": "Programme",
+        "enrollments": "Anmeldungen",
+        "rewards": "Prämien",
+        "incentives": "Anreize",
+        "payouts": "Auszahlungen"
+      }
     }
   },
   "me": {
@@ -1485,7 +1495,19 @@
       "changeDescription": "Ändern Sie ab einem Datum in einem offenen Fenster — die alte Zeile endet am Vortag.",
       "changeReasonPlaceholder": "Warum sich die Deckung ändert",
       "changeSubmit": "Änderung speichern",
-      "changeFailed": "Die Änderung konnte nicht gespeichert werden."
+      "changeFailed": "Die Änderung konnte nicht gespeichert werden.",
+      "awards": {
+        "paidTitle": "Ausgezahlte Prämien",
+        "pendingTitle": "Prämien vor Auszahlung",
+        "hint": "Ausgezahlte Prämien sind bereits im Gehalt enthalten. Offene Prämien sind keine Zahlungen.",
+        "paidEmpty": "Noch keine ausgezahlten Prämien.",
+        "pendingEmpty": "Keine Prämien vor Auszahlung.",
+        "refusalTitle": "Prämien nicht verfügbar",
+        "program": "Programm",
+        "period": "Erarbeiteter Zeitraum",
+        "value": "Wert",
+        "status": "Status"
+      }
     },
     "qualifications": {
       "columns": {
@@ -2356,5 +2378,343 @@
     "biasFlags": "Zu prüfende Sprache",
     "loading": "Entwirft aus den genannten Belegen…",
     "copied": "Kein bearbeitbares Feld hier — der Entwurf wurde in die Zwischenablage kopiert."
+  },
+  "portfolio": {
+    "overviewTitle": "Leistungsportfolio",
+    "programsTitle": "Leistungsprogramme",
+    "rewardsTitle": "Prämien und Zulagen",
+    "incentivesTitle": "Anreizprogramme",
+    "payoutsTitle": "Leistungsauszahlungen",
+    "newProgram": "Neues Programm",
+    "newAward": "Neue Zuwendung",
+    "programsEmptyTitle": "Noch keine Leistungsprogramme",
+    "programsEmptyDescription": "Legen Sie das erste arbeitgeberfinanzierte Programm für Prämien, Zulagen oder Anreize an.",
+    "awardsEmptyTitle": "Noch keine Zuwendungen",
+    "awardsEmptyDescription": "Zuwendungen erscheinen hier, sobald ein Programm sie gewährt.",
+    "loadFailed": "Der Leistungsbereich konnte nicht geladen werden.",
+    "loadFailedTitle": "Leistungen nicht verfügbar",
+    "awardsTruncated": "die ersten 500 werden angezeigt",
+    "totalLabel": "Datensätze insgesamt",
+    "drawerFailedTitle": "Programmdetails unvollständig",
+    "attentionTitle": "Erfordert Aufmerksamkeit",
+    "attentionEmpty": "Nichts erfordert Aufmerksamkeit.",
+    "reportsTitle": "Leistungsberichte",
+    "reportsEmpty": "Keine Leistungsberichte verfügbar.",
+    "reportsFailedTitle": "Berichte nicht verfügbar",
+    "optionsFailedTitle": "Auswahl nicht verfügbar",
+    "vitalsFailedTitle": "Summen unvollständig",
+    "openProgram": "Öffnen",
+    "openAward": "Öffnen",
+    "programActionFailed": "Die Programmänderung ist fehlgeschlagen.",
+    "awardActionFailed": "Die Zuwendungsänderung ist fehlgeschlagen.",
+    "awardCreateFailed": "Die Zuwendung wurde nicht erfasst.",
+    "attention": {
+      "pendingEnrollments": "{count} Anmeldungen warten auf Genehmigung",
+      "pendingAwards": "{count} Zuwendungen warten auf Genehmigung",
+      "queuedAwards": "{count} Zuwendungen warten auf Auszahlung",
+      "draftPrograms": "{count} Programmentwürfe noch nicht aktiv",
+      "missingComponent": "Programm {code} zahlt über die Abrechnung, nennt aber keine Lohnart"
+    },
+    "vitals": {
+      "activePrograms": "Aktive Programme",
+      "openWindows": "Offene Fenster",
+      "pendingApprovals": "Offene Genehmigungen",
+      "queuedPayouts": "Angereihte Auszahlungen",
+      "deliveredTitle": "Ausgezahlt",
+      "awaitingTitle": "Wartet auf Auszahlung",
+      "deliveredEmpty": "Keine ausgezahlten Zuwendungen.",
+      "awaitingEmpty": "Keine Zuwendungen warten auf Auszahlung."
+    },
+    "cardsTitle": "Programmarten",
+    "cards": {
+      "count": "{count} Programme",
+      "health": {
+        "title": "Gesundheit und Versicherung",
+        "description": "Versicherte Kranken-, Zahn-, Seh- und Lebenspläne."
+      },
+      "retirement": {
+        "title": "Altersvorsorge und Sparen",
+        "description": "Betriebliche und private Altersvorsorge."
+      },
+      "allowance": {
+        "title": "Zulagen und Budgets",
+        "description": "Regelmäßige Ausgabenzulagen über die Abrechnung."
+      },
+      "reward": {
+        "title": "Prämien und Anerkennung",
+        "description": "Einmalige Anerkennungsprämien und Geschenkkarten."
+      },
+      "incentive": {
+        "title": "Anreize und Gewinnbeteiligung",
+        "description": "Gemessene Auszahlungen an Mitglieder."
+      },
+      "custom": {
+        "title": "Eigene Programme",
+        "description": "Alles andere, was das Unternehmen gewährt."
+      }
+    },
+    "families": {
+      "reward": "Prämie",
+      "allowance": "Zulage",
+      "incentive": "Anreiz",
+      "custom": "Eigen"
+    },
+    "familyHints": {
+      "reward": "Einmalige Anerkennung: Boni, Geschenkkarten, Spontanprämien.",
+      "allowance": "Regelmäßige Kaufkraft: Essen, Fahrt, Wohlbefinden.",
+      "incentive": "Gemessene Beteiligung: Gewinn, Umsatz oder Stunden mit Abrechnung.",
+      "custom": "Eine Zuwendung, die in keine andere Familie passt."
+    },
+    "valuations": {
+      "fixed": "Festbetrag",
+      "percent": "Prozentsatz der Basis",
+      "pool": "Geteilter Topf"
+    },
+    "metrics": {
+      "revenue": "Umsatz",
+      "gross_profit": "Rohertrag",
+      "net_profit": "Reingewinn",
+      "approved_hours": "Genehmigte Stunden"
+    },
+    "scopes": {
+      "company": "Gesamtes Unternehmen",
+      "department": "Abteilungen",
+      "project": "Projekte"
+    },
+    "allocations": {
+      "equal": "Gleiche Anteile",
+      "hours": "Nach Stunden",
+      "role": "Nach Rollengewicht"
+    },
+    "frequencies": {
+      "monthly": "Monatlich",
+      "quarterly": "Quartalsweise",
+      "annual": "Jährlich",
+      "project_complete": "Bei Projektabschluss",
+      "manual": "Manuell"
+    },
+    "periodBasis": {
+      "calendar": "Kalenderjahr",
+      "fiscal": "Geschäftsjahr"
+    },
+    "delivery": {
+      "payroll": "Über die Abrechnung",
+      "external": "Externer Anbieter"
+    },
+    "programStatus": {
+      "draft": "Entwurf",
+      "active": "Aktiv",
+      "closed": "Geschlossen"
+    },
+    "awardStatus": {
+      "draft": "Entwurf",
+      "pending": "Wartet auf Genehmigung",
+      "approved": "Genehmigt",
+      "queued": "Angereiht zur Auszahlung",
+      "delivered": "Ausgezahlt",
+      "voided": "Storniert"
+    },
+    "columns": {
+      "program": "Programm",
+      "family": "Familie",
+      "value": "Wert",
+      "effective": "Gültig",
+      "status": "Status",
+      "recipient": "Empfänger",
+      "period": "Zeitraum",
+      "currency": "Währung",
+      "externalRef": "Anbieterreferenz",
+      "voidReason": "Stornogrund"
+    },
+    "membersTitle": "Mitglieder",
+    "membersEmpty": "Noch keine Mitglieder.",
+    "members": {
+      "weight": "Gewichtung",
+      "weightPlaceholder": "1",
+      "weightHint": "Anteilsgewicht für Topfaufteilungen; leer bedeutet gleich.",
+      "role": "Rolle",
+      "rolePlaceholder": "Mitwirkender",
+      "roleHint": "Rolle für rollengewichtete Aufteilungen."
+    },
+    "addMember": "Mitglied hinzufügen",
+    "removeMember": "Mitgliedschaft beenden",
+    "removeReasonPrompt": "Warum endet diese Mitgliedschaft?",
+    "removeReasonRequired": "Geben Sie den Grund für das Ende der Mitgliedschaft an.",
+    "sourcesTitle": "Bemessungskonten",
+    "sourcesEmpty": "Keine Bemessungskonten.",
+    "settlementPending": "Die Abrechnung läuft über diese Konten, sobald der Zeitraum schließt.",
+    "activateProgram": "Aktivieren",
+    "closeProgram": "Schließen",
+    "closeReasonLabel": "Warum wird dieses Programm geschlossen?",
+    "editProgram": "Bearbeiten",
+    "reports": {
+      "enrollments": "Leistungsanmeldungen",
+      "inputs": "Leistungsabrechnungspositionen",
+      "awards": "Leistungszuwendungen"
+    },
+    "simulate": {
+      "title": "Abrechnungssimulation",
+      "periodFrom": "Zeitraum von",
+      "periodTo": "Zeitraum bis",
+      "run": "Simulieren",
+      "estimate": "Schätzung: ungebuchte oder ungenehmigte Quellen fallen in diesen Zeitraum, die Abrechnung kann abweichen.",
+      "noRecipients": "Keine auszahlbaren Empfänger für diesen Zeitraum.",
+      "totalHours": "Genehmigte Stunden",
+      "entries": "Quellbuchungen",
+      "revenue": "Umsatz",
+      "expenses": "Aufwendungen",
+      "measured": "Bemessungsbasis",
+      "totalAwarded": "Auszuzahlen insgesamt",
+      "settle": "Zeitraum abrechnen"
+    },
+    "simulateFailedTitle": "Simulation fehlgeschlagen",
+    "simulatePeriodRequired": "Wählen Sie den zu simulierenden Zeitraum.",
+    "builder": {
+      "title": "Neues Leistungsprogramm",
+      "editTitle": "Leistungsprogramm bearbeiten",
+      "stepsLabel": "Programmschritte",
+      "steps": {
+        "offer": "Angebot",
+        "eligibility": "Anspruch",
+        "value": "Wert",
+        "timing": "Termine",
+        "controls": "Steuerung",
+        "delivery": "Auszahlung",
+        "review": "Prüfung"
+      },
+      "fields": {
+        "family": "Programmfamilie",
+        "code": "Programmcode",
+        "name": "Programmname",
+        "description": "Beschreibung",
+        "legalEntity": "Rechtsträger",
+        "currency": "Währung",
+        "valuation": "Bewertung",
+        "fixedAmount": "Festbetrag",
+        "percentRate": "Prozentsatz",
+        "budgetAmount": "Topfbudget",
+        "metric": "Bemessen aus",
+        "metricScope": "Bemessungsumfang",
+        "departments": "Abteilungen",
+        "projects": "Projekte",
+        "capAmount": "Obergrenze je Empfänger",
+        "thresholdAmount": "Auszahlungsschwelle",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "frequency": "Häufigkeit",
+        "periodBasis": "Zeitraumbasis",
+        "paymentDelayDays": "Tage vom Periodenende bis zur Auszahlung",
+        "allocation": "Aufteilung",
+        "measuredAccountIds": "Bemessungskonten",
+        "deliveryMethod": "Auszahlung",
+        "payComponent": "Lohnart",
+        "reason": "Änderungsgrund"
+      },
+      "allEntities": "Alle Träger",
+      "entityHint": "Leer bedeutet jeden Träger, in dem das Programm laufen darf.",
+      "employmentsTruncated": "Die Beschäftigtenliste zeigt die ersten 500 Namen; die Mitgliedschaft akzeptiert jede berechtigte Beschäftigung.",
+      "searchDepartments": "Abteilungen suchen…",
+      "searchProjects": "Projekte suchen…",
+      "searchAccounts": "Konten suchen…",
+      "noDepartments": "Keine Abteilungen im Berechtigungsumfang.",
+      "noProjects": "Keine Projekte im Berechtigungsumfang.",
+      "noAccounts": "Keine Buchungskonten im Berechtigungsumfang.",
+      "measuredHint": "Nur monetäre Anreizkennzahlen nennen Bemessungskonten; die Abrechnung bepreist aus diesen.",
+      "payComponentMapsValue": "Der Wert erreicht die Abrechnung über die Lohnart unten — keine Finanzierungsliste nötig.",
+      "chooseComponent": "Lohnart wählen",
+      "chooseProgram": "Programm wählen",
+      "chooseRecipient": "Empfänger wählen",
+      "chooseBasis": "Basis wählen",
+      "basisHint": "Abrechnung und Lohnabrechnung müssen sich über das Quartal einig sein, daher ist die Basis Teil des Programms.",
+      "externalHint": "Positive Sachprämien können erst ausgegeben werden, wenn die Abrechnung ihre steuerliche Behandlung unterstützt. Erstellen Sie für eine Auszahlung eine Geldprämie über die Abrechnung.",
+      "reviewTitle": "Programm prüfen",
+      "reviewEmpty": "Noch nichts erfasst.",
+      "reviewHint": "Die Anlage landet als Entwurf; die Detailansicht liest ihn vom Server zurück.",
+      "reasonPlaceholder": "Was hat sich geändert und warum",
+      "reasonRequired": "Geben Sie den Grund dieser Änderung an.",
+      "fixFields": "Korrigieren Sie die markierten Felder.",
+      "createFailed": "Das Programm wurde nicht angelegt.",
+      "create": "Programm anlegen",
+      "saveChanges": "Änderungen speichern",
+      "cancel": "Abbrechen",
+      "back": "Zurück",
+      "next": "Weiter",
+      "amountNoun": "Betrag"
+    },
+    "awardBuilderTitle": "Neue Zuwendung",
+    "awardFields": {
+      "program": "Programm",
+      "recipient": "Empfänger",
+      "periodFrom": "Zeitraum von",
+      "periodTo": "Zeitraum bis",
+      "value": "Wert",
+      "currency": "Währung",
+      "reason": "Grund",
+      "reasonPlaceholder": "Warum wird diese Zuwendung gewährt?",
+      "recipientNote": "Hinweis für den Empfänger",
+      "recordReference": "Vorgangsreferenz",
+      "recordReferencePlaceholder": "Anbieterbestätigung oder Bestellnummer",
+      "recordReferenceHint": "Die externe Auszahlung erfasst diese Referenz auf der Zuwendung."
+    },
+    "awardCreate": "Zuwendung erfassen",
+    "submitAward": "Zur Genehmigung einreichen",
+    "approveAward": "Genehmigen",
+    "queueAward": "Zur Auszahlung anreihen",
+    "payrollDelivery": "Über die Abrechnung auszahlen",
+    "externalDelivery": "Externe Auszahlung erfassen",
+    "voidAward": "Stornieren",
+    "payrollInputLabel": "Abrechnungsposition",
+    "payrollInputPlaceholder": "Bestehende Abrechnungspositionsnummer",
+    "externalRefLabel": "Anbieterreferenz",
+    "externalRefPlaceholder": "Anbieterbestätigung oder Bestellnummer",
+    "voidReasonPrompt": "Warum wird diese Zuwendung storniert?",
+    "voidReasonRequired": "Geben Sie den Stornogrund an.",
+    "awardTimelineEmpty": "Ausgezahlte und stornierte Zuwendungen behalten ihren Verlauf; keine weiteren Schritte möglich.",
+    "queueRunLabel": "Abrechnungslauf",
+    "queueRunsLoading": "Läufe werden geladen…",
+    "queueRunsEmpty": "Kein offener Abrechnungslauf.",
+    "queueRunChoose": "Lauf wählen",
+    "queueRunHint": "Die Anreihung legt die native Anpassung auf dem Lauf an.",
+    "linkedRunHint": "Die Auszahlung bestätigt die gespeicherte Laufanbindung.",
+    "unlinkedQueueHint": "Ohne Laufanbindung eingereiht — die Auszahlung nennt sie dann.",
+    "runsUnavailable": "Läufe nicht verfügbar.",
+    "validation": {
+      "programCode": "Geben Sie einen Programmcode ein.",
+      "programName": "Benennen Sie das Programm.",
+      "currency": "Geben Sie einen Währungscode mit 3 Großbuchstaben ein, z. B. USD.",
+      "effectiveFrom": "Wählen Sie ein gültiges Startdatum (JJJJ-MM-TT).",
+      "effectiveTo": "Wählen Sie ein gültiges Enddatum (JJJJ-MM-TT) oder lassen Sie es offen.",
+      "dateOrder": "Das Enddatum muss am oder nach dem Startdatum liegen.",
+      "fixedAmount": "Geben Sie den Festbetrag je Empfänger ein.",
+      "percentRate": "Geben Sie den Prozentsatz für die Bemessungsgrundlage ein.",
+      "budgetAmount": "Geben Sie das gemeinsame Budget ein.",
+      "metric": "Wählen Sie die Bemessung der Prämie.",
+      "scopeIds": "Wählen Sie mindestens eine Abteilung oder ein Projekt.",
+      "sourceAccounts": "Wählen Sie die Konten der Bemessungsgrundlage.",
+      "periodBasis": "Wählen Sie Kalender- oder Geschäftsjahresperioden.",
+      "payComponent": "Wählen Sie die Entgeltkomponente für die Abrechnung.",
+      "paymentDelay": "Geben Sie ganze Tage bis zur Auszahlung ein, oder 0.",
+      "awardProgram": "Wählen Sie das Prämienprogramm.",
+      "awardRecipient": "Wählen Sie das Beschäftigungsverhältnis des Empfängers.",
+      "periodFrom": "Wählen Sie einen gültigen Periodenbeginn (JJJJ-MM-TT).",
+      "periodTo": "Wählen Sie ein gültiges Periodenende (JJJJ-MM-TT) oder lassen Sie es offen.",
+      "awardValue": "Geben Sie den Prämienwert ein.",
+      "awardReason": "Geben Sie den Grund der Prämie an.",
+      "memberEmployment": "Wählen Sie das Beschäftigungsverhältnis des Mitglieds.",
+      "membershipFrom": "Wählen Sie einen gültigen Mitgliedschaftsbeginn (JJJJ-MM-TT).",
+      "legalEntity": "Wählen Sie den verantwortlichen Rechtsträger.",
+      "weight": "Geben Sie ein positives Gewicht mit höchstens 4 Dezimalstellen ein."
+    },
+    "decimal": {
+      "json-number": "{field}: Geben Sie Dezimaltext statt einer JSON-Zahl ein.",
+      "scale": "{field}: Verwenden Sie höchstens {places} Dezimalstellen.",
+      "separator": "{field}: Schreiben Sie {value} ohne Tausendertrennzeichen und mit Dezimalpunkt.",
+      "decimal-comma": "{field}: Schreiben Sie {value} als {dotted}, mit Dezimalpunkt.",
+      "ambiguous-comma": "{field}: {value} könnte {grouped} oder {dotted} bedeuten. Geben Sie den beabsichtigten Wert mit Dezimalpunkt ohne Tausendertrennzeichen ein.",
+      "currency": "{field}: Entfernen Sie das Währungssymbol {symbol}; geben Sie nur den Betrag ein.",
+      "scientific": "{field}: Schreiben Sie {value} vollständig statt in wissenschaftlicher Notation.",
+      "not-a-number": "{field}: Geben Sie einen lesbaren Dezimalbetrag ein."
+    },
+    "description": "Leistungen, Anerkennung und Prämien mit klarer Berechtigung, kontrollierten Genehmigungen und Auszahlung über die Abrechnung."
   }
 }

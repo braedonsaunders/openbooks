@@ -16,3 +16,16 @@ export class BenefitsError extends Error {
     this.code = code;
   }
 }
+
+/** PostgreSQL violations retain their code under a driver's error cause. */
+export function isUniqueViolation(error: unknown): boolean {
+  const visited = new Set<object>();
+  let current = error;
+  while (current !== null && typeof current === "object" && !visited.has(current)) {
+    visited.add(current);
+    const detail = current as { code?: unknown; cause?: unknown };
+    if (detail.code === "23505") return true;
+    current = detail.cause;
+  }
+  return false;
+}

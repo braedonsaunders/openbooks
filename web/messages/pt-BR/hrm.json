@@ -1222,6 +1222,16 @@
       "active": "Ativa",
       "ended": "Encerrada",
       "cancelled": "Cancelada"
+    },
+    "workspace": {
+      "tabs": {
+        "overview": "Visão geral",
+        "programs": "Programas",
+        "enrollments": "Inscrições",
+        "rewards": "Recompensas",
+        "incentives": "Incentivos",
+        "payouts": "Pagamentos"
+      }
     }
   },
   "me": {
@@ -1485,7 +1495,19 @@
       "changeDescription": "Altere a partir de uma data dentro de uma janela aberta — a linha anterior termina no dia anterior.",
       "changeReasonPlaceholder": "Por que a cobertura muda",
       "changeSubmit": "Salvar alteração",
-      "changeFailed": "Não foi possível registrar a alteração."
+      "changeFailed": "Não foi possível registrar a alteração.",
+      "awards": {
+        "paidTitle": "Recompensas pagas",
+        "pendingTitle": "Recompensas aguardando pagamento",
+        "hint": "Recompensas pagas já estão incluídas na folha. Recompensas pendentes não são pagamentos.",
+        "paidEmpty": "Nenhuma recompensa paga.",
+        "pendingEmpty": "Nenhuma recompensa aguardando pagamento.",
+        "refusalTitle": "Recompensas indisponíveis",
+        "program": "Programa",
+        "period": "Período adquirido",
+        "value": "Valor",
+        "status": "Status"
+      }
     },
     "qualifications": {
       "columns": {
@@ -2356,5 +2378,343 @@
     "biasFlags": "Linguagem a revisar",
     "loading": "Redigindo dos registros citados…",
     "copied": "Sem campo editável aqui — o rascunho foi copiado."
+  },
+  "portfolio": {
+    "overviewTitle": "Portfólio de benefícios",
+    "programsTitle": "Programas de benefícios",
+    "rewardsTitle": "Recompensas e auxílios",
+    "incentivesTitle": "Incentivos",
+    "payoutsTitle": "Pagamentos de prêmios",
+    "newProgram": "Novo programa",
+    "newAward": "Novo prêmio",
+    "programsEmptyTitle": "Ainda não há programas de benefícios",
+    "programsEmptyDescription": "Crie o primeiro programa do empregador para conceder recompensas, auxílios ou incentivos.",
+    "awardsEmptyTitle": "Ainda não há prêmios",
+    "awardsEmptyDescription": "Os prêmios aparecem aqui quando um programa os concede.",
+    "loadFailed": "Não foi possível carregar a área de benefícios.",
+    "loadFailedTitle": "Benefícios indisponíveis",
+    "awardsTruncated": "mostrando os primeiros 500",
+    "totalLabel": "Registros totais",
+    "drawerFailedTitle": "Detalhes do programa incompletos",
+    "attentionTitle": "Requer atenção",
+    "attentionEmpty": "Nada requer atenção.",
+    "reportsTitle": "Relatórios de benefícios",
+    "reportsEmpty": "Nenhum relatório de benefícios disponível.",
+    "reportsFailedTitle": "Relatórios indisponíveis",
+    "optionsFailedTitle": "Opções indisponíveis",
+    "vitalsFailedTitle": "Totais incompletos",
+    "openProgram": "Abrir",
+    "openAward": "Abrir",
+    "programActionFailed": "A alteração do programa falhou.",
+    "awardActionFailed": "A alteração do prêmio falhou.",
+    "awardCreateFailed": "O prêmio não foi registrado.",
+    "attention": {
+      "pendingEnrollments": "{count} inscrições aguardando aprovação",
+      "pendingAwards": "{count} prêmios aguardando aprovação",
+      "queuedAwards": "{count} prêmios na fila de pagamento",
+      "draftPrograms": "{count} programas em rascunho ainda inativos",
+      "missingComponent": "O programa {code} paga pela folha mas não nomeia nenhuma verba"
+    },
+    "vitals": {
+      "activePrograms": "Programas ativos",
+      "openWindows": "Janelas abertas",
+      "pendingApprovals": "Aprovações pendentes",
+      "queuedPayouts": "Pagamentos na fila",
+      "deliveredTitle": "Entregues",
+      "awaitingTitle": "Aguardando pagamento",
+      "deliveredEmpty": "Nenhum prêmio entregue.",
+      "awaitingEmpty": "Nenhum prêmio aguardando pagamento."
+    },
+    "cardsTitle": "Tipos de programa",
+    "cards": {
+      "count": "{count} programas",
+      "health": {
+        "title": "Saúde e seguros",
+        "description": "Planos segurados de saúde, odontológico, visão e vida."
+      },
+      "retirement": {
+        "title": "Aposentadoria e poupança",
+        "description": "Planos de previdência e poupança para aposentadoria."
+      },
+      "allowance": {
+        "title": "Auxílios e gastos",
+        "description": "Auxílios periódicos de gasto pagos pela folha."
+      },
+      "reward": {
+        "title": "Recompensas e reconhecimento",
+        "description": "Prêmios únicos de reconhecimento e vales-presente."
+      },
+      "incentive": {
+        "title": "Incentivos e participação",
+        "description": "Pagamentos medidos repartidos entre membros."
+      },
+      "custom": {
+        "title": "Programas personalizados",
+        "description": "Tudo o mais que a organização concede."
+      }
+    },
+    "families": {
+      "reward": "Recompensa",
+      "allowance": "Auxílio",
+      "incentive": "Incentivo",
+      "custom": "Personalizado"
+    },
+    "familyHints": {
+      "reward": "Reconhecimento único: bônus, vales-presente, prêmios espontâneos.",
+      "allowance": "Poder de gasto periódico: refeições, transporte, bem-estar.",
+      "incentive": "Repartição medida: lucro, receita ou horas com liquidação.",
+      "custom": "Uma concessão que não se encaixa em outra família."
+    },
+    "valuations": {
+      "fixed": "Valor fixo",
+      "percent": "Percentual da base",
+      "pool": "Fundo compartilhado"
+    },
+    "metrics": {
+      "revenue": "Receita",
+      "gross_profit": "Lucro bruto",
+      "net_profit": "Lucro líquido",
+      "approved_hours": "Horas aprovadas"
+    },
+    "scopes": {
+      "company": "Empresa toda",
+      "department": "Departamentos",
+      "project": "Projetos"
+    },
+    "allocations": {
+      "equal": "Partes iguais",
+      "hours": "Por horas",
+      "role": "Por peso do papel"
+    },
+    "frequencies": {
+      "monthly": "Mensal",
+      "quarterly": "Trimestral",
+      "annual": "Anual",
+      "project_complete": "Na conclusão do projeto",
+      "manual": "Manual"
+    },
+    "periodBasis": {
+      "calendar": "Ano-calendário",
+      "fiscal": "Ano fiscal"
+    },
+    "delivery": {
+      "payroll": "Pela folha",
+      "external": "Fornecedor externo"
+    },
+    "programStatus": {
+      "draft": "Rascunho",
+      "active": "Ativo",
+      "closed": "Encerrado"
+    },
+    "awardStatus": {
+      "draft": "Rascunho",
+      "pending": "Aguardando aprovação",
+      "approved": "Aprovado",
+      "queued": "Na fila de pagamento",
+      "delivered": "Entregue",
+      "voided": "Anulado"
+    },
+    "columns": {
+      "program": "Programa",
+      "family": "Família",
+      "value": "Valor",
+      "effective": "Vigência",
+      "status": "Situação",
+      "recipient": "Destinatário",
+      "period": "Período",
+      "currency": "Moeda",
+      "externalRef": "Referência do fornecedor",
+      "voidReason": "Motivo de anulação"
+    },
+    "membersTitle": "Membros",
+    "membersEmpty": "Ainda não há membros.",
+    "members": {
+      "weight": "Peso",
+      "weightPlaceholder": "1",
+      "weightHint": "Peso de partilha para fundos; vazio significa igual.",
+      "role": "Papel",
+      "rolePlaceholder": "Colaborador",
+      "roleHint": "Papel usado em repartições ponderadas por papel."
+    },
+    "addMember": "Adicionar membro",
+    "removeMember": "Encerrar participação",
+    "removeReasonPrompt": "Por que esta participação termina?",
+    "removeReasonRequired": "Informe o motivo do fim da participação.",
+    "sourcesTitle": "Contas medidas",
+    "sourcesEmpty": "Sem contas medidas.",
+    "settlementPending": "A liquidação corre sobre estas contas quando o período fecha.",
+    "activateProgram": "Ativar",
+    "closeProgram": "Encerrar",
+    "closeReasonLabel": "Por que este programa é encerrado?",
+    "editProgram": "Editar",
+    "reports": {
+      "enrollments": "Inscrições em benefícios",
+      "inputs": "Verbas de folha de benefícios",
+      "awards": "Prêmios de benefícios"
+    },
+    "simulate": {
+      "title": "Simulação de liquidação",
+      "periodFrom": "Período de",
+      "periodTo": "Período até",
+      "run": "Simular",
+      "estimate": "Estimativa: fontes não contabilizadas ou não aprovadas caem neste período, a liquidação pode diferir.",
+      "noRecipients": "Sem destinatários pagáveis para este período.",
+      "totalHours": "Horas aprovadas",
+      "entries": "Lançamentos fonte",
+      "revenue": "Receita",
+      "expenses": "Despesas",
+      "measured": "Base medida",
+      "totalAwarded": "Total a conceder",
+      "settle": "Liquidar período"
+    },
+    "simulateFailedTitle": "Simulação falhou",
+    "simulatePeriodRequired": "Escolha o período a simular.",
+    "builder": {
+      "title": "Novo programa de benefícios",
+      "editTitle": "Editar programa de benefícios",
+      "stepsLabel": "Etapas do programa",
+      "steps": {
+        "offer": "Oferta",
+        "eligibility": "Elegibilidade",
+        "value": "Valor",
+        "timing": "Prazos",
+        "controls": "Controles",
+        "delivery": "Entrega",
+        "review": "Revisão"
+      },
+      "fields": {
+        "family": "Família do programa",
+        "code": "Código do programa",
+        "name": "Nome do programa",
+        "description": "Descrição",
+        "legalEntity": "Entidade legal",
+        "currency": "Moeda",
+        "valuation": "Avaliação",
+        "fixedAmount": "Valor fixo",
+        "percentRate": "Taxa percentual",
+        "budgetAmount": "Orçamento do fundo",
+        "metric": "Medido a partir de",
+        "metricScope": "Alcance da medição",
+        "departments": "Departamentos",
+        "projects": "Projetos",
+        "capAmount": "Teto por destinatário",
+        "thresholdAmount": "Limite de pagamento",
+        "effectiveFrom": "Vigente de",
+        "effectiveTo": "Vigente até",
+        "frequency": "Frequência",
+        "periodBasis": "Base do período",
+        "paymentDelayDays": "Dias do fim do período ao pagamento",
+        "allocation": "Rateio",
+        "measuredAccountIds": "Contas medidas",
+        "deliveryMethod": "Entrega",
+        "payComponent": "Verba",
+        "reason": "Motivo da alteração"
+      },
+      "allEntities": "Todas as entidades",
+      "entityHint": "Vazio significa cada entidade onde o programa pode operar.",
+      "employmentsTruncated": "A lista de vínculos mostra os primeiros 500 nomes; a participação aceita qualquer vínculo alcançado.",
+      "searchDepartments": "Pesquisar departamentos…",
+      "searchProjects": "Pesquisar projetos…",
+      "searchAccounts": "Pesquisar contas…",
+      "noDepartments": "Sem departamentos ao alcance.",
+      "noProjects": "Sem projetos ao alcance.",
+      "noAccounts": "Sem contas de movimento ao alcance.",
+      "measuredHint": "Só métricas monetárias de incentivos nomeiam contas medidas; a liquidação precifica a partir destas.",
+      "payComponentMapsValue": "O valor chega à folha pela verba abaixo — sem lista de fundos.",
+      "chooseComponent": "Escolha uma verba",
+      "chooseProgram": "Escolha um programa",
+      "chooseRecipient": "Escolha um destinatário",
+      "chooseBasis": "Escolha uma base",
+      "basisHint": "Liquidação e folha precisam concordar no trimestre, por isso a base é parte do programa.",
+      "externalHint": "Recompensas não monetárias positivas não podem ser entregues até que a folha suporte seu tratamento tributário. Crie uma recompensa em dinheiro na folha para efetuar o pagamento.",
+      "reviewTitle": "Revise o programa",
+      "reviewEmpty": "Nada informado ainda.",
+      "reviewHint": "A criação fica em rascunho; o detalhe a relê do servidor.",
+      "reasonPlaceholder": "O que mudou e por quê",
+      "reasonRequired": "Informe o motivo desta alteração.",
+      "fixFields": "Corrija os campos destacados.",
+      "createFailed": "O programa não foi criado.",
+      "create": "Criar programa",
+      "saveChanges": "Salvar alterações",
+      "cancel": "Cancelar",
+      "back": "Voltar",
+      "next": "Avançar",
+      "amountNoun": "Valor"
+    },
+    "awardBuilderTitle": "Novo prêmio",
+    "awardFields": {
+      "program": "Programa",
+      "recipient": "Destinatário",
+      "periodFrom": "Período de",
+      "periodTo": "Período até",
+      "value": "Valor",
+      "currency": "Moeda",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Por que este prêmio é concedido?",
+      "recipientNote": "Nota ao destinatário",
+      "recordReference": "Referência de registro",
+      "recordReferencePlaceholder": "Confirmação do fornecedor ou número do pedido",
+      "recordReferenceHint": "A entrega externa registra esta referência no prêmio."
+    },
+    "awardCreate": "Registrar prêmio",
+    "submitAward": "Enviar para aprovação",
+    "approveAward": "Aprovar",
+    "queueAward": "Por na fila de pagamento",
+    "payrollDelivery": "Pagar pela folha",
+    "externalDelivery": "Registrar entrega externa",
+    "voidAward": "Anular",
+    "payrollInputLabel": "Verba de folha",
+    "payrollInputPlaceholder": "Id da verba de folha existente",
+    "externalRefLabel": "Referência do fornecedor",
+    "externalRefPlaceholder": "Confirmação do fornecedor ou número do pedido",
+    "voidReasonPrompt": "Por que este prêmio é anulado?",
+    "voidReasonRequired": "Informe o motivo da anulação.",
+    "awardTimelineEmpty": "Prêmios entregues e anulados mantêm seu histórico; não se aplicam mais movimentos.",
+    "queueRunLabel": "Folha",
+    "queueRunsLoading": "Carregando folhas…",
+    "queueRunsEmpty": "Sem folhas abertas.",
+    "queueRunChoose": "Escolha uma folha",
+    "queueRunHint": "A fila cria o ajuste nativo na folha.",
+    "linkedRunHint": "O pagamento confirma o vínculo guardado.",
+    "unlinkedQueueHint": "Na fila sem vínculo — o pagamento o nomeará.",
+    "runsUnavailable": "Folhas indisponíveis.",
+    "validation": {
+      "programCode": "Insira um código de programa.",
+      "programName": "Nomeie o programa.",
+      "currency": "Insira uma moeda com 3 letras maiúsculas, por exemplo USD.",
+      "effectiveFrom": "Escolha uma data inicial válida (AAAA-MM-DD).",
+      "effectiveTo": "Escolha uma data final válida (AAAA-MM-DD) ou deixe em aberto.",
+      "dateOrder": "A data final deve ser igual ou posterior à inicial.",
+      "fixedAmount": "Insira o valor fixo por beneficiário.",
+      "percentRate": "Insira o percentual aplicado à base medida.",
+      "budgetAmount": "Insira o orçamento compartilhado entre beneficiários.",
+      "metric": "Escolha a medida do incentivo.",
+      "scopeIds": "Selecione pelo menos um departamento ou projeto.",
+      "sourceAccounts": "Selecione as contas que determinam a base.",
+      "periodBasis": "Escolha períodos civis ou fiscais.",
+      "payComponent": "Selecione o componente salarial usado na folha.",
+      "paymentDelay": "Insira dias inteiros até o pagamento, ou 0.",
+      "awardProgram": "Escolha o programa que concede a recompensa.",
+      "awardRecipient": "Escolha o vínculo do beneficiário.",
+      "periodFrom": "Escolha um início de período válido (AAAA-MM-DD).",
+      "periodTo": "Escolha um fim de período válido (AAAA-MM-DD) ou deixe em aberto.",
+      "awardValue": "Insira o valor da recompensa.",
+      "awardReason": "Informe o motivo da recompensa.",
+      "memberEmployment": "Escolha o vínculo do membro.",
+      "membershipFrom": "Escolha um início de participação válido (AAAA-MM-DD).",
+      "legalEntity": "Escolha a entidade jurídica responsável pelo programa.",
+      "weight": "Insira um peso positivo com até 4 casas decimais."
+    },
+    "decimal": {
+      "json-number": "{field}: insira texto decimal, não um número JSON.",
+      "scale": "{field}: use no máximo {places} casas decimais.",
+      "separator": "{field}: reescreva {value} sem separadores de milhar, com ponto decimal.",
+      "decimal-comma": "{field}: reescreva {value} como {dotted}, com ponto decimal.",
+      "ambiguous-comma": "{field}: {value} pode significar {grouped} ou {dotted}. Digite o valor desejado com ponto decimal e sem separadores de milhar.",
+      "currency": "{field}: remova o símbolo {symbol}; insira somente o valor.",
+      "scientific": "{field}: escreva {value} por inteiro, sem notação científica.",
+      "not-a-number": "{field}: insira um valor decimal legível."
+    },
+    "description": "Benefícios, reconhecimento e incentivos com elegibilidade clara, aprovações controladas e pagamento na folha."
   }
 }

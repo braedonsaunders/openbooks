@@ -20,10 +20,15 @@ const hrmCatalog = JSON.parse(
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
+    // The server-only marker gates RSC bundling; shim it so server modules
+    // load under the plain runner (same seam as other unit suites).
+    if (specifier === "server-only") {
+      return { url: "data:text/javascript,export {}", shortCircuit: true };
+    }
     const parent = context.parentURL ?? "";
     const owned =
       parent.endsWith("/web/lib/hrm/benefits.ts") ||
+      parent.endsWith("/web/lib/hrm/benefits-workspace.ts") ||
       parent.endsWith("/web/lib/hrm/workspace-tabs.ts") ||
       parent.endsWith("/web/lib/hrm/change-requests.ts") || parent.endsWith("/web/lib/scoped-options.ts");
     if (owned && specifier === "next-intl/server") {
@@ -93,6 +98,31 @@ registerHooks({
         url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
       };
     }
+    if (owned && specifier === "../money-server") {
+      // Request-stack boundary (locale + org currency via server-only):
+      // the stub formats canonically so loader labels stay deterministic.
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export const getMoneyFormatter = async () => ({ money: (value, opts) => value + ' ' + (opts && opts.currency ? opts.currency : '') });`,
+          ),
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/hrm/benefits") {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,' + encodeURIComponent(`
+        export async function listBenefitPrograms() { const s = globalThis.__portfolioReads; if (s?.programsError) throw new Error(s.programsError); return { programs: s?.programs ?? [] } }
+        export async function listBenefitAwards() { const s = globalThis.__portfolioReads; if (s?.awardsError) throw new Error(s.awardsError); return { awards: s?.awards ?? [] } }
+        export async function listProgramMemberships() { return [] }
+        export async function listProgramSources() { const s = globalThis.__portfolioReads; if (s?.sourcesError) throw new Error(s.sourcesError); return s?.sources ?? [] }
+        export async function previewIncentiveSettlement() { throw new Error('Simulation was not requested') }
+      `) }
+    }
+    if (owned && specifier === './benefits-reports') {
+      return { shortCircuit: true, url: 'data:text/javascript,export async function loadBenefitsReportLinks() { return [] }' }
+    }
     if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
       return {
         shortCircuit: true,
@@ -123,7 +153,7 @@ registerHooks({
           ),
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (owned && (specifier === "@openbooks/engine/src/platform/db.ts" || specifier === "@openbooks/engine/platform/database")) {
       return {
         shortCircuit: true,
         format: "module",
@@ -233,3 +263,45 @@ test("the benefits copy ships with translated statuses in every section", () => 
     );
   }
 });
+
+const { loadBenefitsPortfolio } = await import('../../../../lib/hrm/benefits-workspace.ts')
+const lookupCatalog = (key: string): string => {
+  const value = key.split('.').reduce((node: any, part) => node?.[part], hrmCatalog)
+  return typeof value === 'string' ? value : key
+}
+const portfolioCatalog = Object.assign(lookupCatalog, { has: (key: string) => lookupCatalog(key) !== key })
+
+test('loaded portfolio keeps all rows searchable beyond 500 and totals exact values', async () => {
+  gap.__portfolioReads = { programs: [], awards: Array.from({ length: 501 }, (_, index) => ({
+    id: `award-${index}`, programId: 'program', employmentId: 'employment', value: '0.01', currency: 'USD', status: 'approved',
+  })) }
+  const data = await loadBenefitsPortfolio(HR_BENEFITS, {}, { openCount: 0, pendingEnrollments: 0 }, portfolioCatalog)
+  assert.equal(data.awards.length, 501)
+  assert.equal(data.awardsTotal, 501)
+  assert.equal(data.awardsTruncated, false)
+  assert.equal(data.vitals.awaitingByCurrency[0]?.amount, '5.0100')
+  assert.equal(data.canQueue, false, 'HR manage cannot release finance payouts')
+  gap.__portfolioReads = undefined
+})
+
+test('refused source read travels into the edit refusal and never implies a cleared set', async () => {
+  gap.__portfolioReads = { programs: [], awards: [], sourcesError: 'Select an account in this legal entity before editing.' }
+  const data = await loadBenefitsPortfolio(HR_BENEFITS, { program: 'program', edit: '1' }, { openCount: 0, pendingEnrollments: 0 }, portfolioCatalog)
+  assert.equal(data.editSourcesRefusal?.message, 'Select an account in this legal entity before editing.')
+  assert.equal(data.optionsRefusal?.message, data.editSourcesRefusal?.message)
+  gap.__portfolioReads = undefined
+})
+
+const { benefitsSpec } = await import('./view.ts')
+test('Benefits header has one primary create action and windows use the native registered list', async () => {
+  gap.__portfolioReads = undefined
+  stubReads([], [])
+  const data = await loadBenefits(HR_BENEFITS, { view: 'windows' })
+  const spec = benefitsSpec(data)
+  const header = spec.header?.find((block: any) => block.kind === 'page-header') as any
+  assert.ok(header)
+  const creates = header.actions.filter((action: any) => action.widget === 'link-button' || action.name === 'link-button')
+  assert.equal(creates.length, 1)
+  const serialized = JSON.stringify(spec)
+  assert.ok(serialized.includes('hrm_benefits_windows'), 'window rows retain the shared registry identity')
+})

@@ -3064,6 +3064,26 @@
         "title": "客户商品编号",
         "singular": "客户商品编号",
         "description": "将客户专用商品代码映射到其订购商品。"
+      },
+      "benefit-programs": {
+        "title": "福利项目",
+        "singularTitle": "福利项目",
+        "description": "雇主设定的奖励、津贴、激励和自定义项目，含类型化规则、资金来源和成员。健康与退休仍使用原有计划。"
+      },
+      "benefit-program-scopes": {
+        "title": "项目范围",
+        "singularTitle": "项目范围",
+        "description": "按租户键解析的部门与项目范围。全公司范围无需行。"
+      },
+      "benefit-program-sources": {
+        "title": "项目资金来源",
+        "singularTitle": "项目资金来源",
+        "description": "按项目的资金来源账户，类型化子表。"
+      },
+      "benefit-program-members": {
+        "title": "项目成员",
+        "singularTitle": "项目成员",
+        "description": "按有效期、权重和角色将雇佣关系绑定到项目。"
       }
     },
     "fields": {
@@ -3594,7 +3614,18 @@
       "aiRailsRetroThreshold": "标记达到此金额的追溯（默认 500）。",
       "aiRailsCohort": "按子公司、部门、发薪周期或职级分组员工。",
       "aiRailsBiasTerms": "组织设定的词语和短语，逐词精确标记，每行一条。",
-      "aiRailsReviewMonths": "评审周期（月，1–36）；逾期能力会通知 setup 收件箱。"
+      "aiRailsReviewMonths": "评审周期（月，1–36）；逾期能力会通知 setup 收件箱。",
+      "benefitProgramFamily": "奖励、津贴、激励或自定义。健康与退休仍使用原有计划。",
+      "benefitProgramDescription": "用通俗语言说明本项目支付什么、为什么支付。",
+      "benefitProgramEntity": "负责的法律实体。激活前必填。",
+      "benefitProgramComponent": "支付金额的应得项目。工资发放和应税外部金额必填。",
+      "benefitDeliveryMethod": "工资通过工资输入发放；外部记录提供方参考号。",
+      "benefitValuation": "固定付金额，比例付费率，总额分预算。",
+      "benefitMetric": "激励衡量：营收、毛利、净利或批准工时。",
+      "benefitMetricScope": "公司衡量整个组织；部门与项目指定范围行。",
+      "benefitAllocation": "平均均分；工时按时间加权；角色按成员角色加权。",
+      "benefitFrequency": "衡量频率：按月、按季、按年、项目完成或手动。",
+      "benefitPeriodBasis": "按季和按年项目注明日历或财年期间。"
     },
     "options": {
       "usageAggregation": {
@@ -4121,6 +4152,53 @@
         "upc": "UPC",
         "ean": "EAN",
         "internal": "内部"
+      },
+      "benefitProgramFamily": {
+        "reward": "奖励",
+        "allowance": "津贴",
+        "incentive": "激励",
+        "custom": "自定义"
+      },
+      "benefitProgramStatus": {
+        "draft": "草稿",
+        "active": "生效",
+        "closed": "关闭"
+      },
+      "benefitDeliveryMethod": {
+        "payroll": "工资",
+        "external": "外部"
+      },
+      "benefitValuation": {
+        "fixed": "固定",
+        "percent": "比例",
+        "pool": "总额"
+      },
+      "benefitMetric": {
+        "revenue": "营收",
+        "gross_profit": "毛利",
+        "net_profit": "净利",
+        "approved_hours": "批准工时"
+      },
+      "benefitMetricScope": {
+        "company": "公司",
+        "department": "部门",
+        "project": "项目"
+      },
+      "benefitAllocation": {
+        "equal": "平均",
+        "hours": "工时",
+        "role": "角色"
+      },
+      "benefitFrequency": {
+        "monthly": "按月",
+        "quarterly": "按季",
+        "annual": "按年",
+        "project_complete": "项目完成",
+        "manual": "手动"
+      },
+      "benefitPeriodBasis": {
+        "calendar": "日历",
+        "fiscal": "财年"
       }
     },
     "payroll": {
@@ -4901,7 +4979,9 @@
       "holidayElection": "法定假日选项",
       "holidayCompanyDay": "公司假日",
       "benefitCosts": "费用与分摊",
-      "benefitComponents": "工资组成部分"
+      "benefitComponents": "工资组成部分",
+      "benefitDelivery": "发放",
+      "benefitRules": "规则"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"

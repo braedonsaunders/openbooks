@@ -3019,6 +3019,26 @@
         "title": "Références client",
         "singular": "Référence client",
         "description": "Codes produit propres au client associés aux articles commandés."
+      },
+      "benefit-programs": {
+        "title": "Programmes primes",
+        "singularTitle": "Programme prime",
+        "description": "Primes, indemnités, intéressements et programmes propres définis par l’employeur, avec règles typées, financement et adhésion. Santé et retraite restent sur les régimes."
+      },
+      "benefit-program-scopes": {
+        "title": "Périmètre programme",
+        "singularTitle": "Périmètre programme",
+        "description": "Services et projets mesurés, résolus par clés de dossier. Le périmètre société ne porte aucune ligne."
+      },
+      "benefit-program-sources": {
+        "title": "Sources programme",
+        "singularTitle": "Source programme",
+        "description": "Comptes de financement par programme, en table enfant typée."
+      },
+      "benefit-program-members": {
+        "title": "Membres programme",
+        "singularTitle": "Membre programme",
+        "description": "Emplois rattachés au programme sur des dates d’effet, avec poids et rôle pour la répartition."
       }
     },
     "fields": {
@@ -3549,7 +3569,18 @@
       "aiRailsRetroThreshold": "Signale les rétroactifs dès ce montant (500 par défaut).",
       "aiRailsCohort": "Regroupe les salariés par filiale, service, calendrier ou niveau.",
       "aiRailsBiasTerms": "Mots et tournures de l'organisation signalés au mot près, un par ligne.",
-      "aiRailsReviewMonths": "Cadence en mois (1–36) ; les capacités en retard notifient la boîte setup."
+      "aiRailsReviewMonths": "Cadence en mois (1–36) ; les capacités en retard notifient la boîte setup.",
+      "benefitProgramFamily": "Prime, indemnité, intéressement ou propre. Santé et retraite restent sur les régimes.",
+      "benefitProgramDescription": "Ce que ce programme verse et pourquoi, en langage clair.",
+      "benefitProgramEntity": "Entité juridique responsable. Requise avant activation.",
+      "benefitProgramComponent": "Composante de gain versant la valeur. Requise pour la paie et la valeur externe taxable.",
+      "benefitDeliveryMethod": "La paie verse par les entrées de paie ; l’externe enregistre la référence du prestataire.",
+      "benefitValuation": "Le fixe verse un montant, le pourcentage un taux, l’enveloppe partage un budget.",
+      "benefitMetric": "Grandeur mesurée : chiffre d’affaires, marge brute, résultat net ou heures approuvées.",
+      "benefitMetricScope": "La société mesure l’organisation ; service et projet nomment leurs lignes de périmètre.",
+      "benefitAllocation": "Égal partage à parts égales ; heures pondère par le temps ; rôle par le rôle.",
+      "benefitFrequency": "Fréquence de mesure : mensuelle, trimestrielle, annuelle, fin de projet ou manuelle.",
+      "benefitPeriodBasis": "Les programmes trimestriels et annuels nomment périodes de calendrier ou d’exercice."
     },
     "options": {
       "usageAggregation": {
@@ -4076,6 +4107,53 @@
         "upc": "UPC",
         "ean": "EAN",
         "internal": "Interne"
+      },
+      "benefitProgramFamily": {
+        "reward": "Prime",
+        "allowance": "Indemnité",
+        "incentive": "Intéressement",
+        "custom": "Propre"
+      },
+      "benefitProgramStatus": {
+        "draft": "Brouillon",
+        "active": "Actif",
+        "closed": "Clôturé"
+      },
+      "benefitDeliveryMethod": {
+        "payroll": "Paie",
+        "external": "Externe"
+      },
+      "benefitValuation": {
+        "fixed": "Fixe",
+        "percent": "Pourcentage",
+        "pool": "Enveloppe"
+      },
+      "benefitMetric": {
+        "revenue": "Chiffre d’affaires",
+        "gross_profit": "Marge brute",
+        "net_profit": "Résultat net",
+        "approved_hours": "Heures approuvées"
+      },
+      "benefitMetricScope": {
+        "company": "Société",
+        "department": "Service",
+        "project": "Projet"
+      },
+      "benefitAllocation": {
+        "equal": "Égal",
+        "hours": "Heures",
+        "role": "Rôle"
+      },
+      "benefitFrequency": {
+        "monthly": "Mensuelle",
+        "quarterly": "Trimestrielle",
+        "annual": "Annuelle",
+        "project_complete": "Fin de projet",
+        "manual": "Manuelle"
+      },
+      "benefitPeriodBasis": {
+        "calendar": "Calendrier",
+        "fiscal": "Exercice"
       }
     },
     "laborCosting": {
@@ -4973,7 +5051,9 @@
       "holidayCompanyDay": "Jour férié d’entreprise",
       "holidayElection": "Option sur un jour férié légal",
       "benefitCosts": "Coûts et prorata",
-      "benefitComponents": "Composantes de paie"
+      "benefitComponents": "Composantes de paie",
+      "benefitDelivery": "Versement",
+      "benefitRules": "Règles"
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
