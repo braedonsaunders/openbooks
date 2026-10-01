@@ -25,18 +25,29 @@ export function resolveWidgetProps(
  * widget entirely — that is how a spec expresses the native pages' conditional
  * `{x ? <Button/> : null}` without gaining a conditional operator.
  */
-export function WidgetSlot({ widgets, scope }: { widgets: WidgetRef[] | undefined; scope: unknown }) {
+export function WidgetSlot({
+  widgets,
+  scope,
+}: {
+  widgets: WidgetRef[] | undefined
+  scope: unknown
+}) {
   if (!widgets || widgets.length === 0) return null
   return (
     <>
       {widgets.map((ref, index) => {
         if (ref.when && !resolvePath(scope, ref.when.$)) return null
         const renderer = WIDGET_REGISTRY[ref.widget]
-        if (!renderer) throw new UnknownWidgetError(`unknown widget: ${ref.widget}`)
+        if (!renderer)
+          throw new UnknownWidgetError(`unknown widget: ${ref.widget}`)
         // A Fragment, not a wrapper element: the native pages place these
         // widgets as direct children of the slot, and any real element here
         // (even display:contents) is markup the native render does not have.
-        return <Fragment key={`${ref.widget}-${index}`}>{renderer(resolveWidgetProps(ref.props, scope))}</Fragment>
+        return (
+          <Fragment key={`${ref.widget}-${index}`}>
+            {renderer(resolveWidgetProps(ref.props, scope), scope)}
+          </Fragment>
+        )
       })}
     </>
   )
@@ -47,12 +58,14 @@ export function WidgetBlockView({
   name,
   props,
   scope,
+  searchParams,
 }: {
   name: string
   props: Record<string, unknown>
   scope: unknown
+  searchParams?: Record<string, string | string[] | undefined>
 }) {
   const renderer = WIDGET_REGISTRY[name]
   if (!renderer) throw new UnknownWidgetError(`unknown widget: ${name}`)
-  return <>{renderer(resolveWidgetProps(props, scope))}</>
+  return <>{renderer(resolveWidgetProps(props, scope), scope, searchParams)}</>
 }

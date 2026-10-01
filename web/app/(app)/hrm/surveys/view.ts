@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
@@ -10,7 +11,6 @@ import {
   link,
   page,
   pageHeader,
-  table,
   text,
   widget,
   widgetBlock,
@@ -45,7 +45,11 @@ export function surveysSpec(data: SurveysPageData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
-          widget('link-button', { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' }, f('canManage')),
+          widget(
+            'link-button',
+            { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
+            f('canManage'),
+          ),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -60,7 +64,7 @@ export function surveysSpec(data: SurveysPageData): PageSpec {
           allLabel: data.allLabel,
           options: data.segmentOptions,
         }),
-        table({
+        registeredListTable('hrm_surveys', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
@@ -69,9 +73,19 @@ export function surveysSpec(data: SurveysPageData): PageSpec {
             column(data.columns.name, link(item('name'), item('href'))),
             column(data.columns.kind, text(item('kindLabel'))),
             column(data.columns.anonymity, text(item('anonymityLabel'))),
-            column(data.columns.participation, text(item('participation'), { fallback: '—' }), { align: 'right', className: 'tabular-nums' }),
-            column(data.columns.closes, text(item('closes'), { fallback: '—' })),
-            column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              data.columns.participation,
+              text(item('participation'), { fallback: '—' }),
+              { align: 'right', className: 'tabular-nums' },
+            ),
+            column(
+              data.columns.closes,
+              text(item('closes'), { fallback: '—' }),
+            ),
+            column(
+              data.columns.status,
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
           ],
         }),
       ]),

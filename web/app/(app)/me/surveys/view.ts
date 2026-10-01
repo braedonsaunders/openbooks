@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
@@ -8,14 +9,16 @@ import {
   grid,
   page,
   pageHeader,
-  table,
   text,
   widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { loadMeSurveysHome, meSurveysAuthz } from '../../../../lib/hrm/me-surveys'
+import {
+  loadMeSurveysHome,
+  meSurveysAuthz,
+} from '../../../../lib/hrm/me-surveys'
 
 /**
  * Me open surveys: unanswered invitations with the respond link.
@@ -52,20 +55,26 @@ export function meSurveysSpec(data: MeSurveysPageData): PageSpec {
         f('refusal'),
       ),
       grid('flex h-full min-h-0 flex-col gap-4', [
-        table({
+        registeredListTable('me_surveys', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
           empty: { title: f('empty') },
           columns: [
             column(data.columns.name, text(item('name'))),
-            column(data.columns.closes, text(item('closes'), { fallback: '—' })),
-            column('', widgetCell('hrm-me-survey-respond', {
-              invitationId: item('id'),
-              respondLabel: data.respondLabel,
-              actionFailed: data.actionFailed,
-              reissueFailed: data.reissueFailed,
-            })),
+            column(
+              data.columns.closes,
+              text(item('closes'), { fallback: '—' }),
+            ),
+            column(
+              '',
+              widgetCell('hrm-me-survey-respond', {
+                invitationId: item('id'),
+                respondLabel: data.respondLabel,
+                actionFailed: data.actionFailed,
+                reissueFailed: data.reissueFailed,
+              }),
+            ),
           ],
         }),
       ]),

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -10,7 +11,6 @@ import {
   page,
   pageHeader,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
@@ -18,7 +18,10 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadProcessesPage, type ProcessesPageData } from '../../../../lib/hrm/processes-page'
+import {
+  loadProcessesPage,
+  type ProcessesPageData,
+} from '../../../../lib/hrm/processes-page'
 
 /**
  * Process checklists — the /hrm sibling tab for employment starts, ends,
@@ -86,15 +89,21 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
         // No panel around the table. The page is already titled "Process
         // checklists"; a card headed "Checklists" under it names the same
         // thing twice and buys a second border for it.
-        table({
+        registeredListTable('hrm_processes', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
           empty: { title: f('empty') },
           columns: [
-            column(data.columns.employee, link(item('workerName'), item('href'))),
+            column(
+              data.columns.employee,
+              link(item('workerName'), item('href')),
+            ),
             column(data.columns.kind, text(item('kindLabel'))),
-            column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              data.columns.status,
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
             column(data.columns.effective, text(item('effectiveDate')), {
               className: 'tabular-nums',
             }),
@@ -109,10 +118,14 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
               }),
               { align: 'right', className: 'tabular-nums' },
             ),
-            column(data.columns.nextDue, text(item('nextDueOn'), { fallback: '—' }), {
-              align: 'right',
-              className: 'tabular-nums',
-            }),
+            column(
+              data.columns.nextDue,
+              text(item('nextDueOn'), { fallback: '—' }),
+              {
+                align: 'right',
+                className: 'tabular-nums',
+              },
+            ),
           ],
         }),
       ]),
@@ -134,7 +147,9 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
   })
 }
 
-export async function loadProcessesRoute(sp: Record<string, string | undefined>): Promise<ProcessesPageData> {
+export async function loadProcessesRoute(
+  sp: Record<string, string | undefined>,
+): Promise<ProcessesPageData> {
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('hrm.process.read')

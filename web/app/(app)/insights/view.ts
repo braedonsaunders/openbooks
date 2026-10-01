@@ -1,20 +1,20 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getFormatter, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { allowedSources, getSource } from '@openbooks/analytics'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
   grid,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -25,7 +25,12 @@ import { insightVisibilitySql } from '@/lib/insight-access'
 import { UNTITLED_CARD_NAME } from '@/lib/insight-untitled'
 import { can, requirePermission } from '../../../lib/authz'
 import { featureEnabled, orgFeatureState } from '../../../lib/features'
-import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  isUuid,
+  parseListParams,
+  pickString,
+} from '../../../lib/list-params'
 import { loadCard } from '../../api/insights/_lib'
 import { VIZ_META } from './viz-meta'
 
@@ -109,7 +114,10 @@ export async function loadInsights(
     allowedSorts: ['name', 'updated'] as const,
   })
   const statusParam = pickString(sp.status)
-  const status = statusParam === 'draft' || statusParam === 'published' ? statusParam : undefined
+  const status =
+    statusParam === 'draft' || statusParam === 'published'
+      ? statusParam
+      : undefined
 
   const visibility = insightVisibilitySql(authz)
   const where = sql`org_id = ${orgId} and ${visibility}
@@ -135,8 +143,11 @@ export async function loadInsights(
   const filteredTotal =
     params.q || status
       ? Number(
-          (await db.execute<{ n: string }>(sql`select count(*) as n from insight_cards where ${where}`))
-            .rows[0]!.n,
+          (
+            await db.execute<{ n: string }>(
+              sql`select count(*) as n from insight_cards where ${where}`,
+            )
+          ).rows[0]!.n,
         )
       : total
 
@@ -145,7 +156,8 @@ export async function loadInsights(
   // explicit Save POSTs /api/insights/cards. Create requires the create
   // grant, mirroring the New button's visibility.
   const isCreate = cardId === 'new' && canCreate
-  const openCard = cardId && !isCreate && isUuid(cardId) ? await loadCard(cardId, orgId) : null
+  const openCard =
+    cardId && !isCreate && isUuid(cardId) ? await loadCard(cardId, orgId) : null
 
   return {
     title: t('title'),
@@ -153,8 +165,16 @@ export async function loadInsights(
     searchPlaceholder: t('cards.searchPlaceholder'),
     statusLabel: tCommon('labels.status'),
     statusOptions: [
-      { value: 'draft', label: tCommon('status.draft'), count: Number(c.drafts) },
-      { value: 'published', label: t('status.published'), count: Number(c.published) },
+      {
+        value: 'draft',
+        label: tCommon('status.draft'),
+        count: Number(c.drafts),
+      },
+      {
+        value: 'published',
+        label: t('status.published'),
+        count: Number(c.published),
+      },
     ],
     currentParams: sp,
     emptyTitle: t('cards.emptyTitle'),
@@ -184,9 +204,14 @@ export async function loadInsights(
         source: source ? tCatalog(`catalog.entities.${source.key}.label`) : '—',
         vizType: String(row.viz_type),
         vizLabel: viz ? t(viz.labelKey) : String(row.viz_type),
-        statusLabel: row.status === 'published' ? t('status.published') : tCommon('status.draft'),
+        statusLabel:
+          row.status === 'published'
+            ? t('status.published')
+            : tCommon('status.draft'),
         statusVariant: row.status === 'published' ? 'success' : 'outline',
-        updated: format.dateTime(new Date(String(row.updated_at)), { dateStyle: 'medium' }),
+        updated: format.dateTime(new Date(String(row.updated_at)), {
+          dateStyle: 'medium',
+        }),
       }
     }),
     total: filteredTotal,
@@ -290,7 +315,7 @@ export function insightsSpec(data: InsightsData): PageSpec {
         when: f('isFilteredEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('insights', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
@@ -305,13 +330,24 @@ export function insightsSpec(data: InsightsData): PageSpec {
               }),
               { sort: 'name', className: 'font-semibold' },
             ),
-            column(rootF('columnSource'), text(item('source')), { className: MUTED }),
+            column(rootF('columnSource'), text(item('source')), {
+              className: MUTED,
+            }),
             column(
               rootF('columnChart'),
-              widgetCell('viz-cell', { vizType: item('vizType'), label: item('vizLabel') }),
+              widgetCell('viz-cell', {
+                vizType: item('vizType'),
+                label: item('vizLabel'),
+              }),
             ),
-            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-            column(rootF('columnUpdated'), text(item('updated')), { sort: 'updated', className: MUTED }),
+            column(
+              rootF('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
+            column(rootF('columnUpdated'), text(item('updated')), {
+              sort: 'updated',
+              className: MUTED,
+            }),
           ],
         }),
         when: f('hasRows'),

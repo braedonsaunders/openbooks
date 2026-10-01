@@ -1,21 +1,21 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import {
+  pagination,
   badge,
   column,
   field,
   grid,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -114,7 +114,11 @@ export async function loadFlows(
   const orgId = authz.user.orgId
   const t = await getTranslations('admin.flows')
   const tHub = await getTranslations('admin.hub')
-  const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 50 })
+  const params = parseListParams(sp, {
+    sort: 'name',
+    allowedSorts: ['name'] as const,
+    perPage: 50,
+  })
   const subject = pickString(sp.subject)
 
   const where = sql`f.org_id = ${orgId}
@@ -122,7 +126,7 @@ export async function loadFlows(
     ${params.q ? sql` and f.name ilike ${'%' + params.q + '%'}` : sql``}`
 
   const [flows, subjects, totalRow] = await Promise.all([
-    (db.execute<FlowDbRow>(sql`
+    db.execute<FlowDbRow>(sql`
       select f.id, f.name, f.subject_kind, f.enabled, ${documentRevisionSql(sql`f.updated_at`)} as updated_at,
              jsonb_array_length(f.graph->'nodes') as node_count,
              lr.status as last_run_status, lr.started_at as last_run_at
@@ -134,16 +138,21 @@ export async function loadFlows(
        where ${where}
        order by f.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `)),
-    (db.execute<{ subject_kind: string; n: string }>(sql`
+    `),
+    db.execute<{ subject_kind: string; n: string }>(sql`
       select subject_kind, count(*) as n from flows f
-       where f.org_id = ${orgId} group by 1 order by 1`)),
-    db.execute<{ n: string }>(sql`select count(*) as n from flows f where ${where}`),
+       where f.org_id = ${orgId} group by 1 order by 1`),
+    db.execute<{ n: string }>(
+      sql`select count(*) as n from flows f where ${where}`,
+    ),
   ])
 
   const tSubjects = await getTranslations('customization.recordTypes')
   const subjectLabel = new Map(
-    listFlowSubjectProfiles().map((p) => [p.subjectKind, p.labelKey ? p.labelKey : p.label]),
+    listFlowSubjectProfiles().map((p) => [
+      p.subjectKind,
+      p.labelKey ? p.labelKey : p.label,
+    ]),
   )
   const subjectName = (kind: string) => {
     const key = subjectLabel.get(kind) ?? kind
@@ -181,14 +190,16 @@ export async function loadFlows(
       subjectKind: String(f.subject_kind),
       subjectLabel: subjectName(String(f.subject_kind)),
       nodeCount: String(f.node_count),
-      lastRunStatus: f.last_run_status != null ? String(f.last_run_status) : null,
+      lastRunStatus:
+        f.last_run_status != null ? String(f.last_run_status) : null,
       lastRunVariant: RUN_BADGE[String(f.last_run_status)] ?? 'outline',
       lastRunAt: f.last_run_at ? dateTime(f.last_run_at) : null,
       neverRanLabel: t('neverRan'),
       updatedAt: dateTime(f.updated_at),
       enabled: Boolean(f.enabled),
       enabledLabel: f.enabled ? t('statusEnabled') : t('statusDisabled'),
-      enabledVariant: (f.enabled ? 'success' : 'outline') as 'success' | 'outline',
+      enabledVariant: (f.enabled ? 'success' : 'outline') as
+        'success' | 'outline',
       rowActions: {
         id: String(f.id),
         name: String(f.name),
@@ -243,7 +254,7 @@ export function flowsSpec(data: FlowsData): PageSpec {
         when: f('isEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('admin_flows', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
@@ -255,7 +266,10 @@ export function flowsSpec(data: FlowsData): PageSpec {
                 href: item('href'),
               }),
             ),
-            column(rootF('columnSubject'), badge(item('subjectLabel'), { variant: 'secondary' })),
+            column(
+              rootF('columnSubject'),
+              badge(item('subjectLabel'), { variant: 'secondary' }),
+            ),
             column(rootF('columnNodes'), text(item('nodeCount')), {
               align: 'right',
               className: 'tabular-nums',

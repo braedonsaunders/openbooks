@@ -1,10 +1,12 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -12,24 +14,35 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { isUuid, parseListParams, pickString } from '../../../../lib/list-params'
+import {
+  isUuid,
+  parseListParams,
+  pickString,
+} from '../../../../lib/list-params'
 import { can, getAuthz } from '../../../../lib/authz'
-import { RECORD_TYPES, RECORD_TYPE_BY_KEY, customFieldTargetFor, defaultFormLayout, type FormLayoutConfig } from '@openbooks/customization'
+import {
+  RECORD_TYPES,
+  RECORD_TYPE_BY_KEY,
+  customFieldTargetFor,
+  defaultFormLayout,
+  type FormLayoutConfig,
+} from '@openbooks/customization'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import type { ComponentProps } from 'react'
 import type { FormDesigner } from './FormDesigner'
 import type { ListViewDesigner } from './ListViewDesigner'
 import { disabledRecordTypes } from '../../../../lib/customization/gates'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
+import {
+  isFeatureEnabled,
+  subsidiaryFeatureEnabled,
+} from '../../../../lib/features'
 
 /**
  * Record customization (forms + list views), split into a loader and a spec.
@@ -171,12 +184,13 @@ export async function loadCustomization(
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const canManageOrg = can(authz, 'admin.customization.manage')
-  const [subsidiaryUiEnabled, inventoryEnabled, crmEnabled, hrmEnabled] = await Promise.all([
-    subsidiaryFeatureEnabled(authz.user.orgId),
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-    isFeatureEnabled(authz.user.orgId, 'crm'),
-    isFeatureEnabled(authz.user.orgId, 'hrm'),
-  ])
+  const [subsidiaryUiEnabled, inventoryEnabled, crmEnabled, hrmEnabled] =
+    await Promise.all([
+      subsidiaryFeatureEnabled(authz.user.orgId),
+      isFeatureEnabled(authz.user.orgId, 'inventory'),
+      isFeatureEnabled(authz.user.orgId, 'crm'),
+      isFeatureEnabled(authz.user.orgId, 'hrm'),
+    ])
   const t = await getTranslations('customization')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
@@ -185,68 +199,101 @@ export async function loadCustomization(
   // Optional-module kinds 404 when their Features switch is off; stored
   // layouts stay in the database and reappear when the switch comes back.
   const requestedType = pickString(sp.recordType)
-  const catalogType = requestedType && Object.hasOwn(RECORD_TYPE_BY_KEY, requestedType) ? requestedType : null
+  const catalogType =
+    requestedType && Object.hasOwn(RECORD_TYPE_BY_KEY, requestedType)
+      ? requestedType
+      : null
   const hiddenKinds = new Set(await disabledRecordTypes(authz.user.orgId))
   if (catalogType && hiddenKinds.has(catalogType)) notFound()
   const recordType = catalogType
   const visibleTypes = RECORD_TYPES.filter((rt) => !hiddenKinds.has(rt.key))
   // The registry may eventually include list-only entities; every built-in
   // transaction kind currently exposes a configurable form.
-  const supportsForms = canManageOrg && (!recordType || RECORD_TYPE_BY_KEY[recordType]?.supportsForms !== false)
-  const tab = !supportsForms ? 'views' : pickString(sp.tab) === 'views' ? 'views' : 'forms'
+  const supportsForms =
+    canManageOrg &&
+    (!recordType || RECORD_TYPE_BY_KEY[recordType]?.supportsForms !== false)
+  const tab = !supportsForms
+    ? 'views'
+    : pickString(sp.tab) === 'views'
+      ? 'views'
+      : 'forms'
   const requestedFormId = canManageOrg ? pickString(sp.form) : undefined
   const formId =
-    requestedFormId === 'new' || (requestedFormId != null && isUuid(requestedFormId))
+    requestedFormId === 'new' ||
+    (requestedFormId != null && isUuid(requestedFormId))
       ? requestedFormId
       : undefined
   const requestedViewId = pickString(sp.view)
   const viewId =
-    requestedViewId === 'new' || (requestedViewId != null && isUuid(requestedViewId))
+    requestedViewId === 'new' ||
+    (requestedViewId != null && isUuid(requestedViewId))
       ? requestedViewId
       : undefined
-  const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 100 })
+  const params = parseListParams(sp, {
+    sort: 'name',
+    allowedSorts: ['name'] as const,
+    perPage: 100,
+  })
 
   const hiddenList = [...hiddenKinds]
-  const hiddenFilter = hiddenList.length === 0
-    ? sql`true`
-    : sql`record_type not in (${sql.join(hiddenList.map((k) => sql`${k}`), sql`, `)})`
-  const typeFilter = recordType ? sql`record_type = ${recordType}` : hiddenFilter
+  const hiddenFilter =
+    hiddenList.length === 0
+      ? sql`true`
+      : sql`record_type not in (${sql.join(
+          hiddenList.map((k) => sql`${k}`),
+          sql`, `,
+        )})`
+  const typeFilter = recordType
+    ? sql`record_type = ${recordType}`
+    : hiddenFilter
   const searchFilter = params.q ? sql`name ilike ${`%${params.q}%`}` : sql`true`
   const [forms, views, formCount, viewCount] = await Promise.all([
-    canManageOrg ? (db.execute(sql`
+    canManageOrg
+      ? db.execute(sql`
       select id, name, record_type as "recordType", is_default as "isDefault",
              is_active as "isActive", allowed_roles as "allowedRoles"
         from form_layouts
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
        order by record_type, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `)) : Promise.resolve({ rows: [] }),
-    (db.execute(sql`
+    `)
+      : Promise.resolve({ rows: [] }),
+    db.execute(sql`
       select id, name, record_type as "recordType", scope, is_default as "isDefault", is_active as "isActive"
         from list_views
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
          and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}
        order by record_type, scope asc, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `)),
-    canManageOrg ? (db.execute(sql`
+    `),
+    canManageOrg
+      ? db.execute(sql`
       select count(*) as n from form_layouts
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
-    `)) : Promise.resolve({ rows: [{ n: 0 }] }),
-    (db.execute(sql`
+    `)
+      : Promise.resolve({ rows: [{ n: 0 }] }),
+    db.execute(sql`
       select count(*) as n from list_views
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
          and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}
-    `)),
+    `),
   ])
 
   const openForm =
     formId && formId !== 'new' && isUuid(formId)
-      ? ((await db.execute(sql`select id, name, description, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles", layout, record_type as "recordType" from form_layouts where id = ${formId} and org_id = ${authz.user.orgId}`)) as unknown as { rows: FormDesignerDef[] }).rows[0] ?? null
+      ? ((
+          (await db.execute(
+            sql`select id, name, description, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles", layout, record_type as "recordType" from form_layouts where id = ${formId} and org_id = ${authz.user.orgId}`,
+          )) as unknown as { rows: FormDesignerDef[] }
+        ).rows[0] ?? null)
       : null
   const openView =
     viewId && viewId !== 'new' && isUuid(viewId)
-      ? ((await db.execute(sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`)) as unknown as { rows: ListViewDesignerDef[] }).rows[0] ?? null
+      ? ((
+          (await db.execute(
+            sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`,
+          )) as unknown as { rows: ListViewDesignerDef[] }
+        ).rows[0] ?? null)
       : null
   if (formId && formId !== 'new' && isUuid(formId) && !openForm) notFound()
   if (viewId && viewId !== 'new' && isUuid(viewId) && !openView) notFound()
@@ -263,10 +310,23 @@ export async function loadCustomization(
   let duplicateFrom: { name: string; layout: FormLayoutConfig } | null = null
   if (recordType && formId === 'new' && fromParam) {
     if (fromParam === 'standard') {
-      duplicateFrom = { name: t('designer.forms.copyName', { name: t('designer.forms.standardName', { type: typeLabel }) }), layout: defaultFormLayout(recordType) }
+      duplicateFrom = {
+        name: t('designer.forms.copyName', {
+          name: t('designer.forms.standardName', { type: typeLabel }),
+        }),
+        layout: defaultFormLayout(recordType),
+      }
     } else if (isUuid(fromParam)) {
-      const src = ((await db.execute(sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`)) as unknown as { rows: FormCopySqlRow[] }).rows[0]
-      if (src) duplicateFrom = { name: t('designer.forms.copyName', { name: src.name }), layout: src.layout as FormLayoutConfig }
+      const src = (
+        (await db.execute(
+          sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`,
+        )) as unknown as { rows: FormCopySqlRow[] }
+      ).rows[0]
+      if (src)
+        duplicateFrom = {
+          name: t('designer.forms.copyName', { name: src.name }),
+          layout: src.layout as FormLayoutConfig,
+        }
     }
   }
 
@@ -276,86 +336,139 @@ export async function loadCustomization(
   // kind and have no line grid. An entity type with no custom-field storage
   // (null header table) gets no header palette: its rows have no custom column,
   // so offering fields — least of all another table's — would store nothing.
-  const designerRecordType = openForm?.recordType ?? openView?.recordType ?? recordType
-  const cfTarget = designerRecordType ? customFieldTargetFor(designerRecordType) : null
-  const [designerHeaderDefs, designerLineDefs] = (formId || viewId) && designerRecordType && cfTarget
-    ? await Promise.all([
-        cfTarget.table ? loadFieldDefs(cfTarget.table, cfTarget.kind) : Promise.resolve([]),
-        cfTarget.lineTable ? loadFieldDefs(cfTarget.lineTable, cfTarget.lineKind) : Promise.resolve([]),
-      ])
-    : [null, null]
-  const viewShowInList = (designerHeaderDefs ?? []).filter((d) => d.config.showInList)
-  const listFilterOptions: Record<string, { value: string; label: string }[]> = {}
+  const designerRecordType =
+    openForm?.recordType ?? openView?.recordType ?? recordType
+  const cfTarget = designerRecordType
+    ? customFieldTargetFor(designerRecordType)
+    : null
+  const [designerHeaderDefs, designerLineDefs] =
+    (formId || viewId) && designerRecordType && cfTarget
+      ? await Promise.all([
+          cfTarget.table
+            ? loadFieldDefs(cfTarget.table, cfTarget.kind)
+            : Promise.resolve([]),
+          cfTarget.lineTable
+            ? loadFieldDefs(cfTarget.lineTable, cfTarget.lineKind)
+            : Promise.resolve([]),
+        ])
+      : [null, null]
+  const viewShowInList = (designerHeaderDefs ?? []).filter(
+    (d) => d.config.showInList,
+  )
+  const listFilterOptions: Record<string, { value: string; label: string }[]> =
+    {}
   if (viewId && designerRecordType) {
-    const entityFilters = RECORD_TYPE_BY_KEY[designerRecordType]?.listFilters.filter((filter) => filter.entitySource) ?? []
-    await Promise.all(entityFilters.map(async (filter) => {
-      let result: FilterOptionResult | null = null
-      switch (filter.entitySource) {
-        case 'crm_opportunity_status':
-          result = await db.execute(sql`select id::text as value, name as label from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence, name`)
-          break
-        // One account list spans the lifecycle, so its sub-status picker
-        // offers every stage's statuses, grouped by stage in the drop-down's
-        // order rather than split across two per-stage sources.
-        case 'crm_account_status':
-          result = await db.execute(sql`select id::text as value, name as label from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage, sequence, name`)
-          break
-        case 'crm_sales_territory':
-          result = await db.execute(sql`select id::text as value, name as label from crm_sales_territories where org_id=${authz.user.orgId} and is_active order by priority, name`)
-          break
-        case 'user':
-          result = await db.execute(sql`select id::text as value, name as label from users where org_id=${authz.user.orgId} and is_active order by name`)
-          break
-        case 'customer':
-          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join customer_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
-          break
-        case 'vendor':
-          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join vendor_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
-          break
-        case 'employee':
-          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join employee_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
-          break
-        case 'project':
-          result = await db.execute(sql`select id::text as value, concat_ws(' · ', code, name) as label from projects where org_id=${authz.user.orgId} and is_active order by name`)
-          break
-        case 'asset_category':
-          result = await db.execute(sql`select id::text as value, name as label from asset_categories where org_id=${authz.user.orgId} and is_active order by name`)
-          break
-        case 'account':
-          result = await db.execute(sql`select id::text as value, concat_ws(' · ', number, name) as label from accounts where org_id=${authz.user.orgId} and is_active order by number nulls last, name`)
-          break
-        case 'bank_account':
-          result = await db.execute(sql`select id::text as value, concat_ws(' · ', number, name) as label from accounts where org_id=${authz.user.orgId} and is_active and not is_summary and reconcilable order by number nulls last, name`)
-          break
-        case 'item':
-          result = await db.execute(sql`select id::text as value, concat_ws(' · ', code, name) as label from items where org_id=${authz.user.orgId} and is_active order by name`)
-          break
-        case 'stock_location':
-          result = await db.execute(sql`select id::text as value, concat_ws(' · ', code, name) as label from stock_locations where org_id=${authz.user.orgId} and is_active order by code`)
-          break
-        case 'accounting_book':
-          result = await db.execute(sql`select id::text as value, name as label from accounting_books where org_id=${authz.user.orgId} and is_active order by name`)
-          break
-        case 'equipment_item':
-          result = await db.execute(sql`select id::text as value, concat_ws(' · ', code, name) as label from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`)
-          break
-        case 'pay_schedule':
-          result = await db.execute(sql`select id::text as value, name as label from pay_schedules where org_id=${authz.user.orgId} and is_active order by name`)
-          break
-        case 'warehouse':
-          result = await db.execute(sql`select w.stock_location_id::text as value, concat_ws(' · ', sl.code, w.name) as label from warehouses w join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id where w.org_id=${authz.user.orgId} order by sl.code`)
-          break
-        case 'fixed_asset':
-          result = await db.execute(sql`select id::text as value, concat_ws(' · ', asset_number, name) as label from fixed_assets where org_id=${authz.user.orgId} order by asset_number`)
-          break
-      }
-      if (result) listFilterOptions[filter.key] = result.rows
-    }))
+    const entityFilters =
+      RECORD_TYPE_BY_KEY[designerRecordType]?.listFilters.filter(
+        (filter) => filter.entitySource,
+      ) ?? []
+    await Promise.all(
+      entityFilters.map(async (filter) => {
+        let result: FilterOptionResult | null = null
+        switch (filter.entitySource) {
+          case 'crm_opportunity_status':
+            result = await db.execute(
+              sql`select id::text as value, name as label from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence, name`,
+            )
+            break
+          // One account list spans the lifecycle, so its sub-status picker
+          // offers every stage's statuses, grouped by stage in the drop-down's
+          // order rather than split across two per-stage sources.
+          case 'crm_account_status':
+            result = await db.execute(
+              sql`select id::text as value, name as label from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage, sequence, name`,
+            )
+            break
+          case 'crm_sales_territory':
+            result = await db.execute(
+              sql`select id::text as value, name as label from crm_sales_territories where org_id=${authz.user.orgId} and is_active order by priority, name`,
+            )
+            break
+          case 'user':
+            result = await db.execute(
+              sql`select id::text as value, name as label from users where org_id=${authz.user.orgId} and is_active order by name`,
+            )
+            break
+          case 'customer':
+            result = await db.execute(
+              sql`select p.id::text as value, p.display_name as label from parties p join customer_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`,
+            )
+            break
+          case 'vendor':
+            result = await db.execute(
+              sql`select p.id::text as value, p.display_name as label from parties p join vendor_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`,
+            )
+            break
+          case 'employee':
+            result = await db.execute(
+              sql`select p.id::text as value, p.display_name as label from parties p join employee_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`,
+            )
+            break
+          case 'project':
+            result = await db.execute(
+              sql`select id::text as value, concat_ws(' · ', code, name) as label from projects where org_id=${authz.user.orgId} and is_active order by name`,
+            )
+            break
+          case 'asset_category':
+            result = await db.execute(
+              sql`select id::text as value, name as label from asset_categories where org_id=${authz.user.orgId} and is_active order by name`,
+            )
+            break
+          case 'account':
+            result = await db.execute(
+              sql`select id::text as value, concat_ws(' · ', number, name) as label from accounts where org_id=${authz.user.orgId} and is_active order by number nulls last, name`,
+            )
+            break
+          case 'bank_account':
+            result = await db.execute(
+              sql`select id::text as value, concat_ws(' · ', number, name) as label from accounts where org_id=${authz.user.orgId} and is_active and not is_summary and reconcilable order by number nulls last, name`,
+            )
+            break
+          case 'item':
+            result = await db.execute(
+              sql`select id::text as value, concat_ws(' · ', code, name) as label from items where org_id=${authz.user.orgId} and is_active order by name`,
+            )
+            break
+          case 'stock_location':
+            result = await db.execute(
+              sql`select id::text as value, concat_ws(' · ', code, name) as label from stock_locations where org_id=${authz.user.orgId} and is_active order by code`,
+            )
+            break
+          case 'accounting_book':
+            result = await db.execute(
+              sql`select id::text as value, name as label from accounting_books where org_id=${authz.user.orgId} and is_active order by name`,
+            )
+            break
+          case 'equipment_item':
+            result = await db.execute(
+              sql`select id::text as value, concat_ws(' · ', code, name) as label from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`,
+            )
+            break
+          case 'pay_schedule':
+            result = await db.execute(
+              sql`select id::text as value, name as label from pay_schedules where org_id=${authz.user.orgId} and is_active order by name`,
+            )
+            break
+          case 'warehouse':
+            result = await db.execute(
+              sql`select w.stock_location_id::text as value, concat_ws(' · ', sl.code, w.name) as label from warehouses w join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id where w.org_id=${authz.user.orgId} order by sl.code`,
+            )
+            break
+          case 'fixed_asset':
+            result = await db.execute(
+              sql`select id::text as value, concat_ws(' · ', asset_number, name) as label from fixed_assets where org_id=${authz.user.orgId} order by asset_number`,
+            )
+            break
+        }
+        if (result) listFilterOptions[filter.key] = result.rows
+      }),
+    )
   }
 
-  const tabHref = (t2: 'forms' | 'views') => recordType
-    ? `/admin/customization?recordType=${recordType}&tab=${t2}`
-    : `/admin/customization?tab=${t2}`
+  const tabHref = (t2: 'forms' | 'views') =>
+    recordType
+      ? `/admin/customization?recordType=${recordType}&tab=${t2}`
+      : `/admin/customization?tab=${t2}`
   const totalForms = Number(formCount.rows[0]?.n ?? 0)
   const totalViews = Number(viewCount.rows[0]?.n ?? 0)
 
@@ -392,7 +505,8 @@ export async function loadCustomization(
     emptyTitle: t('designer.list.newTitle'),
     emptyDescription: t('designer.description'),
     emptyActionName: recordType ? 'new-view' : '',
-    columnName: tab === 'forms' ? t('designer.forms.name') : t('designer.list.name'),
+    columnName:
+      tab === 'forms' ? t('designer.forms.name') : t('designer.list.name'),
     columnType: tCommon('labels.type'),
     columnStatus: tCommon('labels.status'),
     columnDefault: t('views.defaultBadge'),
@@ -403,11 +517,16 @@ export async function loadCustomization(
       name: f.name,
       href: `/admin/customization?recordType=${f.recordType}&tab=forms&form=${f.id}`,
       typeLabel: recordTypeLabel(f.recordType),
-      statusLabel: f.isActive ? tCommon('labels.active') : tCommon('labels.inactive'),
+      statusLabel: f.isActive
+        ? tCommon('labels.active')
+        : tCommon('labels.inactive'),
       statusVariant: f.isActive ? 'success' : 'outline',
       showDefaultBadge: f.isDefault,
       defaultLabel: t('designer.forms.isDefault'),
-      rolesLabel: f.allowedRoles && f.allowedRoles.length ? f.allowedRoles.join(', ') : '',
+      rolesLabel:
+        f.allowedRoles && f.allowedRoles.length
+          ? f.allowedRoles.join(', ')
+          : '',
       duplicateHref: `/admin/customization?recordType=${f.recordType}&tab=forms&form=new&from=${f.id}`,
       duplicateLabel: t('designer.forms.duplicate'),
     })),
@@ -416,11 +535,16 @@ export async function loadCustomization(
       name: v.name,
       href: `/admin/customization?recordType=${v.recordType}&tab=views&view=${v.id}`,
       typeLabel: recordTypeLabel(v.recordType),
-      scopeLabel: v.scope === 'org' ? t('designer.list.scopeOrg') : t('designer.list.scopeUser'),
+      scopeLabel:
+        v.scope === 'org'
+          ? t('designer.list.scopeOrg')
+          : t('designer.list.scopeUser'),
       scopeVariant: v.scope === 'org' ? 'default' : 'secondary',
       showDefaultBadge: v.isDefault,
       defaultLabel: t('designer.list.isDefault'),
-      statusLabel: v.isActive ? tCommon('labels.active') : tCommon('labels.inactive'),
+      statusLabel: v.isActive
+        ? tCommon('labels.active')
+        : tCommon('labels.inactive'),
       statusVariant: v.isActive ? 'success' : 'outline',
     })),
     totalForms,
@@ -431,18 +555,25 @@ export async function loadCustomization(
     perPage: params.perPage,
     formDrawerOpen: Boolean(formId && designerRecordType),
     formDrawerRecordType: designerRecordType ?? '',
-    formDrawerKey: formId === 'new' ? `new:${fromParam ?? ''}` : `edit:${formId ?? ''}`,
-    formDrawerDef: (openForm as unknown as Record<string, unknown> | null) ?? null,
-    formDrawerHeaderDefs: (designerHeaderDefs as unknown as Record<string, unknown>[] | null) ?? null,
-    formDrawerLineDefs: (designerLineDefs as unknown as Record<string, unknown>[] | null) ?? null,
+    formDrawerKey:
+      formId === 'new' ? `new:${fromParam ?? ''}` : `edit:${formId ?? ''}`,
+    formDrawerDef:
+      (openForm as unknown as Record<string, unknown> | null) ?? null,
+    formDrawerHeaderDefs:
+      (designerHeaderDefs as unknown as Record<string, unknown>[] | null) ??
+      null,
+    formDrawerLineDefs:
+      (designerLineDefs as unknown as Record<string, unknown>[] | null) ?? null,
     formDrawerDuplicateFrom: duplicateFrom,
     subsidiaryEnabled: subsidiaryUiEnabled,
     viewDrawerOpen: Boolean(viewId && designerRecordType),
     viewDrawerRecordType: designerRecordType ?? '',
-    viewDrawerDef: (openView as unknown as Record<string, unknown> | null) ?? null,
+    viewDrawerDef:
+      (openView as unknown as Record<string, unknown> | null) ?? null,
     viewDrawerCanManage: canManageOrg,
     viewDrawerUserId: authz.user.id,
-    viewDrawerShowInListDefs: (viewShowInList as unknown as Record<string, unknown>[]) ?? [],
+    viewDrawerShowInListDefs:
+      (viewShowInList as unknown as Record<string, unknown>[]) ?? [],
     viewDrawerFilterOptions: listFilterOptions,
     inventoryEnabled,
     crmEnabled,
@@ -467,9 +598,20 @@ export function customizationSpec(data: CustomizationData): PageSpec {
           description: f('description'),
           back: { href: f('backHref'), label: f('backLabel') },
           actions: [
-            widget('docs-link-button', { href: data.docsHref, label: data.docsLabel }),
-            widget('new-form', { recordType: data.newFormRecordType }, f('showNewForm')),
-            widget('new-view', { recordType: data.newViewRecordType }, f('showNewView')),
+            widget('docs-link-button', {
+              href: data.docsHref,
+              label: data.docsLabel,
+            }),
+            widget(
+              'new-form',
+              { recordType: data.newFormRecordType },
+              f('showNewForm'),
+            ),
+            widget(
+              'new-view',
+              { recordType: data.newViewRecordType },
+              f('showNewView'),
+            ),
           ],
         }),
         when: f('showBack'),
@@ -479,9 +621,20 @@ export function customizationSpec(data: CustomizationData): PageSpec {
           title: f('title'),
           description: f('description'),
           actions: [
-            widget('docs-link-button', { href: data.docsHref, label: data.docsLabel }),
-            widget('new-form', { recordType: data.newFormRecordType }, f('showNewForm')),
-            widget('new-view', { recordType: data.newViewRecordType }, f('showNewView')),
+            widget('docs-link-button', {
+              href: data.docsHref,
+              label: data.docsLabel,
+            }),
+            widget(
+              'new-form',
+              { recordType: data.newFormRecordType },
+              f('showNewForm'),
+            ),
+            widget(
+              'new-view',
+              { recordType: data.newViewRecordType },
+              f('showNewView'),
+            ),
           ],
         }),
         when: f('hideBack'),
@@ -507,14 +660,20 @@ export function customizationSpec(data: CustomizationData): PageSpec {
     ],
     body: [
       {
-        ...table({
+        ...registeredListTable('admin_customization_form_rows', {
           variant: 'app',
           rows: f('formRows'),
           rowKey: item('id'),
           columns: [
             column(rootF('columnName'), link(item('name'), item('href'), LINK)),
-            column(rootF('columnType'), badge(item('typeLabel'), { variant: 'secondary' })),
-            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              rootF('columnType'),
+              badge(item('typeLabel'), { variant: 'secondary' }),
+            ),
+            column(
+              rootF('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
             column(
               rootF('columnDefault'),
               widgetCell('form-default-cell', {
@@ -523,9 +682,13 @@ export function customizationSpec(data: CustomizationData): PageSpec {
                 rolesLabel: item('rolesLabel'),
               }),
             ),
-            column(rootF('columnActions'), link(item('duplicateLabel'), item('duplicateHref'), SMALL_LINK), {
-              align: 'right',
-            }),
+            column(
+              rootF('columnActions'),
+              link(item('duplicateLabel'), item('duplicateHref'), SMALL_LINK),
+              {
+                align: 'right',
+              },
+            ),
           ],
         }),
         when: f('showFormsTable'),
@@ -540,13 +703,16 @@ export function customizationSpec(data: CustomizationData): PageSpec {
         when: f('showViewsEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('admin_customization_view_rows', {
           variant: 'app',
           rows: f('viewRows'),
           rowKey: item('id'),
           columns: [
             column(rootF('columnName'), link(item('name'), item('href'), LINK)),
-            column(rootF('columnType'), badge(item('typeLabel'), { variant: 'secondary' })),
+            column(
+              rootF('columnType'),
+              badge(item('typeLabel'), { variant: 'secondary' }),
+            ),
             column(
               rootF('columnScope'),
               widgetCell('view-scope-cell', {
@@ -556,7 +722,10 @@ export function customizationSpec(data: CustomizationData): PageSpec {
                 defaultLabel: item('defaultLabel'),
               }),
             ),
-            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              rootF('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
           ],
         }),
         when: f('showViewsTable'),

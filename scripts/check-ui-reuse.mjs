@@ -48,6 +48,7 @@ const SELF = "scripts/check-ui-reuse.mjs";
 const ALLOWLIST_PATH = "scripts/check-ui-reuse.allowlist.json";
 const DOC_SOURCES_PATH = "web/lib/list/sources.ts";
 const ENTITY_SOURCES_PATH = "web/lib/list/entity-sources.ts";
+const PREPARED_SOURCES_PATH = "web/lib/list/prepared-sources.ts";
 
 /**
  * The allow-lists may only SHRINK. These are the counts at the gate-first
@@ -203,7 +204,9 @@ export function extractRegistryKeys(sourcesText, entitySourcesText) {
 }
 
 export function loadRegisteredKeys(readFile = (file) => readFileSync(join(repoRoot(), file), "utf8")) {
-  return extractRegistryKeys(readFile(DOC_SOURCES_PATH), readFile(ENTITY_SOURCES_PATH));
+  const keys = extractRegistryKeys(readFile(DOC_SOURCES_PATH), readFile(ENTITY_SOURCES_PATH));
+  const prepared = extractRegistryKeys(readFile(PREPARED_SOURCES_PATH), readFile(PREPARED_SOURCES_PATH));
+  return new Set([...keys, ...prepared]);
 }
 
 /** All violations in one file of comment/string-blanked source. */

@@ -1,9 +1,11 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -11,10 +13,8 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -23,11 +23,23 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { buildListDrawerHref, isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  isUuid,
+  mergeHref,
+  parseListParams,
+  pickString,
+} from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
-import { loadComplianceClasses, loadVendorComplianceClass } from '../../../lib/compliance'
-import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import {
+  loadComplianceClasses,
+  loadVendorComplianceClass,
+} from '../../../lib/compliance'
+import {
+  subsidiaryUiOptions,
+  subsidiaryVisibleFilter,
+} from '../../../lib/subsidiaries'
 import { listScopedAccountOptions } from '../../../lib/scoped-options'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import type { PartyDrawer, PartyTab } from './PartyDrawer'
@@ -160,7 +172,8 @@ export async function loadParties(
   // row. The loader ships pickers plus an empty payload; opening writes
   // nothing, Cancel writes nothing, and the drawer's explicit Save is the
   // single idempotent POST. Gated on manage like the draft flow was.
-  const creating = (pickString(sp.partyNew) === '1' || partyId === 'new') && canManage
+  const creating =
+    (pickString(sp.partyNew) === '1' || partyId === 'new') && canManage
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
@@ -187,7 +200,9 @@ export async function loadParties(
   })
   const roleParam = pickString(sp.role)
   const role =
-    roleParam === 'customer' || roleParam === 'vendor' || roleParam === 'employee'
+    roleParam === 'customer' ||
+    roleParam === 'vendor' ||
+    roleParam === 'employee'
       ? roleParam
       : undefined
   const showInactive = pickString(sp.showInactive) === 'true'
@@ -245,7 +260,14 @@ export async function loadParties(
         )
       : total
 
-  const [openParty, pickers, payrollEnabled, multiCurrency, crmEnabled, complianceEnabled] = await Promise.all([
+  const [
+    openParty,
+    pickers,
+    payrollEnabled,
+    multiCurrency,
+    crmEnabled,
+    complianceEnabled,
+  ] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
       : null,
@@ -263,18 +285,29 @@ export async function loadParties(
           loadFieldDefs('parties'),
           subsidiaryUiOptions(orgId).then((options) =>
             authz.allowedSubsidiaryIds
-              ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+              ? options.filter((option) =>
+                  authz.allowedSubsidiaryIds!.has(option.id),
+                )
               : options,
           ),
-          listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({
-            rows: rows.map(({ id, name, type, number }) => ({ id, name, type, label: [number, name].filter(Boolean).join(' · ') })),
+          listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, {
+            activeOnly: true,
+            postingOnly: true,
+          }).then((rows) => ({
+            rows: rows.map(({ id, name, type, number }) => ({
+              id,
+              name,
+              type,
+              label: [number, name].filter(Boolean).join(' · '),
+            })),
           })),
           db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(
             sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`,
           ),
           db.execute<ElementOf<PartyDrawerProps['salesReps']>>(
             sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active
-            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`),
+            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`,
+          ),
           loadWorkerCompGroups(orgId),
         ])
       : null,
@@ -336,7 +369,12 @@ export async function loadParties(
     addresses: [],
     contacts: [],
     bankAccounts: [],
-    transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] },
+    transactionSummary: {
+      count: 0,
+      openCount: 0,
+      lastDate: null,
+      currencies: [],
+    },
     additionalSubsidiaryIds: [],
   }
   const closeHref = mergeHref('/parties', sp, {
@@ -353,7 +391,9 @@ export async function loadParties(
     (openParty || creating) && pickers
       ? {
           remountKey: creating ? 'new-party' : String(openParty!.party.id),
-          payload: (creating ? newPartyPayload : openParty) as unknown as PartyDrawerProps['payload'],
+          payload: (creating
+            ? newPartyPayload
+            : openParty) as unknown as PartyDrawerProps['payload'],
           paymentTerms: pickers[0].rows,
           departments: pickers[1].rows,
           trades: pickers[2].rows,
@@ -372,7 +412,8 @@ export async function loadParties(
           canManageCompliance: can(authz, 'compliance.manage'),
           compliance,
           initialTab: creating ? 'overview' : partyTab,
-          initialMode: creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          initialMode:
+            creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
           createMode: creating,
           closeHref,
           role,
@@ -385,7 +426,10 @@ export async function loadParties(
       : null
 
   const txnDrawer =
-    openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind
+    openParty &&
+    partyTransactionId &&
+    isUuid(partyTransactionId) &&
+    partyTransactionKind
       ? {
           id: partyTransactionId,
           kind: partyTransactionKind,
@@ -401,9 +445,17 @@ export async function loadParties(
     roleLabel: tc('labels.role'),
     currentParams: sp,
     roleOptions: [
-      { value: 'customer', label: tc('labels.customer'), count: Number(c.customers) },
+      {
+        value: 'customer',
+        label: tc('labels.customer'),
+        count: Number(c.customers),
+      },
       { value: 'vendor', label: tc('labels.vendor'), count: Number(c.vendors) },
-      { value: 'employee', label: tc('labels.employee'), count: Number(c.employees) },
+      {
+        value: 'employee',
+        label: tc('labels.employee'),
+        count: Number(c.employees),
+      },
     ],
     canManage,
     isEmpty: total === 0,
@@ -428,8 +480,12 @@ export async function loadParties(
         ...(p.is_customer
           ? [{ label: tc('labels.customer'), variant: 'default' as const }]
           : []),
-        ...(p.is_vendor ? [{ label: tc('labels.vendor'), variant: 'secondary' as const }] : []),
-        ...(p.is_employee ? [{ label: tc('labels.employee'), variant: 'outline' as const }] : []),
+        ...(p.is_vendor
+          ? [{ label: tc('labels.vendor'), variant: 'secondary' as const }]
+          : []),
+        ...(p.is_employee
+          ? [{ label: tc('labels.employee'), variant: 'outline' as const }]
+          : []),
       ],
       email: p.email ?? '',
       phone: p.phone ?? '',
@@ -495,16 +551,24 @@ export function partiesSpec(data: PartiesData): PageSpec {
         when: f('isFilteredEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('parties', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
           sorting: { basePath: '/parties', sort: f('sort'), dir: f('dir') },
           columns: [
-            column(rootF('columnName'), link(item('name'), item('href'), 'text-teal-700 hover:underline dark:text-teal-300'), {
-              sort: 'name',
-              className: 'font-semibold',
-            }),
+            column(
+              rootF('columnName'),
+              link(
+                item('name'),
+                item('href'),
+                'text-teal-700 hover:underline dark:text-teal-300',
+              ),
+              {
+                sort: 'name',
+                className: 'font-semibold',
+              },
+            ),
             column(rootF('columnShortCode'), text(item('shortCode')), {
               sort: 'code',
               className: 'font-mono text-[13px]',
@@ -536,8 +600,14 @@ export function partiesSpec(data: PartiesData): PageSpec {
         }),
         when: f('hasRows'),
       },
-      { ...widgetBlock('party-drawer', { drawer: data.drawer }), when: f('drawerOpen') },
-      { ...widgetBlock('related-txn-drawer', { drawer: data.txnDrawer }), when: f('txnDrawerOpen') },
+      {
+        ...widgetBlock('party-drawer', { drawer: data.drawer }),
+        when: f('drawerOpen'),
+      },
+      {
+        ...widgetBlock('related-txn-drawer', { drawer: data.txnDrawer }),
+        when: f('txnDrawerOpen'),
+      },
     ],
   })
 }

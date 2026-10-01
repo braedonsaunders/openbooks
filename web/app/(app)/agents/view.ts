@@ -1,8 +1,10 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { getLocale, getTranslations } from 'next-intl/server'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -11,16 +13,18 @@ import {
   money,
   page,
   pageHeader,
-  pagination,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { can, guardRootSubsidiaryScope, requirePermission } from '../../../lib/authz'
+import {
+  can,
+  guardRootSubsidiaryScope,
+  requirePermission,
+} from '../../../lib/authz'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
 import { parseAgentFindingsParams } from '../../../lib/list/agent-findings'
@@ -28,9 +32,18 @@ import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { INBOX_STATUSES, loadAgentInbox } from '../../../lib/agents/inbox'
 import { loadBriefing } from '../../../lib/agents/briefing'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
-import { listWorkItemNotes, loadWorkItemAssignment } from '../../../lib/agents/assignments'
-import { listAgentNotificationTargets, listAgentRuns } from '../../../lib/setup/agents'
-import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
+import {
+  listWorkItemNotes,
+  loadWorkItemAssignment,
+} from '../../../lib/agents/assignments'
+import {
+  listAgentNotificationTargets,
+  listAgentRuns,
+} from '../../../lib/setup/agents'
+import {
+  findingProposalCommand,
+  type FindingProposalCommand,
+} from '../../../lib/agents/proposals'
 import { findingSummaryLine } from '../../../lib/agents/summary'
 import type {
   ContinuousCloseWorkItem,
@@ -52,7 +65,11 @@ import type {
  * Finding links open the shared work-item drawer through ?item=.
  */
 
-const SEVERITY_VARIANT = { info: 'secondary', warning: 'warning', critical: 'destructive' } as const
+const SEVERITY_VARIANT = {
+  info: 'secondary',
+  warning: 'warning',
+  critical: 'destructive',
+} as const
 const STATUS_VARIANT = {
   open: 'warning',
   in_review: 'secondary',
@@ -179,7 +196,10 @@ export interface AgentsData {
   } | null
 }
 
-function singleParam(sp: Record<string, string | string[] | undefined>, key: string): string | undefined {
+function singleParam(
+  sp: Record<string, string | string[] | undefined>,
+  key: string,
+): string | undefined {
   const raw = pickString(sp[key])
   return raw && raw.length > 0 ? raw : undefined
 }
@@ -200,8 +220,14 @@ function stripBriefingTitle(text: string | null, title: string): string | null {
 }
 
 /** Largest fitting unit, always in the past ("3 hours ago", never "in …"). */
-function lastRunAgo(format: Intl.RelativeTimeFormat, startedAt: string): string {
-  const minutes = Math.min(-1, Math.round((Date.parse(startedAt) - Date.now()) / 60_000))
+function lastRunAgo(
+  format: Intl.RelativeTimeFormat,
+  startedAt: string,
+): string {
+  const minutes = Math.min(
+    -1,
+    Math.round((Date.parse(startedAt) - Date.now()) / 60_000),
+  )
   if (minutes > -60) return format.format(minutes, 'minute')
   const hours = Math.ceil(minutes / 60)
   if (hours > -48) return format.format(hours, 'hour')
@@ -253,7 +279,13 @@ export async function loadAgents(
   let selectedAssignment: WorkItemAssignmentView | null = null
   let selectedNotes: WorkItemNoteView[] = []
   if (itemId && isUuid(itemId)) {
-    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable, authz.allowedSubsidiaryIds)
+    selected = await loadWorkItemDetail(
+      authz.user.orgId,
+      authz.user.id,
+      itemId,
+      readable,
+      authz.allowedSubsidiaryIds,
+    )
     if (selected) {
       const [assignment, notes] = await Promise.all([
         loadWorkItemAssignment(authz, itemId),
@@ -271,7 +303,9 @@ export async function loadAgents(
     assigneeOptions = { users: targets.users, roles: targets.roles }
   }
   const closeHref = mergeHref('/agents', sp, { item: undefined })
-  const briefing = briefingMode ? await loadBriefing(authz) : { briefing: null, aiEnabled: false }
+  const briefing = briefingMode
+    ? await loadBriefing(authz)
+    : { briefing: null, aiEnabled: false }
 
   // The proposals tab is the same list block filtered to carriers — no
   // second card renderer. Each row's drawer reuses the existing
@@ -285,7 +319,10 @@ export async function loadAgents(
     canManage: can(authz, 'admin.setup.manage'),
     kpis: [
       { label: t('kpis.open'), value: countFormat.format(activeCount) },
-      { label: t('kpis.proposals'), value: countFormat.format(inbox.facets.withProposals) },
+      {
+        label: t('kpis.proposals'),
+        value: countFormat.format(inbox.facets.withProposals),
+      },
       {
         label: t('kpis.overdue'),
         value: countFormat.format(overdueCount),
@@ -293,7 +330,9 @@ export async function loadAgents(
       },
       {
         label: t('kpis.lastRun'),
-        value: lastRun ? lastRunAgo(ageFormat, lastRun.startedAt) : t('kpis.never'),
+        value: lastRun
+          ? lastRunAgo(ageFormat, lastRun.startedAt)
+          : t('kpis.never'),
       },
     ],
     searchPlaceholder: t('search'),
@@ -335,12 +374,28 @@ export async function loadAgents(
       count: row.count,
     })),
     proposalOptions: [
-      { value: 'true', label: t('facets.withProposal'), count: inbox.facets.withProposals },
+      {
+        value: 'true',
+        label: t('facets.withProposal'),
+        count: inbox.facets.withProposals,
+      },
     ],
     assignmentOptions: [
-      { value: 'mine', label: t('facets.assignedToMe'), count: inbox.facets.assignedToMe },
-      { value: 'unassigned', label: t('facets.unassigned'), count: inbox.facets.unassigned },
-      { value: 'overdue', label: t('facets.overdue'), count: inbox.facets.overdue },
+      {
+        value: 'mine',
+        label: t('facets.assignedToMe'),
+        count: inbox.facets.assignedToMe,
+      },
+      {
+        value: 'unassigned',
+        label: t('facets.unassigned'),
+        count: inbox.facets.unassigned,
+      },
+      {
+        value: 'overdue',
+        label: t('facets.overdue'),
+        count: inbox.facets.overdue,
+      },
     ],
     columnFinding: tc('table.finding'),
     columnPack: t('facets.pack'),
@@ -356,7 +411,10 @@ export async function loadAgents(
       id: row.id,
       title: tc(`findings.${row.findingType}.title`),
       href: mergeHref('/agents', sp, { item: row.id }),
-      summary: findingSummaryLine((key, values) => tc(key, values as never), row.summary),
+      summary: findingSummaryLine(
+        (key, values) => tc(key, values as never),
+        row.summary,
+      ),
       packLabel: tc(`agents.${row.pack}`),
       severityLabel: tc(`severity.${row.severity}`),
       severityVariant: SEVERITY_VARIANT[row.severity],
@@ -366,10 +424,17 @@ export async function loadAgents(
       proposalBadge: row.hasProposal ? t('proposal.badge') : '',
       detected: dateOnly.format(new Date(row.lastDetectedAt)),
       age: ageFormat.format(
-        -Math.max(0, Math.round((Date.now() - new Date(row.lastDetectedAt).getTime()) / 86_400_000)),
+        -Math.max(
+          0,
+          Math.round(
+            (Date.now() - new Date(row.lastDetectedAt).getTime()) / 86_400_000,
+          ),
+        ),
         'day',
       ),
-      assigneeLabel: row.assignee ? row.assignee.name : t('assignment.unassigned'),
+      assigneeLabel: row.assignee
+        ? row.assignee.name
+        : t('assignment.unassigned'),
       due: dateTime(row.dueAt),
       dueOverdueLabel: row.overdue ? t('facets.overdue') : '',
     })),
@@ -381,19 +446,31 @@ export async function loadAgents(
     tabs: [
       {
         key: 'inbox',
-        href: mergeHref('/agents', sp, { proposals: undefined, briefing: undefined, item: undefined }),
+        href: mergeHref('/agents', sp, {
+          proposals: undefined,
+          briefing: undefined,
+          item: undefined,
+        }),
         label: t('tabs.inbox'),
         active: !proposalsOnly && !briefingMode,
       },
       {
         key: 'proposals',
-        href: mergeHref('/agents', sp, { proposals: 'true', briefing: undefined, item: undefined }),
+        href: mergeHref('/agents', sp, {
+          proposals: 'true',
+          briefing: undefined,
+          item: undefined,
+        }),
         label: t('tabs.proposals'),
         active: proposalsOnly && !briefingMode,
       },
       {
         key: 'briefing',
-        href: mergeHref('/agents', sp, { proposals: undefined, briefing: 'true', item: undefined }),
+        href: mergeHref('/agents', sp, {
+          proposals: undefined,
+          briefing: 'true',
+          item: undefined,
+        }),
         label: t('tabs.briefing'),
         active: briefingMode,
       },
@@ -407,15 +484,21 @@ export async function loadAgents(
     briefingTitle: t('briefing.title'),
     briefingGeneratedAt: briefing.briefing
       ? t('briefing.generatedAt', {
-          date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
-            new Date(briefing.briefing.generatedAt),
-          ),
+          date: new Intl.DateTimeFormat(locale, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          }).format(new Date(briefing.briefing.generatedAt)),
         })
       : null,
-    briefingText: stripBriefingTitle(briefing.briefing?.text ?? null, t('briefing.title')),
+    briefingText: stripBriefingTitle(
+      briefing.briefing?.text ?? null,
+      t('briefing.title'),
+    ),
     hasBriefing: briefing.briefing !== null,
     briefingEmpty: briefingMode && briefing.briefing === null,
-    briefingEmptyTitle: briefing.aiEnabled ? t('briefing.empty') : t('briefing.noAi'),
+    briefingEmptyTitle: briefing.aiEnabled
+      ? t('briefing.empty')
+      : t('briefing.noAi'),
     briefingActions: {
       aiEnabled: briefing.aiEnabled,
       hasBriefing: briefing.briefing !== null,
@@ -459,7 +542,9 @@ export async function loadAgents(
           item: selected,
           closeHref,
           canWrite,
-          proposal: canWrite ? findingProposalCommand(authz, selected.summary) : null,
+          proposal: canWrite
+            ? findingProposalCommand(authz, selected.summary)
+            : null,
           assignment: selectedAssignment,
           notes: selectedNotes,
           assignees: assigneeOptions,
@@ -487,11 +572,20 @@ export function agentsSpec(data: AgentsData): PageSpec {
         actions: [
           widget(
             'link-button',
-            { href: '/admin/setup/agents', label: data.configureLabel, variant: 'outline', iconKey: 'settings' },
+            {
+              href: '/admin/setup/agents',
+              label: data.configureLabel,
+              variant: 'outline',
+              iconKey: 'settings',
+            },
             f('canManage'),
           ),
           // Briefing actions belong in the action rail, not below the panel.
-          widget('agents-briefing-actions', { ...data.briefingActions }, f('showBriefing')),
+          widget(
+            'agents-briefing-actions',
+            { ...data.briefingActions },
+            f('showBriefing'),
+          ),
           // The shared route switcher is always the rightmost header action.
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
@@ -537,13 +631,41 @@ export function agentsSpec(data: AgentsData): PageSpec {
           currentParams: data.currentParams,
           search: { paramKey: 'q', placeholder: data.searchPlaceholder },
           filters: [
-            { paramKey: 'packs', label: data.packLabel, options: data.packOptions },
-            { paramKey: 'status', label: data.statusLabel, options: data.statusOptions },
-            { paramKey: 'severity', label: data.severityLabel, options: data.severityOptions },
-            { paramKey: 'subsidiary', label: data.subsidiaryLabel, options: data.subsidiaryOptions },
-            { paramKey: 'proposals', label: data.proposalLabel, options: data.proposalOptions },
-            { paramKey: 'assigned', label: data.assignmentLabel, options: data.assignmentOptions },
-            { paramKey: 'since', label: data.sinceLabel, options: data.sinceOptions },
+            {
+              paramKey: 'packs',
+              label: data.packLabel,
+              options: data.packOptions,
+            },
+            {
+              paramKey: 'status',
+              label: data.statusLabel,
+              options: data.statusOptions,
+            },
+            {
+              paramKey: 'severity',
+              label: data.severityLabel,
+              options: data.severityOptions,
+            },
+            {
+              paramKey: 'subsidiary',
+              label: data.subsidiaryLabel,
+              options: data.subsidiaryOptions,
+            },
+            {
+              paramKey: 'proposals',
+              label: data.proposalLabel,
+              options: data.proposalOptions,
+            },
+            {
+              paramKey: 'assigned',
+              label: data.assignmentLabel,
+              options: data.assignmentOptions,
+            },
+            {
+              paramKey: 'since',
+              label: data.sinceLabel,
+              options: data.sinceOptions,
+            },
           ],
         }),
         when: f('showInboxChrome'),
@@ -565,7 +687,7 @@ export function agentsSpec(data: AgentsData): PageSpec {
         when: f('proposalsEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('agents', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
@@ -579,19 +701,34 @@ export function agentsSpec(data: AgentsData): PageSpec {
                 summary: item('summary'),
               }),
             ),
-            column(f('columnPack'), badge(item('packLabel'), { variant: 'outline' })),
-            column(f('columnSeverity'), badge(item('severityLabel'), { variant: item('severityVariant') }), {
-              sort: 'severity',
-            }),
+            column(
+              f('columnPack'),
+              badge(item('packLabel'), { variant: 'outline' }),
+            ),
+            column(
+              f('columnSeverity'),
+              badge(item('severityLabel'), {
+                variant: item('severityVariant'),
+              }),
+              {
+                sort: 'severity',
+              },
+            ),
             column(f('columnMateriality'), money(item('materiality')), {
               align: 'right',
               className: 'font-medium',
               sort: 'materiality',
             }),
-            column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              f('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
             column(
               f('columnProposal'),
-              widgetCell('optional-badge', { label: item('proposalBadge'), variant: 'outline' }),
+              widgetCell('optional-badge', {
+                label: item('proposalBadge'),
+                variant: 'outline',
+              }),
             ),
             column(f('columnAge'), text(item('age')), {
               className: 'text-sm text-slate-500',
@@ -601,7 +738,10 @@ export function agentsSpec(data: AgentsData): PageSpec {
             }),
             column(
               f('columnDue'),
-              widgetCell('agents-due-cell', { date: item('due'), overdueLabel: item('dueOverdueLabel') }),
+              widgetCell('agents-due-cell', {
+                date: item('due'),
+                overdueLabel: item('dueOverdueLabel'),
+              }),
               { className: 'text-sm text-slate-500' },
             ),
             column(f('columnDetected'), text(item('detected')), {
@@ -613,19 +753,25 @@ export function agentsSpec(data: AgentsData): PageSpec {
         when: f('findingsPresent'),
       },
       {
-        ...grid('mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2', [
-          pagination({
-            basePath: '/agents',
-            total: f('total'),
-            page: f('currentPage'),
-            perPage: f('perPage'),
-            bare: true,
-          }),
-          widgetBlock('agents-triage-hint', { text: data.triageHint }),
-        ]),
+        ...grid(
+          'mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2',
+          [
+            pagination({
+              basePath: '/agents',
+              total: f('total'),
+              page: f('currentPage'),
+              perPage: f('perPage'),
+              bare: true,
+            }),
+            widgetBlock('agents-triage-hint', { text: data.triageHint }),
+          ],
+        ),
         when: f('findingsPresent'),
       },
-      { ...widgetBlock('work-item-drawer', { drawer: data.itemDrawer }), when: f('itemDrawerOpen') },
+      {
+        ...widgetBlock('work-item-drawer', { drawer: data.itemDrawer }),
+        when: f('itemDrawerOpen'),
+      },
     ],
   })
 }

@@ -1,9 +1,11 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -11,17 +13,19 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  parseListParams,
+  pickString,
+} from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
@@ -135,13 +139,27 @@ export async function loadAdminExtensions(
     ${status ? sql` and a.status = ${status}` : sql``}
     ${params.q ? sql` and (a.name ilike ${'%' + params.q + '%'} or a.key ilike ${'%' + params.q + '%'})` : sql``}`
   const [apps, statuses, totalRow] = await Promise.all([
-    db.execute<{row_id:string;key:string;name:string;status:string;version:string|null;manifest:unknown;draft_id:string|null;run_count:string;updatedAt:string}>(sql`
+    db.execute<{
+      row_id: string
+      key: string
+      name: string
+      status: string
+      version: string | null
+      manifest: unknown
+      draft_id: string | null
+      run_count: string
+      updatedAt: string
+    }>(sql`
       ${candidates} select a.*, a.updated_at as "updatedAt" from candidates a
       where ${where} order by a.name, a.row_id
       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `),
-    db.execute<{status:string;n:string}>(sql`${candidates} select status,count(*) as n from candidates group by status`),
-    db.execute(sql`${candidates} select count(*) as n from candidates a where ${where}`),
+    db.execute<{ status: string; n: string }>(
+      sql`${candidates} select status,count(*) as n from candidates group by status`,
+    ),
+    db.execute(
+      sql`${candidates} select count(*) as n from candidates a where ${where}`,
+    ),
   ])
 
   // Drawer payload for the selected app.
@@ -152,20 +170,20 @@ export async function loadAdminExtensions(
     isPublished: boolean
   } | null = null
   if (appKey) {
-    const detail = ((await db.execute(sql`
+    const detail = await db.execute(sql`
       select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
              a.granted_permissions as "grantedPermissions",
              a.active_version_id as "activeVersionId", v.version, v.manifest
         from apps a left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
        where a.org_id = ${orgId} and a.key = ${appKey} limit 1
-    `)))
+    `)
     const app = detail.rows[0]
     if (app) {
       const [files, runs, published] = await Promise.all([
         listAppFiles(orgId, appKey),
-        (db.execute(sql`
+        db.execute(sql`
           select endpoint, status, units, logs, error_message, duration_ms, at
-            from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`)),
+            from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`),
         isAppPublished(appKey, orgId),
       ])
       drawer = {
@@ -178,11 +196,16 @@ export async function loadAdminExtensions(
   }
 
   const total = Number(totalRow.rows[0]?.n ?? 0)
-  const endpointCount = (m: unknown) => (m as AppManifest | null)?.endpoints?.length ?? 0
+  const endpointCount = (m: unknown) =>
+    (m as AppManifest | null)?.endpoints?.length ?? 0
 
-  const statusText = (value: string) => value === 'pending' ? tExtensions('draft.pending') : tAdminExtensions(`statuses.${value}`)
+  const statusText = (value: string) =>
+    value === 'pending'
+      ? tExtensions('draft.pending')
+      : tAdminExtensions(`statuses.${value}`)
   return {
-    canAuthor, newLabel: tExtensions('actions.new'),
+    canAuthor,
+    newLabel: tExtensions('actions.new'),
     title: tExtensions('title'),
     description: tExtensions('description'),
     backHref: '/admin',
@@ -209,12 +232,18 @@ export async function loadAdminExtensions(
       rowId: a.row_id,
       key: String(a.key),
       name: String(a.name),
-      href: buildListDrawerHref('/admin/apps', sp, a.draft_id ? 'draft' : 'app', a.draft_id ?? String(a.key)),
+      href: buildListDrawerHref(
+        '/admin/apps',
+        sp,
+        a.draft_id ? 'draft' : 'app',
+        a.draft_id ?? String(a.key),
+      ),
       versionLabel: a.version ? `v${a.version}` : '—',
       endpointCount: endpointCount(a.manifest),
       runCount: Number(a.run_count),
       statusLabel: statusText(a.status),
-      statusVariant: (a.status === 'installed' ? 'success' : 'outline') as 'success' | 'outline',
+      statusVariant: (a.status === 'installed' ? 'success' : 'outline') as
+        'success' | 'outline',
       updated: dateTime(a.updatedAt),
     })),
     total,
@@ -255,7 +284,15 @@ export function adminExtensionsSpec(data: AdminExtensionsData): PageSpec {
             href: data.libraryHref,
             label: data.libraryLabel,
           }),
-          ...(data.canAuthor ? [widget('link-button', { href: '/admin/apps?new=1', label: data.newLabel, iconKey: 'plus' })] : []),
+          ...(data.canAuthor
+            ? [
+                widget('link-button', {
+                  href: '/admin/apps?new=1',
+                  label: data.newLabel,
+                  iconKey: 'plus',
+                }),
+              ]
+            : []),
         ],
       }),
       grid('flex flex-wrap items-center gap-2', [
@@ -270,13 +307,20 @@ export function adminExtensionsSpec(data: AdminExtensionsData): PageSpec {
       ]),
     ],
     body: [
-      table({
+      registeredListTable('admin_apps', {
         variant: 'app',
         rows: f('rows'),
         rowKey: item('rowId'),
-        emptyRow: { text: f('emptyLabel'), colSpan: 7, className: EMPTY_ROW_CLASS },
+        emptyRow: {
+          text: f('emptyLabel'),
+          colSpan: 7,
+          className: EMPTY_ROW_CLASS,
+        },
         columns: [
-          column(rootF('columnName'), link(item('name'), item('href'), LINK_CLASS)),
+          column(
+            rootF('columnName'),
+            link(item('name'), item('href'), LINK_CLASS),
+          ),
           column(
             rootF('columnKey'),
             widgetCell('app-key-cell', { appKey: item('key') }),
@@ -305,7 +349,6 @@ export function adminExtensionsSpec(data: AdminExtensionsData): PageSpec {
         // The native pager sits directly under the table — no `mt-3` spacer.
         bare: true,
       }),
-
     ],
   })
 }

@@ -3,7 +3,10 @@ import test from "node:test";
 import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // jsdom first: the table reads browser globals at render.
-await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: 'http://localhost:4800/ar/invoices',
+  matchMediaMatches: false,
+})
 
 const React = await import("react");
 Object.assign(globalThis, { React });
@@ -15,6 +18,50 @@ const { PagedTable } = await import("./paged-table");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
+test('a registered server window is never paginated a second time', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  const rows = Array.from({ length: 25 }, (_, index) => ({
+    id: String(index),
+    name: `Window row ${index}`,
+  }))
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <PagedTable
+          source="inbox_approvals"
+          rows={rows}
+          pageSize={10}
+          searchable
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              cell: (row) => row.name,
+              search: (row) => row.name,
+            },
+          ]}
+          rowKey={(row) => row.id}
+          empty="Empty"
+        />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  assert.equal(host.querySelectorAll('tbody tr').length, 25)
+  assert.equal(
+    host.querySelector('input'),
+    null,
+    'window search belongs to the server source',
+  )
+  assert.ok(host.textContent?.includes('Window row 24'))
+})
+
 interface Row {
   id: string;
   name: string;
@@ -25,31 +72,37 @@ const acted: string[] = [];
 const toggled: string[] = [];
 
 async function mountTable() {
-  opened.length = 0;
-  acted.length = 0;
-  toggled.length = 0;
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
+  opened.length = 0
+  acted.length = 0
+  toggled.length = 0
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <PagedTable<Row>
           rows={[
-            { id: "a", name: "Alpha" },
-            { id: "b", name: "Beta" },
+            { id: 'a', name: 'Alpha' },
+            { id: 'b', name: 'Beta' },
           ]}
           columns={[
             {
-              key: "name",
-              header: "Name",
-              cell: (row) => <span data-testid={`cell-${row.id}`}>{row.name}</span>,
+              key: 'name',
+              header: 'Name',
+              cell: (row) => (
+                <span data-testid={`cell-${row.id}`}>{row.name}</span>
+              ),
             },
             {
-              key: "act",
-              header: "Act",
+              key: 'act',
+              header: 'Act',
               cell: (row) => (
-                <button type="button" data-testid={`act-${row.id}`} onClick={() => acted.push(row.id)}>
+                <button
+                  type="button"
+                  data-testid={`act-${row.id}`}
+                  onClick={() => acted.push(row.id)}
+                >
                   Go
                 </button>
               ),
@@ -66,18 +119,18 @@ async function mountTable() {
           }}
         />
       </NextIntlClientProvider>,
-    );
-    await tick();
-  });
-  await tick();
+    )
+    await tick()
+  })
+  await tick()
   return {
     unmount: async () => {
       await act(async () => {
-        root.unmount();
-      });
-      host.remove();
+        root.unmount()
+      })
+      host.remove()
     },
-  };
+  }
 }
 
 async function click(el: HTMLElement) {
@@ -89,9 +142,9 @@ async function click(el: HTMLElement) {
 }
 
 function rowActionButton(id: string): HTMLButtonElement {
-  const el = document.querySelector(`[data-testid="act-${id}"]`);
-  assert.ok(el, `action button for row ${id} renders`);
-  return el as HTMLButtonElement;
+  const el = document.querySelector(`[data-testid="act-${id}"]`)
+  assert.ok(el, `action button for row ${id} renders`)
+  return el as HTMLButtonElement
 }
 
 test("clicking a row action button fires the action and never the row-open", async () => {
@@ -105,34 +158,40 @@ test("clicking a row action button fires the action and never the row-open", asy
   }
 });
 
-test("plain cells open the row and focused rows support keyboard activation", async () => {
-  const table = await mountTable();
+test('plain cells open the row and focused rows support keyboard activation', async () => {
+  const table = await mountTable()
   try {
-    const cell = document.querySelector('[data-testid="cell-b"]') as HTMLElement;
-    const row = cell.closest("tr");
-    assert.ok(row);
-    await click(row);
-    assert.deepEqual(opened, ["b"]);
-    assert.equal(row.getAttribute("tabindex"), "0");
-    row.focus();
-    await act(async () => row.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
-    assert.deepEqual(opened, ["b", "b"]);
+    const cell = document.querySelector('[data-testid="cell-b"]') as HTMLElement
+    const row = cell.closest('tr')
+    assert.ok(row)
+    await click(row)
+    assert.deepEqual(opened, ['b'])
+    assert.equal(row.getAttribute('tabindex'), '0')
+    row.focus()
+    await act(async () =>
+      row.dispatchEvent(
+        new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      ),
+    )
+    assert.deepEqual(opened, ['b', 'b'])
   } finally {
-    await table.unmount();
+    await table.unmount()
   }
-});
+})
 
-test("the selection checkbox toggles without opening the row", async () => {
-  const table = await mountTable();
+test('the selection checkbox toggles without opening the row', async () => {
+  const table = await mountTable()
   try {
-    const checkbox = document.querySelector('tbody input[type="checkbox"]') as HTMLInputElement;
-    await click(checkbox);
-    assert.deepEqual(toggled, ["a"]);
-    assert.deepEqual(opened, [], "selecting a row must not open it");
+    const checkbox = document.querySelector(
+      'tbody input[type="checkbox"]',
+    ) as HTMLInputElement
+    await click(checkbox)
+    assert.deepEqual(toggled, ['a'])
+    assert.deepEqual(opened, [], 'selecting a row must not open it')
   } finally {
-    await table.unmount();
+    await table.unmount()
   }
-});
+})
 
 test("keyboard activation on a focused action button runs only that action", async () => {
   const table = await mountTable();
@@ -148,3 +207,28 @@ test("keyboard activation on a focused action button runs only that action", asy
     await table.unmount();
   }
 });
+
+test('a server window ignores client search retained from a previous collection', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  const rows = Array.from({ length: 25 }, (_, index) => ({ id: String(index), name: `Window row ${index}` }))
+  const render = async (source: 'data_import_history' | 'inbox_approvals') => {
+    await act(async () => { root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <PagedTable source={source} rows={rows} searchable rowKey={(row) => row.id} empty="Empty"
+        columns={[{ key: 'name', header: 'Name', cell: (row) => row.name, search: (row) => row.name }]} />
+    </NextIntlClientProvider>); await tick() })
+  }
+  await render('data_import_history')
+  const input = host.querySelector<HTMLInputElement>('input')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'Window row 24')
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+  assert.equal(host.querySelectorAll('tbody tr').length, 1, 'the loaded collection must actually have a client filter')
+  await render('inbox_approvals')
+  assert.equal(host.querySelectorAll('tbody tr').length, 25, 'a server window must ignore retained client search')
+  assert.equal(host.querySelector('input'), null)
+})

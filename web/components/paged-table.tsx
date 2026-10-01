@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import {
-  Button,
-  Input,
-  TableCell,
-  TableHead,
-} from '@openbooks/ui'
+import { Button, Input, TableCell, TableHead } from '@openbooks/ui'
 import { ListTable, type ListTableColumn } from './list-table'
+import {
+  preparedListSource,
+  type PreparedListSourceKey,
+} from '../lib/list/prepared-sources'
 
 export type PagedColumn<T> = ListTableColumn<T>
 
@@ -47,6 +46,11 @@ export function PagedTable<T>({
   footer,
   emptyAsRow = false,
   selection,
+  source,
+  leading,
+  rowLabel,
+  rowRole,
+  rowSelected,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -69,7 +73,15 @@ export function PagedTable<T>({
   /** Optional checkbox column with a select-all header over the filtered
    *  rows. Selection state lives with the caller; this only renders it. */
   selection?: PagedSelection<T>
+  /** A registered server window is never searched or sliced a second time. */
+  source?: PreparedListSourceKey
+  leading?: ReactNode
+  rowLabel?: (row: T) => string
+  rowRole?: 'link' | 'button'
+  rowSelected?: (row: T) => boolean
 }) {
+  const external = source ? preparedListSource(source).mode !== 'loaded' : false
+  searchable = searchable && !external
   const t = useTranslations('common')
   const tp = useTranslations('ui.pagination')
   const [query, setQuery] = useState('')
@@ -77,16 +89,16 @@ export function PagedTable<T>({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return rows
+    if (external || !q) return rows
     return rows.filter((r) =>
       columns.some((c) => c.search && c.search(r).toLowerCase().includes(q)),
     )
-  }, [rows, query, columns])
+  }, [rows, query, columns, external])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const clamped = Math.min(page, pageCount - 1)
+  const clamped = external ? 0 : Math.min(page, pageCount - 1)
   const start = clamped * pageSize
-  const view = filtered.slice(start, start + pageSize)
+  const view = external ? filtered : filtered.slice(start, start + pageSize)
 
   const selected = useMemo(() => {
     if (!selection) return null
@@ -100,19 +112,27 @@ export function PagedTable<T>({
     [filtered, selection?.getId],
   )
   const allFilteredSelected =
-    !!selection && filteredIds.length > 0 && filteredIds.every((id) => selected?.has(id))
+    !!selection &&
+    filteredIds.length > 0 &&
+    filteredIds.every((id) => selected?.has(id))
   const someFilteredSelected =
-    !!selection && filteredIds.some((id) => selected?.has(id)) && !allFilteredSelected
+    !!selection &&
+    filteredIds.some((id) => selected?.has(id)) &&
+    !allFilteredSelected
   const selectAllRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
-    if (selectAllRef.current) selectAllRef.current.indeterminate = someFilteredSelected
+    if (selectAllRef.current)
+      selectAllRef.current.indeterminate = someFilteredSelected
   }, [someFilteredSelected])
 
   const toolbar = searchable ? (
     toolbarAfter ? (
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
+            size={15}
+          />
           <Input
             value={query}
             onChange={(e) => {
@@ -159,40 +179,74 @@ export function PagedTable<T>({
         rowClassName={rowClassName}
         onRowClick={onRowClick}
         footer={footer}
-        selectionHeader={selection ? (
-          <TableHead className="w-10">
-            <span className="sr-only">{tp('selectAllMatching')}</span>
-            <input ref={selectAllRef} type="checkbox" className={checkboxClass}
-              checked={allFilteredSelected} disabled={selection.disabled || filteredIds.length === 0}
-              onChange={() => selection.onToggleAll(filteredIds)} />
-          </TableHead>
-        ) : undefined}
-        selectionCell={selection ? (row) => (
-          <TableCell>
-            <input type="checkbox" className={checkboxClass}
-              checked={selected?.has(selection.getId(row)) ?? false}
-              disabled={selection.disabled}
-              onChange={() => selection.onToggle(selection.getId(row))}
-              onClick={(event) => event.stopPropagation()} />
-          </TableCell>
-        ) : undefined}
+        leading={leading}
+        rowLabel={rowLabel}
+        rowRole={rowRole}
+        rowSelected={rowSelected}
+        selectionHeader={
+          selection ? (
+            <TableHead className="w-10">
+              <span className="sr-only">{tp('selectAllMatching')}</span>
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                className={checkboxClass}
+                checked={allFilteredSelected}
+                disabled={selection.disabled || filteredIds.length === 0}
+                onChange={() => selection.onToggleAll(filteredIds)}
+              />
+            </TableHead>
+          ) : undefined
+        }
+        selectionCell={
+          selection
+            ? (row) => (
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    className={checkboxClass}
+                    checked={selected?.has(selection.getId(row)) ?? false}
+                    disabled={selection.disabled}
+                    onChange={() => selection.onToggle(selection.getId(row))}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                </TableCell>
+              )
+            : undefined
+        }
       />
-      {filtered.length > pageSize ? (
+      {!external && filtered.length > pageSize ? (
         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>
             {tp.rich('showing', {
               from: start + 1,
               to: Math.min(start + pageSize, filtered.length),
               total: filtered.length,
-              strong: (c) => <strong className="font-semibold text-slate-700 dark:text-slate-200">{c}</strong>,
+              strong: (c) => (
+                <strong className="font-semibold text-slate-700 dark:text-slate-200">
+                  {c}
+                </strong>
+              ),
             })}
           </span>
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" disabled={clamped === 0} onClick={() => setPage(clamped - 1)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clamped === 0}
+              onClick={() => setPage(clamped - 1)}
+            >
               {tp('prev')}
             </Button>
-            <span className="tabular-nums">{tp('pageOf', { page: clamped + 1, pages: pageCount })}</span>
-            <Button variant="outline" size="sm" disabled={clamped >= pageCount - 1} onClick={() => setPage(clamped + 1)}>
+            <span className="tabular-nums">
+              {tp('pageOf', { page: clamped + 1, pages: pageCount })}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clamped >= pageCount - 1}
+              onClick={() => setPage(clamped + 1)}
+            >
               {t('actions.next')}
             </Button>
           </div>

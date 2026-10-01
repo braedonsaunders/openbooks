@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -11,7 +12,6 @@ import {
   pageHeader,
   ref,
   spanRow,
-  table,
   text,
   widget,
   widgetBlock,
@@ -43,7 +43,10 @@ const f = ref<LeaveQueueData>()
 
 // The registry builds every spec from its data alone (scripts/page-registry-source.mjs),
 // so the base path defaults to the literal route the spec declares.
-export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/leave'): PageSpec {
+export function leaveQueueSpec(
+  data: LeaveQueueData,
+  basePath: string = '/hrm/leave',
+): PageSpec {
   return page({
     route: '/hrm/leave',
     layout: 'list',
@@ -61,7 +64,12 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
           ),
           widget(
             'link-button',
-            { href: f('recordHref'), label: f('recordButton'), iconKey: 'plus', variant: 'outline' },
+            {
+              href: f('recordHref'),
+              label: f('recordButton'),
+              iconKey: 'plus',
+              variant: 'outline',
+            },
             f('canRecord'),
           ),
           widget('module-home-tabs', { tabs: data.tabs }),
@@ -130,12 +138,15 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
           // requests" is the same words twice with a border between them.
           {
             ...grid('flex min-h-0 flex-1 flex-col gap-4', [
-              table({
+              registeredListTable('hrm_leave', {
                 variant: 'app',
                 rows: f('rows'),
                 rowKey: item('id'),
                 columns: [
-                  column(f('columns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+                  column(
+                    f('columns.employee'),
+                    link(item('employeeLabel'), item('employeeHref')),
+                  ),
                   column(f('columns.type'), text(item('leaveTypeCode'))),
                   column(
                     f('columns.range'),
@@ -145,10 +156,18 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
                     align: 'right',
                     className: 'tabular-nums',
                   }),
-                  column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                  column(
+                    f('columns.status'),
+                    badge(item('statusLabel'), {
+                      variant: item('statusVariant'),
+                    }),
+                  ),
                   column('', link(item('openLabel'), item('requestHref'))),
                 ],
-                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                empty: {
+                  title: f('emptyTitle'),
+                  description: f('emptyDescription'),
+                },
                 ...(data.truncated
                   ? {
                       trailing: [

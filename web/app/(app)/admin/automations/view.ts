@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -8,7 +9,6 @@ import {
   page,
   pageHeader,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
@@ -224,20 +224,29 @@ export function automationsSpec(data: AutomationsData): PageSpec {
         when: f('isEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('admin_automations', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
           columns: [
             column(
               f('columnAutomation'),
-              widgetCell('automation-name-cell', { name: item('name'), href: item('href') }),
+              widgetCell('automation-name-cell', {
+                name: item('name'),
+                href: item('href'),
+              }),
             ),
-            column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              f('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
             column(f('columnTrigger'), text(item('triggerLabel'))),
             column(
               f('columnLastRun'),
-              widgetCell('automation-last-run-cell', { at: item('lastRunAt'), fallback: item('neverRanLabel') }),
+              widgetCell('automation-last-run-cell', {
+                at: item('lastRunAt'),
+                fallback: item('neverRanLabel'),
+              }),
             ),
             column(f('columnError'), text(item('error'))),
             column(

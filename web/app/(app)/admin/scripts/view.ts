@@ -1,9 +1,11 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -11,20 +13,26 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  parseListParams,
+  pickString,
+} from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
-import { BUILT_IN_SCRIPT_KINDS, customRecordTypeKey, isCustomRecordKind } from '../../../../lib/script-kinds'
+import {
+  BUILT_IN_SCRIPT_KINDS,
+  customRecordTypeKey,
+  isCustomRecordKind,
+} from '../../../../lib/script-kinds'
 
 /**
  * User scripts, split into a loader and a spec.
@@ -119,7 +127,11 @@ export async function loadScripts(
   const orgId = authz.user.orgId
   const t = await getTranslations('admin.scripts')
   const tHub = await getTranslations('admin.hub')
-  const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 50 })
+  const params = parseListParams(sp, {
+    sort: 'name',
+    allowedSorts: ['name'] as const,
+    perPage: 50,
+  })
   const trigger = pickString(sp.trigger)
   const scriptId = pickString(sp.script)
 
@@ -127,38 +139,48 @@ export async function loadScripts(
     ${trigger ? sql` and trigger_point = ${trigger}` : sql``}
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}`
 
-  const [scripts, triggers, totalRow, open, runs, customTypes] = await Promise.all([
-    db.execute(sql`
+  const [scripts, triggers, totalRow, open, runs, customTypes] =
+    await Promise.all([
+      db.execute(sql`
       select s.*, (select count(*) from script_runs r where r.script_id = s.id) as run_count,
              (select max(r.at) from script_runs r where r.script_id = s.id) as last_run
         from user_scripts s where ${where}
        order by s.trigger_point, s.sort_order, s.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
-    db.execute<{ trigger_point: string; n: string }>(sql`
+      db.execute<{ trigger_point: string; n: string }>(sql`
       select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`),
-    db.execute<{ n: string }>(sql`select count(*) as n from user_scripts where ${where}`),
-    scriptId && scriptId !== 'new'
-      ? db.execute<ScriptDetailRow>(sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`)
-      : null,
-    scriptId && scriptId !== 'new'
-      ? db.execute<ScriptRunRow>(sql`
+      db.execute<{ n: string }>(
+        sql`select count(*) as n from user_scripts where ${where}`,
+      ),
+      scriptId && scriptId !== 'new'
+        ? db.execute<ScriptDetailRow>(
+            sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`,
+          )
+        : null,
+      scriptId && scriptId !== 'new'
+        ? db.execute<ScriptRunRow>(sql`
           select status, error_message, logs, duration_ms, at, target_kind
             from script_runs where script_id = ${scriptId} and org_id = ${orgId} order by at desc limit 20`)
-      : null,
-    db.execute<{ key: string; name: string }>(sql`
+        : null,
+      db.execute<{ key: string; name: string }>(sql`
       select key, name from custom_record_types
        where org_id = ${orgId} and status = 'published' order by name`),
-  ])
+    ])
 
   const customTypeName = new Map<string, string>(
     customTypes.rows.map((r) => [String(r.key), String(r.name)]),
   )
-  const builtInKindKey = new Map(BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]))
+  const builtInKindKey = new Map(
+    BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]),
+  )
 
   const triggerLabel = (v: string) =>
     TRIGGER_KEYS[v] ? t(`triggers.${TRIGGER_KEYS[v]}`) : v.replace('_', ' ')
   const kindLabel = (v: string) => {
-    if (isCustomRecordKind(v)) return customTypeName.get(customRecordTypeKey(v)) ?? customRecordTypeKey(v)
+    if (isCustomRecordKind(v))
+      return (
+        customTypeName.get(customRecordTypeKey(v)) ?? customRecordTypeKey(v)
+      )
     const labelKey = builtInKindKey.get(v)
     return labelKey ? t(labelKey) : v
   }
@@ -188,7 +210,9 @@ export async function loadScripts(
       name: String(s.name),
       href: buildListDrawerHref('/admin/scripts', sp, 'script', String(s.id)),
       trigger: triggerLabel(String(s.trigger_point)),
-      kind: s.document_kind ? kindLabel(String(s.document_kind)) : t('allKinds'),
+      kind: s.document_kind
+        ? kindLabel(String(s.document_kind))
+        : t('allKinds'),
       runCount: String(s.run_count),
       lastRun: s.last_run ? dateTime(String(s.last_run)) : '',
       statusLabel: s.is_active ? t('statusActive') : t('statusDisabled'),
@@ -200,7 +224,10 @@ export async function loadScripts(
     drawerOpen: Boolean(scriptId),
     drawerScript: open?.rows[0] ?? null,
     drawerRuns: runs?.rows ?? [],
-    customTypes: customTypes.rows.map((r) => ({ key: String(r.key), name: String(r.name) })),
+    customTypes: customTypes.rows.map((r) => ({
+      key: String(r.key),
+      name: String(r.name),
+    })),
   }
 }
 
@@ -234,21 +261,29 @@ export function scriptsSpec(data: ScriptsData): PageSpec {
       ]),
     ],
     body: [
-      table({
+      registeredListTable('admin_scripts', {
         variant: 'app',
         rows: f('rows'),
         rowKey: item('id'),
         emptyRow: { text: f('emptyLabel'), colSpan: 6, className: MUTED },
         columns: [
           column(rootF('columnScript'), link(item('name'), item('href'), LINK)),
-          column(rootF('columnTrigger'), badge(item('trigger'), { variant: 'secondary' })),
+          column(
+            rootF('columnTrigger'),
+            badge(item('trigger'), { variant: 'secondary' }),
+          ),
           column(rootF('columnKind'), text(item('kind')), { className: MUTED }),
           column(rootF('columnRuns'), text(item('runCount')), {
             align: 'right',
             className: 'tabular-nums',
           }),
-          column(rootF('columnLastRun'), text(item('lastRun')), { className: MUTED }),
-          column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+          column(rootF('columnLastRun'), text(item('lastRun')), {
+            className: MUTED,
+          }),
+          column(
+            rootF('columnStatus'),
+            badge(item('statusLabel'), { variant: item('statusVariant') }),
+          ),
         ],
       }),
       pagination({
@@ -259,7 +294,11 @@ export function scriptsSpec(data: ScriptsData): PageSpec {
       }),
       widgetBlock(
         'script-drawer',
-        { script: data.drawerScript, runs: data.drawerRuns, customTypes: data.customTypes },
+        {
+          script: data.drawerScript,
+          runs: data.drawerRuns,
+          customTypes: data.customTypes,
+        },
         f('drawerOpen'),
       ),
     ],

@@ -1,4 +1,4 @@
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
+import { RegisteredListTable } from '../../../../components/registered-list-table'
 import { Badge } from '@openbooks/ui'
 
 /** Native record cells and actions compose the shared table primitives. */
@@ -34,51 +34,113 @@ export function ProvisionRunsTable({
   rows: ProvisionRunListRow[]
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <SharedTable className="w-full text-sm">
-        <SharedTableHeader>
-          <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            <SharedTableHead className="px-4 py-2 font-medium">{columns.fiscalYear}</SharedTableHead>
-            <SharedTableHead className="px-4 py-2 font-medium">{columns.version}</SharedTableHead>
-            <SharedTableHead className="px-4 py-2 font-medium">{columns.status}</SharedTableHead>
-            <SharedTableHead className="px-4 py-2 text-right font-medium">{columns.totalExpense}</SharedTableHead>
-            <SharedTableHead className="px-4 py-2 text-right font-medium">{columns.effectiveRate}</SharedTableHead>
-            <SharedTableHead className="px-4 py-2 font-medium">{columns.created}</SharedTableHead>
-          </SharedTableRow>
-        </SharedTableHeader>
-        <SharedTableBody>
-          {rows.length === 0 ? (
-            <SharedTableRow>
-              <SharedTableCell colSpan={6} className="px-4 py-10 text-center text-slate-400 italic">
-                {emptyText}
-              </SharedTableCell>
-            </SharedTableRow>
-          ) : (
-            rows.map((row) => (
-              <SharedTableRow
-                key={row.id}
-                className="border-b border-slate-100 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+    <RegisteredListTable
+      source="tax_provisions"
+      rows={rows}
+      rowKey={(row) => row.id}
+      empty={emptyText}
+      rowClassName={() =>
+        'border-b border-slate-100 last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40'
+      }
+      columns={[
+        {
+          key: 'column_0',
+          header: <>{columns.fiscalYear}</>,
+          headerClassName: 'px-4 py-2 font-medium',
+          className: 'px-4 py-2.5',
+          cell: (row) => (
+            <>
+              <a
+                className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                href={row.href}
               >
-                <SharedTableCell className="px-4 py-2.5">
-                  <a
-                    className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-                    href={row.href}
-                  >
-                    {row.fiscalYearLabel}
-                  </a>
-                </SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 tabular-nums">{row.versionLabel}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5">
-                  <Badge variant={row.statusVariant}>{row.statusLabel}</Badge>
-                </SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums">{row.totalExpense}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-right tabular-nums">{row.effectiveRateText}</SharedTableCell>
-                <SharedTableCell className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{row.created}</SharedTableCell>
-              </SharedTableRow>
-            ))
-          )}
-        </SharedTableBody>
-      </SharedTable>
-    </div>
+                {row.fiscalYearLabel}
+              </a>
+            </>
+          ),
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_1',
+          header: <>{columns.version}</>,
+          headerClassName: 'px-4 py-2 font-medium',
+          className: 'px-4 py-2.5 tabular-nums',
+          cell: (row) => <>{row.versionLabel}</>,
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_2',
+          header: <>{columns.status}</>,
+          headerClassName: 'px-4 py-2 font-medium',
+          className: 'px-4 py-2.5',
+          cell: (row) => (
+            <>
+              <Badge variant={row.statusVariant}>{row.statusLabel}</Badge>
+            </>
+          ),
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_3',
+          header: <>{columns.totalExpense}</>,
+          headerClassName: 'px-4 py-2 text-right font-medium',
+          className: 'px-4 py-2.5 text-right tabular-nums',
+          cell: (row) => <>{row.totalExpense}</>,
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_4',
+          header: <>{columns.effectiveRate}</>,
+          headerClassName: 'px-4 py-2 text-right font-medium',
+          className: 'px-4 py-2.5 text-right tabular-nums',
+          cell: (row) => <>{row.effectiveRateText}</>,
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_5',
+          header: <>{columns.created}</>,
+          headerClassName: 'px-4 py-2 font-medium',
+          className: 'px-4 py-2.5 text-slate-500 dark:text-slate-400',
+          cell: (row) => <>{row.created}</>,
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+      ]}
+    />
   )
 }

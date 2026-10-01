@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -13,7 +14,6 @@ import {
   ref,
   rootRef,
   spanRow,
-  table,
   text,
   widget,
   widgetBlock,
@@ -22,7 +22,10 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadChangeRequestQueue, type ChangeRequestQueueData } from '../../../../lib/hrm/change-requests'
+import {
+  loadChangeRequestQueue,
+  type ChangeRequestQueueData,
+} from '../../../../lib/hrm/change-requests'
 
 /**
  * The org-wide employment change-request queue, split into a loader and a
@@ -42,12 +45,24 @@ const rootF = rootRef<ChangeRequestQueueData>()
 
 export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
   const columns = [
-    column(f('columns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+    column(
+      f('columns.employee'),
+      link(item('employeeLabel'), item('employeeHref')),
+    ),
     column(f('columns.kind'), text(item('kindLabel'))),
-    column(f('columns.effective'), text(item('effectiveWindow'), { className: 'tabular-nums' })),
+    column(
+      f('columns.effective'),
+      text(item('effectiveWindow'), { className: 'tabular-nums' }),
+    ),
     column(f('columns.requester'), text(item('requesterLabel'))),
-    column(f('columns.submitted'), text(item('submittedLabel'), { className: 'tabular-nums' })),
-    column(f('statusHeader'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+    column(
+      f('columns.submitted'),
+      text(item('submittedLabel'), { className: 'tabular-nums' }),
+    ),
+    column(
+      f('statusHeader'),
+      badge(item('statusLabel'), { variant: item('statusVariant') }),
+    ),
     // HR-16 begin: classification + verb chips (0227). actionDisplay is null
     // when unclassified (feature off); verbLabel only when not a plain apply.
     column(f('actionHeader'), text(item('actionDisplay'))),
@@ -95,13 +110,21 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
         actions: [
           widget(
             'link-button',
-            { href: f('proposeHref'), label: f('proposeButton'), iconKey: 'plus' },
+            {
+              href: f('proposeHref'),
+              label: f('proposeButton'),
+              iconKey: 'plus',
+            },
             f('canManage'),
           ),
           // HR-16 begin: rehomed reason-code setup beside the queue.
           widget(
             'link-button',
-            { href: f('reasonsHref'), label: f('reasonsLabel'), iconKey: 'tag' },
+            {
+              href: f('reasonsHref'),
+              label: f('reasonsLabel'),
+              iconKey: 'tag',
+            },
             f('canEditReasons'),
           ),
           // HR-16 end
@@ -136,12 +159,15 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-0 flex-1',
             blocks: [
-              table({
+              registeredListTable('hrm_change_requests', {
                 variant: 'app',
                 rows: f('rows'),
                 rowKey: item('id'),
                 columns,
-                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                empty: {
+                  title: f('emptyTitle'),
+                  description: f('emptyDescription'),
+                },
                 ...(data.truncated
                   ? {
                       trailing: [

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../../lib/list/prepared-spec'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -11,7 +12,6 @@ import {
   pageHeader,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetCell,
@@ -137,23 +137,38 @@ export function importHistorySpec(): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('link-button', { href: f('importHref'), label: f('importLabel') })],
+        actions: [
+          widget('link-button', {
+            href: f('importHref'),
+            label: f('importLabel'),
+          }),
+        ],
       }),
     ],
     body: [
-      table({
+      registeredListTable('data_import_history', {
         variant: 'app',
         rows: f('rows'),
         rowKey: item('id'),
         empty: { title: f('emptyLabel') },
         columns: [
-          column(rootF('columnWhen'), text(item('when')), { className: 'whitespace-nowrap' }),
+          column(rootF('columnWhen'), text(item('when')), {
+            className: 'whitespace-nowrap',
+          }),
           column(
             rootF('columnResource'),
-            widgetCell('resource-cell', { label: item('resourceLabel'), fileName: item('fileName') }),
+            widgetCell('resource-cell', {
+              label: item('resourceLabel'),
+              fileName: item('fileName'),
+            }),
           ),
-          column(rootF('columnFormat'), text(item('format')), { className: 'uppercase' }),
-          column(rootF('columnStatus'), badge(item('status'), { variant: item('statusVariant') })),
+          column(rootF('columnFormat'), text(item('format')), {
+            className: 'uppercase',
+          }),
+          column(
+            rootF('columnStatus'),
+            badge(item('status'), { variant: item('statusVariant') }),
+          ),
           column(
             rootF('columnRows'),
             widgetCell('row-counts-cell', {
@@ -163,7 +178,9 @@ export function importHistorySpec(): PageSpec {
             }),
             { align: 'right', className: 'tabular-nums' },
           ),
-          column(rootF('columnBy'), text(item('actor')), { className: 'text-muted-foreground' }),
+          column(rootF('columnBy'), text(item('actor')), {
+            className: 'text-muted-foreground',
+          }),
         ],
       }),
     ],

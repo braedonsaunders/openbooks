@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -10,14 +11,16 @@ import {
   page,
   pageHeader,
   statTile,
-  table,
   text,
   widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { notFound } from 'next/navigation'
-import { documentsAuthz, loadDocumentsHome } from '../../../../lib/hrm/documents-home'
+import {
+  documentsAuthz,
+  loadDocumentsHome,
+} from '../../../../lib/hrm/documents-home'
 
 /**
  * Documents tab: statTiles (awaiting signature, expiring, retention
@@ -51,17 +54,45 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
-          widget('link-button', { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' }, f('canManage')),
+          widget(
+            'link-button',
+            { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
+            f('canManage'),
+          ),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
       grid('grid grid-cols-2 gap-3 xl:grid-cols-4', [
-        statTile({ iconKey: f('tiles.0.iconKey'), accent: f('tiles.0.accent'), label: f('tiles.0.label'), value: f('tiles.0.value'), tone: f('tiles.0.tone') }),
-        statTile({ iconKey: f('tiles.1.iconKey'), accent: f('tiles.1.accent'), label: f('tiles.1.label'), value: f('tiles.1.value'), tone: f('tiles.1.tone') }),
-        statTile({ iconKey: f('tiles.2.iconKey'), accent: f('tiles.2.accent'), label: f('tiles.2.label'), value: f('tiles.2.value'), tone: f('tiles.2.tone') }),
-        statTile({ iconKey: f('tiles.3.iconKey'), accent: f('tiles.3.accent'), label: f('tiles.3.label'), value: f('tiles.3.value'), tone: f('tiles.3.tone') }),
+        statTile({
+          iconKey: f('tiles.0.iconKey'),
+          accent: f('tiles.0.accent'),
+          label: f('tiles.0.label'),
+          value: f('tiles.0.value'),
+          tone: f('tiles.0.tone'),
+        }),
+        statTile({
+          iconKey: f('tiles.1.iconKey'),
+          accent: f('tiles.1.accent'),
+          label: f('tiles.1.label'),
+          value: f('tiles.1.value'),
+          tone: f('tiles.1.tone'),
+        }),
+        statTile({
+          iconKey: f('tiles.2.iconKey'),
+          accent: f('tiles.2.accent'),
+          label: f('tiles.2.label'),
+          value: f('tiles.2.value'),
+          tone: f('tiles.2.tone'),
+        }),
+        statTile({
+          iconKey: f('tiles.3.iconKey'),
+          accent: f('tiles.3.accent'),
+          label: f('tiles.3.label'),
+          value: f('tiles.3.value'),
+          tone: f('tiles.3.tone'),
+        }),
       ]),
       // The register sizes to its content in normal flow: a flex item
       // with min-h-0 inside a viewport-locked column shrinks below its
@@ -77,18 +108,27 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
           allLabel: data.allLabel,
           options: data.segmentOptions,
         }),
-        table({
+        registeredListTable('hrm_documents', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
           empty: { title: f('empty') },
           columns: [
             column(data.columns.title, link(item('title'), item('href'))),
-            column(data.columns.person, text(item('person'), { fallback: '—' })),
+            column(
+              data.columns.person,
+              text(item('person'), { fallback: '—' }),
+            ),
             column(data.columns.category, text(item('category'))),
             column(data.columns.sent, text(item('sent'), { fallback: '—' })),
-            column(data.columns.expires, text(item('expires'), { fallback: '—' })),
-            column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              data.columns.expires,
+              text(item('expires'), { fallback: '—' }),
+            ),
+            column(
+              data.columns.status,
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
           ],
         }),
       ]),
@@ -97,12 +137,41 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
         when: f('drawerOpen'),
       },
       {
-        ...widgetBlock('hrm-documents-generate-dialog', { generate: data.generate }),
+        ...widgetBlock('hrm-documents-generate-dialog', {
+          generate: data.generate,
+        }),
         when: f('generateOpen'),
       },
-      widgetBlock('setup-section', { entityKey: 'hrm-document-templates', sp: data.currentParams, basePath: '/hrm/documents', rowParam: 'template' }, f('canManage')),
-      widgetBlock('setup-section', { entityKey: 'hrm-document-categories', sp: data.currentParams, basePath: '/hrm/documents', rowParam: 'category' }, f('canManage')),
-      widgetBlock('setup-section', { entityKey: 'hrm-retention-schedules', sp: data.currentParams, basePath: '/hrm/documents', rowParam: 'retention' }, f('canManage')),
+      widgetBlock(
+        'setup-section',
+        {
+          entityKey: 'hrm-document-templates',
+          sp: data.currentParams,
+          basePath: '/hrm/documents',
+          rowParam: 'template',
+        },
+        f('canManage'),
+      ),
+      widgetBlock(
+        'setup-section',
+        {
+          entityKey: 'hrm-document-categories',
+          sp: data.currentParams,
+          basePath: '/hrm/documents',
+          rowParam: 'category',
+        },
+        f('canManage'),
+      ),
+      widgetBlock(
+        'setup-section',
+        {
+          entityKey: 'hrm-retention-schedules',
+          sp: data.currentParams,
+          basePath: '/hrm/documents',
+          rowParam: 'retention',
+        },
+        f('canManage'),
+      ),
     ],
   })
 }
@@ -112,7 +181,9 @@ export async function documentsTitle(): Promise<string> {
   return t('documents.title')
 }
 
-export async function loadDocumentsPage(sp: Record<string, string | undefined>) {
+export async function loadDocumentsPage(
+  sp: Record<string, string | undefined>,
+) {
   const authz = await documentsAuthz()
   if (!authz) notFound()
   return loadDocumentsHome(authz, sp)

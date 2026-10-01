@@ -1,17 +1,17 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
+  pagination,
   badge,
   column,
   field,
   grid,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -94,7 +94,8 @@ export async function loadViewsPage(
   const tNav = await getTranslations('nav')
   const tc = await getTranslations('common')
   const authz = await requirePermission('reports.read')
-  const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
+  const canCreate =
+    authz.permissions.has('reports.create') || authz.permissions.has('*')
   const params = parseListParams(sp, {
     sort: 'updated',
     dir: 'desc',
@@ -111,19 +112,29 @@ export async function loadViewsPage(
   const q = params.q?.toLowerCase()
   const filtered = all.filter((s) => {
     if (scopeFilter !== 'all' && s.scope !== scopeFilter) return false
-    if (q && !s.name.toLowerCase().includes(q) && !s.description?.toLowerCase().includes(q)) return false
+    if (
+      q &&
+      !s.name.toLowerCase().includes(q) &&
+      !s.description?.toLowerCase().includes(q)
+    )
+      return false
     return true
   })
   const sorted = [...filtered].sort((a, b) => {
     if (params.sort === 'name') {
-      return params.dir === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+      return params.dir === 'asc'
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name)
     }
     return params.dir === 'asc'
       ? new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()
       : new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   })
   const total = sorted.length
-  const pageRows = sorted.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE)
+  const pageRows = sorted.slice(
+    (params.page - 1) * PER_PAGE,
+    params.page * PER_PAGE,
+  )
 
   const openId = pickString(sp.view)
   // Unsaved create: `?view=new` renders the studio over a blank view. Nothing
@@ -131,7 +142,8 @@ export async function loadViewsPage(
   // explicit Save POSTs /api/views. Create requires the create grant,
   // mirroring the New button's visibility.
   const isCreate = openId === 'new' && canCreate
-  const openView = openId && !isCreate ? (all.find((s) => s.id === openId) ?? null) : null
+  const openView =
+    openId && !isCreate ? (all.find((s) => s.id === openId) ?? null) : null
   const isAdmin = authz.permissions.has('*')
 
   const currentParams = Object.fromEntries(
@@ -274,41 +286,47 @@ export function viewsSpec(data: ViewsData): PageSpec {
         when: f('isEmpty'),
       },
       {
-        ...grid('overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800', [
-          table({
-            variant: 'app',
-            rows: f('rows'),
-            rowKey: item('id'),
-            columns: [
-              column(
-                rootF('columnName'),
-                widgetCell('view-name-cell', {
-                  name: item('name'),
-                  href: item('href'),
-                  description: item('description'),
+        ...grid(
+          'overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800',
+          [
+            registeredListTable('knowledge_views', {
+              variant: 'app',
+              rows: f('rows'),
+              rowKey: item('id'),
+              columns: [
+                column(
+                  rootF('columnName'),
+                  widgetCell('view-name-cell', {
+                    name: item('name'),
+                    href: item('href'),
+                    description: item('description'),
+                  }),
+                ),
+                column(rootF('columnSource'), text(item('source')), {
+                  className: 'text-slate-600 dark:text-slate-300',
                 }),
-              ),
-              column(rootF('columnSource'), text(item('source')), {
-                className: 'text-slate-600 dark:text-slate-300',
-              }),
-              column(rootF('columnScope'), badge(item('scopeLabel'), { variant: item('scopeVariant') })),
-              column(rootF('columnUpdated'), text(item('updated')), {
-                className: 'text-slate-500 dark:text-slate-400',
-              }),
-              column(
-                rootF('columnActions'),
-                widgetCell('view-actions-cell', {
-                  runHref: item('runHref'),
-                  runLabel: rootF('runLabel'),
-                  editHref: item('editHref'),
-                  editLabel: rootF('editLabel'),
-                  canEdit: item('canEdit'),
+                column(
+                  rootF('columnScope'),
+                  badge(item('scopeLabel'), { variant: item('scopeVariant') }),
+                ),
+                column(rootF('columnUpdated'), text(item('updated')), {
+                  className: 'text-slate-500 dark:text-slate-400',
                 }),
-                { headerClassName: 'w-24' },
-              ),
-            ],
-          }),
-        ]),
+                column(
+                  rootF('columnActions'),
+                  widgetCell('view-actions-cell', {
+                    runHref: item('runHref'),
+                    runLabel: rootF('runLabel'),
+                    editHref: item('editHref'),
+                    editLabel: rootF('editLabel'),
+                    canEdit: item('canEdit'),
+                  }),
+                  { headerClassName: 'w-24' },
+                ),
+              ],
+            }),
+          ],
+        ),
         when: f('hasRows'),
       },
       pagination({

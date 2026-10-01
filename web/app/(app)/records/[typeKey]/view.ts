@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
@@ -7,6 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import type { FormField } from '@openbooks/forms-core'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -14,16 +16,19 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  isUuid,
+  parseListParams,
+  pickString,
+} from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { pgTextArrayLiteral } from '../../../../lib/pg-array'
 import { can, requirePermission } from '../../../../lib/authz'
@@ -106,7 +111,12 @@ export interface RecordModuleData {
   basePath: string
   typeKey: string
   typeName: string
-  newRecordProps: { typeKey: string; typeName: string; basePath: string; currentParams: Record<string, string | string[] | undefined> }
+  newRecordProps: {
+    typeKey: string
+    typeName: string
+    basePath: string
+    currentParams: Record<string, string | string[] | undefined>
+  }
   title: string
   description: string
   canCreate: boolean
@@ -115,7 +125,11 @@ export interface RecordModuleData {
   searchPlaceholder: string
   statusLabel: string
   statusOptions: { value: string; label: string; count: number }[]
-  filterChips: { paramKey: string; label: string; options: { value: string; label: string; count: number }[] }[]
+  filterChips: {
+    paramKey: string
+    label: string
+    options: { value: string; label: string; count: number }[]
+  }[]
   currentParams: Record<string, string | string[] | undefined>
   emptyTitle: string
   emptyDescription: string
@@ -131,15 +145,23 @@ export interface RecordModuleData {
   sort: string
   dir: string
   drawerOpen: boolean
-  drawerProps: ({
-    typeKey: string
-    typeName: string
-    sections: FormSection[]
-    record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus; updatedAt: string }
-    canEdit: boolean
-    preview?: boolean
-    closeHref: string
-  } & { remountKey: string }) | null
+  drawerProps:
+    | ({
+        typeKey: string
+        typeName: string
+        sections: FormSection[]
+        record: {
+          id: string
+          recordNumber: string
+          data: FieldValueMap
+          status: RecordStatus
+          updatedAt: string
+        }
+        canEdit: boolean
+        preview?: boolean
+        closeHref: string
+      } & { remountKey: string })
+    | null
 }
 
 export async function loadRecordModule(
@@ -161,7 +183,14 @@ export async function loadRecordWorkspace(
   const tc = await getTranslations('common')
 
   const type = await loadRecordTypeByKey(authz.user.orgId, typeKey)
-  if (!type || type.status !== 'published' || !inTypeAudience(authz.user.roles.map(({ key }) => key), type.allowed_roles)) {
+  if (
+    !type ||
+    type.status !== 'published' ||
+    !inTypeAudience(
+      authz.user.roles.map(({ key }) => key),
+      type.allowed_roles,
+    )
+  ) {
     notFound()
   }
   const lint = lintRecordFields(type.fields, type.name)
@@ -174,7 +203,11 @@ export async function loadRecordWorkspace(
   const basePath = workspacePath ?? `/records/${typeKey}`
   const columns = listableFields(sections).slice(0, 5)
   const filterFields = columns
-    .filter((f) => (f.type === 'select' || f.type === 'radio') && (f.validation?.options?.length ?? 0) > 0)
+    .filter(
+      (f) =>
+        (f.type === 'select' || f.type === 'radio') &&
+        (f.validation?.options?.length ?? 0) > 0,
+    )
     .slice(0, 3)
 
   const listParams = parseListParams(sp, {
@@ -187,7 +220,8 @@ export async function loadRecordWorkspace(
   const showInactive = pickString(sp.showInactive) === 'true'
   // A malformed ?rec= must resolve like an unknown id (no drawer), never
   // reach the loader to 500 on the uuid cast.
-  const recId = typeof sp.rec === 'string' && isUuid(sp.rec) ? sp.rec : undefined
+  const recId =
+    typeof sp.rec === 'string' && isUuid(sp.rec) ? sp.rec : undefined
 
   const activeFieldFilters = filterFields
     .map((f) => ({ field: f, value: pickString(sp[`f_${f.id}`]) }))
@@ -223,38 +257,42 @@ export async function loadRecordWorkspace(
           })()
 
   const [rows, statusCounts, filterCounts] = await Promise.all([
-    (db.execute<CustomRecordRow>(sql`
+    db.execute<CustomRecordRow>(sql`
       select r.id, r.record_number, r.data, r.status, r.created_at
         from custom_records r
        where ${where}
        order by ${sortColumn} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.created_at desc
        limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
-    `)),
-    (db.execute<{ status: string; n: string }>(sql`
+    `),
+    db.execute<{ status: string; n: string }>(sql`
       select r.status, count(*) as n from custom_records r
        where ${scope} ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
        group by r.status
-    `)),
+    `),
     Promise.all(
-      filterFields.map(
-        (f) =>
-          (db.execute(sql`
+      filterFields.map((f) =>
+        db.execute(sql`
             select r.data->>${f.id} as v, count(*) as n
              from custom_records r
              where ${scope}
                ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
                and r.data->>${f.id} is not null
              group by 1
-          `)),
+          `),
       ),
     ),
   ])
   const total = statusCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
-  const filtered = Boolean(status || listParams.q || activeFieldFilters.length > 0)
+  const filtered = Boolean(
+    status || listParams.q || activeFieldFilters.length > 0,
+  )
   const filteredTotal = filtered
     ? Number(
-        (await db.execute<{ n: string }>(sql`select count(*) as n from custom_records r where ${where}`))
-          .rows[0]?.n ?? 0,
+        (
+          await db.execute<{ n: string }>(
+            sql`select count(*) as n from custom_records r where ${where}`,
+          )
+        ).rows[0]?.n ?? 0,
       )
     : total
 
@@ -264,14 +302,18 @@ export async function loadRecordWorkspace(
     rows.rows.map((r) => (r.data ?? {}) as Record<string, unknown>),
   )
 
-  const loadedOpenRecord = recId ? await loadRecord(authz.user.orgId, typeKey, recId) : null
-  const openRecord = loadedOpenRecord && recordVisibleInSubsidiaryFence(
-    sections,
-    loadedOpenRecord.data,
-    authz.allowedSubsidiaryIds,
-  )
-    ? loadedOpenRecord
+  const loadedOpenRecord = recId
+    ? await loadRecord(authz.user.orgId, typeKey, recId)
     : null
+  const openRecord =
+    loadedOpenRecord &&
+    recordVisibleInSubsidiaryFence(
+      sections,
+      loadedOpenRecord.data,
+      authz.allowedSubsidiaryIds,
+    )
+      ? loadedOpenRecord
+      : null
 
   const statusOptions = statusCounts.rows.map((r) => ({
     value: r.status,
@@ -285,11 +327,20 @@ export async function loadRecordWorkspace(
     basePath,
     typeKey,
     typeName: type.name,
-    newRecordProps: { typeKey, typeName: type.name, basePath, currentParams: sp },
+    newRecordProps: {
+      typeKey,
+      typeName: type.name,
+      basePath,
+      currentParams: sp,
+    },
     title: type.plural_name,
-    description: type.description ?? t('module.defaultDescription', { pluralName: type.plural_name }),
+    description:
+      type.description ??
+      t('module.defaultDescription', { pluralName: type.plural_name }),
     canCreate,
-    searchPlaceholder: t('module.searchPlaceholder', { pluralName: type.plural_name.toLowerCase() }),
+    searchPlaceholder: t('module.searchPlaceholder', {
+      pluralName: type.plural_name.toLowerCase(),
+    }),
     statusLabel: tc('labels.status'),
     statusOptions,
     filterChips: filterFields.map((f) => {
@@ -310,7 +361,9 @@ export async function loadRecordWorkspace(
       }
     }),
     currentParams: sp,
-    emptyTitle: t('module.emptyTitle', { pluralName: type.plural_name.toLowerCase() }),
+    emptyTitle: t('module.emptyTitle', {
+      pluralName: type.plural_name.toLowerCase(),
+    }),
     emptyDescription: canCreate
       ? t('module.emptyCreate', { typeName: type.name.toLowerCase() })
       : t('module.emptyNoAccess'),
@@ -327,7 +380,8 @@ export async function loadRecordWorkspace(
     rows: rows.rows.map((r) => {
       const data = (r.data ?? {}) as Record<string, unknown>
       const cells: Record<string, string> = {}
-      for (const f of columns) cells[f.id] = formatFieldValue(f, data[f.id], labels, display)
+      for (const f of columns)
+        cells[f.id] = formatFieldValue(f, data[f.id], labels, display)
       return {
         id: String(r.id),
         number: String(r.record_number),
@@ -383,7 +437,13 @@ export function recordModuleSpec(data: RecordModuleData): PageSpec {
         // WidgetSlot renders a bare Fragment, so a `when`-off widget leaves no
         // wrapper div behind — matching the native header with no actions.
         actions: data.previewNewHref
-          ? [widget('link-button', { href: data.previewNewHref, label: data.previewNewLabel ?? data.typeName, iconKey: 'plus' })]
+          ? [
+              widget('link-button', {
+                href: data.previewNewHref,
+                label: data.previewNewLabel ?? data.typeName,
+                iconKey: 'plus',
+              }),
+            ]
           : [widget('new-record', data.newRecordProps, f('canCreate'))],
       }),
       grid('flex flex-wrap items-center gap-2', [
@@ -421,7 +481,7 @@ export function recordModuleSpec(data: RecordModuleData): PageSpec {
         when: f('isEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('records_type_key', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
@@ -434,11 +494,21 @@ export function recordModuleSpec(data: RecordModuleData): PageSpec {
             ...data.columns.map((c) =>
               column(
                 c.label,
-                text(item(`cells.${c.id}`), { fallback: '—', fallbackClassName: DASH_CLASS }),
-                { sort: c.id, align: c.align, ...(c.cellClassName ? { className: c.cellClassName } : {}) },
+                text(item(`cells.${c.id}`), {
+                  fallback: '—',
+                  fallbackClassName: DASH_CLASS,
+                }),
+                {
+                  sort: c.id,
+                  align: c.align,
+                  ...(c.cellClassName ? { className: c.cellClassName } : {}),
+                },
               ),
             ),
-            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(
+              rootF('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
             column(rootF('columnCreated'), text(item('created')), {
               sort: 'created',
               className: MUTED,
@@ -456,7 +526,11 @@ export function recordModuleSpec(data: RecordModuleData): PageSpec {
         }),
         when: f('hasRows'),
       },
-      widgetBlock('record-drawer', { drawer: data.drawerProps }, f('drawerOpen')),
+      widgetBlock(
+        'record-drawer',
+        { drawer: data.drawerProps },
+        f('drawerOpen'),
+      ),
     ],
   })
 }

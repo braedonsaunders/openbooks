@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -11,7 +12,6 @@ import {
   panel,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -20,7 +20,10 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadMeChecklists, type MeChecklistsData } from '../../../../lib/hrm/self-service'
+import {
+  loadMeChecklists,
+  type MeChecklistsData,
+} from '../../../../lib/hrm/self-service'
 
 /**
  * Me checklists — my process steps in the shared `table` block with the
@@ -62,7 +65,7 @@ export function meChecklistsSpec(data: MeChecklistsData): PageSpec {
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-0 flex-1',
             blocks: [
-              table({
+              registeredListTable('me_checklists', {
                 variant: 'app',
                 rows: f('rows'),
                 rowKey: item('id'),
@@ -77,7 +80,9 @@ export function meChecklistsSpec(data: MeChecklistsData): PageSpec {
                   column(f('columns.evidence'), text(item('evidenceLabel'))),
                   column(
                     f('columns.status'),
-                    badge(item('statusLabel'), { variant: item('statusVariant') }),
+                    badge(item('statusLabel'), {
+                      variant: item('statusVariant'),
+                    }),
                   ),
                   column(
                     '',
@@ -88,7 +93,10 @@ export function meChecklistsSpec(data: MeChecklistsData): PageSpec {
                     }),
                   ),
                 ],
-                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                empty: {
+                  title: f('emptyTitle'),
+                  description: f('emptyDescription'),
+                },
               }),
             ],
           }),

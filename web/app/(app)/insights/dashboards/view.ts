@@ -1,19 +1,19 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getFormatter, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
   grid,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -81,7 +81,11 @@ export interface DashboardsData {
 export async function loadDashboards(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<DashboardsData> {
-  const [t, tCommon, format] = await Promise.all([getTranslations('insights'), getTranslations('common'), getFormatter()])
+  const [t, tCommon, format] = await Promise.all([
+    getTranslations('insights'),
+    getTranslations('common'),
+    getFormatter(),
+  ])
   const authz = await requirePermission('insights.read')
   const canCreate = can(authz, 'insights.create')
   const orgId = authz.user.orgId
@@ -93,7 +97,10 @@ export async function loadDashboards(
     allowedSorts: ['name', 'updated'] as const,
   })
   const statusParam = pickString(sp.status)
-  const status = statusParam === 'draft' || statusParam === 'published' ? statusParam : undefined
+  const status =
+    statusParam === 'draft' || statusParam === 'published'
+      ? statusParam
+      : undefined
 
   const visibility = insightVisibilitySql(authz)
   const where = sql`org_id = ${orgId} and ${visibility}
@@ -133,8 +140,16 @@ export async function loadDashboards(
     searchPlaceholder: t('dashboards.searchPlaceholder'),
     statusLabel: tCommon('labels.status'),
     statusOptions: [
-      { value: 'draft', label: tCommon('status.draft'), count: Number(c.drafts) },
-      { value: 'published', label: t('status.published'), count: Number(c.published) },
+      {
+        value: 'draft',
+        label: tCommon('status.draft'),
+        count: Number(c.drafts),
+      },
+      {
+        value: 'published',
+        label: t('status.published'),
+        count: Number(c.published),
+      },
     ],
     currentParams: sp,
     emptyTitle: t('dashboards.emptyTitle'),
@@ -154,9 +169,14 @@ export async function loadDashboards(
       href: `/insights/dashboards/${row.id}`,
       description: (row.description as string | null) ?? null,
       cardCount: String(Number(row.card_count)),
-      statusLabel: row.status === 'published' ? t('status.published') : tCommon('status.draft'),
+      statusLabel:
+        row.status === 'published'
+          ? t('status.published')
+          : tCommon('status.draft'),
       statusVariant: row.status === 'published' ? 'success' : 'outline',
-      updated: format.dateTime(new Date(String(row.updated_at)), { dateStyle: 'medium' }),
+      updated: format.dateTime(new Date(String(row.updated_at)), {
+        dateStyle: 'medium',
+      }),
     })),
     total: filteredTotal,
     currentPage: params.page,
@@ -213,11 +233,15 @@ export function dashboardsSpec(data: DashboardsData): PageSpec {
         when: f('isFilteredEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('insights_dashboards', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
-          sorting: { basePath: '/insights/dashboards', sort: f('sort'), dir: f('dir') },
+          sorting: {
+            basePath: '/insights/dashboards',
+            sort: f('sort'),
+            dir: f('dir'),
+          },
           columns: [
             column(
               rootF('columnName'),
@@ -228,9 +252,17 @@ export function dashboardsSpec(data: DashboardsData): PageSpec {
               }),
               { sort: 'name', className: 'font-semibold' },
             ),
-            column(rootF('columnCards'), text(item('cardCount')), { className: MUTED }),
-            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-            column(rootF('columnUpdated'), text(item('updated')), { sort: 'updated', className: MUTED }),
+            column(rootF('columnCards'), text(item('cardCount')), {
+              className: MUTED,
+            }),
+            column(
+              rootF('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
+            column(rootF('columnUpdated'), text(item('updated')), {
+              sort: 'updated',
+              className: MUTED,
+            }),
           ],
         }),
         when: f('hasRows'),

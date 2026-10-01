@@ -4,6 +4,9 @@ import { KeyRound, Building2, Users, Mail, Activity, Send, CheckCircle2, Gauge, 
 import { OpportunityKanbanBoard } from '../../app/(app)/crm/OpportunityKanban'
 import { RecordListSlot } from './record-list-slot'
 import { EntityListSlot } from './entity-list-slot'
+import { RegisteredListBlockView } from './registered-list'
+import type { PreparedListSourceKey } from '../../lib/list/prepared-sources'
+import type { TableBlock } from '@braedonsaunders/appkit-viewspec'
 import { PAYROLL_WIDGETS } from './widgets-payroll'
 import { BANKING_WIDGETS } from './widgets-banking'
 import { REPORTING_WIDGETS } from './widgets-reporting'
@@ -72,6 +75,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       />
     )
   },
+  'registered-record-list': (props, scope, searchParams) => (
+    <RegisteredListBlockView source={str(props, 'source') as PreparedListSourceKey} spec={props.table as TableBlock} scope={scope} searchParams={searchParams ?? {}} />
+  ),
   'opportunity-kanban-board': (props) => {
     const statuses = (props.statuses as ComponentProps<typeof OpportunityKanbanBoard>['statuses']) ?? []
     const opportunities = (props.opportunities as ComponentProps<typeof OpportunityKanbanBoard>['opportunities']) ?? []

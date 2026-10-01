@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge } from '@openbooks/ui'
+import { RegisteredListTable } from '../../../../components/registered-list-table'
 import { stateTone, type ComplianceMatrix } from '../../../../lib/compliance'
 import { decimalCmp } from '../../../../lib/statement-format'
 
@@ -41,82 +42,95 @@ export function VendorComplianceMatrix({
   }
 }) {
   return (
-    <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="sticky left-0 bg-white dark:bg-slate-900">{labels.vendor}</TableHead>
-            <TableHead>{labels.class}</TableHead>
-            <TableHead>{labels.status}</TableHead>
-            {columns.map((policy) => (
-              <TableHead key={policy.id} className="whitespace-nowrap text-center">
-                {policy.code}
-              </TableHead>
-            ))}
-            <TableHead className="text-right">{labels.exposure}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.partyId}>
-              <TableCell className="sticky left-0 bg-white font-medium dark:bg-slate-900">
-                <Link
-                  href={`/compliance/vendors?${new URLSearchParams({
-                    ...(classId ? { class: classId } : {}),
-                    ...(stateFilter ? { state: stateFilter } : {}),
-                    vendor: row.partyId,
-                  })}`}
-                  className="hover:underline"
-                >
-                  {row.vendorName}
-                </Link>
-              </TableCell>
-              <TableCell className="text-slate-500 dark:text-slate-400">{row.className}</TableCell>
-              <TableCell>
-                <Badge variant={stateTone(row.overall)}>{labels.states[row.overall] ?? row.overall}</Badge>
-              </TableCell>
-              {columns.map((policy) => {
-                const finding = row.findings.find((f) => f.requirementId === policy.id)
-                if (!finding) {
-                  return (
-                    <TableCell key={policy.id} className="text-center text-slate-300 dark:text-slate-600">
-                      —
-                    </TableCell>
-                  )
+    <RegisteredListTable
+      source="compliance_vendors"
+      rows={rows}
+      rowKey={(row) => row.partyId}
+      empty=""
+      columns={[
+        {
+          key: 'vendor',
+          header: labels.vendor,
+          className: 'sticky left-0 bg-white font-medium dark:bg-slate-900',
+          headerClassName: 'sticky left-0 bg-white dark:bg-slate-900',
+          search: (row) => row.vendorName,
+          cell: (row) => (
+            <Link
+              href={`/compliance/vendors?${new URLSearchParams({ ...(classId ? { class: classId } : {}), ...(stateFilter ? { state: stateFilter } : {}), vendor: row.partyId })}`}
+              className="hover:underline"
+            >
+              {row.vendorName}
+            </Link>
+          ),
+        },
+        {
+          key: 'class',
+          header: labels.class,
+          search: (row) => row.className ?? '',
+          cell: (row) => row.className,
+          className: 'text-slate-500 dark:text-slate-400',
+        },
+        {
+          key: 'status',
+          header: labels.status,
+          search: (row) => labels.states[row.overall] ?? row.overall,
+          cell: (row) => (
+            <Badge variant={stateTone(row.overall)}>
+              {labels.states[row.overall] ?? row.overall}
+            </Badge>
+          ),
+        },
+        ...columns.map((policy) => ({
+          key: `policy:${policy.id}`,
+          header: policy.code,
+          align: 'center' as const,
+          headerClassName: 'whitespace-nowrap text-center',
+          cell: (row: ComplianceMatrix['rows'][number]) => {
+            const finding = row.findings.find(
+              (f) => f.requirementId === policy.id,
+            )
+            if (!finding)
+              return (
+                <span className="text-slate-300 dark:text-slate-600">—</span>
+              )
+            return (
+              <span
+                title={`${labels.states[finding.state] ?? finding.state}${finding.expiresOn ? ` · ${finding.expiresOn}` : ''}${finding.reasons.length ? ` · ${finding.reasons.map((r) => labels.reasons[r] ?? r).join(', ')}` : ''}`}
+              >
+                <Badge variant={stateTone(finding.state)}>
+                  {finding.state === 'compliant'
+                    ? '✓'
+                    : finding.state === 'expiring'
+                      ? `${finding.daysToExpiry ?? 0}d`
+                      : finding.state === 'waived'
+                        ? '~'
+                        : '!'}
+                </Badge>
+              </span>
+            )
+          },
+        })),
+        {
+          key: 'exposure',
+          header: labels.exposure,
+          align: 'right',
+          className: 'text-right tabular-nums',
+          cell: (row) =>
+            decimalCmp(row.openBalance, '0') > 0 ? (
+              <span
+                className={
+                  row.blocksPayment
+                    ? 'font-semibold text-red-600 dark:text-red-400'
+                    : ''
                 }
-                return (
-                  <TableCell key={policy.id} className="text-center">
-                    <span
-                      title={`${labels.states[finding.state] ?? finding.state}${
-                        finding.expiresOn ? ` · ${finding.expiresOn}` : ''
-                      }${finding.reasons.length ? ` · ${finding.reasons.map((r) => labels.reasons[r] ?? r).join(', ')}` : ''}`}
-                    >
-                      <Badge variant={stateTone(finding.state)}>
-                        {finding.state === 'compliant'
-                          ? '✓'
-                          : finding.state === 'expiring'
-                            ? `${finding.daysToExpiry ?? 0}d`
-                            : finding.state === 'waived'
-                              ? '~'
-                              : '!'}
-                      </Badge>
-                    </span>
-                  </TableCell>
-                )
-              })}
-              <TableCell className="text-right tabular-nums">
-                {decimalCmp(row.openBalance, '0') > 0 ? (
-                  <span className={row.blocksPayment ? 'font-semibold text-red-600 dark:text-red-400' : ''}>
-                    {labels.money[row.partyId] ?? ''}
-                  </span>
-                ) : (
-                  <span className="text-slate-300 dark:text-slate-600">—</span>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+              >
+                {labels.money[row.partyId] ?? ''}
+              </span>
+            ) : (
+              <span className="text-slate-300 dark:text-slate-600">—</span>
+            ),
+        },
+      ]}
+    />
   )
 }
