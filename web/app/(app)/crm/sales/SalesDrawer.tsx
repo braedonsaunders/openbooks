@@ -12,6 +12,17 @@ import {
   UrlDrawer,
   Badge,
 } from "@openbooks/ui";
+import {
+  Users,
+  Target,
+  Briefcase,
+  TrendingUp,
+  UserRound,
+  Settings2,
+} from "lucide-react";
+import { Panel } from "../../analytics/_ui/Panel";
+import { KpiCard } from "../../analytics/_ui/KpiCard";
+import { confirmDialog } from "@/lib/confirm";
 import { apiJson } from "@/lib/api-error";
 import type {
   SalesCommand,
@@ -54,6 +65,9 @@ export function SalesDrawer({
   );
   const [manager, setManager] = useState(source?.manager_employee_id ?? "");
   const [teamId, setTeam] = useState(source?.sales_team_id ?? "");
+  const [quotaTarget, setQuotaTarget] = useState<"representative" | "team">(
+    source?.sales_team_id ? "team" : "representative",
+  );
   const [repId, setRep] = useState(source?.id ?? "");
   const [enabled, setEnabled] = useState(source?.is_sales_rep ?? true);
   const [since, setSince] = useState(source?.sales_rep_since ?? data.periodEnd);
@@ -263,12 +277,41 @@ export function SalesDrawer({
       closeHref={closeHref}
       title={row?.name ?? t(`tabs.${data.page}`)}
       description={t("drawerDescription")}
-      size={data.page === "territories" ? "2xl" : "lg"}
+      size={
+        data.page === "territories" || data.page === "representatives"
+          ? "2xl"
+          : "xl"
+      }
       footer={
         <div className="flex flex-wrap justify-end gap-2">
           <Link href={closeHref}>
             <Button variant="outline">{t("cancel")}</Button>
           </Link>
+          {row?.is_sales_rep && data.page === "representatives" && editable ? (
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={async () => {
+                if (
+                  await confirmDialog({
+                    title: t("removeRepTitle"),
+                    message: t("removeRepBody"),
+                    confirmLabel: t("removeRep"),
+                    tone: "danger",
+                  })
+                )
+                  await perform({
+                    action: "representative",
+                    employeeId: row.id,
+                    enabled: false,
+                    since: row.sales_rep_since ?? since,
+                    expectedRevision: row.updated_at!,
+                  });
+              }}
+            >
+              {t("removeRep")}
+            </Button>
+          ) : null}
           {editable ? (
             <Button disabled={busy} onClick={save}>
               {busy ? t("saving") : t("save")}
@@ -332,43 +375,131 @@ export function SalesDrawer({
           </div>
         ) : null}
         {data.page === "representatives" ? (
-          <>
-            <Field label={t("employee")}>
-              <Select
-                value={repId}
-                disabled={!!row || !editable}
-                onChange={(e) => {
-                  setRep(e.target.value);
-                  router.push(
-                    `/crm/sales/representatives?row=${e.target.value}`,
-                  );
-                }}
+          <div className="space-y-4">
+            {row?.is_sales_rep && row.repSummary ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <KpiCard
+                  label={t("assignedCustomers")}
+                  value={
+                    row.repSummary.customers === null
+                      ? "—"
+                      : String(row.repSummary.customers)
+                  }
+                  icon={Users}
+                  accent="teal"
+                />
+                <KpiCard
+                  label={t("openOpportunities")}
+                  value={
+                    row.repSummary.openOpportunities === null
+                      ? "—"
+                      : String(row.repSummary.openOpportunities)
+                  }
+                  icon={TrendingUp}
+                  accent="sky"
+                />
+                <KpiCard
+                  label={t("teamMemberships")}
+                  value={String(row.repSummary.teams)}
+                  icon={Briefcase}
+                  accent="violet"
+                />
+                <KpiCard
+                  label={t("activeQuotas")}
+                  value={String(row.repSummary.quotas)}
+                  icon={Target}
+                  accent="amber"
+                />
+              </div>
+            ) : null}
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Panel title={t("repIdentity")} icon={UserRound}>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
+                  <dt className="text-slate-500">{t("employeeNumber")}</dt>
+                  <dd className="text-right font-medium">
+                    {row?.employee_number ?? "—"}
+                  </dd>
+                  <dt className="text-slate-500">{t("legalEntity")}</dt>
+                  <dd className="text-right font-medium">
+                    {data.subsidiaries.find(
+                      (entity) => entity.id === row?.subsidiary_id,
+                    )?.name ?? "—"}
+                  </dd>
+                  <dt className="text-slate-500">{t("department")}</dt>
+                  <dd className="text-right font-medium">
+                    {row?.department_name ?? "—"}
+                  </dd>
+                </dl>
+                <Link
+                  className="mt-4 inline-block text-sm font-medium text-teal-700 dark:text-teal-300"
+                  href={
+                    repId
+                      ? `/entities/employees?party=${repId}`
+                      : "/entities/employees"
+                  }
+                >
+                  {t("manageEmployee")} →
+                </Link>
+              </Panel>
+              <Panel
+                title={t("repSettings")}
+                icon={Settings2}
+                bodyClassName="space-y-4"
               >
-                {options(data.employees)}
-              </Select>
-            </Field>
-            <Link className="text-sm text-teal-700" href="/entities/employees">
-              {t("manageEmployee")}
-            </Link>
-            <Field label={t("eligibility")}>
-              <Select
-                value={enabled ? "yes" : "no"}
-                disabled={!editable}
-                onChange={(e) => setEnabled(e.target.value === "yes")}
-              >
-                <option value="yes">{t("eligible")}</option>
-                <option value="no">{t("notDesignated")}</option>
-              </Select>
-            </Field>
-            <Field label={t("effectiveFrom")}>
-              <Input
-                type="date"
-                value={since}
-                disabled={!editable}
-                onChange={(e) => setSince(e.target.value)}
-              />
-            </Field>
-          </>
+                <Field label={t("employee")}>
+                  {row ? (
+                    <Input value={row.name} readOnly />
+                  ) : (
+                    <Select
+                      value={repId}
+                      disabled={!!row || !editable}
+                      onChange={(e) => {
+                        setRep(e.target.value);
+                        router.push(
+                          `/crm/sales/representatives?row=${e.target.value}`,
+                        );
+                      }}
+                    >
+                      {options(data.employees)}
+                    </Select>
+                  )}
+                </Field>
+                <Field label={t("eligibility")}>
+                  <Select
+                    value={enabled ? "yes" : "no"}
+                    disabled={!editable}
+                    onChange={(e) => setEnabled(e.target.value === "yes")}
+                  >
+                    <option value="yes">{t("eligible")}</option>
+                    <option value="no">{t("notDesignated")}</option>
+                  </Select>
+                </Field>
+                <Field label={t("effectiveFrom")}>
+                  <Input
+                    type="date"
+                    value={since}
+                    disabled={!editable}
+                    onChange={(e) => setSince(e.target.value)}
+                  />
+                </Field>
+              </Panel>
+            </div>
+            {row?.is_sales_rep ? (
+              <Panel title={t("repActivity")} icon={Briefcase}>
+                <div className="flex flex-wrap gap-3">
+                  <Link href={`/crm/sales/teams?salesRep=${row.id}`}>
+                    <Button variant="outline">{t("teamMemberships")}</Button>
+                  </Link>
+                  <Link href={`/crm/sales/quotas?salesRep=${row.id}`}>
+                    <Button variant="outline">{t("activeQuotas")}</Button>
+                  </Link>
+                  <Link href={data.reports.evidence}>
+                    <Button variant="outline">{t("reviewEvidence")}</Button>
+                  </Link>
+                </div>
+              </Panel>
+            ) : null}
+          </div>
         ) : (
           <>
             <fieldset disabled={!editable} className="space-y-5">
@@ -476,33 +607,67 @@ export function SalesDrawer({
               ) : null}
               {data.page === "quotas" ? (
                 <>
+                  <Field label={t("quotaTarget")}>
+                    <Select
+                      value={quotaTarget}
+                      onChange={(event) => {
+                        setQuotaTarget(
+                          event.target.value as "representative" | "team",
+                        );
+                        setEmployee("");
+                        setTeam("");
+                      }}
+                    >
+                      <option value="representative">
+                        {t("individualRep")}
+                      </option>
+                      <option value="team">{t("team")}</option>
+                    </Select>
+                  </Field>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label={t("representative")}>
-                      <Select
-                        value={employeeId}
-                        onChange={(e) => {
-                          setEmployee(e.target.value);
-                          if (e.target.value) setTeam("");
-                        }}
-                      >
-                        {options(reps)}
-                      </Select>
-                    </Field>
-                    <Field label={t("team")}>
-                      <Select
-                        value={teamId}
-                        onChange={(e) => {
-                          setTeam(e.target.value);
-                          if (e.target.value) setEmployee("");
-                        }}
-                      >
-                        {options(
-                          data.teams.filter(
-                            (e) => e.subsidiary_id === subsidiaryId,
-                          ),
-                        )}
-                      </Select>
-                    </Field>
+                    {quotaTarget === "representative" ? (
+                      <Field label={t("representative")}>
+                        <Select
+                          value={employeeId}
+                          onChange={(event) => {
+                            const id = event.target.value;
+                            setEmployee(id);
+                            setTeam("");
+                            const entity = data.representatives.find(
+                              (rep) => rep.id === id,
+                            )?.subsidiary_id;
+                            if (entity) setSubsidiary(entity);
+                          }}
+                        >
+                          {options(
+                            data.representatives.filter(
+                              (rep) => rep.subsidiary_id !== null,
+                            ),
+                          )}
+                        </Select>
+                      </Field>
+                    ) : (
+                      <Field label={t("team")}>
+                        <Select
+                          value={teamId}
+                          onChange={(event) => {
+                            const id = event.target.value;
+                            setTeam(id);
+                            setEmployee("");
+                            const entity = data.teams.find(
+                              (team) => team.id === id,
+                            )?.subsidiary_id;
+                            if (entity) setSubsidiary(entity);
+                          }}
+                        >
+                          {options(
+                            data.teams.filter(
+                              (team) => team.subsidiary_id !== null,
+                            ),
+                          )}
+                        </Select>
+                      </Field>
+                    )}
                     <Field label={t("from")}>
                       <Input
                         type="date"
@@ -655,6 +820,7 @@ export function SalesDrawer({
                   </Field>
                   {data.mapEnabled ? (
                     <TerritoryMap
+                      customers={data.customerLocations}
                       value={geography}
                       onChange={editable ? setGeography : undefined}
                       territories={source ? [source] : []}

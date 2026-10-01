@@ -65,6 +65,59 @@ test(
         withOrg(org.orgId, () =>
           writeSalesCommand({ ...scope, actorId }, command),
         ) as Promise<SalesRecord>;
+      await t.test(
+        "inactive employees can be removed from Sales but cannot be newly designated",
+        async () => {
+          const retired = await withOrg(org.orgId, async () => {
+            const person = (
+              await db.execute<{ id: string }>(
+                sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Retired sales employee',${org.subsidiaryId}) returning id`,
+              )
+            ).rows[0]!.id;
+            await db.execute(
+              sql`insert into employee_roles(org_id,party_id,is_active,is_sales_rep,sales_rep_since) values(${org.orgId},${person},false,true,'2020-01-01')`,
+            );
+            return person;
+          });
+          const revision = await withOrg(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{ updated_at: string }>(
+                  sql`select updated_at::text from employee_roles where org_id=${org.orgId} and party_id=${retired}`,
+                )
+              ).rows[0]!.updated_at,
+          );
+          await assert.rejects(
+            () =>
+              write({
+                action: "representative",
+                employeeId: retired,
+                enabled: true,
+                since: "2020-01-01",
+                expectedRevision: revision,
+              }),
+            /active employee/,
+          );
+          await write({
+            action: "representative",
+            employeeId: retired,
+            enabled: false,
+            since: "2020-01-01",
+            expectedRevision: revision,
+          });
+          const saved = await withOrg(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{ is_sales_rep: boolean }>(
+                  sql`select is_sales_rep from employee_roles where org_id=${org.orgId} and party_id=${retired}`,
+                )
+              ).rows[0]!,
+          );
+          assert.equal(saved.is_sales_rep, false);
+        },
+      );
       let salesTeam: SalesRecord;
       let quota: SalesRecord;
       await t.test(

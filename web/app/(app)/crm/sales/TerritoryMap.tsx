@@ -16,6 +16,7 @@ import type {
   AreaGeometry,
   BoundarySelection,
   SalesRecord,
+  SalesCustomerLocation,
   TerritoryGeography,
 } from "@openbooks/engine/crm/sales/contracts";
 import { EMPTY_TERRITORY_GEOGRAPHY } from "@openbooks/engine/crm/sales/contracts";
@@ -25,11 +26,13 @@ export function TerritoryMap({
   value = EMPTY_TERRITORY_GEOGRAPHY,
   onChange,
   territories = [],
+  customers = [],
   onTerritoryClick,
 }: {
   value?: TerritoryGeography;
   onChange?: (v: TerritoryGeography) => void;
   territories?: SalesRecord[];
+  customers?: SalesCustomerLocation[];
   onTerritoryClick?: (id: string) => void;
 }) {
   const t = useTranslations("crm.sales");
@@ -122,6 +125,13 @@ export function TerritoryMap({
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
         });
+      instance.addSource("customers", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+        cluster: true,
+        clusterRadius: 45,
+        clusterMaxZoom: 12,
+      });
       instance.addLayer({
         id: "boundaries-fill",
         type: "fill",
@@ -152,6 +162,77 @@ export function TerritoryMap({
           "line-width": 2,
         },
       });
+      instance.addLayer({
+        id: "customers-cluster",
+        type: "circle",
+        source: "customers",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": "#0284c7",
+          "circle-radius": [
+            "step",
+            ["get", "point_count"],
+            14,
+            20,
+            20,
+            100,
+            27,
+          ],
+          "circle-opacity": 0.9,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-width": 2,
+        },
+      });
+      instance.addLayer({
+        id: "customers-point",
+        type: "circle",
+        source: "customers",
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-color": ["case", ["get", "assigned"], "#0284c7", "#d97706"],
+          "circle-radius": 6,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-width": 2,
+        },
+      });
+      instance.on("click", "customers-point", (event) => {
+        const feature = event.features?.[0];
+        if (!feature || feature.geometry.type !== "Point") return;
+        const content = document.createElement("div");
+        content.className = "space-y-1 text-sm text-slate-900";
+        const name = document.createElement("strong");
+        name.textContent = String(feature.properties?.name ?? "");
+        content.append(name);
+        const link = document.createElement("a");
+        link.textContent = t("openCustomer");
+        link.className = "block text-teal-700";
+        link.href = `/entities/customers?party=${encodeURIComponent(String(feature.properties?.id ?? ""))}`;
+        content.append(link);
+        new maplibregl.Popup()
+          .setLngLat(feature.geometry.coordinates as [number, number])
+          .setDOMContent(content)
+          .addTo(instance);
+      });
+      instance.on("click", "customers-cluster", async (event) => {
+        const feature = event.features?.[0];
+        if (!feature || feature.geometry.type !== "Point") return;
+        const zoom = await (
+          instance.getSource("customers") as GeoJSONSource
+        ).getClusterExpansionZoom(Number(feature.properties?.cluster_id));
+        if (!stopped)
+          instance.easeTo({
+            center: feature.geometry.coordinates as [number, number],
+            zoom,
+          });
+      });
+      for (const layer of ["customers-point", "customers-cluster"]) {
+        instance.on("mouseenter", layer, () => {
+          instance.getCanvas().style.cursor = "pointer";
+        });
+        instance.on("mouseleave", layer, () => {
+          instance.getCanvas().style.cursor = "";
+        });
+      }
       instance.on("click", "boundaries-fill", (e) => {
         const current = state.current;
         if (!current.onChange || current.mode !== "select") return;
@@ -368,6 +449,24 @@ export function TerritoryMap({
       features,
     });
   }, [ready, onChange, value, territories]);
+  useEffect(() => {
+    if (!ready || !map.current) return;
+    (map.current.getSource("customers") as GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: customers.map((customer) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [customer.longitude, customer.latitude],
+        },
+        properties: {
+          id: customer.id,
+          name: customer.name,
+          assigned: customer.employeeId !== null,
+        },
+      })),
+    });
+  }, [customers, ready]);
   function drawingMode(next: string) {
     setMode(next);
     state.current.mode = next;
@@ -445,6 +544,18 @@ export function TerritoryMap({
           </>
         ) : null}
       </div>
+      {customers.length ? (
+        <div className="flex flex-wrap gap-4 border-t bg-white px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+          <span className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-600" />
+            {t("assignedCustomer")}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-600" />
+            {t("unassignedCustomer")}
+          </span>
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="bg-amber-50 p-3 text-sm text-amber-900">
           {error}

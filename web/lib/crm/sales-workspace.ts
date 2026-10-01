@@ -1,3 +1,4 @@
+import { loadSalesMapCustomers } from "./sales-map";
 import { EMPTY_TERRITORY_GEOGRAPHY } from "@openbooks/engine/crm/sales/contracts";
 import "server-only";
 import { ensureReportDefinitions } from "@openbooks/engine/reports/definitions";
@@ -35,6 +36,18 @@ export async function loadSalesWorkspace(
     orgId,
     actorId,
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  };
+  const mapEnabled = await isFeatureEnabled(orgId, "geographicTerritories");
+  const dimensionId = (key: string) => {
+    const value = params[key];
+    if (value && !isUuid(value)) notFound();
+    return value || null;
+  };
+  const mapFilters = {
+    subsidiaryId: dimensionId("subsidiary"),
+    departmentId: dimensionId("department"),
+    salesTeamId: dimensionId("salesTeam"),
+    employeeId: dimensionId("salesRep"),
   };
   await ensureReportDefinitions(orgId);
   const reportRows = (
@@ -99,6 +112,11 @@ export async function loadSalesWorkspace(
       sql`select id,name,id as subsidiary_id from subsidiaries where org_id=${orgId} and is_active and ${salesScopeWhere(scope, sql`id`)} order by name,id`,
     )
   ).rows;
+  const departments = (
+    await db.execute<SalesOption>(
+      sql`select d.id,d.name,d.subsidiary_id from departments d where d.org_id=${orgId} and d.is_active and (d.subsidiary_id is null or ${salesScopeWhere(scope, sql`d.subsidiary_id`)}) order by d.name,d.id`,
+    )
+  ).rows;
   const currencies = (
     await db.execute<{ code: string; name: string }>(
       sql`select code,name from currencies order by code`,
@@ -114,7 +132,7 @@ export async function loadSalesWorkspace(
           : sql`crm_sales_quotas e left join parties p on p.org_id=e.org_id and p.id=e.employee_id left join crm_sales_teams t on t.org_id=e.org_id and t.id=e.sales_team_id`;
   const fields =
     page === "representatives"
-      ? sql`e.*,e.party_id as id,p.display_name as name,p.subsidiary_id,e.updated_at::text,0 as revision,e.sales_rep_since::text`
+      ? sql`e.party_id as id,p.display_name as name,p.subsidiary_id,e.is_sales_rep,e.is_active,e.employee_number,e.job_title,e.updated_at::text,0 as revision,e.sales_rep_since::text,(select d.name from departments d where d.org_id=e.org_id and d.id=e.department_id) as department_name`
       : page === "teams"
         ? sql`e.*,p.display_name as manager_name,(select count(*)::int from crm_sales_team_members m where m.org_id=e.org_id and m.team_id=e.id and m.is_active and m.valid_from<=${today}::date and (m.valid_to is null or m.valid_to>=${today}::date)) as member_count`
         : page === "territories"
@@ -123,7 +141,19 @@ export async function loadSalesWorkspace(
   const entity =
     page === "representatives" ? sql`p.subsidiary_id` : sql`e.subsidiary_id`;
   const name = page === "representatives" ? sql`p.display_name` : sql`e.name`;
-  const where = sql`e.org_id=${orgId} and ${salesScopeWhere(scope, entity)} and (${q ?? ""}='' or ${name} ilike ${"%" + (q ?? "") + "%"})`;
+  const territoryDimensions =
+    page === "quotas"
+      ? sql`(${mapFilters.employeeId}::uuid is null or e.employee_id=${mapFilters.employeeId}::uuid)`
+      : page === "teams"
+        ? sql`(${mapFilters.employeeId}::uuid is null or exists(select 1 from crm_sales_team_members member where member.org_id=e.org_id and member.team_id=e.id and member.employee_id=${mapFilters.employeeId}::uuid and member.is_active))`
+        : page === "territories"
+          ? sql`
+    (${mapFilters.subsidiaryId}::uuid is null or e.subsidiary_id=${mapFilters.subsidiaryId}::uuid)
+    and (${mapFilters.salesTeamId}::uuid is null or e.sales_team_id=${mapFilters.salesTeamId}::uuid)
+    and (${mapFilters.employeeId}::uuid is null or e.default_employee_id=${mapFilters.employeeId}::uuid)
+    and (${mapFilters.departmentId}::uuid is null or exists(select 1 from employee_roles rep where rep.org_id=e.org_id and rep.department_id=${mapFilters.departmentId}::uuid and (rep.party_id=e.default_employee_id or rep.party_id=e.manager_employee_id or exists(select 1 from crm_sales_team_members member where member.org_id=e.org_id and member.team_id=e.sales_team_id and member.employee_id=rep.party_id and member.is_active and member.valid_from<=${today}::date and (member.valid_to is null or member.valid_to>=${today}::date)))))`
+          : sql`true`;
+  const where = sql`e.org_id=${orgId} and ${salesScopeWhere(scope, entity)} and ${page === "representatives" ? sql`e.is_sales_rep` : sql`true`} and ${territoryDimensions} and (${q ?? ""}='' or ${name} ilike ${"%" + (q ?? "") + "%"})`;
   const total =
     page === "overview"
       ? 0
@@ -142,6 +172,18 @@ export async function loadSalesWorkspace(
             sql`select ${fields} from ${relation} where ${where} order by ${name},e.id limit ${perPage} offset ${(currentPage - 1) * perPage}`,
           )
         ).rows;
+  const mapTerritories =
+    page === "territories" && params.view === "map" && mapEnabled
+      ? (
+          await db.execute<SalesRecord>(
+            sql`select ${fields} from ${relation} where ${where} order by ${name},e.id limit 500`,
+          )
+        ).rows
+      : [];
+  const customerMap =
+    page === "territories" && mapEnabled && can(authz, "parties.read")
+      ? await loadSalesMapCustomers(scope, mapFilters)
+      : { locations: [], stats: { total: 0, located: 0 } };
   let selected: SalesRecord | null = null;
   const requestedRecord = params.row === "new" ? params.revises : params.row;
   if (requestedRecord && requestedRecord !== "new") {
@@ -154,6 +196,27 @@ export async function loadSalesWorkspace(
         )
       ).rows[0] ?? null;
     if (!selected) notFound();
+    if (page === "representatives") {
+      const summary = (
+        await db.execute<{
+          customers: number;
+          openOpportunities: number;
+          teams: number;
+          quotas: number;
+        }>(sql`select
+        (select count(*)::int from customer_roles c join parties customer on customer.org_id=c.org_id and customer.id=c.party_id where c.org_id=${orgId} and c.sales_rep_id=${selected.id} and c.is_active and customer.is_active and ${salesScopeWhere(scope, sql`customer.subsidiary_id`)}) as customers,
+        (select count(*)::int from crm_opportunities opportunity join crm_opportunity_statuses status on status.org_id=opportunity.org_id and status.id=opportunity.status_id where opportunity.org_id=${orgId} and opportunity.sales_rep_id=${selected.id} and opportunity.is_active and not status.is_closed and ${salesScopeWhere(scope, sql`opportunity.subsidiary_id`)}) as "openOpportunities",
+        (select count(distinct member.team_id)::int from crm_sales_team_members member join crm_sales_teams team on team.org_id=member.org_id and team.id=member.team_id where member.org_id=${orgId} and member.employee_id=${selected.id} and member.is_active and team.is_active and member.valid_from<=${today}::date and (member.valid_to is null or member.valid_to>=${today}::date) and ${salesScopeWhere(scope, sql`team.subsidiary_id`)}) as teams,
+        (select count(*)::int from crm_sales_quotas quota where quota.org_id=${orgId} and quota.employee_id=${selected.id} and quota.lifecycle in ('draft','pending_approval','approved') and quota.period_end>=${today}::date and ${salesScopeWhere(scope, sql`quota.subsidiary_id`)}) as quotas`)
+      ).rows[0]!;
+      selected.repSummary = {
+        ...summary,
+        customers: can(authz, "parties.read") ? summary.customers : null,
+        openOpportunities: can(authz, "crm.opportunities.read")
+          ? summary.openOpportunities
+          : null,
+      };
+    }
     if (page === "teams")
       selected.members = (
         await db.execute<{
@@ -169,7 +232,11 @@ export async function loadSalesWorkspace(
   if (page === "territories") {
     // Masked sandbox coverage has no published version and must be reviewed
     // before it can become operational again.
-    for (const record of [...rows, ...(selected ? [selected] : [])])
+    for (const record of [
+      ...rows,
+      ...mapTerritories,
+      ...(selected ? [selected] : []),
+    ])
       if (
         !Array.isArray(record.geography?.includes) ||
         !Array.isArray(record.geography?.excludes) ||
@@ -192,6 +259,10 @@ export async function loadSalesWorkspace(
     )
   ).rows;
   return {
+    departments,
+    customerLocations: customerMap.locations,
+    customerLocationStats: customerMap.stats,
+    mapTerritories,
     reports,
     quotaOptions,
     page,
@@ -206,7 +277,7 @@ export async function loadSalesWorkspace(
     currencies,
     baseCurrency: organization.base_currency,
     multiCurrency: await isFeatureEnabled(orgId, "multiCurrency"),
-    mapEnabled: await isFeatureEnabled(orgId, "geographicTerritories"),
+    mapEnabled,
     canManage: can(authz, "crm.setup.manage"),
     canApprove: can(authz, "crm.forecasts.override"),
     selected,

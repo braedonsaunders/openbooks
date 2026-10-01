@@ -260,3 +260,44 @@ test('registered lists retain search and domain filters when a filter returns no
   assert.ok(host.querySelector('thead')?.textContent?.includes('Tenant'))
   assert.ok(host.querySelector('tbody')?.textContent?.includes('No matching leases'))
 })
+
+test("a button-role record row opens from its cells and keyboard without treating itself as a nested control", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const opened: string[] = [];
+  try {
+    await act(async () =>
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <PagedTable
+            rows={[{ id: "record", name: "Sales representative" }]}
+            columns={[
+              {
+                key: "name",
+                header: "Name",
+                cell: (row) => <span>{row.name}</span>,
+              },
+            ]}
+            rowKey={(row) => row.id}
+            empty="Empty"
+            onRowClick={(row) => opened.push(row.id)}
+          />
+        </NextIntlClientProvider>,
+      ),
+    );
+    const row = host.querySelector("tbody tr") as HTMLElement;
+    assert.equal(row.getAttribute("role"), "button");
+    await act(async () => row.querySelector("span")!.click());
+    assert.deepEqual(opened, ["record"]);
+    await act(async () =>
+      row.dispatchEvent(
+        new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    assert.deepEqual(opened, ["record", "record"]);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

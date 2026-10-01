@@ -301,7 +301,7 @@ async function saveCommand(
         updated_at: string;
         subsidiary_id: string | null;
       }>(sql`select e.*,e.updated_at::text as updated_at,p.subsidiary_id from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id
-      where e.org_id=${scope.orgId} and e.party_id=${input.employeeId} and e.is_active and p.is_active and ${salesScopeWhere(scope, sql`p.subsidiary_id`)} for update of e`)
+      where e.org_id=${scope.orgId} and e.party_id=${input.employeeId} and (not ${input.enabled} or (e.is_active and p.is_active)) and ${salesScopeWhere(scope, sql`p.subsidiary_id`)} for update of e`)
     ).rows[0];
     if (!before)
       throw new SalesError(

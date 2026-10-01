@@ -29,6 +29,10 @@ const group = LOCAL_NAVIGATION_BY_ID.get("crm-sales")!.tabs.map((tab) => ({
   ]!,
 }));
 const baseline: SalesWorkspaceData = {
+  departments: [],
+  customerLocations: [],
+  customerLocationStats: { total: 0, located: 0 },
+  mapTerritories: [],
   reports: {
     quota: "/reports/custom/run/quota",
     evidence: "/reports/custom/run/evidence",
@@ -95,6 +99,24 @@ test("all Sales routes use exactly one global subtab switch in the top-right hea
     ) as SalesWorkspaceData["page"];
     const screen = await mount({ ...baseline, page });
     try {
+      if (page !== "overview")
+        assert.ok(
+          [...screen.host.querySelectorAll("button")].some(
+            (button) =>
+              button.textContent ===
+              {
+                representatives: "New sales rep",
+                teams: "New sales team",
+                quotas: "New quota",
+                territories: "New territory",
+              }[page],
+          ),
+        );
+      assert.equal(
+        screen.host.textContent!.includes("No results"),
+        false,
+        "empty lists show one useful empty state",
+      );
       const strips = screen.host.querySelectorAll("[data-subtabs]");
       assert.equal(strips.length, 1, `${page} must have one shared switch`);
       assert.ok(
@@ -148,6 +170,104 @@ test("native employee rows remain visible without login identities and read-only
         a.getAttribute("href")?.includes("row=new"),
       ),
       false,
+    );
+  } finally {
+    await screen.close();
+  }
+});
+
+const rep = {
+  id: "00000000-0000-4000-8000-000000000001",
+  name: "Employee without login",
+  revision: 0,
+  subsidiary_id: "00000000-0000-4000-8000-000000000003",
+  is_sales_rep: true,
+  employee_number: "EMP-42",
+  sales_rep_since: "2020-01-01",
+  updated_at: "2026-10-01T00:00:00Z",
+  department_name: "Enterprise sales",
+  repSummary: { customers: 12, openOpportunities: 5, teams: 2, quotas: 3 },
+};
+test("representative details use the wide native drawer and Financial Health panels with editable sales details and removal", async () => {
+  const screen = await mount({
+    ...baseline,
+    page: "representatives",
+    selected: rep,
+    rows: [rep],
+    employees: [rep],
+    representatives: [rep],
+    subsidiaries: [
+      {
+        id: rep.subsidiary_id,
+        name: "Canada",
+        subsidiary_id: rep.subsidiary_id,
+      },
+    ],
+  });
+  try {
+    const dialog = document.querySelector('[role="dialog"]')!;
+    assert.ok(dialog);
+    assert.match(dialog.className, /max-w-6xl/);
+    assert.match(dialog.textContent!, /Assigned customers/);
+    assert.match(dialog.textContent!, /Enterprise sales/);
+    assert.ok(
+      [...dialog.querySelectorAll("button")].some(
+        (button) => button.textContent === "Remove sales rep",
+      ),
+    );
+    assert.ok(
+      [...dialog.querySelectorAll("button")].some(
+        (button) => button.textContent === "Save",
+      ),
+    );
+  } finally {
+    await screen.close();
+  }
+});
+test("quota creation offers both a native individual sales rep and a sales team target", async () => {
+  const screen = await mount({
+    ...baseline,
+    page: "quotas",
+    creating: true,
+    representatives: [rep],
+    employees: [rep],
+    subsidiaries: [
+      {
+        id: rep.subsidiary_id,
+        name: "Canada",
+        subsidiary_id: rep.subsidiary_id,
+      },
+    ],
+    teams: [
+      {
+        id: "00000000-0000-4000-8000-000000000004",
+        name: "Enterprise team",
+        subsidiary_id: rep.subsidiary_id,
+      },
+    ],
+  });
+  try {
+    const dialog = document.querySelector('[role="dialog"]')!;
+    assert.ok(dialog);
+    const target = [...dialog.querySelectorAll("select")].find((select) =>
+      [...select.options].some(
+        (option) => option.textContent === "Individual sales rep",
+      ),
+    )!;
+    assert.ok(target);
+    assert.ok(
+      [...dialog.querySelectorAll("option")].some(
+        (option) => option.textContent === rep.name,
+      ),
+    );
+    await act(async () => {
+      target.value = "team";
+      target.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+    assert.ok(
+      [...dialog.querySelectorAll("option")].some(
+        (option) => option.textContent === "Enterprise team",
+      ),
     );
   } finally {
     await screen.close();
