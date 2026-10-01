@@ -10,7 +10,7 @@ import { promptDialog } from '../../../../lib/prompt'
 import type { LocalNavigationPreference } from '@openbooks/engine/navigation'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useUnsavedNavigationGuard } from '../../../../lib/use-unsaved-navigation-guard'
-import { LOCAL_NAVIGATION } from '@openbooks/engine/navigation'
+import { isDefaultLocalNavigationItem, LOCAL_NAVIGATION } from '@openbooks/engine/navigation'
 import type { NavigationEditorWorkspace } from '../../../../lib/nav/catalog'
 import {
   MODULE_BY_KEY,
@@ -114,6 +114,19 @@ export function NavEditor({ initial, apps, initialRevision, localCatalog }: { in
     }))
   }
 
+  function toggleMenuVisibility(gi: number, ii: number) {
+    const group = config.groups[gi]!
+    const item = group.items[ii]!
+    const module = item.kind === 'module' ? MODULE_BY_KEY.get(item.moduleKey) : undefined
+    const hidden = !!item.hidden || isDefaultLocalNavigationItem(group.id, item)
+    setGroup(gi, {
+      items: group.items.map((candidate, index) => index !== ii ? candidate
+        : candidate.kind === 'module' && module?.menuParent && group.id === module.group
+          ? { ...candidate, placement: hidden ? 'custom' as const : undefined, hidden: false }
+          : { ...candidate, hidden: !hidden }),
+    })
+  }
+
   function toggleMobile(gi: number, ii: number) {
     const item = config.groups[gi]?.items[ii]
     if (!item) return
@@ -124,7 +137,9 @@ export function NavEditor({ initial, apps, initialRevision, localCatalog }: { in
     }
     setGroup(gi, {
       items: config.groups[gi]!.items.map((candidate, index) =>
-        index === ii ? { ...candidate, mobile: !candidate.mobile } : candidate,
+        index === ii ? { ...candidate, mobile: !candidate.mobile,
+          ...(candidate.kind === 'module' && MODULE_BY_KEY.get(candidate.moduleKey)?.menuParent && !candidate.mobile ? { placement: 'custom' as const } : {}),
+        } : candidate,
       ),
     })
   }
@@ -220,7 +235,7 @@ export function NavEditor({ initial, apps, initialRevision, localCatalog }: { in
               {g.items.map((item, ii) => (
                 <li
                   key={`${item.kind === 'module' ? item.moduleKey : item.kind === 'app' ? `app:${item.appKey}` : item.href}-${ii}`}
-                  className={cn('flex flex-wrap items-center gap-2 py-1.5', item.hidden && 'opacity-45')}
+                  className={cn('flex flex-wrap items-center gap-2 py-1.5', (item.hidden || isDefaultLocalNavigationItem(g.id, item)) && 'opacity-45')}
                 >
                   <Input
                     value={
@@ -274,15 +289,11 @@ export function NavEditor({ initial, apps, initialRevision, localCatalog }: { in
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label={item.hidden ? t('showItem') : t('hideItem')}
-                    onClick={() =>
-                      setGroup(gi, {
-                        items: g.items.map((x, k) => (k === ii ? { ...x, hidden: !x.hidden } : x)),
-                      })
-                    }
+                    aria-label={item.hidden || isDefaultLocalNavigationItem(g.id, item) ? t('showItem') : t('hideItem')}
+                    onClick={() => toggleMenuVisibility(gi, ii)}
                     disabled={busy}
                   >
-                    {item.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {item.hidden || isDefaultLocalNavigationItem(g.id, item) ? <EyeOff size={14} /> : <Eye size={14} />}
                   </Button>
                   <Button
                     variant="ghost"

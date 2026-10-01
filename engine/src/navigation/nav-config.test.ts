@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { defaultNavConfig, NAV_MODULES, type OrgNavConfig } from './nav-registry.ts'
-import { reconcileNavConfig, featureAwareNavConfig } from './nav-config.ts'
+import { reconcileNavConfig, featureAwareNavConfig, isDefaultLocalNavigationItem } from './nav-config.ts'
 import { applyLocalNavigationPreferences } from './local-navigation.ts'
 
 test('legacy default people destinations move without losing settings or mutating stored data', () => {
@@ -60,4 +60,20 @@ test('local order, visibility and names cannot resurrect unavailable choices', (
     { href: '/payroll/runs', hidden: true },
   ] }), [{ href: '/payroll/runs', label: 'Process payroll' }])
   assert.deepEqual(applyLocalNavigationPreferences([...tabs, { href: '/new', label: 'New' }], { items: [{ href: '/payroll', hidden: true }] }), [tabs[1], { href: '/new', label: 'New' }])
+})
+
+test('compact Talent defaults preserve stored navigation and deliberate placements', () => {
+  const saved = defaultNavConfig()
+  saved.localNavigation = { 'hrm-talent': { items: [{ href: '/hrm/performance?tab=talent', label: 'Succession planning' }] } }
+  const before = structuredClone(saved)
+  const result = reconcileNavConfig(saved)
+  const people = result.groups.find((group) => group.id === 'hrm')!
+  const details = people.items.filter((item) => isDefaultLocalNavigationItem(people.id, item))
+  assert.equal(details.length, 10)
+  assert.deepEqual(result, before)
+  assert.deepEqual(saved, before)
+  const calibration = details.find((item) => item.kind === 'module' && item.moduleKey === 'hrm-performance-calibration')!
+  assert.equal(isDefaultLocalNavigationItem('hrm', { ...calibration, placement: 'custom' }), false)
+  assert.equal(isDefaultLocalNavigationItem('custom-work', calibration), false)
+  assert.equal(isDefaultLocalNavigationItem('hrm', { kind: 'link', href: '/hrm/performance?tab=calibration', label: 'Calibration shortcut' }), false)
 })

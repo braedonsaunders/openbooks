@@ -36,6 +36,8 @@ export interface NavModule {
   exact?: boolean
   /** The workspace header owns this landing link in its default group. */
   homeOnly?: boolean
+  /** Registered entry-point key; company placements can promote this view. */
+  menuParent?: string
 }
 
 export const NAV_GROUPS = [
@@ -1049,6 +1051,7 @@ for (const workspace of LOCAL_NAVIGATION) {
       subgroup: workspace.id === 'hrm-people' ? 'workforce' : workspace.id === 'hrm-hiring' ? 'hrm-talent' : workspace.id.startsWith('hrm-') ? workspace.id : workspace.id === 'payroll' ? 'payroll-work' : workspace.id,
       requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, featureKey: tab.feature ?? workspace.feature,
       exact: true,
+      ...(tab.menuParent ? { menuParent: tab.menuParent } : {}),
     })
   }
 }
