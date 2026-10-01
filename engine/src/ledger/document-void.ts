@@ -1,6 +1,6 @@
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
-import { db, schema, withOrgTransaction } from "../platform/db.ts";
+import { db, schema, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../periods/period-policy.ts";
@@ -33,6 +33,7 @@ import { isUuid } from "../platform/uuid.ts";
  */
 export type DocumentVoidCode =
   | "invalid"
+  | "posting-effects-incomplete"
   | "stale-revision"
   | "reversal-period-uncovered"
   | "reversal-period-closed"
@@ -152,6 +153,20 @@ async function loadDocument(documentId: string, orgId: string): Promise<Document
   return doc;
 }
 
+/** A void must not strand unfinished effects on a document that can no longer
+ * use the posted-document retry action. Successful effects are terminal. */
+async function assertPostingEffectsCompleteForVoid(exec: SqlExecutor, orgId: string, documentId: string): Promise<void> {
+  const effect = (await exec.execute<{ status: string }>(sql`
+    select status from posting_effects where org_id=${orgId} and document_id=${documentId}
+  `)).rows[0];
+  if (effect && effect.status !== "succeeded") {
+    throw new DocumentVoidError(
+      `posting effects are ${effect.status}; wait for completion before voiding. For a terminal failure, resolve the cause and choose Retry posting effects on the posted document with a review reason`,
+      422, "posting-effects-incomplete",
+    );
+  }
+}
+
 function assertDocumentVoidable(doc: DocumentRow): void {
   if (!["approved", "posted"].includes(doc.status)) {
     throw new DocumentVoidError(
@@ -239,6 +254,7 @@ export async function requestDocumentVoid(
     // reservation below would otherwise answer with the generic draft/status
     // refusal and the operator would never see the file number or its remedy.
     await refuseReleasedPayRunBankFile(db, input.orgId, input.documentId);
+    if (current.status === "posted") await assertPostingEffectsCompleteForVoid(db, input.orgId, input.documentId);
     // This compare-and-set is the single-winner claim. PostgreSQL locks the
     // aggregate row and rechecks the predicate after a concurrent waiter
     // resumes. Every material before_void effect stays in this same
@@ -799,6 +815,8 @@ export async function completeRequestedDocumentVoid(
           `this transaction feeds ${downstream.rows[0].document_number} — reverse the downstream transaction first`,
         );
       }
+
+      if (doc.status === "posted") await assertPostingEffectsCompleteForVoid(tx, orgId, documentId);
 
       // Retainage lifecycle fence. A draw invoice/bill whose holdback supports
       // live retainage releases cannot be voided out from under them: the void
