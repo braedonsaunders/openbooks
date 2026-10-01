@@ -10,6 +10,8 @@ changes; each release documents required operator action.
 
 - Use Enrollment consistently throughout English Benefits buttons, headings,
   empty states, enrollment-window drawers and report labels.
+- Render Benefits record counts in native table footer rows to preserve valid
+  markup during server rendering and hydration.
 
 No additional migrations or operator configuration are required.
 
