@@ -322,20 +322,20 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compensation_cycles: {
-    // top-10 window: local search stays off so a capped slice never poses as the collection.
+    // top-10 window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/hrm/compensation',
     rowsField: 'cycles',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   hrm_compensation_plans: {
-    // top-10 window: local search stays off so a capped slice never poses as the collection.
+    // top-10 window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/hrm/compensation',
     rowsField: 'plans',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   hrm_compensation_cycle_lines: {
     route: '/hrm/compensation/cycles',
@@ -350,12 +350,12 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compliance_findings: {
-    // 200-capped window beside full-list tiles: local search stays off so a capped slice never poses as the collection.
+    // 200-capped window beside full-list tiles: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'findings',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   hrm_compliance_schedules: {
     route: '/hrm/compliance',
@@ -364,12 +364,12 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compliance_runs: {
-    // 200-capped window: local search stays off so a capped slice never poses as the collection.
+    // 200-capped window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'runs',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   hrm_compliance_classes: {
     route: '/hrm/compliance',
@@ -378,20 +378,20 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compliance_entries: {
-    // 200-capped window: local search stays off so a capped slice never poses as the collection.
+    // 200-capped window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'entries',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   hrm_qualifications_ledger: {
-    // 200-capped window: local search stays off so a capped slice never poses as the collection.
+    // 200-capped window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/hrm/qualifications',
     rowsField: 'rows',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   hrm_qualifications_requirements: {
     route: '/hrm/qualifications',
@@ -400,12 +400,18 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_qualifications_coverage: {
-    // crew pager owns the window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
+    showPerPage: false,
     route: '/hrm/qualifications',
     rowsField: 'coverageRows',
     rowKeyField: 'employmentId',
-    mode: 'loaded',
+    mode: 'server',
+    paging: {
+      totalField: 'coverageTotal',
+      pageField: 'coveragePage',
+      perPageField: 'coveragePerPage',
+      pageParamKey: 'crewPage',
+    },
   },
   hrm_qualifications_alerts: {
     route: '/hrm/qualifications',
@@ -499,36 +505,36 @@ const SOURCES = {
     mode: 'loaded',
   },
   me_overview_steps: {
-    // top-5 window: local search stays off so a capped slice never poses as the collection.
+    // top-5 window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/me',
     rowsField: 'steps',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   me_overview_requests: {
-    // top-5 window: local search stays off so a capped slice never poses as the collection.
+    // top-5 window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/me',
     rowsField: 'requests',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   me_overview_qualifications: {
-    // top-5 window: local search stays off so a capped slice never poses as the collection.
+    // top-5 window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/me',
     rowsField: 'qualifications',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   me_overview_pay: {
-    // six-stub window: local search stays off so a capped slice never poses as the collection.
+    // six-stub window: the domain reader owns the displayed window; no client filtering or second pagination.
     clientSearch: false,
     route: '/me',
     rowsField: 'payStubs',
     rowKeyField: 'id',
-    mode: 'loaded',
+    mode: 'external',
   },
   me_benefits_elections: {
     route: '/me/benefits',
