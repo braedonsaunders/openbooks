@@ -157,6 +157,8 @@ export const PERMISSION_CATALOGUE = [
   // approve key alone does NOT establish separation of duties: full approval
   // authorization additionally requires the identity invariant in
   // engine/src/hrm/authorization.ts over the service-loaded request.
+  // Basic organizational names, titles and reporting lines, without employment records.
+  "hrm.org_chart.read",
   "hrm.employment.read",
   "hrm.employment.manage",
   "hrm.employment.approve",
@@ -552,6 +554,7 @@ export const PERMISSION_GROUPS: {
     key: "hrm",
     labelKey: "permissions.groups.hrm",
     permissions: [
+      { key: "hrm.org_chart.read", labelKey: permissionLabelKey("hrm.org_chart.read") },
       { key: "hrm.employment.read", labelKey: permissionLabelKey("hrm.employment.read") },
       { key: "hrm.employment.manage", labelKey: permissionLabelKey("hrm.employment.manage") },
       { key: "hrm.employment.approve", labelKey: permissionLabelKey("hrm.employment.approve") },

@@ -16,7 +16,9 @@
     "folderRow": "Folder",
     "linkNotFound": "The requested file or folder could not be opened. The link may be stale, or it was shared without access."
   },
-  "systemFolders": { "apCapture": "AP capture" },
+  "systemFolders": {
+    "apCapture": "AP capture"
+  },
   "columns": {
     "name": "Name",
     "size": "Size",
@@ -192,10 +194,10 @@
     "restoreFailed": "Could not restore",
     "purged": "Permanently deleted",
     "purgeFailed": "Could not delete",
-   "purgeRetained": "This file is kept as evidence for a posted record and can't be permanently deleted.",
-   "purgeAttached": "This folder contains files attached to records and can't be permanently deleted.",
-   "purgeSystem": "System folders can't be permanently deleted.",
-   "alreadyGone": "This item no longer exists."
+    "purgeRetained": "This file is kept as evidence for a posted record and can't be permanently deleted.",
+    "purgeAttached": "This folder contains files attached to records and can't be permanently deleted.",
+    "purgeSystem": "System folders can't be permanently deleted.",
+    "alreadyGone": "This item no longer exists."
   },
   "activity": {
     "title": "Activity",

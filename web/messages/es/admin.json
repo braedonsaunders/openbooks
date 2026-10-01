@@ -1126,7 +1126,8 @@
     "hrm_surveys_manage": "Gestionar encuestas",
     "time_clock": "Fichar en campo",
     "time_crew_enter": "Cargar lotes de cuadrilla",
-    "time_kiosk_manage": "Gestionar quioscos y PIN"
+    "time_kiosk_manage": "Gestionar quioscos y PIN",
+    "hrm_org_chart_read": "Ver organigrama"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -5143,7 +5144,10 @@
         "connectAction": "Conectar",
         "connectPlaceholder": "Elige un paso…",
         "connectEmpty": "Aún no hay otro paso — añade primero un nodo."
-      }
+      },
+      "ungatedOutcomeLabel": "Si no corresponde un paso de aprobación",
+      "ungatedApply": "Aplicar inmediatamente",
+      "ungatedRequireApproval": "Exigir un paso de aprobación"
     },
     "node": {
       "trigger": "Disparador",

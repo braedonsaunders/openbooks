@@ -175,6 +175,10 @@
     "material-variances": {
       "title": "Les fluctuations significatives exigent une explication",
       "message": "{count, plural, one {# compte dépasse les seuils de matérialité configurés.} other {# comptes dépassent les seuils de matérialité configurés.}}"
+    },
+    "posting-effects-incomplete": {
+      "title": "Effets de comptabilisation incomplets",
+      "message": "Des documents comptabilisés ont des projections de stocks ou de revenus incomplètes. Corrigez les erreurs, relancez les échecs définitifs depuis le document avec un motif de vérification et attendez la fin du traitement avant de clôturer le grand livre."
     }
   },
   "severity": {

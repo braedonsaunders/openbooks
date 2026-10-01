@@ -232,3 +232,31 @@ test('a server window ignores client search retained from a previous collection'
   assert.equal(host.querySelectorAll('tbody tr').length, 25, 'a server window must ignore retained client search')
   assert.equal(host.querySelector('input'), null)
 })
+
+
+test('registered lists retain search and domain filters when a filter returns no rows', async (t) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <PagedTable<Row>
+          source="property_rent_roll" rows={[]} rowKey={(row) => row.id}
+          columns={[{ key: 'name', header: 'Tenant', cell: (row) => row.name, search: (row) => row.name }]}
+          searchable empty="No matching leases"
+          toolbarAfter={<button>Reset property filter</button>}
+        />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  assert.ok(host.querySelector('input[aria-label="Search"]'), 'search remains usable for an empty collection')
+  assert.ok([...host.querySelectorAll('button')].some((button) => button.textContent === 'Reset property filter'), 'operators can recover from an empty filtered collection')
+  assert.ok(host.querySelector('thead')?.textContent?.includes('Tenant'))
+  assert.ok(host.querySelector('tbody')?.textContent?.includes('No matching leases'))
+})

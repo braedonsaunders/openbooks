@@ -24,8 +24,8 @@ import { useBusinessToday } from '../../../components/business-date-provider'
  * and the payload carries them untouched, never through a Date. FTE posts as
  * the exact typed decimal text. Every API refusal renders with its message
  * intact — res.ok is checked before parsing, failures toast and render
- * inline, and nothing is swallowed. Approval outcomes stay in native
- * Approvals: this surface only files, edits, submits, and withdraws.
+ * inline, and nothing is swallowed. Saving follows the configured native workflow: direct application or
+ * approval gates, through the same canonical submission service.
  */
 
 export type ChangeRequestKind = 'hire' | 'status_change' | 'assignment_change' | 'termination' | 'position_assignment'
@@ -84,6 +84,7 @@ export function ChangeRequestDrawer({
   initialRequest,
   initialValues,
   stacked = false,
+  presentation = 'request',
   departmentOptions,
   onClose,
   onSaved,
@@ -94,6 +95,8 @@ export function ChangeRequestDrawer({
   /** Context for a new request; never treated as an existing saved draft. */
   initialValues?: Record<string, unknown>
   stacked?: boolean
+  /** Employee editors use Save; the same submission service resolves automatic or gated policy. */
+  presentation?: 'request' | 'employee-edit'
   departmentOptions: DepartmentOption[]
   onClose: () => void
   onSaved: () => void
@@ -105,6 +108,7 @@ export function ChangeRequestDrawer({
   // never the browser's UTC day (tomorrow after 5pm Pacific).
   const today = useBusinessToday()
   const editing = initialRequest !== null
+  const employeeEdit = presentation === 'employee-edit'
   const initialPayload = initialRequest?.payload ?? initialValues ?? {}
 
   const [kind, setKind] = useState<ChangeRequestKind>(
@@ -147,9 +151,11 @@ export function ChangeRequestDrawer({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const appliedOnSubmit = useRef(false)
   // The draft this drawer created: a refused submit (or save) must retry
   // against the same draft — creating again orphans the first one, and
   // the next Submit would post a second draft beside it.
+  const savedPayload = useRef<Record<string, unknown> | null>(initialRequest?.payload ?? null)
   const [createdId, setCreatedId] = useState<string | null>(null)
   const { loadState: reasonLoadState, options: reasonOptions, required: reasonsOn } = useActionReasons(true, setError)
   const [action, setAction] = useState('')
@@ -374,6 +380,16 @@ export function ChangeRequestDrawer({
         ...(effectiveTo.trim() ? { effectiveTo: effectiveTo.trim() } : {}),
       }
     }
+    if (employeeEdit) return {
+      kind, assignmentKey: assignmentKey.trim(), effectiveFrom,
+      ...(jobTitle.trim() !== asText(initialPayload.jobTitle) ? { jobTitle: jobTitle.trim() || null } : {}),
+      ...(departmentId !== asText(initialPayload.departmentId) ? { departmentId: departmentId || null } : {}),
+      ...(locationId !== asText(initialPayload.locationId) ? { locationId: locationId || null } : {}),
+      ...(fte.trim() !== asText(initialPayload.fte) ? { fte: fte.trim() } : {}),
+      ...(primary !== 'unchanged' && primary !== (initialPayload.isPrimary === true ? 'yes' : 'no') ? { isPrimary: primary === 'yes' } : {}),
+      ...(effectiveTo.trim() ? { effectiveTo: effectiveTo.trim() } : {}),
+      ...(managerEmploymentId ? { managerEmploymentId } : {}),
+    }
     return {
       kind,
       assignmentKey: assignmentKey.trim(),
@@ -428,8 +444,10 @@ export function ChangeRequestDrawer({
    * before the submit POST that follows.
    */
   async function patchDraftIfChanged(requestId: string, payload: Record<string, unknown>): Promise<boolean> {
-    if (canonicalPayloadText(payload) === canonicalPayloadText(initialPayload)) return true
-    return patchDraft(requestId, payload)
+    if (savedPayload.current && canonicalPayloadText(payload) === canonicalPayloadText(savedPayload.current)) return true
+    const saved = await patchDraft(requestId, payload)
+    if (saved) savedPayload.current = payload
+    return saved
   }
 
   /**
@@ -446,7 +464,7 @@ export function ChangeRequestDrawer({
       return (await patchDraftIfChanged(createdId, payload)) ? createdId : null
     }
     const id = await postCreate(payload)
-    if (id) setCreatedId(id)
+    if (id) { setCreatedId(id); savedPayload.current = payload }
     return id
   }
 
@@ -478,7 +496,12 @@ export function ChangeRequestDrawer({
       toast.error(message)
       return false
     }
-    await res.json().catch(() => ({}))
+    const body = await res.json() as { request?: { status?: string } }
+    if (!body.request || !['pending_approval', 'applied'].includes(body.request.status ?? '')) {
+      setError(t('employment.changeRequests.requestFailed'))
+      return false
+    }
+    appliedOnSubmit.current = body.request.status === 'applied'
     return true
   }
 
@@ -499,6 +522,7 @@ export function ChangeRequestDrawer({
   }
 
   function requireReason(): string | null {
+    if (employeeEdit && !reasonsOn && !reason.trim()) return t('employment.changeRequests.defaultEditReason')
     if (!reason.trim()) {
       setError(t('employment.changeRequests.reasonRequired'))
       return null
@@ -567,7 +591,7 @@ export function ChangeRequestDrawer({
       setBusy(false)
     }
     if (submitted) {
-      toast.success(t('employment.changeRequests.submittedToast'))
+      toast.success(t(appliedOnSubmit.current ? 'employment.changeRequests.appliedToast' : 'employment.changeRequests.submittedToast'))
       onClose()
       onSaved()
       router.refresh()
@@ -582,24 +606,24 @@ export function ChangeRequestDrawer({
       stacked={stacked}
       onClose={() => void closeGuard.close()}
       size="md"
-      title={t(editing ? 'employment.changeRequests.titleEdit' : 'employment.changeRequests.titleNew')}
-      description={t('employment.changeRequests.authoringDescription')}
+      title={t(employeeEdit ? 'employment.changeRequests.employeeEditTitle' : editing ? 'employment.changeRequests.titleEdit' : 'employment.changeRequests.titleNew')}
+      description={t(employeeEdit ? 'employment.changeRequests.employeeEditDescription' : 'employment.changeRequests.authoringDescription')}
       headerActions={
         <>
           <Button variant="outline" disabled={busy} onClick={() => void closeGuard.close()}>
             {tCommon('actions.cancel')}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={saveDraft}>
+          {!employeeEdit && <Button variant="outline" disabled={busy} onClick={saveDraft}>
             {t(editing ? 'employment.changeRequests.saveChanges' : 'employment.changeRequests.saveDraft')}
-          </Button>
+          </Button>}
           <Button disabled={busy || reasonLoadState === 'loading' || reasonLoadState === 'failed'} onClick={submitForApproval}>
-            {t('employment.changeRequests.submitForApproval')}
+            {employeeEdit ? tCommon('actions.save') : t('employment.changeRequests.submitForApproval')}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
-        <div className="space-y-1.5">
+        {!employeeEdit && <div className="space-y-1.5">
           <Label htmlFor="cr-kind">{t('employment.changeRequests.kindLabel')}</Label>
           <Select
             id="cr-kind"
@@ -616,7 +640,7 @@ export function ChangeRequestDrawer({
               </option>
             ))}
           </Select>
-        </div>
+        </div>}
 
         {kind === 'hire' || kind === 'status_change' ? (
           <>
@@ -666,7 +690,7 @@ export function ChangeRequestDrawer({
 
         {kind === 'assignment_change' ? (
           <>
-            <div className="space-y-1.5">
+            {!employeeEdit && <div className="space-y-1.5">
               <Label htmlFor="cr-assignment-key">{t('employment.changeRequests.assignmentKeyLabel')}</Label>
               <Input
                 id="cr-assignment-key"
@@ -676,7 +700,7 @@ export function ChangeRequestDrawer({
                 onChange={(event) => setAssignmentKey(event.target.value)}
                 placeholder={t('employment.changeRequests.assignmentKeyPlaceholder')}
               />
-            </div>
+            </div>}
             <div className="space-y-1.5">
               <Label htmlFor="cr-job-title">{t('employment.changeRequests.jobTitleLabel')}</Label>
               <Input
@@ -943,7 +967,7 @@ export function ChangeRequestDrawer({
             placeholder={t('employment.changeRequests.reasonPlaceholder')}
           />
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t('employment.changeRequests.reasonSubmitNote')}
+            {employeeEdit && !reasonsOn ? tCommon('labels.optional') : t('employment.changeRequests.reasonSubmitNote')}
           </p>
         </div>
 

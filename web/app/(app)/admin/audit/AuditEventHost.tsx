@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { DrawerNavigateContext } from '@openbooks/ui'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { AuditEventDrawer, type AuditEvent } from './AuditEventDrawer'
 
 /** Like the related-party drawer host, the event owns its detail request.

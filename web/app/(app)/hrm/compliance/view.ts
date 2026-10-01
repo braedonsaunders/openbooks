@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -8,11 +9,9 @@ import {
   grid,
   page,
   pageHeader,
-  panel,
   ref,
   spanRow,
   statTile,
-  table,
   text,
   widget,
   widgetBlock,
@@ -25,17 +24,29 @@ import type { ComplianceData } from '../../../../lib/hrm/compliance'
 
 /**
  * The Compliance tab (HR-13), split into a loader and a spec — the
- * banking/purchasing archetype: a four-tile vitals strip, section chips
- * across findings/rates/certified/classes/per-diem, and a ViewSpec table
- * block (variant 'app') per section over loader-resolved rows. The page's
- * primary action is the shared 'link-button' widget ("Generate report")
- * FIRST in the page header, then the module-home-tabs strip. Row actions
- * and the generate dialog open through small client islands;
- * configuration lives in rehomed Setup sections on this same page. Every
- * string arrives loader-resolved through the catalog.
+ * banking/purchasing archetype: a four-tile vitals strip and a shared
+ * registered list per section over loader-resolved rows, with the
+ * findings/rates/certified/classes/per-diem switch on the list's shared
+ * toolbar slot. The page's primary action is the shared 'link-button'
+ * widget ("Generate report") FIRST in the page header, then the
+ * module-home-tabs strip. Row actions and the generate dialog open
+ * through small client islands; configuration lives in rehomed Setup
+ * sections on this same page. Every string arrives loader-resolved
+ * through the catalog.
  */
 
 const f = ref<ComplianceData>()
+
+// The section switch rides every list's toolbar slot — one switch, beside
+// the list it switches, never a lone chips row above a titled panel.
+function sectionFilter(data: ComplianceData) {
+  return {
+    paramKey: 'section',
+    label: '',
+    allLabel: '',
+    options: data.sections,
+  }
+}
 
 export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/compliance'): PageSpec {
   return page({
@@ -66,238 +77,240 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
         value: f(`stats.${index}.value`),
         sub: f(`stats.${index}.sub`),
       }))),
-      widgetBlock('filter-chips', {
-        basePath,
-        currentParams: data.currentParams,
-        paramKey: 'section',
-        label: '',
-        allLabel: '',
-        options: data.sections,
-      }),
       ...(data.section === 'findings'
         ? [
-            widgetBlock('filter-chips', {
-              basePath,
-              currentParams: data.currentParams,
-              paramKey: 'kind',
-              label: '',
-              allLabel: data.kindAllLabel,
-              options: data.kinds,
-            }),
-            panel({
-              title: f('labels.findingsTitle'),
-              iconKey: 'siren',
-              bodyClassName: 'min-h-0 overflow-y-auto p-0',
-              className: 'min-h-0 flex-1',
-              blocks: [
-                table({
-                  variant: 'app',
-                  rows: f('findings'),
-                  rowKey: item('id'),
-                  // The tiles count the full finding list while the table
-                  // caps at 200: a truncation note rides trailing, never
-                  // a silent slice beside full counts.
-                  ...(data.findingsTruncatedNote
-                    ? {
-                        trailing: [
-                          spanRow({
-                            label: f('findingsTruncatedNote'),
-                            labelColSpan: 6,
-                            labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
-                            cells: [],
-                          }),
-                        ],
-                      }
-                    : {}),
-                  columns: [
-                    column(f('labels.columns.kind'), text(item('kindLabel'))),
-                    column(f('labels.columns.project'), text(item('projectLabel'))),
-                    column(f('labels.columns.day'), text(item('workedOn'))),
-                    column(f('labels.columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-                    column(f('labels.columns.recorded'), text(item('recordedLabel'))),
-                    column(
-                      f('labels.columns.actions'),
-                      widgetCell('hrm-compliance-actions', {
-                        actionKind: 'finding',
-                        rowId: item('id'),
-                        rowStatus: item('status'),
-                        acknowledgeLabel: f('actions.acknowledge'),
-                        resolveLabel: f('actions.resolve'),
-                        approveLabel: '',
-                        voidLabel: '',
-                        submitLabel: '',
-                        canManage: f('canManage'),
-                      }),
-                    ),
+            registeredListTable(
+              'hrm_compliance_findings',
+              {
+                variant: 'app',
+                rows: f('findings'),
+                rowKey: item('id'),
+                // The tiles count the full finding list while the table
+                // caps at 200: a truncation note rides trailing, never
+                // a silent slice beside full counts.
+                ...(data.findingsTruncatedNote
+                  ? {
+                      trailing: [
+                        spanRow({
+                          label: f('findingsTruncatedNote'),
+                          labelColSpan: 6,
+                          labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
+                          cells: [],
+                        }),
+                      ],
+                    }
+                  : {}),
+                columns: [
+                  column(f('labels.columns.kind'), text(item('kindLabel'))),
+                  column(f('labels.columns.project'), text(item('projectLabel'))),
+                  column(f('labels.columns.day'), text(item('workedOn'))),
+                  column(f('labels.columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                  column(f('labels.columns.recorded'), text(item('recordedLabel'))),
+                  column(
+                    f('labels.columns.actions'),
+                    widgetCell('hrm-compliance-actions', {
+                      actionKind: 'finding',
+                      rowId: item('id'),
+                      rowStatus: item('status'),
+                      acknowledgeLabel: f('actions.acknowledge'),
+                      resolveLabel: f('actions.resolve'),
+                      approveLabel: '',
+                      voidLabel: '',
+                      submitLabel: '',
+                      canManage: f('canManage'),
+                    }),
+                  ),
+                ],
+                empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+              },
+              [
+                widget('list-toolbar', {
+                  basePath,
+                  currentParams: data.currentParams,
+                  filters: [
+                    sectionFilter(data),
+                    {
+                      paramKey: 'kind',
+                      label: '',
+                      allLabel: data.kindAllLabel,
+                      options: data.kinds,
+                    },
                   ],
-                  empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
                 }),
               ],
-            }),
+            ),
           ]
         : []),
       ...(data.section === 'rates'
         ? [
-            panel({
-              title: f('labels.ratesTitle'),
-              iconKey: 'table-properties',
-              bodyClassName: 'min-h-0 overflow-y-auto p-0',
-              className: 'min-h-0 flex-1',
-              blocks: [
-                table({
-                  variant: 'app',
-                  rows: f('schedules'),
-                  rowKey: item('id'),
-                  columns: [
-                    column(f('labels.columns.schedule'), text(item('name'))),
-                    column(f('labels.columns.kind'), text(item('kindLabel'))),
-                    column(f('labels.columns.scope'), text(item('scopeLabel'))),
-                    column(f('labels.columns.reciprocity'), text(item('reciprocityLabel'))),
-                    column(f('labels.columns.window'), text(item('windowLabel'))),
-                    column(f('labels.columns.status'), text(item('statusLabel'))),
-                  ],
-                  empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+            registeredListTable(
+              'hrm_compliance_schedules',
+              {
+                variant: 'app',
+                rows: f('schedules'),
+                rowKey: item('id'),
+                columns: [
+                  column(f('labels.columns.schedule'), text(item('name'))),
+                  column(f('labels.columns.kind'), text(item('kindLabel'))),
+                  column(f('labels.columns.scope'), text(item('scopeLabel'))),
+                  column(f('labels.columns.reciprocity'), text(item('reciprocityLabel'))),
+                  column(f('labels.columns.window'), text(item('windowLabel'))),
+                  column(f('labels.columns.status'), text(item('statusLabel'))),
+                ],
+                empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+              },
+              [
+                widget('list-toolbar', {
+                  basePath,
+                  currentParams: data.currentParams,
+                  filters: [sectionFilter(data)],
                 }),
               ],
-            }),
+            ),
             widgetBlock('setup-section', { entityKey: 'construction-classifications', sp: data.currentParams, basePath, rowParam: 'classification' }),
             widgetBlock('setup-section', { entityKey: 'construction-rate-schedules', sp: data.currentParams, basePath, rowParam: 'schedule' }),
           ]
         : []),
       ...(data.section === 'certified'
         ? [
-            panel({
-              title: f('labels.certifiedTitle'),
-              iconKey: 'file-check',
-              bodyClassName: 'min-h-0 overflow-y-auto p-0',
-              className: 'min-h-0 flex-1',
-              blocks: [
-                table({
-                  variant: 'app',
-                  rows: f('runs'),
-                  rowKey: item('id'),
-                  ...(data.runsTruncatedNote
-                    ? {
-                        trailing: [
-                          spanRow({
-                            label: f('runsTruncatedNote'),
-                            labelColSpan: 5,
-                            labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
-                            cells: [],
-                          }),
-                        ],
-                      }
-                    : {}),
-                  columns: [
-                    column(f('labels.columns.project'), text(item('projectLabel'))),
-                    column(f('labels.columns.week'), text(item('weekLabel'))),
-                    column(f('labels.columns.format'), text(item('formatLabel'))),
-                    column(f('labels.columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-                    column(
-                      f('labels.columns.actions'),
-                      widgetCell('hrm-compliance-actions', {
-                        actionKind: 'run',
-                        rowId: item('id'),
-                        rowStatus: item('status'),
-                        acknowledgeLabel: '',
-                        resolveLabel: '',
-                        approveLabel: '',
-                        voidLabel: '',
-                        submitLabel: f('actions.submit'),
-                        canManage: f('canManage'),
-                      }),
-                    ),
-                  ],
-                  empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+            registeredListTable(
+              'hrm_compliance_runs',
+              {
+                variant: 'app',
+                rows: f('runs'),
+                rowKey: item('id'),
+                ...(data.runsTruncatedNote
+                  ? {
+                      trailing: [
+                        spanRow({
+                          label: f('runsTruncatedNote'),
+                          labelColSpan: 5,
+                          labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
+                          cells: [],
+                        }),
+                      ],
+                    }
+                  : {}),
+                columns: [
+                  column(f('labels.columns.project'), text(item('projectLabel'))),
+                  column(f('labels.columns.week'), text(item('weekLabel'))),
+                  column(f('labels.columns.format'), text(item('formatLabel'))),
+                  column(f('labels.columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                  column(
+                    f('labels.columns.actions'),
+                    widgetCell('hrm-compliance-actions', {
+                      actionKind: 'run',
+                      rowId: item('id'),
+                      rowStatus: item('status'),
+                      acknowledgeLabel: '',
+                      resolveLabel: '',
+                      approveLabel: '',
+                      voidLabel: '',
+                      submitLabel: f('actions.submit'),
+                      canManage: f('canManage'),
+                    }),
+                  ),
+                ],
+                empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+              },
+              [
+                widget('list-toolbar', {
+                  basePath,
+                  currentParams: data.currentParams,
+                  filters: [sectionFilter(data)],
                 }),
               ],
-            }),
+            ),
           ]
         : []),
       ...(data.section === 'classes'
         ? [
-            panel({
-              title: f('labels.classesTitle'),
-              iconKey: 'shield-plus',
-              bodyClassName: 'min-h-0 overflow-y-auto p-0',
-              className: 'min-h-0 flex-1',
-              blocks: [
-                table({
-                  variant: 'app',
-                  rows: f('classes'),
-                  rowKey: item('id'),
-                  columns: [
-                    column(f('labels.columns.code'), text(item('code'))),
-                    column(f('labels.columns.name'), text(item('name'))),
-                    column(f('labels.columns.rate'), text(item('rateLabel')), {
-                      align: 'right',
-                      className: 'tabular-nums',
-                    }),
-                    column(f('labels.columns.rules'), text(item('rulesLabel')), {
-                      align: 'right',
-                      className: 'tabular-nums',
-                    }),
-                  ],
-                  empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+            registeredListTable(
+              'hrm_compliance_classes',
+              {
+                variant: 'app',
+                rows: f('classes'),
+                rowKey: item('id'),
+                columns: [
+                  column(f('labels.columns.code'), text(item('code'))),
+                  column(f('labels.columns.name'), text(item('name'))),
+                  column(f('labels.columns.rate'), text(item('rateLabel')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                  column(f('labels.columns.rules'), text(item('rulesLabel')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                ],
+                empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+              },
+              [
+                widget('list-toolbar', {
+                  basePath,
+                  currentParams: data.currentParams,
+                  filters: [sectionFilter(data)],
                 }),
               ],
-            }),
+            ),
             widgetBlock('setup-section', { entityKey: 'construction-comp-classes', sp: data.currentParams, basePath, rowParam: 'compClass' }),
             widgetBlock('setup-section', { entityKey: 'construction-ratio-rules', sp: data.currentParams, basePath, rowParam: 'ratioRule' }),
           ]
         : []),
       ...(data.section === 'perdiem'
         ? [
-            panel({
-              title: f('labels.perdiemTitle'),
-              iconKey: 'wallet',
-              bodyClassName: 'min-h-0 overflow-y-auto p-0',
-              className: 'min-h-0 flex-1',
-              blocks: [
-                table({
-                  variant: 'app',
-                  rows: f('entries'),
-                  rowKey: item('id'),
-                  ...(data.entriesTruncatedNote
-                    ? {
-                        trailing: [
-                          spanRow({
-                            label: f('entriesTruncatedNote'),
-                            labelColSpan: 4,
-                            labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
-                            cells: [],
-                          }),
-                        ],
-                      }
-                    : {}),
-                  columns: [
-                    column(f('labels.columns.day'), text(item('dayLabel'))),
-                    column(f('labels.columns.amount'), text(item('amountLabel')), {
-                      align: 'right',
-                      className: 'tabular-nums',
+            registeredListTable(
+              'hrm_compliance_entries',
+              {
+                variant: 'app',
+                rows: f('entries'),
+                rowKey: item('id'),
+                ...(data.entriesTruncatedNote
+                  ? {
+                      trailing: [
+                        spanRow({
+                          label: f('entriesTruncatedNote'),
+                          labelColSpan: 4,
+                          labelClassName: 'text-center text-xs text-slate-400 dark:text-slate-500',
+                          cells: [],
+                        }),
+                      ],
+                    }
+                  : {}),
+                columns: [
+                  column(f('labels.columns.day'), text(item('dayLabel'))),
+                  column(f('labels.columns.amount'), text(item('amountLabel')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                  column(f('labels.columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                  column(
+                    f('labels.columns.actions'),
+                    widgetCell('hrm-compliance-actions', {
+                      actionKind: 'entry',
+                      rowId: item('id'),
+                      rowStatus: item('status'),
+                      entryKind: 'per_diem',
+                      acknowledgeLabel: '',
+                      resolveLabel: '',
+                      approveLabel: f('actions.approve'),
+                      failedLabel: f('actions.actionFailed'),
+                      voidLabel: f('actions.void'),
+                      submitLabel: '',
+                      canManage: f('canManage'),
                     }),
-                    column(f('labels.columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-                    column(
-                      f('labels.columns.actions'),
-                      widgetCell('hrm-compliance-actions', {
-                        actionKind: 'entry',
-                        rowId: item('id'),
-                        rowStatus: item('status'),
-                        entryKind: 'per_diem',
-                        acknowledgeLabel: '',
-                        resolveLabel: '',
-                        approveLabel: f('actions.approve'),
-                        failedLabel: f('actions.actionFailed'),
-                        voidLabel: f('actions.void'),
-                        submitLabel: '',
-                        canManage: f('canManage'),
-                      }),
-                    ),
-                  ],
-                  empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+                  ),
+                ],
+                empty: { title: f('labels.empty'), description: f('labels.emptyAction') },
+              },
+              [
+                widget('list-toolbar', {
+                  basePath,
+                  currentParams: data.currentParams,
+                  filters: [sectionFilter(data)],
                 }),
               ],
-            }),
+            ),
             widgetBlock('setup-section', { entityKey: 'construction-per-diem-policies', sp: data.currentParams, basePath, rowParam: 'perDiem' }),
           ]
         : []),

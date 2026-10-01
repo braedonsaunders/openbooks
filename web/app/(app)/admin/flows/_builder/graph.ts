@@ -116,9 +116,10 @@ export function toFlow(
 }
 
 /** React Flow state → the persisted AutomationGraph (positions rounded). */
-export function fromFlow(nodes: FlowNode[], edges: Edge[]): AutomationGraph {
+export function fromFlow(nodes: FlowNode[], edges: Edge[], ungatedOutcome?: 'apply'): AutomationGraph {
   return {
     schemaVersion: 1,
+    ...(ungatedOutcome ? { ungatedOutcome } : {}),
     nodes: nodes.map((n) => ({
       id: n.id,
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },

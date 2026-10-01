@@ -175,6 +175,10 @@
     "material-variances": {
       "title": "重大波动需要说明",
       "message": "{count, plural, one {有 # 个科目超过已配置的重要性阈值。} other {有 # 个科目超过已配置的重要性阈值。}}"
+    },
+    "posting-effects-incomplete": {
+      "title": "过账后处理未完成",
+      "message": "已过账单据的库存或收入后续处理未完成。请解决错误，在单据上填写复核理由并重试最终失败的处理，等待处理完成后再关闭总账期间。"
     }
   },
   "severity": {

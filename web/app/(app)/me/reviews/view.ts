@@ -1,18 +1,18 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
   column,
   grid,
   field as item,
+  heading,
   link,
   page,
   pageHeader,
-  panel,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -59,91 +59,75 @@ export function meReviewsSpec(data: MeReviewsData): PageSpec {
       ),
       {
         ...grid('flex h-full min-h-0 flex-col gap-4', [
-          panel({
-            title: f('selfTitle'),
-            iconKey: 'star',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            blocks: [
-              table({
-                variant: 'app',
-                rows: f('selfRows'),
-                rowKey: item('reviewId'),
-                columns: [
-                  column(f('selfColumns.cycle'), text(item('cycleName'))),
-                  column(f('selfColumns.period'), text(item('periodLabel'), { className: 'tabular-nums' })),
-                  column(
-                    f('selfColumns.due'),
-                    text(item('dueOn'), { className: 'tabular-nums' }),
-                  ),
-                  column(
-                    f('selfColumns.status'),
-                    badge(item('statusLabel'), { variant: item('statusVariant') }),
-                  ),
-                  column('', link(item('openLabel'), item('openHref'))),
-                ],
-                empty: { title: f('selfEmpty'), description: f('selfEmptyDescription') },
-              }),
+          // Self-assessments, shared reviews and goals render as direct
+          // lists under house headings — no panel repeats the section.
+          heading(2, f('selfTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+          registeredListTable('me_reviews_self', {
+            variant: 'app',
+            rows: f('selfRows'),
+            rowKey: item('reviewId'),
+            columns: [
+              column(f('selfColumns.cycle'), text(item('cycleName'))),
+              column(f('selfColumns.period'), text(item('periodLabel'), { className: 'tabular-nums' })),
+              column(
+                f('selfColumns.due'),
+                text(item('dueOn'), { className: 'tabular-nums' }),
+              ),
+              column(
+                f('selfColumns.status'),
+                badge(item('statusLabel'), { variant: item('statusVariant') }),
+              ),
+              column('', link(item('openLabel'), item('openHref'))),
             ],
+            empty: { title: f('selfEmpty'), description: f('selfEmptyDescription') },
           }),
-          panel({
-            title: f('sharedTitle'),
-            iconKey: 'message-square',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            blocks: [
-              table({
-                variant: 'app',
-                rows: f('sharedRows'),
-                rowKey: item('reviewId'),
-                columns: [
-                  column(f('sharedColumns.cycle'), text(item('cycleName'))),
-                  column(
-                    f('sharedColumns.status'),
-                    badge(item('statusLabel'), { variant: item('statusVariant') }),
-                  ),
-                  column(f('sharedColumns.rating'), text(item('ratingLabel'), { className: 'tabular-nums' })),
-                  column(
-                    f('sharedColumns.shared'),
-                    text(item('sharedOn'), { className: 'tabular-nums' }),
-                  ),
-                  column(
-                    '',
-                    widgetCell('hrm-review-acknowledge', {
-                      reviewId: item('reviewId'),
-                      label: item('acknowledgeLabel'),
-                      canAcknowledge: item('canAcknowledge'),
-                      failedLabel: rootF('acknowledgeFailed'),
-                    }),
-                  ),
-                ],
-                empty: { title: f('sharedEmpty'), description: f('sharedEmptyDescription') },
-              }),
+          heading(2, f('sharedTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+          registeredListTable('me_reviews_shared', {
+            variant: 'app',
+            rows: f('sharedRows'),
+            rowKey: item('reviewId'),
+            columns: [
+              column(f('sharedColumns.cycle'), text(item('cycleName'))),
+              column(
+                f('sharedColumns.status'),
+                badge(item('statusLabel'), { variant: item('statusVariant') }),
+              ),
+              column(f('sharedColumns.rating'), text(item('ratingLabel'), { className: 'tabular-nums' })),
+              column(
+                f('sharedColumns.shared'),
+                text(item('sharedOn'), { className: 'tabular-nums' }),
+              ),
+              column(
+                '',
+                widgetCell('hrm-review-acknowledge', {
+                  reviewId: item('reviewId'),
+                  label: item('acknowledgeLabel'),
+                  canAcknowledge: item('canAcknowledge'),
+                  failedLabel: rootF('acknowledgeFailed'),
+                }),
+              ),
             ],
+            empty: { title: f('sharedEmpty'), description: f('sharedEmptyDescription') },
           }),
-          panel({
-            title: f('goalsTitle'),
-            iconKey: 'target',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            blocks: [
-              table({
-                variant: 'app',
-                rows: f('goalRows'),
-                rowKey: item('id'),
-                columns: [
-                  column(f('goalsColumns.title'), text(item('title'))),
-                  column(
-                    f('goalsColumns.due'),
-                    text(item('dueOn'), { className: 'tabular-nums' }),
-                  ),
-                  column(
-                    f('goalsColumns.status'),
-                    badge(item('statusLabel'), { variant: item('statusVariant') }),
-                  ),
-                  column(f('goalsColumns.progress'), text(item('progressLabel'), { className: 'tabular-nums' })),
-                  column('', link(item('updateLabel'), item('updateHref'))),
-                ],
-                empty: { title: f('goalsEmpty'), description: f('goalsEmptyDescription') },
-              }),
+          heading(2, f('goalsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+          registeredListTable('me_reviews_goals', {
+            variant: 'app',
+            rows: f('goalRows'),
+            rowKey: item('id'),
+            columns: [
+              column(f('goalsColumns.title'), text(item('title'))),
+              column(
+                f('goalsColumns.due'),
+                text(item('dueOn'), { className: 'tabular-nums' }),
+              ),
+              column(
+                f('goalsColumns.status'),
+                badge(item('statusLabel'), { variant: item('statusVariant') }),
+              ),
+              column(f('goalsColumns.progress'), text(item('progressLabel'), { className: 'tabular-nums' })),
+              column('', link(item('updateLabel'), item('updateHref'))),
             ],
+            empty: { title: f('goalsEmpty'), description: f('goalsEmptyDescription') },
           }),
           widgetBlock(
             'hrm-goal-dialog',

@@ -1126,7 +1126,8 @@
     "hrm_surveys_manage": "アンケートを管理",
     "time_clock": "現場で打刻する",
     "time_crew_enter": "班バッチを入力する",
-    "time_kiosk_manage": "キオスクとPINを管理する"
+    "time_kiosk_manage": "キオスクとPINを管理する",
+    "hrm_org_chart_read": "組織図を表示"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -5143,7 +5144,10 @@
         "connectAction": "接続",
         "connectPlaceholder": "ステップを選択…",
         "connectEmpty": "他のステップはまだありません — 先にノードを追加してください。"
-      }
+      },
+      "ungatedOutcomeLabel": "承認ステップが適用されない場合",
+      "ungatedApply": "即時適用",
+      "ungatedRequireApproval": "承認ステップを必須にする"
     },
     "node": {
       "trigger": "トリガー",

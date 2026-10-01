@@ -32,3 +32,9 @@ test("failed-effects listing requires its tenant scope up front", async () => {
   // empty scope and surfaces a connection error instead of this refusal.
   await assert.rejects(() => listFailedPostingEffects(""), /organization id is required/);
 });
+
+test("failed-effects listing refuses malformed limits instead of silently changing them", async () => {
+  for (const limit of [NaN, Infinity, 0, -1, 1.5, 501]) {
+    await assert.rejects(() => listFailedPostingEffects("00000000-0000-0000-0000-000000000000", limit), /integer between 1 and 500/);
+  }
+});

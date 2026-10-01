@@ -686,3 +686,22 @@ describe('lintAutomationGraph', () => {
     assert.ok(errors.includes('Action a: set_field targets unknown field "ghost"'))
   })
 })
+
+describe('explicit submission policy', () => {
+  const graph: AutomationGraph = {
+    schemaVersion: 1, ungatedOutcome: 'apply',
+    nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }], edges: [],
+  }
+  test('only a matching submission carries permission to apply without gates', () => {
+    assert.equal(planAutomation(graph, { kind: 'on_submit' }, emptyCtx).ungatedOutcome, 'apply')
+    assert.equal(planAutomation(graph, { kind: 'manual' }, emptyCtx).ungatedOutcome, undefined)
+    assert.equal(planAutomation({ ...graph, ungatedOutcome: undefined }, { kind: 'on_submit' }, emptyCtx).ungatedOutcome, undefined)
+    assert.equal(planAutomation({ ...graph, nodes: [] }, { kind: 'on_submit' }, emptyCtx).ungatedOutcome, undefined)
+  })
+  test('an explicit direct policy permits a lone submission trigger and rejects unsupported subjects', () => {
+    assert.equal(lintAutomationGraph(graph, new Set()).length, 0)
+    const unsupported: FlowSubjectProfile = { subjectKind: 'example', label: 'Example', triggers: ['on_submit'], actions: [], fields: [], statuses: [] }
+    assert.match(lintAutomationGraph(graph, new Set(), unsupported).join(' '), /does not support automatic submission/)
+    assert.equal(lintAutomationGraph(graph, new Set(), { ...unsupported, supportsUngatedSubmission: true }).length, 0)
+  })
+})

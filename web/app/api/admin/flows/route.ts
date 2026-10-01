@@ -15,6 +15,9 @@ const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.su
 const requestBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
   subjectKind: z.enum(FLOW_SUBJECT_KINDS),
+  ungatedOutcome: z.literal('apply').optional(),
+}).superRefine((value, ctx) => {
+  if (value.ungatedOutcome && !listFlowSubjectProfiles().find(profile => profile.subjectKind === value.subjectKind)?.supportsUngatedSubmission) ctx.addIssue({ code: 'custom', message: 'This record type does not support saving without approval steps.', path: ['ungatedOutcome'] });
 });
 
 
@@ -123,11 +126,12 @@ export const POST = defineRoute({
       return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
     }
 
+    const graph = body.ungatedOutcome ? { schemaVersion: 1, ungatedOutcome: body.ungatedOutcome, nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }], edges: [] } : emptyAutomationGraph()
     const id = await db.transaction(async (tx) => {
       const r = (await tx.execute<{ id: string }>(sql`
         insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
         values (${user.orgId}, ${name}, ${subjectKind}, false,
-                ${JSON.stringify(emptyAutomationGraph())}::jsonb, ${user.id}, ${user.id})
+                ${JSON.stringify(graph)}::jsonb, ${user.id}, ${user.id})
         returning *
       `))
       const created = r.rows[0]!

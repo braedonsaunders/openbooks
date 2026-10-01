@@ -175,6 +175,10 @@
     "material-variances": {
       "title": "Flutuações relevantes exigem explicação",
       "message": "{count, plural, one {# conta excede os limites de materialidade configurados.} other {# contas excedem os limites de materialidade configurados.}}"
+    },
+    "posting-effects-incomplete": {
+      "title": "Efeitos da contabilização incompletos",
+      "message": "Documentos contabilizados têm projeções de estoque ou receita incompletas. Resolva as falhas, repita as falhas definitivas no documento com um motivo de revisão e aguarde a conclusão antes de fechar o razão."
     }
   },
   "severity": {
