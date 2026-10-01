@@ -6,6 +6,13 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.28.1] - 2026-10-01
+
+- Use Enrollment consistently throughout English Benefits buttons, headings,
+  empty states, enrollment-window drawers and report labels.
+
+No additional migrations or operator configuration are required.
+
 ## [0.1.0-alpha.28] - 2026-10-01
 
 - Consolidate Benefits into native Programs, Enrollments, Rewards, Incentives

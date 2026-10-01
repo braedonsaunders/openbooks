@@ -1196,14 +1196,14 @@
     "title": "Benefits",
     "description": "Plans, enrollment windows, elections, and the monthly amounts that cross into payroll.",
     "windowsTitle": "Enrollment windows",
-    "enrolmentsTitle": "Enrolments",
+    "enrolmentsTitle": "Enrollments",
     "segmentsLabel": "Show",
     "allLabel": "All",
     "segments": {
       "open": "Open",
       "draft": "Draft",
       "closed": "Closed",
-      "enrolments": "Enrolments"
+      "enrolments": "Enrollments"
     },
     "columns": {
       "window": "Window",
@@ -1220,7 +1220,7 @@
     },
     "windowsEmptyTitle": "No windows here",
     "windowsEmpty": "Nothing in this segment yet.",
-    "enrolmentsEmptyTitle": "No enrolments here",
+    "enrolmentsEmptyTitle": "No enrollments here",
     "enrolmentsEmpty": "Nothing elected yet.",
     "unknownSegmentTitle": "Unknown segment",
     "unknownSegment": "There is no benefits segment {segment}.",
@@ -1246,7 +1246,7 @@
     "approve": "Approve",
     "actionFailed": "This action could not be completed.",
     "drawerProgress": "Election progress",
-    "drawerEnrolments": "Enrolments in this window",
+    "drawerEnrolments": "Enrollments in this window",
     "drawerNoEnrolments": "No elections in this window yet.",
     "windowKinds": {
       "open_enrollment": "Open enrollment",
@@ -1274,7 +1274,7 @@
         "payouts": "Payouts"
       }
     },
-    "newEnrollment": "New enrolment",
+    "newEnrollment": "New enrollment",
     "planSettings": "Plan settings"
   },
   "me": {
