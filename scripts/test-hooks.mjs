@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import pg from 'pg'
 
 const EMPTY_MODULE = 'openbooks:test-hooks:empty'
+const CSS_MODULE = 'openbooks:test-hooks:css-module'
 // web/tsconfig.json maps the `@/*` house alias onto the web root. Mirror it
 // here so `@/` resolves under node --test even when TSX_TSCONFIG_PATH is
 // unset (tsx maps the same target when it is set — identical outcome, and
@@ -12,6 +13,9 @@ const WEB_ROOT = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', 'web
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier.endsWith('.module.css')) {
+      return { url: CSS_MODULE, shortCircuit: true }
+    }
     if (specifier === 'server-only' || specifier.endsWith('.css')) {
       return { url: EMPTY_MODULE, shortCircuit: true }
     }
@@ -21,6 +25,11 @@ registerHooks({
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
+    if (url === CSS_MODULE) {
+      // The bundler supplies scoped class names; Node render tests only need
+      // the same named properties so CSS imports cannot prevent registration.
+      return { format: 'module', source: 'export default new Proxy({}, { get: (_target, key) => String(key) })', shortCircuit: true }
+    }
     if (url === EMPTY_MODULE) {
       return { format: 'module', source: 'export {}', shortCircuit: true }
     }

@@ -1,0 +1,292 @@
+.canvas {
+  --feature-ink: #0f766e;
+  --feature-line: #99d6cf;
+  --feature-surface: rgb(255 255 255 / 88%);
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: #f8fbfb;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 34%, rgb(153 246 228 / 25%), transparent 48%),
+    radial-gradient(ellipse at 12% 12%, rgb(204 251 241 / 32%), transparent 42%),
+    radial-gradient(ellipse at 92% 92%, rgb(224 231 255 / 35%), transparent 42%);
+}
+
+.backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(15 118 110 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(15 118 110 / 5%) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at 50% 38%, #000, transparent 68%);
+}
+
+.scroll {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 40px 24px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 760px;
+  margin: auto;
+  padding-bottom: 32px;
+  text-align: center;
+}
+
+.illustration {
+  position: relative;
+  flex-shrink: 0;
+  width: 440px;
+  max-width: 100%;
+  height: 260px;
+  margin-bottom: 28px;
+  animation: appear 800ms ease-out both;
+}
+
+.orbit,
+.innerOrbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 340px;
+  height: 340px;
+  translate: -50% -50%;
+  border: 1px solid rgb(15 118 110 / 8%);
+  border-radius: 50%;
+}
+
+.innerOrbit {
+  width: 230px;
+  height: 230px;
+  border-style: dashed;
+  border-color: rgb(15 118 110 / 12%);
+}
+
+.connections {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  stroke: var(--feature-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 7;
+  animation: connect 1.8s ease-out both;
+}
+
+.icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  translate: -50% -50%;
+  border: 1px solid rgb(255 255 255 / 75%);
+  border-radius: 30px;
+  color: white;
+  background: linear-gradient(145deg, #20a89a, #0f766e 65%, #115e59);
+  box-shadow: 0 20px 60px -14px rgb(15 118 110 / 40%), inset 0 1px 0 rgb(255 255 255 / 35%);
+  transform: rotate(-8deg);
+  animation: float 6s ease-in-out infinite;
+}
+
+.icon > svg {
+  width: 44px;
+  height: 44px;
+  stroke-width: 1.5;
+  transform: rotate(8deg);
+}
+
+.node {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgb(15 118 110 / 12%);
+  border-radius: 18px;
+  color: var(--feature-ink);
+  background: var(--feature-surface);
+  box-shadow: 0 8px 24px -12px rgb(15 118 110 / 20%), inset 0 1px 0 rgb(255 255 255 / 60%);
+  animation: appear 700ms ease-out both;
+}
+
+.node > svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.5;
+}
+
+.nodeOne { left: 51px; top: 51px; animation-delay: 100ms; }
+.nodeTwo { right: 51px; top: 51px; animation-delay: 200ms; }
+.nodeThree { left: 71px; bottom: 31px; animation-delay: 300ms; }
+.nodeFour { right: 71px; bottom: 31px; animation-delay: 400ms; }
+
+.spark {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--feature-line);
+}
+
+.sparkOne { left: 143px; top: 24px; }
+.sparkTwo { right: 124px; top: 30px; width: 8px; height: 8px; }
+.sparkThree { left: 208px; bottom: 10px; }
+
+.label {
+  max-width: 100%;
+  margin-bottom: 20px;
+  padding: 6px 14px;
+  border: 1px solid rgb(15 118 110 / 14%);
+  border-radius: 999px;
+  color: var(--feature-ink);
+  background: var(--feature-surface);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  overflow-wrap: anywhere;
+  animation: appear 650ms 100ms ease-out both;
+}
+
+.heading {
+  width: 100%;
+  animation: appear 650ms 150ms ease-out both;
+}
+
+.heading header { display: block; }
+.heading h1 {
+  overflow: visible;
+  white-space: normal;
+  text-wrap: balance;
+  font-size: clamp(30px, 3.6vw, 48px);
+  line-height: 1.12;
+  letter-spacing: -0.045em;
+  font-weight: 600;
+}
+
+.heading p {
+  display: block;
+  max-width: 500px;
+  margin: 20px auto 0;
+  font-size: 15px;
+  line-height: 1.8;
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  max-width: 100%;
+  margin-top: 30px;
+  animation: appear 650ms 250ms ease-out both;
+}
+
+.actions > a {
+  max-width: 100%;
+  height: auto;
+  min-height: 44px;
+  padding: 12px 22px;
+  border-radius: 10px;
+  white-space: normal;
+}
+
+.footer {
+  max-width: 480px;
+  margin-top: 24px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+  animation: appear 650ms 300ms ease-out both;
+}
+
+:global(.dark) .canvas {
+  --feature-ink: #5eead4;
+  --feature-line: #255b59;
+  --feature-surface: rgb(15 30 40 / 90%);
+  background: #0b131e;
+}
+
+:global(.dark) .backdrop {
+  background:
+    radial-gradient(ellipse at 50% 34%, rgb(13 148 136 / 14%), transparent 48%),
+    radial-gradient(ellipse at 12% 12%, rgb(15 118 110 / 10%), transparent 42%),
+    radial-gradient(ellipse at 92% 92%, rgb(99 102 241 / 8%), transparent 42%);
+}
+
+:global(.dark) .backdrop::after {
+  background-image:
+    linear-gradient(rgb(94 234 212 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(94 234 212 / 4%) 1px, transparent 1px);
+}
+
+:global(.dark) .orbit,
+:global(.dark) .innerOrbit,
+:global(.dark) .node,
+:global(.dark) .label { border-color: rgb(94 234 212 / 12%); }
+:global(.dark) .node { box-shadow: 0 8px 24px -12px rgb(0 0 0 / 40%); }
+:global(.dark) .footer { color: #94a3b8; }
+
+@keyframes appear {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes connect {
+  from { opacity: 0; stroke-dashoffset: 36; }
+  to { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(-8deg); }
+  50% { transform: translateY(-7px) rotate(-5deg); }
+}
+
+@container (max-width: 520px) {
+  .scroll { padding: 32px 20px; }
+  .content { padding-bottom: 16px; }
+  .illustration { width: 300px; height: 200px; margin-bottom: 20px; }
+  .orbit { width: 260px; height: 260px; }
+  .innerOrbit { width: 180px; height: 180px; }
+  .icon { width: 84px; height: 84px; border-radius: 24px; }
+  .icon > svg { width: 36px; height: 36px; }
+  .node { width: 44px; height: 44px; border-radius: 14px; }
+  .node > svg { width: 20px; height: 20px; }
+  .nodeOne { left: 33px; top: 40px; }
+  .nodeTwo { right: 33px; top: 40px; }
+  .nodeThree { left: 46px; bottom: 24px; }
+  .nodeFour { right: 46px; bottom: 24px; }
+  .sparkOne { left: 94px; top: 10px; }
+  .sparkTwo { right: 90px; top: 16px; }
+  .sparkThree { left: 148px; bottom: 0; }
+  .heading p { font-size: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas *, .canvas *::before, .canvas *::after { animation: none; }
+}
