@@ -108,9 +108,11 @@ export function WarehousesPanel({
   return (
     <div className="space-y-3">
       <PagedTable<WarehouseTieOutRowView>
+        source="warehouse_list"
         rows={rows}
         rowKey={(row) => row.warehouseId ?? 'unassigned'}
         pageSize={15}
+        searchable
         emptyAsRow
         empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('warehouses.empty')}</p>}
         onRowClick={(row) => {
@@ -121,12 +123,19 @@ export function WarehousesPanel({
             key: 'code',
             header: t('warehouses.columns.code'),
             cell: (row) => <span className="font-medium">{row.code ?? t('warehouses.unassigned')}</span>,
+            search: (row) => `${row.code ?? ''} ${row.name ?? ''}`,
           },
-          { key: 'name', header: t('warehouses.columns.name'), cell: (row) => row.name ?? '—' },
+          {
+            key: 'name',
+            header: t('warehouses.columns.name'),
+            cell: (row) => row.name ?? '—',
+            search: (row) => row.name ?? '',
+          },
           {
             key: 'status',
             header: t('warehouses.columns.status'),
             cell: (row) => (row.status ? <Badge variant={STATUS_VARIANT[row.status]}>{t(`status.${row.status}`)}</Badge> : '—'),
+            search: (row) => row.status ?? '',
           },
           {
             key: 'value',
