@@ -42,11 +42,14 @@ test("the matrix is one cell per source release and dataset", () => {
 });
 
 test("the release default is oldest plus latest source on the gate datasets", () => {
-  assert.deepEqual(defaultMatrix(loadConfig()).include, [
+  const declared = { ...loadConfig(), sources: [
+    { tag: "v0.1.0-alpha.22" }, { tag: "v0.1.0-alpha.23" }, { tag: "v0.1.0-alpha.26" },
+  ] };
+  assert.deepEqual(defaultMatrix(declared).include, [
     { source: "v0.1.0-alpha.22", dataset: "multi-entity" },
-    { source: "v0.1.0-alpha.23", dataset: "multi-entity" },
+    { source: "v0.1.0-alpha.26", dataset: "multi-entity" },
   ]);
-  assert.equal(planMatrix(loadConfig()).include.length, 18);
+  assert.equal(planMatrix(declared).include.length, declared.sources.length * declared.datasets.length);
 });
 
 test("the release default refuses an unknown dataset and dedupes one source", () => {

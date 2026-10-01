@@ -6,9 +6,8 @@
  * but it RUNS INSIDE THE SOURCE TREE: rehearse.mjs copies it to
  * `engine/src/upgrade-rehearsal-seed/multi-entity.ts` and executes it there
  * with the source release's runtime. Relative imports below resolve from THAT
- * location, and every module imported must exist in BOTH v0.1.0-alpha.22 and
- * v0.1.0-alpha.23 (the schemas are identical; the engine surface used here is
- * unchanged between the tags).
+ * location, and every module imported must exist in every supported source
+ * release. Payment drafts carry an explicit parent-subsidiary actor scope.
  *
  * What it builds, deterministically from `--seed`:
  *   - a sim-tagged org (source sim/world.ts provisionOrg, general-business)
@@ -473,6 +472,7 @@ async function main(): Promise<void> {
       const doc = await createPaymentDocument({
         orgId, kind,
         createdBy: admin, partyId, bankAccountId: world.accounts.bank!,
+        allowedSubsidiaryIds: new Set([world.subsidiaryId]),
         documentDate: date, subsidiaryId: world.subsidiaryId, currency, fxRate,
       });
       await updateDraftPayment(doc.id, { allocations, bankAccountId: world.accounts.bank! }, admin, orgId);
