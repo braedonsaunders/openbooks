@@ -85,6 +85,8 @@ export function SetupNav({
   canExport,
   canImport,
   canManageSetup,
+  canManagePerformance = false,
+  canManageCrm = false,
   canManagePeriods,
   hiddenEntityKeys = [],
   projectsEnabled = true,
@@ -99,6 +101,8 @@ export function SetupNav({
   canExport: boolean
   canImport: boolean
   canManageSetup: boolean
+  canManagePerformance?: boolean
+  canManageCrm?: boolean
   canManagePeriods?: boolean
   hiddenEntityKeys?: string[]
   projectsEnabled?: boolean
@@ -113,6 +117,7 @@ export function SetupNav({
   const t = useTranslations('admin.setup')
   const tClose = useTranslations('close.setup')
   const td = useTranslations('data')
+  const tHrm = useTranslations('hrm')
   const tCrm = useTranslations('crm')
   const tProjectTypes = useTranslations('projectTypes')
   const tLaborPricing = useTranslations('laborPricing')
@@ -139,7 +144,7 @@ export function SetupNav({
           panel. sm and up restore the grouped vertical rail exactly. */}
       <div className="flex flex-row items-start gap-6 overflow-x-auto pb-1 sm:flex-col sm:gap-0 sm:space-y-5 sm:overflow-visible sm:pb-0">
         {SETUP_GROUPS.map((group) => {
-          if (!canManageSetup && group.key !== 'company') return null
+          if (!canManageSetup && group.key !== 'company' && !(group.key === 'workforce' && canManagePerformance)) return null
           const items: NavItem[] =
             group.key === 'accounting'
               ? [
@@ -226,6 +231,7 @@ export function SetupNav({
                 ]
               : group.key === 'workforce'
               ? [
+                  ...(canManagePerformance ? [{ href: '/admin/setup/performance', label: tHrm('performance.workspace.setupTitle'), iconKey: 'clipboard-list' }] : []),
                   // The review-form and hiring-funnel builders: one page per
                   // template/pipeline behind these index pages.
                   ...(hrmEnabled
@@ -266,7 +272,7 @@ export function SetupNav({
                   label: t(`entities.${e.key}.title`),
                   iconKey: e.iconKey,
                 }))
-          const visibleItems = canManageSetup ? items : items.filter((item) => item.href === '/admin/setup/crm')
+          const visibleItems = canManageSetup ? items : items.filter((item) => (canManageCrm && item.href === '/admin/setup/crm') || (canManagePerformance && item.href === '/admin/setup/performance'))
           if (visibleItems.length === 0) return null
           return (
             <div key={group.key} className="shrink-0 space-y-1">

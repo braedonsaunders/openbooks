@@ -78,9 +78,17 @@ test('feature-gated entries follow their flags, never the install', () => {
   assert.ok(on.includes('/admin/setup/payroll'), 'payroll links its surface once enabled')
 })
 
-test('readers without setup permission keep only the CRM entry', () => {
-  const html = hrefs(renderNav({ ...BASE_PROPS, canManageSetup: false }))
+test('CRM setup managers keep only their authorized setup entry', () => {
+  const html = hrefs(renderNav({ ...BASE_PROPS, canManageSetup: false, canManageCrm: true }))
   assert.ok(html.includes('/admin/setup/crm'), 'the CRM entry survives without the permission')
   assert.ok(!html.includes('/admin/setup/account-groups'), 'registry entities hide without the permission')
   assert.ok(!html.includes('/admin/setup/company'), 'the Company tab hides without the permission')
+})
+
+
+test('performance managers see their configuration without unrelated setup destinations', () => {
+  const shown = hrefs(renderNav({ ...BASE_PROPS, hrmEnabled: true, canManageSetup: false, canManagePerformance: true }))
+  assert.deepEqual(shown, ['/admin/setup/performance'])
+  const denied = hrefs(renderNav({ ...BASE_PROPS, canManageSetup: false }))
+  assert.equal(denied.length, 0, 'domain entries require their own grants')
 })

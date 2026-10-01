@@ -614,6 +614,11 @@ scopeMatrix([
       assert.equal((await listTalentReviews({ orgId, actorId: w.hrFull })).length, 2);
       const directory = (await listTalentDirectory({ orgId, actorId: w.hrA })).employments.map((e) => e.id);
       assert.ok(directory.includes(empA) && !directory.includes(empB), "the other entity's people stay hidden");
+      const retired = (await db.execute(sql`update parties set is_active = false
+        where org_id = ${orgId} and id = (select worker_party_id from worker_employments where org_id = ${orgId} and id = ${empA}) returning id`)).rows;
+      assert.equal(retired.length, 1);
+      assert.ok(!(await listTalentDirectory({ orgId, actorId: w.hrA, activeOnly: true })).employments.some((employment) => employment.id === empA), "new assignments exclude inactive people");
+      assert.ok((await listTalentDirectory({ orgId, actorId: w.hrA })).employments.some((employment) => employment.id === empA), "historical assessments keep their existing employment available");
       assert.deepEqual(await listTalentReviews({ orgId, actorId: hrEmpty }), []);
       assert.deepEqual(await listTalentDirectory({ orgId, actorId: hrEmpty }), { employments: [], positions: [] });
 

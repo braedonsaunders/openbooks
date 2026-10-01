@@ -11,7 +11,7 @@ import { SetupNav } from './SetupNav'
 export const dynamic = 'force-dynamic'
 
 /**
- * Setup workspace shell — a single admin.setup.manage gate, a page header with
+ * Setup workspace shell for company administrators and domain setup managers, with
  * a back-link to the admin hub, and a two-column body: the grouped tab rail
  * (SetupNav) beside the active tab's content. The whole area scrolls together.
  */
@@ -19,12 +19,8 @@ export default async function SetupLayout({ children }: { children: ReactNode })
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const canManageSetup = can(authz, 'admin.setup.manage')
-  // The shell names the primary grant (F1T-10): without either setup grant
-  // the operator sees /access-denied, never a silent bounce. The layout runs
-  // before every setup loader, so this is the refusal that actually reaches
-  // anyone — a loader-side refusal alone would be dead code behind it.
-  // crm.setup.manage is the documented alternative — either one admits.
-  if (!canManageSetup && !can(authz, 'crm.setup.manage')) {
+  // Domain setup managers enter the shared shell; each page enforces its own grant.
+  if (!canManageSetup && !can(authz, 'crm.setup.manage') && !can(authz, 'hrm.performance.manage')) {
     redirect(accessDeniedHref({ permission: 'admin.setup.manage' }))
   }
   const t = await getTranslations('admin')
@@ -55,6 +51,8 @@ export default async function SetupLayout({ children }: { children: ReactNode })
             canExport={canExport}
             canImport={canImport}
             canManageSetup={canManageSetup}
+            canManageCrm={can(authz, 'crm.setup.manage')}
+            canManagePerformance={can(authz, 'hrm.performance.manage') && featureEnabled(features, 'hrm') && featureEnabled(features, 'hrmPerformance')}
             canManagePeriods={can(authz, 'periods.manage')}
             hiddenEntityKeys={hiddenEntityKeys}
             projectsEnabled={featureEnabled(features, 'projects')}

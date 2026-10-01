@@ -930,8 +930,18 @@
       "interviews": "Entretiens",
       "offers": "Offres",
       "openings": "Besoins",
-      "pools": "Vivier",
-      "postings": "Sites"
+      "pools": "Viviers de candidats",
+      "postings": "Annonces d’emploi"
+    },
+    "workspace": {
+      "openings": "Besoins de recrutement approuvés : demandes, effectifs et candidats.",
+      "interviews": "Entretiens planifiés et grilles d’évaluation. Les kits et groupes d’intervieweurs se configurent dans la configuration de l’entreprise.",
+      "offers": "Offres aux candidats, approbations et acceptation. Les modèles se configurent dans la configuration de l’entreprise.",
+      "postings": "Publiez les postes ouverts approuvés et suivez les candidatures par canal.",
+      "pools": "Les viviers de candidats regroupent les profils pour de futurs postes. Les politiques de conservation se configurent dans la configuration de l’entreprise.",
+      "configure": "Configurer le recrutement",
+      "newPool": "Nouveau vivier de candidats",
+      "poolDescription": "Description"
     }
   },
   "performance": {
@@ -1144,6 +1154,29 @@
         "respondLabel": "Répondre",
         "settingsLoadFailed": "Les paramètres de feedback n'ont pas pu être chargés. Réessayez."
       }
+    },
+    "workspace": {
+      "view": "Vue",
+      "assessments": "Évaluations",
+      "succession": "Plans de succession",
+      "matrix": "Matrice à neuf cases",
+      "noCycle": "Créez un cycle pour évaluer la performance et le potentiel. Les plans de succession peuvent être gérés sans cycle.",
+      "newPlan": "Nouveau plan de succession",
+      "setupTitle": "Configuration de la performance",
+      "setupDescription": "Configurez les formulaires, les échelles et les autorisations de feedback dans la configuration de l’entreprise.",
+      "reviewForms": "Formulaires et échelles",
+      "reviewFormsDescription": "Créez des formulaires réutilisables et définissez les échelles de performance et de potentiel.",
+      "exitRecords": "Dossiers de départ",
+      "exitInterviews": "Entretiens de départ",
+      "addCandidate": "Ajouter un successeur",
+      "removeCandidate": "Retirer le successeur",
+      "readiness": "Disponibilité",
+      "noCandidates": "Aucun successeur n’a été désigné.",
+      "planNotFound": "Ce plan de succession est indisponible. Choisissez un plan dans cette liste.",
+      "noScale": "Ce cycle nécessite des échelles de performance et de potentiel. Demandez à un administrateur de configurer son formulaire dans la configuration de l’entreprise.",
+      "assessmentsDescription": "Évaluez la performance, le potentiel et le risque de départ pour le cycle d’évaluation sélectionné.",
+      "successionDescription": "Planifiez la relève des postes clés et gérez les candidats classés par ordre de priorité.",
+      "matrixDescription": "Explorez le positionnement selon la performance et le potentiel pour le cycle d’évaluation sélectionné."
     }
   },
   "retention": {
@@ -1153,7 +1186,8 @@
     "missingExits": "Terminés sans fiche de sortie",
     "noMissingExits": "Chaque fin de contrat a sa fiche de sortie.",
     "noInterviewTitle": "Fiches de sortie sans entretien",
-    "noInterviewEmpty": "Chaque fiche de sortie a son entretien."
+    "noInterviewEmpty": "Chaque fiche de sortie a son entretien.",
+    "workspaceDescription": "Suivez la fidélisation et complétez les dossiers et entretiens de départ."
   },
   "benefits": {
     "title": "Avantages",

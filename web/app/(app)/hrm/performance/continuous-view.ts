@@ -6,10 +6,8 @@ import {
   column,
   field as item,
   link,
-  table,
   text,
   widgetBlock,
-  widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import {
@@ -20,9 +18,7 @@ import {
 } from '@openbooks/engine/src/hrm/performance/calibration.ts'
 import { HrmPerformanceError } from '@openbooks/engine/src/hrm/performance/errors.ts'
 import { getFeedbackSettings } from '@openbooks/engine/src/hrm/performance/feedback.ts'
-import {
-  listCycleProgress,
-} from '@openbooks/engine/src/hrm/performance/performance-read.ts'
+import { listCycleProgress } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
 import {
   listSuccessionPlans,
   listTalentDirectory,
@@ -30,6 +26,7 @@ import {
   nineBoxForCycle,
 } from '@openbooks/engine/src/hrm/performance/talent.ts'
 import type { Authz } from '../../../../lib/authz'
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { translateTalentCode } from './talent-labels.ts'
 
 /**
@@ -44,7 +41,8 @@ import { translateTalentCode } from './talent-labels.ts'
  * id or Authz crosses into a spec or a widget prop.
  */
 
-export type ContinuousTab = 'cycles' | 'calibration' | 'talent' | 'settings' | 'retention'
+export type ContinuousTab =
+  'cycles' | 'calibration' | 'talent' | 'settings' | 'retention'
 
 /**
  * A section read that failed for an unexpected reason (typed NOT_FOUND
@@ -60,11 +58,15 @@ export interface ContinuousLoadError {
 
 /** True for the typed absence/scope refusals a null section already names. */
 function isExpectedAbsence(error: unknown): boolean {
-  return error instanceof HrmPerformanceError && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
+  return (
+    error instanceof HrmPerformanceError &&
+    (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
+  )
 }
 
 export interface ContinuousData {
   tab: ContinuousTab
+  setupLabel: string
   showCalibration: boolean
   showTalent: boolean
   calibration: {
@@ -80,10 +82,18 @@ export interface ContinuousData {
       cancelLabel: string
       closeHref: string
       failed: string
+      emptyLabel: string
+      newCycleLabel: string
     } | null
     sessionsEmpty: string
     sessionCols: { name: string; status: string; opened: string }
-    sessions: { id: string; name: string; status: string; statusLabel: string; href: string }[]
+    sessions: {
+      id: string
+      name: string
+      status: string
+      statusLabel: string
+      href: string
+    }[]
     detail: {
       id: string
       name: string
@@ -124,6 +134,14 @@ export interface ContinuousData {
   talent: {
     title: string
     description: string
+    view: string
+    viewLabel: string
+    assessmentsLabel: string
+    viewOptions: { value: string; label: string }[]
+    noCycle: string
+    scaleNote: string | null
+    cycleAction: string
+    cycleActionHref: string
     newLabel: string
     cycleLabel: string
     cycles: { value: string; label: string }[]
@@ -131,16 +149,72 @@ export interface ContinuousData {
     gridTitle: string
     gridEmpty: string
     unplacedNote: string | null
-    boxRows: { perf: string; cells: Record<string, { count: string; href: string }> }[]
+    boxRows: {
+      perf: string
+      cells: Record<string, { count: string; href: string }>
+    }[]
     boxCols: { perf: string; pots: string[] }
-    tableCols: { employee: string; performance: string; potential: string; loss: string; ready: string }
-    reviews: { id: string; employee: string; performance: string; potential: string; loss: string; ready: string }[]
+    tableCols: {
+      employee: string
+      performance: string
+      potential: string
+      loss: string
+      ready: string
+    }
+    reviews: {
+      id: string
+      employee: string
+      performance: string
+      potential: string
+      loss: string
+      ready: string
+    }[]
     reviewsEmpty: string
     plansTitle: string
     plansEmpty: string
-    planCols: { position: string; incumbent: string; candidates: string; status: string }
-    plans: { id: string; position: string; incumbent: string; candidates: string; status: string }[]
+    planCols: {
+      position: string
+      incumbent: string
+      candidates: string
+      status: string
+    }
+    planDetail: {
+      id: string
+      title: string
+      closeHref: string
+      status: string
+      statusLabel: string
+      statusOptions: { value: string; label: string }[]
+      notes: string
+      notesLabel: string
+      saveLabel: string
+      failed: string
+      addLabel: string
+      employeeLabel: string
+      readinessLabel: string
+      removeLabel: string
+      readinessOptions: { value: string; label: string }[]
+      employments: { value: string; label: string }[]
+      candidates: {
+        id: string
+        name: string
+        readiness: string
+        order: number
+      }[]
+      empty: string
+    } | null
+    planMissing: string | null
+    plans: {
+      id: string
+      href: string
+      position: string
+      incumbent: string
+      candidates: string
+      status: string
+    }[]
     dialog: {
+      initialMode?: 'talent' | 'succession'
+      incumbentLabel: string
       cycleId: string
       employments: { value: string; label: string }[]
       positions: { value: string; label: string }[]
@@ -179,9 +253,16 @@ export interface ContinuousData {
 
 const f = item
 
-function calibrationStatusLabel(t: (key: string) => string, status: string): string {
+function calibrationStatusLabel(
+  t: (key: string) => string,
+  status: string,
+): string {
   const known = new Set(['draft', 'open', 'closed'])
-  return t(known.has(status) ? `performance.continuous.calibration.status.${status}` : 'performance.continuous.calibration.status.unknown')
+  return t(
+    known.has(status)
+      ? `performance.continuous.calibration.status.${status}`
+      : 'performance.continuous.calibration.status.unknown',
+  )
 }
 
 export async function loadContinuousTab(
@@ -205,24 +286,41 @@ export async function loadContinuousTab(
   const showSettings = canManage
   const showRetention = canRetain
   const tab: ContinuousTab =
-    rawTab === 'calibration' && showCalibration ? 'calibration'
-    : rawTab === 'talent' && showTalent ? 'talent'
-    : rawTab === 'settings' && showSettings ? 'settings'
-    : rawTab === 'retention' && showRetention ? 'retention'
-    : 'cycles'
+    rawTab === 'calibration' && showCalibration
+      ? 'calibration'
+      : rawTab === 'talent' && showTalent
+        ? 'talent'
+        : rawTab === 'settings' && showSettings
+          ? 'settings'
+          : rawTab === 'retention' && showRetention
+            ? 'retention'
+            : 'cycles'
   let calibration: ContinuousData['calibration'] = null
   if (tab === 'calibration' && showCalibration) {
-    const sessions = await listCalibrationSessions({ orgId: authz.user.orgId, actorId: authz.user.id })
+    const sessions = await listCalibrationSessions({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+    })
     // ?session=new opens the create dialog: it is not a session id, so it
     // never reaches getCalibrationSession (whose requireId rejects it).
     const creating = sp.session === 'new'
-    const sessionId = creating ? null : typeof sp.session === 'string' && sp.session.length > 0 ? sp.session : sessions[0]?.id ?? null
-    type CalibrationDetail = NonNullable<NonNullable<ContinuousData['calibration']>['detail']>
+    const sessionId = creating
+      ? null
+      : typeof sp.session === 'string' && sp.session.length > 0
+        ? sp.session
+        : null
+    type CalibrationDetail = NonNullable<
+      NonNullable<ContinuousData['calibration']>['detail']
+    >
     let detail: CalibrationDetail | null = null
     let detailError: ContinuousLoadError | null = null
     if (sessionId) {
       try {
-        const session = await getCalibrationSession({ orgId: authz.user.orgId, actorId: authz.user.id, id: sessionId })
+        const session = await getCalibrationSession({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          id: sessionId,
+        })
         // The editor offers the session cycle's declared scale
         // labels — the same source setPotential enforces, so an offered
         // option always saves. A labelless template offers nothing.
@@ -231,7 +329,11 @@ export async function loadContinuousTab(
           actorId: authz.user.id,
           sessionId,
         })
-        const distribution = await calibrationDistribution({ orgId: authz.user.orgId, actorId: authz.user.id, id: sessionId })
+        const distribution = await calibrationDistribution({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          id: sessionId,
+        })
         const distEntries = [...Object.entries(distribution.calibrated)]
         const distMax = Math.max(1, ...distEntries.map(([, count]) => count))
         detail = {
@@ -248,7 +350,9 @@ export async function loadContinuousTab(
           entries: session.entries.map((entry) => ({
             id: entry.id,
             review: entry.subjectName,
-            proposed: entry.proposedRating ?? t('performance.continuous.calibration.unrated'),
+            proposed:
+              entry.proposedRating ??
+              t('performance.continuous.calibration.unrated'),
             editor: {
               entryId: entry.id,
               calibratedRating: entry.calibratedRating,
@@ -256,21 +360,35 @@ export async function loadContinuousTab(
               potentialOptions,
               justification: entry.justification,
               ratingLabel: t('performance.continuous.calibration.ratingLabel'),
-              potentialLabel: t('performance.continuous.calibration.potentialLabel'),
-              justificationLabel: t('performance.continuous.calibration.justificationLabel'),
+              potentialLabel: t(
+                'performance.continuous.calibration.potentialLabel',
+              ),
+              justificationLabel: t(
+                'performance.continuous.calibration.justificationLabel',
+              ),
               saveLabel: t('performance.continuous.calibration.saveLabel'),
               revertLabel: t('performance.continuous.calibration.revertLabel'),
-              revertReasonLabel: t('performance.continuous.calibration.revertReasonLabel'),
+              revertReasonLabel: t(
+                'performance.continuous.calibration.revertReasonLabel',
+              ),
               failed: t('performance.actionFailed'),
             },
           })),
           gridEmpty: t('performance.continuous.calibration.gridEmpty'),
-          distributionTitle: t('performance.continuous.calibration.distributionTitle'),
-          distribution: distEntries.map(([key, count]) => ({ key, count, width: Math.round((count / distMax) * 100) })),
+          distributionTitle: t(
+            'performance.continuous.calibration.distributionTitle',
+          ),
+          distribution: distEntries.map(([key, count]) => ({
+            key,
+            count,
+            width: Math.round((count / distMax) * 100),
+          })),
           missingTitle: t('performance.continuous.calibration.missingTitle'),
           missing: session.missing.map((m) => ({
             review: m.subjectName,
-            reason: t(`performance.continuous.calibration.missingReasons.${m.reason}` as never),
+            reason: t(
+              `performance.continuous.calibration.missingReasons.${m.reason}` as never,
+            ),
           })),
           openLabel: t('performance.continuous.calibration.openSession'),
           closeLabel: t('performance.continuous.calibration.closeSession'),
@@ -294,7 +412,10 @@ export async function loadContinuousTab(
     // the manager's visible cycles, and the POST endpoint owns the grant.
     let create: NonNullable<ContinuousData['calibration']>['create'] = null
     if (creating) {
-      const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id })
+      const cycles = await listCycleProgress({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+      })
       create = {
         cycles: cycles.map((c) => ({ value: c.id, label: c.name })),
         nameLabel: t('performance.continuous.calibration.sessionName'),
@@ -303,6 +424,8 @@ export async function loadContinuousTab(
         cancelLabel: t('performance.cancel'),
         closeHref: '/hrm/performance?tab=calibration',
         failed: t('performance.actionFailed'),
+        emptyLabel: t('performance.empty'),
+        newCycleLabel: t('performance.newCycle'),
       }
     }
     calibration = {
@@ -332,36 +455,111 @@ export async function loadContinuousTab(
   let talent: ContinuousData['talent'] = null
   let talentError: ContinuousLoadError | null = null
   if (tab === 'talent' && showTalent) {
-    const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id })
+    const cycles = await listCycleProgress({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+    })
     // The talent filter rides talentCycle, never cycle: cycle opens the
     // cycle drawer (performance/view reads it as the drawer id), so sharing
     // the name popped the drawer over the talent tab.
-    const cycleId = typeof sp.talentCycle === 'string' && sp.talentCycle.length > 0 ? sp.talentCycle : cycles.find((c) => c.status !== 'closed')?.id ?? cycles[0]?.id ?? null
+    const cycleId =
+      typeof sp.talentCycle === 'string' && sp.talentCycle.length > 0
+        ? sp.talentCycle
+        : (cycles.find((c) => c.status !== 'closed')?.id ??
+          cycles[0]?.id ??
+          null)
     const perfFilter = typeof sp.perf === 'string' ? sp.perf : null
     const potFilter = typeof sp.pot === 'string' ? sp.pot : null
-    const directory = await listTalentDirectory({ orgId: authz.user.orgId, actorId: authz.user.id })
-    if (cycleId) {
+    const view =
+      sp.talentView === 'succession'
+        ? 'succession'
+        : sp.talentView === 'matrix'
+          ? 'matrix'
+          : 'assessments'
+    const directory = await listTalentDirectory({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      activeOnly: view === 'succession' || cycles.find((cycle) => cycle.id === cycleId)?.status !== 'closed',
+    })
+    {
       try {
         const [box, reviews, plans] = await Promise.all([
-          nineBoxForCycle({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId }),
-          listTalentReviews({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId }),
-          listSuccessionPlans({ orgId: authz.user.orgId, actorId: authz.user.id }),
+          cycleId && view !== 'succession'
+            ? nineBoxForCycle({
+                orgId: authz.user.orgId,
+                actorId: authz.user.id,
+                cycleId,
+              }).catch((error) => {
+                if (
+                  error instanceof HrmPerformanceError &&
+                  error.code === 'REFUSED'
+                )
+                  return {
+                    performance: [],
+                    potential: [],
+                    cells: {} as Record<string, Record<string, number>>,
+                    unplaced: 0,
+                  }
+                throw error
+              })
+            : Promise.resolve({
+                performance: [],
+                potential: [],
+                cells: {} as Record<string, Record<string, number>>,
+                unplaced: 0,
+              }),
+          cycleId && view !== 'succession'
+            ? listTalentReviews({
+                orgId: authz.user.orgId,
+                actorId: authz.user.id,
+                cycleId,
+              })
+            : Promise.resolve([]),
+          listSuccessionPlans({
+            orgId: authz.user.orgId,
+            actorId: authz.user.id,
+          }),
         ])
-        const base = `/hrm/performance?tab=talent&talentCycle=${cycleId}`
+        const base = cycleId
+          ? `/hrm/performance?tab=talent&talentCycle=${cycleId}`
+          : '/hrm/performance?tab=talent'
         const talentLabel = (key: string) => t(key as never)
         const visible = reviews.filter(
-          (r) => (!perfFilter || r.performanceKey === perfFilter) && (!potFilter || r.potentialKey === potFilter),
+          (r) =>
+            (!perfFilter || r.performanceKey === perfFilter) &&
+            (!potFilter || r.potentialKey === potFilter),
         )
         talent = {
+          view,
+          viewLabel: t('performance.workspace.view'),
+          assessmentsLabel: t('performance.workspace.assessments'),
+          viewOptions: ['succession', 'matrix'].map((value) => ({
+            value,
+            label: t(`performance.workspace.${value}`),
+          })),
+          noCycle: t('performance.workspace.noCycle'),
+          scaleNote:
+            cycleId &&
+            view !== 'succession' &&
+            (!box.performance.length || !box.potential.length)
+              ? t('performance.workspace.noScale')
+              : null,
+          cycleAction: t('performance.newCycle'),
+          cycleActionHref: '/hrm/performance?cycle=new',
           title: t('performance.continuous.talent.title'),
-          description: t('performance.continuous.talent.description'),
+          description: t(`performance.workspace.${view}Description`),
           newLabel: t('performance.continuous.talent.newRecord'),
           cycleLabel: t('performance.continuous.talent.cycleLabel'),
           cycles: cycles.map((c) => ({ value: c.id, label: c.name })),
-          cycleId,
+          cycleId: cycleId ?? '',
           gridTitle: t('performance.continuous.talent.gridTitle'),
           gridEmpty: t('performance.continuous.talent.gridEmpty'),
-          unplacedNote: box.unplaced > 0 ? t('performance.continuous.talent.unplacedNote', { count: box.unplaced }) : null,
+          unplacedNote:
+            box.unplaced > 0
+              ? t('performance.continuous.talent.unplacedNote', {
+                  count: box.unplaced,
+                })
+              : null,
           boxRows: box.performance.map((perf) => ({
             perf,
             cells: Object.fromEntries(
@@ -374,7 +572,10 @@ export async function loadContinuousTab(
               ]),
             ),
           })),
-          boxCols: { perf: t('performance.continuous.talent.colPerformance'), pots: [...box.potential] },
+          boxCols: {
+            perf: t('performance.continuous.talent.colPerformance'),
+            pots: [...box.potential],
+          },
           tableCols: {
             employee: t('performance.continuous.talent.colEmployee'),
             performance: t('performance.continuous.talent.colPerformance'),
@@ -388,7 +589,9 @@ export async function loadContinuousTab(
             performance: r.performanceKey,
             potential: r.potentialKey,
             loss: `${translateTalentCode('loss', r.impactOfLoss, talentLabel)} / ${translateTalentCode('loss', r.riskOfLoss, talentLabel)}`,
-            ready: r.promotionReady ? t('performance.continuous.talent.readyYes') : t('performance.continuous.talent.readyNo'),
+            ready: r.promotionReady
+              ? t('performance.continuous.talent.readyYes')
+              : t('performance.continuous.talent.readyNo'),
           })),
           reviewsEmpty: t('performance.continuous.talent.reviewsEmpty'),
           plansTitle: t('performance.continuous.talent.plansTitle'),
@@ -399,20 +602,86 @@ export async function loadContinuousTab(
             candidates: t('performance.continuous.talent.colCandidates'),
             status: t('performance.continuous.talent.colStatus'),
           },
+          planMissing:
+            sp.plan && !plans.some((p) => p.id === sp.plan)
+              ? t('performance.workspace.planNotFound')
+              : null,
+          planDetail: (() => {
+            const plan = plans.find((p) => p.id === sp.plan)
+            if (!plan) return null
+            return {
+              id: plan.id,
+              title: `${plan.positionCode} · ${plan.positionTitle}`,
+              closeHref: `${base}&talentView=succession`,
+              status: plan.status,
+              statusLabel: t('performance.continuous.talent.colStatus'),
+              statusOptions: (['draft', 'active', 'archived'] as const).map(
+                (value) => ({
+                  value,
+                  label: translateTalentCode('planStatus', value, talentLabel),
+                }),
+              ),
+              notes: plan.notes ?? '',
+              notesLabel: t('performance.continuous.talent.notesLabel'),
+              saveLabel: t('performance.continuous.talent.submitLabel'),
+              failed: t('performance.actionFailed'),
+              addLabel: t('performance.workspace.addCandidate'),
+              removeLabel: t('performance.workspace.removeCandidate'),
+              employeeLabel: t('performance.continuous.talent.employeeLabel'),
+              readinessLabel: t('performance.workspace.readiness'),
+              readinessOptions: (
+                ['ready_now', 'one_to_two_years', 'three_plus'] as const
+              ).map((value) => ({
+                value,
+                label: translateTalentCode('readiness', value, talentLabel),
+              })),
+              employments: directory.employments.map((e) => ({
+                value: e.id,
+                label: e.name,
+              })),
+              empty: t('performance.workspace.noCandidates'),
+              candidates: plan.candidates.map((c) => ({
+                id: c.id,
+                name: c.employeeName,
+                readiness: translateTalentCode(
+                  'readiness',
+                  c.readiness,
+                  talentLabel,
+                ),
+                order: c.order,
+              })),
+            }
+          })(),
           plans: plans.map((p) => ({
             id: p.id,
+            href: `${base}&talentView=succession&plan=${p.id}`,
             position: `${p.positionCode} · ${p.positionTitle}`,
             incumbent: p.incumbentName ?? '—',
-            candidates: p.candidates.map((c) => {
-              const readiness = translateTalentCode('readiness', c.readiness, talentLabel)
-              return `${c.employeeName} (${readiness})`
-            }).join(', ') || '—',
+            candidates:
+              p.candidates
+                .map((c) => {
+                  const readiness = translateTalentCode(
+                    'readiness',
+                    c.readiness,
+                    talentLabel,
+                  )
+                  return `${c.employeeName} (${readiness})`
+                })
+                .join(', ') || '—',
             status: translateTalentCode('planStatus', p.status, talentLabel),
           })),
           dialog: {
-            cycleId,
-            employments: directory.employments.map((e) => ({ value: e.id, label: e.name })),
-            positions: directory.positions.map((p) => ({ value: p.id, label: `${p.code} · ${p.title}` })),
+            initialMode: view === 'succession' ? 'succession' : 'talent',
+            incumbentLabel: t('performance.continuous.talent.colIncumbent'),
+            cycleId: cycleId ?? '',
+            employments: directory.employments.map((e) => ({
+              value: e.id,
+              label: e.name,
+            })),
+            positions: directory.positions.map((p) => ({
+              value: p.id,
+              label: `${p.code} · ${p.title}`,
+            })),
             perfOptions: [...box.performance],
             potOptions: [...box.potential],
             perfLabel: t('performance.continuous.talent.colPerformance'),
@@ -427,24 +696,30 @@ export async function loadContinuousTab(
             notesLabel: t('performance.continuous.talent.notesLabel'),
             submitLabel: t('performance.continuous.talent.submitLabel'),
             cancelLabel: t('performance.cancel'),
-            closeHref: `/hrm/performance?tab=talent&talentCycle=${cycleId}`,
+            closeHref: `${base}&talentView=${view}`,
             failed: t('performance.actionFailed'),
-            openLabel: t('performance.continuous.talent.newRecord'),
+            openLabel: t(
+              view === 'succession'
+                ? 'performance.workspace.newPlan'
+                : 'performance.continuous.talent.newRecord',
+            ),
             modeLabel: t('performance.continuous.talent.modeLabel'),
             modeTalentLabel: t('performance.continuous.talent.modeTalentLabel'),
-            modeSuccessionLabel: t('performance.continuous.talent.modeSuccessionLabel'),
+            modeSuccessionLabel: t(
+              'performance.continuous.talent.modeSuccessionLabel',
+            ),
             employeeLabel: t('performance.continuous.talent.employeeLabel'),
             positionLabel: t('performance.continuous.talent.positionLabel'),
           },
         }
-      } catch (error) {
-        if (!isExpectedAbsence(error)) {
+      } catch {
           talentError = {
             message: t('performance.continuous.talent.loadFailed'),
-            retryHref: cycleId ? `/hrm/performance?tab=talent&talentCycle=${cycleId}` : '/hrm/performance?tab=talent',
+            retryHref: cycleId
+              ? `/hrm/performance?tab=talent&talentCycle=${cycleId}`
+              : '/hrm/performance?tab=talent',
             retryLabel,
           }
-        }
         talent = null
       }
     }
@@ -454,7 +729,10 @@ export async function loadContinuousTab(
   let settingsError: ContinuousLoadError | null = null
   if (tab === 'settings' && showSettings) {
     try {
-      const settings = await getFeedbackSettings({ orgId: authz.user.orgId, actorId: authz.user.id })
+      const settings = await getFeedbackSettings({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+      })
       feedbackSettings = {
         title: t('performance.continuous.feedback.settingsTitle'),
         anyoneLabel: t('performance.continuous.feedback.anyoneLabel'),
@@ -475,7 +753,17 @@ export async function loadContinuousTab(
     }
   }
 
-  return { tab, showCalibration, showTalent, calibration, talent, talentError, feedbackSettings, settingsError }
+  return {
+    tab,
+    setupLabel: t('performance.workspace.setupTitle'),
+    showCalibration,
+    showTalent,
+    calibration,
+    talent,
+    talentError,
+    feedbackSettings,
+    settingsError,
+  }
 }
 
 /**
@@ -487,7 +775,11 @@ function loadErrorBlocks(error: ContinuousLoadError): PageSpec['body'] {
     widgetBlock('hrm-note', { note: error.message }),
     // widgetBlock, not widget: a bare WidgetRef is not a body Block, and
     // the retry link must live in the tab body beside the note.
-    widgetBlock('plain-link-button', { href: error.retryHref, label: error.retryLabel, variant: 'outline' }),
+    widgetBlock('plain-link-button', {
+      href: error.retryHref,
+      label: error.retryLabel,
+      variant: 'outline',
+    }),
   ]
 }
 
@@ -496,118 +788,157 @@ export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
   if (data.tab === 'calibration' && data.calibration) {
     const cal = data.calibration
     blocks.push(
-      widgetBlock('link-button', { href: cal.newHref, label: cal.newLabel, iconKey: 'plus' }),
-      table({
+      registeredListTable('hrm_calibration_sessions', {
         variant: 'app',
         rows: f('continuous.calibration.sessions'),
         rowKey: item('id'),
-        empty: { title: f('continuous.calibration.sessionsEmpty') },
+        empty: { title: cal.sessionsEmpty },
         columns: [
           column(cal.sessionCols.name, link(item('name'), item('href'))),
-          column(cal.sessionCols.status, badge(item('statusLabel'), { variant: 'secondary' })),
+          column(
+            cal.sessionCols.status,
+            badge(item('statusLabel'), { variant: 'secondary' }),
+          ),
         ],
       }),
     )
-    if (cal.detail) {
-      const d = cal.detail
+    if (cal.detail)
       blocks.push(
-        widgetBlock('hrm-session-actions', {
-          sessionId: d.id,
-          status: d.status,
-          openLabel: d.openLabel,
-          closeLabel: d.closeLabel,
-          failed: d.failed,
-        }),
+        widgetBlock('hrm-calibration-session', { detail: cal.detail }),
       )
+    else if (cal.detailError) blocks.push(...loadErrorBlocks(cal.detailError))
+    if (cal.create)
+      blocks.push(widgetBlock('hrm-session-dialog', { create: cal.create }))
+  }
+  if (data.tab === 'talent' && data.talentError)
+    blocks.push(...loadErrorBlocks(data.talentError))
+  if (data.tab === 'talent' && data.talent) {
+    const tal = data.talent
+    blocks.push(
+      widgetBlock('list-toolbar', {
+        basePath: '/hrm/performance',
+        currentParams: {
+          tab: 'talent',
+          ...(tal.cycleId ? { talentCycle: tal.cycleId } : {}),
+          talentView: tal.view,
+        },
+        filters: [
+          {
+            paramKey: 'talentView',
+            label: tal.viewLabel,
+            hideAll: true,
+            defaultValue: 'assessments',
+            options: [{ value: 'assessments', label: tal.assessmentsLabel }, ...tal.viewOptions],
+          },
+          ...(tal.cycles.length
+            ? [
+                {
+                  paramKey: 'talentCycle',
+                  label: tal.cycleLabel,
+                  hideAll: true,
+                  defaultValue: tal.cycleId,
+                  options: tal.cycles,
+                },
+              ]
+            : []),
+        ],
+      }),
+    )
+    if (tal.view === 'succession') {
       blocks.push(
-        widgetBlock('hrm-calibration-distribution', {
-          title: d.distributionTitle,
-          distribution: d.distribution,
-        }),
-      )
-      blocks.push(
-        table({
+        registeredListTable('hrm_succession_plans', {
           variant: 'app',
-          rows: f('continuous.calibration.detail.entries'),
+          rows: f('continuous.talent.plans'),
           rowKey: item('id'),
-          empty: { title: f('continuous.calibration.gridEmpty') },
+          empty: { title: tal.plansEmpty },
           columns: [
-            column(d.gridCols.review, text(item('review'))),
-            column(d.gridCols.proposed, text(item('proposed')), { align: 'right', className: 'tabular-nums' }),
-            column(d.gridCols.decide, widgetCell('hrm-calibration-entry', { editor: item('editor') })),
+            column(tal.planCols.position, link(item('position'), item('href'))),
+            column(tal.planCols.incumbent, text(item('incumbent'))),
+            column(tal.planCols.candidates, text(item('candidates'))),
+            column(
+              tal.planCols.status,
+              badge(item('status'), { variant: 'secondary' }),
+            ),
           ],
         }),
       )
-      if (d.missing.length > 0) {
-        blocks.push(
-          widgetBlock('hrm-calibration-missing', { title: d.missingTitle, missing: d.missing }),
-        )
-      }
-    } else if (cal.detailError) {
-      blocks.push(...loadErrorBlocks(cal.detailError))
-    }
-    // The create dialog rides ?session=new with no session behind it, so
-    // it renders beside the detail (or its absence), never inside it.
-    if (cal.create) {
-      blocks.push(widgetBlock('hrm-session-dialog', { create: cal.create }))
+    } else if (!tal.cycleId) {
+      blocks.push(
+        widgetBlock('empty-state', {
+          title: tal.title,
+          description: tal.noCycle,
+          action: 'plain-link-button',
+          actionProps: {
+            href: tal.cycleActionHref,
+            label: tal.cycleAction,
+            variant: 'outline',
+          },
+        }),
+      )
+    } else if (tal.view === 'matrix' && tal.scaleNote) {
+      blocks.push(
+        widgetBlock('empty-state', {
+          title: tal.gridTitle,
+          description: tal.scaleNote,
+          action: 'plain-link-button',
+          actionProps: {
+            href: '/admin/setup/performance',
+            label: data.setupLabel,
+            variant: 'outline',
+          },
+        }),
+      )
+    } else if (tal.view === 'matrix') {
+      blocks.push(
+        registeredListTable('hrm_talent_matrix', {
+          variant: 'app',
+          rows: f('continuous.talent.boxRows'),
+          rowKey: item('perf'),
+          empty: { title: tal.gridEmpty },
+          columns: [
+            column(tal.boxCols.perf, text(item('perf'))),
+            ...tal.boxCols.pots.map((pot) =>
+              column(
+                pot,
+                link(item(`cells.${pot}.count`), item(`cells.${pot}.href`)),
+              ),
+            ),
+          ],
+        }),
+      )
+      if (tal.unplacedNote)
+        blocks.push(widgetBlock('hrm-note', { note: tal.unplacedNote }))
+    } else {
+      if (tal.scaleNote)
+        blocks.push(widgetBlock('hrm-note', { note: tal.scaleNote }))
+      blocks.push(
+        registeredListTable('hrm_talent_reviews', {
+          variant: 'app',
+          rows: f('continuous.talent.reviews'),
+          rowKey: item('id'),
+          empty: { title: tal.reviewsEmpty },
+          columns: [
+            column(tal.tableCols.employee, text(item('employee'))),
+            column(tal.tableCols.performance, text(item('performance'))),
+            column(tal.tableCols.potential, text(item('potential'))),
+            column(tal.tableCols.loss, text(item('loss'))),
+            column(tal.tableCols.ready, text(item('ready'))),
+          ],
+        }),
+      )
     }
   }
-  if (data.tab === 'talent' && data.talentError) {
-    blocks.push(...loadErrorBlocks(data.talentError))
-  }
-  if (data.tab === 'talent' && data.talent) {
-    const tal = data.talent
-    // The 9-box as the shared table block: rows are performance keys,
-    // columns are potential keys, cells link to the filtered table.
-    const boxColumns = [
-      column(tal.boxCols.perf, text(item('perf'))),
-      ...tal.boxCols.pots.map((pot) => column(pot, link(item(`cells.${pot}.count`), item(`cells.${pot}.href`)))),
-    ]
+  if (data.tab === 'talent' && data.talent?.planDetail)
     blocks.push(
-      widgetBlock('hrm-talent-dialog', { dialog: tal.dialog }),
-      table({
-        variant: 'app',
-        rows: f('continuous.talent.boxRows'),
-        rowKey: item('perf'),
-        empty: { title: f('continuous.talent.gridEmpty') },
-        columns: boxColumns,
-      }),
+      widgetBlock('hrm-succession-plan', { detail: data.talent.planDetail }),
     )
-    if (tal.unplacedNote) {
-      blocks.push(widgetBlock('hrm-note', { note: tal.unplacedNote }))
-    }
+  if (data.tab === 'talent' && data.talent?.planMissing)
+    blocks.push(widgetBlock('hrm-note', { note: data.talent.planMissing }))
+  if (data.tab === 'settings' && data.feedbackSettings)
     blocks.push(
-      table({
-        variant: 'app',
-        rows: f('continuous.talent.reviews'),
-        rowKey: item('id'),
-        empty: { title: f('continuous.talent.reviewsEmpty') },
-        columns: [
-          column(tal.tableCols.employee, text(item('employee'))),
-          column(tal.tableCols.performance, text(item('performance'))),
-          column(tal.tableCols.potential, text(item('potential'))),
-          column(tal.tableCols.loss, text(item('loss'))),
-          column(tal.tableCols.ready, text(item('ready'))),
-        ],
-      }),
-      table({
-        variant: 'app',
-        rows: f('continuous.talent.plans'),
-        rowKey: item('id'),
-        empty: { title: f('continuous.talent.plansEmpty') },
-        columns: [
-          column(tal.planCols.position, text(item('position'))),
-          column(tal.planCols.incumbent, text(item('incumbent'))),
-          column(tal.planCols.candidates, text(item('candidates'))),
-          column(tal.planCols.status, badge(item('status'), { variant: 'secondary' })),
-        ],
-      }),
+      widgetBlock('hrm-feedback-settings', { settings: data.feedbackSettings }),
     )
-  }
-  if (data.tab === 'settings' && data.feedbackSettings) {
-    blocks.push(widgetBlock('hrm-feedback-settings', { settings: data.feedbackSettings }))
-  } else if (data.tab === 'settings' && data.settingsError) {
+  else if (data.tab === 'settings' && data.settingsError)
     blocks.push(...loadErrorBlocks(data.settingsError))
-  }
   return blocks
 }

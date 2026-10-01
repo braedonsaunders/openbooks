@@ -930,8 +930,18 @@
       "interviews": "Interviews",
       "offers": "Offers",
       "openings": "Openings",
-      "pools": "Pools",
-      "postings": "Postings"
+      "pools": "Candidate pools",
+      "postings": "Job postings"
+    },
+    "workspace": {
+      "openings": "Approved hiring demand: manage requisitions, headcount, and candidates.",
+      "interviews": "Scheduled interviews and scorecards. Interview kits and interviewer groups live in Company Setup.",
+      "offers": "Candidate offers, approvals, and acceptance. Reusable offer templates live in Company Setup.",
+      "postings": "Publish approved openings to job boards and track applications by channel.",
+      "pools": "Candidate pools keep potential applicants for future roles. Retention policies live in Company Setup.",
+      "configure": "Configure recruiting",
+      "newPool": "New candidate pool",
+      "poolDescription": "Description"
     }
   },
   "performance": {
@@ -1144,7 +1154,30 @@
         "settingsLoadFailed": "The feedback settings could not be loaded. Try again."
       }
     },
-    "goalProgressInvalid": "Progress must be a whole number from 0 to 100."
+    "goalProgressInvalid": "Progress must be a whole number from 0 to 100.",
+    "workspace": {
+      "view": "View",
+      "assessments": "Assessments",
+      "succession": "Succession plans",
+      "matrix": "Nine-box",
+      "noCycle": "Create a review cycle to assess performance and potential. Succession plans can be managed without a cycle.",
+      "newPlan": "New succession plan",
+      "setupTitle": "Performance setup",
+      "setupDescription": "Configure review forms, rating scales, and feedback permissions in Company Setup.",
+      "reviewForms": "Review forms and scales",
+      "reviewFormsDescription": "Build reusable review forms and define the performance and potential scales used in assessments and calibration.",
+      "exitRecords": "Exit records",
+      "exitInterviews": "Exit interviews",
+      "addCandidate": "Add successor",
+      "removeCandidate": "Remove successor",
+      "readiness": "Readiness",
+      "noCandidates": "No successors have been nominated.",
+      "planNotFound": "This succession plan is unavailable. Choose a plan from this list.",
+      "noScale": "This cycle needs declared performance and potential scales. Ask a Company Setup administrator to configure its review form before recording an assessment.",
+      "assessmentsDescription": "Assess performance, potential, and retention risk for the selected review cycle.",
+      "successionDescription": "Plan coverage for key positions and maintain ranked successor candidates.",
+      "matrixDescription": "Explore performance and potential placements for the selected review cycle."
+    }
   },
   "retention": {
     "title": "Retention",
@@ -1153,7 +1186,8 @@
     "missingExits": "Terminated without an exit record",
     "noMissingExits": "Every termination has its exit record.",
     "noInterviewTitle": "Exit records without an interview",
-    "noInterviewEmpty": "Every exit record has its interview."
+    "noInterviewEmpty": "Every exit record has its interview.",
+    "workspaceDescription": "Monitor retention and complete outstanding exit records and interviews."
   },
   "benefits": {
     "title": "Benefits",

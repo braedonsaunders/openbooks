@@ -136,9 +136,9 @@ test('Talent exposes two workspaces while detailed views remain in authorized lo
   ])
   const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0])
   const recruiting = local.groups.find((group) => group.some((tab) => tab.href === '/hrm/recruiting'))!
-  assert.deepEqual(recruiting.map((tab) => tab.href), ['/hrm/positions', '/hrm/recruiting', ...['interviews', 'offers', 'postings', 'pools'].map((tab) => `/hrm/recruiting?tab=${tab}`)])
+  assert.deepEqual(recruiting.map((tab) => tab.href), ['/hrm/recruiting', '/hrm/positions', ...['interviews', 'offers', 'postings', 'pools'].map((tab) => `/hrm/recruiting?tab=${tab}`)])
   const performance = local.groups.find((group) => group.some((tab) => tab.href === '/hrm/performance'))!
-  assert.deepEqual(performance.map((tab) => tab.href), ['/hrm/performance', '/hrm/performance?tab=calibration', '/hrm/performance?tab=talent', '/hrm/performance?tab=retention', '/hrm/surveys', '/hrm/performance?tab=settings'])
+  assert.deepEqual(performance.map((tab) => tab.href), ['/hrm/performance', '/hrm/performance?tab=calibration', '/hrm/performance?tab=talent', '/hrm/performance?tab=retention', '/hrm/surveys'])
   assert.equal(performance[0]!.label, 'Cycles')
 })
 

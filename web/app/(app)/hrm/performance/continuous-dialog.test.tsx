@@ -161,6 +161,7 @@ test('succession mode posts its notes with the plan', async () => {
     assert.equal((m.document.querySelector('select[aria-hidden]') as HTMLSelectElement).value, 'succession')
     assert.ok(m.document.getElementById('tal-notes'), 'succession mode keeps the notes field available')
     await act(async () => {
+      m.setSelect(m.document.querySelectorAll('select[aria-hidden]')[1] as HTMLSelectElement, 'pos-1')
       m.setText(m.document.getElementById('tal-notes') as HTMLTextAreaElement, 'interim coverage plan')
     })
     await act(async () => {
@@ -171,6 +172,7 @@ test('succession mode posts its notes with the plan', async () => {
     assert.equal(posts.length, 1, 'the succession plan posts once')
     assert.equal(posts[0]?.body?.notes, 'interim coverage plan', 'the succession payload carries its notes')
     assert.equal(posts[0]?.body?.positionId, 'pos-1', 'the plan still names its position')
+    assert.equal(posts[0]?.body?.incumbentEmploymentId, null, 'a new plan never silently assigns the first employee as incumbent')
   } finally {
     await m.unmount()
   }
@@ -183,6 +185,7 @@ test('talent mode still posts its notes with the review', async () => {
     const { act } = await import('react')
     await openDialog(m)
     await act(async () => {
+      m.setSelect(m.document.querySelectorAll('select[aria-hidden]')[1] as HTMLSelectElement, 'emp-1')
       m.setText(m.document.getElementById('tal-notes') as HTMLTextAreaElement, 'flight risk')
     })
     await act(async () => {

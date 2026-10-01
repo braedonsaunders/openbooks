@@ -782,7 +782,7 @@ export interface RetentionOverviewDTO {
     terminatedFrom: string;
   }[];
   /** Exit records with no interview held. */
-  readonly exitRecordsWithoutInterview: { exitId: string; employmentId: string }[];
+  readonly exitRecordsWithoutInterview: { exitId: string; employmentId: string; workerName: string }[];
 }
 
 /**
@@ -874,11 +874,12 @@ export async function getRetentionOverview(args: {
     `)).rows;
     const noInterview = (allowed !== null && allowed.size === 0)
       ? []
-      : (await db.execute<{ exitId: string; employmentId: string }>(sql`
-      select x.id as "exitId", x.employment_id as "employmentId"
+      : (await db.execute<{ exitId: string; employmentId: string; workerName: string }>(sql`
+      select x.id as "exitId", x.employment_id as "employmentId", coalesce(p.display_name, '—') as "workerName"
         from hrm_exit_records x
         join worker_employments e
           on e.org_id = x.org_id and e.id = x.employment_id
+        left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
        where x.org_id = ${orgId} and x.interview_held_on is null
          ${retentionScopeCondition(allowed)}
        order by x.recorded_at desc

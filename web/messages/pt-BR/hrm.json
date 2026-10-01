@@ -930,8 +930,18 @@
       "interviews": "Entrevistas",
       "offers": "Ofertas",
       "openings": "Vagas",
-      "pools": "Banco",
-      "postings": "Portais"
+      "pools": "Bancos de candidatos",
+      "postings": "Anúncios de vagas"
+    },
+    "workspace": {
+      "openings": "Necessidades de contratação aprovadas: requisições, quadro de pessoal e candidatos.",
+      "interviews": "Entrevistas agendadas e avaliações. Kits e grupos de entrevistadores ficam na configuração da empresa.",
+      "offers": "Ofertas, aprovações e aceite. Modelos de oferta ficam na configuração da empresa.",
+      "postings": "Publique vagas aprovadas e acompanhe candidaturas por canal.",
+      "pools": "Bancos de candidatos reúnem perfis para futuras vagas. Políticas de retenção ficam na configuração da empresa.",
+      "configure": "Configurar recrutamento",
+      "newPool": "Novo banco de candidatos",
+      "poolDescription": "Descrição"
     }
   },
   "performance": {
@@ -1144,6 +1154,29 @@
         "respondLabel": "Responder",
         "settingsLoadFailed": "Não foi possível carregar as configurações de feedback. Tente novamente."
       }
+    },
+    "workspace": {
+      "view": "Visualização",
+      "assessments": "Avaliações",
+      "succession": "Planos de sucessão",
+      "matrix": "Matriz de nove quadrantes",
+      "noCycle": "Crie um ciclo para avaliar desempenho e potencial. Planos de sucessão podem ser gerenciados sem um ciclo.",
+      "newPlan": "Novo plano de sucessão",
+      "setupTitle": "Configuração de desempenho",
+      "setupDescription": "Configure formulários, escalas e permissões de feedback na configuração da empresa.",
+      "reviewForms": "Formulários e escalas",
+      "reviewFormsDescription": "Crie formulários reutilizáveis e defina escalas de desempenho e potencial.",
+      "exitRecords": "Registros de desligamento",
+      "exitInterviews": "Entrevistas de desligamento",
+      "addCandidate": "Adicionar sucessor",
+      "removeCandidate": "Remover sucessor",
+      "readiness": "Prontidão",
+      "noCandidates": "Nenhum sucessor foi indicado.",
+      "planNotFound": "Este plano de sucessão não está disponível. Escolha um plano desta lista.",
+      "noScale": "Este ciclo precisa de escalas de desempenho e potencial. Peça a um administrador para configurar o formulário na configuração da empresa.",
+      "assessmentsDescription": "Avalie o desempenho, o potencial e o risco de saída no ciclo de avaliação selecionado.",
+      "successionDescription": "Planeje a sucessão de cargos-chave e gerencie candidatos em ordem de prioridade.",
+      "matrixDescription": "Explore a distribuição por desempenho e potencial no ciclo de avaliação selecionado."
     }
   },
   "retention": {
@@ -1153,7 +1186,8 @@
     "missingExits": "Desligados sem registro de saída",
     "noMissingExits": "Cada desligamento tem seu registro de saída.",
     "noInterviewTitle": "Registros de saída sem entrevista",
-    "noInterviewEmpty": "Cada registro de saída tem sua entrevista."
+    "noInterviewEmpty": "Cada registro de saída tem sua entrevista.",
+    "workspaceDescription": "Acompanhe a retenção e complete registros e entrevistas de desligamento pendentes."
   },
   "benefits": {
     "title": "Benefícios",

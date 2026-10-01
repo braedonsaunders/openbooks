@@ -930,8 +930,18 @@
       "interviews": "Entrevistas",
       "offers": "Ofertas",
       "openings": "Vacantes",
-      "pools": "Reserva",
-      "postings": "Portales"
+      "pools": "Bolsas de candidatos",
+      "postings": "Anuncios de empleo"
+    },
+    "workspace": {
+      "openings": "Necesidades de contratación aprobadas: solicitudes, plantilla y candidatos.",
+      "interviews": "Entrevistas programadas y evaluaciones. Los kits y grupos de entrevistadores se gestionan en la configuración de la empresa.",
+      "offers": "Ofertas, aprobaciones y aceptación. Las plantillas se gestionan en la configuración de la empresa.",
+      "postings": "Publique vacantes aprobadas y siga las solicitudes por canal.",
+      "pools": "Las bolsas de candidatos reúnen perfiles para futuros puestos. Las políticas de conservación se gestionan en la configuración de la empresa.",
+      "configure": "Configurar contratación",
+      "newPool": "Nueva bolsa de candidatos",
+      "poolDescription": "Descripción"
     }
   },
   "performance": {
@@ -1144,6 +1154,29 @@
         "respondLabel": "Responder",
         "settingsLoadFailed": "No se pudo cargar la configuración de comentarios. Inténtalo de nuevo."
       }
+    },
+    "workspace": {
+      "view": "Vista",
+      "assessments": "Evaluaciones",
+      "succession": "Planes de sucesión",
+      "matrix": "Matriz de nueve casillas",
+      "noCycle": "Cree un ciclo para evaluar rendimiento y potencial. Los planes de sucesión se pueden gestionar sin un ciclo.",
+      "newPlan": "Nuevo plan de sucesión",
+      "setupTitle": "Configuración del rendimiento",
+      "setupDescription": "Configure formularios, escalas y permisos de comentarios en la configuración de la empresa.",
+      "reviewForms": "Formularios y escalas",
+      "reviewFormsDescription": "Cree formularios reutilizables y defina escalas de rendimiento y potencial.",
+      "exitRecords": "Registros de salida",
+      "exitInterviews": "Entrevistas de salida",
+      "addCandidate": "Añadir sucesor",
+      "removeCandidate": "Quitar sucesor",
+      "readiness": "Preparación",
+      "noCandidates": "No se han nombrado sucesores.",
+      "planNotFound": "Este plan de sucesión no está disponible. Elija un plan de esta lista.",
+      "noScale": "Este ciclo necesita escalas de rendimiento y potencial. Pida a un administrador que configure su formulario en la configuración de la empresa.",
+      "assessmentsDescription": "Evalúe el desempeño, el potencial y el riesgo de salida en el ciclo de evaluación seleccionado.",
+      "successionDescription": "Planifique la sucesión de puestos clave y gestione candidatos ordenados por prioridad.",
+      "matrixDescription": "Explore la distribución por desempeño y potencial en el ciclo de evaluación seleccionado."
     }
   },
   "retention": {
@@ -1153,7 +1186,8 @@
     "missingExits": "Terminados sin registro de salida",
     "noMissingExits": "Cada terminación tiene su registro de salida.",
     "noInterviewTitle": "Registros de salida sin entrevista",
-    "noInterviewEmpty": "Cada registro de salida tiene su entrevista."
+    "noInterviewEmpty": "Cada registro de salida tiene su entrevista.",
+    "workspaceDescription": "Supervise la retención y complete los registros y entrevistas de salida pendientes."
   },
   "benefits": {
     "title": "Beneficios",

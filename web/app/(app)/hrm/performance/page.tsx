@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadPerformancePage, performanceSpec, performanceTitle } from './view'
 
@@ -22,6 +23,7 @@ export default async function PerformancePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
+  if (sp.tab === 'settings') redirect('/admin/setup/performance')
   const data = await loadPerformancePage(sp)
   return <ModuleView spec={performanceSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
@@ -629,6 +629,8 @@ export function FeedbackDialog({
 
 /** Record a talent review or a succession plan with its first candidate (HR). */
 export function TalentDialog({
+  initialMode,
+  incumbentLabel,
   cycleId,
   employments,
   positions,
@@ -652,6 +654,8 @@ export function TalentDialog({
   employeeLabel,
   positionLabel,
 }: {
+  incumbentLabel?: string
+  initialMode?: 'talent' | 'succession'
   cycleId: string
   employments: { value: string; label: string }[]
   positions: { value: string; label: string }[]
@@ -677,9 +681,11 @@ export function TalentDialog({
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<'talent' | 'succession'>('talent')
-  const [employmentId, setEmploymentId] = useState(employments[0]?.value ?? '')
-  const [positionId, setPositionId] = useState(positions[0]?.value ?? '')
+  const [mode, setMode] = useState<'talent' | 'succession'>(
+    initialMode ?? 'talent',
+  )
+  const [employmentId, setEmploymentId] = useState('')
+  const [positionId, setPositionId] = useState('')
   const [perf, setPerf] = useState(perfOptions[0] ?? '')
   const [pot, setPot] = useState(potOptions[0] ?? '')
   const [impact, setImpact] = useState('medium')
@@ -693,7 +699,10 @@ export function TalentDialog({
     setBusy(true)
     setError(null)
     try {
-      const url = mode === 'talent' ? '/api/hrm/talent-reviews' : '/api/hrm/succession-plans'
+      const url =
+        mode === 'talent'
+          ? '/api/hrm/talent-reviews'
+          : '/api/hrm/succession-plans'
       const payload =
         mode === 'talent'
           ? {
@@ -706,7 +715,11 @@ export function TalentDialog({
               promotionReady: promotion,
               notes: notes.trim() || null,
             }
-          : { positionId, incumbentEmploymentId: employmentId || null, notes: notes.trim() || null }
+          : {
+              positionId,
+              incumbentEmploymentId: employmentId || null,
+              notes: notes.trim() || null,
+            }
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -735,106 +748,166 @@ export function TalentDialog({
     )
   }
   return (
-    <div className="space-y-3">
-      <div>
-        <Label htmlFor="tal-mode">{modeLabel}</Label>
-        <Select id="tal-mode" value={mode} onChange={(e) => setMode(e.target.value as 'talent' | 'succession')}>
-          <option value="talent">{modeTalentLabel}</option>
-          <option value="succession">{modeSuccessionLabel}</option>
-        </Select>
-      </div>
-      {mode === 'talent' ? (
-        <div>
-          <Label htmlFor="tal-emp">{employeeLabel}</Label>
-          <Select id="tal-emp" value={employmentId} onChange={(e) => setEmploymentId(e.target.value)}>
-            {employments.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-      ) : (
-        <div>
-          <Label htmlFor="tal-pos">{positionLabel}</Label>
-          <Select id="tal-pos" value={positionId} onChange={(e) => setPositionId(e.target.value)}>
-            {positions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-      )}
-      {mode === 'talent' ? (
-        <>
+    <Drawer open onClose={() => setOpen(false)} title={openLabel}>
+      <div className="space-y-3">
+        {!initialMode ? (
           <div>
-            <Label htmlFor="tal-perf">{perfLabel}</Label>
-            <Select id="tal-perf" value={perf} onChange={(e) => setPerf(e.target.value)}>
-              {perfOptions.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
+            <Label htmlFor="tal-mode">{modeLabel}</Label>
+            <Select
+              id="tal-mode"
+              value={mode}
+              onChange={(e) => { setMode(e.target.value as 'talent' | 'succession'); setEmploymentId('') }}
+            >
+              <option value="talent">{modeTalentLabel}</option>
+              <option value="succession">{modeSuccessionLabel}</option>
             </Select>
           </div>
+        ) : null}
+        {mode === 'talent' ? (
           <div>
-            <Label htmlFor="tal-pot">{potLabel}</Label>
-            <Select id="tal-pot" value={pot} onChange={(e) => setPot(e.target.value)}>
-              {potOptions.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="tal-impact">{impactLabel}</Label>
-            <Select id="tal-impact" value={impact} onChange={(e) => setImpact(e.target.value)}>
-              {lossOptions.map((o) => (
+            <Label htmlFor="tal-emp">{employeeLabel}</Label>
+            <Select
+              id="tal-emp"
+              value={employmentId}
+              onChange={(e) => setEmploymentId(e.target.value)}
+            >
+              <option value="">{employeeLabel}</option>
+              {employments.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
             </Select>
           </div>
+        ) : (
           <div>
-            <Label htmlFor="tal-risk">{riskLabel}</Label>
-            <Select id="tal-risk" value={risk} onChange={(e) => setRisk(e.target.value)}>
-              {lossOptions.map((o) => (
+            <Label htmlFor="tal-pos">{positionLabel}</Label>
+            <Select
+              id="tal-pos"
+              value={positionId}
+              onChange={(e) => setPositionId(e.target.value)}
+            >
+              <option value="">{positionLabel}</option>
+              {positions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
             </Select>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input type="checkbox" checked={promotion} onChange={(e) => setPromotion(e.target.checked)} />
-            {promotionLabel}
-          </label>
-        </>
-      ) : null}
-      <div>
-        <Label htmlFor="tal-notes">{notesLabel}</Label>
-        <Textarea id="tal-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        )}
+        {mode === 'succession' ? <div>
+          <Label htmlFor="tal-incumbent">{incumbentLabel ?? employeeLabel}</Label>
+          <Select id="tal-incumbent" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}>
+            <option value="">—</option>
+            {employments.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select>
+        </div> : null}
+        {mode === 'talent' ? (
+          <>
+            <div>
+              <Label htmlFor="tal-perf">{perfLabel}</Label>
+              <Select
+                id="tal-perf"
+                value={perf}
+                onChange={(e) => setPerf(e.target.value)}
+              >
+                {perfOptions.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="tal-pot">{potLabel}</Label>
+              <Select
+                id="tal-pot"
+                value={pot}
+                onChange={(e) => setPot(e.target.value)}
+              >
+                {potOptions.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="tal-impact">{impactLabel}</Label>
+              <Select
+                id="tal-impact"
+                value={impact}
+                onChange={(e) => setImpact(e.target.value)}
+              >
+                {lossOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="tal-risk">{riskLabel}</Label>
+              <Select
+                id="tal-risk"
+                value={risk}
+                onChange={(e) => setRisk(e.target.value)}
+              >
+                {lossOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={promotion}
+                onChange={(e) => setPromotion(e.target.checked)}
+              />
+              {promotionLabel}
+            </label>
+          </>
+        ) : null}
+        <div>
+          <Label htmlFor="tal-notes">{notesLabel}</Label>
+          <Textarea
+            id="tal-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+        {error ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        ) : null}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            disabled={
+              busy ||
+              (mode === 'talent'
+                ? !cycleId || !employmentId || !perf || !pot
+                : !positionId)
+            }
+            onClick={submit}
+          >
+            {submitLabel}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setOpen(false)
+              router.push(closeHref)
+            }}
+          >
+            {cancelLabel}
+          </Button>
+        </div>
       </div>
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-      <div className="flex gap-2">
-        <Button type="button" disabled={busy} onClick={submit}>
-          {submitLabel}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setOpen(false)
-            router.push(closeHref)
-          }}
-        >
-          {cancelLabel}
-        </Button>
-      </div>
-    </div>
+    </Drawer>
   )
 }
 

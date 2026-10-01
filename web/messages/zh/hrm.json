@@ -930,8 +930,18 @@
       "interviews": "面试",
       "offers": "录用函",
       "openings": "需求",
-      "pools": "人才库",
-      "postings": "渠道"
+      "pools": "候选人才库",
+      "postings": "职位发布"
+    },
+    "workspace": {
+      "openings": "已批准的招聘需求：管理招聘申请、人数和候选人。",
+      "interviews": "已安排的面试和评分。面试套件和面试官组在公司设置中管理。",
+      "offers": "候选人录用通知、审批和接受情况。录用通知模板在公司设置中管理。",
+      "postings": "将已批准的空缺发布到招聘平台，并按渠道跟踪申请。",
+      "pools": "候选人才库为未来岗位储备候选人。保留策略在公司设置中管理。",
+      "configure": "配置招聘",
+      "newPool": "新建候选人才库",
+      "poolDescription": "说明"
     }
   },
   "performance": {
@@ -1144,6 +1154,29 @@
         "respondLabel": "回复",
         "settingsLoadFailed": "无法加载反馈设置，请重试。"
       }
+    },
+    "workspace": {
+      "view": "视图",
+      "assessments": "评估",
+      "succession": "继任计划",
+      "matrix": "九宫格",
+      "noCycle": "请创建评估周期以评估绩效和潜力。继任计划无需周期即可管理。",
+      "newPlan": "新建继任计划",
+      "setupTitle": "绩效设置",
+      "setupDescription": "在公司设置中配置评估表、评分标准和反馈权限。",
+      "reviewForms": "评估表与评分标准",
+      "reviewFormsDescription": "创建可重复使用的评估表，并定义绩效和潜力的评分标准。",
+      "exitRecords": "离职记录",
+      "exitInterviews": "离职面谈",
+      "addCandidate": "添加继任候选人",
+      "removeCandidate": "移除继任候选人",
+      "readiness": "准备程度",
+      "noCandidates": "尚未提名继任候选人。",
+      "planNotFound": "此继任计划不可用。请从此列表中选择计划。",
+      "noScale": "此周期需要明确的绩效和潜力评分标准。请公司设置管理员先配置评估表。",
+      "assessmentsDescription": "评估所选考核周期内的绩效、潜力及离职风险。",
+      "successionDescription": "规划关键岗位的继任安排，并管理候选人的优先顺序。",
+      "matrixDescription": "查看所选考核周期内的绩效与潜力分布。"
     }
   },
   "retention": {
@@ -1153,7 +1186,8 @@
     "missingExits": "无离职记录的终止雇佣",
     "noMissingExits": "每次雇佣终止都有离职记录。",
     "noInterviewTitle": "无面谈的离职记录",
-    "noInterviewEmpty": "每份离职记录都有面谈。"
+    "noInterviewEmpty": "每份离职记录都有面谈。",
+    "workspaceDescription": "监控员工保留情况并完成待处理的离职记录和面谈。"
   },
   "benefits": {
     "title": "福利",

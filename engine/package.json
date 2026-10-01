@@ -70,6 +70,7 @@
     "./crm/sales/contracts": "./src/crm/public-sales-contracts.ts",
     "./reports/definitions": "./src/reports/public-definitions.ts",
     "./platform/business-date": "./src/platform/public-business-date.ts",
+    "./hrm/performance": "./src/hrm/public-performance.ts",
     "./hrm/benefits": "./src/hrm/public-benefits.ts",
     "./money": "./src/money/public.ts",
     "./money/decimal": "./src/money/exact-decimal.ts",

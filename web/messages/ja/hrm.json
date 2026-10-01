@@ -930,8 +930,18 @@
       "interviews": "面接",
       "offers": "オファー",
       "openings": "求人",
-      "pools": "プール",
-      "postings": "掲示"
+      "pools": "候補者プール",
+      "postings": "求人掲載"
+    },
+    "workspace": {
+      "openings": "承認済みの採用ニーズ：採用申請、必要人数、候補者を管理します。",
+      "interviews": "予定された面接と評価。面接キットと面接担当者グループは会社設定で管理します。",
+      "offers": "候補者へのオファー、承認、承諾。オファーテンプレートは会社設定で管理します。",
+      "postings": "承認済みの募集を求人サイトに掲載し、媒体別の応募を追跡します。",
+      "pools": "候補者プールは今後の採用に備えて候補者を管理します。保持ポリシーは会社設定で管理します。",
+      "configure": "採用の設定",
+      "newPool": "新規候補者プール",
+      "poolDescription": "説明"
     }
   },
   "performance": {
@@ -1144,6 +1154,29 @@
         "respondLabel": "回答する",
         "settingsLoadFailed": "フィードバック設定を読み込めませんでした。もう一度お試しください。"
       }
+    },
+    "workspace": {
+      "view": "表示",
+      "assessments": "評価",
+      "succession": "後継者計画",
+      "matrix": "9ボックス",
+      "noCycle": "業績と潜在能力を評価するには評価サイクルを作成してください。後継者計画はサイクルなしでも管理できます。",
+      "newPlan": "新規後継者計画",
+      "setupTitle": "業績管理の設定",
+      "setupDescription": "会社設定で評価フォーム、評価尺度、フィードバック権限を設定します。",
+      "reviewForms": "評価フォームと尺度",
+      "reviewFormsDescription": "再利用可能な評価フォームを作成し、業績と潜在能力の尺度を定義します。",
+      "exitRecords": "退職記録",
+      "exitInterviews": "退職面談",
+      "addCandidate": "後継候補者を追加",
+      "removeCandidate": "後継候補者を削除",
+      "readiness": "準備状況",
+      "noCandidates": "後継候補者はまだ指名されていません。",
+      "planNotFound": "この後継者計画は利用できません。一覧から計画を選択してください。",
+      "noScale": "このサイクルには業績と潜在能力の評価尺度が必要です。会社設定の管理者に評価フォームの設定を依頼してください。",
+      "assessmentsDescription": "選択した評価サイクルの業績、潜在能力、離職リスクを評価します。",
+      "successionDescription": "重要な役職の後継者を計画し、候補者の優先順位を管理します。",
+      "matrixDescription": "選択した評価サイクルの業績と潜在能力の分布を確認します。"
     }
   },
   "retention": {
@@ -1153,7 +1186,8 @@
     "missingExits": "退職記録のない終了者",
     "noMissingExits": "すべての終了者に退職記録があります。",
     "noInterviewTitle": "面談なしの退職記録",
-    "noInterviewEmpty": "すべての退職記録に面談があります。"
+    "noInterviewEmpty": "すべての退職記録に面談があります。",
+    "workspaceDescription": "定着状況を確認し、未完了の退職記録と面談を完了します。"
   },
   "benefits": {
     "title": "福利厚生",

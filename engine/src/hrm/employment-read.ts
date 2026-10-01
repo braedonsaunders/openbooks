@@ -1221,7 +1221,7 @@ export function likeEscape(fragment: string): string {
  * of that role does not retire the employment. Stored historical selections
  * remain readable unless the caller explicitly requests active-only pins.
  */
-const ACTIVE_WORKER_OPTIONS = sql`and p.is_active and not exists (
+export const ACTIVE_WORKER_OPTIONS = sql`and p.is_active and not exists (
   select 1 from employee_roles r
    where r.org_id = p.org_id and r.party_id = p.id and not r.is_active
 )`;
