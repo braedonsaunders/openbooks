@@ -1,13 +1,42 @@
 // source-pin-contract: upgrade-rehearsal release-only trigger policy and publish refusal without upgrade-verification (upgrade-rehearsal.yml, publish-container.yml)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
 import { REMEDY_DIR_PREFIX, coverageGaps, defaultMatrix, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, clearPhaseLogSink, diffFindingKeys, findingKeys, maskDatabaseUrl, phaseLogPath, PhaseRefusal, preUpgradeDumpName, run, setPhaseLogSink, summarize, tailLines, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
+import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, clearPhaseLogSink, diffFindingKeys, findingKeys, harness, maskDatabaseUrl, phaseLogPath, PhaseRefusal, preUpgradeDumpName, run, setPhaseLogSink, summarize, tailLines, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
+
+test("source harness evidence names its checkout even when CI declares the candidate", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "openbooks-upgrade-evidence-"));
+  try {
+    mkdirSync(join(directory, "engine"));
+    writeFileSync(join(directory, "engine/package.json"), JSON.stringify({ scripts: { harness: "node evidence.mjs" } }));
+    const provenance = pathToFileURL(resolve("engine/src/platform/provenance.ts")).href;
+    writeFileSync(join(directory, "engine/evidence.mjs"), `
+      import assert from 'node:assert/strict';
+      import { execFileSync } from 'node:child_process';
+      import { sourceSha } from ${JSON.stringify(provenance)};
+      const expected = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+      assert.equal(sourceSha(), expected);
+    `);
+    const git = (...args) => execFileSync("git", ["-C", directory, ...args], { stdio: "pipe", encoding: "utf8" }).trim();
+    git("init", "--quiet");
+    git("add", "engine");
+    git("-c", "user.name=Upgrade Verification", "-c", "user.email=verification@example.invalid", "commit", "--quiet", "-m", "Source evidence fixture");
+    const candidate = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    assert.notEqual(git("rev-parse", "HEAD"), candidate);
+    assert.deepEqual(await harness("source-harness", directory, ["fixture"], new Set(), {
+      GITHUB_SHA: candidate, OPENBOOKS_SOURCE_SHA: candidate,
+    }), []);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 function config(overrides = {}) {
   return {

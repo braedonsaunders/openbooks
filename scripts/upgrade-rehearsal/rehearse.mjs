@@ -405,11 +405,18 @@ export function classifyHarnessFailures(stdout, tolerated) {
  * undeclared FAIL, is refused. The candidate harness is always run with no
  * tolerance, and it re-checks the same data after the upgrade.
  */
-async function harness(phase, treeDir, orgIds, tolerated = new Set(), env = {}) {
+export async function harness(phase, treeDir, orgIds, tolerated = new Set(), env = {}) {
+  // A source release is a different checkout from the candidate running the
+  // workflow. Its evidence must name its own commit, not the ambient CI SHA.
+  const commit = (await run(phase, "git", ["rev-parse", "HEAD"], { cwd: treeDir })).trim();
+  if (!/^[a-f0-9]{40}$/.test(commit)) {
+    throw new PhaseRefusal(phase, "the harness checkout has no full commit — check out the declared release before verification");
+  }
+  const evidenceEnv = { ...env, OPENBOOKS_SOURCE_SHA: commit };
   const toleratedRuns = [];
   for (const orgId of orgIds) {
     try {
-      await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir, env });
+      await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir, env: evidenceEnv });
     } catch (error) {
       if (tolerated.size === 0 || !(error instanceof PhaseRefusal) || error.cause instanceof Error || typeof error.details?.stdout !== "string") throw error;
       const { failed, unexpected } = classifyHarnessFailures(error.details.stdout, tolerated);
