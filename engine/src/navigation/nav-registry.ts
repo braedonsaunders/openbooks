@@ -1027,6 +1027,19 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
   "/compliance/information-returns": "Information Returns"
 }
 
+/** Register explicit destinations before deriving missing local destinations. */
+NAV_MODULES.push(
+  ...[
+    ['payroll-opening-balances', '/payroll/opening-balances', 'Opening Balances', 'payroll.read'],
+    ['payroll-retro', '/payroll/retro', 'Retroactive Pay', 'payroll.read'],
+    ['payroll-parallel-run', '/payroll/parallel-run', 'Parallel Run', 'payroll.read'],
+    ['payroll-work-locations', '/payroll/work-locations', 'Work Locations', 'payroll.manage'],
+  ].map(([key, href, label, requiredPermission]) => ({ key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: 'wallet', group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true })),
+  { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'clipboard-check', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
+  { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'shield', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
+  { key: 'admin-navigation', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'settings', subgroup: 'customize', requiredPermissionsAny: ['admin.nav.manage', 'admin.customization.manage'] },
+)
+
 /** Native local destinations are also discoverable and editable in the main menu. */
 for (const workspace of LOCAL_NAVIGATION) {
   if (workspace.inline) continue
@@ -1045,17 +1058,6 @@ for (const workspace of LOCAL_NAVIGATION) {
     })
   }
 }
-NAV_MODULES.push(
-  ...[
-    ['payroll-opening-balances', '/payroll/opening-balances', 'Opening Balances', 'payroll.read'],
-    ['payroll-retro', '/payroll/retro', 'Retroactive Pay', 'payroll.read'],
-    ['payroll-parallel-run', '/payroll/parallel-run', 'Parallel Run', 'payroll.read'],
-    ['payroll-work-locations', '/payroll/work-locations', 'Work Locations', 'payroll.manage'],
-  ].map(([key, href, label, requiredPermission]) => ({ key: key!, href: href!, label: label!, requiredPermission: requiredPermission!, iconKey: 'wallet', group: 'hrm' as const, subgroup: 'payroll-controls', featureKey: 'payroll', exact: true })),
-  { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'clipboard-check', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
-  { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'shield', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
-  { key: 'admin-navigation', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'settings', subgroup: 'customize', requiredPermissionsAny: ['admin.nav.manage', 'admin.customization.manage'] },
-)
 
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))
 
