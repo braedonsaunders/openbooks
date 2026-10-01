@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
+import { Input, cn } from "@openbooks/ui";
+import { PagedTable } from "../../../components/paged-table";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { Empty, Field, Small, Status, formatGroupedMoney, sumByCurrency } from "./workspace-ui";
 import type { Money } from "./types";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type ReconciliationRow = {
   propertyId: string;
@@ -101,26 +101,23 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
   const subledgerByCurrency = sumByCurrency(rows.map((row) => ({ currency: inCurrency(row), amount: row.subledgerBalance })));
   const linkedByCurrency = sumByCurrency(rows.map((row) => ({ currency: inCurrency(row), amount: row.linkedGlBalance })));
   const cashByCurrency = sumByCurrency(rows.map((row) => ({ currency: inCurrency(row), amount: row.cashActivity ?? "0" })));
+  // Search text mirrors the displayed cells in plain strings: names, codes,
+  // bank names and the status label.
+  const searchText = (row: ReconciliationRow) =>
+    [row.propertyName, row.propertyCode, row.controlNote,
+      ...(row.bankAccounts ?? []).map((bank) => bank.bankAccountName),
+      row.defaultBankAccountName, row.status]
+      .map((value) => String(value ?? ""))
+      .join(" ");
   return (
     <div className="space-y-4 p-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Security deposit reconciliation</h2>
-          <p className="mt-1 max-w-3xl text-xs text-slate-500">
-            Compare tenant deposit activity with posted deposit-liability entries
-            and the property location control balance. Bank activity is supporting
-            evidence and can differ after applications, interest, or adjustments.
-          </p>
-        </div>
-        <div className="w-44">
-          <Field label="As of">
-            <Input
-              type="date"
-              value={asOf}
-              onChange={(event) => setAsOf(event.target.value)}
-            />
-          </Field>
-        </div>
+      <div>
+        <h2 className="text-sm font-semibold">Security deposit reconciliation</h2>
+        <p className="mt-1 max-w-3xl text-xs text-slate-500">
+          Compare tenant deposit activity with posted deposit-liability entries
+          and the property location control balance. Bank activity is supporting
+          evidence and can differ after applications, interest, or adjustments.
+        </p>
       </div>
       {error && rows.length === 0 ? (
         <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
@@ -140,22 +137,73 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
           )}
         />
       </div>
-      <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Property</TableHead>
-              <TableHead>Deposit bank</TableHead>
-              <TableHead className="text-right">Subledger</TableHead>
-              <TableHead className="text-right">Linked GL</TableHead>
-              <TableHead className="text-right">Location control</TableHead>
-              <TableHead className="text-right">Difference</TableHead>
-              <TableHead>Last activity</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => {
+      <PagedTable
+        source="property_deposit_reconciliation"
+        rows={rows}
+        rowKey={(row) => row.propertyId}
+        searchable
+        onRowClick={(row) => onOpenProperty(row.propertyId)}
+        rowRole="button"
+        empty={<Empty title="No properties to reconcile" detail="Create a property and lease before running deposit reconciliation." />}
+        toolbarAfter={(
+          <div className="w-44">
+            <Field label="As of">
+              <Input
+                type="date"
+                value={asOf}
+                onChange={(event) => setAsOf(event.target.value)}
+              />
+            </Field>
+          </div>
+        )}
+        columns={[
+          {
+            key: "property",
+            header: "Property",
+            cell: (row) => (
+              <>
+                <div className="font-medium">{row.propertyName}</div>
+                <div className="font-mono text-xs text-slate-500">{row.propertyCode}</div>
+                {row.controlNote ? (
+                  <div className="text-xs text-slate-500">{row.controlNote}</div>
+                ) : null}
+              </>
+            ),
+            search: searchText,
+          },
+          {
+            key: "bank",
+            header: "Deposit bank",
+            cell: (row) => row.bankAccounts?.length
+              ? row.bankAccounts.map((bank) => bank.bankAccountName).join(", ")
+              : row.defaultBankAccountName ?? "Not configured",
+            search: searchText,
+          },
+          {
+            key: "subledger",
+            header: "Subledger",
+            align: "right",
+            cell: (row) => money(row.subledgerBalance, row.currency ? { currency: row.currency } : undefined),
+          },
+          {
+            key: "linkedGl",
+            header: "Linked GL",
+            align: "right",
+            cell: (row) => money(row.linkedGlBalance, row.currency ? { currency: row.currency } : undefined),
+          },
+          {
+            key: "control",
+            header: "Location control",
+            align: "right",
+            cell: (row) => row.locationControlBalance == null
+              ? "—"
+              : money(row.locationControlBalance, row.currency ? { currency: row.currency } : undefined),
+          },
+          {
+            key: "difference",
+            header: "Difference",
+            align: "right",
+            cell: (row) => {
               // A shared location control reconciles as one group: the
               // difference shown is the combined group variance, never a
               // per-property slice of the shared balance.
@@ -164,55 +212,17 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
                 : (row.controlVariance ?? row.linkedVariance);
               // Every balance belongs to this property's currency: format in
               // it, never in the org default across a mixed portfolio.
-              const rowMoney = (value: string | number | null | undefined) =>
-                money(value ?? 0, row.currency ? { currency: row.currency } : undefined);
               return (
-                <InteractiveTableRow
-                  key={row.propertyId}
-                  role="button"
-                  tabIndex={0}
-                  className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
-                  onClick={() => onOpenProperty(row.propertyId)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onOpenProperty(row.propertyId);
-                    }
-                  }}
-                >
-                  <TableCell>
-                    <div className="font-medium">{row.propertyName}</div>
-                    <div className="font-mono text-xs text-slate-500">{row.propertyCode}</div>
-                    {row.controlNote ? (
-                      <div className="text-xs text-slate-500">{row.controlNote}</div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    {row.bankAccounts?.length
-                      ? row.bankAccounts
-                          .map((bank) => bank.bankAccountName)
-                          .join(", ")
-                      : row.defaultBankAccountName ?? "Not configured"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{rowMoney(row.subledgerBalance)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{rowMoney(row.linkedGlBalance)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {row.locationControlBalance == null ? "—" : rowMoney(row.locationControlBalance)}
-                  </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", Number(difference) !== 0 && "font-medium text-red-600")}>
-                    {rowMoney(difference)}
-                  </TableCell>
-                  <TableCell>{row.lastActivityOn ?? "—"}</TableCell>
-                  <TableCell><Status value={row.status} /></TableCell>
-                </InteractiveTableRow>
+                <span className={cn(Number(difference) !== 0 && "font-medium text-red-600")}>
+                  {money(difference, row.currency ? { currency: row.currency } : undefined)}
+                </span>
               );
-            })}
-          </TableBody>
-        </Table>
-        {!rows.length ? (
-          <Empty title="No properties to reconcile" detail="Create a property and lease before running deposit reconciliation." />
-        ) : null}
-      </div>
+            },
+          },
+          { key: "activity", header: "Last activity", cell: (row) => row.lastActivityOn ?? "—" },
+          { key: "status", header: "Status", cell: (row) => <Status value={row.status} />, search: searchText },
+        ]}
+      />
       </>
       )}
     </div>

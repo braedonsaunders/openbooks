@@ -3,17 +3,9 @@
 import { useTranslations } from "next-intl";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import type { ListViewConfig } from "@openbooks/customization";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@openbooks/ui";
+import { PagedTable } from "../../../components/paged-table";
 import { Empty, Status } from "./workspace-ui";
 import type { PropertyRow, PropertyWorkspace } from "./types";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type ListColumn = ListViewConfig["columns"][number];
 
@@ -32,13 +24,6 @@ const COLUMN_LABEL_KEYS: Record<string, string> = {
 export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: PropertyWorkspace; view: ListViewConfig; fieldDefs: CustomFieldDefClient[]; onOpen: (id: string) => void }) {
   const t = useTranslations("entities.propertyManagement");
   const tc = useTranslations("customization");
-  if (!data.properties.length)
-    return (
-      <Empty
-        title={t("list.emptyTitle")}
-        detail={t("list.emptyDetail")}
-      />
-    );
   const defs = new Map<string, CustomFieldDefClient>(
     fieldDefs.map((def: CustomFieldDefClient) => [def.key, def]),
   );
@@ -100,48 +85,44 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
     if (key === "status") return <Status value={property.status} label={statusLabel(property.status)} />;
     return "—";
   };
+  // Search text mirrors the displayed cells in plain strings. Internal row
+  // fields never cross into the shared table for filtering.
+  const searchText = (property: PropertyRow, key: string) => {
+    if (key.startsWith("cf_")) {
+      const value = property.custom?.[key.slice(3)];
+      return Array.isArray(value) ? value.join(" ") : value == null ? "" : String(value);
+    }
+    if (key === "name") return `${property.name} ${property.code}`;
+    if (key === "code") return property.code;
+    if (key === "subsidiary") return property.subsidiaryName ?? "";
+    if (key === "location") return property.locationName ?? "";
+    if (key === "property_type") return `${property.propertyType} ${typeLabel(property.propertyType)}`;
+    if (key === "occupancy") return `${property.occupiedUnits} ${property.unitCount}`;
+    if (key === "currency") return property.currency ?? "";
+    if (key === "status") return `${property.status} ${statusLabel(property.status) ?? ""}`;
+    return "";
+  };
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {columns.map((column) => (
-            <TableHead
-              key={column.key}
-              className={column.key === "occupancy" ? "text-right" : undefined}
-            >
-              {label(column)}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {data.properties.map((property) => (
-          <InteractiveTableRow
-            key={property.id}
-            tabIndex={0}
-            role="button"
-            className="cursor-pointer"
-            onClick={() => onOpen(property.id)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onOpen(property.id);
-              }
-            }}
-          >
-            {columns.map((column) => (
-              <TableCell
-                key={column.key}
-                className={
-                  column.key === "occupancy" ? "text-right" : undefined
-                }
-              >
-                {cell(property, column.key)}
-              </TableCell>
-            ))}
-          </InteractiveTableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <PagedTable
+      source="property_properties"
+      rows={data.properties}
+      rowKey={(property) => property.id}
+      searchable
+      onRowClick={(property) => onOpen(property.id)}
+      rowRole="button"
+      empty={(
+        <Empty
+          title={t("list.emptyTitle")}
+          detail={t("list.emptyDetail")}
+        />
+      )}
+      columns={columns.map((column) => ({
+        key: column.key,
+        header: label(column),
+        align: column.key === "occupancy" ? ("right" as const) : undefined,
+        cell: (property: PropertyRow) => cell(property, column.key),
+        search: (property: PropertyRow) => searchText(property, column.key),
+      }))}
+    />
   );
 }
