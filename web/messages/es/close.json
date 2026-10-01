@@ -175,6 +175,10 @@
     "material-variances": {
       "title": "Las fluctuaciones materiales requieren explicación",
       "message": "{count, plural, one {# cuenta supera los umbrales de materialidad configurados.} other {# cuentas superan los umbrales de materialidad configurados.}}"
+    },
+    "posting-effects-incomplete": {
+      "title": "Efectos de contabilización incompletos",
+      "message": "Hay documentos contabilizados con proyecciones de inventario o ingresos incompletas. Resuelva los errores, reintente los fallos definitivos desde el documento con un motivo de revisión y espere a que finalicen antes de cerrar el libro mayor."
     }
   },
   "severity": {

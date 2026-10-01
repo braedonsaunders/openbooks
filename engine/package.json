@@ -61,6 +61,10 @@
     "./navigation": "./src/navigation/public.ts",
     "./organization/features": "./src/organization/public-features.ts",
     "./extensions/navigation": "./src/extensions/public-navigation.ts",
-    "./platform/database": "./src/platform/public-database.ts"
+    "./platform/database": "./src/platform/public-database.ts",
+    "./platform/identifiers": "./src/platform/uuid.ts",
+    "./hrm/org-chart/contracts": "./src/hrm/public-org-chart-contracts.ts",
+    "./hrm/org-chart": "./src/hrm/public-org-chart.ts",
+    "./sales/returns/contracts": "./src/sales/public-return-contracts.ts"
   }
 }

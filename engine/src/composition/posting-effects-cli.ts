@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   const command = process.argv[2];
   if (command === "list") {
     const limitRaw = option("limit");
-    const limit = limitRaw === undefined ? 100 : Number.parseInt(limitRaw, 10);
+    const limit = limitRaw === undefined ? 100 : (/^\d+$/.test(limitRaw) ? Number(limitRaw) : NaN);
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new Error("--limit must be an integer between 1 and 500");
     }

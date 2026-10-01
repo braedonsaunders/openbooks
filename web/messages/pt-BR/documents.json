@@ -194,10 +194,10 @@
     "restoreFailed": "Não foi possível restaurar",
     "purged": "Excluído permanentemente",
     "purgeFailed": "Não foi possível excluir",
-   "purgeRetained": "Este arquivo é mantido como evidência de um lançamento contabilizado e não pode ser excluído permanentemente.",
-   "purgeAttached": "Esta pasta contém arquivos anexados a registros e não pode ser excluída permanentemente.",
-   "purgeSystem": "Pastas do sistema não podem ser excluídas permanentemente.",
-   "alreadyGone": "Este item não existe mais."
+    "purgeRetained": "Este arquivo é mantido como evidência de um lançamento contabilizado e não pode ser excluído permanentemente.",
+    "purgeAttached": "Esta pasta contém arquivos anexados a registros e não pode ser excluída permanentemente.",
+    "purgeSystem": "Pastas do sistema não podem ser excluídas permanentemente.",
+    "alreadyGone": "Este item não existe mais."
   },
   "activity": {
     "title": "Atividade",
@@ -263,5 +263,21 @@
   "rename": {
     "fileTitle": "Renomear arquivo",
     "folderTitle": "Renomear pasta"
+  },
+  "postingEffects": {
+    "title": "Processamento após contabilização",
+    "unknown": "Status desconhecido — revisão necessária",
+    "incomplete": "O lançamento está contabilizado. As projeções de estoque ou receita estão incompletas. Revise as falhas e aguarde a conclusão bem-sucedida antes de fechar o razão.",
+    "retry": "Repetir efeitos da contabilização",
+    "reason": "Motivo da revisão",
+    "reasonHelp": "Explique a correção e a revisão em 10 a 1000 caracteres.",
+    "queued": "Nova tentativa na fila; verifique a conclusão após a execução do processo.",
+    "status": {
+      "pending": "Na fila",
+      "running": "Em processamento",
+      "failed": "Nova tentativa automática pendente",
+      "terminal_failed": "Revisão e nova tentativa necessárias",
+      "succeeded": "Concluído"
+    }
   }
 }
