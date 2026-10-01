@@ -963,6 +963,14 @@
         "label": "案件予測",
         "description": "月および通貨別に、予定時間、売上、労務費、利益を予測します。"
       },
+      "sales_evidence": {
+        "label": "Sales evidence",
+        "description": "Immutable attributed sales credits and reversals, including historical attribution gaps."
+      },
+      "sales_quota_attainment": {
+        "label": "Sales quota attainment",
+        "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "福利厚生の給与入力",
         "description": "月次保障額、従業員控除、雇用主拠出および関連する給与計算。"
@@ -2261,6 +2269,37 @@
         "month": "月",
         "bill_status": "請求価格の状態",
         "cost_status": "労務費の状態"
+      },
+      "sales_evidence": {
+        "id": "Evidence key",
+        "source_id": "Source record",
+        "source_kind": "Source kind",
+        "source_number": "Source number",
+        "employee": "Employee",
+        "employee_id": "Employee key",
+        "team": "Team",
+        "effective_date": "Effective date",
+        "metric": "Measure",
+        "event_kind": "Event",
+        "currency": "Currency",
+        "amount": "Amount"
+      },
+      "sales_quota_attainment": {
+        "id": "Quota key",
+        "name": "Quota",
+        "target": "Target",
+        "employee_id": "Employee key",
+        "sales_team_id": "Team key",
+        "parent_quota_id": "Parent quota",
+        "supersedes_id": "Replaces quota",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "lifecycle": "Lifecycle",
+        "metric": "Measure",
+        "currency": "Currency",
+        "amount": "Target amount",
+        "actual": "Actual",
+        "attainment": "Attainment percent"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "保障開始日",

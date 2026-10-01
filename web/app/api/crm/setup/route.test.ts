@@ -263,6 +263,17 @@ const actions: Array<[string, Record<string, unknown>, string]> = [
 ];
 
 for (const [label, body, table] of actions) {
+  if (["territory", "team", "quota"].includes(label)) {
+    test(`${label} setup writes name the Sales workspace and store nothing`, async () => {
+      reset();
+      const response = await post(body);
+      assert.equal(response.status, 410);
+      assert.match((await response.json()).error, /Sales/);
+      assert.equal(state.committed.length, 0);
+      assert.equal(state.outsideWrites.length, 0);
+    });
+    continue;
+  }
   test(`${label} commits with audit evidence in one transaction`, async () => {
     reset();
 
@@ -303,7 +314,7 @@ for (const [label, body, table] of actions) {
   });
 }
 
-test("save-team refuses duplicate members instead of tripping the unique index", async () => {
+test("retired team setup refuses duplicate member writes without touching the database", async () => {
   reset();
 
   const response = await post({
@@ -316,8 +327,8 @@ test("save-team refuses duplicate members instead of tripping the unique index",
     ],
   });
 
-  assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), { error: "duplicate team member" });
+  assert.equal(response.status, 410);
+  assert.match((await response.json()).error, /Sales/);
   assert.equal(state.committed.length, 0);
   assert.equal(state.outsideWrites.length, 0);
 });
@@ -361,10 +372,8 @@ test("save-quota refuses a subsidiary-restricted caller before any write", async
     amount: "1000.25",
   });
 
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), {
-    error: "requires unrestricted subsidiary access",
-  });
+  assert.equal(response.status, 410);
+  assert.match((await response.json()).error, /Sales/);
   assert.equal(state.committed.length, 0);
   assert.equal(state.outsideWrites.length, 0);
   assert.ok(
@@ -373,7 +382,7 @@ test("save-quota refuses a subsidiary-restricted caller before any write", async
   );
 });
 
-test("save-team refuses a manager duplicated in the member list under another role", async () => {
+test("retired team setup refuses manager membership writes without touching the database", async () => {
   reset();
 
   const response = await post({
@@ -387,7 +396,8 @@ test("save-team refuses a manager duplicated in the member list under another ro
     ],
   });
 
-  assert.equal(response.status, 422);
+  assert.equal(response.status, 410);
+  assert.match((await response.json()).error, /Sales/);
   assert.equal(state.committed.length, 0);
   assert.equal(state.outsideWrites.length, 0);
 });

@@ -201,7 +201,7 @@ export async function loadOpportunities(
       isFeatureEnabled(authz.user.orgId, 'inventory'),
       isFeatureEnabled(authz.user.orgId, 'equipment'),
     ])
-    const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies] = await Promise.all([
+    const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies, representatives] = await Promise.all([
       loadOpportunity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
       (db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`)),
       (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`)),
@@ -224,6 +224,7 @@ export async function loadOpportunities(
       multiCurrency
         ? db.execute<ElementOf<OpportunityDrawerProps['currencies']>>(sql`select code,name from currencies order by code`)
         : Promise.resolve({ rows: [] }),
+      db.execute(sql`select p.id,p.display_name as name from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id where e.org_id=${authz.user.orgId} and e.is_sales_rep and e.is_active and p.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`),
     ])
     const requestedReturn = pickString(sp.drawerReturn)
     const closeHref = requestedReturn?.startsWith('/crm/opportunities')
@@ -237,6 +238,7 @@ export async function loadOpportunities(
         remountKey: openId,
         data: open as unknown as OpportunityDrawerProps['data'],
         statuses: statuses.rows as unknown as OpportunityDrawerProps['statuses'],
+        representatives: representatives.rows as unknown as OpportunityDrawerProps['representatives'],
         owners: owners.rows as unknown as OpportunityDrawerProps['owners'],
         accounts: accounts.rows as unknown as OpportunityDrawerProps['accounts'],
         contacts: contacts.rows as unknown as OpportunityDrawerProps['contacts'],

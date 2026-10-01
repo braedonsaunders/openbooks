@@ -135,7 +135,7 @@ async function orgRefExists(
             : kind === 'tax'
               ? sql`select 1 from tax_codes where id = ${id} and org_id = ${orgId} and is_active`
               : kind === 'salesRep'
-                ? sql`select 1 from parties p join employee_roles r on r.party_id = p.id and r.org_id = p.org_id and r.is_active where p.id = ${id} and p.org_id = ${orgId} and p.is_active`
+                ? sql`select 1 from parties p join employee_roles r on r.party_id = p.id and r.org_id = p.org_id and r.is_active and r.is_sales_rep where p.id = ${id} and p.org_id = ${orgId} and p.is_active`
                 : kind === 'department'
                   ? sql`select 1 from departments where id = ${id} and org_id = ${orgId} and is_active`
                   : kind === 'workerComp'
@@ -606,7 +606,7 @@ export const PATCH = defineRoute({
                for key share`)
             if (!account.rows.length) throwBad('Invalid receivable account for this party subsidiary')
           }
-          if (!(await orgRefExists('salesRep', salesRepId, user.orgId))) throwBad('Invalid sales representative')
+          if (!(await orgRefExists('salesRep', salesRepId, user.orgId))) throwBad('Select an active sales employee. Manage eligibility in Sales → Representatives.')
           if (!(await orgRefExists('tax', taxCodeId, user.orgId))) throwBad('Invalid customer tax code')
           const creditLimitRaw = strOrNull(c.creditLimit)
           const creditLimitExact = creditLimitRaw === null ? null : canonicalDecimal(creditLimitRaw, 4)

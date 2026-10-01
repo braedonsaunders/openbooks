@@ -20,7 +20,7 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__crmAccountRoutingState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -29,9 +29,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg, createScratchUser } = await import('@openbooks/engine/src/testing/fixtures.ts')
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
+import { sql } from 'drizzle-orm'
+import { createScratchOrg, dropScratchOrg, createScratchUser } from '@openbooks/engine/src/testing/fixtures.ts'
 const { PATCH } = await import('./route.ts')
 
 async function fixture(withAddress: boolean) {
@@ -39,6 +39,7 @@ async function fixture(withAddress: boolean) {
   state.orgId = org.orgId
   const ownerId = await withBypassContext(() => createScratchUser(org.orgId, 'Territory Owner', 'owner'))
   state.actorId = ownerId
+  await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId}`))
   await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
@@ -55,11 +56,20 @@ async function fixture(withAddress: boolean) {
     await withBypassContext(() => db.execute(sql`
       insert into addresses (org_id, party_id, country, region, is_default_billing)
       values (${org.orgId}, ${partyId}, 'US', 'CA', true)`))
-    await withBypassContext(() => db.execute(sql`
-      insert into crm_sales_territories (org_id, key, name, priority, match_mode, rules, default_owner_user_id, is_active)
-      values (${org.orgId}, 'us-west', 'US West', 10, 'all',
-              '[{"field": "country", "operator": "equals", "value": "US"}]'::jsonb,
-              ${ownerId}, true)`))
+    const employee = await withBypassContext(async () => {
+      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${partyId}`)
+      const p=(await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Territory representative',${org.subsidiaryId}) returning id`)).rows[0]!.id
+      await db.execute(sql`insert into employee_roles(org_id,party_id,is_sales_rep,sales_rep_since) values(${org.orgId},${p},true,'2020-01-01')`)
+      return p
+    })
+    const {writeSalesCommand,previewTerritory} = await import('@openbooks/engine/crm/sales')
+    const input={action:'territory' as const, name:'US West', subsidiaryId:org.subsidiaryId, managerEmployeeId:null, defaultEmployeeId:employee, salesTeamId:null,description:'',priority:10,matchMode:'all' as const,rules:[{field:'country' as const,operator:'equals' as const,value:'US'}], geography:{version:1 as const,includes:[],excludes:[],polygons:[]},effectiveFrom:'2020-01-01',lifecycle:'active' as const}
+    const scope={orgId:org.orgId,actorId:ownerId,allowedSubsidiaryIds:null}
+    await withOrgContext(org.orgId,async()=>{
+      const preview=await db.transaction(tx=>previewTerritory(tx,scope,input))
+      await writeSalesCommand(scope,{...input,previewRevision:preview.revision})
+    })
+
   }
   return { org, partyId, profileId, ownerId }
 }
@@ -104,10 +114,12 @@ test('PATCH { route: true } assigns the matching territory, owner, and assignmen
   try {
     const result = await patch(partyId, { route: true, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`)
-    const profile = (await withBypassContext(() => db.execute<{ territory_id: string | null; owner_user_id: string | null }>(sql`
-      select territory_id, owner_user_id from crm_account_profiles where id = ${profileId}`))).rows[0]!
+    const profile = (await withBypassContext(() => db.execute<{ territory_id: string | null; sales_rep_id: string | null }>(sql`
+      select territory_id, sales_rep_id from crm_account_profiles where id = ${profileId}`))).rows[0]!
     assert.ok(profile.territory_id, 'expected the matching territory to be assigned')
-    assert.equal(profile.owner_user_id, ownerId)
+    assert.ok(profile.sales_rep_id)
+    const native=(await withBypassContext(()=>db.execute<{party_id:string}>(sql`select party_id from employee_roles where org_id=${org.orgId} and party_id=${profile.sales_rep_id}`))).rows
+    assert.equal(native.length,1, 'the assigned representative is a native employee')
     const events = (await withBypassContext(() => db.execute<{ to_territory_id: string; source: string }>(sql`
       select to_territory_id, source from crm_account_assignment_events
        where org_id = ${org.orgId} and account_profile_id = ${profileId}`))).rows

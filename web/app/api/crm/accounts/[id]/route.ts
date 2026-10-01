@@ -1,3 +1,4 @@
+import { routeSalesAccount } from "@openbooks/engine/crm/sales"
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -6,7 +7,7 @@ import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { CrmLifecycleRefusalError, promoteCrmAccount, routeCrmAccount, transitionCrmAccountStage } from '@openbooks/engine/src/crm/crm.ts'
+import { CrmLifecycleRefusalError, promoteCrmAccount, transitionCrmAccountStage } from '@openbooks/engine/src/crm/crm.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
@@ -407,13 +408,13 @@ export const PATCH = defineRoute({
         select cp.*, p.display_name, p.is_active as party_active
           from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
          where cp.id = ${row.id} and cp.org_id = ${user.orgId}`)).rows[0]
+      if (body.route === true) await routeSalesAccount(tx, user.orgId, row.id, user.id)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'crm_account_profiles', ${row.id}, 'update',
                 ${JSON.stringify({ before: row, after })}::jsonb, ${user.id})`)
     })
     if (denied) return denied
-    if (body.route === true) await routeCrmAccount(user.orgId, row.id, user.id)
     const result = await loadCrmAccount(id, user.orgId, gate.allowedSubsidiaryIds)
     return NextResponse.json(result)
 

@@ -23,6 +23,10 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  crm_sales_representatives: { route: '/crm/sales/representatives', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' } },
+  crm_sales_teams: { route: '/crm/sales/teams', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' } },
+  crm_sales_quotas: { route: '/crm/sales/quotas', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' } },
+  crm_sales_territories: { route: '/crm/sales/territories', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' } },
   admin_api_keys: {
     clientSearch: false,
     route: '/admin/api-keys',

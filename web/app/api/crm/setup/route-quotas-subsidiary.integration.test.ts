@@ -91,9 +91,11 @@ async function fixture() {
       update app_roles set permissions='["crm.setup.manage"]'::jsonb,
         subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [secondSub] })}::jsonb
        where org_id=${org.orgId} and key='scoped_setup'`)
+    const employee=(await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Quota representative',${org.subsidiaryId}) returning id`)).rows[0]!.id
+    await db.execute(sql`insert into employee_roles(org_id,party_id,is_sales_rep) values(${org.orgId},${employee},true)`)
     await db.execute(sql`
-      insert into crm_sales_quotas (org_id, owner_user_id, sales_team_id, period_start, period_end, currency, amount, filters, created_by, updated_by)
-      values (${org.orgId}, ${owner}, null, '2026-07-01', '2026-07-31', 'CAD', '50000', '{}'::jsonb, ${owner}, ${owner})`)
+      insert into crm_sales_quotas (org_id, employee_id, sales_team_id, period_start, period_end, currency, amount, filters, created_by, updated_by)
+      values (${org.orgId}, ${employee}, null, '2026-07-01', '2026-07-31', 'CAD', '50000', '{}'::jsonb, ${owner}, ${owner})`)
   })
   const ownerUser: SessionUser = {
     id: owner, orgId: org.orgId, name: 'Quota owner', email: 'owner@scratch.test',
@@ -174,15 +176,15 @@ test('a subsidiary-restricted caller cannot save a quota for any owner', async (
         amount: '1000',
       }),
     )
-    assert.equal(response.status, 403)
-    assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+    assert.equal(response.status, 410)
+    assert.match((await response.json()).error, /Sales/)
     assert.equal(await quotaCount(), before, 'the refused write stored nothing')
   } finally {
     await close()
   }
 })
 
-test('an unrestricted caller can still save a quota', async () => {
+test('an unrestricted caller receives the new Sales destination without a setup write', async () => {
   const { org, ownerUser, quotaCount, close } = await fixture()
   try {
     asUser(ownerUser)
@@ -196,8 +198,9 @@ test('an unrestricted caller can still save a quota', async () => {
         amount: '1000',
       }),
     )
-    assert.equal(response.status, 200)
-    assert.equal(await quotaCount(), before + 1)
+    assert.equal(response.status, 410)
+    assert.match((await response.json()).error, /Sales/)
+    assert.equal(await quotaCount(), before)
   } finally {
     await close()
   }

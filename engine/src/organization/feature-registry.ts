@@ -37,6 +37,8 @@ export const FEATURES: FeatureDef[] = [
   // list gated by parties.read, and turning CRM off narrows that list to
   // customers rather than removing a nav entry.
   { key: 'crm', defaultEnabled: true, category: 'sales', navModules: ['crm-opportunities', 'crm-activities', 'crm-forecasts'] },
+  { key: 'salesManagement', defaultEnabled: true, category: 'sales', parentKey: 'crm', navModules: ['crm-sales'] },
+  { key: 'geographicTerritories', defaultEnabled: false, category: 'sales', parentKey: 'salesManagement' },
   { key: 'orders', defaultEnabled: true, category: 'sales', navModules: ['estimates', 'sales-orders', 'purchase-orders'] },
   { key: 'revenueRecognition', defaultEnabled: true, category: 'sales', navModules: ['revenue'] },
   // Subscription billing: plans + subscriptions that auto-generate recurring

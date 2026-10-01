@@ -128,6 +128,17 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  // Sales target names, reasons and authored coverage can contain personal
+  // details. Published definitions are removed from masked sandboxes so
+  // routing cannot act on a partially anonymized definition.
+  { tableName: "crm_sales_quotas", columnName: "name", transform: "redact" },
+  { tableName: "crm_sales_quotas", columnName: "reason", transform: "redact" },
+  { tableName: "crm_sales_evidence", columnName: "source_number", transform: "hash" },
+  { tableName: "crm_sales_territories", columnName: "geography", transform: "null_out" },
+  { tableName: "addresses", columnName: "longitude", transform: "null_out" },
+  { tableName: "addresses", columnName: "latitude", transform: "null_out" },
+  { tableName: "addresses", columnName: "location_verified_at", transform: "null_out" },
+  { tableName: "addresses", columnName: "location_verified_by", transform: "null_out" },
   { tableName: "rma_documents", columnName: "rejection_reason", transform: "redact" },
   { tableName: "party_bank_accounts", columnName: "account_number_encrypted", transform: "reseal_secret" },
   { tableName: "party_bank_accounts", columnName: "account_last_four", transform: "null_out" },

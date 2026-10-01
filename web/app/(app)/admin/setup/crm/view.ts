@@ -38,9 +38,7 @@ const TABS: CrmSetupTab[] = [
   'accountStatuses',
   'opportunityStatuses',
   'sources',
-  'territories',
-  'teams',
-  'quotas',
+
 ]
 
 export interface CrmSetupData {
