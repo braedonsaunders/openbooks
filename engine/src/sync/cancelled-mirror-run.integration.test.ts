@@ -191,6 +191,54 @@ test(
 );
 
 test(
+  "a source cancellation with missing connector ownership remains unresolved",
+  { skip: !DB, timeout: 180_000 },
+  async () => {
+    const o = await ctx();
+    const connectionId = await newConnection(o.orgId);
+    const source = new CancelledInvoiceSource(o);
+    await runSync(source, "cancelled-mirror-test", {
+      kind: "full_migration",
+      orgId: o.orgId,
+      connectionId,
+      since: null,
+      loadEntitiesFirst: false,
+    });
+    // Older imports retained the source reference without connector ownership.
+    await db.execute(sql`
+      update documents set custom = custom - 'connectionId'
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`);
+    source.cancelled = true;
+    source.ledger.openUnpaid = null;
+    await assert.rejects(
+      runSync(source, "cancelled-mirror-test", {
+        orgId: o.orgId,
+        connectionId,
+        since: new Date("2026-07-16T00:00:00.000Z"),
+        loadEntitiesFirst: false,
+      }),
+      /1 source deletions need resolution/,
+    );
+    const [run] = (await db.execute<{
+      status: string;
+      stats: { autoResolvedDeletions: string[]; deletedAtSource: string[]; skipped: string[] };
+    }>(sql`
+      select status, stats from sync_runs
+       where org_id = ${o.orgId} and connection_id = ${connectionId}
+       order by started_at desc limit 1`)).rows;
+    assert.equal(run?.status, "failed");
+    assert.deepEqual(run?.stats.autoResolvedDeletions, []);
+    assert.deepEqual(run?.stats.deletedAtSource, ["TST-1"]);
+    assert.match(run?.stats.skipped.join("\n") ?? "", /source deletion TST-1.*connector ownership.*check the document's source and connector configuration/);
+    const [doc] = (await db.execute<{ status: string; open_balance: string }>(sql`
+      select status, open_balance::text from documents
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-1'`)).rows;
+    assert.equal(doc?.status, "posted");
+    assert.equal(doc?.open_balance, "100.0000");
+  },
+);
+
+test(
   "a cancelled source order that still stands locally keeps failing honestly",
   { skip: !DB, timeout: 180_000 },
   async () => {
