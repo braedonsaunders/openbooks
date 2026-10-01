@@ -246,6 +246,8 @@ export function TemplatesList({
   return (
     <>
       <PagedTable
+        source="admin_pdf_templates"
+        emptyAsRow
         rows={rows}
         columns={columns}
         pageSize={15}
