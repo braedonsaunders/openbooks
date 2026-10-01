@@ -8,13 +8,14 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { paymentRunReadiness } from "@openbooks/engine/src/payments/run-readiness.ts";
-import { Alert, AlertDescription, AlertTitle, Badge, Table, TableBody, TableCell, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
+import { Alert, AlertDescription, AlertTitle, Badge, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
+import { RegisteredListTable } from '../../../components/registered-list-table'
+import type { ServerPagedColumn } from '../../../components/server-paged-table'
 import { isUuid, parsePrefixedListParams, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
-import { SortTh } from '../../../components/sortable-th'
 import { RunBuilder, type RunBill } from './RunBuilder'
 import { RunDrawer, type PaymentEventClient, type PaymentFileClient, type PaymentInstructionClient, type PaymentRunClient, type PaymentRunItemClient, type RunBlockerClient } from './RunDrawer'
 
@@ -227,15 +228,74 @@ export async function RunsSection({
 
   const runsTotal = runCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
   const runsFilteredTotal = Number(runFilteredCount.rows[0]?.n ?? 0)
-  const runThProps = {
-    basePath,
-    currentParams: sp,
-    sort: runParams.sort,
-    dir: runParams.dir,
-    sortParamKey: 'runsSort',
-    dirParamKey: 'runsDir',
-    pageParamKey: 'runsPage',
-  }
+  // Pre-rendered server cells for the shared registered runs table. Search,
+  // status filter, sort and paging stay URL-driven against the loader's
+  // server window — the table never filters or reslices that window again.
+  const runColumns: ServerPagedColumn<PaymentRunRow>[] = [
+    {
+      key: 'number',
+      header: <>{t('runs.columns.run')}</>,
+      sortKey: 'number',
+      cell: (r) => (
+        <Link
+          href={(`${basePath}?view=runs&run=${r.id}`)}
+          className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300"
+        >
+          {r.run_number}
+        </Link>
+      ),
+    },
+    {
+      key: 'created',
+      header: <>{tCommon('labels.created')}</>,
+      sortKey: 'created',
+      cell: (r) => <span className="text-slate-600 dark:text-slate-300">{dateTime(r.created_at, locale)}</span>,
+    },
+    {
+      key: 'bank',
+      header: <>{t('runs.columns.bankAccount')}</>,
+      sortKey: 'bank',
+      cell: (r) => <>{`${r.bank_number ?? ''} ${r.bank_name ?? ''}`.trim() || '—'}</>,
+    },
+    {
+      key: 'method',
+      header: <>{t('runs.columns.method')}</>,
+      sortKey: 'method',
+      cell: (r) => <Badge variant="outline">{t(`runs.method.${String(r.method)}`)}</Badge>,
+    },
+    {
+      key: 'scheduled',
+      header: <>{t('runs.columns.fundsDate')}</>,
+      sortKey: 'scheduled',
+      cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.scheduled_for ?? '—'}</span>,
+    },
+    {
+      key: 'payments',
+      header: <>{t('runs.columns.payments')}</>,
+      align: 'right',
+      sortKey: 'payments',
+      cell: (r) => <span className="tabular-nums">{r.instruction_count}</span>,
+    },
+    {
+      key: 'total',
+      header: <>{tCommon('labels.total')}</>,
+      align: 'right',
+      sortKey: 'total',
+      cell: (r) => (
+        <span className="tabular-nums">{money(r.total, { currency: r.currency ?? undefined, useGrouping: 'always' })}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: <>{tCommon('labels.status')}</>,
+      sortKey: 'status',
+      cell: (r) => (
+        <Badge variant={RUN_VARIANT[r.status] ?? 'secondary'}>
+          {runStatusLabel(String(r.status))}
+        </Badge>
+      ),
+    },
+  ]
 
   // -- ?run= flyout ----------------------------------------------------------
   const runId = typeof sp.run === 'string' && isUuid(sp.run) ? sp.run : undefined
@@ -351,89 +411,50 @@ export async function RunsSection({
       ) : null}
 
       <section className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t(collections ? 'runs.collectionRunsHeading' : 'runs.runsHeading')}</h2>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t(collections ? 'runs.collectionDescription' : 'runs.description')}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder={t('runs.searchPlaceholder')} paramKey="runsQ" pageParamKey="runsPage" />
-            <FilterChips
-              basePath={basePath}
-              currentParams={sp}
-              paramKey="runsStatus"
-              label={tCommon('labels.status')}
-              pageParamKey="runsPage"
-              options={runCounts.rows.map((r) => ({
-                value: r.status,
-                label: runStatusLabel(String(r.status)),
-                count: Number(r.n),
-              }))}
-            />
-          </div>
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t(collections ? 'runs.collectionRunsHeading' : 'runs.runsHeading')}</h2>
+          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{t(collections ? 'runs.collectionDescription' : 'runs.description')}</p>
         </div>
 
-        {runsTotal === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-            {t(collections ? 'runs.noCollectionRunsYet' : 'runs.noRunsYet')}
-          </p>
-        ) : runsFilteredTotal === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-            {tCommon('feedback.noResults')}
-          </p>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortTh {...runThProps} column="number">{t('runs.columns.run')}</SortTh>
-                  <SortTh {...runThProps} column="created">{tCommon('labels.created')}</SortTh>
-                  <SortTh {...runThProps} column="bank">{t('runs.columns.bankAccount')}</SortTh>
-                  <SortTh {...runThProps} column="method">{t('runs.columns.method')}</SortTh>
-                  <SortTh {...runThProps} column="scheduled">{t('runs.columns.fundsDate')}</SortTh>
-                  <SortTh {...runThProps} column="payments" align="right">{t('runs.columns.payments')}</SortTh>
-                  <SortTh {...runThProps} column="total" align="right">{tCommon('labels.total')}</SortTh>
-                  <SortTh {...runThProps} column="status">{tCommon('labels.status')}</SortTh>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {runs.rows.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-mono text-[13px] font-semibold">
-                      <Link
-                        href={(`${basePath}?view=runs&run=${r.id}`)}
-                        className="text-teal-700 hover:underline dark:text-teal-300"
-                      >
-                        {r.run_number}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">{dateTime(r.created_at, locale)}</TableCell>
-                    <TableCell>{`${r.bank_number ?? ''} ${r.bank_name ?? ''}`.trim() || '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{t(`runs.method.${String(r.method)}`)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">{r.scheduled_for ?? '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.instruction_count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(r.total, { currency: r.currency ?? undefined, useGrouping: 'always' })}</TableCell>
-                    <TableCell>
-                      <Badge variant={RUN_VARIANT[r.status] ?? 'secondary'}>
-                        {runStatusLabel(String(r.status))}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination
-              basePath={basePath}
-              currentParams={sp}
-              total={runsFilteredTotal}
-              page={runParams.page}
-              perPage={runParams.perPage}
-              pageParamKey="runsPage"
-            />
-          </>
-        )}
+        <RegisteredListTable
+          source="payments_runs"
+          rows={runs.rows}
+          columns={runColumns}
+          rowKey={(r) => r.id}
+          empty={
+            <p className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+              {runsTotal === 0
+                ? t(collections ? 'runs.noCollectionRunsYet' : 'runs.noRunsYet')
+                : tCommon('feedback.noResults')}
+            </p>
+          }
+          state={{ total: runsFilteredTotal, page: runParams.page, perPage: runParams.perPage }}
+          basePath={basePath}
+          currentParams={sp}
+          sort={runParams.sort}
+          dir={runParams.dir}
+          sortParamKey="runsSort"
+          dirParamKey="runsDir"
+          pageParamKey="runsPage"
+          perPageParamKey="runsPerPage"
+          toolbarAfter={
+            <div className="flex flex-wrap items-center gap-2">
+              <SearchInput placeholder={t('runs.searchPlaceholder')} paramKey="runsQ" pageParamKey="runsPage" />
+              <FilterChips
+                basePath={basePath}
+                currentParams={sp}
+                paramKey="runsStatus"
+                label={tCommon('labels.status')}
+                pageParamKey="runsPage"
+                options={runCounts.rows.map((r) => ({
+                  value: r.status,
+                  label: runStatusLabel(String(r.status)),
+                  count: Number(r.n),
+                }))}
+              />
+            </div>
+          }
+        />
       </section>
 
       {building ? (

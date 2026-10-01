@@ -28,6 +28,13 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { RemittancesView } = await import('./RemittancesView')
 const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
+// The destination collection renders through the shared table, which reads
+// its search and pagination strings from the catalog like every workspace.
+const catalogMessages = {
+  payroll: messages,
+  common: JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8')),
+  ui: JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8')),
+}
 import type { RemittanceGroup } from '../../../../../engine/src/payroll/remittance.ts'
 Object.assign(globalThis, { React })
 
@@ -44,7 +51,7 @@ async function mountInteractive(t: import('node:test').TestContext, group: Remit
   })
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={{ payroll: messages }}>
+      <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
         <MoneyProvider currency="CAD">
           <RemittancesView groups={[group]} from="2026-07-01" to="2026-07-31" canCreate />
         </MoneyProvider>
@@ -111,7 +118,7 @@ test('bill creation refuses an unapplied date draft', async (t) => {
 test('refused remittance view renders an alert and date form, without an empty balance or bill action', () => {
   const message = 'Committed payroll has an unknown historical filing account.'
   const html = renderToStaticMarkup(
-    <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={{ payroll: messages }}>
+    <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="CAD">
         <RemittancesView groups={[]} from="2026-08-01" to="2026-08-31" canCreate={false} populationRefusal={message} />
       </MoneyProvider>
@@ -169,7 +176,7 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
     schedule: null,
   }
   const html = renderToStaticMarkup(
-    <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={{ payroll: messages }}>
+    <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="CAD">
         <RemittancesView groups={[rqGroup, legacyGroup]} from="2026-07-01" to="2026-07-31" canCreate={false} />
       </MoneyProvider>
@@ -219,7 +226,7 @@ test('a group with unattributed payroll offers attribution, never a bill button'
     existingBills: [],
   }
   const html = renderToStaticMarkup(
-    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ payroll: messages }}>
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="CAD">
         <RemittancesView groups={[entitylessGroup]} from="2026-09-01" to="2026-09-30" canCreate={true} />
       </MoneyProvider>
@@ -261,7 +268,7 @@ test('a EUR-only scope under a GBP org renders euros, never pounds', () => {
     existingBills: [],
   }
   const html = renderToStaticMarkup(
-    <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={{ payroll: messages }}>
+    <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="GBP">
         <RemittancesView groups={[eurGroup]} from="2026-09-01" to="2026-09-30" canCreate={false} />
       </MoneyProvider>
@@ -301,7 +308,7 @@ test('a translated scope names the presentation currency it was translated into'
     existingBills: [],
   }
   const html = renderToStaticMarkup(
-    <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={{ payroll: messages }}>
+    <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={catalogMessages}>
       <MoneyProvider currency="GBP">
         <RemittancesView groups={[translatedGroup]} from="2026-09-01" to="2026-09-30" canCreate={false} />
       </MoneyProvider>

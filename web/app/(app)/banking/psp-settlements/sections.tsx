@@ -1,11 +1,11 @@
 'use client'
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useEffect, useId, useState } from 'react'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { dateLabel } from '@/lib/format'
 import { Button, Card, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { PagedTable } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 
@@ -534,70 +534,55 @@ export function PspSettlementsWorkspace({
             />
           </div>
         </div>
-        <SharedTable className="w-full text-sm">
-          <SharedTableHeader className="text-left text-muted-foreground">
-            <SharedTableRow>
-              <SharedTableHead className="py-1">{strings.colProvider}</SharedTableHead>
-              <SharedTableHead>{strings.referenceLabel}</SharedTableHead>
-              <SharedTableHead>{strings.dateLabel}</SharedTableHead>
-              <SharedTableHead className="text-right">{strings.colNet}</SharedTableHead>
-              <SharedTableHead>{strings.statusLabel}</SharedTableHead>
-              <SharedTableHead></SharedTableHead>
-            </SharedTableRow>
-          </SharedTableHeader>
-          <SharedTableBody>
-            {listed.map((b) => (
-              <SharedTableRow key={b.id} className="border-t">
-                <SharedTableCell className="py-1">{b.provider}</SharedTableCell>
-                <SharedTableCell className="font-mono text-xs">{b.externalRef}</SharedTableCell>
-                <SharedTableCell>{b.date}</SharedTableCell>
-                <SharedTableCell className="text-right tabular-nums">{b.net}</SharedTableCell>
-                <SharedTableCell>{b.status}</SharedTableCell>
-                <SharedTableCell className="text-right">
-                  {b.rawStatus === 'draft' && canReconcile && (
-                    <Button size="sm" variant="ghost" onClick={() => void post(b.id)}>
-                      {strings.postLabel}
-                    </Button>
-                  )}
-                  {b.rawStatus === 'posted' && canReconcile && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={reversalReason.trim().length < 5}
-                      onClick={() => void reverse(b.id)}
-                    >
-                      {strings.reverse}
-                    </Button>
-                  )}
-                </SharedTableCell>
-              </SharedTableRow>
-            ))}
-            {loading && (
-              <SharedTableRow>
-                <SharedTableCell colSpan={6} className="py-4 text-center text-muted-foreground">
-                  {strings.loadingLabel}
-                </SharedTableCell>
-              </SharedTableRow>
-            )}
-            {!loading && loadFailed && (
-              <SharedTableRow>
-                <SharedTableCell colSpan={6} className="py-4 text-center text-muted-foreground">
-                  <p>{strings.loadFailedLabel}</p>
-                  <Button size="sm" variant="outline" className="mt-2" onClick={() => void load()}>
-                    {strings.retryLabel}
-                  </Button>
-                </SharedTableCell>
-              </SharedTableRow>
-            )}
-            {!loading && !loadFailed && listed.length === 0 && (
-              <SharedTableRow>
-                <SharedTableCell colSpan={6} className="py-4 text-center text-muted-foreground">
-                  {strings.empty}
-                </SharedTableCell>
-              </SharedTableRow>
-            )}
-          </SharedTableBody>
-        </SharedTable>
+        {loading ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">{strings.loadingLabel}</p>
+        ) : loadFailed ? (
+          <div className="py-4 text-center text-sm text-muted-foreground">
+            <p>{strings.loadFailedLabel}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => void load()}>
+              {strings.retryLabel}
+            </Button>
+          </div>
+        ) : (
+          <PagedTable
+            source="banking_psp_settlement_batches"
+            rows={listed}
+            rowKey={(row) => row.id}
+            searchable
+            empty={strings.empty}
+            columns={[
+              { key: 'provider', header: strings.colProvider, cell: (b) => b.provider, search: (b) => b.provider },
+              { key: 'reference', header: strings.referenceLabel, cell: (b) => <span className="font-mono text-xs">{b.externalRef}</span>, search: (b) => b.externalRef },
+              { key: 'date', header: strings.dateLabel, cell: (b) => b.date, search: (b) => b.date },
+              { key: 'net', header: strings.colNet, align: 'right', className: 'tabular-nums', cell: (b) => b.net, search: (b) => b.net },
+              { key: 'status', header: strings.statusLabel, cell: (b) => b.status, search: (b) => b.status },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                cell: (b) => (
+                  <>
+                    {b.rawStatus === 'draft' && canReconcile && (
+                      <Button size="sm" variant="ghost" onClick={() => void post(b.id)}>
+                        {strings.postLabel}
+                      </Button>
+                    )}
+                    {b.rawStatus === 'posted' && canReconcile && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={reversalReason.trim().length < 5}
+                        onClick={() => void reverse(b.id)}
+                      >
+                        {strings.reverse}
+                      </Button>
+                    )}
+                  </>
+                ),
+              },
+            ]}
+          />
+        )}
       </Card>
     </>
   )

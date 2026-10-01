@@ -427,6 +427,7 @@ export function RetroWorkspace({
               {text('retro.reviewTitle', 'Per employee, per period')}
             </h2>
             <PagedTable
+              source="payroll_retro_periods"
               rows={proposal.periods}
               columns={columns}
               rowKey={(row) => `${row.candidate.employeePartyId}:${row.candidate.sourcePayRunDocumentId}`}
@@ -496,6 +497,7 @@ export function RetroWorkspace({
                   {text('retro.bucketsTitle', 'Where the difference lands')}
                 </h3>
                 <PagedTable
+                  source="payroll_retro_buckets"
                   rows={open.difference?.buckets ?? []}
                   columns={[
                     {

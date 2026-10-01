@@ -733,6 +733,7 @@ export function ParallelRunView({
           </Button>
         </div>
         <PagedTable
+          source="payroll_parallel_comparisons"
           rows={comparisons}
           columns={comparisonColumns}
           rowKey={(row) => row.id}
@@ -753,6 +754,7 @@ export function ParallelRunView({
           {text('registersTitle', 'Imported registers')}
         </h2>
         <PagedTable
+          source="payroll_parallel_registers"
           rows={registers}
           columns={registerColumns}
           rowKey={(row) => row.id}
@@ -935,6 +937,7 @@ export function ParallelRunView({
               </div>
             ) : (
               <PagedTable
+                source="payroll_parallel_findings"
                 rows={visibleFindings}
                 columns={findingColumns}
                 rowKey={(row) => row.id}

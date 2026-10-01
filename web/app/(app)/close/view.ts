@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { getFormatter, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { registeredListTable } from '../../../lib/list/prepared-spec'
 import {
   column,
   field,
@@ -13,7 +14,6 @@ import {
   pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -528,7 +528,7 @@ export function closeSpec(data: CloseData): PageSpec {
         ...grid(
           'overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
           [
-            table({
+            registeredListTable('close_periods', {
               variant: 'app',
               rows: f('rows'),
               rowKey: item('id'),

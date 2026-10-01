@@ -8,6 +8,8 @@ export interface PreparedListSource {
   mode: 'loaded' | 'server' | 'external'
   basePathField?: string
   clientSearch?: boolean
+  /** Fixed-size readers do not expose a selector they cannot honor. */
+  showPerPage?: boolean
   paging?: {
     totalField: string
     pageField: string
@@ -48,6 +50,12 @@ const SOURCES = {
   admin_automations: {
     route: '/admin/automations',
     rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  admin_backups: {
+    route: '/admin/backups',
+    rowsField: 'runs',
     rowKeyField: 'id',
     mode: 'loaded',
   },
@@ -106,6 +114,12 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  admin_sandboxes: {
+    route: '/admin/sandboxes',
+    rowsField: 'sandboxes',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   admin_scripts: {
     clientSearch: false,
     route: '/admin/scripts',
@@ -130,6 +144,19 @@ const SOURCES = {
       perPageField: 'perPage',
     },
   },
+  accounts_search: {
+    showPerPage: false,
+    clientSearch: false,
+    route: '/accounts',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    paging: {
+      totalField: 'total',
+      pageField: 'currentPage',
+      perPageField: 'perPage',
+    },
+  },
   agents: {
     clientSearch: false,
     route: '/agents',
@@ -142,9 +169,125 @@ const SOURCES = {
       perPageField: 'perPage',
     },
   },
+  close_periods: {
+    clientSearch: false,
+    route: '/close',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    paging: {
+      totalField: 'total',
+      pageField: 'currentPage',
+      perPageField: 'perPage',
+    },
+  },
   compliance_lien_waivers: {
     route: '/compliance/lien-waivers',
     rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  compliance_information_returns: {
+    route: '/compliance/information-returns',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  compliance_information_return_readiness: {
+    route: '/compliance/information-returns',
+    rowsField: 'readiness',
+    rowKeyField: 'partyId',
+    mode: 'loaded',
+  },
+  banking_psp_settlement_batches: {
+    route: '/banking/psp-settlements',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  property_properties: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  property_rent_roll: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'key',
+    mode: 'loaded',
+  },
+  property_cam_pools: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  property_deposit_reconciliation: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'propertyId',
+    mode: 'loaded',
+  },
+  // Period identity is the composite (employee, source pay run) and bucket
+  // identity is component-plus-index; no single field holds either, so the
+  // client tables key rows with those pairs instead.
+  payroll_retro_periods: {
+    route: '/payroll/retro',
+    rowsField: 'rows',
+    mode: 'loaded',
+  },
+  payroll_retro_buckets: {
+    route: '/payroll/retro',
+    rowsField: 'rows',
+    mode: 'loaded',
+  },
+  payroll_parallel_comparisons: {
+    route: '/payroll/parallel-run',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  payroll_parallel_registers: {
+    route: '/payroll/parallel-run',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  payroll_parallel_findings: {
+    route: '/payroll/parallel-run',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  // Group identity is the composite (destination, filing account), which no
+  // single field holds; the client table keys rows with that pair instead.
+  payroll_remittance_groups: {
+    route: '/payroll/remittances',
+    rowsField: 'groups',
+    mode: 'loaded',
+  },
+  continuous_close_findings: {
+    clientSearch: false,
+    route: '/continuous-close',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    paging: {
+      totalField: 'total',
+      pageField: 'currentPage',
+      perPageField: 'perPage',
+    },
+  },
+  crm_forecast_quotas: {
+    route: '/crm/forecasts',
+    rowsField: 'quotaRows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  crm_forecast_snapshots: {
+    route: '/crm/forecasts',
+    rowsField: 'snapshotRows',
     rowKeyField: 'id',
     mode: 'loaded',
   },
@@ -281,7 +424,26 @@ const SOURCES = {
       perPageField: 'perPage',
     },
   },
+  inventory_bom: {
+    route: '/inventory',
+    rowsField: 'assemblies',
+    rowKeyField: 'assemblyItemId',
+    mode: 'loaded',
+  },
+  inventory_count_lines: {
+    route: '/inventory',
+    rowsField: 'lines',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  inventory_counts: {
+    route: '/inventory',
+    rowsField: 'counts',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
   knowledge_views: {
+    showPerPage: false,
     clientSearch: false,
     route: '/knowledge/views',
     rowsField: 'rows',
@@ -330,6 +492,25 @@ const SOURCES = {
       perPageField: 'perPage',
     },
   },
+  sync_runs: {
+    route: '/sync',
+    rowsField: 'runs',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  payments_runs: {
+    clientSearch: false,
+    route: '/payments',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'server',
+    basePathField: 'basePath',
+    paging: {
+      totalField: 'total',
+      pageField: 'page',
+      perPageField: 'perPage',
+    },
+  },
   payroll_anomalies: {
     route: '/payroll/anomalies',
     rowsField: 'rows',
@@ -337,6 +518,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_org_chart_directory: {
+    showPerPage: false,
     route: '/hrm/org-chart',
     rowsField: 'directoryRows',
     rowKeyField: 'id',
@@ -364,6 +546,30 @@ const SOURCES = {
   compliance_vendors: { route: '/compliance/vendors', mode: 'loaded' },
   documents_trash: { route: '/documents/trash', mode: 'loaded' },
   tax_provisions: { route: '/tax/provisions', mode: 'loaded' },
+  time_clock_pairs: {
+    route: '/time/clock',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  time_crew_batches: {
+    route: '/time/crew',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  warehouse_list: {
+    route: '/warehouse',
+    rowsField: 'rows',
+    rowKeyField: 'warehouseId',
+    mode: 'loaded',
+  },
+  warehouse_putaway: {
+    route: '/warehouse',
+    rowsField: 'staged',
+    rowKeyField: 'stagingLocationId',
+    mode: 'loaded',
+  },
 } satisfies Record<string, PreparedListSource>
 
 export type PreparedListSourceKey = keyof typeof SOURCES

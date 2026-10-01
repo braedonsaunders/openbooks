@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription, Badge, Button, Input } from '@openbooks/ui'
 import type { RemittanceEntitySlice, RemittanceGroup } from '@openbooks/engine/src/payroll/remittance.ts'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { PagedTable } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 
 /**
@@ -22,6 +23,20 @@ import { useMoney } from '../../../../components/money-provider'
 /** Card identity — mirrors the engine's (destination, filing account) group. */
 const groupKey = (partyId: string | null, filingAccountId: string | null) =>
   `${partyId ?? 'unassigned'}::${filingAccountId ?? ''}`
+
+/** Search text mirrors the displayed card: destination, filing account,
+// currency and component names. Internal accrual rows never cross over. */
+function groupSearchText(group: RemittanceGroup): string {
+  return [
+    group.partyName,
+    group.filingAccount.accountNumber,
+    group.filingAccount.name,
+    group.currency,
+    ...group.components.flatMap((component) => [component.name, component.accountLabel]),
+  ]
+    .map((value) => String(value ?? ''))
+    .join(' ')
+}
 
 export function RemittancesView({
   groups,
@@ -96,21 +111,38 @@ export function RemittancesView({
         <Alert variant="warning">
           <AlertDescription>{populationRefusal}</AlertDescription>
         </Alert>
-      ) : groups.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          {t('empty')}
-        </div>
       ) : (
-        groups.map((group) => (
-          <RemittanceGroupCard
-            key={groupKey(group.partyId, group.filingAccount.id)}
-            group={group}
-            canCreate={canCreate}
-            busy={busyParty !== null}
-            rangeChanged={rangeChanged}
-            onCreate={(subsidiaryId) => void createBill(group.partyId!, group.filingAccount.id, subsidiaryId)}
-          />
-        ))
+        // The destination collection renders through the shared table (one
+        // card per row) so search, paging and the empty state match every
+        // other collection. Each card keeps its bill/attribute actions, its
+        // existing-bill links and its per-slice buttons.
+        <PagedTable
+          source="payroll_remittance_groups"
+          rows={groups}
+          rowKey={(group) => groupKey(group.partyId, group.filingAccount.id)}
+          searchable
+          empty={(
+            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              {t('empty')}
+            </div>
+          )}
+          columns={[
+            {
+              key: 'destination',
+              header: <span className="sr-only">{t('title')}</span>,
+              cell: (group) => (
+                <RemittanceGroupCard
+                  group={group}
+                  canCreate={canCreate}
+                  busy={busyParty !== null}
+                  rangeChanged={rangeChanged}
+                  onCreate={(subsidiaryId) => void createBill(group.partyId!, group.filingAccount.id, subsidiaryId)}
+                />
+              ),
+              search: groupSearchText,
+            },
+          ]}
+        />
       )}
     </div>
   )

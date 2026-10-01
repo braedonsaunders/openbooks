@@ -27,8 +27,10 @@ export function RegisteredListTable<T>({
   sortParamKey,
   dirParamKey,
   pageParamKey,
+  perPageParamKey,
   searchable = true,
   paging = true,
+  showPerPage,
 }: {
   source: PreparedListSourceKey
   rows: T[]
@@ -47,8 +49,10 @@ export function RegisteredListTable<T>({
   sortParamKey?: string
   dirParamKey?: string
   pageParamKey?: string
+  perPageParamKey?: string
   searchable?: boolean
   paging?: boolean
+  showPerPage?: boolean
 }) {
   const definition = preparedListSource(source)
   const ids = rows.map(rowKey)
@@ -60,7 +64,7 @@ export function RegisteredListTable<T>({
   if (definition.mode !== 'loaded') {
     if (definition.mode === 'server' && !state)
       throw new Error('Missing server pagination for record list: ' + source)
-    const table = (
+    return (
       <ServerPagedTable
         source={source}
         rows={rows}
@@ -77,20 +81,14 @@ export function RegisteredListTable<T>({
         sortParamKey={sortParamKey}
         dirParamKey={dirParamKey}
         pageParamKey={pageParamKey}
+        perPageParamKey={perPageParamKey}
         paging={Boolean(state) && paging}
-        showPerPage={Boolean(state)}
+        showPerPage={showPerPage ?? definition.showPerPage ?? Boolean(state)}
+        toolbar={toolbarAfter}
         leading={leading}
         footer={footer}
         rowClassName={rowClassName}
       />
-    )
-    return toolbarAfter ? (
-      <div className="space-y-3">
-        {toolbarAfter}
-        {table}
-      </div>
-    ) : (
-      table
     )
   }
   return (

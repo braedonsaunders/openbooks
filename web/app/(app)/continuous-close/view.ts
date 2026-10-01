@@ -5,6 +5,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { registeredListTable } from '../../../lib/list/prepared-spec'
 import {
   badge,
   column,
@@ -17,7 +18,6 @@ import {
   ref,
   repeat,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -595,7 +595,7 @@ export function continuousCloseSpec(data: ContinuousCloseData): PageSpec {
         when: f('findingsEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('continuous_close_findings', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
