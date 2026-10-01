@@ -1,6 +1,6 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
-import { uuidId } from '../api/json'
+import { uuidId } from '../api/json-schema'
 import { claimSetupCreate, SetupCreateConflict } from '../api/idempotency'
 import { isUuid } from '../list-params'
 import { saveExtensionSettingRow } from './extension-settings'

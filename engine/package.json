@@ -60,6 +60,7 @@
     "./tax/contracts": "./src/tax/public-contracts.ts",
     "./navigation": "./src/navigation/public.ts",
     "./organization/features": "./src/organization/public-features.ts",
+    "./organization/authority": "./src/organization/public-authority.ts",
     "./extensions/navigation": "./src/extensions/public-navigation.ts",
     "./platform/database": "./src/platform/public-database.ts",
     "./platform/identifiers": "./src/platform/uuid.ts",

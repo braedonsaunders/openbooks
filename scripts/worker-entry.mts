@@ -362,13 +362,20 @@ const isMain =
   typeof process.argv[1] === "string" &&
   import.meta.url === pathToFileURL(process.argv[1]).href;
 
+/** Load the same deferred transfer runtime exercised by production startup checks. */
+export async function loadDataTransferWorker() {
+  return import('../web/lib/data-io/transfer-worker.ts');
+}
+
 if (isMain) {
   // Boot the worker (queues, schedulers, heartbeat). Imported lazily so a
   // test import of this entry registers duties without starting the world:
   // engine/src/worker/index.ts self-starts on import. No top-level await:
   // tsx compiles scripts-adjacent files as CJS, where TLA is unsupported.
-  void import("../engine/src/worker/index.ts").then(async () => {
-    const { startDataTransferWorker } = await import('../web/lib/data-io/transfer-worker.ts');
+  void loadDataTransferWorker().then(async ({ startDataTransferWorker }) => {
+    // Resolve deferred transfer dependencies before any worker can publish
+    // a heartbeat, so a startup refusal cannot appear ready briefly.
+    await import("../engine/src/worker/index.ts");
     const stopTransfers = startDataTransferWorker();
     const { registerProcessWorker } = await import('../engine/src/worker/shutdown.ts');
     registerProcessWorker({ close: stopTransfers });

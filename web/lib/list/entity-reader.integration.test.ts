@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "@openbooks/engine/src/testing/fixtures.ts";
 import { upsertAssignment } from "@openbooks/engine/src/resourcing/assignments.ts";
 import { defaultListView } from "@openbooks/customization";
@@ -69,13 +69,14 @@ test("refusal matrix fires every named refusal with a usable remedy", enabled, a
       ["dir", { sort: "week", dir: "sideways" }, /invalid_dir/],
       ["page", { page: 1.5 }, /invalid_page/],
       ["perPage", { perPage: 2.5 }, /invalid_per_page/],
-      ["filter", { filters: [{ key: "nope", operator: "eq", value: "x" }] }, /unknown_filter/],
+      ["filter", { filters: [{ key: "nope", operator: "eq", value: "x" }] }, /invalid_view/],
       ["cf-stale", { filters: [{ key: "cf_gone", operator: "eq", value: "x" }] }, /invalid_view/],
       ["uuid", { filters: [{ key: "project_id", operator: "eq", value: "not-a-uuid" }] }, /invalid_filter_value/],
     ];
     for (const [name, over, want] of cases) {
       const r = await readEntityListPage(query(org.orgId, owner, over));
-      assert.ok(!r.ok && want.test(r.error) && r.remedy.length > 10 && r.error !== "feature_state_unavailable", name);
+      assert.ok(!r.ok && want.test(r.error) && r.remedy.length > 10 && r.error !== "feature_state_unavailable", `${name}: ${JSON.stringify(r)}`);
+      if (name === 'filter' && !r.ok) assert.match(r.remedy, /unknown filter "nope"/);
     }
     const mismatch = await trusted(org.orgId, { view: { ...defaultListView("resourcing_assignment"), recordType: "retainer" } });
     assert.ok(!mismatch.ok && /view_record_type_mismatch/.test(mismatch.error));
@@ -146,8 +147,17 @@ test("feature-off refuses by name; outage rejects instead of refusing", enabled,
   try {
     const r = await readEntityListPage(query(org.orgId, owner));
     assert.ok(!r.ok && /feature_disabled/.test(r.error) && /Features/.test(r.remedy));
-    await withBypassContext(async () => assert.equal((await db.execute(sql`update orgs set settings = '"corrupt"'::jsonb where id = ${org.orgId} returning id`)).rows.length, 1, "entity reader outage setup corrupts one organization"));
-    await assert.rejects(readEntityListPage(query(org.orgId, owner)));
+    await assert.rejects(withOrgTransaction(org.orgId, async () => {
+      // A real PostgreSQL transaction failure makes the next storage read
+      // unavailable; malformed JSON configuration is not a storage outage.
+      await assert.rejects(db.execute(sql`select 1 / 0`));
+      return readEntityListPage(query(org.orgId, owner));
+    }), (error) => {
+      assert.ok(error instanceof Error);
+      const cause = error.cause instanceof Error ? error.cause : error;
+      assert.match(cause.message, /current transaction is aborted/);
+      return true;
+    });
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
 

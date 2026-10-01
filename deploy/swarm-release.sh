@@ -87,6 +87,7 @@ OLD=$(dokploy_sql "select \"composeFile\" from compose where \"appName\"='$APP'"
       | grep -oE 'openbooks@sha256:[0-9a-f]{64}' | head -1 | cut -d@ -f2)
 echo "old digest: ${OLD:-none}"
 echo "new digest: $NEW"
+BASELINE_COMPOSE=$(dokploy_sql "select replace(encode(convert_to(\"composeFile\", 'UTF8'), 'base64'), E'\\n', '') from compose where \"appName\"='$APP'")
 
 STAMP=$(date +%Y%m%d-%H%M%S)
 BK="/home/administrator/openbooks-deploy-backup-$STAMP"
@@ -295,20 +296,37 @@ sudo docker run --rm \
 # ---------------------------------------------------------------------------
 # 3. Only now repoint the stack. The schema is already ahead of the new code.
 # ---------------------------------------------------------------------------
-if [ "$OLD" = "$NEW" ]; then
-  echo "stack already pinned to this digest; migrations applied, nothing to swap"
-  exit 0
-fi
-
-sudo docker exec "$PG" psql -U dokploy -d dokploy -v ON_ERROR_STOP=1 </dev/null -c \
-  "update compose set \"composeFile\" = replace(\"composeFile\", '$OLD', '$NEW') where \"appName\" = '$APP'"
+repoint_images() {
+  # Worker-only recovery can leave the two services on different images.
+  # Replace every verified application pin and preserve all other settings.
+  local pins expression pin affected
+  pins=$(grep -oE 'openbooks@sha256:[0-9a-f]{64}' "$BK/composeFile.yml" | cut -d@ -f2)
+  [ "$(printf '%s\n' "$pins" | wc -l | tr -d ' ')" = "2" ] || {
+    echo "refusing to deploy: expected exactly two application image pins" >&2; return 1; }
+  expression="convert_from(decode('$BASELINE_COMPOSE', 'base64'), 'UTF8')"
+  for pin in $(printf '%s\n' "$pins" | sort -u); do
+    expression="replace($expression, '$pin', '$NEW')"
+  done
+  EXPECTED_COMPOSE_SQL="$expression"
+  affected=$(dokploy_sql "with changed as (
+    update compose set \"composeFile\" = $expression
+    where \"appName\" = '$APP'
+      and replace(encode(convert_to(\"composeFile\", 'UTF8'), 'base64'), E'\\n', '') = '$BASELINE_COMPOSE'
+    returning 1) select count(*) from changed")
+  [ "$affected" = "1" ] || {
+    echo "refusing to deploy: application configuration changed during verification — review the current pins and retry" >&2; return 1; }
+}
+repoint_images
 
 PINS=$(dokploy_sql "select \"composeFile\" from compose where \"appName\"='$APP'" | grep -c "openbooks@$NEW" || true)
 echo "pins on new digest: $PINS (expect 2 -- web and worker)"
 [ "$PINS" = "2" ] || {
-  echo "digest swap did not update both pins; restoring" >&2
-  sudo docker exec "$PG" psql -U dokploy -d dokploy -v ON_ERROR_STOP=1 </dev/null -c \
-    "update compose set \"composeFile\" = replace(\"composeFile\", '$NEW', '$OLD') where \"appName\" = '$APP'"
+  echo "digest swap did not update both pins; attempting configuration recovery" >&2
+  restored=$(dokploy_sql "with restored as (
+    update compose set \"composeFile\" = convert_from(decode('$BASELINE_COMPOSE', 'base64'), 'UTF8')
+    where \"appName\" = '$APP' and \"composeFile\" = $EXPECTED_COMPOSE_SQL
+    returning 1) select count(*) from restored")
+  [ "$restored" = "1" ] || echo "configuration recovery refused because another write changed it — review current pins before retrying" >&2
   exit 1; }
 
 DIR="/etc/dokploy/compose/$APP/code"

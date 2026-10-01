@@ -129,13 +129,22 @@ jobs:
         run: |
           set -euo pipefail
           deadline=$(( $(date +%s) + 600 ))
+          ready_samples=0
+          worker_url="${HEALTH_URL%%\?*}?include=worker"
           while :; do
-            body="$(curl -sS --max-time 15 "$HEALTH_URL" || true)"
+            body="$(curl -sS --max-time 15 "$worker_url" || true)"
             version="$(printf '%s' "$body" | jq -r '.version // empty' 2>/dev/null || true)"
             status="$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)"
             if [ "$status" = "ok" ] && [ "$version" = "$EXPECTED_VERSION" ]; then
-              echo "production serves $version"
-              exit 0
+              ready_samples=$((ready_samples + 1))
+              # Five observations span the previous worker's 60-second
+              # heartbeat expiry, rather than accepting its final heartbeat.
+              if [ "$ready_samples" -ge 5 ]; then
+                echo "production serves $version with sustained worker readiness"
+                exit 0
+              fi
+            else
+              ready_samples=0
             fi
             if [ "$(date +%s)" -ge "$deadline" ]; then
               echo "health did not report $EXPECTED_VERSION within 10 minutes (last: ${body:-<no response>})" >&2

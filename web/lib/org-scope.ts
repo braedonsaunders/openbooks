@@ -1,7 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { cache } from 'react'
-import { currentUser } from './auth'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 
 /**
@@ -14,6 +13,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
  * initialized the tenant context. Trusted internal jobs pass their org id.
  */
 const requestOrgId = cache(async (): Promise<string> => {
+  const { currentUser } = await import('./auth')
   const user = await currentUser()
   if (!user) throw new Error('active organization is required')
   return user.orgId
