@@ -40,6 +40,7 @@ changes; each release documents required operator action.
 
 ### Upgrade requirements
 
+- Update Next.js and DOMPurify to patched releases.
 - Apply additive migrations 0467 through 0472 with the release's native
   migration runner before starting the updated application and worker.
 - Run the updated worker for background import/export progress. Previously
