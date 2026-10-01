@@ -10,7 +10,8 @@ import test from 'node:test'
 const { myCompSpec } = await import('./view')
 
 type SpecData = Parameters<typeof myCompSpec>[0]
-type Block = { kind?: string; blocks?: Block[]; columns?: { header: unknown }[]; rowKey?: { $?: string } }
+type TableShape = { columns?: { header: unknown }[]; rowKey?: { $?: string } }
+type Block = { kind?: string; widget?: string; props?: { table?: TableShape }; blocks?: Block[] } & TableShape
 
 const data = {
   hasContent: true,
@@ -21,16 +22,22 @@ const data = {
 function statementHeaders(): unknown[] {
   const spec = myCompSpec(data) as unknown as { body: Block[] }
   const found: unknown[][] = []
+  const collect = (table: TableShape | undefined): void => {
+    if (table?.rowKey?.$ === 'id' && table.columns) {
+      found.push(table.columns.map((c) => c.header))
+    }
+  }
   const walk = (blocks: Block[] | undefined): void => {
     for (const block of blocks ?? []) {
-      if (block.kind === 'table' && block.rowKey?.$ === 'id' && block.columns) {
-        found.push(block.columns.map((c) => c.header))
-      }
+      if (block.kind === 'table') collect(block)
+      // Statements ride the shared registered list: the table config
+      // lives on the widget's props.table, never as a bare table block.
+      if (block.kind === 'widget' && block.widget === 'registered-record-list') collect(block.props?.table)
       walk(block.blocks)
     }
   }
   walk(spec.body)
-  assert.equal(found.length, 1, 'the statements panel carries exactly one table')
+  assert.equal(found.length, 1, 'the statements list carries exactly one table')
   return found[0] as unknown[]
 }
 

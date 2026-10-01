@@ -304,27 +304,25 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_benefits_windows: {
-    clientSearch: false,
     route: '/hrm/benefits',
     rowsField: 'windowRows',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_benefits_enrolments: {
-    clientSearch: false,
     route: '/hrm/benefits',
     rowsField: 'enrollmentRows',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_compensation_bands: {
-    clientSearch: false,
     route: '/hrm/compensation',
     rowsField: 'bands',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_compensation_cycles: {
+    // top-10 window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/hrm/compensation',
     rowsField: 'cycles',
@@ -332,6 +330,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compensation_plans: {
+    // top-10 window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/hrm/compensation',
     rowsField: 'plans',
@@ -339,20 +338,19 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compensation_cycle_lines: {
-    clientSearch: false,
     route: '/hrm/compensation/cycles',
     rowsField: 'lines',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_compensation_plan_lines: {
-    clientSearch: false,
     route: '/hrm/compensation/plans',
     rowsField: 'lines',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_compliance_findings: {
+    // 200-capped window beside full-list tiles: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'findings',
@@ -360,13 +358,13 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compliance_schedules: {
-    clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'schedules',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_compliance_runs: {
+    // 200-capped window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'runs',
@@ -374,13 +372,13 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_compliance_classes: {
-    clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'classes',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_compliance_entries: {
+    // 200-capped window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/hrm/compliance',
     rowsField: 'entries',
@@ -388,6 +386,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_qualifications_ledger: {
+    // 200-capped window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/hrm/qualifications',
     rowsField: 'rows',
@@ -395,13 +394,13 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_qualifications_requirements: {
-    clientSearch: false,
     route: '/hrm/qualifications',
     rowsField: 'requirements',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   hrm_qualifications_coverage: {
+    // crew pager owns the window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/hrm/qualifications',
     rowsField: 'coverageRows',
@@ -409,7 +408,6 @@ const SOURCES = {
     mode: 'loaded',
   },
   hrm_qualifications_alerts: {
-    clientSearch: false,
     route: '/hrm/qualifications',
     rowsField: 'alerts',
     rowKeyField: 'id',
@@ -495,13 +493,13 @@ const SOURCES = {
     mode: 'loaded',
   },
   me_overview_employments: {
-    clientSearch: false,
     route: '/me',
     rowsField: 'employments',
     rowKeyField: 'employmentId',
     mode: 'loaded',
   },
   me_overview_steps: {
+    // top-5 window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/me',
     rowsField: 'steps',
@@ -509,6 +507,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   me_overview_requests: {
+    // top-5 window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/me',
     rowsField: 'requests',
@@ -516,6 +515,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   me_overview_qualifications: {
+    // top-5 window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/me',
     rowsField: 'qualifications',
@@ -523,6 +523,7 @@ const SOURCES = {
     mode: 'loaded',
   },
   me_overview_pay: {
+    // six-stub window: local search stays off so a capped slice never poses as the collection.
     clientSearch: false,
     route: '/me',
     rowsField: 'payStubs',
@@ -530,98 +531,84 @@ const SOURCES = {
     mode: 'loaded',
   },
   me_benefits_elections: {
-    clientSearch: false,
     route: '/me/benefits',
     rowsField: 'elections',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_benefits_windows: {
-    clientSearch: false,
     route: '/me/benefits',
     rowsField: 'windows',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_compensation_statements: {
-    clientSearch: false,
     route: '/me/compensation',
     rowsField: 'statements',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_one_on_ones_upcoming: {
-    clientSearch: false,
     route: '/me/one-on-ones',
     rowsField: 'upcoming',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_one_on_ones_past: {
-    clientSearch: false,
     route: '/me/one-on-ones',
     rowsField: 'past',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_one_on_ones_requests: {
-    clientSearch: false,
     route: '/me/one-on-ones',
     rowsField: 'requests',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_reviews_self: {
-    clientSearch: false,
     route: '/me/reviews',
     rowsField: 'selfRows',
     rowKeyField: 'reviewId',
     mode: 'loaded',
   },
   me_reviews_shared: {
-    clientSearch: false,
     route: '/me/reviews',
     rowsField: 'sharedRows',
     rowKeyField: 'reviewId',
     mode: 'loaded',
   },
   me_reviews_goals: {
-    clientSearch: false,
     route: '/me/reviews',
     rowsField: 'goalRows',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_team_roster: {
-    clientSearch: false,
     route: '/me/team',
     rowsField: 'roster',
     rowKeyField: 'employmentId',
     mode: 'loaded',
   },
   me_team_steps: {
-    clientSearch: false,
     route: '/me/team',
     rowsField: 'teamSteps',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_team_leave: {
-    clientSearch: false,
     route: '/me/team',
     rowsField: 'pendingLeave',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_team_changes: {
-    clientSearch: false,
     route: '/me/team',
     rowsField: 'pendingChanges',
     rowKeyField: 'id',
     mode: 'loaded',
   },
   me_team_owed: {
-    clientSearch: false,
     route: '/me/team',
     rowsField: 'owedReviews',
     rowKeyField: 'reviewId',
