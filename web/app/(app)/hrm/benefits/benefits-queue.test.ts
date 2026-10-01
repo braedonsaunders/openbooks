@@ -308,6 +308,21 @@ test('Benefits header has one primary create action and windows use the native r
   assert.ok(serialized.includes('hrm_benefits_windows'), 'window rows retain the shared registry identity')
 })
 
+test('Rewards and payouts use one compact header create action without a body-wide button', async () => {
+  gap.__portfolioReads = undefined
+  stubReads([], [])
+  for (const view of ['rewards', 'payouts']) {
+    const data = await loadBenefits(HR_BENEFITS, { view })
+    const spec = benefitsSpec(data)
+    const header = spec.header?.find((block) => block.kind === 'page-header')
+    assert.ok(header)
+    const creates = header.actions?.filter((action) => action.widget === 'link-button') ?? []
+    assert.equal(creates.length, 1)
+    assert.ok(JSON.stringify(creates[0]).includes('newAwardHref'))
+    assert.ok(!JSON.stringify(spec.body).includes('newAwardHref'), 'the create action belongs to the native header')
+  }
+})
+
 test('a refused award read shows unknown vitals and omits zero-shaped currency totals', async () => {
   stubReads([], [])
   gap.__portfolioReads = { awardsError: 'Ask finance to restore access before reviewing payouts.' }
