@@ -171,10 +171,12 @@ async function importBatch(orgId: string, id: string, token: string): Promise<bo
           from evidence where occurrences>1 group by row_no`)
         await db.execute(sql`insert into data_transfer_issues (org_id,job_id,phase,row_no,severity,message,field)
           with evidence as materialized (
-            select r.row_no,k.value from data_transfer_rows r cross join lateral jsonb_array_elements(r.keys) k
+            select r.row_no,k.value,
+              min(k.value->>'value') over (partition by k.value->>'key') as first_value,
+              max(k.value->>'value') over (partition by k.value->>'key') as last_value
+            from data_transfer_rows r cross join lateral jsonb_array_elements(r.keys) k
             where r.org_id=${orgId} and r.job_id=${id}
-          ), conflicts as materialized (select value->>'key' as key from evidence group by value->>'key' having count(distinct value->>'value')>1)
-          select ${orgId},${id},'preview',e.row_no,'error',e.value->>'label',null from evidence e join conflicts c on c.key=e.value->>'key'`)
+          ) select ${orgId},${id},'preview',row_no,'error',value->>'label',null from evidence where first_value<>last_value`)
         const failures = (await db.execute<{ count: string }>(sql`select count(distinct row_no) as count from data_transfer_issues where org_id=${orgId} and job_id=${id} and phase='preview' and severity='error'`)).rows[0]
         const errors = (await db.execute<RowError & Record<string, unknown>>(sql`select row_no::float8 as row,message,field from data_transfer_issues where org_id=${orgId} and job_id=${id} and phase='preview' and severity='error' order by row_no limit 100`)).rows
         const outcome = { ...job.preview, failed: Number(failures?.count ?? 0), errors }

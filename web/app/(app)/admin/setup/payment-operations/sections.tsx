@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useViewerFormat } from '../../../../../lib/viewer-format'
 import { Plus } from 'lucide-react'
 import { Button } from '@openbooks/ui'
-import { SetupEditor, type PaymentSetupView } from './PaymentOperationsSetup'
+import { SetupEditor } from './PaymentOperationsSetup'
 import type { PaymentOperationsData } from './view'
 
 /**

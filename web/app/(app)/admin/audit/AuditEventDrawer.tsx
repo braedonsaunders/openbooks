@@ -217,7 +217,7 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
   const { event } = props
   const t = useTranslations('admin.audit')
   const format = useFormatter()
-  const changes = useMemo(() => isObject(event?.changes) ? event.changes : {}, [event?.changes])
+  const changes = useMemo(() => isObject(event?.changes) ? event.changes : {}, [event])
   const hasBefore = Object.hasOwn(changes, 'before')
   const hasAfter = Object.hasOwn(changes, 'after')
   const tabs: DrawerTab[] = ['changes', ...(hasBefore ? ['before' as const] : []), ...(hasAfter ? ['after' as const] : [])]

@@ -301,7 +301,7 @@ test(
             lifecycle: "pending_approval",
             reason: "Review revision",
           });
-          revision = await write(
+          await write(
             {
               action: "quota-transition",
               id: revision.id,
@@ -426,7 +426,7 @@ test(
               }),
             /Close the representative allocations/,
           );
-          child = await write({
+          await write({
             action: "quota-transition",
             id: child.id,
             expectedRevision: child.revision,

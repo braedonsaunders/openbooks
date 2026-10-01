@@ -6,9 +6,9 @@ import { useEffect, useEffectEvent, useState } from 'react'
  * overlay state may change without discarding a record already being read. */
 export function useDrawerResource<T>(url: string | null, onError: (error: Error) => void) {
   const reportError = useEffectEvent(onError)
-  const [resource, setResource] = useState<{ url: string; data: T } | null>(null)
+  const [resource, setResource] = useState<{ url: string | null; data: T | null }>({ url, data: null })
+  if (resource.url !== url) setResource({ url, data: null })
   useEffect(() => {
-    setResource(null)
     if (!url) return
     const controller = new AbortController()
     fetch(url, { signal: controller.signal, cache: 'no-store' })
@@ -22,11 +22,11 @@ export function useDrawerResource<T>(url: string | null, onError: (error: Error)
       .then((data) => { if (!controller.signal.aborted) setResource({ url, data }) })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
-          setResource(null)
+          setResource({ url, data: null })
           reportError(error instanceof Error ? error : new Error(String(error)))
         }
       })
     return () => controller.abort()
   }, [url])
-  return resource?.url === url ? resource.data : null
+  return resource.url === url ? resource.data : null
 }

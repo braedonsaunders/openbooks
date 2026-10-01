@@ -1,7 +1,7 @@
 import { routeSalesAccount } from './sales-routing.ts'
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type TerritoryRule, type TerritorySubject } from "./crm-math.ts";
+import { shouldPromoteLifecycle, type CrmLifecycleStage } from "./crm-math.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { DEFAULT_ACCOUNT_STATUSES, DEFAULT_OPPORTUNITY_STATUSES } from "./crm-default-statuses.ts";
 

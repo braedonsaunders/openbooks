@@ -17,6 +17,7 @@
     "unzipper": "0.10.14"
   },
   "devDependencies": {
-    "@types/node": "^24"
+    "@types/node": "^24",
+    "@types/unzipper": "0.10.11"
   }
 }
