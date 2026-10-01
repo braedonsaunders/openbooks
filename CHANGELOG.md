@@ -6,6 +6,49 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.27] - 2026-10-01
+
+### Durable import and export
+
+- Add organization-scoped background transfers with bounded upload parts,
+  record batches, live progress, resumable checkpoints, cancellation and retry.
+- Bind approval to the immutable source, mapping, field definitions and
+  legal-entity scope. Preserve native permissions, posting rules, precise
+  amounts and atomic batch audit evidence; detect identities shared across
+  worker batches before approval.
+- Stream CSV, JSON and XLSX exports from a consistent database snapshot,
+  support spreadsheet sheet rollover and resumable completed downloads,
+  and preserve financial decimals without spreadsheet rounding.
+- Keep import, export and history within the native Company Setup workspace,
+  restore transfers after navigation, and correct Back navigation. Sample
+  company provisioning remains a separate Company Setup action.
+
+### Company and employee workspaces
+
+- Standardize operational lists, local navigation, filters and drawers on
+  shared registered components, including payroll, inventory, banking,
+  property management, construction and administration.
+- Add governed Benefits programs, eligibility and enrollment workflows,
+  incentive settlements and payroll-linked awards with financial evidence
+  and controlled reversals.
+- Add employee-backed Sales planning, quotas, customer territory maps and
+  performance charts. Reorganize Recruiting and Performance workspaces,
+  succession plans and native review forms.
+- Rework the HR organization directory and employee update policy; improve
+  audit query indexes, asynchronous drawers, dashboard scrolling and module
+  cockpit presentation.
+
+### Upgrade requirements
+
+- Apply additive migrations 0467 through 0472 with the release's native
+  migration runner before starting the updated application and worker.
+- Run the updated worker for background import/export progress. Previously
+  committed batches remain committed after cancellation or a later refusal;
+  correct financial history through native reversals or adjusting entries.
+- Plan database capacity for source files, staged rows, evidence and export
+  artifacts, and temporary disk for spreadsheet decoding. No automatic
+  transfer-evidence retention deletion is enabled.
+
 ## [0.1.0-alpha.26] - 2026-09-30
 
 ### Accounting and operational controls
