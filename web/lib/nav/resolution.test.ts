@@ -127,15 +127,52 @@ test('installed local contributions require a placed shortcut and their native p
 })
 
 
-test('Talent includes recruitment and every authorized performance view without a Cycles umbrella', async () => {
+test('Talent exposes two workspaces while detailed views remain in authorized local navigation', async () => {
   reset()
-  let groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  const groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
   const people = groups.find((group) => group.id === 'hrm')!
-  const destinations = ['/hrm/positions','/hrm/recruiting','/hrm/recruiting?tab=interviews','/hrm/recruiting?tab=offers','/hrm/recruiting?tab=postings','/hrm/recruiting?tab=pools','/hrm/performance','/hrm/performance?tab=calibration','/hrm/performance?tab=talent','/hrm/performance?tab=retention','/hrm/surveys','/hrm/performance?tab=settings']
-  for (const href of destinations) assert.ok(people.items.some((item) => item.href === href && item.subgroup === 'Talent'), href)
-  assert.equal(people.items.find((item) => item.href === '/hrm/performance')!.label, 'Performance')
+  assert.deepEqual(people.items.filter((item) => item.subgroup === 'Talent').map((item) => [item.href, item.label]), [
+    ['/hrm/recruiting', 'Recruiting'], ['/hrm/performance', 'Performance'],
+  ])
+  const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0])
+  const recruiting = local.groups.find((group) => group.some((tab) => tab.href === '/hrm/recruiting'))!
+  assert.deepEqual(recruiting.map((tab) => tab.href), ['/hrm/positions', '/hrm/recruiting', ...['interviews', 'offers', 'postings', 'pools'].map((tab) => `/hrm/recruiting?tab=${tab}`)])
+  const performance = local.groups.find((group) => group.some((tab) => tab.href === '/hrm/performance'))!
+  assert.deepEqual(performance.map((tab) => tab.href), ['/hrm/performance', '/hrm/performance?tab=calibration', '/hrm/performance?tab=talent', '/hrm/performance?tab=retention', '/hrm/surveys', '/hrm/performance?tab=settings'])
+  assert.equal(performance[0]!.label, 'Cycles')
+})
+
+test('explicit Talent shortcuts survive compact defaults and still enforce access', async () => {
+  reset()
+  const item = config.groups.find((group) => group.id === 'hrm')!.items.find((entry) => entry.kind === 'module' && entry.moduleKey === 'hrm-performance-calibration')!
+  assert.equal(item.kind, 'module')
+  if (item.kind !== 'module') throw new Error('Expected a native destination')
+  item.placement = 'custom'
+  item.label = 'Review calibration'
+  let groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  assert.ok(groups.flatMap((group) => group.items).some((entry) => entry.href === '/hrm/performance?tab=calibration' && entry.label === 'Review calibration'))
+  const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0])
+  assert.ok(local.groups.flat().some((tab) => tab.href === '/hrm/performance?tab=calibration' && tab.label === 'Review calibration'))
   const permissions = new Set(['hrm.self.read'])
   config.groups[0]!.items.push({kind:'link',href:'/hrm/performance?tab=settings',label:'Settings shortcut'})
   groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(permissions,key), [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
-  assert.ok(!groups.flatMap((group) => group.items).some((item) => item.href === '/hrm/performance?tab=settings' || item.href === '/hrm/performance?tab=calibration'))
+  assert.ok(!groups.flatMap((group) => group.items).some((entry) => entry.href === '/hrm/performance?tab=settings' || entry.href === '/hrm/performance?tab=calibration'))
+  features.hrmRecruiting = false
+  groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  assert.ok(!groups.flatMap((group) => group.items).some((entry) => entry.href.startsWith('/hrm/recruiting')))
+})
+
+test('independent Talent destinations remain discoverable when their parent workspace is unavailable', async () => {
+  reset()
+  features.hrmRecruiting = false
+  features.hrmPerformance = false
+  let groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  let talent = groups.flatMap((group) => group.items).filter((item) => item.subgroup === 'Talent')
+  assert.deepEqual(talent.map((item) => item.href), ['/hrm/positions', '/hrm/surveys'])
+  reset()
+  const permissions = new Set(['hrm.position.read'])
+  groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(permissions, key), [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
+  talent = groups.flatMap((group) => group.items).filter((item) => item.subgroup === 'Talent')
+  assert.ok(talent.some((item) => item.href === '/hrm/positions'))
+  assert.ok(!talent.some((item) => item.href === '/hrm/recruiting'))
 })
