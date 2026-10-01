@@ -1,29 +1,12 @@
 import 'server-only'
 
-import { page, widgetBlock, frame, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
- * Platform → Migrations & Mirror, split into a loader and a spec.
- *
- * This is the degenerate case, and the loader is honest about it: the native
- * page is `<PageContainer><PlatformClient /></PageContainer>` and nothing
- * else. There is no server-rendered header, no query, no gate in the page
- * itself. The gates live in the API handlers both paths hit identically:
- * `sync.run` reads the console and runs/probes syncs, while `admin.setup.manage`
- * reconfigures connections (the payload's `canManage` hides those controls
- * from run-only callers). So the loader resolves nothing and the spec places
- * one widget inside the exact native shell.
- *
- * A first pass added a `pageHeader` here, on the reasonable-looking
- * assumption that a page like this has one. It does not — the console renders
- * its own header — and the conformance harness caught the extra block at node
- * 2. Worth stating plainly: the spec must reproduce what the page RENDERS,
- * not what a page of this kind usually looks like.
- *
- * The console carries no props. It fetches its own payload over
- * /api/platform/connections and reads its own `sync.*` keys through
- * `useTranslations`, as it always has; a loader-resolved
- * string here would be a second copy that drifts from the catalog.
+ * The client console owns ListPageLayout and PageHeader because connection
+ * management permissions arrive with the API payload. The spec delegates to
+ * that shared shell without nesting a second scroll container. Connection
+ * writes and sync actions remain guarded by their API permissions.
  */
 
 export type SyncData = Record<string, never>
@@ -35,11 +18,8 @@ export async function loadSync(): Promise<SyncData> {
 export function syncSpec(): PageSpec {
   return page({
     route: '/sync',
-    // Bare + `page-container`: the native page renders <PageContainer>, not
-    // the sticky ListPageLayout chrome, so a `list` layout would nest a shell
-    // the page never had.
     layout: 'bare',
     header: [],
-    body: [frame('page-container', [widgetBlock('sync-console')])],
+    body: [widgetBlock('sync-console')],
   })
 }
