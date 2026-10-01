@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { CamTable, formatCamAmount } from "./CamTable";
 import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import type { PropertyWorkspace } from "./types";
+
+await bootJsdomEnvironment({ url: "http://localhost:4800/property-management", matchMediaMatches: false });
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+
+function camTableElement(props: Parameters<typeof CamTable>[0]) {
+  // The pool collection renders through the shared table, which reads its
+  // search and pagination strings from the catalog like every workspace.
+  return (
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <CamTable {...props} />
+    </NextIntlClientProvider>
+  );
+}
 
 type MoneyCall = {
   value: string | number;
@@ -51,7 +64,6 @@ const workspace = {
 
 const permissions = { manage: false, account: false, bill: false };
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/property-management", matchMediaMatches: false });
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 
@@ -64,7 +76,7 @@ test("CAM allocation rows format exact amounts in their property's currency", ()
   };
 
   renderToStaticMarkup(
-    createElement(CamTable, {
+    camTableElement({
       data: workspace,
       money,
       busy: false,
@@ -100,7 +112,7 @@ test("an invoiced CAM pool exposes replacement billing only for released nonzero
     data.camPools[0]!.status = "invoiced";
     data.camAllocations[0]!.reconciliationAmount = amount;
     data.camAllocations[0]!.invoiceDocumentId = invoice;
-    const html = renderToStaticMarkup(createElement(CamTable, {
+    const html = renderToStaticMarkup(camTableElement({
       data, money: value => String(value), busy: false,
       permissions: { manage: false, account: false, bill: true }, act: async () => null,
     }));
@@ -128,7 +140,7 @@ test("a refused CAM finalize displays the server remedy on its pool card", async
   };
 
   await act(async () => {
-    root.render(createElement(CamTable, {
+    root.render(camTableElement({
       data: workspace,
       money: value => String(value),
       busy: false,

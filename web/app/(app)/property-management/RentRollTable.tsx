@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
-import { Badge, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
+import { Badge, Select, cn } from "@openbooks/ui";
+import { PagedTable } from "../../../components/paged-table";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { decimalCmp, decimalSum } from "../../../lib/statement-format";
 import { Empty, Field, Status } from "./workspace-ui";
 import type { LeaseRow, Money, PropertyRow, PropertyWorkspace, UnitRow } from "./types";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type RentRollRow = {
   key: string;
@@ -55,9 +54,6 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
   onOpenUnit: (id: string) => void;
   onOpenLease: (id: string) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [propertyId, setPropertyId] = useState("all");
-  const [status, setStatus] = useState("all");
   const today = useBusinessToday();
   const operatingLeases = data.leases.filter((lease) =>
     ["active", "notice"].includes(lease.status),
@@ -103,115 +99,131 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
     ),
   );
   const rowStatus = (row: RentRollRow) => row.lease?.status ?? row.unit?.status ?? "vacant";
-  const normalizedQuery = query.trim().toLowerCase();
-  const filtered = rows.filter((row) => {
+  // The shared table owns text search and paging; the property/status facets
+  // stay as toolbar selects narrowing the collection before it reaches the
+  // table, exactly as the previous hand-rolled filter did.
+  const [propertyId, setPropertyId] = useState("all");
+  const [status, setStatus] = useState("all");
+  const scoped = rows.filter((row) => {
     if (propertyId !== "all" && row.property?.id !== propertyId) return false;
     if (status !== "all" && rowStatus(row) !== status) return false;
-    if (!normalizedQuery) return true;
-    return [row.property?.name, row.property?.code, row.unit?.code, row.unit?.name,
-      row.lease?.leaseNumber, row.lease?.tenantName]
-      .some((value) => String(value ?? "").toLowerCase().includes(normalizedQuery));
+    return true;
   });
+  const searchText = (row: RentRollRow) =>
+    [row.property?.name, row.property?.code, row.unit?.code, row.unit?.name,
+      row.lease?.leaseNumber, row.lease?.tenantName]
+      .map((value) => String(value ?? ""))
+      .join(" ");
+  const open = (row: RentRollRow) => {
+    if (row.lease) onOpenLease(row.lease.id);
+    else if (row.unit) onOpenUnit(row.unit.id);
+  };
   return (
     <div className="min-w-0">
-      <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-end dark:border-slate-800">
-        <Field label="Search rent roll">
-          <div className="relative sm:w-72">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-8" value={query} onChange={(event) => setQuery(event.target.value)}
-              placeholder="Property, unit, tenant, or lease" />
+      <PagedTable
+        source="property_rent_roll"
+        rows={scoped}
+        rowKey={(row) => row.key}
+        searchable
+        onRowClick={open}
+        rowRole="button"
+        empty={<Empty title="No rent-roll rows match" detail="Adjust the search, property, or status filters." />}
+        toolbarAfter={(
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Property">
+              <Select className="sm:w-56" value={propertyId} onChange={(event) => setPropertyId(event.target.value)}>
+                <option value="all">All properties</option>
+                {data.properties.map((property) => (
+                  <option key={property.id} value={property.id}>{property.name}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Status">
+              <Select className="sm:w-44" value={status} onChange={(event) => setStatus(event.target.value)}>
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="notice">Notice</option>
+                <option value="draft">Upcoming / draft</option>
+                <option value="vacant">Vacant</option>
+                <option value="offline">Offline</option>
+              </Select>
+            </Field>
+            <p className="pb-2 text-xs text-slate-500">
+              Historical leases stay on each property
+            </p>
           </div>
-        </Field>
-        <Field label="Property">
-          <Select className="sm:w-56" value={propertyId} onChange={(event) => setPropertyId(event.target.value)}>
-            <option value="all">All properties</option>
-            {data.properties.map((property) => (
-              <option key={property.id} value={property.id}>{property.name}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Status">
-          <Select className="sm:w-44" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="all">All statuses</option>
-            <option value="active">Active</option>
-            <option value="notice">Notice</option>
-            <option value="draft">Upcoming / draft</option>
-            <option value="vacant">Vacant</option>
-            <option value="offline">Offline</option>
-          </Select>
-        </Field>
-        <p className="pb-2 text-xs text-slate-500 sm:ml-auto">
-          {filtered.length} of {rows.length} rows · historical leases stay on each property
-        </p>
-      </div>
-      {filtered.length ? (
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Property / unit</TableHead>
-                <TableHead>Tenant / lease</TableHead>
-                <TableHead>Term</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Monthly charges</TableHead>
-                <TableHead className="text-right">Deposit held</TableHead>
-                <TableHead className="text-right">Past due</TableHead>
-                <TableHead>Billing</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((row) => {
-                const overdueAmount = pastDue(data, row.lease, today);
-                const open = () => row.lease ? onOpenLease(row.lease.id) :
-                  row.unit ? onOpenUnit(row.unit.id) : undefined;
-                return (
-                  <InteractiveTableRow key={row.key} role="button" tabIndex={0}
-                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
-                    onClick={open}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault(); open();
-                      }
-                    }}>
-                    <TableCell>
-                      <div className="font-medium">{row.property?.name ?? "—"}</div>
-                      <div className="text-xs text-slate-500">
-                        {row.unit?.code ?? "Whole property"}{row.unit?.name ? ` · ${row.unit.name}` : ""}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>{row.lease?.tenantName ?? "No tenant"}</div>
-                      <div className="font-mono text-xs text-slate-500">{row.lease?.leaseNumber ?? "Available"}</div>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-xs">
-                      {row.lease ? `${row.lease.startsOn} – ${row.lease.endsOn || "Open"}` : "—"}
-                    </TableCell>
-                    <TableCell><Status value={rowStatus(row)} /></TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.lease ? money(monthlyCharges(data, row.lease, today), { currency: row.lease.currency }) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {row.lease ? money(row.lease.depositBalance ?? 0, { currency: row.lease.currency }) : "—"}
-                    </TableCell>
-                    <TableCell className={cn("text-right tabular-nums", decimalCmp(overdueAmount, "0") > 0 && "font-medium text-red-600")}>
-                      {row.lease ? money(overdueAmount, { currency: row.lease.currency }) : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {row.lease ? (
-                        <Badge variant={row.lease.autoInvoice ? "success" : "secondary"}>
-                          {row.lease.autoInvoice ? "Automatic" : "Manual"}
-                        </Badge>
-                      ) : "—"}
-                    </TableCell>
-                  </InteractiveTableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <Empty title="No rent-roll rows match" detail="Adjust the search, property, or status filters." />
-      )}
+        )}
+        columns={[
+          {
+            key: "property",
+            header: "Property / unit",
+            cell: (row) => (
+              <>
+                <div className="font-medium">{row.property?.name ?? "—"}</div>
+                <div className="text-xs text-slate-500">
+                  {row.unit?.code ?? "Whole property"}{row.unit?.name ? ` · ${row.unit.name}` : ""}
+                </div>
+              </>
+            ),
+            search: searchText,
+          },
+          {
+            key: "tenant",
+            header: "Tenant / lease",
+            cell: (row) => (
+              <>
+                <div>{row.lease?.tenantName ?? "No tenant"}</div>
+                <div className="font-mono text-xs text-slate-500">{row.lease?.leaseNumber ?? "Available"}</div>
+              </>
+            ),
+            search: searchText,
+          },
+          {
+            key: "term",
+            header: "Term",
+            cell: (row) => (
+              <span className="whitespace-nowrap text-xs">
+                {row.lease ? `${row.lease.startsOn} – ${row.lease.endsOn || "Open"}` : "—"}
+              </span>
+            ),
+          },
+          { key: "status", header: "Status", cell: (row) => <Status value={rowStatus(row)} /> },
+          {
+            key: "charges",
+            header: "Monthly charges",
+            align: "right",
+            cell: (row) => row.lease ? money(monthlyCharges(data, row.lease, today), { currency: row.lease.currency }) : "—",
+          },
+          {
+            key: "deposit",
+            header: "Deposit held",
+            align: "right",
+            cell: (row) => row.lease ? money(row.lease.depositBalance ?? 0, { currency: row.lease.currency }) : "—",
+          },
+          {
+            key: "pastDue",
+            header: "Past due",
+            align: "right",
+            cell: (row) => {
+              const overdueAmount = pastDue(data, row.lease, today);
+              return (
+                <span className={cn(decimalCmp(overdueAmount, "0") > 0 && "font-medium text-red-600")}>
+                  {row.lease ? money(overdueAmount, { currency: row.lease.currency }) : "—"}
+                </span>
+              );
+            },
+          },
+          {
+            key: "billing",
+            header: "Billing",
+            cell: (row) => row.lease ? (
+              <Badge variant={row.lease.autoInvoice ? "success" : "secondary"}>
+                {row.lease.autoInvoice ? "Automatic" : "Manual"}
+              </Badge>
+            ) : "—",
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -199,6 +199,36 @@ const SOURCES = {
     rowKeyField: 'partyId',
     mode: 'loaded',
   },
+  banking_psp_settlement_batches: {
+    route: '/banking/psp-settlements',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  property_properties: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  property_rent_roll: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'key',
+    mode: 'loaded',
+  },
+  property_cam_pools: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  property_deposit_reconciliation: {
+    route: '/property-management',
+    rowsField: 'rows',
+    rowKeyField: 'propertyId',
+    mode: 'loaded',
+  },
   continuous_close_findings: {
     clientSearch: false,
     route: '/continuous-close',
