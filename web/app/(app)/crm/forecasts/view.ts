@@ -3,6 +3,7 @@ import 'server-only'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
   badge,
   column,
@@ -15,7 +16,6 @@ import {
   ref,
   repeat,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -510,7 +510,7 @@ export function forecastsSpec(data: ForecastsData): PageSpec {
               title: data.quotasTitle,
             }),
             {
-              ...table({
+              ...registeredListTable('crm_forecast_quotas', {
                 variant: 'app',
                 rows: f('quotaRows'),
                 rowKey: item('id'),
@@ -555,7 +555,7 @@ export function forecastsSpec(data: ForecastsData): PageSpec {
               description: data.historyDescription,
             }),
             {
-              ...table({
+              ...registeredListTable('crm_forecast_snapshots', {
                 variant: 'app',
                 rows: f('snapshotRows'),
                 rowKey: item('id'),
