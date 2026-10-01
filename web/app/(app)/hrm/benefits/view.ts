@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -10,7 +11,6 @@ import {
   page,
   pageHeader,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
@@ -24,10 +24,10 @@ import { loadBenefits, type BenefitsData } from '../../../../lib/hrm/benefits'
 /**
  * The Benefits tab, split into a loader and a spec.
  *
- * Windows render through the shared `table` block (variant 'app') over
+ * Windows and enrolments render through the shared registered list over
  * loader-resolved rows. Windows and Enrolments are the two VIEWS, on the
  * shared subtab strip; the window-status filter rides the shared
- * `list-toolbar` beside it. The page's primary action is the
+ * `list-toolbar` in the list's toolbar slot. The page's primary action is the
  * shared 'link-button' widget ("New window") FIRST in the page header,
  * then the module-home-tabs strip. The window drawer (progress plus its
  * enrolments) and the new-window dialog open from URL search params
@@ -62,63 +62,47 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
       widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),
       {
         ...grid('flex h-full min-h-0 flex-col gap-4', [
-          // The window-status filter. It used to sit INSIDE the list card
-          // and carry the view switch as one of its options: picking
-          // "Enrolments" swapped the table for a different entity. Windows
-          // and Enrolments are views on the Rewards strip under the header.
+          // Windows and Enrolments are views on the Rewards strip under
+          // the header — the active tab already names the surface, so no
+          // panel repeats it. The window-status filter rides the shared
+          // toolbar slot on the windows list, matching the leave queue.
           ...(data.showingEnrolments
-            ? []
+            ? [
+                registeredListTable('hrm_benefits_enrolments', {
+                  variant: 'app',
+                  rows: f('enrollmentRows'),
+                  rowKey: item('id'),
+                  columns: [
+                    column(f('enrollmentColumns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+                    column(f('enrollmentColumns.plan'), text(item('planCode'))),
+                    column(f('enrollmentColumns.coverage'), text(item('coverageLabel'))),
+                    column(f('enrollmentColumns.employeeAmount'), text(item('employeeAmountPerPeriod')), {
+                      align: 'right',
+                      className: 'tabular-nums',
+                    }),
+                    column(f('enrollmentColumns.employerAmount'), text(item('employerAmountPerPeriod')), {
+                      align: 'right',
+                      className: 'tabular-nums',
+                    }),
+                    column(f('enrollmentColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                    column(
+                      '',
+                      widgetCell('hrm-enrollment-actions', {
+                        enrollmentId: item('id'),
+                        enrollmentStatus: item('status'),
+                        approveLabel: f('approveLabel'),
+                        failedLabel: f('actionFailed'),
+                        canManage: f('canManage'),
+                      }),
+                    ),
+                  ],
+                  empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                }),
+              ]
             : [
-                grid('flex shrink-0 flex-wrap items-center gap-3', [
-                  widgetBlock('list-toolbar', {
-                    basePath,
-                    currentParams: data.currentParams,
-                    filters: [
-                      {
-                        paramKey: 'segment',
-                        label: data.segmentsLabel,
-                        allLabel: data.allLabel,
-                        options: data.segments,
-                      },
-                    ],
-                  }),
-                ]),
-              ]),
-            ...(data.showingEnrolments
-              ? [
-                  table({
-                    variant: 'app',
-                    rows: f('enrollmentRows'),
-                    rowKey: item('id'),
-                    columns: [
-                      column(f('enrollmentColumns.employee'), link(item('employeeLabel'), item('employeeHref'))),
-                      column(f('enrollmentColumns.plan'), text(item('planCode'))),
-                      column(f('enrollmentColumns.coverage'), text(item('coverageLabel'))),
-                      column(f('enrollmentColumns.employeeAmount'), text(item('employeeAmountPerPeriod')), {
-                        align: 'right',
-                        className: 'tabular-nums',
-                      }),
-                      column(f('enrollmentColumns.employerAmount'), text(item('employerAmountPerPeriod')), {
-                        align: 'right',
-                        className: 'tabular-nums',
-                      }),
-                      column(f('enrollmentColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-                      column(
-                        '',
-                        widgetCell('hrm-enrollment-actions', {
-                          enrollmentId: item('id'),
-                          enrollmentStatus: item('status'),
-                          approveLabel: f('approveLabel'),
-                          failedLabel: f('actionFailed'),
-                          canManage: f('canManage'),
-                        }),
-                      ),
-                    ],
-                    empty: { title: f('emptyTitle'), description: f('emptyDescription') },
-                  }),
-                ]
-              : [
-                  table({
+                registeredListTable(
+                  'hrm_benefits_windows',
+                  {
                     variant: 'app',
                     rows: f('windowRows'),
                     rowKey: item('id'),
@@ -132,8 +116,23 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
                       column('', link(item('openLabel'), item('windowHref'))),
                     ],
                     empty: { title: f('emptyTitle'), description: f('emptyDescription') },
-                  }),
-                ]),
+                  },
+                  [
+                    widget('list-toolbar', {
+                      basePath,
+                      currentParams: data.currentParams,
+                      filters: [
+                        {
+                          paramKey: 'segment',
+                          label: data.segmentsLabel,
+                          allLabel: data.allLabel,
+                          options: data.segments,
+                        },
+                      ],
+                    }),
+                  ],
+                ),
+              ]),
             widgetBlock(
               'hrm-window-dialog',
               {

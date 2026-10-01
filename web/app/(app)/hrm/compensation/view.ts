@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
@@ -7,12 +8,12 @@ import {
   column,
   grid,
   field as item,
+  heading,
   link,
   page,
   pageHeader,
   panel,
   statTile,
-  table,
   text,
   widget,
   widgetBlock,
@@ -60,55 +61,43 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
         statTile({ iconKey: f('tiles.2.iconKey'), accent: f('tiles.2.accent'), label: f('tiles.2.label'), value: f('tiles.2.value'), tone: f('tiles.2.tone') }),
         statTile({ iconKey: f('tiles.3.iconKey'), accent: f('tiles.3.accent'), label: f('tiles.3.label'), value: f('tiles.3.value'), tone: f('tiles.3.tone') }),
       ]),
-      panel({
-        title: f('bandsTitle'),
-        bodyClassName: 'min-h-0 overflow-y-auto p-0',
-        blocks: [
-          table({
-            variant: 'app',
-            rows: f('bands'),
-            rowKey: item('id'),
-            empty: { title: f('bandsEmpty') },
-            columns: [
-              column(f('bandsColumns.level'), text(item('levelCode'))),
-              column(f('bandsColumns.range'), text(item('range'))),
-              column(f('bandsColumns.headcount'), text(item('headcount')), { align: 'right', className: 'tabular-nums' }),
-            ],
-          }),
+      // No panel around the registers: a house heading names each
+      // surface, and a card repeating it is the same words twice with a
+      // border between them.
+      heading(2, f('bandsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+      registeredListTable('hrm_compensation_bands', {
+        variant: 'app',
+        rows: f('bands'),
+        rowKey: item('id'),
+        empty: { title: f('bandsEmpty') },
+        columns: [
+          column(f('bandsColumns.level'), text(item('levelCode'))),
+          column(f('bandsColumns.range'), text(item('range'))),
+          column(f('bandsColumns.headcount'), text(item('headcount')), { align: 'right', className: 'tabular-nums' }),
         ],
       }),
-      panel({
-        title: f('cyclesTitle'),
-        bodyClassName: 'min-h-0 overflow-y-auto p-0',
-        blocks: [
-          table({
-            variant: 'app',
-            rows: f('cycles'),
-            rowKey: item('id'),
-            empty: { title: f('cyclesEmpty') },
-            columns: [
-              column(f('cyclesColumns.name'), link(item('name'), item('href'))),
-              column(f('cyclesColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-              column(f('cyclesColumns.effective'), text(item('effectiveOn'))),
-            ],
-          }),
+      heading(2, f('cyclesTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+      registeredListTable('hrm_compensation_cycles', {
+        variant: 'app',
+        rows: f('cycles'),
+        rowKey: item('id'),
+        empty: { title: f('cyclesEmpty') },
+        columns: [
+          column(f('cyclesColumns.name'), link(item('name'), item('href'))),
+          column(f('cyclesColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+          column(f('cyclesColumns.effective'), text(item('effectiveOn'))),
         ],
       }),
-      panel({
-        title: f('plansTitle'),
-        bodyClassName: 'min-h-0 overflow-y-auto p-0',
-        blocks: [
-          table({
-            variant: 'app',
-            rows: f('plans'),
-            rowKey: item('id'),
-            empty: { title: f('plansEmpty') },
-            columns: [
-              column(f('plansColumns.name'), link(item('name'), item('href'))),
-              column(f('plansColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-              column(f('plansColumns.cost'), text(item('totalCost')), { align: 'right', className: 'tabular-nums' }),
-            ],
-          }),
+      heading(2, f('plansTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+      registeredListTable('hrm_compensation_plans', {
+        variant: 'app',
+        rows: f('plans'),
+        rowKey: item('id'),
+        empty: { title: f('plansEmpty') },
+        columns: [
+          column(f('plansColumns.name'), link(item('name'), item('href'))),
+          column(f('plansColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+          column(f('plansColumns.cost'), text(item('totalCost')), { align: 'right', className: 'tabular-nums' }),
         ],
       }),
       widgetBlock('setup-section', { entityKey: 'hrm-job-families', sp: data.setupParams, basePath: '/hrm/compensation', rowParam: 'family' }, f('canSetup')),
