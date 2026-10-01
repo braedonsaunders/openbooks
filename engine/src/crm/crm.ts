@@ -1,3 +1,4 @@
+import { routeSalesAccount } from './sales-routing.ts'
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type TerritoryRule, type TerritorySubject } from "./crm-math.ts";
@@ -262,68 +263,7 @@ export async function promoteCrmAccount(
 /** Route one account using the first matching active territory by priority. */
 export async function routeCrmAccount(orgId: string, profileId: string, actorId: string): Promise<string | null> {
   if (!(await crmFeatureEnabled(db, orgId))) return null;
-  return db.transaction(async (tx) => {
-    const account = (await tx.execute<{
-      id: string;
-      lifecycle_stage: CrmLifecycleStage;
-      lead_source_id: string | null;
-      industry: string | null;
-      annual_revenue: string | null;
-      employee_count: number | null;
-      owner_user_id: string | null;
-      territory_id: string | null;
-      country: string | null;
-      region: string | null;
-    }>(sql`
-      select cp.id, cp.lifecycle_stage, cp.lead_source_id, cp.industry, cp.annual_revenue, cp.employee_count,
-             cp.owner_user_id, cp.territory_id, a.country, a.region
-        from crm_account_profiles cp
-        left join lateral (
-          select country, region from addresses
-           where org_id = ${orgId} and party_id = cp.party_id
-          order by is_default_billing desc, created_at limit 1
-        ) a on true
-       -- The address is read-only routing context on the nullable side of an
-       -- outer join, which Postgres refuses to lock: lock the profile only.
-       -- A concurrent address edit simply re-routes on the next run.
-       where cp.id = ${profileId} and cp.org_id = ${orgId} for update of cp`));
-    const row = account.rows[0];
-    if (!row) return null;
-    const territories = (await tx.execute<{
-      id: string;
-      rules: TerritoryRule[];
-      match_mode: "all" | "any";
-      default_owner_user_id: string | null;
-    }>(sql`
-      select id, rules, match_mode, default_owner_user_id
-        from crm_sales_territories where org_id = ${orgId} and is_active
-       order by priority, created_at`));
-    const subject: TerritorySubject = {
-      country: row.country,
-      region: row.region,
-      industry: row.industry,
-      lifecycleStage: row.lifecycle_stage,
-      leadSourceId: row.lead_source_id,
-      annualRevenue: row.annual_revenue,
-      employeeCount: row.employee_count,
-    };
-    const territory = territories.rows.find((candidate) => matchesTerritory(subject, candidate.rules ?? [], candidate.match_mode));
-    if (!territory || (territory.id === row.territory_id && (!territory.default_owner_user_id || territory.default_owner_user_id === row.owner_user_id))) {
-      return territory?.id ?? null;
-    }
-    await tx.execute(sql`
-      update crm_account_profiles set territory_id = ${territory.id},
-             owner_user_id = coalesce(${territory.default_owner_user_id}, owner_user_id),
-             updated_at = now(), updated_by = ${actorId}
-       where id = ${profileId} and org_id = ${orgId}`);
-    await tx.execute(sql`
-      insert into crm_account_assignment_events
-        (org_id, account_profile_id, from_owner_user_id, to_owner_user_id, from_territory_id, to_territory_id,
-         source, reason, created_by, updated_by)
-      values (${orgId}, ${profileId}, ${row.owner_user_id}, ${territory.default_owner_user_id ?? row.owner_user_id},
-              ${row.territory_id}, ${territory.id}, 'routing', 'Matched territory rules', ${actorId}, ${actorId})`);
-    return territory.id;
-  });
+  return db.transaction(tx => routeSalesAccount(tx,orgId,profileId,actorId));
 }
 
 export async function nextOpportunityNumber(orgId: string): Promise<string> {

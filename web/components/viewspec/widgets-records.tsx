@@ -3,6 +3,7 @@ import { type ComponentProps } from 'react'
 import { RecordCountCell, InNavCell } from '../../app/(app)/records/types/sections'
 import { TypeBuilderDrawer } from '../../app/(app)/records/types/TypeBuilderDrawer'
 import { PartyRolesCell } from '../../app/(app)/parties/sections'
+import { SalesWorkspace } from '../../app/(app)/crm/sales/SalesWorkspace'
 import { CrmSetupWorkspace } from '../../app/(app)/admin/setup/crm/CrmSetupWorkspace'
 import { ExportClient } from '../../app/(app)/data/export/ExportClient'
 import { ImportWizard } from '../../app/(app)/data/import/ImportWizard'
@@ -60,6 +61,7 @@ export const RECORDS_WIDGETS = {
   /** One client island, like the labor-costing workspace. Six per-tab column
    *  sets with row-click routing are a six-way conditional pair, not presence,
    *  and neither table variant can carry row navigation. */
+  'crm-sales-workspace': (props) => <SalesWorkspace data={props.data as ComponentProps<typeof SalesWorkspace>['data']} params={props.params as ComponentProps<typeof SalesWorkspace>['params']} />,
   'crm-setup-workspace': (props) => (
     <CrmSetupWorkspace {...(props as ComponentProps<typeof CrmSetupWorkspace>)} />
   ),

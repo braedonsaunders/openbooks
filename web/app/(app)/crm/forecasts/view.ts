@@ -211,16 +211,16 @@ export async function loadForecasts(
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     }),
     db.execute<QuotaRow>(sql`
-      select q.*, u.name owner_name, st.name team_name
+      select q.*, u.display_name owner_name, st.name team_name
         from crm_sales_quotas q
-        left join users u on u.id = q.owner_user_id
+        left join parties u on u.id = q.employee_id and u.org_id=q.org_id
         left join crm_sales_teams st on st.id = q.sales_team_id and st.org_id = q.org_id
-       where q.org_id = ${authz.user.orgId}
+       where q.org_id = ${authz.user.orgId} and q.lifecycle='approved'
          and q.period_start <= ${end}::date
          and q.period_end >= ${start}::date
-         ${ownerUserId ? sql`and q.owner_user_id = ${ownerUserId}` : sql``}
+         ${ownerUserId ? sql`and q.employee_id = (select party_id from users where id=${ownerUserId} and org_id=q.org_id)` : sql``}
          ${salesTeamId ? sql`and q.sales_team_id = ${salesTeamId}` : sql``}
-       order by q.period_start desc, coalesce(u.name, st.name), q.currency
+       order by q.period_start desc, coalesce(u.display_name, st.name), q.currency
     `),
     db.execute<SnapshotRow>(sql`
       select s.*, u.name owner_name, st.name team_name
@@ -269,7 +269,7 @@ export async function loadForecasts(
     tabs: await customerGroupTabs(authz, '/crm/forecasts'),
     canConfigureQuotas,
     canManageForecasts,
-    manageQuotasHref: '/admin/setup/crm?tab=quotas',
+    manageQuotasHref: '/crm/sales/quotas',
     manageQuotasLabel: t('forecasts.manageQuotas'),
     manageQuotasAriaLabel: t('forecasts.manageQuotas'),
     snapshotPeriodStart: start,
@@ -342,7 +342,7 @@ export async function loadForecasts(
     emptyQuotaDescription: t('forecasts.emptyQuotaDescription'),
     quotaEmptyAction: canConfigureQuotas ? 'quota-empty-action' : null,
     quotaEmptyActionProps: {
-      href: '/admin/setup/crm?tab=quotas',
+      href: '/crm/sales/quotas',
       label: t('forecasts.manageQuotas'),
       size: 'sm',
     },

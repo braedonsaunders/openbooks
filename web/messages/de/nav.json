@@ -51,7 +51,7 @@
     "compliance-vendors": "Subunternehmer",
     "continuous-close": "Abschlussmonitor",
     "crm-activities": "Aktivitäten",
-    "crm-forecasts": "Prognosen & Ziele",
+    "crm-forecasts": "Forecasts",
     "crm-opportunities": "Verkaufschancen",
     "customers": "Kunden",
     "dashboard": "Dashboard",
@@ -129,7 +129,12 @@
     "hrm-performance-calibration": "Kalibrierung",
     "hrm-performance-talent": "Talent & Nachfolge",
     "hrm-performance-retention": "Bindung",
-    "hrm-performance-settings": "Leistungseinstellungen"
+    "hrm-performance-settings": "Leistungseinstellungen",
+    "crm-sales": "Sales",
+    "crm-sales-representatives": "Representatives",
+    "crm-sales-teams": "Teams",
+    "crm-sales-quotas": "Quotas",
+    "crm-sales-territories": "Territories"
   },
   "groups": {
     "workforce": "Belegschaft",
@@ -181,7 +186,8 @@
     "accounts-views": "Kontenplan",
     "inventory-views": "Bestand",
     "inbox-views": "Posteingang",
-    "me-views": "Ich"
+    "me-views": "Ich",
+    "crm-sales": "Sales"
   },
   "modulesShort": {
     "ap": "Kreditoren",
@@ -213,6 +219,7 @@
     "setup-depreciation": "Buch-Abschreibung",
     "setup-tax-depreciation": "Steuerliche Abschreibung",
     "setup-overhead": "Gemeinkosten",
-    "setup-payments": "Zahlungen & Banking"
+    "setup-payments": "Zahlungen & Banking",
+    "crm-sales": "Sales"
   }
 }

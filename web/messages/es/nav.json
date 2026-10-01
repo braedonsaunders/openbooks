@@ -51,7 +51,7 @@
     "compliance-vendors": "Subcontratistas",
     "continuous-close": "Agentes",
     "crm-activities": "Actividades",
-    "crm-forecasts": "Previsiones y cuotas",
+    "crm-forecasts": "Forecasts",
     "crm-opportunities": "Oportunidades",
     "customers": "Clientes",
     "dashboard": "Panel",
@@ -129,7 +129,12 @@
     "hrm-performance-calibration": "Calibración",
     "hrm-performance-talent": "Talento y sucesión",
     "hrm-performance-retention": "Retención",
-    "hrm-performance-settings": "Configuración del desempeño"
+    "hrm-performance-settings": "Configuración del desempeño",
+    "crm-sales": "Sales",
+    "crm-sales-representatives": "Representatives",
+    "crm-sales-teams": "Teams",
+    "crm-sales-quotas": "Quotas",
+    "crm-sales-territories": "Territories"
   },
   "modulesShort": {
     "ap": "Por pagar",
@@ -186,7 +191,8 @@
     "accounts-views": "Plan de cuentas",
     "inventory-views": "Inventario",
     "inbox-views": "Bandeja de entrada",
-    "me-views": "Yo"
+    "me-views": "Yo",
+    "crm-sales": "Sales"
   },
   "localWorkspaces": {
     "hrm-people": "Empleados",
@@ -213,6 +219,7 @@
     "setup-depreciation": "Depreciación contable",
     "setup-tax-depreciation": "Depreciación fiscal",
     "setup-overhead": "Gastos generales",
-    "setup-payments": "Pagos y banca"
+    "setup-payments": "Pagos y banca",
+    "crm-sales": "Sales"
   }
 }

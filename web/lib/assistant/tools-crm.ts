@@ -626,12 +626,12 @@ const crmForecast: AssistantToolDef = {
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       }),
       db.execute<Record<string, unknown>>(sql`
-        select q.*, u.name as owner_name, t.name as sales_team_name from crm_sales_quotas q
-        left join users u on u.id = q.owner_user_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
-        where q.org_id = ${authz.user.orgId} and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
-          ${a.ownerUserId ? sql`and q.owner_user_id = ${a.ownerUserId}` : sql``}
+        select q.*, u.display_name as owner_name, t.name as sales_team_name from crm_sales_quotas q
+        left join parties u on u.id = q.employee_id and u.org_id=q.org_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
+        where q.org_id = ${authz.user.orgId} and q.lifecycle='approved' and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
+          ${a.ownerUserId ? sql`and q.employee_id = (select party_id from users where org_id=q.org_id and id=${a.ownerUserId})` : sql``}
           ${a.salesTeamId ? sql`and q.sales_team_id = ${a.salesTeamId}` : sql``}
-        order by q.period_start, coalesce(u.name, t.name)`),
+        order by q.period_start, coalesce(u.display_name, t.name)`),
       // Stored snapshots aggregate the whole org without entity lineage, so
       // restricted callers never see them — the same boundary as the route.
       authz.allowedSubsidiaryIds === null

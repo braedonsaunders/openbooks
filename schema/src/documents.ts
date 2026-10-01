@@ -68,6 +68,8 @@ export const documents = pgTable(
     kind: text("kind").notNull(),
     documentNumber: text("document_number").notNull(),
     partyId: uuid("party_id"), // customer/vendor/employee, per kind
+    salesRepId: uuid("sales_rep_id"),
+    salesTeamId: uuid("sales_team_id"),
     /**
      * The legal entity this document belongs to (→ subsidiaries); null means
      * the org's root subsidiary (posting resolves it). Defaulted from the

@@ -305,7 +305,7 @@ export async function loadParties(
             sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`,
           ),
           db.execute<ElementOf<PartyDrawerProps['salesReps']>>(
-            sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active
+            sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active and er.is_sales_rep where p.org_id = ${orgId} and p.is_active
             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`,
           ),
           loadWorkerCompGroups(orgId),

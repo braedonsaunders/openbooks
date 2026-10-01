@@ -13,6 +13,7 @@
 
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
+import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { RESOURCING_REPORT_ENTITIES } from './resourcing-entities'
 
 export { HRM_REPORT_ENTITIES } from './hrm-entities'
@@ -1536,6 +1537,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // change-request ledger (0185). Declared in hrm-entities.ts so the HRM
   // read path stays beside the core catalog without growing this file.
   ...HRM_REPORT_ENTITIES,
+  ...SALES_REPORT_ENTITIES,
   // HR-20 begin: field time capture (0231). Clock events carry geo FLAGS
   // (inside/outside/unavailable) — raw coordinates are worker location
   // and live only in field_clock_coordinates behind hrm.employment.read.
