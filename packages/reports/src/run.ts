@@ -1173,9 +1173,10 @@ function compareDecimals(left: string | number | null, right: string | number | 
 
 /**
  * Inclusive [from, to] date bounds of one temporal bucket. The raw value is
- * the bucket START (date_trunc output, fiscal-shifted where applicable) — pg
- * hands date columns back as Date at LOCAL midnight, so local parts are the
- * truth (toISOString would shift a day east of UTC).
+ * the bucket START, fiscal-shifted where applicable. Compiled queries emit an
+ * ISO civil date so driver and host timezones cannot shift the drill boundary.
+ * Legacy in-memory callers may supply a Date at local midnight; preserve its
+ * civil parts rather than converting that value to another timezone.
  */
 function binRange(v: unknown, bin: ReportTemporalBin): { from: string; to: string } | null {
   let y: number, m: number, d: number

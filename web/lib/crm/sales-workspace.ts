@@ -1,3 +1,5 @@
+import { salesTrendQuery, salesTrendFromReport } from "./sales-trend";
+import { executeReport } from "@/lib/custom-reports";
 import { loadSalesMapCustomers } from "./sales-map";
 import { EMPTY_TERRITORY_GEOGRAPHY } from "@openbooks/engine/crm/sales/contracts";
 import "server-only";
@@ -209,6 +211,17 @@ export async function loadSalesWorkspace(
         (select count(distinct member.team_id)::int from crm_sales_team_members member join crm_sales_teams team on team.org_id=member.org_id and team.id=member.team_id where member.org_id=${orgId} and member.employee_id=${selected.id} and member.is_active and team.is_active and member.valid_from<=${today}::date and (member.valid_to is null or member.valid_to>=${today}::date) and ${salesScopeWhere(scope, sql`team.subsidiary_id`)}) as teams,
         (select count(*)::int from crm_sales_quotas quota where quota.org_id=${orgId} and quota.employee_id=${selected.id} and quota.lifecycle in ('draft','pending_approval','approved') and quota.period_end>=${today}::date and ${salesScopeWhere(scope, sql`quota.subsidiary_id`)}) as quotas`)
       ).rows[0]!;
+      if (
+        selected.is_sales_rep &&
+        can(authz, "crm.forecasts.read") &&
+        can(authz, "reports.read")
+      ) {
+        const query = salesTrendQuery(selected.id, today);
+        selected.repTrend = salesTrendFromReport(
+          today,
+          await executeReport(orgId, query, Number.MAX_SAFE_INTEGER),
+        );
+      }
       selected.repSummary = {
         ...summary,
         customers: can(authz, "parties.read") ? summary.customers : null,

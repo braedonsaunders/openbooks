@@ -861,9 +861,13 @@ function compileSummarize(
     measure.filter ? compileRuleGroup(entity, measure.filter, params) : null,
   )
   const hasSemiAdditive = measures.some((measure) => measure.fn === 'opening' || measure.fn === 'closing')
-  const dimSelect = breakouts.map((b, i) =>
-    hasSemiAdditive ? `"d${i}" AS "d${i}"` : `${dimExpr(entity, b, startMonth)} AS "d${i}"`,
-  )
+  const dimSelect = breakouts.map((b, i) => {
+    const dimension = hasSemiAdditive ? `"d${i}"` : dimExpr(entity, b, startMonth)
+    // Calendar buckets cross the driver as ISO civil dates. A JavaScript Date
+    // would reinterpret database midnight in the application host's timezone,
+    // shifting both fiscal labels and source-record drill boundaries by a day.
+    return `${b.bin ? `to_char(${dimension}, 'YYYY-MM-DD')` : dimension} AS "d${i}"`
+  })
   const measSelect = hasSemiAdditive
     ? measures.map((m, i) => `${semiAdditiveMeasureExpr(m, i, measureFilters[i] ?? null)} AS "m${i}"`)
     : measures.map((m, i) => `${measureExpr(entity, m, measureFilters[i] ?? null)} AS "m${i}"`)

@@ -10,6 +10,10 @@ await bootJsdomEnvironment({
 });
 Object.assign(globalThis, { React });
 stubModules({
+  extra: {
+    "@openbooks/analytics/viz":
+      "export function InsightChart({option}) { globalThis.salesChartOption = option; return null; }",
+  },
   navigation: {
     source: `export function usePathname(){return window.location.pathname} export function useSearchParams(){return new URLSearchParams(window.location.search)} export function useRouter(){return {push(){},replace(){},refresh(){}}}`,
   },
@@ -186,6 +190,7 @@ const rep = {
   sales_rep_since: "2020-01-01",
   updated_at: "2026-10-01T00:00:00Z",
   department_name: "Enterprise sales",
+  repTrend: { months: ["2026-09-01"], points: [] },
   repSummary: { customers: 12, openOpportunities: 5, teams: 2, quotas: 3 },
 };
 test("representative details use the wide native drawer and Financial Health panels with editable sales details and removal", async () => {
@@ -209,6 +214,15 @@ test("representative details use the wide native drawer and Financial Health pan
     assert.ok(dialog);
     assert.match(dialog.className, /max-w-6xl/);
     assert.match(dialog.textContent!, /Assigned customers/);
+    assert.match(dialog.textContent!, /Sales over time/);
+    assert.match(dialog.textContent!, /No attributed sales/);
+    assert.equal(
+      [...dialog.querySelectorAll("input")].some(
+        (input) => input.value === rep.name,
+      ),
+      false,
+      "employee identity belongs in the drawer title, not a repeated input",
+    );
     assert.match(dialog.textContent!, /Enterprise sales/);
     assert.ok(
       [...dialog.querySelectorAll("button")].some(
@@ -268,6 +282,98 @@ test("quota creation offers both a native individual sales rep and a sales team 
       [...dialog.querySelectorAll("option")].some(
         (option) => option.textContent === "Enterprise team",
       ),
+    );
+  } finally {
+    await screen.close();
+  }
+});
+
+test("sales performance charts use real monthly series and keep currency totals separate", async () => {
+  const chartRep = {
+    ...rep,
+    repTrend: {
+      months: ["2026-08-01", "2026-09-01"],
+      points: [
+        {
+          month: "2026-08-01",
+          currency: "CAD",
+          metric: "closed_won" as const,
+          amount: "100.0001",
+        },
+        {
+          month: "2026-09-01",
+          currency: "CAD",
+          metric: "closed_won" as const,
+          amount: "0.0002",
+        },
+        {
+          month: "2026-09-01",
+          currency: "CAD",
+          metric: "net_invoiced" as const,
+          amount: "40.5",
+        },
+        {
+          month: "2026-09-01",
+          currency: "USD",
+          metric: "closed_won" as const,
+          amount: "9999",
+        },
+      ],
+    },
+  };
+  const screen = await mount({
+    ...baseline,
+    page: "representatives",
+    selected: chartRep,
+    rows: [chartRep],
+  });
+  try {
+    await act(async () => {
+      await import("../../analytics/_ui/charts");
+    });
+    const dialog = document.querySelector('[role="dialog"]')!;
+    assert.match(dialog.textContent!, /100\.00/);
+    assert.match(dialog.textContent!, /40\.50/);
+    assert.equal(
+      dialog.textContent!.includes("9,999"),
+      false,
+      "another currency must not enter these totals",
+    );
+    const chart = (
+      globalThis as typeof globalThis & {
+        salesChartOption: { series: { data: number[] }[] };
+      }
+    ).salesChartOption;
+    assert.deepEqual(
+      chart.series.map((series) => series.data),
+      [
+        [100.0001, 0.0002],
+        [0, 40.5],
+      ],
+    );
+    const currency = [...dialog.querySelectorAll("select")].find((select) =>
+      [...select.options].some((option) => option.value === "CAD"),
+    )!;
+    assert.deepEqual(
+      [...currency.options].map((option) => option.value),
+      ["CAD", "USD"],
+    );
+    await act(async () => {
+      currency.value = "USD";
+      currency.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+    assert.match(dialog.textContent!, /9,999\.00/);
+    const switched = (
+      globalThis as typeof globalThis & {
+        salesChartOption: { series: { data: number[] }[] };
+      }
+    ).salesChartOption;
+    assert.deepEqual(
+      switched.series.map((series) => series.data),
+      [
+        [0, 9999],
+        [0, 0],
+      ],
     );
   } finally {
     await screen.close();
