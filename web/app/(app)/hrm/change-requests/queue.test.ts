@@ -201,7 +201,8 @@ test("an absent segment lists every request with exact per-segment counts", asyn
   );
   assert.equal(data.rows.length, 5, "All shows every service row, applied included");
   const submitted = data.segments.find((segment) => segment.value === "submitted");
-  assert.ok(submitted?.label.includes("(2)"), "the segment label carries its count");
+  assert.equal(submitted?.label, lookup("queue.segments.submitted"), "the segment label does not duplicate the shared count badge");
+  assert.equal(submitted?.count, 2, "the shared status filter receives the exact count separately");
 });
 
 test("the submitted segment shows pending approvals only", async () => {

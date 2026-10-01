@@ -461,13 +461,7 @@ export async function partnerStatement(
       from parties p
      where p.id = ${partyId} and p.org_id = ${orgId}${partySubsidiaryFilter}
   `))
-  const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId, { bookId: opts.bookId })
-  const agingTotals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
-  for (const row of aging.rows) {
-    if (row.partyId !== partyId) continue
-    agingTotals[row.bucket] = decimalAdd(agingTotals[row.bucket], row.open)
-    agingTotals.total = decimalAdd(agingTotals.total, row.open)
-  }
+  const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId, { bookId: opts.bookId, partyId })
   // The register only surfaces parties with window lines, but a statement is
   // addressed to one party: with no window activity the opening (= closing)
   // is still the pre-window control balance, never zero.
@@ -480,7 +474,7 @@ export async function partnerStatement(
     opening,
     closing: p?.closing ?? opening,
     lines: p?.lines ?? [],
-    aging: agingTotals,
+    aging: aging.totals,
     truncated: reg.truncated,
   }
 }

@@ -1,0 +1,1 @@
+These additive indexes preserve all audit rows and existing indexes. No backfill, configuration change or tenant-data repair is required.

@@ -82,6 +82,8 @@ function canonicalPayloadText(value: unknown): string {
 export function ChangeRequestDrawer({
   employmentId,
   initialRequest,
+  initialValues,
+  stacked = false,
   departmentOptions,
   onClose,
   onSaved,
@@ -89,6 +91,9 @@ export function ChangeRequestDrawer({
   employmentId: string
   /** Set when editing a draft; null when proposing a new change. */
   initialRequest: EditableChangeRequest | null
+  /** Context for a new request; never treated as an existing saved draft. */
+  initialValues?: Record<string, unknown>
+  stacked?: boolean
   departmentOptions: DepartmentOption[]
   onClose: () => void
   onSaved: () => void
@@ -100,7 +105,7 @@ export function ChangeRequestDrawer({
   // never the browser's UTC day (tomorrow after 5pm Pacific).
   const today = useBusinessToday()
   const editing = initialRequest !== null
-  const initialPayload = (initialRequest?.payload ?? {}) as Record<string, unknown>
+  const initialPayload = initialRequest?.payload ?? initialValues ?? {}
 
   const [kind, setKind] = useState<ChangeRequestKind>(
     initialPayload.kind === 'status_change' ||
@@ -574,6 +579,7 @@ export function ChangeRequestDrawer({
   return (
     <Drawer
       open
+      stacked={stacked}
       onClose={() => void closeGuard.close()}
       size="md"
       title={t(editing ? 'employment.changeRequests.titleEdit' : 'employment.changeRequests.titleNew')}

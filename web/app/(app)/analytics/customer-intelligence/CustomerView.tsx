@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { TableCell as SharedTableCell, TableRow as SharedTableRow, TableHead as SharedTableHead, Table as SharedTable, TableHeader as SharedTableHeader, TableBody as SharedTableBody } from "../../reports/ReportTable"
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -204,24 +206,7 @@ export function CustomerView({
       </div>
 
       {/* Tabs */}
-      <div className="-mx-1 overflow-x-auto">
-        <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {tabs.map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              className={cn(
-                '-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors',
-                tab === key ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
-              )}
-            >
-              {t(`tabs.${key}`)}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <RecordTabs label={t('title')} tabs={tabs.map((key) => ({ key: key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'health' ? <HealthTab data={data} onDrill={openCustomer} /> : null}
@@ -232,6 +217,7 @@ export function CustomerView({
         {tab === 'profitability' && projectsEnabled ? <ProfitabilityTab p={profitability} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+      </RecordTabs>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>

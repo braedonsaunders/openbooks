@@ -104,43 +104,7 @@ export function Empty({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-export function RecordTabs({
-  label,
-  active,
-  tabs,
-  onChange,
-}: {
-  label: string;
-  active: string;
-  tabs: Array<{ key: string; label: string }>;
-  onChange: (key: string) => void;
-}) {
-  return (
-    <nav
-      className="-mb-px flex gap-1 overflow-x-auto"
-      role="tablist"
-      aria-label={label}
-    >
-      {tabs.map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          role="tab"
-          aria-selected={active === item.key}
-          onClick={() => onChange(item.key)}
-          className={cn(
-            "border-b-2 px-3 py-3 text-sm font-medium transition-colors",
-            active === item.key
-              ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
-              : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200",
-          )}
-        >
-          {item.label}
-        </button>
-      ))}
-    </nav>
-  );
-}
+export { RecordTabs } from '@/components/module-home/record-tabs'
 
 export function Small({ label, value }: { label: string; value: string }) {
   return (

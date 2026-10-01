@@ -9,9 +9,7 @@ import {
   link,
   page,
   pageHeader,
-  panel,
   pagination,
-  statTile,
   table,
   text,
   widget,
@@ -58,34 +56,8 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
           }),
           when: f('dateRefusal'),
         },
-        // Three tiles, not four: the as-of date is a toolbar CONTROL now, so
-        // a tile repeating it back is one of two places showing the same
-        // fact and the only one you cannot change.
-        grid('grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3', [
-          statTile({
-            iconKey: 'users',
-            accent: 'blue',
-            label: f('labels.headcount'),
-            value: f('chart.headcount'),
-            tone: 'default',
-          }),
-          statTile({
-            iconKey: 'user-plus',
-            accent: 'amber',
-            label: f('labels.vacancies'),
-            value: f('chart.vacancies'),
-            tone: 'default',
-          }),
-          statTile({
-            iconKey: 'layers',
-            accent: 'slate',
-            label: f('labels.layers'),
-            value: f('chart.layers'),
-            tone: 'default',
-          }),
-        ]),
         // The as-of/search controls on the shared toolbar. The Employees
-        // view strip is the page layout's, under the header.
+        // view switch is the page layout's, in the header action rail.
         grid('flex shrink-0 flex-wrap items-center gap-3', [
           widgetBlock('list-toolbar', {
             basePath: '/hrm/org-chart',
@@ -136,27 +108,25 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
               }),
             ]
           : [
-              // The tree remains a panel because its canvas needs a named,
-              // bounded scrolling surface; unlike Directory it is not a
-              // native list table.
-              panel({
-                title: f('treeLabel'),
-                iconKey: 'network',
-                className: 'min-h-0 flex-1',
-                bodyClassName: 'min-h-0 overflow-auto p-4',
-                blocks: [
-                  widgetBlock('org-chart-tree', {
-                    chart: data.chart,
-                    personBaseHref: data.personBaseHref,
-                    labels: data.labels,
-                  }),
-                ],
-              }),
+              grid('min-h-0 flex-1', [
+                widgetBlock('org-chart-tree', {
+                  chart: data.chart,
+                  personBaseHref: data.personBaseHref,
+                  labels: data.labels,
+                  canManage: data.canManage,
+                  today: data.today,
+                  departmentOptions: data.departmentOptions,
+                }),
+              ]),
             ]),
       ]),
       {
         ...widgetBlock('hrm-org-chart-person', {
           selected: data.selected,
+          manager: data.manager,
+          canManage: data.canManage,
+          today: data.today,
+          departmentOptions: data.departmentOptions,
           closeHref: data.personCloseHref,
           labels: data.labels,
         }),

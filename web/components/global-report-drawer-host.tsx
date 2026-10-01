@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Skeleton, UrlDrawer, cn } from '@openbooks/ui'
@@ -20,6 +20,7 @@ import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../app/(app)/reports/ReportTable'
 import { AccountRegisterDrawer } from './account-register-drawer'
 import { useReportOverlay } from './navigation-provider'
+import { useDrawerResource } from './use-drawer-resource'
 
 /** Shell-level report drill stack: result rows over the report, native record over rows. */
 export function GlobalReportDrawerHost() {
@@ -38,10 +39,6 @@ export function GlobalReportDrawerHost() {
   const recordKind = params.get('reportRecordKind')
   const parsed = useMemo(() => parseReportDrillTarget(target), [target])
   const periodBrowsable = parsed?.kind === 'ledger' && Boolean(parsed.period)
-  const [data, setData] = useState<ReportDrillResponse | null>(null)
-  const [loadedTarget, setLoadedTarget] = useState<string | null>(null)
-  const [recordData, setRecordData] = useState<RelatedTransactionDrawerData | null>(null)
-  const [loadedRecord, setLoadedRecord] = useState<string | null>(null)
 
   const closeHref = useMemo(
     () => hrefWithoutKeys(pathname, query, [
@@ -55,73 +52,22 @@ export function GlobalReportDrawerHost() {
     [pathname, query],
   )
 
-  // Fetch identity is the drill target and its window — not the close href
-  // or a nested record. Opening a transaction over the drill must not
-  // discard rows the operator is still looking at.
-  const drillRequest = `${target ?? ''}:${page}:${drillPeriod ?? ''}:${drillFrom ?? ''}:${drillTo ?? ''}`
-  const [prevDrillRequest, setPrevDrillRequest] = useState(drillRequest)
-  if (prevDrillRequest !== drillRequest) {
-    setPrevDrillRequest(drillRequest)
-    setData(null)
-    setLoadedTarget(null)
-  }
-
-  useEffect(() => {
-    if (!target) return
-    const controller = new AbortController()
-    const search = new URLSearchParams({ target, page: String(page) })
-    if (drillPeriod) search.set('period', drillPeriod)
-    if (drillFrom) search.set('from', drillFrom)
-    if (drillTo) search.set('to', drillTo)
-    fetch(`/api/reports/drill?${search}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(t('drillDrawer.loadFailed'))
-        return response.json() as Promise<ReportDrillResponse>
-      })
-      .then((body) => {
-        setData(body)
-        setLoadedTarget(drillRequest)
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        toast.error(error instanceof Error ? error.message : t('drillDrawer.loadFailed'))
-        overlay.replace(closeHref)
-      })
-    return () => controller.abort()
-  }, [closeHref, drillFrom, drillPeriod, drillRequest, drillTo, overlay, page, t, target])
-
-  const recordRequest = `${recordKind ?? ''}:${recordId ?? ''}:${params.get('form') ?? ''}`
-  const [prevRecordRequest, setPrevRecordRequest] = useState(recordRequest)
-  if (prevRecordRequest !== recordRequest) {
-    setPrevRecordRequest(recordRequest)
-    setRecordData(null)
-    setLoadedRecord(null)
-  }
-
-  useEffect(() => {
-    if (!recordId || !recordKind) return
-    const controller = new AbortController()
-    const search = new URLSearchParams({ id: recordId, kind: recordKind })
-    const form = params.get('form')
-    if (form) search.set('form', form)
-    fetch(`/api/reports/transaction-drawer?${search}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(t('drillDrawer.recordLoadFailed'))
-        return response.json() as Promise<RelatedTransactionDrawerData>
-      })
-      .then((body) => {
-        setRecordData(body)
-        setLoadedRecord(recordRequest)
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        toast.error(error instanceof Error ? error.message : t('drillDrawer.recordLoadFailed'))
-        overlay.replace(recordCloseHref)
-      })
-    return () => controller.abort()
-  }, [overlay, params, recordCloseHref, recordId, recordKind, recordRequest, t])
-
-  const ready = data && loadedTarget === drillRequest
+  const drillSearch = new URLSearchParams({ target: target ?? '', page: String(page) })
+  if (drillPeriod) drillSearch.set('period', drillPeriod)
+  if (drillFrom) drillSearch.set('from', drillFrom)
+  if (drillTo) drillSearch.set('to', drillTo)
+  const data = useDrawerResource<ReportDrillResponse>(target ? `/api/reports/drill?${drillSearch}` : null, (error) => {
+    toast.error(error.message || t('drillDrawer.loadFailed'))
+    overlay.replace(closeHref)
+  })
+  const recordSearch = new URLSearchParams({ id: recordId ?? '', kind: recordKind ?? '' })
+  const form = params.get('form')
+  if (form) recordSearch.set('form', form)
+  const recordData = useDrawerResource<RelatedTransactionDrawerData>(recordId && recordKind ? `/api/reports/transaction-drawer?${recordSearch}` : null, (error) => {
+    toast.error(error.message || t('drillDrawer.recordLoadFailed'))
+    overlay.replace(recordCloseHref)
+  })
+  const ready = data !== null
   const currentParams = Object.fromEntries(params.entries())
   const periodFilter = periodBrowsable ? (
     <ReportFilterBar
@@ -210,7 +156,7 @@ export function GlobalReportDrawerHost() {
         </div>
       </UrlDrawer>
       {!journalPage ? <AccountRegisterDrawer /> : null}
-      {recordData && loadedRecord === recordRequest ? <RelatedTransactionDrawerClient data={recordData} /> : null}
+      {recordData ? <RelatedTransactionDrawerClient data={recordData} /> : null}
       <EntryFlyout />
     </>
   )

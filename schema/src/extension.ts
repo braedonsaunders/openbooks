@@ -342,5 +342,9 @@ export const auditLog = pgTable(
   (t) => [
     index("audit_log_row").on(t.tableName, t.rowId),
     index("audit_log_org_at").on(t.orgId, t.at),
+    index("audit_log_org_at_id").on(t.orgId, t.at.desc(), t.id.desc()),
+    // The forward migration stores id/action/actor/at as INCLUDE payload;
+    // Drizzle cannot express INCLUDE, so all covered columns are declared here.
+    index("audit_log_org_metadata").on(t.orgId, t.tableName, t.rowId, t.id, t.action, t.actorId, t.at),
   ],
 );

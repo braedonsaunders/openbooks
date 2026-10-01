@@ -12,12 +12,8 @@ import { NavIcon } from "../sidebar-nav";
  * Server-component friendly: no state, plain links.
  */
 
-/** Route-tab pill strip for the page header — the /ap "Overview | Bills"
- * idiom generalized. Tabs are ROUTES, not client state, so the promoted
- * cockpits keep their own pages and the org's nav customization decides which
- * tabs exist. The strip itself lives in ./tabs: it has to measure itself to
- * fold a long strip into a More menu, and that needs the client. Re-exported
- * here because every caller already imports the module-home kit. */
+/** Shared route navigation for bounded tasks and page views. The client strip
+ * retains configured order and folds overflow into the shared More menu. */
 export { ModuleHomeTabs } from "./tabs";
 export type { ModuleHomeTab } from "./tab-types";
 

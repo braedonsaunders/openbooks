@@ -7,7 +7,8 @@
     "evening": "Guten Abend"
   },
   "header": {
-    "customize": "Anpassen"
+    "customize": "Anpassen",
+    "description": "Ihre tägliche Arbeit, Finanzübersicht und Schnellzugriffe."
   },
   "widgets": {
     "operatingExpenses": "Betriebsaufwendungen",

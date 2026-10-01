@@ -7,7 +7,8 @@
     "evening": "Good evening"
   },
   "header": {
-    "customize": "Customize"
+    "customize": "Customize",
+    "description": "Your daily work, financial overview, and shortcuts."
   },
   "widgets": {
     "operatingExpenses": "Operating expenses",

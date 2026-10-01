@@ -14,10 +14,16 @@ export type ViewTab = {
   label: string
   prefix?: boolean
   carry?: string[]
+  /** Only named organization lenses can travel to a different sibling route. */
+  sharedCarry?: string[]
+  navigationSet?: string
 }
 
 /** A job's sibling views, in strip order. */
 export type ViewTabGroup = ViewTab[]
+
+/** Route ownership survives hiding a destination from its local strip. */
+export type ViewTabOwnership = { href: string; prefix?: boolean; group: number }
 
 function split(href: string): { path: string; query: URLSearchParams } {
   const [path = href, query = ''] = href.split('?')
@@ -45,8 +51,9 @@ function score(tab: ViewTab, pathname: string, search: URLSearchParams): number 
 
 function withCarry(tab: ViewTab, pathname: string, search: URLSearchParams): string {
   const { path, query } = split(tab.href)
-  if (path !== pathname || !tab.carry?.length) return tab.href
-  for (const key of tab.carry) {
+  const keys = path === pathname ? tab.carry : tab.sharedCarry
+  if (!keys?.length) return tab.href
+  for (const key of keys) {
     const value = search.get(key)
     if (value !== null && !query.has(key)) query.set(key, value)
   }
@@ -64,6 +71,7 @@ export function resolveViewTabs(
   groups: readonly ViewTabGroup[],
   pathname: string,
   search: URLSearchParams,
+  ownership?: readonly ViewTabOwnership[],
 ): ModuleHomeTab[] | null {
   let best: { group: ViewTabGroup; index: number; score: number } | null = null
   for (const group of groups) {
@@ -71,6 +79,14 @@ export function resolveViewTabs(
       const s = score(tab, pathname, search)
       if (s >= 0 && (best === null || s > best.score)) best = { group, index, score: s }
     }
+  }
+  if (best === null && ownership) {
+    const owner = ownership.filter((route) => {
+      const path = split(route.href).path
+      return path === pathname || (route.prefix && pathname.startsWith(`${path}/`))
+    }).sort((a, b) => split(b.href).path.length - split(a.href).path.length)[0]
+    const group = owner && groups[owner.group]
+    if (group) best = { group, index: -1, score: -1 }
   }
   if (best === null || best.group.length < 2) return null
   const { group, index } = best

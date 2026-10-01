@@ -170,3 +170,24 @@ test("the queue spec hands the forwarded params to the setup-section widget", as
     "?reasons=1&row=new yields a setup section with the New drawer open",
   );
 });
+
+
+test("the queue uses one shared list toolbar without a second titled panel or tab strip", async () => {
+  const { changeRequestQueueSpec } = await import("./view.ts");
+  const data = await loadChangeRequestQueue(HR_ADMIN, {});
+  const spec = changeRequestQueueSpec(data);
+  assert.equal(spec.layout, "list");
+  assert.ok(!spec.body.some((block) => block.kind === "panel"));
+  const list = spec.body.find((block) => block.kind === "widget" && block.widget === "registered-record-list");
+  assert.ok(list && list.kind === "widget", "the collection renders directly through the shared list");
+  assert.equal(list.props?.source, "hrm_change_requests");
+  const toolbar = list.props?.toolbar as Array<{ widget: string; props: { filters: unknown[] } }>;
+  assert.equal(toolbar.length, 1);
+  assert.equal(toolbar[0]?.widget, "list-toolbar");
+  assert.deepEqual(toolbar[0]?.props.filters, [{
+    paramKey: "status", label: data.segmentsLabel, allLabel: data.allLabel, options: data.segments,
+  }]);
+  const header = spec.header[0];
+  assert.ok(header?.kind === "page-header");
+  assert.ok(!header.actions?.some((action) => action.widget === "module-home-tabs"), "the shared page layout owns the sibling tabs");
+});

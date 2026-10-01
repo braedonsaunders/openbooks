@@ -10,7 +10,6 @@ import {
   link,
   page,
   pageHeader,
-  panel,
   ref,
   statTile,
   text,
@@ -26,7 +25,7 @@ import {
 } from '../../../../lib/hrm/ai-rails'
 
 /**
- * Payroll checks — the deterministic pre-run anomaly queue (HR-21).
+ * Payroll checks — the deterministic pre-run anomaly queue.
  *
  * Stat tiles (blocking, warnings, acknowledged this period,
  * false-positive rate), severity/kind/status filter chips, the flags
@@ -42,7 +41,7 @@ export function anomalyChecksSpec(data: AnomalyChecksData): PageSpec {
   return page({
     route: '/payroll/anomalies',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'space-y-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -97,35 +96,11 @@ export function anomalyChecksSpec(data: AnomalyChecksData): PageSpec {
           value: f('stats.falsePositiveRate'),
         }),
       ]),
-      widgetBlock('filter-chips', {
-        basePath: '/payroll/anomalies',
-        currentParams: data.currentParams,
-        paramKey: 'severity',
-        label: data.severityLabel,
-        allLabel: data.allLabel,
-        options: data.severityOptions,
-      }),
-      widgetBlock('filter-chips', {
-        basePath: '/payroll/anomalies',
-        currentParams: data.currentParams,
-        paramKey: 'kind',
-        label: data.kindLabel,
-        allLabel: data.allLabel,
-        options: data.kindOptions,
-      }),
-      widgetBlock('filter-chips', {
-        basePath: '/payroll/anomalies',
-        currentParams: data.currentParams,
-        paramKey: 'status',
-        label: data.statusLabel,
-        allLabel: data.allLabel,
-        options: data.statusOptions,
-      }),
-      panel({
-        title: f('listTitle'),
-        bodyClassName: 'min-h-0 overflow-y-auto p-0',
-        blocks: [
-          registeredListTable('payroll_anomalies', {
+
+      grid('space-y-3', [
+        registeredListTable(
+          'payroll_anomalies',
+          {
             variant: 'app',
             rows: f('rows'),
             rowKey: item('id'),
@@ -153,17 +128,43 @@ export function anomalyChecksSpec(data: AnomalyChecksData): PageSpec {
               title: f('emptyTitle'),
               description: f('emptyDescription'),
             },
-          }),
-          widgetBlock(
-            'payroll-anomaly-drawer',
-            {
-              flag: data.dialogFlag,
-              closeHref: data.dialogCloseHref,
-            },
-            f('dialogOpen'),
-          ),
-        ],
-      }),
+          },
+          [
+            widget('list-toolbar', {
+              basePath: '/payroll/anomalies',
+              currentParams: data.currentParams,
+              filters: [
+                {
+                  paramKey: 'severity',
+                  label: data.severityLabel,
+                  allLabel: data.allLabel,
+                  options: data.severityOptions,
+                },
+                {
+                  paramKey: 'kind',
+                  label: data.kindLabel,
+                  allLabel: data.allLabel,
+                  options: data.kindOptions,
+                },
+                {
+                  paramKey: 'status',
+                  label: data.statusLabel,
+                  allLabel: data.allLabel,
+                  options: data.statusOptions,
+                },
+              ],
+            }),
+          ],
+        ),
+        widgetBlock(
+          'payroll-anomaly-drawer',
+          {
+            flag: data.dialogFlag,
+            closeHref: data.dialogCloseHref,
+          },
+          f('dialogOpen'),
+        ),
+      ]),
     ],
   })
 }

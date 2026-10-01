@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
-import { Badge, Drawer, UrlDrawer, cn } from '@openbooks/ui'
+import { Badge, Drawer, cn } from '@openbooks/ui'
 import { Braces, Clock3, Database, Fingerprint, History, UserRound } from 'lucide-react'
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 import { auditEventDiffs, type AuditDiffRow } from '../../../../lib/audit-diff'
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
+import { AsyncUrlDrawer } from '../../../../components/async-url-drawer'
 
 export { auditEventDiffs } from '../../../../lib/audit-diff'
 
@@ -77,6 +78,25 @@ function CompactValue({ value, exactNumbers = false }: { value: unknown; exactNu
   return <span className={cn('break-words', isUuid(text) && 'font-mono text-xs text-slate-600 dark:text-slate-300')}>{text}</span>
 }
 
+function JsonCollectionItem({ item, index, total, depth, exactNumbers }: {
+  item: unknown; index: number; total: number; depth: number; exactNumbers: boolean
+}) {
+  const t = useTranslations('admin.audit.drawer')
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <details onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="group overflow-hidden rounded-lg border border-slate-200 bg-white open:shadow-sm dark:border-slate-800 dark:bg-slate-950/30">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 marker:hidden hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60">
+        <span className="truncate">{itemTitle(item, index, t('item'), (line) => t('lineItem', { line }))}</span>
+        <span className="shrink-0 text-xs font-normal text-slate-400">{t('itemPosition', { current: index + 1, total })}</span>
+      </summary>
+      {expanded ? <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+        <JsonValue value={item} depth={depth + 1} exactNumbers={exactNumbers} />
+      </div> : null}
+    </details>
+  )
+}
+
 export function JsonValue({ value, depth = 0, exactNumbers = false }: { value: unknown; depth?: number; exactNumbers?: boolean }) {
   const t = useTranslations('admin.audit.drawer')
   if (!Array.isArray(value) && !isObject(value)) return <CompactValue value={value} exactNumbers={exactNumbers} />
@@ -97,18 +117,7 @@ export function JsonValue({ value, depth = 0, exactNumbers = false }: { value: u
     return (
       <div className="space-y-2">
         {value.map((item, index) => (
-          <details
-            key={index}
-            className="group overflow-hidden rounded-lg border border-slate-200 bg-white open:shadow-sm dark:border-slate-800 dark:bg-slate-950/30"
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 marker:hidden hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60">
-              <span className="truncate">{itemTitle(item, index, t('item'), (line) => t('lineItem', { line }))}</span>
-              <span className="shrink-0 text-xs font-normal text-slate-400">{t('itemPosition', { current: index + 1, total: value.length })}</span>
-            </summary>
-            <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-              <JsonValue value={item} depth={depth + 1} exactNumbers={exactNumbers} />
-            </div>
-          </details>
+          <JsonCollectionItem key={index} item={item} index={index} total={value.length} depth={depth} exactNumbers={exactNumbers} />
         ))}
       </div>
     )
@@ -201,21 +210,21 @@ function MetadataCard({ icon, label, children }: { icon: React.ReactNode; label:
 }
 
 type AuditEventDrawerProps =
-  | { event: AuditEvent; closeHref: string; onClose?: never; stacked?: never }
+  | { event: AuditEvent | null; closeHref: string; eventId: string; error?: string | null; onRetry?: () => void; onClose?: never; stacked?: never }
   | { event: AuditEvent; onClose: () => void; stacked?: boolean; closeHref?: never }
 
 export function AuditEventDrawer(props: AuditEventDrawerProps) {
   const { event } = props
   const t = useTranslations('admin.audit')
   const format = useFormatter()
-  const changes = useMemo(() => isObject(event.changes) ? event.changes : {}, [event.changes])
+  const changes = useMemo(() => isObject(event?.changes) ? event.changes : {}, [event?.changes])
   const hasBefore = Object.hasOwn(changes, 'before')
   const hasAfter = Object.hasOwn(changes, 'after')
   const tabs: DrawerTab[] = ['changes', ...(hasBefore ? ['before' as const] : []), ...(hasAfter ? ['after' as const] : [])]
   const [activeTab, setActiveTab] = useState<DrawerTab>('changes')
-  const when = format.dateTime(new Date(event.at), { dateStyle: 'long', timeStyle: 'medium' })
-  const actionLabel = KNOWN_ACTIONS.has(event.action) ? t(`actions.${event.action}` as never) : humanize(event.action)
-  const actor = event.actorName ?? t('systemActor')
+  const when = event ? format.dateTime(new Date(event.at), { dateStyle: 'long', timeStyle: 'medium' }) : ''
+  const actionLabel = event ? (KNOWN_ACTIONS.has(event.action) ? t(`actions.${event.action}` as never) : humanize(event.action)) : ''
+  const actor = event?.actorName ?? t('systemActor')
   const context = Object.fromEntries(Object.entries(changes).filter(([key]) => CONTEXT_KEYS.has(key)))
 
   const diffs = useMemo(() => auditEventDiffs(changes), [changes])
@@ -227,14 +236,14 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
     && !(Array.isArray(value) && value.length === 2)
   )))
 
-  const title = (
+  const title = event ? (
     <span className="flex flex-wrap items-center gap-2.5">
       <span>{humanize(event.recordType)}</span>
       <Badge variant={ACTION_VARIANT[event.action] ?? 'secondary'}>{actionLabel}</Badge>
     </span>
-  )
-  const subtabs = <DrawerTabStrip tabs={tabs.map((tab) => ({ key: tab, label: t(`drawer.tabs.${tab}`) }))} activeKey={activeTab} onSelect={setActiveTab} ariaLabel={t('drawer.tabsAria')} />
-  const content = (
+  ) : t('title')
+  const subtabs = event ? <DrawerTabStrip tabs={tabs.map((tab) => ({ key: tab, label: t(`drawer.tabs.${tab}`) }))} activeKey={activeTab} onSelect={setActiveTab} ariaLabel={t('drawer.tabsAria')} /> : undefined
+  const content = event ? (
       <div className="space-y-6 pb-2">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetadataCard icon={<Clock3 size={14} aria-hidden />} label={t('drawer.when')}>{when}</MetadataCard>
@@ -291,20 +300,24 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
           </section>
         ) : null}
       </div>
-  )
+  ) : null
 
   if (typeof props.closeHref === 'string') {
     return (
-      <UrlDrawer
+      <AsyncUrlDrawer
         open
+        openKey={props.eventId}
+        pending={!event}
+        error={props.error}
+        onRetry={props.onRetry}
         closeHref={props.closeHref}
         size="2xl"
         title={title}
-        description={t('drawer.description', { actor, when })}
+        description={event ? t('drawer.description', { actor, when }) : undefined}
         subtabs={subtabs}
       >
         {content}
-      </UrlDrawer>
+      </AsyncUrlDrawer>
     )
   }
 

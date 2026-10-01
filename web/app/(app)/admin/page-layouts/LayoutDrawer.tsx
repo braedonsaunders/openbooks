@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -346,27 +348,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
   // The drawer chrome owns the tab strip, so the tabs sit above the scrolling
   // body instead of scrolling away with it.
   const subtabs = working ? (
-    <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('tabs.aria')}>
-      {TABS.map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          role="tab"
-          aria-selected={mode === tab}
-          onClick={() => {
-            setMode(tab)
-            if (tab === 'history') void loadHistory()
-          }}
-          className={
-            mode === tab
-              ? 'shrink-0 border-b-2 border-teal-600 px-3 py-3 text-sm font-medium text-teal-700 transition-colors dark:border-teal-400 dark:text-teal-300'
-              : 'shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
-          }
-        >
-          {t(`tabs.${tab}`)}
-        </button>
-      ))}
-    </nav>
+    <RecordTabs label={t('tabs.aria')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={mode} onChange={(tab) => { setMode(tab); if (tab === 'history') void loadHistory() }} />
   ) : undefined
 
   return (

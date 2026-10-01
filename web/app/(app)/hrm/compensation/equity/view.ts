@@ -10,7 +10,6 @@ import {
   field as item,
   page,
   pageHeader,
-  panel,
   statTile,
   text,
   widget,
@@ -38,7 +37,7 @@ export function equitySpec(
   return page({
     route: '/hrm/compensation/equity',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col gap-4',
+    bodyClassName: 'space-y-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -105,42 +104,37 @@ export function equitySpec(
         when: f('hasContent'),
       },
       {
-        ...panel({
-          title: f('categoriesTitle'),
-          bodyClassName: 'min-h-0 overflow-y-auto p-0',
-          className: 'min-h-0 flex-1',
-          blocks: [
-            registeredListTable('hrm_compensation_equity', {
-              variant: 'app',
-              rows: f('categories'),
-              rowKey: item('id'),
-              empty: { title: f('categoriesEmpty') },
-              columns: [
-                column('category', text(item('level'))),
-                column('counts', text(item('counts')), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-                column('mean', text(item('mean')), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-                column('median', text(item('median')), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-                column('unexplained', text(item('unexplained')), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-                column(
-                  'flag',
-                  badge(item('flag'), { variant: item('flagTone') }),
-                ),
-              ],
-            }),
-          ],
-        }),
+        ...grid('space-y-3', [
+          registeredListTable('hrm_compensation_equity', {
+            variant: 'app',
+            rows: f('categories'),
+            rowKey: item('id'),
+            empty: { title: f('categoriesEmpty') },
+            columns: [
+              column('category', text(item('level'))),
+              column('counts', text(item('counts')), {
+                align: 'right',
+                className: 'tabular-nums',
+              }),
+              column('mean', text(item('mean')), {
+                align: 'right',
+                className: 'tabular-nums',
+              }),
+              column('median', text(item('median')), {
+                align: 'right',
+                className: 'tabular-nums',
+              }),
+              column('unexplained', text(item('unexplained')), {
+                align: 'right',
+                className: 'tabular-nums',
+              }),
+              column(
+                'flag',
+                badge(item('flag'), { variant: item('flagTone') }),
+              ),
+            ],
+          }),
+        ]),
         when: f('hasContent'),
       },
       // The snapshot-generate dialog (?generate=1): the loader owns the

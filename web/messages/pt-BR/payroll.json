@@ -11,7 +11,8 @@
       "runs": "Folhas",
       "remittances": "Recolhimentos",
       "separations": "Desligamentos",
-      "yearEnd": "Fechamento anual"
+      "yearEnd": "Fechamento anual",
+      "checks": "Verificações"
     },
     "actions": {
       "viewRuns": "Folhas",

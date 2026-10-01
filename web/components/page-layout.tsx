@@ -1,4 +1,4 @@
-import { cn } from '@openbooks/ui'
+import { cn, PageHeaderNavigationProvider } from '@openbooks/ui'
 import { FadeInBody, FadeInHeader } from './page-layout-motion'
 import { PageViewTabs } from './module-home/view-tabs'
 
@@ -28,8 +28,8 @@ export function PageContainer({
  * List page layout — header (title/actions/search/filter chips) is sticky;
  * only the table area scrolls. The header fades in on mount; the body
  * fades in slightly behind it. When a route layout provides sibling view
- * tabs (see module-home/view-tabs), their strip renders directly under the
- * page header — here, and only here, so every sibling page places it alike.
+ * tabs (see module-home/view-tabs), the header provider places the shared
+ * switch in PageHeader's action rail, consistently across sibling pages.
  *
  *   <ListPageLayout
  *     header={...}        // PageHeader, search/filter row, etc
@@ -53,8 +53,7 @@ export function ListPageLayout({
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
         <FadeInHeader className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
-          {header}
-          <PageViewTabs />
+          <PageHeaderNavigationProvider navigation={<PageViewTabs />}>{header}</PageHeaderNavigationProvider>
         </FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
@@ -95,11 +94,8 @@ export function DetailPageLayout({
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <FadeInHeader className="mx-auto max-w-screen-2xl px-3 pt-3 sm:px-6 sm:pt-5">
-          {header}
+          <PageHeaderNavigationProvider navigation={<PageViewTabs />}>{header}</PageHeaderNavigationProvider>
           {alerts ? <div className="mt-2.5 space-y-2 sm:mt-3">{alerts}</div> : null}
-          <div className="mt-2.5 empty:hidden sm:mt-3">
-            <PageViewTabs />
-          </div>
           {subtabs ? <div className="mt-2.5 sm:mt-4">{subtabs}</div> : null}
         </FadeInHeader>
       </div>
@@ -122,6 +118,9 @@ export function WizardLayout({
   children,
   className,
   wide = false,
+  steps,
+  currentStep,
+  progressLabel,
 }: {
   header: React.ReactNode
   // Optional: when omitted, no footer bar renders (the body runs to the bottom)
@@ -132,12 +131,38 @@ export function WizardLayout({
   // Full-width content column (matches DetailPageLayout). Used by read-only
   // record views; editable forms stay in the narrower, focused column.
   wide?: boolean
+  /** Ordered, read-only progress; step transitions remain owned by the form. */
+  steps?: readonly { key: string; label: string }[]
+  currentStep?: string
+  progressLabel?: string
 }) {
   const maxW = wide ? 'max-w-screen-2xl' : 'max-w-3xl'
   return (
     <div className={cn('flex h-full min-h-0 flex-col', className)}>
       <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className={cn('mx-auto px-4 py-4 sm:px-6', maxW)}>{header}</FadeInHeader>
+        <FadeInHeader className={cn('mx-auto space-y-4 px-4 py-4 sm:px-6', maxW)}>
+          {header}
+          {steps && (
+            <ol aria-label={progressLabel} className="flex gap-2">
+              {steps.map((item, index) => {
+                const activeIndex = steps.findIndex((candidate) => candidate.key === currentStep)
+                const active = item.key === currentStep
+                const complete = activeIndex > index
+                return (
+                  <li key={item.key} aria-current={active ? 'step' : undefined}
+                    className={cn('flex min-w-0 flex-1 flex-col gap-2 rounded-lg border px-2 py-2 text-xs sm:flex-row sm:items-center sm:px-3 sm:text-sm',
+                      active ? 'border-teal-300 bg-teal-50 font-medium text-teal-800 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400')}>
+                    <span aria-hidden="true" className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full text-xs',
+                      active || complete ? 'bg-teal-600 text-white' : 'bg-slate-100 dark:bg-slate-800')}>
+                      {complete ? '✓' : index + 1}
+                    </span>
+                    <span>{item.label}</span>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
         <FadeInBody className={cn('mx-auto space-y-5 p-4 sm:p-6', maxW)}>{children}</FadeInBody>

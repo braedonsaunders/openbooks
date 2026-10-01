@@ -13,7 +13,7 @@ export function DrawerTabStrip<T extends string>({
   onSelect,
   ariaLabel,
 }: {
-  tabs: { key: T; label: ReactNode }[]
+  tabs: { key: T; label: ReactNode; count?: number; disabled?: boolean }[]
   activeKey: T
   onSelect: (key: T) => void
   ariaLabel: string
@@ -24,15 +24,17 @@ export function DrawerTabStrip<T extends string>({
         <button
           key={tab.key}
           type="button"
+          disabled={tab.disabled}
           aria-pressed={activeKey === tab.key}
           onClick={() => onSelect(tab.key)}
-          className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
+          className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
             activeKey === tab.key
               ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
               : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
           }`}
         >
           {tab.label}
+          {typeof tab.count === 'number' ? <span className="rounded-full bg-slate-100 px-1.5 text-xs tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400">{tab.count}</span> : null}
         </button>
       ))}
     </nav>

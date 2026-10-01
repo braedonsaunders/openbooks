@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
-import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '../../../lib/authz'
 
 import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
@@ -57,19 +57,11 @@ export async function loadDashboard(): Promise<DashboardData | null> {
 export function dashboardSpec(data: DashboardData): PageSpec {
   return page({
     route: '/dashboard',
-    // The native page renders inside PageContainer (not the sticky
-    // ListPageLayout chrome), so the spec is bare and places the container
-    // itself through the `page-container` frame — the platform-hub precedent.
-    layout: 'bare',
-    body: [
-      frame('page-container', [
-        // Exact wrapper from page.tsx: <div className="space-y-5">.
-        grid('space-y-5', [
-          widgetBlock('dashboard-header', { greeting: data.greeting, name: data.name }),
-          // No props: the slot re-derives everything from the session.
-          widgetBlock('dashboard-grid'),
-        ]),
-      ]),
-    ],
+    layout: 'list',
+    bodyClassName: 'flex min-h-full min-h-0 flex-col gap-4',
+    header: [widgetBlock('dashboard-header', { greeting: data.greeting, name: data.name })],
+    // The same cockpit layout as Customers, AR, and AP, with the user's
+    // configured widget canvas and its authorized actions resolved by the host.
+    body: [widgetBlock('dashboard-grid')],
   })
 }

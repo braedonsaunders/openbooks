@@ -24,6 +24,9 @@ import { displayListViewName } from '../lib/customization/display'
 import { columnDescriptors, documentWhere, type ListColDesc } from '../lib/customization/list-query'
 import { enabledListSource, listOrderClause, listSource } from '../lib/list/sources'
 import { RelatedPartyLink } from './related-party-link'
+import { ListDrawerLink } from './list-drawer-link'
+import { ListDrawerHost } from './list-drawer-host'
+import { listDrawerRoute, type NativeListDrawerData } from '../lib/list/drawer-routes'
 
 /**
  * The universal record list — one component that renders EVERY documents-backed
@@ -75,6 +78,7 @@ export async function RecordListView({
   canManage,
   sp,
   drawer,
+  nativeDrawer,
   emptyAction,
   renderRowActions,
 }: {
@@ -86,6 +90,7 @@ export async function RecordListView({
   sp: Record<string, string | string[] | undefined>
   /** Page-resolved flyout (rendered when e.g. ?doc=/?payment= is set). */
   drawer?: ReactNode
+  nativeDrawer?: NativeListDrawerData | null
   /** Action shown in the empty state (usually the New button). */
   emptyAction?: ReactNode
   /** Per-row actions for the `_actions` column, if the view includes it. */
@@ -284,12 +289,12 @@ export async function RecordListView({
           <TableCell key={c.key} className="font-mono text-[13px] font-semibold">
             <div className="flex items-center gap-2">
               {source.multiKind ? <DocTypeBadge kind={String(row.kind)} /> : null}
-              <Link
+              <ListDrawerLink
                 href={(openHref(String(row.id)))}
                 className="text-teal-700 hover:underline dark:text-teal-300"
               >
                 {String(v ?? '')}
-              </Link>
+              </ListDrawerLink>
             </div>
           </TableCell>
         )
@@ -320,15 +325,15 @@ export async function RecordListView({
       case 'actions':
         return (
           <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
-            {renderRowActions ? renderRowActions(row) : (
-              <Link
+            {renderRowActions ? renderRowActions({ ...row, openHref: openHref(String(row.id)) }) : (
+              <ListDrawerLink
                 href={(openHref(String(row.id)))}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
                 aria-label={tCommon('actions.open')}
                 title={tCommon('actions.open')}
               >
                 <Eye size={15} />
-              </Link>
+              </ListDrawerLink>
             )}
           </TableCell>
         )
@@ -431,6 +436,8 @@ export async function RecordListView({
           </div>
         </div>
       )}
+      {listDrawerRoute(recordType)?.path === basePath ? <ListDrawerHost source={recordType}
+        initial={nativeDrawer} initialId={pickString(sp[source.drawerParam])} initialForm={pickString(sp.form)} /> : null}
       {drawer}
     </>
   )

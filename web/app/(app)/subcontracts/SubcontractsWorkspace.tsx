@@ -1,5 +1,7 @@
 "use client";
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -284,11 +286,7 @@ export function SubcontractsWorkspace({
               <StatusBadge status={detail.subcontract.status} />
               <LifecycleActions detail={detail} permissions={permissions} busy={busy} act={act} />
             </div>
-            <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" role="tablist">
-              {(["overview", "sov", "changes", "applications", "retainage", "controls"] as Tab[]).map((key) => (
-                <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={cn("-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium capitalize", tab === key ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300" : "border-transparent text-slate-500")}>{t(`tabs.${key}`)}</button>
-              ))}
-            </nav>
+            <RecordTabs label={t('register.drawerTitle')} tabs={(["overview", "sov", "changes", "applications", "retainage", "controls"] as Tab[]).map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab} className="border-b border-slate-200 dark:border-slate-800" />
             {tab === "overview" ? <Overview key={`${detail.subcontract.id}:${detail.subcontract.updatedAt}`} detail={detail} money={money} canEdit={permissions.create} busy={busy} act={act} /> : null}
             {tab === "sov" ? <SovSection detail={detail} accounts={expenseAccounts} canCreate={permissions.create} busy={busy} act={act} money={money} /> : null}
             {tab === "changes" ? <ChangesSection detail={detail} permissions={permissions} busy={busy} act={act} money={money} /> : null}

@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { NetInvestmentButton } from '@/app/(app)/accounting/changes/NetInvestmentButton'
 
 import { LossOfControlButton } from '@/app/(app)/accounting/changes/LossOfControlButton'
@@ -345,31 +347,7 @@ export function SetupDrawer({
       stacked={stacked}
       title={creating ? t('drawer.newTitle', { name: entityTitle }) : t('drawer.editTitle', { name: entityTitle })}
       subtabs={!creating && recordTabs.length > 0 ? (
-        <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('drawer.tabs.ariaLabel')}>
-          {[
-            { key: 'details', label: t('drawer.tabs.details') },
-            ...recordTabs,
-          ].map((tab) => {
-            const active = tab.key === 'details' ? !nestedTabActive : activeNestedTab?.key === tab.key
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => selectTab(tab.key)}
-                className={cn(
-                  'shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-                  active
-                    ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-                )}
-              >
-                {tab.label}
-              </button>
-            )
-          })}
-        </nav>
+        <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
       ) : undefined}
       headerActions={
         !nestedTabActive && !entity.readOnly ? <Button disabled={busy} onClick={save}>

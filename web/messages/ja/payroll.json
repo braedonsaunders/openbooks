@@ -11,7 +11,8 @@
       "runs": "給与計算",
       "remittances": "納付",
       "separations": "退職",
-      "yearEnd": "年末調整"
+      "yearEnd": "年末調整",
+      "checks": "チェック"
     },
     "actions": {
       "viewRuns": "給与計算",

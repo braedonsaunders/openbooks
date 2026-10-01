@@ -203,8 +203,18 @@ Corollaries:
   `DetailPageLayout`), one house-style New button, no duplicate header actions.
 - When a shared component almost fits, extend it (new prop/slot) — never fork
   it or approximate it with local markup.
+- An asynchronously loaded record uses **one drawer shell**. A native record
+  component that owns its dialog mounts once its full payload is ready (see
+  `web/components/list-drawer-host.tsx`); never wrap it in a loading dialog.
+  A host that owns the shell keeps that shell mounted through
+  loading, success, refusal and retry. Use `web/components/async-url-drawer.tsx`
+  for URL-driven async drawers; change its body and chrome when data arrives.
+  Never branch between a skeleton `Drawer`/`UrlDrawer` and a loaded component
+  that creates a second drawer. The request key identifies the record, not
+  the loading phase. Verify that the same dialog DOM node survives resolution
+  and retry, with focus and scroll lock retained. The audit event host at
+  `web/app/(app)/admin/audit/AuditEventHost.tsx` is the exemplar.
 
 Litmus test before writing code: "Which existing screen already does this kind
 of thing, and am I using its exact components?" If you cannot name the
 exemplar file, stop and go find it.
-

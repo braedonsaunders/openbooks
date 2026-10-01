@@ -40,12 +40,15 @@ export const HRM_DOCUMENT_WIDGETS = {
     if (!author) return null
     return <SurveysAuthorDialog author={author} />
   },
-  /** The org-chart tree: collapsible nodes, vacancy dashes, as-of
-   *  search, and the narrow-screen card stack. Loader-resolved props
+  /** The org-chart tree: connected cards, collapsible branches, as-of
+   *  search, and native change-request authoring. Loader-resolved props
    *  only — no org or user crosses into the widget. */
   'org-chart-tree': (props) => (
     <OrgChartTree
       chart={props.chart as ComponentProps<typeof OrgChartTree>['chart']}
+      canManage={props.canManage === true}
+      today={str(props, 'today')}
+      departmentOptions={props.departmentOptions as ComponentProps<typeof OrgChartTree>['departmentOptions']}
       personBaseHref={str(props, 'personBaseHref') ?? '/hrm/org-chart'}
       labels={(props.labels as ComponentProps<typeof OrgChartTree>['labels']) ?? {}}
     />
@@ -57,6 +60,10 @@ export const HRM_DOCUMENT_WIDGETS = {
     return (
       <OrgChartPerson
         selected={selected}
+        manager={props.manager as ComponentProps<typeof OrgChartPerson>['manager']}
+        canManage={props.canManage === true}
+        today={str(props, 'today')}
+        departmentOptions={props.departmentOptions as ComponentProps<typeof OrgChartPerson>['departmentOptions']}
         closeHref={str(props, 'closeHref') ?? '/hrm/org-chart'}
         labels={(props.labels as ComponentProps<typeof OrgChartPerson>['labels']) ?? {}}
       />

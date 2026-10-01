@@ -13,9 +13,10 @@ export async function SandboxBanner({
   name?: string;
   kind?: "sandbox" | "preview";
 }) {
+  // Sample companies are independent tenants, with no production sandbox to exit.
+  if (kind === "preview") return null;
   const t = await getTranslations("shell.sandboxBanner");
-  const isPreview = kind === "preview";
-  const environment = isPreview ? t("sampleCompany") : t("sandbox");
+  const environment = t("sandbox");
   return (
     <div className="flex items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-center text-sm font-medium text-amber-950">
       <span>

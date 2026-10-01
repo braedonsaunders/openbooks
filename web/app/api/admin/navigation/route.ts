@@ -7,20 +7,30 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, type Authz } from '../../../../lib/authz'
 import { MODULE_BY_KEY, type OrgNavConfig } from '../../../../lib/nav/registry'
+import { LOCAL_NAVIGATION } from '@openbooks/engine/navigation'
+import { listActiveExtensionContributions } from '@openbooks/engine/extensions/navigation'
+import { safeNavigationHref, validLocalNavigationPreferences } from '../../../../lib/nav/preferences'
+import { nativeAppNavigationCatalog } from '../../../../lib/nav/native-apps'
 
 const navItemBodySchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("module"), moduleKey: z.string(), label: z.string().optional(), iconKey: z.string().optional(), hidden: z.boolean().optional(), mobile: z.boolean().optional() }),
+  z.object({ kind: z.literal("module"), moduleKey: z.string(), placement: z.literal('custom').optional(), label: z.string().trim().min(1).max(100).optional(), iconKey: z.string().optional(), hidden: z.boolean().optional(), mobile: z.boolean().optional() }),
   z.object({ kind: z.literal("app"), appKey: z.string(), label: z.string().optional(), iconKey: z.string().optional(), hidden: z.boolean().optional(), mobile: z.boolean().optional() }),
   z.object({ kind: z.literal("link"), href: z.string().min(1), label: z.string().min(1), iconKey: z.string().optional(), hidden: z.boolean().optional(), mobile: z.boolean().optional(), extensionKey: z.string().optional(), requiredPermission: z.string().optional(), retiredAt: z.string().datetime({ offset: true }).optional() }),
 ]);
 const requestBodySchema = z.object({
   config: z.object({
     version: z.literal(2),
+    architectureVersion: z.literal(1).optional(),
+    localNavigation: z.record(z.string(), z.object({ items: z.array(z.object({ href: z.string().min(1).max(512), label: z.string().trim().min(1).max(100).optional(), hidden: z.boolean().optional() })).max(64) })).optional(),
     groups: z.array(z.object({ id: z.string().min(1).max(100), label: z.string().min(1).max(80), items: z.array(navItemBodySchema) })).min(1).max(32),
   }),
   expectedUpdatedAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
+
+class NavigationSaveRefusal extends Error {
+  readonly status = 409
+}
 
 export const runtime = 'nodejs'
 
@@ -62,7 +72,7 @@ function validate(config: unknown): config is OrgNavConfig {
       } else if (i.kind === 'link') {
         if (
           typeof i.href !== 'string' ||
-          (!i.href.startsWith('/') && !i.href.startsWith('https://')) ||
+          !safeNavigationHref(i.href) ||
           typeof i.label !== 'string' ||
           !i.label.trim() ||
           i.label.length > 100
@@ -132,6 +142,27 @@ export const PUT = defineRoute({
       const before = (await tx.execute<{ id: string; config: OrgNavConfig; updated_at: Date }>(sql`
         select id, config, updated_at from org_nav_configs where org_id = ${user.orgId} limit 1 for update
       `))
+      if (config.localNavigation) {
+        const catalog = new Map(LOCAL_NAVIGATION.map((set) => [set.id, new Set(set.tabs.map((tab) => tab.href))]))
+        for (const app of await nativeAppNavigationCatalog(user.orgId, tx)) catalog.set(app.id, new Set(app.tabs.map((tab) => tab.href)))
+        for (const entry of await listActiveExtensionContributions(user.orgId, tx)) {
+          if (entry.contribution.kind === 'nav' && entry.contribution.workspaceKey) catalog.get(entry.contribution.workspaceKey)?.add(entry.contribution.href)
+        }
+        // Retired extension screens keep their stored presentation preferences.
+        // They may be preserved unchanged, but only live destinations can be edited.
+        for (const [key, savedPreference] of Object.entries(before.rows[0]?.config.localNavigation ?? {})) {
+          const draft = config.localNavigation[key]
+          if (draft?.items.length === savedPreference.items.length && draft.items.every((item, index) => {
+            const saved = savedPreference.items[index]!
+            return item.href === saved.href && item.label === saved.label && item.hidden === saved.hidden
+          })) {
+            const hrefs = catalog.get(key) ?? new Set<string>()
+            for (const item of savedPreference.items) hrefs.add(item.href)
+            catalog.set(key, hrefs)
+          }
+        }
+        if (!validLocalNavigationPreferences(config.localNavigation, catalog)) return { invalid: true as const, conflict: false as const }
+      }
       // Optimistic fence for the full-config write: the editor sends the row
       // version it loaded, compared while holding the row lock. updated_at is
       // the compare token (millisecond compare after a Date round trip — two
@@ -161,7 +192,8 @@ export const PUT = defineRoute({
         where org_nav_configs.org_id = ${user.orgId}
         returning id, updated_at
       `))
-      await tx.execute(sql`
+      if (!saved.rows[0]) throw new NavigationSaveRefusal('Navigation was not saved; reload the editor and try again')
+      const audited = await tx.execute<{ id: string }>(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (
           ${user.orgId},
@@ -171,12 +203,15 @@ export const PUT = defineRoute({
           ${JSON.stringify({ before: before.rows[0]?.config ?? null, after: config })}::jsonb,
           ${user.id}
         )
+        returning id
       `)
-      return { conflict: false as const, id: saved.rows[0]!.id, updatedAt: saved.rows[0]!.updated_at }
+      if (!audited.rows[0]) throw new NavigationSaveRefusal('Navigation was not saved because audit evidence could not be recorded; reload the editor and try again')
+      return { invalid: false as const, conflict: false as const, id: saved.rows[0]!.id, updatedAt: saved.rows[0]!.updated_at }
     })
     if (outcome.conflict) {
       return NextResponse.json({ error: 'navigation config changed since loaded' }, { status: 409 })
     }
+    if (outcome.invalid) return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
     return NextResponse.json({ ok: true, revision: new Date(outcome.updatedAt).toISOString() })
   },
 });

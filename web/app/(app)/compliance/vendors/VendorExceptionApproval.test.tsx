@@ -129,7 +129,7 @@ async function mountExceptions(currentUserId: string) {
   });
   await tick();
   await tick();
-  const exceptionsTab = [...document.querySelectorAll('button[role="tab"]')].find((b) =>
+  const exceptionsTab = [...document.querySelectorAll('button[aria-pressed]')].find((b) =>
     b.textContent?.startsWith("Exceptions"),
   ) as HTMLButtonElement | undefined;
   assert.ok(exceptionsTab, "the exceptions tab renders");

@@ -758,8 +758,8 @@ export function AssistantApp({
   ]
 
   const sidebar = (
-    <div className="flex h-full flex-col">
-      <div className="p-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 p-3">
         {aiEnabled ? (
           <Link href="/assistant" className="block">
             <Button variant="outline" className="w-full justify-start gap-2">
@@ -871,7 +871,7 @@ export function AssistantApp({
   return (
     <div className="flex h-full min-h-0 flex-1">
       {/* Desktop sidebar */}
-      <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
+      <aside className="hidden min-h-0 w-72 shrink-0 overflow-hidden border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
         {sidebar}
       </aside>
 

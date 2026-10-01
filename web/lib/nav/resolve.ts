@@ -1,23 +1,25 @@
 import 'server-only'
 import { listActiveExtensionContributions } from '@openbooks/engine/src/extensions/projections.ts'
 import { sql } from 'drizzle-orm'
-import { hiddenNavModules, resolvedFeatureState } from '../features'
+import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '../features'
+import { featureAwareNavConfig, reconcileNavConfig } from '@openbooks/engine/navigation'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
 import { essentialsWorkspace } from '../workspace-presentation'
 import { essentialsNavConfig } from './essentials'
+import { readNavigationConfig } from './config'
+import { visibleNavigationHref } from './access'
+export { navPathname } from './access'
 import {
   ADMIN_HUB_PERMISSIONS,
   ADMIN_MODULE_KEY,
   MODULE_BY_KEY,
   NAV_GROUP_BY_KEY,
   NAV_GROUP_HOMES,
-  NAV_MODULES,
   NAV_SUBGROUPS,
   defaultNavConfig,
   type NavGroupKey,
   type NavAppOption,
-  type OrgNavConfig,
 } from './registry'
 
 /**
@@ -65,17 +67,6 @@ export function resolveModuleShortLabel(
   }
 }
 
-/**
- * Same-origin pathname of a nav href: strips the ?query and #fragment so
- * feature gating compares module boundaries, not decorations. Absolute
- * (https://) links are returned untouched — they never match a module home.
- */
-export function navPathname(href: string): string {
-  if (!href.startsWith('/')) return href
-  const end = href.search(/[?#]/)
-  return end === -1 ? href : href.slice(0, end)
-}
-
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
@@ -84,7 +75,7 @@ export async function resolveNav(
   has?: (key: string) => boolean,
 ): Promise<SidebarNavGroup[]> {
   const [r, appResult, featureState, extensionContributions] = await Promise.all([
-    db.execute<{ config: OrgNavConfig }>(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`),
+    readNavigationConfig(orgId),
     db.execute<NavAppOption>(sql`
       select a.key,
              coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
@@ -97,11 +88,11 @@ export async function resolveNav(
     resolvedFeatureState(orgId),
     listActiveExtensionContributions(orgId),
   ])
-  const saved = r.rows[0]?.config
+  const saved = r?.config
   const baseConfig = saved?.version === 2
-    ? layerInNewModules(saved)
+    ? reconcileNavConfig(saved)
     : await essentialsWorkspace(orgId) ? essentialsNavConfig() : defaultNavConfig()
-  const config = baseConfig
+  const config = featureAwareNavConfig(baseConfig, featureEnabled(featureState, 'hrm'))
   const appByKey = new Map(appResult.rows.map((app) => [app.key, app]))
   const featureHiddenModules = hiddenNavModules(featureState)
 
@@ -113,17 +104,20 @@ export async function resolveNav(
       if (item.kind === 'module') {
         const mod = MODULE_BY_KEY.get(item.moduleKey)
         if (!mod) continue
+        if (mod.homeOnly && g.id === mod.group && item.placement !== 'custom') continue
         if (featureHiddenModules.has(mod.key)) continue
+        if (mod.featureKey && !featureEnabled(featureState, mod.featureKey)) continue
         // The collapsed Administration entry has no single permission — it
         // opens the /admin hub, which is reachable by anyone holding any
         // admin-ish permission (each card there is re-gated individually).
         if (mod.key === ADMIN_MODULE_KEY) {
           if (!ADMIN_HUB_PERMISSIONS.some((p) => can(p))) continue
-        } else if (!can(mod.requiredPermission)) continue
+        } else if (mod.requiredPermissionsAny ? !mod.requiredPermissionsAny.some((permission) => can(permission)) : !can(mod.requiredPermission)) continue
         // A saved label that still equals the registry default counts as the
         // catalog label (org configs snapshot English defaults at save time).
         const useCatalogLabel = !(item.label && item.label !== mod.label)
-        const fullLabel = item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`) || mod.label
+        const translated = has && !has(`modules.${mod.key}`) ? '' : t(`modules.${mod.key}`)
+        const fullLabel = item.label && item.label !== mod.label ? item.label : translated && translated !== `modules.${mod.key}` && translated !== `nav.modules.${mod.key}` ? translated : mod.label
         items.push({
           href: mod.href,
           label: fullLabel,
@@ -136,7 +130,7 @@ export async function resolveNav(
           // Nested sub-menu label (registry-driven; desktop sidebar renders it
           // collapsible, the top nav as a flyout, flat consumers ignore it).
           // subgroupHref makes the sub-menu header itself navigate.
-          ...(mod.subgroup && g.id === mod.group
+          ...(mod.subgroup && (g.id === mod.group || (mod.group === 'hrm' && g.id === 'operations' && !featureEnabled(featureState, 'hrm')))
             ? {
                 subgroup: t(`groups.${mod.subgroup.toLowerCase()}`) || mod.subgroup,
                 ...(NAV_SUBGROUPS[mod.subgroup]
@@ -153,7 +147,7 @@ export async function resolveNav(
             : {}),
         })
       } else if (item.kind === 'app') {
-        if (!can('apps.use')) continue
+        if (!can('apps.use') || !featureEnabled(featureState, 'apps')) continue
         const app = appByKey.get(item.appKey)
         if (!app) continue
         items.push({
@@ -163,12 +157,7 @@ export async function resolveNav(
           mobile: item.mobile,
         })
       } else {
-        // Gate custom links by their same-origin PATHNAME: a saved link like
-        // /projects?tab=jobs still lands inside the Projects module, so with
-        // Projects disabled it must hide exactly like /projects itself. Query
-        // strings and fragments never change which module a link enters.
-        const linkPath = navPathname(item.href);
-        if (NAV_MODULES.some((module) => featureHiddenModules.has(module.key) && (linkPath === module.href || linkPath.startsWith(`${module.href}/`)))) continue
+        if (!visibleNavigationHref(item.href, can, featureState)) continue
         if (item.extensionKey) {
           const entry = extensionContributions.find((entry) => entry.extensionKey === item.extensionKey && entry.contribution.kind === 'nav' && entry.contribution.href === item.href)
           if (!entry || entry.contribution.kind !== 'nav' || !can(entry.contribution.requiredPermission)) continue
@@ -185,7 +174,14 @@ export async function resolveNav(
       const defaultGroup = NAV_GROUP_BY_KEY.get(g.id as NavGroupKey)
       // Group header navigation: registry groups with a module home get a
       // groupHref (custom org groups never match and stay plain toggles).
-      const groupHref = NAV_GROUP_HOMES[g.id as NavGroupKey]
+      const home = NAV_GROUP_HOMES[g.id as NavGroupKey]
+      const homePermission: Record<string, string[]> = {
+        customers: ['ar.read', 'crm.read', 'crm.opportunities.read', 'parties.read'],
+        purchasing: ['ap.read', 'parties.read', 'expenses.read'],
+        banking: ['banking.read'], accounting: ['gl.read', 'close.read', 'reports.read'],
+        insights: ['reports.read'], hrm: ['hrm.employment.read'], settings: [...ADMIN_HUB_PERMISSIONS],
+      }
+      const groupHref = home && (!homePermission[g.id] || homePermission[g.id]!.some((permission) => can(permission))) && (g.id !== 'hrm' || featureEnabled(featureState, 'hrm')) ? home : undefined
       groups.push({
         id: g.id,
         label: defaultGroup && g.label === defaultGroup.label ? t(`groups.${g.id}`) : g.label,
@@ -252,25 +248,4 @@ async function recordTypeNavItems(
     // custom_record_types not migrated yet — the shell must keep rendering.
     return []
   }
-}
-
-/** Modules shipped after the org saved its config get appended to their default group. */
-function layerInNewModules(config: OrgNavConfig): OrgNavConfig {
-  const present = new Set(
-    config.groups.flatMap((g) => g.items.flatMap((i) => (i.kind === 'module' ? [i.moduleKey] : []))),
-  )
-  const missing = NAV_MODULES.filter((m) => !present.has(m.key))
-  if (missing.length === 0) return config
-  const groups = config.groups.map((g) => ({ ...g, items: [...g.items] }))
-  for (const m of missing) {
-    let g = groups.find((x) => x.id === m.group)
-    if (!g) {
-      const defaultGroup = NAV_GROUP_BY_KEY.get(m.group)
-      if (!defaultGroup) throw new Error(`Unknown navigation group: ${m.group}`)
-      g = { id: defaultGroup.key, label: defaultGroup.label, items: [] }
-      groups.push(g)
-    }
-    g.items.push({ kind: 'module', moduleKey: m.key })
-  }
-  return { version: 2, groups }
 }

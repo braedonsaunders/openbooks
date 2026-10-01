@@ -7,7 +7,8 @@
     "evening": "Bonsoir"
   },
   "header": {
-    "customize": "Personnaliser"
+    "customize": "Personnaliser",
+    "description": "Votre travail quotidien, votre aperçu financier et vos raccourcis."
   },
   "widgets": {
     "operatingExpenses": "Charges d’exploitation",

@@ -5,7 +5,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-const { agingByParty, agingDetail, agingCurrenciesInScope } = await import('./aging')
+const { agingByParty, agingDetail, agingDetailPage, agingCurrenciesInScope } = await import('./aging')
 
 /**
  * Aging answers two different questions and must label which one it is
@@ -97,6 +97,19 @@ test('aging converts from base or transaction currency at the as-of spot', { ski
       assert.equal(cadRow.docCurrency, 'CAD')
       assert.equal(cadRow.txnOpen, '200.0000')
       assert.equal(cadRow.open, '200.0000')
+
+      for (const basis of ['base', 'transaction'] as const) {
+        const complete = await agingDetail('ar', scratch.date, undefined, scratch.orgId, { basis })
+        const pages = []
+        for (let page = 1; page <= 3; page++) {
+          const result = await agingDetailPage('ar', scratch.date, undefined, scratch.orgId, { basis }, { page, perPage: 1 })
+          assert.equal(result.total, complete.rows.length, 'each page retains the exact full count')
+          assert.deepEqual(result.totals, complete.totals, 'each page retains the exact full-scope totals')
+          assert.ok(result.rows.length <= 1, 'only the selected page is transferred')
+          pages.push(...result.rows)
+        }
+        assert.deepEqual(pages, complete.rows, 'paged rows preserve signed balances, currencies and stable ordering')
+      }
 
       // Same-currency documents read identically under both bases.
       const baseDetail = await agingDetail('ar', scratch.date, undefined, scratch.orgId)

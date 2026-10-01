@@ -1,9 +1,11 @@
 'use client'
 
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
+
 import Link from 'next/link'
 import { useViewerFormat } from '../../../../../lib/viewer-format'
 import { Plus } from 'lucide-react'
-import { Button, cn } from '@openbooks/ui'
+import { Button } from '@openbooks/ui'
 import { SetupEditor, type PaymentSetupView } from './PaymentOperationsSetup'
 import type { PaymentOperationsData } from './view'
 
@@ -37,37 +39,12 @@ import type { PaymentOperationsData } from './view'
  * way — the wrappers below add no markup of their own.
  */
 
-const VIEWS: PaymentSetupView[] = ['profiles', 'formats', 'schedules', 'mandates']
-
 export function PaymentOperationsTabs({
   tabs,
 }: {
   tabs: { key: string; href: string; label: string; active: boolean }[]
 }) {
-  // Byte contract: the native strip is a bare div of plain links with no
-  // roles — the active-vs-plain link PAIR is the component (presence cannot
-  // choose between two treatments). Rendered in VIEWS order like the native
-  // map, with loader-resolved hrefs and labels.
-  return (
-    <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-      {VIEWS.map((item) => {
-        const tab = tabs.find((candidate) => candidate.key === item)
-        if (!tab) return null
-        return (
-          <Link
-            key={item}
-            href={tab.href as never}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
-              tab.active ? 'border-teal-600 text-teal-700 dark:text-teal-300' : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
-            )}
-          >
-            {tab.label}
-          </Link>
-        )
-      })}
-    </div>
-  )
+  return <ModuleHomeTabs tabs={tabs} />
 }
 
 /**

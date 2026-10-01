@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -200,17 +202,7 @@ export function SentinelView({ data, canConfigure }: { data: SentinelData; canCo
         <KpiCard icon={ShieldAlert} accent={s.ghostCount + s.sequentialGroups > 0 ? 'red' : 'emerald'} label={t('kpi.shellSignals')} value={num(s.ghostCount + s.sequentialGroups)} sub={t('sub.ghostsSequential', { ghosts: s.ghostCount, sequential: s.sequentialGroups })} tone={s.ghostCount + s.sequentialGroups > 0 ? 'negative' : 'positive'} />
       </div>
 
-      <div className="-mx-1 overflow-x-auto">
-        <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {TABS.map((k) => (
-            <button key={k} type="button" onClick={() => setTab(k)} className={cn('-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors', tab === k ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
-              {t(`tabs.${k}`)}
-              {k === 'detection' && s.flaggedCount > 0 ? <span className="rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">{num(s.flaggedCount)}</span> : null}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <RecordTabs label={t('title')} tabs={TABS.map((k) => ({ key: k, label: t(`tabs.${k}`), count: k === 'detection' ? s.flaggedCount : undefined }))} active={tab} onChange={setTab}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'benford' ? <BenfordTab data={data} /> : null}
@@ -220,6 +212,7 @@ export function SentinelView({ data, canConfigure }: { data: SentinelData; canCo
         {tab === 'audit' ? <AuditTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+      </RecordTabs>
 
       <DrillDrawer target={drill} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} />
     </div>

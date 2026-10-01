@@ -84,9 +84,11 @@ const drawerPayload = {
   compliance: { classId: null, classes: CLASSES },
 }
 
-async function mountHost(t: TestContext): Promise<void> {
+async function mountHost(t: TestContext, requests: string[] = []): Promise<() => Promise<void>> {
   const prior = globalThis.fetch
   globalThis.fetch = (async (url: unknown) => {
+    requests.push(String(url))
+    if (String(url).includes("/transaction-drawer")) return Response.json(null)
     assert.ok(String(url).includes(`/api/parties/${PARTY_ID}/drawer`), `host must load the drawer payload, got ${String(url)}`)
     return Response.json(drawerPayload)
   }) as typeof fetch
@@ -103,7 +105,7 @@ async function mountHost(t: TestContext): Promise<void> {
     host.remove()
     for (const node of [...document.body.children]) node.remove()
   })
-  await act(async () => {
+  const render = async () => { await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="CAD">
@@ -112,7 +114,9 @@ async function mountHost(t: TestContext): Promise<void> {
       </NextIntlClientProvider>,
     )
     for (let i = 0; i < 10; i++) await tick()
-  })
+  }) }
+  await render()
+  return render
 }
 
 function findTab(label: string): HTMLButtonElement | undefined {
@@ -127,4 +131,23 @@ test('the overlay vendor drawer forwards the Compliance tab', async (t) => {
     findTab('Compliance'),
     'an overlay vendor drawer must offer Compliance when the drawer payload carries it',
   )
+})
+
+
+test('party and nested transaction requests survive unrelated URL changes', async (t) => {
+  const requests: string[] = []
+  const original = 'relatedParty=' + PARTY_ID + '&relatedPartyRole=vendor'
+  Object.assign(globalThis, { __hostTestQuery: original })
+  t.after(() => Object.assign(globalThis, { __hostTestQuery: original }))
+  const render = await mountHost(t, requests)
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog)
+  const nested = original + '&partyTxn=019f0000-0000-4000-8000-000000000004&partyTxnKind=vendor_bill'
+  Object.assign(globalThis, { __hostTestQuery: nested })
+  await render()
+  Object.assign(globalThis, { __hostTestQuery: nested + '&relatedPartyTab=compliance&transactionTab=lines' })
+  await render()
+  assert.equal(document.querySelector('[role="dialog"]'), dialog, 'an unchanged party keeps its native dialog')
+  assert.equal(requests.filter((url) => url.includes('/drawer?')).length, 1)
+  assert.equal(requests.filter((url) => url.includes('/transaction-drawer')).length, 1)
 })

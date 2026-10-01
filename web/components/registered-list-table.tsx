@@ -17,6 +17,7 @@ export function RegisteredListTable<T>({
   empty,
   leading,
   footer,
+  toolbarAfter,
   rowClassName,
   state,
   basePath,
@@ -36,6 +37,7 @@ export function RegisteredListTable<T>({
   empty: ReactNode
   leading?: ReactNode
   footer?: ReactNode
+  toolbarAfter?: ReactNode
   rowClassName?: (row: T) => string | undefined
   state?: { total: number; page: number; perPage: number }
   basePath?: string
@@ -58,7 +60,7 @@ export function RegisteredListTable<T>({
   if (definition.mode !== 'loaded') {
     if (definition.mode === 'server' && !state)
       throw new Error('Missing server pagination for record list: ' + source)
-    return (
+    const table = (
       <ServerPagedTable
         source={source}
         rows={rows}
@@ -81,6 +83,14 @@ export function RegisteredListTable<T>({
         footer={footer}
         rowClassName={rowClassName}
       />
+    )
+    return toolbarAfter ? (
+      <div className="space-y-3">
+        {toolbarAfter}
+        {table}
+      </div>
+    ) : (
+      table
     )
   }
   return (
@@ -106,6 +116,7 @@ export function RegisteredListTable<T>({
       leading={leading}
       footer={footer}
       searchable={searchable}
+      toolbarAfter={toolbarAfter}
     />
   )
 }

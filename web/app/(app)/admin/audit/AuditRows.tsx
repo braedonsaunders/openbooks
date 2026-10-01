@@ -1,7 +1,7 @@
 'use client'
 
 import { PagedTable } from '../../../../components/paged-table'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useFormatter, useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
 import { ChevronRight } from 'lucide-react'
@@ -52,14 +52,12 @@ const humanize = (value: string) =>
 
 export function AuditRows({
   rows,
-  selectedId,
 }: {
   rows: AuditListRow[]
   selectedId?: string
 }) {
   const t = useTranslations('admin.audit')
   const format = useFormatter()
-  const router = useRouter()
   const searchParams = useSearchParams()
   const actionLabel = (action: string) =>
     KNOWN_ACTIONS.has(action)
@@ -74,7 +72,7 @@ export function AuditRows({
   function openEvent(id: string) {
     const next = new URLSearchParams(searchParams.toString())
     next.set('event', id)
-    router.push(`/admin/audit?${next.toString()}`)
+    window.history.pushState(null, '', `/admin/audit?${next.toString()}`)
   }
 
   return (
@@ -88,7 +86,7 @@ export function AuditRows({
       }
       onRowClick={(row) => openEvent(row.id)}
       rowRole="link"
-      rowSelected={(row) => selectedId === row.id}
+      rowSelected={(row) => searchParams.get('event') === row.id}
       rowLabel={(row) =>
         t('openEventAria', {
           action: actionLabel(row.action),

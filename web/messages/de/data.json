@@ -41,7 +41,7 @@
     "format": "Dateiformat",
     "file": "Datei",
     "chooseFile": "Datei auswählen",
-    "orPaste": "…oder Zeilen einfügen",
+    "orPaste": "Oder Daten einfügen",
     "mode": "Wenn ein Datensatz bereits existiert",
     "modeInsert": "Überspringen (nur neue einfügen)",
     "modeUpsert": "Aktualisieren (Upsert)",
@@ -56,7 +56,7 @@
     "toInsert": "Zu erstellen",
     "toUpdate": "Zu aktualisieren",
     "toFail": "Fehler",
-    "commit": "{n} Zeilen importieren",
+    "commit": "{n, plural, one {# Zeile} other {# Zeilen}} importieren",
     "committing": "Wird importiert…",
     "commitFailed": "Der Import konnte nicht abgeschlossen werden.",
     "commitPersistenceFailed": "Dieser Browser konnte den Import-Wiederholungsschlüssel nicht speichern, daher wurde kein Import gesendet. Aktivieren Sie den Sitzungsspeicher oder verwenden Sie einen Browser, der ihn zulässt, und versuchen Sie es erneut.",
@@ -98,7 +98,15 @@
       "createFailedFinalize": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abschluss des neuen Unternehmens ist fehlgeschlagen. Das Unternehmen wurde erstellt, aber seine Einrichtung wurde nicht abgeschlossen; ein erneuter Versuch setzt die Einrichtung an der unterbrochenen Stelle fort.",
       "createFailedNumbering": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abgleich der Belegnummerierung ist fehlgeschlagen. Das Unternehmen wurde erstellt, aber seine Belegnummerierung wurde nicht abgeschlossen; ein erneuter Versuch setzt den Abgleich fort."
     },
-    "loadFailed": "Importierbare Datensatztypen konnten nicht geladen werden."
+    "loadFailed": "Importierbare Datensatztypen konnten nicht geladen werden.",
+    "sourceTitle": "Datensätze auswählen und Datei hochladen",
+    "sourceHint": "Wählen Sie den Datensatztyp für den Import. Ordnen Sie die Spalten zu und prüfen Sie die Änderungen vor dem Import.",
+    "fileHint": "CSV, Excel (.xlsx) oder JSON. CSV- und Excel-Dateien müssen Spaltenüberschriften enthalten.",
+    "pasteHint": "Fügen Sie CSV mit einer Kopfzeile oder ein JSON-Array von Datensätzen ein. Wählen Sie oben das passende Format.",
+    "rowCount": "{n, plural, one {# Zeile} other {# Zeilen}}",
+    "parsing": "Datei wird gelesen…",
+    "pastedData": "Eingefügte Daten",
+    "reviewHint": "Prüfen Sie die Anzahl und alle Fehler vor dem Import. Es wurden noch keine Datensätze importiert."
   },
   "history": {
     "title": "Importverlauf",
@@ -114,5 +122,8 @@
       "committed": "Festgeschrieben",
       "failed": "Fehlgeschlagen"
     }
+  },
+  "resources": {
+    "parties": "Personen und Unternehmen"
   }
 }

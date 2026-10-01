@@ -7,6 +7,7 @@ import { hasVendorBillApprovalFlow } from '@openbooks/engine/src/flows/index.ts'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
+import { SampleCompanyPicker } from '../../../../../components/sample-company-picker'
 
 /**
  * Company & Accounting settings, rendered as the Setup "Company" tab. This is
@@ -96,6 +97,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         saasMetricsEnabled={saasMetricsEnabled}
         vendorBillFlowConfigured={vendorBillFlowConfigured}
       />
+      <SampleCompanyPicker />
     </div>
   )
 }

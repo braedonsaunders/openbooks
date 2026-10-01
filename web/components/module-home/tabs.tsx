@@ -1,46 +1,19 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useContext, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
 import { cn, Popover } from "@openbooks/ui";
 import { visibleTopNavGroupCount } from "../../lib/top-nav-overflow";
+import { configureInlineTabs } from "./inline-tabs";
+import { ViewTabsContext, useManagedLocalNavigation } from "./navigation-context";
 import type { ModuleHomeTab } from "./tab-types";
 
-/**
- * THE subtab strip. One component for every tabbed switch in the product —
- * the nav-group route strip in a page header (Purchasing · Accounts Payable ·
- * Expenses), and the in-page view switch above a list (Requests · Calendar).
- * There is deliberately no second implementation: a page that grows tabs
- * renders this, or it does not have tabs.
- *
- * Two things it must do that a plain row of links cannot:
- *
- *   • FIT. The HRM group once carried fourteen peer routes. Rendered as a
- *     rigid strip it measured 1358px and crushed the page title to ZERO
- *     width on every page in the module — the title element was still
- *     there, still 32px tall, and 0px wide. The strip now names six jobs
- *     (plus Compliance when construction is on); the rest are viewTabs.
- *     Overflow still matters for wide view strips, so the strip measures
- *     itself, shows the leading tabs that fit, and folds the rest into a
- *     More menu. The overflow arithmetic is `visibleTopNavGroupCount`,
- *     shared with the top nav, so the two strips cannot drift on the one
- *     calculation either could get wrong.
- *
- *   • MATCH THE BUTTONS BESIDE IT. The pills and page-header buttons share
- *     --page-control-height (36px). The track adds a 2px inset on each side.
- *
- * An active tab that lands in the overflow is pulled forward to the last
- * visible slot, so "where am I" is never hidden behind a menu.
- *
- * The strip is always the last item in a page-header action rail. This makes
- * the product rule structural: primary create/action buttons stay to its left
- * even when a page's JSX or ViewSpec happens to list the tabs first. That rule
- * lives in globals.css, scoped to the rail, so a strip anywhere else keeps its
- * document position.
+/** Shared route switch for page-header action rails and page-owned URL views.
+ * Measured overflow preserves configured order; the active overflow destination
+ * is named by the More control. Record panels use RecordTabs.
  */
-
 /** Rounding headroom, in CSS pixels, for the fit test. See `recompute`. */
 const SUBPIXEL_SLACK = 1;
 
@@ -52,6 +25,7 @@ const PILL_IDLE =
   "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100";
 
 function Count({ count, active }: { count: number; active: boolean }) {
+  const locale = useLocale();
   return (
     <span
       className={cn(
@@ -61,7 +35,7 @@ function Count({ count, active }: { count: number; active: boolean }) {
           : "bg-slate-200/70 text-slate-500 dark:bg-slate-700 dark:text-slate-400",
       )}
     >
-      {count}
+      {count.toLocaleString(locale)}
     </span>
   );
 }
@@ -82,8 +56,19 @@ function Pill({ tab }: { tab: ModuleHomeTab }) {
   );
 }
 
-export function ModuleHomeTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
+export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
+  tabs: ModuleHomeTab[];
+  placement?: 'header' | 'local';
+  ariaLabel?: string;
+}) {
+  const managed = useManagedLocalNavigation();
+  const context = useContext(ViewTabsContext);
+  tabs = configureInlineTabs(tabs, context?.preferences);
+  const suppressed = managed && placement === 'header';
+  const shell = useTranslations('shell');
+  const locale = useLocale();
   const t = useTranslations("shell.topNav");
+  const activeTab = tabs.find((tab) => tab.active);
   const moreLabel = t("more");
   const trackRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -141,27 +126,18 @@ export function ModuleHomeTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
       window.removeEventListener("resize", recompute);
       observer.disconnect();
     };
-  }, [tabs, moreLabel]);
+  }, [tabs, moreLabel, suppressed]);
 
-  if (tabs.length < 2) return null;
-
-  // A tab the viewer is ON must never be the one hidden behind More. When the
-  // active tab overflows it takes the last visible slot and the tab it
-  // displaces joins the menu — the order of everything else is preserved.
-  let visible = tabs.slice(0, visibleCount);
-  let overflow = tabs.slice(visibleCount);
-  const activeIndex = tabs.findIndex((tab) => tab.active === true);
-  const activeTab = activeIndex >= 0 ? tabs[activeIndex] : undefined;
-  if (activeTab && activeIndex >= visibleCount && visibleCount > 0) {
-    visible = [...tabs.slice(0, visibleCount - 1), activeTab];
-    overflow = tabs.filter(
-      (_, i) => i >= visibleCount - 1 && i !== activeIndex,
-    );
-  }
+  if (tabs.length < 2 || suppressed) return null;
+  const visible = tabs.slice(0, visibleCount);
+  const overflow = tabs.slice(visibleCount);
+  const activeOverflow = overflow.find((tab) => tab === activeTab);
 
   return (
     <div
       ref={trackRef}
+      role="navigation"
+      aria-label={ariaLabel ?? shell("localNavigation")}
       data-subtabs
       className={cn(
         "relative flex h-[calc(var(--page-control-height)+0.25rem)] min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800",
@@ -192,7 +168,7 @@ export function ModuleHomeTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
           </span>
         ))}
         <span data-tab-measure="more" className={cn(PILL, PILL_IDLE)}>
-          {moreLabel}
+          {activeTab ? `${moreLabel}: ${activeTab.label}` : moreLabel}
           <ChevronDown size={14} />
         </span>
       </div>
@@ -211,9 +187,9 @@ export function ModuleHomeTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
               aria-haspopup="menu"
               aria-expanded={open}
               onClick={() => setOpen((v) => !v)}
-              className={cn(PILL, PILL_IDLE)}
+              className={cn(PILL, activeOverflow ? PILL_ACTIVE : PILL_IDLE)}
             >
-              {moreLabel}
+              {activeOverflow ? `${moreLabel}: ${activeOverflow.label}` : moreLabel}
               <ChevronDown size={14} />
             </button>
           }
@@ -236,7 +212,7 @@ export function ModuleHomeTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
                 {tab.label}
                 {typeof tab.count === "number" ? (
                   <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-                    {tab.count}
+                    {tab.count.toLocaleString(locale)}
                   </span>
                 ) : null}
               </Link>

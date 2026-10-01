@@ -1,9 +1,9 @@
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
 import 'server-only'
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BookOpen } from 'lucide-react'
-import { cn } from '@openbooks/ui'
 import { TrueCostView } from '../../../analytics/true-cost/TrueCostView'
 import { OverheadActions, type DeptRate, type TypeOpt } from './OverheadActions'
 import { OverheadApplication, type ApplicationRow } from './OverheadApplication'
@@ -114,22 +114,7 @@ export function OverheadModelHeader({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
-        {tabs.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href as never}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium',
-              item.active
-                ? 'border-teal-600 text-teal-700 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
-            )}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
+      <ModuleHomeTabs tabs={tabs} />
     </>
   )
 }

@@ -1,7 +1,6 @@
 import 'server-only'
 
-import Link from 'next/link'
-import { cn } from '@openbooks/ui'
+import { NavigationPicker } from '@/components/module-home/navigation-picker'
 import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -39,8 +38,8 @@ import { WorkSchedulesSection } from './WorkSchedulesSection'
  * Tab-body slots for the payroll setup workspace, plus the header chrome the
  * spec cannot express.
  *
- * This page is the setup workspace's odd sibling: it owns its own two-level
- * tab strip rather than arriving through the generic entity list, and its
+ * This page is the setup workspace's odd sibling: it owns a configuration-family picker
+ * and one local navigation row rather than arriving through the generic entity list, and its
  * tabs are mutually exclusive bodies behind one `?tab=` param. Presence
  * flags (`onPacks`, `onAccounts`, …) choose exactly one of them; the spec
  * never branches, it only places blocks and lets all but one vanish — the
@@ -55,10 +54,8 @@ import { WorkSchedulesSection } from './WorkSchedulesSection'
  * `setup-section`. A slot takes only the tab key it renders (as its NAME),
  * the URL it was already rendering with (`sp`), and the base path.
  *
- * The group strip + ModuleHomeTabs pill row is shared chrome, not spec
- * vocabulary: `PayrollSetupTabs` renders the conditional PAIR (active link
- * vs plain link per group) verbatim, and the page imports it back so both
- * render paths share one implementation.
+ * The shared configuration-family picker and local navigation row serve both
+ * stored layouts and built-in pages.
  */
 
 export function PayrollSetupTabs({
@@ -74,26 +71,7 @@ export function PayrollSetupTabs({
 }) {
   return (
     <>
-      <nav
-        className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800"
-        aria-label={tabsAria}
-      >
-        {groups.map((item) => (
-          <Link
-            key={item.key}
-            href={`/admin/setup/payroll?tab=${item.firstTab}` as never}
-            aria-current={activeGroup === item.key ? 'page' : undefined}
-            className={cn(
-              '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
-              activeGroup === item.key
-                ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400',
-            )}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <NavigationPicker label={tabsAria} value={activeGroup} options={groups.map((group) => ({ key: group.key, label: group.label, href: `/admin/setup/payroll?tab=${group.firstTab}` }))} />
       <ModuleHomeTabs tabs={subTabs} />
     </>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { accountRegisterCloseHref } from '../lib/account-register-navigation'
 import { AccountRegisterExportMenu } from './account-register-export-menu'
 import { SearchInput } from './search-input'
+import { useDrawerResource } from './use-drawer-resource'
 import { useReportOverlayOptional } from './navigation-provider'
 
 interface RegisterResponse {
@@ -63,55 +64,18 @@ export function AccountRegisterDrawer() {
   const book = params.get('book')
   const registerSearch = params.get('accountRegisterQ')
   const query = params.toString()
-  const [data, setData] = useState<RegisterResponse | null>(null)
-  const [loadedKey, setLoadedKey] = useState<string | null>(null)
-
   const closeHref = useMemo(() => accountRegisterCloseHref(pathname, query), [pathname, query])
-  const requestKey = `${accountId ?? ''}:${page}:${from ?? ''}:${to ?? ''}:${registerSearch ?? ''}:${book ?? ''}`
-
-  // Clear the register while (re)loading, during render (same committed
-  // values, no extra render). Keyed on the request inputs plus the close href
-  // and translator — the same values that re-run the fetch below.
-  const resetKey = JSON.stringify([requestKey, closeHref])
-  const [prevResetKey, setPrevResetKey] = useState(resetKey)
-  const [prevTc, setPrevTc] = useState(() => tc)
-  if (prevResetKey !== resetKey || prevTc !== tc) {
-    setPrevResetKey(resetKey)
-    // Wrap the translator: a bare function argument is invoked as a state
-    // updater with the previous translator as the key, and next-intl throws
-    // `key.split is not a function`.
-    setPrevTc(() => tc)
-    setData(null)
-    setLoadedKey(null)
-  }
-
-  useEffect(() => {
-    if (!accountId) return
-    const controller = new AbortController()
-    const requestParams = new URLSearchParams({ page: String(page) })
-    if (book) requestParams.set('book', book)
-    if (from) requestParams.set('from', from)
-    if (to) requestParams.set('to', to)
-    if (registerSearch) requestParams.set('q', registerSearch)
-    fetch(`/api/accounts/${accountId}/register?${requestParams}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(tc('feedback.loadFailed'))
-        return response.json() as Promise<RegisterResponse>
-      })
-      .then((body) => {
-        setData(body)
-        setLoadedKey(requestKey)
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        toast.error(error instanceof Error ? error.message : tc('feedback.loadFailed'))
-        if (overlay) overlay.replace(closeHref)
-        else window.location.assign(closeHref)
-      })
-    return () => controller.abort()
-  }, [accountId, book, closeHref, from, overlay, page, registerSearch, requestKey, tc, to])
-
-  const ready = data && loadedKey === requestKey
+  const requestParams = new URLSearchParams({ page: String(page) })
+  if (book) requestParams.set('book', book)
+  if (from) requestParams.set('from', from)
+  if (to) requestParams.set('to', to)
+  if (registerSearch) requestParams.set('q', registerSearch)
+  const data = useDrawerResource<RegisterResponse>(accountId ? `/api/accounts/${encodeURIComponent(accountId)}/register?${requestParams}` : null, (error) => {
+    toast.error(error.message || tc('feedback.loadFailed'))
+    if (overlay) overlay.replace(closeHref)
+    else window.location.assign(closeHref)
+  })
+  const ready = data !== null
   const periodLabel = from || to ? `${from ?? ''} → ${to ?? ''}` : null
   const currentParams = Object.fromEntries(params.entries())
 

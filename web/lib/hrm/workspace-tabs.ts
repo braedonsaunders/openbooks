@@ -6,23 +6,13 @@ import { featureEnabled, orgFeatureState } from '../features'
 import type { ViewTabGroup } from '../../components/module-home/view-tab-match'
 import { hrmViewTabGroupsFor } from './view-tab-registry'
 
-/**
- * HRM workspace strips. The group strip names six jobs (plus Compliance
- * when construction is on). Everything that used to be a fourteenth peer
- * — documents, surveys, qualifications, benefits, positions, org chart,
- * processes — is a view tab under its job, so it stays findable without
- * crowding the header.
- */
+/** Compatibility helpers for older HR loaders. The app shell owns native local navigation. */
 
 function pathOf(href: string): string {
   return href.split('?')[0] ?? href
 }
 
-/**
- * Map a page href to the group-strip tab that should light up. Child
- * routes (documents, surveys, positions, …) highlight their parent job,
- * never a missing fourteenth peer.
- */
+/** Parent destination mapping for stored layouts that still name a broad group strip. */
 export function hrmStripParentHref(pageHref: string): string {
   const path = pathOf(pageHref)
   const rules: { prefix: string; parent: string }[] = [

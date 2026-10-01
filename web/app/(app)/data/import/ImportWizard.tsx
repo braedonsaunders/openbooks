@@ -5,11 +5,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, CheckCircle2, Database, Sparkles, Upload } from 'lucide-react'
-import { Badge, Button, PageHeader, Select, cn } from '@openbooks/ui'
+import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, Upload } from 'lucide-react'
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Label, PageHeader, Select, Textarea, cn } from '@openbooks/ui'
 import { WizardLayout } from '../../../../components/page-layout'
 import { useBusinessToday } from '../../../../components/business-date-provider'
-import { enterOrg } from '../../../../lib/sandbox-session'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { exportCsv } from '../../analytics/_ui/exportCsv'
 import {
@@ -39,50 +38,6 @@ interface Outcome {
   errors: { row: number; message: string; field?: string }[]
   warnings?: { row: number; message: string; field?: string }[]
 }
-interface SampleCompanyProfile {
-  industryKey: string
-  profileId: string
-  companyName: string
-  focus: string[]
-  templateReady: boolean
-  existingOrgId: string | null
-}
-
-interface SampleCompanyRefusal {
-  code?: string
-  stage?: string
-  message?: string
-}
-
-// OM-14: the provisioning API reports failures by pipeline stage with a
-// stable code. The wizard renders the matching localized copy so the
-// operator reads the failure in their own locale; an unknown code falls
-// back to the server message, then to the generic localized copy.
-export const SAMPLE_COMPANY_FAILURE_COPY: Record<string, string> = {
-  'sample-company-template-failed': 'import.sample.createFailedTemplate',
-  'sample-company-clone-failed': 'import.sample.createFailedClone',
-  'sample-company-finalize-failed': 'import.sample.createFailedFinalize',
-  'sample-company-numbering-failed': 'import.sample.createFailedNumbering',
-}
-
-async function readSampleCompanyRefusal(res: Response): Promise<SampleCompanyRefusal> {
-  try {
-    const body: unknown = await res.json()
-    if (body !== null && typeof body === 'object' && !Array.isArray(body)) {
-      const record = body as Record<string, unknown>
-      return {
-        code: typeof record.error === 'string' ? record.error : undefined,
-        stage: typeof record.stage === 'string' ? record.stage : undefined,
-        message: typeof record.message === 'string' ? record.message : undefined,
-      }
-    }
-  } catch {
-    // Non-JSON error body (proxy page, empty 502): fall through to the
-    // generic copy rather than surfacing a SyntaxError.
-  }
-  return {}
-}
-
 type Step = 'source' | 'mapping' | 'preview' | 'result'
 type Format = 'csv' | 'xlsx' | 'json'
 type PreviewRequest = { resource: string; format: Format; rows: Record<string, unknown>[]; mapping: Record<string, string>; importMode: 'insert' | 'upsert'; post: boolean }
@@ -90,6 +45,7 @@ type PreviewState = { outcome: Outcome; revision: number; request: PreviewReques
 
 export function ImportWizard() {
   const t = useTranslations('data')
+  const tCatalog = useTranslations()
   const router = useRouter()
   const today = useBusinessToday()
 
@@ -113,10 +69,7 @@ export function ImportWizard() {
   const [inputRevision, setInputRevision] = useState(0)
   const [result, setResult] = useState<Outcome | null>(null)
   const [busy, setBusy] = useState(false)
-  const [sampleProfiles, setSampleProfiles] = useState<SampleCompanyProfile[]>([])
-  const [sampleIndustry, setSampleIndustry] = useState('')
-  const [sampleBusy, setSampleBusy] = useState(false)
-  const [sampleError, setSampleError] = useState<SampleCompanyRefusal | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const commitIdentity = useRef<ImportCommitIdentity | null>(null)
   const inputRevisionRef = useRef(0)
 
@@ -124,13 +77,7 @@ export function ImportWizard() {
     const revision = ++inputRevisionRef.current
     setInputRevision(revision)
     setPreview(null)
-  }
-
-  const sampleErrorText = (refusal: SampleCompanyRefusal): string => {
-    const copyKey = refusal.code ? SAMPLE_COMPANY_FAILURE_COPY[refusal.code] : undefined
-    if (copyKey) return t(copyKey)
-    if (refusal.message && refusal.message.trim() !== '') return refusal.message
-    return t('import.sample.createFailed')
+    setError(null)
   }
 
   useEffect(() => {
@@ -144,76 +91,19 @@ export function ImportWizard() {
       // truthy check matches the server's own `!supportsImport` refusal.
       .then((d) => setResources((d.resources ?? []).filter((x: ResourceDescriptor & { supportsImport?: boolean }) => x?.supportsImport)))
       .catch((e) => {
-        toast.error((e as Error).message)
-      })
-    fetch('/api/data/sample-companies')
-      .then(async (r) => {
-        if (!r.ok) throw new Error(await readApiErrorMessage(r, t('import.sample.error')))
-        return r.json()
-      })
-      .then((d) => {
-        const profiles = (d.profiles ?? []) as SampleCompanyProfile[]
-        setSampleProfiles(profiles)
-        setSampleIndustry((current) => current || profiles[0]?.industryKey || '')
-      })
-      .catch((e) => {
+        setError((e as Error).message)
         toast.error((e as Error).message)
       })
   }, [t])
 
-  const selectedSample = useMemo(
-    () => sampleProfiles.find((profile) => profile.industryKey === sampleIndustry) ?? null,
-    [sampleIndustry, sampleProfiles],
-  )
-
-  const createOrOpenSample = async () => {
-    if (!selectedSample) return
-    setSampleBusy(true)
-    // A retry starts clean, but the chosen company and profile stay selected
-    // below: a failed attempt either created nothing (template/clone) or left
-    // a resumable company the server continues from, so retry is safe.
-    setSampleError(null)
-    let orgId = selectedSample.existingOrgId
-    try {
-      if (!orgId) {
-        const response = await fetch('/api/data/sample-companies', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ industry: selectedSample.industryKey }),
-        })
-        if (!response.ok) {
-          const refusal = await readSampleCompanyRefusal(response)
-          setSampleError(refusal)
-          throw new Error(sampleErrorText(refusal))
-        }
-        const data = (await response.json()) as { orgId?: unknown; created?: unknown }
-        if (typeof data.orgId !== 'string') {
-          const refusal: SampleCompanyRefusal = {}
-          setSampleError(refusal)
-          throw new Error(sampleErrorText(refusal))
-        }
-        orgId = data.orgId
-        toast.success(data.created ? t('import.sample.created') : t('import.sample.ready'))
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('import.sample.error'))
-      setSampleBusy(false)
-      return
-    }
-    if (!orgId) {
-      toast.error(t('import.sample.error'))
-      setSampleBusy(false)
-      return
-    }
-    // Entering resolves access and navigates: a refusal must release the
-    // button instead of leaving it on "Preparing" forever.
-    try {
-      await enterOrg(orgId)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('import.sample.error'))
-    } finally {
-      setSampleBusy(false)
-    }
+  // Built-in names reuse the same catalogs as Setup, navigation, and records.
+  // Custom resources keep the name supplied by their own definition.
+  const resourceLabel = (item: ResourceDescriptor): string => {
+    const key = item.group === 'Setup' ? `admin.setup.entities.${item.key}.title`
+      : item.group === 'Master data' ? (item.key === 'parties' ? 'data.resources.parties' : `nav.modules.${item.key}`)
+      : item.group === 'Transactions' ? (item.key === 'txn:pay_run' ? 'nav.modules.payroll-runs' : `common.transactionTypes.${item.key.replace(/^txn:/, '').replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())}`)
+      : ''
+    return key && tCatalog.has(key) ? tCatalog(key) : item.label
   }
 
   const grouped = useMemo(() => {
@@ -226,10 +116,21 @@ export function ImportWizard() {
     return [...map.entries()]
   }, [resources])
 
+  const selectedResource = resources.find((item) => item.key === resource)
+
   const selectedCanPost = useMemo(
     () => resources.find((r) => r.key === resource)?.canPost ?? false,
     [resources, resource],
   )
+
+  const fieldLabel = (field: Field): string => {
+    if (field.label !== field.key) return field.label
+    const namespace = selectedResource?.group === 'Setup' || resource === 'accounts' ? 'admin.setup.fields'
+      : resource === 'parties' ? 'parties.drawer'
+      : resource === 'items' ? 'items.labels' : ''
+    const key = namespace && `${namespace}.${field.key}`
+    return key && tCatalog.has(key) ? tCatalog(key) : field.label
+  }
 
   const onFile = (file: File) => {
     invalidateInputs()
@@ -262,6 +163,7 @@ export function ImportWizard() {
     if (!resource) return
     const revision = inputRevisionRef.current
     setBusy(true)
+    setError(null)
     try {
       const res = await fetch('/api/data/import', {
         method: 'POST',
@@ -279,7 +181,10 @@ export function ImportWizard() {
       setMapping(d.mapping ?? {})
       setStep('mapping')
     } catch (e) {
-      if (inputRevisionRef.current === revision) toast.error((e as Error).message)
+      if (inputRevisionRef.current === revision) {
+        setError((e as Error).message)
+        toast.error((e as Error).message)
+      }
     } finally {
       setBusy(false)
     }
@@ -289,6 +194,7 @@ export function ImportWizard() {
     const revision = inputRevisionRef.current
     const request: PreviewRequest = { resource, format, rows, mapping, importMode, post }
     setBusy(true)
+    setError(null)
     try {
       const res = await fetch('/api/data/import', {
         method: 'POST',
@@ -301,7 +207,10 @@ export function ImportWizard() {
       setPreview({ outcome: d.outcome, revision, request })
       setStep('preview')
     } catch (e) {
-      if (inputRevisionRef.current === revision) toast.error((e as Error).message)
+      if (inputRevisionRef.current === revision) {
+        setError((e as Error).message)
+        toast.error((e as Error).message)
+      }
     } finally {
       setBusy(false)
     }
@@ -311,6 +220,7 @@ export function ImportWizard() {
     if (!preview || preview.revision !== inputRevisionRef.current) return
     const request = preview.request
     setBusy(true)
+    setError(null)
     try {
       // The key follows the exact request inputs. A lost response reuses it,
       // including after reload; editing the import creates a distinct request.
@@ -342,7 +252,9 @@ export function ImportWizard() {
       forgetImportCommitIdentity(identity, storage)
       commitIdentity.current = null
     } catch (e) {
-      toast.error(e instanceof ImportIdentityPersistenceError ? t('import.commitPersistenceFailed') : (e as Error).message)
+      const message = e instanceof ImportIdentityPersistenceError ? t('import.commitPersistenceFailed') : (e as Error).message
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -351,6 +263,8 @@ export function ImportWizard() {
   const reset = () => {
     commitIdentity.current = null
     setStep('source')
+    setError(null)
+    setFormat('csv')
     setResource('')
     setFileName('')
     setText('')
@@ -390,20 +304,20 @@ export function ImportWizard() {
       <span className="text-xs text-muted-foreground">{t('import.step', { n: stepIndex, total: 4 })}</span>
       <div className="flex gap-2">
         {step === 'mapping' && (
-          <Button variant="outline" onClick={() => setStep('source')}>
+          <Button variant="outline" disabled={busy} onClick={() => { setError(null); setStep('source') }}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             {t('import.back')}
           </Button>
         )}
         {step === 'preview' && (
-          <Button variant="outline" onClick={() => setStep('mapping')}>
+          <Button variant="outline" disabled={busy} onClick={() => { setError(null); setStep('mapping') }}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             {t('import.back')}
           </Button>
         )}
         {step === 'source' && (
           <Button onClick={doParse} disabled={!resource || busy || (!text && !base64)}>
-            {t('import.next')}
+            {busy ? t('import.parsing') : t('import.next')}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         )}
@@ -432,183 +346,182 @@ export function ImportWizard() {
   )
 
   return (
-    <WizardLayout header={header} footer={footer}>
+    <WizardLayout
+      header={header}
+      footer={footer}
+      steps={(['source', 'mapping', 'preview', 'result'] as const).map((key) => ({ key, label: t(`import.steps.${key}`) }))}
+      currentStep={step}
+      progressLabel={t('import.step', { n: stepIndex, total: 4 })}
+    >
+      {error && <Alert variant="destructive">{error}</Alert>}
+      {step !== 'source' && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">{selectedResource && resourceLabel(selectedResource)}</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{fileName || t('import.pastedData')}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{format.toUpperCase()}</Badge>
+            <Badge variant="secondary">{t('import.rowCount', { n: rows.length })}</Badge>
+          </div>
+        </Card>
+      )}
       {step === 'source' && (
-        <div className="space-y-5">
-          <section className="overflow-hidden rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 via-white to-cyan-50 dark:border-teal-900 dark:from-teal-950/40 dark:via-slate-950 dark:to-cyan-950/30">
-            <div className="flex items-start gap-3 border-b border-teal-100 p-4 dark:border-teal-900/70">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal-600 text-white shadow-sm">
-                <Sparkles className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="font-semibold text-foreground">{t('import.sample.title')}</h2>
-                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{t('import.sample.description')}</p>
-              </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('import.sourceTitle')}</CardTitle>
+            <CardDescription>{t('import.sourceHint')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="import-resource">{t('import.resource')}</Label>
+              <Select id="import-resource" disabled={busy} value={resource} onChange={(e) => { invalidateInputs(); setResource(e.target.value) }}>
+                <option value="">{t('import.resourcePlaceholder')}</option>
+                {grouped.map(([group, list]) => (
+                  <optgroup key={group} label={group}>
+                    {list.map((r) => <option key={r.key} value={r.key}>{resourceLabel(r)}</option>)}
+                  </optgroup>
+                ))}
+              </Select>
             </div>
-            <div className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">{t('import.sample.industry')}</label>
-                <Select value={sampleIndustry} onChange={(event) => setSampleIndustry(event.target.value)}>
-                  {sampleProfiles.map((profile) => (
-                    <option key={profile.industryKey} value={profile.industryKey}>{profile.companyName}</option>
-                  ))}
-                </Select>
-                {selectedSample && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedSample.focus.join(' · ')}
-                    {!selectedSample.templateReady && !selectedSample.existingOrgId ? ` · ${t('import.sample.firstGeneration')}` : ''}
-                  </p>
-                )}
-                {sampleError && (
-                  <p
-                    id="sample-company-error"
-                    role="alert"
-                    className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-relaxed text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
-                  >
-                    {sampleErrorText(sampleError)}
-                  </p>
-                )}
+            <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-950/50">
+              <div className="flex items-start gap-3">
+                <FileUp aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-teal-600 dark:text-teal-400" />
+                <div className="space-y-1">
+                  <Label htmlFor="import-file">{t('import.chooseFile')}</Label>
+                  <p id="import-file-hint" className="text-xs text-muted-foreground">{t('import.fileHint')}</p>
+                </div>
               </div>
-              <Button
-                type="button"
-                onClick={createOrOpenSample}
-                disabled={!selectedSample || sampleBusy}
-                className="sm:min-w-44"
-              >
-                <Database className="mr-2 h-4 w-4" />
-                {sampleBusy
-                  ? t('import.sample.preparing')
-                  : selectedSample?.existingOrgId
-                    ? t('import.sample.open')
-                    : t('import.sample.create')}
-              </Button>
+              <input
+                id="import-file"
+                type="file"
+                disabled={busy}
+                aria-describedby="import-file-hint"
+                accept=".csv,.xlsx,.json,text/csv,application/json"
+                onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+                className="block w-full min-w-0 text-sm text-foreground file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground focus-visible:outline-teal-500"
+              />
             </div>
-            <p className="px-4 pb-4 text-xs leading-relaxed text-muted-foreground">{t('import.sample.safety')}</p>
-          </section>
-          <div className="flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            {t('import.sample.orFile')}
-            <span className="h-px flex-1 bg-border" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">{t('import.resource')}</label>
-            <Select value={resource} onChange={(e) => { invalidateInputs(); setResource(e.target.value) }}>
-              <option value="">{t('import.resourcePlaceholder')}</option>
-              {grouped.map(([group, list]) => (
-                <optgroup key={group} label={group}>
-                  {list.map((r) => (
-                    <option key={r.key} value={r.key}>
-                      {r.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">{t('import.file')}</label>
-            <input
-              type="file"
-              accept=".csv,.xlsx,.json,text/csv,application/json"
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-              className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-sm"
-            />
-            {fileName && (
-              <p className="text-xs text-muted-foreground">
-                {fileName} · {format.toUpperCase()}
-              </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">{t('import.orPaste')}</label>
-            <textarea
-              value={text}
-              onChange={(e) => {
-                invalidateInputs()
-                setText(e.target.value)
-                setBase64('')
-                if (format === 'xlsx') setFormat('csv')
-              }}
-              rows={5}
-              className="w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
-            />
-          </div>
-        </div>
+            <details className="group border-t border-border pt-4">
+              <summary className="cursor-pointer text-sm font-medium text-foreground focus-visible:outline-teal-500">{t('import.orPaste')}</summary>
+              <div className="mt-4 space-y-3">
+                <div className="max-w-xs space-y-2">
+                  <Label htmlFor="import-paste-format">{t('import.format')}</Label>
+                  <Select id="import-paste-format" disabled={busy || format === 'xlsx'} value={format} onChange={(e) => { invalidateInputs(); setFormat(e.target.value as Format) }}>
+                    <option value="csv">CSV</option>
+                    <option value="json">JSON</option>
+                    {format === 'xlsx' && <option value="xlsx">Excel</option>}
+                  </Select>
+                </div>
+                <Label htmlFor="import-paste" className="sr-only">{t('import.orPaste')}</Label>
+                <Textarea
+                  id="import-paste"
+                  disabled={busy}
+                  aria-describedby="import-paste-hint"
+                  value={text}
+                  onChange={(e) => {
+                    invalidateInputs()
+                    setText(e.target.value)
+                    setFileName('')
+                    setBase64('')
+                    if (format === 'xlsx') setFormat('csv')
+                  }}
+                  rows={5}
+                  className="font-mono"
+                />
+                <p id="import-paste-hint" className="text-xs text-muted-foreground">{t('import.pasteHint')}</p>
+              </div>
+            </details>
+          </CardContent>
+        </Card>
       )}
 
       {step === 'mapping' && (
-        <div className="space-y-5">
-          <p className="text-sm text-muted-foreground">{t('import.mapHint')}</p>
-          {truncatedMax !== null && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-              {t('import.truncatedWarning', { n: truncatedMax })}
-            </div>
-          )}
-          {!selectedCanPost && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">{t('import.mode')}</label>
-              <Select value={importMode} onChange={(e) => { invalidateInputs(); setImportMode(e.target.value as 'insert' | 'upsert') }}>
-                <option value="upsert">{t('import.modeUpsert')}</option>
-                <option value="insert">{t('import.modeInsert')}</option>
-              </Select>
-            </div>
-          )}
-          {selectedCanPost && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">{t('import.postMode')}</label>
-              <Select value={post ? 'post' : 'draft'} onChange={(e) => { invalidateInputs(); setPost(e.target.value === 'post') }}>
-                <option value="draft">{t('import.postDraft')}</option>
-                <option value="post">{t('import.postPost')}</option>
-              </Select>
-            </div>
-          )}
-          <div className="overflow-hidden rounded-lg border border-border">
-            <SharedTable className="w-full text-sm">
-              <SharedTableHeader className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                <SharedTableRow>
-                  <SharedTableHead className="px-3 py-2">{t('import.sourceColumn')}</SharedTableHead>
-                  <SharedTableHead className="px-3 py-2">{t('import.targetField')}</SharedTableHead>
-                </SharedTableRow>
-              </SharedTableHeader>
-              <SharedTableBody>
-                {headers.map((h) => (
-                  <SharedTableRow key={h} className="border-t border-border">
-                    <SharedTableCell className="px-3 py-2 font-mono text-xs">{h}</SharedTableCell>
-                    <SharedTableCell className="px-3 py-2">
-                      <Select
-                        value={mapping[h] ?? ''}
-                        onChange={(e) => { invalidateInputs(); setMapping((prev) => ({ ...prev, [h]: e.target.value })) }}
-                        triggerClassName="h-8"
-                      >
-                        <option value="">{t('import.ignore')}</option>
-                        {fields.map((f) => (
-                          <option key={f.key} value={f.key}>
-                            {f.label}
-                            {f.required ? ' *' : ''}
-                          </option>
-                        ))}
-                      </Select>
-                    </SharedTableCell>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('import.steps.mapping')}</CardTitle>
+            <CardDescription>{t('import.mapHint')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {truncatedMax !== null && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                {t('import.truncatedWarning', { n: truncatedMax })}
+              </div>
+            )}
+            {!selectedCanPost && (
+              <div className="space-y-2">
+                <Label htmlFor="import-mode">{t('import.mode')}</Label>
+                <Select id="import-mode" disabled={busy} value={importMode} onChange={(e) => { invalidateInputs(); setImportMode(e.target.value as 'insert' | 'upsert') }}>
+                  <option value="upsert">{t('import.modeUpsert')}</option>
+                  <option value="insert">{t('import.modeInsert')}</option>
+                </Select>
+              </div>
+            )}
+            {selectedCanPost && (
+              <div className="space-y-2">
+                <Label htmlFor="import-post-mode">{t('import.postMode')}</Label>
+                <Select id="import-post-mode" disabled={busy} value={post ? 'post' : 'draft'} onChange={(e) => { invalidateInputs(); setPost(e.target.value === 'post') }}>
+                  <option value="draft">{t('import.postDraft')}</option>
+                  <option value="post">{t('import.postPost')}</option>
+                </Select>
+              </div>
+            )}
+            <div className="overflow-hidden rounded-lg border border-border">
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+                  <SharedTableRow>
+                    <SharedTableHead className="px-3 py-2">{t('import.sourceColumn')}</SharedTableHead>
+                    <SharedTableHead className="px-3 py-2">{t('import.targetField')}</SharedTableHead>
                   </SharedTableRow>
-                ))}
-              </SharedTableBody>
-            </SharedTable>
-          </div>
-        </div>
+                </SharedTableHeader>
+                <SharedTableBody>
+                  {headers.map((h) => (
+                    <SharedTableRow key={h} className="border-t border-border">
+                      <SharedTableCell className="px-3 py-2 font-mono text-xs">{h}</SharedTableCell>
+                      <SharedTableCell className="px-3 py-2">
+                        <Select
+                          aria-label={`${h} — ${t('import.targetField')}`}
+                          disabled={busy}
+                          value={mapping[h] ?? ''}
+                          onChange={(e) => { invalidateInputs(); setMapping((prev) => ({ ...prev, [h]: e.target.value })) }}
+                          triggerClassName="h-8"
+                        >
+                          <option value="">{t('import.ignore')}</option>
+                          {fields.map((f) => (
+                            <option key={f.key} value={f.key}>
+                              {fieldLabel(f)}
+                              {f.required ? ' *' : ''}
+                            </option>
+                          ))}
+                        </Select>
+                      </SharedTableCell>
+                    </SharedTableRow>
+                  ))}
+                </SharedTableBody>
+              </SharedTable>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {step === 'preview' && preview && (
-        <div className="space-y-5">
-          <div className="grid grid-cols-3 gap-3">
-            <StatTile label={t('import.toInsert')} value={preview.outcome.created} tone="green" />
-            <StatTile label={t('import.toUpdate')} value={preview.outcome.updated} tone="blue" />
-            <StatTile label={t('import.toFail')} value={preview.outcome.failed} tone="red" />
-          </div>
-          {preview.outcome.errors.length > 0 && <ErrorTable t={t} errors={preview.outcome.errors} />}
-          {(preview.outcome.warnings?.length ?? 0) > 0 && (
-            <ErrorTable t={t} errors={preview.outcome.warnings ?? []} tone="amber" title={t('import.warnings')} />
-          )}
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t('import.preview')}</CardTitle>
+            <CardDescription>{t('import.reviewHint')}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-3 gap-3">
+              <StatTile label={t('import.toInsert')} value={preview.outcome.created} tone="green" />
+              <StatTile label={t('import.toUpdate')} value={preview.outcome.updated} tone="blue" />
+              <StatTile label={t('import.toFail')} value={preview.outcome.failed} tone="red" />
+            </div>
+            {preview.outcome.errors.length > 0 && <ErrorTable t={t} errors={preview.outcome.errors} />}
+            {(preview.outcome.warnings?.length ?? 0) > 0 && (
+              <ErrorTable t={t} errors={preview.outcome.warnings ?? []} tone="amber" title={t('import.warnings')} />
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {step === 'result' && result && (

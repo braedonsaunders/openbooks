@@ -8,6 +8,8 @@ import { SandboxBanner } from '../../components/sandbox-banner'
 import { ThemeProvider } from '../../components/theme-provider'
 import { NavigationProvider } from '../../components/navigation-provider'
 import { getAuthz, can } from '../../lib/authz'
+import { resolveLocalNavigation } from '../../lib/nav/local'
+import { ViewTabsProvider } from '../../components/module-home/view-tabs'
 import { resolveNav } from '../../lib/nav/resolve'
 import { shellEnvironments } from '../../lib/environments'
 import { userLocalePreference } from '../../lib/locale'
@@ -74,11 +76,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     },
   )
 
+  const localNavigation = await resolveLocalNavigation(authz)
+
   return (
     <MoneyProvider currency={org.base_currency}>
       <BusinessDateProvider today={today}>
       <ThemeProvider>
         <NavigationProvider>
+          <ViewTabsProvider groups={localNavigation.groups} preferences={localNavigation.preferences} ownership={localNavigation.ownership} managed>
           <AppShell
           account={{
             name: authz.user.name,
@@ -110,7 +115,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           canManageWages={can(authz, 'admin.setup.manage')}
           feedback={feedbackReady ? { appVersion: process.env.OPENBOOKS_VERSION || 'development' } : null}
           >
-            {authz.user.envKind !== 'production' && (
+            {authz.user.envKind === 'sandbox' && (
               <SandboxBanner name={authz.user.sandboxName} kind={authz.user.envKind} />
             )}
             {/* Page content streams behind the skeleton so the shell
@@ -120,6 +125,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
           </AppShell>
           {can(authz, 'admin.setup.manage') && <OnboardingWizard authz={authz} />}
+          </ViewTabsProvider>
         </NavigationProvider>
       </ThemeProvider>
       </BusinessDateProvider>

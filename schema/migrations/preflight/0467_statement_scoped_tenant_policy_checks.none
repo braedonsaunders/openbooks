@@ -1,0 +1,1 @@
+This changes only the evaluation frequency of the existing stable bypass predicate and tenant-context lookup. It preserves each policy's command, roles, permissiveness and organization condition, changes no tenant data, and has no data-dependent refusal.

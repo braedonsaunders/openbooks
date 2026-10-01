@@ -18,7 +18,7 @@ const root = pathToFileURL(process.cwd() + '/').href
 const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
-const { agingByParty, agingDetail, bucketOf } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
+const { agingByParty, agingDetail, agingDetailPage, bucketOf } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
 const { voidReportDocument } = await import('../../testing/document-void.ts')
 const { partnerBalances } = (await import(root + 'web/lib/reports/statements.ts')) as typeof import('./statements')
 const { partyRegister, partnerStatement } = (await import(root + 'web/lib/reports/registers.ts')) as typeof import('./registers')
@@ -108,6 +108,10 @@ test('AR aging as of July still shows the balance settled in August', { skip: !p
       )
 
       const detail = await agingDetail('ar', '2026-07-31', undefined, org.orgId)
+      const paged = await agingDetailPage('ar', '2026-07-31', undefined, org.orgId, {}, { page: 1, perPage: 50 })
+      assert.deepEqual(paged.rows, detail.rows, 'paging preserves historical applications, reversals and credits')
+      assert.deepEqual(paged.totals, detail.totals)
+      assert.equal(paged.total, detail.rows.length)
       assert.equal(detail.totals.total, '700.0000', 'aging detail must tie the summary')
       assert.equal(detail.rows.length, 2, 'the settled credit memo drops out but an invoice voided in August stays in July')
 
@@ -146,6 +150,10 @@ test('AP aging as of July still shows the bill paid in August', { skip: !process
       const aging = await agingByParty('ap', '2026-07-31', undefined, org.orgId)
       assert.equal(aging.totals.total, '300.0000', 'July AP aging must tie the July control balance after an August payment')
       const detail = await agingDetail('ap', '2026-07-31', undefined, org.orgId)
+      const paged = await agingDetailPage('ap', '2026-07-31', undefined, org.orgId, {}, { page: 1, perPage: 50 })
+      assert.deepEqual(paged.rows, detail.rows, 'paging preserves historical applications, reversals and credits')
+      assert.deepEqual(paged.totals, detail.totals)
+      assert.equal(paged.total, detail.rows.length)
       assert.equal(detail.totals.total, '300.0000')
       // Current (not-yet-due) bucket: due 08-11 is after the as-of date.
       assert.equal(aging.totals.current, '300.0000')
@@ -164,6 +172,10 @@ test('aging on the void date still matches the live open balances', { skip: !pro
       assert.equal(aging.totals.total, '0.0000')
       assert.equal(aging.rows.length, 0)
       const detail = await agingDetail('ar', voidDate, undefined, org.orgId)
+      const paged = await agingDetailPage('ar', voidDate, undefined, org.orgId, {}, { page: 1, perPage: 50 })
+      assert.deepEqual(paged.rows, detail.rows, 'paging preserves historical applications, reversals and credits')
+      assert.deepEqual(paged.totals, detail.totals)
+      assert.equal(paged.total, detail.rows.length)
       assert.equal(detail.totals.total, '0.0000')
     })
   } finally {
@@ -205,6 +217,10 @@ test('aging puts a 90-day-old invoice in the 90+ bucket', { skip: !process.env.O
       assert.equal(aging.totals.b4, '100.0000')
       assert.equal(aging.totals.b3, '0.0000')
       const detail = await agingDetail('ar', '2026-08-31', undefined, scratch.orgId)
+      const paged = await agingDetailPage('ar', '2026-08-31', undefined, scratch.orgId, {}, { page: 1, perPage: 50 })
+      assert.deepEqual(paged.rows, detail.rows, 'paging preserves historical applications, reversals and credits')
+      assert.deepEqual(paged.totals, detail.totals)
+      assert.equal(paged.total, detail.rows.length)
       assert.equal(detail.rows[0]?.bucket, 'b4')
     })
   } finally {

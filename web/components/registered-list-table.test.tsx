@@ -70,3 +70,47 @@ test('rows without unique identities and server lists without counts refuse', ()
     /Missing server pagination.*admin_api_keys/,
   )
 })
+
+test('loaded list filters remain beside search when the collection is empty', async () => {
+  const React = await import('react')
+  Object.assign(globalThis, { React })
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { NextIntlClientProvider } = await import('next-intl')
+  const messages = (await import('../messages/en')).default
+  for (const rows of [[], [{ id: 'one', name: 'Employee' }]]) {
+    const result = RegisteredListTable({
+      source: 'hrm_change_requests',
+      rows,
+      rowKey: (row) => row.id,
+      columns: [
+        {
+          key: 'name',
+          header: 'Employee',
+          cell: (row) => row.name,
+          search: (row) => row.name,
+        },
+      ],
+      empty: 'No change requests',
+      toolbarAfter: <button>Status filter</button>,
+    })
+    const html = renderToStaticMarkup(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+        {result}
+      </NextIntlClientProvider>,
+    )
+    assert.equal(
+      (html.match(/<input/g) ?? []).length,
+      1,
+      'the list has exactly one search field',
+    )
+    assert.equal(
+      (html.match(/Status filter/g) ?? []).length,
+      1,
+      'empty lists retain the status controls',
+    )
+    assert.ok(
+      html.indexOf('Status filter') < html.indexOf('<table'),
+      'filters stay on the shared search toolbar above the table',
+    )
+  }
+})

@@ -1,3 +1,4 @@
+import { ModuleHomeTabs } from '@/components/module-home/tabs'
 import Link from 'next/link'
 import { ArrowRight, FileText, Sparkles } from 'lucide-react'
 import { Button } from '@openbooks/ui'
@@ -19,21 +20,7 @@ export function TabNav({
   ariaLabel: string
   tabs: { key: string; href: string; label: string; active: boolean }[]
 }) {
-  return (
-    <nav className="-mb-2 flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={ariaLabel}>
-      {tabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href as never}
-          role="tab"
-          aria-selected={tab.active}
-          className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${tab.active
-            ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-            : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'}`}
-        >{tab.label}</Link>
-      ))}
-    </nav>
-  )
+  return <ModuleHomeTabs tabs={tabs} ariaLabel={ariaLabel} />
 }
 
 export function Metric({ label, value, locale, tone }: { label: string; value: number; locale: string; tone?: string }) {

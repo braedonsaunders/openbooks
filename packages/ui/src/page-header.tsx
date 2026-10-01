@@ -1,3 +1,7 @@
+"use client";
+
+import { useContext } from "react";
+import { PageHeaderNavigationContext } from "./page-header-navigation";
 // UiLink rather than a bare <a>: back-links are in-app routes, and a plain
 // anchor forces a full document reload — which replays the boot splash and
 // refetches the whole shell on every record → list hop. The app injects its
@@ -8,17 +12,21 @@ import { cn } from "./utils";
 
 export function PageHeader({
   title,
+  titleContent,
   description,
   actions,
   back,
   className,
 }: {
   title: string;
+  /** Optional live title content; document and accessibility names remain stable. */
+  titleContent?: React.ReactNode;
   description?: string;
   actions?: React.ReactNode;
   back?: { href: string; label: string };
   className?: string;
 }) {
+  const navigation = useContext(PageHeaderNavigationContext);
   return (
     <div className={cn("space-y-2", className)}>
       <DocumentTitle title={title} />
@@ -29,26 +37,12 @@ export function PageHeader({
           className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
         />
       ) : null}
-      {/* Title on the left (truncates to make room), actions pinned right.
-          Phones drop the description to keep the header to a single line and
-          let a wide action strip (route tabs + a button) wrap UNDER the title
-          instead of squeezing it to one letter — the title keeps a 10rem
-          floor. sm+ stays one row and actions TOP-align to the (single-line)
-          title so their position never depends on whether the description
-          wraps — route-tab strips must not move between sibling pages.
-
-          The sm+ floor is a HARD 14rem, not `min-w-0`. With min-w-0 a wide
-          action strip won a shrink race outright: the HRM group's old
-          fourteen-peer strip measured 1358px and left the <h1> rendered at
-          ZERO width on every page in the module — present, 32px tall,
-          invisible. The group strip now names six jobs (plus Compliance
-          when construction is on). The strip is still the thing that must
-          give, and it can: it folds its tail into a More menu once it
-          stops fitting. */}
+      {/* Keep the title and primary actions stable between sibling pages.
+          The shared route switch occupies the right end of the action rail. */}
       <header className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:items-start sm:gap-4">
         <div className="min-w-0 flex-1 basis-40 space-y-1 sm:min-w-56">
           <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">
-            {title}
+            {titleContent ?? title}
           </h1>
           {description ? (
             <p className="hidden text-sm text-slate-500 sm:block dark:text-slate-400">
@@ -56,25 +50,14 @@ export function PageHeader({
             </p>
           ) : null}
         </div>
-        {/* Primary page actions keep stable geometry when sibling routes use
-            different implementations (for example, a client create button on
-            one tab and an asChild link on another).
-
-            `data-page-actions` is what lets a subtab strip shrink instead of
-            overrunning the row. A flex item's default `min-width: auto`
-            refuses to go below its content, and specs wrap their actions in
-            one more flex div of their own (actionsClassName), so the
-            permission has to reach two levels — see the rule in
-            web/app/globals.css. Buttons still hold their width: they set
-            `whitespace-nowrap` and the rule leaves their own min-width alone
-            at the level it stops, so the strip is the only item with slack
-            to give. */}
-        {actions ? (
+        {/* Actions wrap on small screens while the title retains readable width. */}
+        {actions || navigation ? (
           <div
             data-page-actions
             className="flex max-w-full flex-wrap items-center justify-end gap-2 [&_[data-slot=button][data-variant=default]]:px-4"
           >
             {actions}
+            {navigation}
           </div>
         ) : null}
       </header>
@@ -95,6 +78,7 @@ export function DetailHeader({
   badge?: React.ReactNode;
   actions?: React.ReactNode;
 }) {
+  const navigation = useContext(PageHeaderNavigationContext);
   return (
     <header className="space-y-2">
       <DocumentTitle title={title} />
@@ -112,8 +96,8 @@ export function DetailHeader({
           </h1>
           {badge}
         </div>
-        {actions ? (
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        {actions || navigation ? (
+          <div data-page-actions className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}{navigation}</div>
         ) : null}
       </div>
       {subtitle ? (

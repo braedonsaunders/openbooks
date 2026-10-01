@@ -7,6 +7,7 @@ import { loadDirectory, loadOrgChart } from '@openbooks/engine/src/hrm/org-chart
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { can, getAuthz, type Authz } from '../authz'
 import { requireFeatureEnabled } from '../feature-gates'
+import { listScopedDepartmentOptions } from '../scoped-options'
 
 /**
  * Org chart loader (0230, HR-19).
@@ -43,6 +44,7 @@ export async function loadOrgChartHome(
   sp: Record<string, string | undefined>,
 ) {
   const t = await getTranslations('hrm')
+  const common = await getTranslations('common')
   const tabs = await hrmGroupTabs(authz.session, '/hrm/org-chart')
   const today = await businessToday(authz.orgId)
   // Shape is not enough: 2026-02-30 passes the regex and then throws out
@@ -80,7 +82,19 @@ export async function loadOrgChartHome(
       : Promise.resolve({ entries: [], totalCount: 0, page: 1, pageSize: 50 }),
   ])
 
-  const personBaseHref = `/hrm/org-chart?asOf=${asOf}`
+  const canManage = can(authz.session, 'hrm.employment.manage') && can(authz.session, 'hrm.employment.read')
+  const departmentOptions = canManage
+    ? (await listScopedDepartmentOptions(authz.orgId, authz.session.allowedSubsidiaryIds)).map((row) => ({ value: row.id, label: row.name }))
+    : []
+  const currentParams = {
+    ...(view === 'directory' ? { view: 'directory' } : {}),
+    ...(search ? { q: search } : {}),
+    ...(sp.department ? { department: sp.department } : {}),
+    ...(sp.root ? { root: sp.root } : {}),
+    ...(view === 'directory' && directoryPage.page > 1 ? { page: String(directoryPage.page) } : {}),
+    asOf,
+  }
+  const personBaseHref = `/hrm/org-chart?${new URLSearchParams(currentParams)}`
   const selectedId = typeof sp.person === 'string' && sp.person.length > 0 ? sp.person : null
 
   function findNode(
@@ -95,6 +109,15 @@ export async function loadOrgChartHome(
     return null
   }
   const selected = selectedId ? findNode(chart.roots, selectedId) : null
+  function findManager(nodes: typeof chart.roots): typeof selected {
+    for (const node of nodes) {
+      if (node.children.some((child) => child.employmentId === selectedId)) return node
+      const found = findManager(node.children)
+      if (found) return found
+    }
+    return null
+  }
+  const manager = selectedId ? findManager(chart.roots) : null
 
   const directoryRows = directoryPage.entries.map((entry) => ({
       id: entry.employmentId,
@@ -102,7 +125,7 @@ export async function loadOrgChartHome(
       title: entry.title,
       department: entry.department,
       manager: entry.managerName,
-      href: `/hrm/org-chart?asOf=${asOf}&person=${entry.employmentId}`,
+      href: `${personBaseHref}&person=${entry.employmentId}`,
     }))
 
   return {
@@ -122,6 +145,8 @@ export async function loadOrgChartHome(
     // a list-toolbar view filter, not a second tab strip.
     search,
     chart,
+    canManage,
+    departmentOptions,
     directoryRows,
     directoryTotal: directoryPage.totalCount,
     directoryPage: directoryPage.page,
@@ -136,15 +161,11 @@ export async function loadOrgChartHome(
     searchLabel: t('orgChart.search'),
     asOfLabel: t('orgChart.asOf'),
     /** URL state the shared toolbar preserves when a control changes. */
-    currentParams: {
-      ...(view === 'directory' ? { view: 'directory' } : {}),
-      ...(search ? { q: search } : {}),
-      ...(view === 'directory' && directoryPage.page > 1 ? { page: String(directoryPage.page) } : {}),
-      asOf,
-    },
+    currentParams,
     personBaseHref,
     selected,
-    personCloseHref: `/hrm/org-chart?asOf=${asOf}${view === 'directory' ? '&view=directory' : ''}`,
+    manager,
+    personCloseHref: personBaseHref,
     // `orgChart.labels.*`, not `orgChart.*`. Every one of these twelve keys
     // was read one segment too high, and next-intl answers a miss with the
     // key path — so the headcount tile was captioned HRM.ORGCHART.HEADCOUNT
@@ -165,6 +186,15 @@ export async function loadOrgChartHome(
       collapse: t('orgChart.labels.collapse'),
       noMatch: t('orgChart.labels.noMatch'),
       empty: t('orgChart.labels.empty'),
+      ...Object.fromEntries([
+        'allDepartments', 'noDepartment', 'expandAll', 'collapseAll', 'editStructure', 'doneEditing',
+        'focus', 'wholeOrganization', 'missingFocus', 'matches', 'clearFilters', 'edit', 'openEmployee',
+        'noReports', 'noVisibleManager', 'openPosition', 'panHint', 'connectHint', 'approvalHint',
+        'zoomIn', 'zoomOut', 'fit', 'minimap', 'managerConnector', 'employeeConnector',
+        'invalidConnection', 'preparingEdit', 'editFailed', 'noAssignment',
+      ].map((key) => [key, t(`orgChart.labels.${key}`)])),
+      retry: common('actions.retry'),
+      cancel: common('actions.cancel'),
     },
   }
 }

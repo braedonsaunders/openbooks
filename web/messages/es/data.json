@@ -41,7 +41,7 @@
     "format": "Formato de archivo",
     "file": "Archivo",
     "chooseFile": "Elegir un archivo",
-    "orPaste": "…o pega filas",
+    "orPaste": "O pegar datos",
     "mode": "Cuando una fila ya existe",
     "modeInsert": "Omitirla (solo insertar nuevas)",
     "modeUpsert": "Actualizarla (upsert)",
@@ -56,7 +56,7 @@
     "toInsert": "Para crear",
     "toUpdate": "Para actualizar",
     "toFail": "Errores",
-    "commit": "Importar {n} filas",
+    "commit": "Importar {n, plural, one {# fila} other {# filas}}",
     "committing": "Importando…",
     "commitFailed": "No se pudo completar la importación.",
     "commitPersistenceFailed": "Este navegador no pudo guardar la clave para reintentar la importación, así que no se envió ninguna solicitud. Activa el almacenamiento de sesión o usa un navegador que lo permita e inténtalo de nuevo.",
@@ -98,7 +98,15 @@
       "createFailedFinalize": "No se pudo crear la empresa de ejemplo: falló la finalización de la nueva empresa. La empresa se creó, pero su configuración no terminó; reinténtelo para continuar donde se detuvo.",
       "createFailedNumbering": "No se pudo crear la empresa de ejemplo: falló la conciliación de la numeración de documentos. La empresa se creó, pero su numeración no terminó; reinténtelo para continuar con la numeración."
     },
-    "loadFailed": "No se pudieron cargar los tipos de registro importables."
+    "loadFailed": "No se pudieron cargar los tipos de registro importables.",
+    "sourceTitle": "Seleccionar registros y cargar un archivo",
+    "sourceHint": "Elija el tipo de registro que desea importar. Asigne las columnas y revise los cambios antes de importar.",
+    "fileHint": "CSV, Excel (.xlsx) o JSON. Incluya encabezados de columna en los archivos CSV y Excel.",
+    "pasteHint": "Pegue CSV con una fila de encabezados o un arreglo JSON de registros. Elija el formato correspondiente arriba.",
+    "rowCount": "{n, plural, one {# fila} other {# filas}}",
+    "parsing": "Leyendo archivo…",
+    "pastedData": "Datos pegados",
+    "reviewHint": "Revise las cantidades y los errores antes de importar. Aún no se ha importado ningún registro."
   },
   "history": {
     "title": "Historial de importaciones",
@@ -114,5 +122,8 @@
     },
     "rows": "Filas",
     "by": "Por"
+  },
+  "resources": {
+    "parties": "Personas y empresas"
   }
 }

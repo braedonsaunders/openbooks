@@ -11,7 +11,8 @@
       "runs": "Paies",
       "remittances": "Versements",
       "separations": "Départs",
-      "yearEnd": "Fin d'année"
+      "yearEnd": "Fin d'année",
+      "checks": "Contrôles"
     },
     "actions": {
       "viewRuns": "Paies",

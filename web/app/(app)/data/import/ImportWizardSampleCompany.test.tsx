@@ -50,6 +50,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
 const messages = (await import('../../../../messages/en')).default
 const { ImportWizard } = await import('./ImportWizard')
+const { SampleCompanyPicker } = await import('../../../../components/sample-company-picker')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -63,6 +64,7 @@ const PROFILE = {
 }
 
 const script = {
+  sampleGets: 0,
   postStatus: 500,
   postBody: { error: 'sample-company-clone-failed', stage: 'clone' },
   resources: [] as { key: string; label: string; group: string; supportsImport?: boolean }[],
@@ -78,6 +80,7 @@ function stubFetch(): void {
       return Response.json({ resources: script.resources })
     }
     if (url === '/api/data/sample-companies' && method === 'GET') {
+      script.sampleGets += 1
       return Response.json({ profiles: [PROFILE] })
     }
     if (url === '/api/data/sample-companies' && method === 'POST') {
@@ -105,10 +108,11 @@ function stubFetch(): void {
   }) as typeof fetch
 }
 
-async function mountWizard(t: TestContext): Promise<void> {
+async function mountWizard(t: TestContext, sample = false): Promise<void> {
   globalThis.__sampleTestRouter = { pushes: [] }
   globalThis.__sampleTestToasts = []
   globalThis.__sampleTestEnteredOrgs = []
+  script.sampleGets = 0
   script.postStatus = 500
   script.postBody = { error: 'sample-company-clone-failed', stage: 'clone' }
   script.importRequests = []
@@ -125,7 +129,7 @@ async function mountWizard(t: TestContext): Promise<void> {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <BusinessDateProvider today="2026-09-23">
-          <ImportWizard />
+          {sample ? <SampleCompanyPicker /> : <ImportWizard />}
         </BusinessDateProvider>
       </NextIntlClientProvider>,
     )
@@ -194,7 +198,7 @@ async function clickImportAction(label: string): Promise<void> {
 }
 
 test('a failed create shows a persistent inline error and keeps the selection', async (t) => {
-  await mountWizard(t)
+  await mountWizard(t, true)
   assert.equal(sampleSelect().value, 'sim_atlas', 'the profile starts selected')
   await clickCreate()
   const alert = document.querySelector('[role="alert"]')
@@ -214,7 +218,7 @@ test('a failed create shows a persistent inline error and keeps the selection', 
 })
 
 test('a subsequent success clears the error and enters the new company', async (t) => {
-  await mountWizard(t)
+  await mountWizard(t, true)
   await clickCreate()
   assert.ok(document.querySelector('[role="alert"]'), 'the failure must render first')
   script.postStatus = 200
@@ -248,6 +252,8 @@ test('the wizard does not send a commit when retry-key session storage cannot pe
   })
   await mountWizard(t)
 
+  assert.equal(script.sampleGets, 0, 'file imports never load sample-company provisioning')
+  assert.equal(document.querySelector('#sample-companies'), null)
   await chooseImportSource()
 
   const button = (label: string) => [...document.querySelectorAll('button')].find((candidate) =>
@@ -265,7 +271,7 @@ test('the wizard does not send a commit when retry-key session storage cannot pe
     await tick()
   })
   await act(async () => {
-    button('Import 1 rows')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    button('Import 1 row')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await tick()
     await tick()
   })
@@ -287,6 +293,7 @@ for (const stage of [
     await chooseImportSource()
     for (const label of stage.clicks) await clickImportAction(label)
 
+    assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', stage.error)
     assert.deepEqual(script.importRequests.map(({ mode }) => mode), stage.requests)
     assert.ok((globalThis.__sampleTestToasts ?? []).some(
       ({ kind, message }) => kind === 'error' && stage.error.test(message),

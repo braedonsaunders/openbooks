@@ -8,6 +8,6 @@ export function setupLaunchActions(authz: Authz): SetupLaunchAction[] {
     ...(can(authz, 'ar.create') ? ['invoice' as const] : []),
     ...(can(authz, 'sync.run') ? ['migrate' as const] : []),
     ...(can(authz, 'banking.reconcile') ? ['statement' as const] : []),
-    ...(can(authz, 'data.import') ? ['demo' as const] : []),
+    ...(can(authz, 'admin.setup.manage') ? ['demo' as const] : []),
   ]
 }

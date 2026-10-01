@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
@@ -277,25 +279,7 @@ export function RateBookDrawer({
       title={creating ? t('newTitle') : t('editTitle', { name: String(row?.name ?? '') })}
       description={t('description')}
       subtabs={
-        <nav className="-mb-px flex flex-wrap gap-1" aria-label={t('tabsAria')}>
-          {(['overview', 'rates'] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-                activeTab === tab
-                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-              )}
-            >
-              {t(`tabs.${tab}`)}
-            </button>
-          ))}
-        </nav>
+        <RecordTabs label={t('tabsAria')} tabs={(['overview', 'rates'] as const).map((key) => ({ key, label: t(`tabs.${key}`) }))} active={activeTab} onChange={setActiveTab} />
       }
       headerActions={<Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : creating ? common('actions.create') : common('actions.save')}</Button>}
     >

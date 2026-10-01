@@ -5,7 +5,8 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-const { agingByParty, agingDetail, AgingRatesUnavailableError } = await import('./aging')
+const { reportDrillErrorResponse } = await import('../report-drill-error')
+const { agingByParty, agingDetail, agingDetailPage, AgingRatesUnavailableError } = await import('./aging')
 
 /**
  * A document currency with no as-of spot must fail the TRANSACTION basis
@@ -38,6 +39,22 @@ test('transaction basis fails closed on uncovered spots; base basis never needs 
       const baseDetail = await agingDetail('ar', scratch.date, undefined, scratch.orgId)
       assert.equal(baseDetail.rows[0]?.docCurrency, 'GBP')
       assert.equal(baseDetail.rows[0]?.txnOpen, '50.0000')
+
+      for (const page of [1, 2]) {
+        let refusal: unknown
+        await assert.rejects(agingDetailPage('ar', scratch.date, undefined, scratch.orgId, { basis: 'transaction' }, { page, perPage: 1 }), (error: unknown) => {
+          assert.ok(error instanceof AgingRatesUnavailableError, 'missing FX must refuse even outside the selected page')
+          refusal = error
+          return true
+        })
+        const response = reportDrillErrorResponse(refusal)
+        assert.equal(response.status, 422, 'an actionable FX refusal must not become a server failure')
+        assert.match((await response.json()).error, /no spot rate for GBP→CAD/)
+
+      }
+      const pagedBase = await agingDetailPage('ar', scratch.date, undefined, scratch.orgId, {}, { page: 1, perPage: 1 })
+      assert.deepEqual(pagedBase.rows, baseDetail.rows)
+      assert.deepEqual(pagedBase.totals, baseDetail.totals)
 
       await assert.rejects(
         agingByParty('ar', scratch.date, undefined, scratch.orgId, { basis: 'transaction' }),

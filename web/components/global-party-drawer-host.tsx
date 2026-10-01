@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { PartyDrawer, type PartyTab } from '../app/(app)/parties/PartyDrawer'
 import type { RelatedPartyRole } from './related-party-link'
+import { useDrawerResource } from './use-drawer-resource'
 import {
   RelatedTransactionDrawerClient,
   type RelatedTransactionDrawerData,
@@ -72,10 +73,6 @@ export function GlobalPartyDrawerHost({
   const transactionId = searchParams.get('partyTxn')
   const transactionKind = searchParams.get('partyTxnKind')
   const initialTab = isPartyTab(requestedTab) ? requestedTab : 'overview'
-  const [data, setData] = useState<DrawerPayload | null>(null)
-  const [loadedId, setLoadedId] = useState<string | null>(null)
-  const [transactionData, setTransactionData] = useState<RelatedTransactionDrawerData | null>(null)
-  const [loadedTransaction, setLoadedTransaction] = useState<string | null>(null)
 
   const closeHref = useMemo(() => {
     const params = new URLSearchParams(queryString)
@@ -90,43 +87,13 @@ export function GlobalPartyDrawerHost({
     return query ? `${pathname}?${query}` : pathname
   }, [pathname, queryString])
 
-  // Clear the drawer while (re)loading, during render (same committed values,
-  // no extra render). The snapshot mirrors the fetch inputs below exactly, so
-  // the reset fires on the same renders the effect re-runs on.
-  const [prevPartyRequest, setPrevPartyRequest] = useState(() => ({ closeHref, partyForm, partyId, role, router, t }))
-  if (
-    prevPartyRequest.closeHref !== closeHref || prevPartyRequest.partyForm !== partyForm ||
-    prevPartyRequest.partyId !== partyId || prevPartyRequest.role !== role ||
-    prevPartyRequest.router !== router || prevPartyRequest.t !== t
-  ) {
-    setPrevPartyRequest({ closeHref, partyForm, partyId, role, router, t })
-    setData(null)
-    setLoadedId(null)
-  }
-
-  useEffect(() => {
-    if (!partyId) return
-    const controller = new AbortController()
-    const params = new URLSearchParams()
-    if (role) params.set('role', role)
-    if (partyForm) params.set('form', partyForm)
-    fetch(`/api/parties/${encodeURIComponent(partyId)}/drawer?${params}`, { signal: controller.signal })
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : t('loadFailed'))
-        return body as DrawerPayload
-      })
-      .then((body) => {
-        setData(body)
-        setLoadedId(partyId)
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        toast.error(error instanceof Error ? error.message : t('loadFailed'))
-        router.replace(closeHref as never, { scroll: false })
-      })
-    return () => controller.abort()
-  }, [closeHref, partyForm, partyId, role, router, t])
+  const partySearch = new URLSearchParams()
+  if (role) partySearch.set('role', role)
+  if (partyForm) partySearch.set('form', partyForm)
+  const data = useDrawerResource<DrawerPayload>(partyId ? `/api/parties/${encodeURIComponent(partyId)}/drawer?${partySearch}` : null, (error) => {
+    toast.error(error.message || t('loadFailed'))
+    router.replace(closeHref as never, { scroll: false })
+  })
 
   const transactionCloseHref = useMemo(() => {
     const params = new URLSearchParams(queryString)
@@ -136,56 +103,17 @@ export function GlobalPartyDrawerHost({
     return query ? `${pathname}?${query}` : pathname
   }, [pathname, queryString])
 
-  // Same render-time reset for the nested transaction drawer. Keyed on the
-  // query string (not the search-params object, whose identity is not stable
-  // across renders) plus the other fetch inputs.
-  const [prevTxnRequest, setPrevTxnRequest] = useState(() => ({
-    partyId, router, queryString, t, transactionCloseHref, transactionId, transactionKind,
-  }))
-  if (
-    prevTxnRequest.partyId !== partyId || prevTxnRequest.router !== router ||
-    prevTxnRequest.queryString !== queryString || prevTxnRequest.t !== t ||
-    prevTxnRequest.transactionCloseHref !== transactionCloseHref ||
-    prevTxnRequest.transactionId !== transactionId || prevTxnRequest.transactionKind !== transactionKind
-  ) {
-    setPrevTxnRequest({
-      partyId, router, queryString, t, transactionCloseHref, transactionId, transactionKind,
-    })
-    setTransactionData(null)
-    setLoadedTransaction(null)
-  }
+  const transactionSearch = new URLSearchParams({ transaction: transactionId ?? '', kind: transactionKind ?? '' })
+  const form = searchParams.get('form')
+  if (form) transactionSearch.set('form', form)
+  const transactionData = useDrawerResource<RelatedTransactionDrawerData>(partyId && transactionId && transactionKind
+    ? `/api/parties/${encodeURIComponent(partyId)}/transaction-drawer?${transactionSearch}` : null, (error) => {
+    toast.error(error.message || t('loadFailed'))
+    router.replace(transactionCloseHref as never, { scroll: false })
+  })
+  // The native record owns its shell. Mount it once its full payload is ready.
+  if (!partyId || !data) return null
 
-  useEffect(() => {
-    if (!partyId || !transactionId || !transactionKind) return
-    const selection = `${transactionKind}:${transactionId}`
-    const controller = new AbortController()
-    const params = new URLSearchParams({ transaction: transactionId, kind: transactionKind })
-    const form = searchParams.get('form')
-    if (form) params.set('form', form)
-    fetch(`/api/parties/${encodeURIComponent(partyId)}/transaction-drawer?${params}`, { signal: controller.signal })
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : t('loadFailed'))
-        return body as RelatedTransactionDrawerData
-      })
-      .then((body) => {
-        setTransactionData(body)
-        setLoadedTransaction(selection)
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        toast.error(error instanceof Error ? error.message : t('loadFailed'))
-        router.replace(transactionCloseHref as never, { scroll: false })
-      })
-    return () => controller.abort()
-  }, [partyId, router, searchParams, t, transactionCloseHref, transactionId, transactionKind])
-
-  if (!partyId) return null
-  // Keep the page beneath completely undisturbed while the record loads. The
-  // real, full-size drawer mounts only after its complete payload is ready.
-  if (!data || loadedId !== partyId) return null
-
-  const transactionSelection = transactionId && transactionKind ? `${transactionKind}:${transactionId}` : null
   return (
     <>
       <PartyDrawer
@@ -217,7 +145,7 @@ export function GlobalPartyDrawerHost({
         recordType={data.recordType}
         canCustomize={data.canCustomize}
       />
-      {transactionData && loadedTransaction === transactionSelection ? (
+      {transactionData ? (
         <RelatedTransactionDrawerClient data={transactionData} />
       ) : null}
     </>

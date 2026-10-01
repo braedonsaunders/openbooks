@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -364,16 +366,7 @@ export function UtilizationView({ data, canConfigure }: { data: UtilizationData;
         <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.billableHours')} value={hrs0(c.billableHours)} sub={t('sub.revenueGenerating')} tone="positive" />
       </div>
 
-      <div className="-mx-1 overflow-x-auto">
-        <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {TABS.map((k) => (
-            <button key={k} type="button" onClick={() => setTab(k)} className={cn('-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors', tab === k ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
-              {t(`tabs.${k}`)}
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <RecordTabs label={t('title')} tabs={TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
       <div key={tab}>
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'intelligence' ? <IntelligenceTab data={data} /> : null}
@@ -383,6 +376,7 @@ export function UtilizationView({ data, canConfigure }: { data: UtilizationData;
         {tab === 'employees' ? <EmployeesTab data={data} onDrill={setFlyout} /> : null}
         {tab === 'config' ? <ConfigTab data={data} canEdit={canConfigure ?? false} /> : null}
       </div>
+      </RecordTabs>
 
       {flyout ? (
         <EntriesDrawer kind={flyout.kind} id={flyout.id} name={flyout.name} sub={flyout.sub} peer={flyout.peer} from={data.period.from} to={data.period.to} onClose={() => setFlyout(null)} />

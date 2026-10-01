@@ -127,7 +127,6 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/compliance', 'mock:compliance'],
   ['@/lib/money-server', 'mock:money'],
   ['../tabs', 'mock:tabs'],
-  ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
 ])
 
 const hooks = registerHooks({

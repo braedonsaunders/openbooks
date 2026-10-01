@@ -29,17 +29,18 @@ export type AiStoredMessage = {
   createdAt: string;
 };
 
+/** Complete owner-scoped history unless a caller explicitly requests a recent window. */
 export async function listConversations(
   authz: Authz,
   scope: string,
-  limit = 20,
+  limit?: number,
 ): Promise<AiConversationSummary[]> {
   const r = (await db.execute<AiConversationSummary>(sql`
     select id, title, updated_at as "updatedAt"
       from ai_conversations
      where org_id = ${authz.user.orgId} and user_id = ${authz.user.id} and scope = ${scope}
-     order by updated_at desc
-     limit ${limit}
+     order by updated_at desc, id desc
+     ${limit === undefined ? sql`` : sql`limit ${limit}`}
   `));
   return r.rows;
 }

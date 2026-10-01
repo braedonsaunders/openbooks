@@ -1,5 +1,7 @@
 'use client'
 
+import { RecordTabs } from '@/components/module-home/record-tabs'
+
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { X } from 'lucide-react'
@@ -248,24 +250,7 @@ function TabStrip({ tab, onTab }: { tab: DrawerTab; onTab: (tab: DrawerTab) => v
   // Underline tab strip — the SetupDrawer drawer-tabs style verbatim. The
   // drawer shell already wraps subtabs in its bordered band.
   return (
-    <div role="tablist" aria-label={t('rules.tabsAria')} className="flex gap-1 overflow-x-auto">
-      {TABS.map((key) => (
-        <button
-          key={key}
-          role="tab"
-          aria-selected={tab === key}
-          type="button"
-          onClick={() => onTab(key)}
-          className={
-            tab === key
-              ? 'shrink-0 border-b-2 border-teal-600 px-3 py-3 text-sm font-medium text-teal-700 transition-colors dark:border-teal-400 dark:text-teal-300'
-              : 'shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200'
-          }
-        >
-          {labels[key]}
-        </button>
-      ))}
-    </div>
+    <RecordTabs label={t('rules.tabsAria')} tabs={TABS.map((key) => ({ key, label: labels[key] }))} active={tab} onChange={onTab} />
   )
 }
 

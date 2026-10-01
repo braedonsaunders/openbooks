@@ -157,6 +157,7 @@ export function SetupNav({
                   { href: '/admin/setup/readiness', label: t('readiness.navTitle'), iconKey: 'gauge' },
                   { href: '/admin/setup/wizard', label: t('features.runWizard'), iconKey: 'sparkles' },
                   { href: '/admin/setup/company', label: t('entities.company.title'), iconKey: 'building' },
+                  { href: '/admin/setup/company#sample-companies', label: td('import.sample.industry'), iconKey: 'sparkles' },
                   { href: '/admin/setup/features', label: t('features.navTitle'), iconKey: 'layers' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,

@@ -22,10 +22,9 @@ import { launcherDataFor, type PayrollLauncherData } from './sections'
 /**
  * The payroll setup workspace, split into a loader and a spec.
  *
- * This page is the setup workspace's odd sibling: it owns its own two-level
- * tab strip (house border-b group strip on top, ModuleHomeTabs pill row
- * beneath) rather than arriving through the generic entity list, and its
- * tabs are mutually exclusive bodies behind one `?tab=` param. Presence
+ * A shared family selector chooses the configuration area and one local
+ * route strip chooses its view. The views are mutually exclusive bodies
+ * behind one `?tab=` param. Presence
  * flags (`onPacks`, `onAccounts`, …) choose exactly one of them; the spec
  * never branches, it only places blocks and lets all but one vanish — the
  * accounts-page precedent (`onList`/`onSearch`/`onHierarchy`) at its widest
@@ -87,7 +86,7 @@ type EntityTab = keyof typeof ENTITY_BY_TAB
 
 const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 
-/** The two-level arrangement: ≤5 top-row groups, subtabs within. */
+/** Configuration families use a picker; only the selected family has a local row. */
 const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
   { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
   { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
@@ -245,8 +244,7 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
           launcher: data.launcher,
         }),
         widgetBlock('payroll-setup-banner', { launcher: data.launcher }),
-        // Group strip + subtab pills: shared chrome, one widget. The
-        // active-vs-plain link PAIR lives in the shared component.
+        // One shared configuration-family selector and local route strip.
         widgetBlock('payroll-setup-tabs', {
           groups: data.groups,
           activeGroup: data.activeGroup,

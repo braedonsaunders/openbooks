@@ -391,7 +391,13 @@
     "saveConflict": "其他用户已更改导航。请重新加载页面并重新应用您的更改。",
     "invalidConfig": "导航配置无效。",
     "unknownApp": "导航引用了未安装的应用。",
-    "resetDefaults": "重置为默认"
+    "resetDefaults": "重置为默认",
+    "workspaceHelp": "工作区用于组织主菜单。局部导航用于在同一任务的相关页面或视图之间切换。",
+    "localTitle": "局部导航",
+    "localHelp": "选择任务，然后重命名、排序或隐藏其局部导航目标。权限和已启用的功能仍然生效。",
+    "localWorkspace": "任务",
+    "localLabel": "目标名称",
+    "resetLocal": "重置局部顺序和可见性"
   },
   "roles": {
     "metaTitle": "角色",

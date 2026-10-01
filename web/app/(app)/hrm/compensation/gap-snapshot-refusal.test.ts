@@ -295,6 +295,7 @@ interface SpecBlock {
   widget?: string;
   props?: { title?: unknown; description?: unknown };
   when?: unknown;
+  blocks?: SpecBlock[];
 }
 
 function bodyOf(spec: unknown): SpecBlock[] {
@@ -330,7 +331,7 @@ test("genuine no-snapshot equity keeps its table distinct from a refusal", async
   const emptyBody = bodyOf(equitySpec(equity!));
   const banner = emptyBody.find((block) => block.widget === "empty-state");
   assert.deepEqual(banner?.when, { $: "refusal" }, "the banner stays hidden without a refusal");
-  const tablePanel = emptyBody.find((block) => block.kind === "panel");
-  assert.ok(tablePanel, "the genuine empty state still renders its categories panel");
-  assert.deepEqual(tablePanel.when, { $: "hasContent" }, "the panel renders because content holds");
+  const categories = emptyBody.find((block) => block.blocks?.some((child) => child.widget === "registered-record-list"));
+  assert.ok(categories, "the genuine empty state still renders its categories collection");
+  assert.deepEqual(categories.when, { $: "hasContent" }, "the categories render because content holds");
 });

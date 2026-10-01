@@ -3,7 +3,7 @@
  * client strip (`./tabs`) so a server loader can name it without pulling the
  * client component into its module graph.
  *
- * `count` is optional and renders as a bubble on the pill — the approvals
+ * `count` is optional and renders as a badge on the link — the approvals
  * hub needs it, a route strip does not. It is the reason the inbox no longer
  * has a tab strip of its own.
  */

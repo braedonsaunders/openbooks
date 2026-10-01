@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 /** Named drill refusals stay 4xx with the engine token; only defects 500. */
 export function reportDrillErrorResponse(error: unknown): NextResponse {
-  if (error instanceof Error && error.name === 'ReportBookSelectionError') {
+  if (error instanceof Error && (error.name === 'ReportBookSelectionError' || error.name === 'AgingRatesUnavailableError')) {
     return NextResponse.json({ error: error.message }, { status: 422 })
   }
   if (error instanceof Error) {

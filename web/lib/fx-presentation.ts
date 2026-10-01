@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 
@@ -48,6 +48,32 @@ export function lineFunctional(
   return subsidiaryBase ?? orgBase;
 }
 
+/** Shared direct-or-inverse closing spot selection. Direct rates win ties;
+ * callers supply the needed currencies as a SQL relation with a ccy column. */
+export function presentationSpotRatesSql(orgId: string, base: string, currencies: SQL, refDate: string): SQL {
+  return sql`
+    select distinct on (s.from_currency) s.from_currency, s.rate::text as rate
+      from (
+        select from_currency, rate, as_of, 0 as priority from fx_rates
+         where org_id = ${orgId} and from_currency in (select ccy from (${currencies}) needed)
+           and to_currency = ${base} and rate_type = 'spot'
+           and as_of <= ${refDate}::date
+        union all
+        select to_currency as from_currency, (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
+         where org_id = ${orgId} and to_currency in (select ccy from (${currencies}) needed)
+           and from_currency = ${base} and rate_type = 'spot'
+           and as_of <= ${refDate}::date
+      ) s
+     order by s.from_currency, s.as_of desc, s.priority asc
+  `;
+}
+
+/** Exact four-decimal ledger conversion, equivalent to money.mulDecimal:
+ * PostgreSQL numeric round and the bigint kernel both round halves away from zero. */
+export function presentationAmountSql(amount: SQL, currency: SQL, target: string, rate: SQL): SQL {
+  return sql`case when ${currency} = ${target} then ${amount} else round((${amount}) * (${rate}), 4) end`;
+}
+
 /**
  * Latest dated spot rate per requested functional currency → presentation
  * base, on or before `refDate`. Same-currency legs resolve to "1" with no
@@ -65,21 +91,9 @@ export async function presentationRates(
   const rates = new Map<string, string>([[base, "1"]]);
   if (needed.length === 0) return rates;
   const list = `{${needed.join(",")}}`;
-  const r = await db.execute<{ from_currency: string; rate: string }>(sql`
-    select distinct on (s.from_currency) s.from_currency, s.rate::text as rate
-      from (
-        select from_currency, rate, as_of, 0 as priority from fx_rates
-         where org_id = ${orgId} and from_currency = any(${list}::text[])
-           and to_currency = ${base} and rate_type = 'spot'
-           and as_of <= ${refDate}::date
-        union all
-        select to_currency as from_currency, (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
-         where org_id = ${orgId} and to_currency = any(${list}::text[])
-           and from_currency = ${base} and rate_type = 'spot'
-           and as_of <= ${refDate}::date
-      ) s
-     order by s.from_currency, s.as_of desc, s.priority asc
-  `);
+  const r = await db.execute<{ from_currency: string; rate: string }>(
+    presentationSpotRatesSql(orgId, base, sql`select unnest(${list}::text[]) as ccy`, refDate),
+  );
   for (const row of r.rows) rates.set(row.from_currency, row.rate);
   const missing = needed.filter((c) => !rates.has(c));
   if (missing.length > 0) {

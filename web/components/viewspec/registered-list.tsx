@@ -3,6 +3,7 @@ import type {
   CellSpec,
   TableBlock,
   Tone,
+  WidgetRef,
 } from '@braedonsaunders/appkit-viewspec'
 import {
   resolvePath,
@@ -17,6 +18,7 @@ import {
 } from '../../lib/list/prepared-sources'
 import { RegisteredListTable } from '../registered-list-table'
 import { CellView } from './cells'
+import { WidgetSlot } from './widget-slot'
 import { nestedScope } from './list-scope'
 import { SpanRowView, tablePrimitives } from './blocks'
 import { toneClass } from './tone'
@@ -46,9 +48,11 @@ export function RegisteredListBlockView({
   spec,
   scope,
   searchParams,
+  toolbar,
 }: {
   source: PreparedListSourceKey
   spec: TableBlock
+  toolbar?: WidgetRef[]
   scope: unknown
   searchParams: Record<string, string | string[] | undefined>
 }) {
@@ -105,6 +109,11 @@ export function RegisteredListBlockView({
       sortParamKey={spec.sorting?.sortParamKey}
       dirParamKey={spec.sorting?.dirParamKey}
       searchable={source.clientSearch !== false}
+      toolbarAfter={
+        toolbar?.length ? (
+          <WidgetSlot widgets={toolbar} scope={tableScope} />
+        ) : undefined
+      }
       paging={false}
       leading={spec.leading?.map((row, index) => (
         <SpanRowView

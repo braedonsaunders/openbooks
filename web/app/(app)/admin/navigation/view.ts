@@ -1,14 +1,15 @@
 import 'server-only'
 
-import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
 import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { redirect } from 'next/navigation'
 import { can, getAuthz } from '../../../../lib/authz'
 import { accessDeniedHref } from '../../../../lib/gate-targets'
 import { listApps } from '../../../../lib/apps/store'
 import { defaultNavConfig, type NavAppOption, type OrgNavConfig } from '../../../../lib/nav/registry'
+import { reconcileNavConfig } from '@openbooks/engine/navigation'
+import { readNavigationConfig } from '../../../../lib/nav/config'
+import { navigationEditorCatalog, type NavigationEditorWorkspace } from '../../../../lib/nav/catalog'
 
 /**
  * The navigation editor, split into a loader and a spec.
@@ -34,6 +35,7 @@ export interface NavigationAdminData {
   /** Save fence token: the saved row's updated_at at load, null when no row
    *  exists yet. The editor echoes it back; a mismatch is a stale write. */
   revision: string | null
+  localCatalog: NavigationEditorWorkspace[]
 }
 
 export async function loadNavigationAdmin(): Promise<NavigationAdminData | null> {
@@ -53,12 +55,13 @@ export async function loadNavigationAdmin(): Promise<NavigationAdminData | null>
   const t = await getTranslations('admin.navigation')
   const tHub = await getTranslations('admin.hub')
 
-  const [r, apps] = await Promise.all([
-    db.execute<{ config: OrgNavConfig; updated_at: Date }>(sql`select config, updated_at from org_nav_configs where org_id = ${user.orgId} limit 1`),
+  const [r, apps, localCatalog] = await Promise.all([
+    readNavigationConfig(user.orgId),
     listApps(user.orgId),
+    navigationEditorCatalog(user.orgId),
   ])
-  const saved = r.rows[0]?.config
-  const revision = r.rows[0]?.updated_at ? new Date(r.rows[0].updated_at).toISOString() : null
+  const saved = r?.config
+  const revision = r?.updated_at ? new Date(r.updated_at).toISOString() : null
   const navApps = apps
     .filter((app) => app.status === 'installed' && app.activeVersionId)
     .map((app) => ({
@@ -66,7 +69,7 @@ export async function loadNavigationAdmin(): Promise<NavigationAdminData | null>
       name: app.manifest?.nav?.label?.trim() || app.name,
       iconKey: app.manifest?.nav?.icon?.trim() || app.iconKey,
     }))
-  const config = saved?.version === 2 ? saved : defaultNavConfig()
+  const config = saved?.version === 2 ? reconcileNavConfig(saved) : defaultNavConfig()
 
   return {
     title: t('title'),
@@ -76,6 +79,7 @@ export async function loadNavigationAdmin(): Promise<NavigationAdminData | null>
     initial: config,
     apps: navApps,
     revision,
+    localCatalog,
   }
 }
 
@@ -91,7 +95,7 @@ export function navigationAdminSpec(data: NavigationAdminData): PageSpec {
     layout: 'bare',
     header: [],
     body: [
-      frame('page-container', [pageHeader({ title: f('title'), description: f('description'), back: { href: f('backHref'), label: f('backLabel') } }), grid('mt-6', [widgetBlock('nav-editor', { initial: data.initial, apps: data.apps, revision: data.revision })])], {
+      frame('page-container', [pageHeader({ title: f('title'), description: f('description'), back: { href: f('backHref'), label: f('backLabel') } }), grid('mt-6', [widgetBlock('nav-editor', { initial: data.initial, apps: data.apps, revision: data.revision, localCatalog: data.localCatalog })])], {
         className: 'max-w-3xl',
       }),
     ],

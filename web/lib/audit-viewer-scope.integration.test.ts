@@ -25,6 +25,7 @@ const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { default: Audit } = await import("../app/(app)/admin/audit/page");
+const { GET: auditEvent } = await import('../app/api/audit/events/[id]/route');
 
 const cases: Array<{ mode: "restricted" | "empty" | "all"; query?: Record<string, string>; invalid?: boolean }> = [
   { mode: "restricted" }, { mode: "empty" }, { mode: "all" },
@@ -52,6 +53,26 @@ for (const { mode, query = {}, invalid = false } of cases) {
       await withBypassContext(() => db.execute(sql`insert into audit_log(id,org_id,table_name,row_id,action,changes,actor_id)
         values (${eventId},${org.orgId},'documents',${evidence.before.document.id},'delete',${JSON.stringify(evidence)}::jsonb,${actor})`));
       const invoke = () => withOrgContext(org.orgId, () => Audit({ searchParams: Promise.resolve({ event: eventId, ...query }) }));
+      if (!invalid) {
+        const response = await withOrgContext(org.orgId, () => auditEvent(
+          new Request(`http://localhost/api/audit/events/${eventId}`),
+          { params: Promise.resolve({ id: eventId }) },
+        ));
+        assert.equal(response.status, mode === 'all' ? 200 : 403);
+        const body = await response.json();
+        if (mode === 'all') {
+          assert.equal(body.id, eventId);
+          assert.deepEqual(body.changes, evidence);
+          assert.equal(response.headers.get('cache-control'), 'private, no-store');
+          const missing = await withOrgContext(org.orgId, () => auditEvent(
+            new Request('http://localhost/api/audit/events/missing'),
+            { params: Promise.resolve({ id: randomUUID() }) },
+          ));
+          assert.equal(missing.status, 404);
+        } else {
+          assert.ok(!JSON.stringify(body).includes('PRIVATE-AUDIT-DOCUMENT'));
+        }
+      }
       if (mode === "all" && !invalid) {
         const output = JSON.stringify(await invoke(), (_key, value: unknown) => React.isValidElement(value) ? value.props : value);
         assert.ok(output.includes("PRIVATE-AUDIT-DOCUMENT"));

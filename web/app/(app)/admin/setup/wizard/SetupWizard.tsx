@@ -1486,7 +1486,7 @@ function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
 }) {
   const destinations: Record<SetupLaunchAction, string> = {
     invoice: documentCreateHref('/ar/invoices', 'customer_invoice'),
-    migrate: '/sync', statement: '/banking/imports', demo: '/data/import',
+    migrate: '/sync', statement: '/banking/imports', demo: '/admin/setup/company#sample-companies',
   }
   const preferred: SetupLaunchAction = bookStart === 'migrate' ? 'migrate' : 'invoice'
   const ordered = [preferred, ...actions.filter((action) => action !== preferred)]

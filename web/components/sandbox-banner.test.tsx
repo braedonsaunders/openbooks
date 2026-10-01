@@ -3,9 +3,8 @@ import test from "node:test";
 import { stubModules } from '../testing/stub-modules.ts'
 import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-// F5-4: SandboxBanner hardcoded every word of its safety-critical chrome —
-// the banner a sandbox session cannot avoid. A non-en user must read the
-// environment warning and the exit action in their own locale.
+// A user must read the persistent sandbox warning and exit action in their
+// own locale.
 // The banner is a server component, so next-intl/server is doubled with a
 // stub that reads the REAL catalog: the mock translator substitutes the
 // locale file's own values, and hardcoded English fails every assertion.
@@ -54,7 +53,7 @@ async function renderBanner(props: { name?: string; kind?: "sandbox" | "preview"
   return { host, root };
 }
 
-test("F5-4: the sandbox banner warns and exits in the session locale", async () => {
+test("the sandbox banner warns and exits in the session locale", async () => {
   const { host, root } = await renderBanner({ name: "QA-1", kind: "sandbox" });
   try {
     const text = host.textContent ?? "";
@@ -72,15 +71,8 @@ test("F5-4: the sandbox banner warns and exits in the session locale", async () 
   }
 });
 
-test("F5-4: the sample-company banner translates without a name", async () => {
-  const { host, root } = await renderBanner({ kind: "preview" });
-  try {
-    const text = host.textContent ?? "";
-    assert.match(text, /Beispielunternehmen/);
-    assert.ok(!text.includes("Sample company"), "English sample-company label must not leak");
-  } finally {
-    await act(async () => {
-      root.unmount();
-    });
+test("sample companies never render a sandbox warning or production exit", async () => {
+  for (const name of [undefined, "SIM · Northstar Cloud"]) {
+    assert.equal(await SandboxBanner({ kind: "preview", name }), null);
   }
 });

@@ -1,4 +1,5 @@
 'use client'
+import { RecordTabs } from '@/components/module-home/record-tabs'
 import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell, TableHeader as SharedTableHeader, TableHead as SharedTableHead } from "../../reports/ReportTable"
 import { toChartNumber } from '../_ui/format'
 
@@ -179,21 +180,8 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
         </div>
       ) : null}
 
-      <div className="-mx-1 overflow-x-auto">
-        <div className="flex min-w-max items-center gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {tabs.map((key) => (
-            <button key={key} type="button" onClick={() => setTab(key)} className={cn('-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors', tab === key ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
-              {t(`tabs.${key}`)}
-            </button>
-          ))}
-          {mode === 'analytics' ? (
-            <button type="button" onClick={() => router.push('/admin/setup/overhead')} className="-mb-px ml-auto flex shrink-0 items-center gap-1 px-3.5 py-2 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400">
-              <SlidersHorizontal size={12} aria-hidden /> {t('configureInSetup')}
-            </button>
-          ) : null}
-        </div>
-      </div>
-
+      {mode === 'analytics' ? <Link href="/admin/setup/overhead" className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400"><SlidersHorizontal size={12} aria-hidden /> {t('configureInSetup')}</Link> : null}
+      <RecordTabs label={t('title')} tabs={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))} active={tab} onChange={setTab}>
       <div key={tab}>
         {tab === 'categories' ? <CategoriesTab data={data} openCat={setOpenCatId} /> : null}
         {tab === 'matrix' ? <MatrixTab data={data} onDrill={setCell} /> : null}
@@ -201,6 +189,7 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
         {tab === 'selling' ? <SellingTab data={data} /> : null}
         {tab === 'config' ? <ConfigTab data={data} /> : null}
       </div>
+      </RecordTabs>
 
       {openCatId ? <CategoryFlyout catId={openCatId} data={data} onClose={() => setOpenCatId(null)} onDrillAccount={setDrill} /> : null}
       {cell ? <CellFlyout cell={cell} data={data} onClose={() => setCell(null)} /> : null}
