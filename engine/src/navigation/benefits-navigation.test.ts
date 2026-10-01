@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { HRM_LOCAL_NAVIGATION, LOCAL_NAVIGATION, applyLocalNavigationPreferences } from './local-navigation.ts'
+import { isDefaultLocalNavigationItem, reconcileNavConfig } from './nav-config.ts'
 import { defaultNavConfig, NAV_MODULES } from './nav-registry.ts'
 
 test('Benefits owns programs, enrollment, rewards and incentives while compensation retains its own workspace', () => {
@@ -30,4 +31,24 @@ test('new Benefits destinations enter native navigation once and preserve stored
   const resolved = applyLocalNavigationPreferences(tabs, { items: [{ href: '/hrm/benefits', hidden: true }] })
   assert.ok(!resolved.some((tab) => tab.href === '/hrm/benefits'))
   assert.ok(resolved.some((tab) => tab.href === '/hrm/benefits?view=rewards'))
+})
+
+
+test('enrollment windows remain registered and local while enrollment owns the default main-menu entry', () => {
+  const saved = defaultNavConfig()
+  const before = structuredClone(saved)
+  const reconciled = reconcileNavConfig(saved)
+  assert.deepEqual(saved, before, 'saved company preferences are not rewritten')
+  const people = reconciled.groups.find((group) => group.id === 'hrm')!
+  const windows = people.items.find((item) => item.kind === 'module' && item.moduleKey === 'hrm-benefits-windows')!
+  const enrollment = people.items.find((item) => item.kind === 'module' && item.moduleKey === 'hrm-benefits-enrolments')!
+  assert.equal(NAV_MODULES.find((module) => module.key === 'hrm-benefits-windows')?.menuParent, 'hrm-benefits-enrolments')
+  assert.equal(isDefaultLocalNavigationItem(people.id, windows), true)
+  assert.equal(isDefaultLocalNavigationItem(people.id, enrollment), false)
+  assert.equal(windows.kind, 'module')
+  if (windows.kind !== 'module') throw new Error('Enrollment windows must retain their registered navigation identity')
+  assert.equal(isDefaultLocalNavigationItem(people.id, { ...windows, placement: 'custom' }), false, 'explicit shortcuts survive')
+  assert.equal(isDefaultLocalNavigationItem('company-shortcuts', windows), false, 'company-defined groups retain shortcuts')
+  assert.ok(HRM_LOCAL_NAVIGATION.rewards.some((tab) => tab.href === '/hrm/benefits?view=windows'))
+  assert.equal(NAV_MODULES.find((module) => module.key === 'hrm-benefits-windows')?.requiredPermission, 'hrm.benefits.read')
 })
