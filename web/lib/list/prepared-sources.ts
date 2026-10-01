@@ -229,6 +229,44 @@ const SOURCES = {
     rowKeyField: 'propertyId',
     mode: 'loaded',
   },
+  // Period identity is the composite (employee, source pay run) and bucket
+  // identity is component-plus-index; no single field holds either, so the
+  // client tables key rows with those pairs instead.
+  payroll_retro_periods: {
+    route: '/payroll/retro',
+    rowsField: 'rows',
+    mode: 'loaded',
+  },
+  payroll_retro_buckets: {
+    route: '/payroll/retro',
+    rowsField: 'rows',
+    mode: 'loaded',
+  },
+  payroll_parallel_comparisons: {
+    route: '/payroll/parallel-run',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  payroll_parallel_registers: {
+    route: '/payroll/parallel-run',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  payroll_parallel_findings: {
+    route: '/payroll/parallel-run',
+    rowsField: 'rows',
+    rowKeyField: 'id',
+    mode: 'loaded',
+  },
+  // Group identity is the composite (destination, filing account), which no
+  // single field holds; the client table keys rows with that pair instead.
+  payroll_remittance_groups: {
+    route: '/payroll/remittances',
+    rowsField: 'groups',
+    mode: 'loaded',
+  },
   continuous_close_findings: {
     clientSearch: false,
     route: '/continuous-close',

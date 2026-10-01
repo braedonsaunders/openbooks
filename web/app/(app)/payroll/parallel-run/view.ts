@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import {
   comparablePayRuns,
   comparableSlots,
@@ -12,7 +12,6 @@ import {
 import { can, guardRootSubsidiaryScope, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { notFound } from 'next/navigation'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
 import type { ParallelRunView } from './ParallelRunView'
 
 /**
@@ -48,7 +47,6 @@ type WorkspaceProps = Parameters<typeof ParallelRunView>[0]
 export interface ParallelRunData {
   title: string
   description: string
-  viewTabs: { href: string; label: string; active?: boolean }[]
   workspace: {
     registers: WorkspaceProps['registers']
     runs: WorkspaceProps['runs']
@@ -79,15 +77,12 @@ export async function loadParallelRun(): Promise<ParallelRunData> {
     parallelTolerances(orgId),
     comparableSlots(orgId),
   ])
-  const tabs = await groupTabs('payroll', '/payroll/parallel-run', { orgId })
-
   return {
     title: text('parallelRun.title', 'Parallel run'),
     description: text(
       'parallelRun.description',
       'Check a pay period against the payroll system you are leaving, penny by penny. Import the old provider’s register, pick the run that covers the same period, and compare.',
     ),
-    viewTabs: tabs,
     workspace: {
       registers,
       runs,
@@ -111,10 +106,11 @@ export function parallelRunSpec(_data: ParallelRunData): PageSpec {
     route: '/payroll/parallel-run',
     layout: 'list',
     header: [
+      // Module tabs live in the shared payroll navigation; the header keeps
+      // only the title the loader resolves.
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: _data.viewTabs })],
       }),
     ],
     body: [
