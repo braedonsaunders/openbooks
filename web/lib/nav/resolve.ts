@@ -2,7 +2,7 @@ import 'server-only'
 import { listActiveExtensionContributions } from '@openbooks/engine/src/extensions/projections.ts'
 import { sql } from 'drizzle-orm'
 import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '../features'
-import { featureAwareNavConfig, reconcileNavConfig } from '@openbooks/engine/navigation'
+import { featureAwareNavConfig, isDefaultLocalNavigationItem, reconcileNavConfig } from '@openbooks/engine/navigation'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
 import { essentialsWorkspace } from '../workspace-presentation'
@@ -104,6 +104,8 @@ export async function resolveNav(
       if (item.kind === 'module') {
         const mod = MODULE_BY_KEY.get(item.moduleKey)
         if (!mod) continue
+        const parent = mod.menuParent ? MODULE_BY_KEY.get(mod.menuParent) : undefined
+        if (isDefaultLocalNavigationItem(g.id, item) && parent && visibleNavigationHref(parent.href, can, featureState)) continue
         if (mod.homeOnly && g.id === mod.group && item.placement !== 'custom') continue
         if (featureHiddenModules.has(mod.key)) continue
         if (mod.featureKey && !featureEnabled(featureState, mod.featureKey)) continue

@@ -122,3 +122,37 @@ for (const [name, respond, releaseMessage] of [
     }
   });
 }
+
+test('local detail views can be promoted to the main menu and returned without hiding their page tabs', async () => {
+  const priorFetch = globalThis.fetch;
+  const saved: ReturnType<typeof defaultNavConfig>[] = [];
+  globalThis.fetch = (async (_input, init) => {
+    saved.push((JSON.parse(String(init?.body)) as { config: ReturnType<typeof defaultNavConfig> }).config);
+    return Response.json({ revision: '2026-10-01T00:00:00Z' });
+  }) as typeof fetch;
+  const { host, root } = await mountEditor();
+  const row = () => [...host.querySelectorAll('li')].find((element) => element.textContent?.includes('hrm-performance-calibration'))!;
+  const visibilityButton = () => row().querySelector<HTMLButtonElement>('button[aria-label="Show item"], button[aria-label="Hide item"]')!;
+  const savedItem = () => {
+    const item = saved.at(-1)!.groups.flatMap((group) => group.items).find((entry) => entry.kind === 'module' && entry.moduleKey === 'hrm-performance-calibration');
+    assert.ok(item && item.kind === 'module');
+    return item;
+  };
+  try {
+    assert.equal(visibilityButton().getAttribute('aria-label'), 'Show item');
+    await act(async () => { visibilityButton().click(); await tick(); });
+    assert.equal(visibilityButton().getAttribute('aria-label'), 'Hide item');
+    await act(async () => { saveButton(host).click(); await tick(); });
+    assert.equal(savedItem().placement, 'custom');
+    assert.equal(savedItem().hidden, false);
+    await act(async () => { visibilityButton().click(); await tick(); });
+    await act(async () => { saveButton(host).click(); await tick(); });
+    assert.equal(visibilityButton().getAttribute('aria-label'), 'Show item');
+    assert.equal(savedItem().placement, undefined);
+    assert.equal(savedItem().hidden, false, 'returning to local navigation must retain the local tab');
+  } finally {
+    globalThis.fetch = priorFetch;
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

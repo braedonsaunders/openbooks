@@ -156,7 +156,16 @@ test('every module belongs to a declared workspace and has a unique stable key',
   const orderedKeys = NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key])
   assert.equal(new Set(moduleKeys).size, NAV_MODULES.length)
   assert.deepEqual([...orderedKeys].sort(), [...moduleKeys].sort())
-  for (const module of NAV_MODULES) assert.ok(groupKeys.has(module.group), module.key)
+  for (const module of NAV_MODULES) {
+    assert.ok(groupKeys.has(module.group), module.key)
+    if (module.menuParent) {
+      const parent = NAV_MODULES.find((candidate) => candidate.key === module.menuParent)
+      assert.ok(parent, `${module.key}: menu parent must be registered`)
+      assert.notEqual(parent.key, module.key)
+      assert.equal(parent.group, module.group, `${module.key}: parent owns the same workspace`)
+      assert.equal(parent.menuParent, undefined, `${module.key}: main menu parents are entry points`)
+    }
+  }
   for (const group of NAV_GROUPS) {
     for (const moduleKey of DEFAULT_NAV_ORDER[group.key]) {
       assert.equal(NAV_MODULES.find((module) => module.key === moduleKey)?.group, group.key, moduleKey)

@@ -10,6 +10,8 @@ export type LocalNavigationTab = {
   label?: string
   /** Explicit main-menu identity for a query-addressed working view. */
   menuKey?: string
+  /** Registered entry-point key; detailed views stay local unless promoted. */
+  menuParent?: string
   permission?: string
   permissionsAny?: string[]
   feature?: string
@@ -62,10 +64,11 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/hrm/qualifications', ns: 'hrm', key: 'home.tabs.qualifications', permission: 'hrm.certifications.read', feature: 'hrmCertifications' },
   ],
   hiring: [
-    { href: '/hrm/positions', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read' },
+    { href: '/hrm/positions', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read', menuParent: 'hrm-recruiting' },
     { href: '/hrm/recruiting', ns: 'hrm', key: 'recruiting.tabs.openings', permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'] },
     ...['interviews', 'offers', 'postings', 'pools'].map((tab) => ({
       href: `/hrm/recruiting?tab=${tab}`, menuKey: `hrm-recruiting-${tab}`, ns: 'hrm', key: `recruiting.tabs.${tab}`,
+      menuParent: 'hrm-recruiting',
       permission: 'hrm.recruiting.read', feature: 'hrmRecruiting', carry: ['status'],
     })),
   ],
@@ -75,10 +78,10 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   ],
   talent: [
     { href: '/hrm/performance', ns: 'hrm', key: 'performance.continuous.tabs.cycles', feature: 'hrmPerformance' },
-    ...['calibration', 'talent'].map((tab) => ({ href: `/hrm/performance?tab=${tab}`, menuKey: `hrm-performance-${tab}`, ns: 'hrm', key: `performance.continuous.tabs.${tab}`, permission: 'hrm.performance.manage', feature: 'hrmPerformance' })),
-    { href: '/hrm/performance?tab=retention', menuKey: 'hrm-performance-retention', ns: 'hrm', key: 'retention.title', permission: 'hrm.retention.read', feature: 'hrmPerformance' },
-    { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys', permission: 'hrm.surveys.manage', feature: 'hrmSurveys' },
-    { href: '/hrm/performance?tab=settings', menuKey: 'hrm-performance-settings', ns: 'hrm', key: 'performance.continuous.tabs.settings', permission: 'hrm.performance.manage', feature: 'hrmPerformance' },
+    ...['calibration', 'talent'].map((tab) => ({ href: `/hrm/performance?tab=${tab}`, menuKey: `hrm-performance-${tab}`, ns: 'hrm', key: `performance.continuous.tabs.${tab}`, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' })),
+    { href: '/hrm/performance?tab=retention', menuKey: 'hrm-performance-retention', ns: 'hrm', key: 'retention.title', permission: 'hrm.retention.read', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
+    { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys', permission: 'hrm.surveys.manage', feature: 'hrmSurveys', menuParent: 'hrm-performance' },
+    { href: '/hrm/performance?tab=settings', menuKey: 'hrm-performance-settings', ns: 'hrm', key: 'performance.continuous.tabs.settings', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
   ],
   compensation: [
     { href: '/hrm/compensation', ns: 'hrm', key: 'home.tabs.compensation', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },
