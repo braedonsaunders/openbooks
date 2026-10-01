@@ -2798,6 +2798,11 @@
       "scientific": "{field}：请完整输入 {value} 的十进制形式，不使用科学计数法。",
       "not-a-number": "{field}：请输入可读的十进制金额。"
     },
-    "description": "福利、表彰与激励：明确资格、受控审批和工资发放。"
+    "description": "福利、表彰与激励：明确资格、受控审批和工资发放。",
+    "home": {
+      "heroHint": "雇主定义的计划、金额规则和生效日期。",
+      "directoryTitle": "福利管理",
+      "payrollHint": "所有已记录奖励 · 各币种分别汇总"
+    }
   }
 }

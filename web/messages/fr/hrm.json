@@ -2798,6 +2798,11 @@
       "scientific": "{field} : écrivez {value} en entier, sans notation scientifique.",
       "not-a-number": "{field} : saisissez un montant décimal lisible."
     },
-    "description": "Avantages, reconnaissance et primes : admissibilité claire, approbations contrôlées et versement en paie."
+    "description": "Avantages, reconnaissance et primes : admissibilité claire, approbations contrôlées et versement en paie.",
+    "home": {
+      "heroHint": "Programmes de l’employeur, règles de valorisation et dates d’effet.",
+      "directoryTitle": "Gestion des avantages",
+      "payrollHint": "Toutes les récompenses enregistrées · devises séparées"
+    }
   }
 }

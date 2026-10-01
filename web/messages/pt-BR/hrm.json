@@ -2798,6 +2798,11 @@
       "scientific": "{field}: escreva {value} por inteiro, sem notação científica.",
       "not-a-number": "{field}: insira um valor decimal legível."
     },
-    "description": "Benefícios, reconhecimento e incentivos com elegibilidade clara, aprovações controladas e pagamento na folha."
+    "description": "Benefícios, reconhecimento e incentivos com elegibilidade clara, aprovações controladas e pagamento na folha.",
+    "home": {
+      "heroHint": "Programas do empregador, regras de valor e datas de vigência.",
+      "directoryTitle": "Gestão de benefícios",
+      "payrollHint": "Todas as recompensas registradas · moedas separadas"
+    }
   }
 }

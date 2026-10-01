@@ -2798,6 +2798,11 @@
       "scientific": "{field}: write {value} in full decimal form, not scientific notation.",
       "not-a-number": "{field}: enter a readable decimal amount."
     },
-    "description": "Benefits, recognition and incentives — clear eligibility, controlled approvals and payroll delivery."
+    "description": "Benefits, recognition and incentives — clear eligibility, controlled approvals and payroll delivery.",
+    "home": {
+      "heroHint": "Employer-defined programs, value rules and effective dates.",
+      "directoryTitle": "Benefits workspace",
+      "payrollHint": "All recorded awards · currencies remain separate"
+    }
   }
 }

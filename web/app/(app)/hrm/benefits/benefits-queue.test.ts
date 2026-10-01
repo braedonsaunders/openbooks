@@ -320,3 +320,55 @@ test('a refused award read shows unknown vitals and omits zero-shaped currency t
     assert.ok(!spec.includes('deliveredRows'), 'a failed read cannot render a no-awards currency table')
   } finally { gap.__portfolioReads = undefined }
 })
+
+test('Benefits overview uses the native cockpit hero and rail without enrollment tables or creation cards', async () => {
+  gap.__portfolioReads = undefined
+  stubReads([], [])
+  const data = await loadBenefits(HR_BENEFITS, {})
+  const spec = benefitsSpec(data)
+  const body = spec.body.find((block) => block.kind === 'grid')
+  assert.ok(body?.kind === 'grid')
+  const cockpit = body.blocks.find((block) => block.kind === 'grid' && block.className?.includes('lg:grid-cols-3'))
+  assert.ok(cockpit?.kind === 'grid')
+  const hero = cockpit.blocks[0]
+  assert.ok(hero?.kind === 'panel')
+  assert.match(hero.className ?? '', /lg:col-span-2/)
+  assert.ok(hero.blocks.some((block) => block.kind === 'widget' && block.widget === 'hrm-program-table'))
+  const rail = cockpit.blocks[1]
+  assert.ok(rail?.kind === 'grid')
+  assert.match(rail.className ?? '', /overflow-y-auto/)
+  const serialized = JSON.stringify(spec)
+  assert.ok(serialized.includes('attention-list'))
+  assert.ok(serialized.includes('directory-section'))
+  assert.ok(!serialized.includes('hrm_benefits_windows'))
+  assert.ok(!serialized.includes('hrm_benefits_enrolments'))
+  assert.ok(!serialized.includes('hrm-benefit-type-cards'))
+  assert.ok(!serialized.includes('hrm-facts'), 'empty award balances do not create empty money panels')
+})
+
+test('Benefits overview preserves exact currency lines in native populated summaries', async () => {
+  stubReads([], [])
+  gap.__portfolioReads = { programs: [], awards: [
+    { id: 'usd', programId: 'program', employmentId: 'emp', status: 'approved', value: '25.00', currency: 'USD', periodFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', programCode: 'BONUS', programName: 'Bonus', programFamily: 'reward' },
+    { id: 'jpy', programId: 'program', employmentId: 'emp', status: 'approved', value: '1000', currency: 'JPY', periodFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', programCode: 'BONUS', programName: 'Bonus', programFamily: 'reward' },
+  ] }
+  try {
+    const data = await loadBenefits(HR_BENEFITS, {})
+    const serialized = JSON.stringify(benefitsSpec(data))
+    assert.ok(serialized.includes('hrm-facts'))
+    for (const row of data.awaitingRows) {
+      assert.ok(serialized.includes(JSON.stringify({ label: row.currency, value: row.display })))
+    }
+    assert.deepEqual(data.awaitingRows.map((row) => [row.currency, row.amount]), [['JPY', '1000.0000'], ['USD', '25.0000']])
+  } finally { gap.__portfolioReads = undefined }
+})
+
+test('Enrollment windows remain directly accessible from Enrollments', async () => {
+  gap.__portfolioReads = undefined
+  stubReads([], [])
+  const data = await loadBenefits(HR_BENEFITS, { view: 'enrolments' })
+  const serialized = JSON.stringify(benefitsSpec(data))
+  assert.ok(serialized.includes('"href":"/hrm/benefits?view=windows"'))
+  assert.ok(serialized.includes(JSON.stringify(data.enrollmentWindowsButton)))
+  assert.ok(serialized.includes('hrm_benefits_enrolments'))
+})

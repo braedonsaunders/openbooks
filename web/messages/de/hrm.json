@@ -2798,6 +2798,11 @@
       "scientific": "{field}: Schreiben Sie {value} vollständig statt in wissenschaftlicher Notation.",
       "not-a-number": "{field}: Geben Sie einen lesbaren Dezimalbetrag ein."
     },
-    "description": "Leistungen, Anerkennung und Prämien mit klarer Berechtigung, kontrollierten Genehmigungen und Auszahlung über die Abrechnung."
+    "description": "Leistungen, Anerkennung und Prämien mit klarer Berechtigung, kontrollierten Genehmigungen und Auszahlung über die Abrechnung.",
+    "home": {
+      "heroHint": "Arbeitgeberprogramme, Wertregeln und Gültigkeitszeiträume.",
+      "directoryTitle": "Leistungsverwaltung",
+      "payrollHint": "Alle erfassten Prämien · Währungen bleiben getrennt"
+    }
   }
 }
