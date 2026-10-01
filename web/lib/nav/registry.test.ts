@@ -49,6 +49,7 @@ test('default workspaces follow the approved journey-oriented information archit
     'collections',
     'ar-invoices',
     'receipts',
+    'crm-sales',
   ])
   for (const key of ['employees', 'hrm', 'payroll']) {
     assert.ok(DEFAULT_NAV_ORDER.hrm.includes(key))
