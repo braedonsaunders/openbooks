@@ -86,7 +86,7 @@ async function mount(t: TestContext, responder: () => Response): Promise<void> {
 test('the register chrome renders translated with an empty list', async (t) => {
   await mount(t, () => Response.json({ subcontracts: [] }))
   const text = document.body.textContent ?? ''
-  assert.ok(text.includes('Subcontract register'), 'the register title must render')
+  assert.ok(text.includes('Original and revised commitments remain visible'), 'the collection guidance must render')
   assert.ok(text.includes('No subcontracts yet'), 'the empty title must render')
   assert.ok(text.includes('New subcontract'), 'the create action must render')
   assert.ok(
