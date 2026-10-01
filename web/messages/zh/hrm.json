@@ -1040,7 +1040,7 @@
       "tabs": {
         "cycles": "周期",
         "calibration": "校准",
-        "talent": "人才与继任",
+        "talent": "评估",
         "settings": "设置"
       },
       "calibration": {
@@ -1085,7 +1085,7 @@
         "detailLoadFailed": "无法加载校准详情，请重试。"
       },
       "talent": {
-        "title": "人才与继任",
+        "title": "评估",
         "description": "基于既定量表的九宫格、人才表和继任计划。",
         "newRecord": "新建记录",
         "cycleLabel": "评估周期",
@@ -1160,7 +1160,7 @@
       "assessments": "评估",
       "succession": "继任计划",
       "matrix": "九宫格",
-      "noCycle": "请创建评估周期以评估绩效和潜力。继任计划无需周期即可管理。",
+      "noCycle": "创建考核周期以记录绩效和潜力评估。",
       "newPlan": "新建继任计划",
       "setupTitle": "绩效设置",
       "setupDescription": "在公司设置中配置评估表、评分标准和反馈权限。",
@@ -1176,7 +1176,10 @@
       "noScale": "此周期需要明确的绩效和潜力评分标准。请公司设置管理员先配置评估表。",
       "assessmentsDescription": "评估所选考核周期内的绩效、潜力及离职风险。",
       "successionDescription": "规划关键岗位的继任安排，并管理候选人的优先顺序。",
-      "matrixDescription": "查看所选考核周期内的绩效与潜力分布。"
+      "matrixDescription": "查看所选考核周期内的绩效与潜力分布。",
+      "reviewFormsTab": "考核表单",
+      "newReviewForm": "新建考核表单",
+      "noReviewForms": "开始考核周期前，请创建包含评分尺度和问题的考核表单。"
     }
   },
   "retention": {

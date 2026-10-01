@@ -1040,7 +1040,7 @@
       "tabs": {
         "cycles": "Zyklen",
         "calibration": "Kalibrierung",
-        "talent": "Talent & Nachfolge",
+        "talent": "Beurteilungen",
         "settings": "Einstellungen"
       },
       "calibration": {
@@ -1085,7 +1085,7 @@
         "detailLoadFailed": "Das Kalibrierungsdetail konnte nicht geladen werden. Versuchen Sie es erneut."
       },
       "talent": {
-        "title": "Talent & Nachfolge",
+        "title": "Beurteilungen",
         "description": "Das 9-Felder-Raster über die festgelegten Skalen, die Talenttabelle und Nachfolgepläne.",
         "newRecord": "Neuer Eintrag",
         "cycleLabel": "Beurteilungszyklus",
@@ -1160,7 +1160,7 @@
       "assessments": "Beurteilungen",
       "succession": "Nachfolgepläne",
       "matrix": "Neun-Felder-Matrix",
-      "noCycle": "Erstellen Sie einen Bewertungszyklus für Leistung und Potenzial. Nachfolgepläne können ohne Zyklus verwaltet werden.",
+      "noCycle": "Erstellen Sie einen Beurteilungszyklus, um Leistung und Potenzial zu beurteilen.",
       "newPlan": "Neuer Nachfolgeplan",
       "setupTitle": "Leistungseinstellungen",
       "setupDescription": "Bewertungsformulare, Skalen und Feedbackberechtigungen in der Unternehmenseinrichtung konfigurieren.",
@@ -1176,7 +1176,10 @@
       "noScale": "Dieser Zyklus benötigt Skalen für Leistung und Potenzial. Bitten Sie einen Administrator, das Bewertungsformular in der Unternehmenseinrichtung zu konfigurieren.",
       "assessmentsDescription": "Bewerten Sie Leistung, Potenzial und Abwanderungsrisiko im ausgewählten Beurteilungszyklus.",
       "successionDescription": "Planen Sie die Nachfolge für Schlüsselpositionen und verwalten Sie priorisierte Nachfolgekandidaten.",
-      "matrixDescription": "Untersuchen Sie die Einordnung nach Leistung und Potenzial im ausgewählten Beurteilungszyklus."
+      "matrixDescription": "Untersuchen Sie die Einordnung nach Leistung und Potenzial im ausgewählten Beurteilungszyklus.",
+      "reviewFormsTab": "Beurteilungsformulare",
+      "newReviewForm": "Neues Beurteilungsformular",
+      "noReviewForms": "Erstellen Sie vor Beginn eines Beurteilungszyklus ein Formular mit Bewertungsskala und Fragen."
     }
   },
   "retention": {

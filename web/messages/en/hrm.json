@@ -1039,7 +1039,7 @@
       "tabs": {
         "cycles": "Cycles",
         "calibration": "Calibration",
-        "talent": "Talent & succession",
+        "talent": "Assessments",
         "settings": "Settings"
       },
       "calibration": {
@@ -1084,7 +1084,7 @@
         "detailLoadFailed": "The calibration detail could not be loaded. Try again."
       },
       "talent": {
-        "title": "Talent & succession",
+        "title": "Assessments",
         "description": "The 9-box over the org-declared scales, the talent table, and succession plans.",
         "newRecord": "New record",
         "cycleLabel": "Review cycle",
@@ -1160,7 +1160,7 @@
       "assessments": "Assessments",
       "succession": "Succession plans",
       "matrix": "Nine-box",
-      "noCycle": "Create a review cycle to assess performance and potential. Succession plans can be managed without a cycle.",
+      "noCycle": "Create a review cycle to record performance and potential assessments.",
       "newPlan": "New succession plan",
       "setupTitle": "Performance setup",
       "setupDescription": "Configure review forms, rating scales, and feedback permissions in Company Setup.",
@@ -1176,7 +1176,10 @@
       "noScale": "This cycle needs declared performance and potential scales. Ask a Company Setup administrator to configure its review form before recording an assessment.",
       "assessmentsDescription": "Assess performance, potential, and retention risk for the selected review cycle.",
       "successionDescription": "Plan coverage for key positions and maintain ranked successor candidates.",
-      "matrixDescription": "Explore performance and potential placements for the selected review cycle."
+      "matrixDescription": "Explore performance and potential placements for the selected review cycle.",
+      "reviewFormsTab": "Review forms",
+      "newReviewForm": "New review form",
+      "noReviewForms": "Create a review form with its rating scale and questions before starting a review cycle."
     }
   },
   "retention": {

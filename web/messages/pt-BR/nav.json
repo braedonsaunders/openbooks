@@ -127,7 +127,7 @@
     "hrm-recruiting-pools": "Bancos de candidatos",
     "hrm-leave-calendar": "Calendário por departamento",
     "hrm-performance-calibration": "Calibração",
-    "hrm-performance-talent": "Talento e sucessão",
+    "hrm-performance-talent": "Avaliações",
     "hrm-performance-retention": "Retenção",
     "hrm-performance-settings": "Configuração de desempenho",
     "crm-sales": "Sales",
@@ -140,7 +140,9 @@
     "hrm-benefits-windows": "Períodos de inscrição",
     "hrm-benefits-rewards": "Recompensas",
     "hrm-benefits-incentives": "Incentivos",
-    "hrm-benefits-payouts": "Pagamentos"
+    "hrm-benefits-payouts": "Pagamentos",
+    "hrm-performance-succession": "Planos de sucessão",
+    "hrm-performance-templates": "Formulários de avaliação"
   },
   "groups": {
     "workforce": "Força de trabalho",

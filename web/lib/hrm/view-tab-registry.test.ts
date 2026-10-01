@@ -81,3 +81,14 @@ test("a viewer is offered only the tabs their grants and switches open", () => {
   ]);
   assert.equal(strip("/hrm/positions", forViewer(["hrm.position.read", "hrm.recruiting.read"], [])), null, "Recruiting off: no recruiting views");
 });
+
+
+test("Performance separates assessments, succession, and the native form builder", () => {
+  assert.deepEqual(strip("/hrm/performance?tab=talent")?.active, ["performance.workspace.assessments"]);
+  assert.deepEqual(strip("/hrm/performance?tab=succession")?.active, ["performance.workspace.succession"]);
+  assert.deepEqual(strip("/hrm/performance/templates/template-1")?.active, ["performance.workspace.reviewFormsTab"]);
+  assert.deepEqual(strip("/hrm/performance/templates")?.hrefs, strip("/hrm/performance?tab=succession")?.hrefs);
+  const manager = forViewer(["hrm.performance.manage"], ["hrmPerformance"]);
+  assert.ok(strip("/hrm/performance", manager)?.hrefs.includes("/hrm/performance?tab=succession"));
+  assert.ok(!strip("/hrm/performance", manager)?.hrefs.includes("/hrm/performance/templates"), "form writes retain Setup authorization");
+});

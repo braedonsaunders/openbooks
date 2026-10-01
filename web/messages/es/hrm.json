@@ -1040,7 +1040,7 @@
       "tabs": {
         "cycles": "Ciclos",
         "calibration": "Calibración",
-        "talent": "Talento y sucesión",
+        "talent": "Evaluaciones",
         "settings": "Configuración"
       },
       "calibration": {
@@ -1085,7 +1085,7 @@
         "detailLoadFailed": "No se pudo cargar el detalle de calibración. Inténtalo de nuevo."
       },
       "talent": {
-        "title": "Talento y sucesión",
+        "title": "Evaluaciones",
         "description": "La matriz de 9 casillas sobre las escalas declaradas, la tabla de talento y los planes de sucesión.",
         "newRecord": "Nuevo registro",
         "cycleLabel": "Ciclo de evaluación",
@@ -1160,7 +1160,7 @@
       "assessments": "Evaluaciones",
       "succession": "Planes de sucesión",
       "matrix": "Matriz de nueve casillas",
-      "noCycle": "Cree un ciclo para evaluar rendimiento y potencial. Los planes de sucesión se pueden gestionar sin un ciclo.",
+      "noCycle": "Cree un ciclo de evaluación para registrar evaluaciones de desempeño y potencial.",
       "newPlan": "Nuevo plan de sucesión",
       "setupTitle": "Configuración del rendimiento",
       "setupDescription": "Configure formularios, escalas y permisos de comentarios en la configuración de la empresa.",
@@ -1176,7 +1176,10 @@
       "noScale": "Este ciclo necesita escalas de rendimiento y potencial. Pida a un administrador que configure su formulario en la configuración de la empresa.",
       "assessmentsDescription": "Evalúe el desempeño, el potencial y el riesgo de salida en el ciclo de evaluación seleccionado.",
       "successionDescription": "Planifique la sucesión de puestos clave y gestione candidatos ordenados por prioridad.",
-      "matrixDescription": "Explore la distribución por desempeño y potencial en el ciclo de evaluación seleccionado."
+      "matrixDescription": "Explore la distribución por desempeño y potencial en el ciclo de evaluación seleccionado.",
+      "reviewFormsTab": "Formularios de evaluación",
+      "newReviewForm": "Nuevo formulario de evaluación",
+      "noReviewForms": "Cree un formulario con su escala de valoración y sus preguntas antes de iniciar un ciclo de evaluación."
     }
   },
   "retention": {

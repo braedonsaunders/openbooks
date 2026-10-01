@@ -1040,7 +1040,7 @@
       "tabs": {
         "cycles": "Ciclos",
         "calibration": "Calibração",
-        "talent": "Talento e sucessão",
+        "talent": "Avaliações",
         "settings": "Configurações"
       },
       "calibration": {
@@ -1085,7 +1085,7 @@
         "detailLoadFailed": "Não foi possível carregar o detalhe da calibração. Tente novamente."
       },
       "talent": {
-        "title": "Talento e sucessão",
+        "title": "Avaliações",
         "description": "A matriz 9-box sobre as escalas declaradas, a tabela de talentos e os planos de sucessão.",
         "newRecord": "Novo registro",
         "cycleLabel": "Ciclo de avaliação",
@@ -1160,7 +1160,7 @@
       "assessments": "Avaliações",
       "succession": "Planos de sucessão",
       "matrix": "Matriz de nove quadrantes",
-      "noCycle": "Crie um ciclo para avaliar desempenho e potencial. Planos de sucessão podem ser gerenciados sem um ciclo.",
+      "noCycle": "Crie um ciclo de avaliação para registrar avaliações de desempenho e potencial.",
       "newPlan": "Novo plano de sucessão",
       "setupTitle": "Configuração de desempenho",
       "setupDescription": "Configure formulários, escalas e permissões de feedback na configuração da empresa.",
@@ -1176,7 +1176,10 @@
       "noScale": "Este ciclo precisa de escalas de desempenho e potencial. Peça a um administrador para configurar o formulário na configuração da empresa.",
       "assessmentsDescription": "Avalie o desempenho, o potencial e o risco de saída no ciclo de avaliação selecionado.",
       "successionDescription": "Planeje a sucessão de cargos-chave e gerencie candidatos em ordem de prioridade.",
-      "matrixDescription": "Explore a distribuição por desempenho e potencial no ciclo de avaliação selecionado."
+      "matrixDescription": "Explore a distribuição por desempenho e potencial no ciclo de avaliação selecionado.",
+      "reviewFormsTab": "Formulários de avaliação",
+      "newReviewForm": "Novo formulário de avaliação",
+      "noReviewForms": "Crie um formulário com sua escala de classificação e suas perguntas antes de iniciar um ciclo de avaliação."
     }
   },
   "retention": {

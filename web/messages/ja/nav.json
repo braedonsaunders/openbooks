@@ -127,7 +127,7 @@
     "hrm-recruiting-pools": "候補者プール",
     "hrm-leave-calendar": "部門別カレンダー",
     "hrm-performance-calibration": "キャリブレーション",
-    "hrm-performance-talent": "タレントと後継",
+    "hrm-performance-talent": "評価",
     "hrm-performance-retention": "定着",
     "hrm-performance-settings": "業績管理の設定",
     "crm-sales": "Sales",
@@ -140,7 +140,9 @@
     "hrm-benefits-windows": "加入期間",
     "hrm-benefits-rewards": "褒賞",
     "hrm-benefits-incentives": "インセンティブ",
-    "hrm-benefits-payouts": "支給"
+    "hrm-benefits-payouts": "支給",
+    "hrm-performance-succession": "後継者計画",
+    "hrm-performance-templates": "評価フォーム"
   },
   "groups": {
     "workforce": "従業員体制",

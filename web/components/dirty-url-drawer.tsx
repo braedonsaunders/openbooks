@@ -63,9 +63,10 @@ export function DirtyUrlDrawer({ children, ...props }: Props) {
 export function useDirtyUrlDrawer(dirty: boolean, busy = false): (href?: string) => Promise<void> {
   const context = useContext(DirtyDrawerContext)
   const id = useId()
+  const register = context?.register
   useEffect(() => {
-    context?.register(id, dirty, busy)
-    return () => context?.register(id, false, false)
-  }, [busy, context, dirty, id])
+    register?.(id, dirty, busy)
+    return () => register?.(id, false, false)
+  }, [busy, register, dirty, id])
   return context?.close ?? (async () => {})
 }

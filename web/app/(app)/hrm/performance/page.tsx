@@ -24,6 +24,11 @@ export default async function PerformancePage({
 }) {
   const sp = await searchParams
   if (sp.tab === 'settings') redirect('/admin/setup/performance')
+  if (sp.tab === 'talent' && sp.talentView === 'succession') {
+    const query = new URLSearchParams({ tab: 'succession' })
+    if (sp.plan) query.set('plan', sp.plan)
+    redirect(`/hrm/performance?${query}`)
+  }
   const data = await loadPerformancePage(sp)
   return <ModuleView spec={performanceSpec(data)} data={data} searchParams={sp} trusted />
 }

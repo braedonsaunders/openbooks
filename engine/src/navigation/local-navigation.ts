@@ -78,7 +78,10 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
   ],
   talent: [
     { href: '/hrm/performance', ns: 'hrm', key: 'performance.continuous.tabs.cycles', feature: 'hrmPerformance' },
-    ...['calibration', 'talent'].map((tab) => ({ href: `/hrm/performance?tab=${tab}`, menuKey: `hrm-performance-${tab}`, ns: 'hrm', key: `performance.continuous.tabs.${tab}`, permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' })),
+    { href: '/hrm/performance/templates', menuKey: 'hrm-performance-templates', ns: 'hrm', key: 'performance.workspace.reviewFormsTab', permission: 'admin.setup.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance', prefix: true },
+    { href: '/hrm/performance?tab=calibration', menuKey: 'hrm-performance-calibration', ns: 'hrm', key: 'performance.continuous.tabs.calibration', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
+    { href: '/hrm/performance?tab=talent', menuKey: 'hrm-performance-talent', ns: 'hrm', key: 'performance.workspace.assessments', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
+    { href: '/hrm/performance?tab=succession', menuKey: 'hrm-performance-succession', ns: 'hrm', key: 'performance.workspace.succession', permission: 'hrm.performance.manage', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
     { href: '/hrm/performance?tab=retention', menuKey: 'hrm-performance-retention', ns: 'hrm', key: 'retention.title', permission: 'hrm.retention.read', feature: 'hrmPerformance', menuParent: 'hrm-performance' },
     { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys', permission: 'hrm.surveys.manage', feature: 'hrmSurveys', menuParent: 'hrm-performance' },
   ],
