@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
+import { createMoneyFormatter } from '../money-format'
 import {
   buildAttentionQueue,
   decimalFieldRefusal,
@@ -18,7 +19,7 @@ test('totals keep one line per currency and never merge them', () => {
     { value: '100.00', currency: 'USD' },
     { value: '50.00', currency: 'USD' },
     { value: '10000', currency: 'JPY' },
-  ])
+  ], (value, currency) => createMoneyFormatter('en', currency).money(value, { currency }))
   assert.deepEqual(
     lines.map((line) => [line.currency, line.amount]),
     [

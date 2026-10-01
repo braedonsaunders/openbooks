@@ -3,6 +3,7 @@ import { canonicalDecimal } from "../../money/exact-decimal.ts";
 import { normalizeMoney } from "../../money/money.ts";
 import { businessTodayInTx } from "../../platform/business-date.ts";
 import { sql } from "drizzle-orm";
+import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { PayrollError } from "../../payroll/error.ts";
 import { mutatePayRunAdjustment, PayRunAdjustmentIdempotencyConflict } from "../../payroll/run-adjustments.ts";
@@ -177,6 +178,7 @@ interface SettlementContext {
   incentiveExpenseAccountId: string | null;
   minorUnits: number;
   members: BenefitProgramMember[];
+  projectCompletion: ReadonlyArray<{ readonly projectId: string; readonly status: string; readonly updatedAt: string }>;
 }
 
 async function loadSettlementContext(
@@ -245,6 +247,32 @@ async function loadSettlementContext(
         "REFUSED",
         `program ${program.code} scopes ${missing.length} department(s) outside this organization — reselect the scope; measures never cross tenants`,
       );
+    }
+  }
+
+  const projectCompletion: Array<{projectId: string; status: string; updatedAt: string}> = [];
+  if (program.frequency === "project_complete") {
+    if (program.metricScope !== "project" || projectIds.length === 0) {
+      throw new BenefitsError("REFUSED", "project-completion programs name their project scope — select the projects before previewing or settling");
+    }
+    if (!(await lockAndCheckOrgFeature(db, orgId, "projects"))) {
+      throw new BenefitsError("REFUSED", "Projects is off — turn it on in Company Settings → Features before measuring project completion");
+    }
+    // Keep completion facts fixed through settlement. Project record edits
+    // take these same row locks, so reopening cannot race an obligation.
+    const projects = (await db.execute<{id: string; status: string; updated_at: string}>(sql`
+      select id::text as id, status, updated_at::text as updated_at from projects
+       where org_id = ${orgId} and subsidiary_id = ${program.legalEntityId}
+         and id = any (${`{${projectIds.join(",")}}`}::uuid[])
+       order by id for share
+    `)).rows;
+    if (projects.length !== new Set(projectIds).size) {
+      throw new BenefitsError("NOT_FOUND", "a completion project is not visible in the program's legal entity — review the selected project scope before settling");
+    }
+    projectCompletion.push(...projects.map((p) => ({projectId: p.id, status: p.status, updatedAt: p.updated_at})));
+    const incomplete = projects.filter((p) => p.status !== "closed");
+    if (forSettle && incomplete.length > 0) {
+      throw new BenefitsError("REFUSED", `${incomplete.length} selected project(s) are not closed — close each selected project in its project record before settling a completion award; substantial completion and cancellation do not authorize payment`);
     }
   }
 
@@ -332,7 +360,7 @@ async function loadSettlementContext(
   const minorUnits = await currencyMinorUnits(orgId, program.currency);
   return {
     program, scope, basis, fiscalCalendarId, departmentIds, projectIds,
-    revenueAccountIds, expenseAccountIds, incentiveExpenseAccountId, minorUnits, members,
+    revenueAccountIds, expenseAccountIds, incentiveExpenseAccountId, minorUnits, members, projectCompletion,
   };
 }
 
@@ -522,7 +550,13 @@ async function buildPreviewResult(
   const sourceSnapshot = buildSourceSnapshot(ctx, query, result, result.computation, result.excluded);
   const today = await businessTodayInTx(db, orgId);
   // A period ending today is still incomplete: estimates until tomorrow.
-  const isEstimate = query.periodTo >= today;
+  const openPeriod = query.periodTo >= today;
+  const openProjects = ctx.projectCompletion.filter((p) => p.status !== "closed");
+  const isEstimate = openPeriod || openProjects.length > 0;
+  const estimateLines = [
+    ...(openPeriod ? [`estimate: period ends ${query.periodTo} (today ${today}) — sources are incomplete; settle only after the period closes`] : []),
+    ...(openProjects.length > 0 ? [`estimate: ${openProjects.length} selected project(s) are not closed — close each project in its project record before settling a completion award`] : []),
+  ];
   return {
     programId: ctx.program.id,
     programCode: ctx.program.code,
@@ -540,9 +574,7 @@ async function buildPreviewResult(
     computation: {
       ...result.computation,
       recipients: visible,
-      summaryLines: isEstimate
-        ? [...result.computation.summaryLines, `estimate: period ends ${query.periodTo} (today ${today}) — sources are incomplete; settle only after the period closes`]
-        : result.computation.summaryLines,
+      summaryLines: [...result.computation.summaryLines, ...estimateLines],
     },
     visibleRecipients: visible,
     excluded: result.excluded,
@@ -661,8 +693,9 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
         from hrm_benefit_awards a
        where a.org_id = ${orgId} and a.program_id = ${programId}
          and a.status <> 'voided' and a.adjusts_award_id is null
-         and a.period_from <= ${query.periodTo}::date
-         and (a.period_to is null or a.period_to >= ${query.periodFrom}::date)
+         and (${ctx.program.frequency === "project_complete"}
+           or (a.period_from <= ${query.periodTo}::date
+             and (a.period_to is null or a.period_to >= ${query.periodFrom}::date)))
     `)).rows;
     const exact = overlapping.filter(
       (row) => String(row.periodFrom).slice(0, 10) === query.periodFrom &&
@@ -672,7 +705,9 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
     if (others.length > 0) {
       throw new BenefitsError(
         "REFUSED",
-        `${others.length} settled award(s) overlap ${query.periodFrom}..${query.periodTo} on a different span — overlapping spans never settle twice; settle the exact span again or correct history with adjusting awards`,
+        ctx.program.frequency === "project_complete"
+          ? "this program's project completion was already settled on another span — retry that exact span or record a linked adjusting award; completion does not authorize a second settlement"
+          : `${others.length} settled award(s) overlap ${query.periodFrom}..${query.periodTo} on a different span — overlapping spans never settle twice; settle the exact span again or correct history with adjusting awards`,
       );
     }
     if (exact.length > 0) {
@@ -760,6 +795,7 @@ export function buildSourceSnapshot(
     programName: ctx.program.name,
     periodBasis: ctx.basis,
     fiscalCalendarId: ctx.fiscalCalendarId,
+    projectCompletion: ctx.projectCompletion,
     metric: money?.metric ?? "approved_hours",
     scope: money?.scope ?? hours?.scope ?? null,
     measuredValue: computation.measuredValue,

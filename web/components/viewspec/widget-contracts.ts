@@ -358,7 +358,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'opportunity-view-switcher': { props: ['view'] },
   'optional-badge': { props: ['label', 'variant'] },
   'order-drawer': { props: ['drawer'] },
-  'org-chart-tree': { props: ['canManage', 'chart', 'departmentOptions', 'labels', 'personBaseHref', 'today'] },
+  'org-chart-tree': { props: ['canEditLayout', 'canManage', 'chart', 'departmentOptions', 'labels', 'layout', 'personBaseHref', 'today'] },
   'org-environment-cell': { props: ['envKind', 'parentNote', 'variant'] },
   'org-locale-cell': { props: ['country', 'currency'] },
   'org-name-cell': { props: ['name', 'subtitle'] },

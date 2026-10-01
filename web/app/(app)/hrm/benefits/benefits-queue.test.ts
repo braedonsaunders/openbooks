@@ -157,7 +157,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) }; export async function withBypassContext(_opts, work) { return work() } export function ambientTenantOrgId() { return null }",
+        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) }; export async function withBypass(work) { return work() } export async function withBypassContext(work) { return work() } export function ambientTenantOrgId() { return null } let resolver = null; export function currentRequestOrgResolver() { return resolver } export function registerRequestOrgResolver(fn) { resolver = fn } export async function withOrgContext(_orgId, work) { return work() } export async function withOrgTransaction(_orgId, work) { return work() }",
       };
     }
     return nextResolve(specifier, context);
@@ -304,4 +304,17 @@ test('Benefits header has one primary create action and windows use the native r
   assert.equal(creates.length, 1)
   const serialized = JSON.stringify(spec)
   assert.ok(serialized.includes('hrm_benefits_windows'), 'window rows retain the shared registry identity')
+})
+
+test('a refused award read shows unknown vitals and omits zero-shaped currency totals', async () => {
+  stubReads([], [])
+  gap.__portfolioReads = { awardsError: 'Ask finance to restore access before reviewing payouts.' }
+  try {
+    const data = await loadBenefits(HR_BENEFITS, {})
+    assert.equal(data.awardsRefusal?.message, 'Ask finance to restore access before reviewing payouts.')
+    assert.equal(data.tiles.pendingApprovals, '—')
+    assert.equal(data.tiles.queuedPayouts, '—')
+    const spec = JSON.stringify(benefitsSpec(data))
+    assert.ok(!spec.includes('deliveredRows'), 'a failed read cannot render a no-awards currency table')
+  } finally { gap.__portfolioReads = undefined }
 })

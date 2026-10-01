@@ -170,7 +170,7 @@ export interface BenefitsData {
   awardDrawer: AwardDetailDrawer | null
   awardCloseHref: string
   canQueue: boolean
-  awardProgramOptions: { value: string; label: string; currency: string }[]
+  awardProgramOptions: { value: string; label: string; currency: string; fixedAmount: string | null }[]
   vitalsRefusal: { title: string; message: string } | null
   awardsTotal: number
   awardsTruncated: boolean
@@ -782,10 +782,10 @@ function toPortfolioFields(
     awardsTruncated: portfolio.awardsTruncated,
     truncationNotice: t('portfolio.awardsTruncated'),
     tiles: {
-      activePrograms: String(portfolio.vitals.activePrograms),
+      activePrograms: portfolio.programsRefusal ? '—' : String(portfolio.vitals.activePrograms),
       openWindows: String(portfolio.vitals.openWindows),
-      pendingApprovals: String(portfolio.vitals.pendingEnrollments + portfolio.vitals.pendingAwards),
-      queuedPayouts: String(portfolio.vitals.queuedAwards),
+      pendingApprovals: portfolio.awardsRefusal ? '—' : String(portfolio.vitals.pendingEnrollments + portfolio.vitals.pendingAwards),
+      queuedPayouts: portfolio.awardsRefusal ? '—' : String(portfolio.vitals.queuedAwards),
     },
     deliveredRows: portfolio.vitals.deliveredByCurrency,
     awaitingRows: portfolio.vitals.awaitingByCurrency,
@@ -841,7 +841,7 @@ function toPortfolioFields(
     // here; they settle from their program drawer.
     awardProgramOptions: portfolio.programs
       .filter((program) => program.status === 'active' && program.family !== 'incentive')
-      .map((program) => ({ value: program.id, label: `${program.code} — ${program.name}`, currency: program.currency })),
+      .map((program) => ({ value: program.id, label: `${program.code} — ${program.name}`, currency: program.currency, fixedAmount: program.valuation === 'fixed' ? program.fixedAmount : null })),
     // The insured-plan Setup section rehomes onto the programs view, where
     // the health and retirement cards land. Every other view keeps the
     // portfolio tables; the section reads its own rows, never the loader's.

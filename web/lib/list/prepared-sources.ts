@@ -306,6 +306,7 @@ const SOURCES = {
   hrm_benefit_programs: { route: '/hrm/benefits', rowsField: 'programRows', rowKeyField: 'id', mode: 'loaded' },
   hrm_benefit_awards: { route: '/hrm/benefits', rowsField: 'awardRows', rowKeyField: 'id', mode: 'loaded' },
   me_benefit_awards_paid: { route: '/me/benefits', rowsField: 'paidAwards', rowKeyField: 'id', mode: 'loaded' },
+  me_benefit_awards_reversed: { route: '/me/benefits', rowsField: 'reversedAwards', rowKeyField: 'id', mode: 'loaded' },
   me_benefit_awards_pending: { route: '/me/benefits', rowsField: 'pendingAwards', rowKeyField: 'id', mode: 'loaded' },
   hrm_benefits_windows: {
     route: '/hrm/benefits',

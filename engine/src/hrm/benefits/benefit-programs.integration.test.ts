@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 
 class Rollback extends Error {}
 import test, { after, before } from "node:test";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -18,6 +18,9 @@ import {
   mkSecondSubsidiary,
   seedComponent,
   seedPerson,
+  seedEmployment,
+  mkVersion,
+  addLiveVersion,
 } from "../../testing/hrm-harness.ts";
 import { BenefitsError } from "./errors.ts";
 import {
@@ -27,6 +30,8 @@ import {
   createBenefitProgram,
   getBenefitProgram,
   listBenefitPrograms,
+  updateBenefitProgram,
+  listProgramSources,
 } from "./programs.ts";
 import {
   approveBenefitAward,
@@ -493,7 +498,8 @@ test("nonprivileged connection cannot SET its way across tenants or history", { 
   // One transaction, one connection: SET LOCAL cannot leak to the pool,
   // and the org context is set explicitly so RLS evaluates instead of the
   // query silently matching zero rows.
-  await db.transaction(async (tx) => {
+  await withOrgTransaction(orgId, async () => {
+    const tx = db;
     await tx.execute(sql`set local app.bypass_rls = 'on'`);
     await tx.execute(sql`set local openbooks.amend = 'on'`);
     assert.match(orgId, /^[0-9a-f-]{36}$/i);
@@ -504,6 +510,12 @@ test("nonprivileged connection cannot SET its way across tenants or history", { 
       `)
     ).rows;
     assert.equal(foreign.length, 0);
+    const visible = (await tx.execute<{ id: string; privileged: boolean }>(sql`
+      select id, public.app_bypass_rls_active() as privileged from hrm_benefit_awards
+       where org_id = ${orgId} and id = ${award.id}
+    `)).rows;
+    assert.equal(visible.length, 1, "the guarded write must target a visible award, never zero rows");
+    assert.equal(visible[0]!.privileged, false, "raw GUCs confer no privileged authority");
     await assert.rejects(
       tx.execute(sql`
         update hrm_benefit_awards set value = '11.0000'
@@ -572,7 +584,7 @@ test("a payroll award cannot queue without a native adjustment and remains appro
   assert.equal(listed.awards[0]!.createdBy, HRMGR);
 });
 
-test("award visibility follows the immutable program entity after employment moves", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("award visibility and employer identity remain bound to the original legal entity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const orgId = ARTIFACT!.orgId;
   const program = await draftProgram(`SCOPE${Date.now().toString(36).toUpperCase()}`);
   await activateBenefitProgram({ orgId, actorId: HRMGR!, programId: program.id });
@@ -580,13 +592,12 @@ test("award visibility follows the immutable program entity after employment mov
     employmentId: EMPLOYMENT!, periodFrom: "2026-03-01", value: "100.0000", currency: "USD" });
   const own = await mkHr(orgId, "Historical Reader", "historical_reader", [ENTITY!], ["hrm.benefits.read"]);
   const foreign = await mkHr(orgId, "Transfer Reader", "transfer_reader", [OTHER_ENTITY!], ["hrm.benefits.read"]);
-  try {
-    await db.execute(sql`update worker_employments set employer_subsidiary_id = ${OTHER_ENTITY} where org_id = ${orgId} and id = ${EMPLOYMENT}`);
-    assert.equal((await getBenefitAward(db, orgId, own, award.id)).id, award.id);
-    await assert.rejects(getBenefitAward(db, orgId, foreign, award.id), /not found/);
-  } finally {
-    await db.execute(sql`update worker_employments set employer_subsidiary_id = ${ENTITY} where org_id = ${orgId} and id = ${EMPLOYMENT}`);
-  }
+  await assert.rejects(
+    db.execute(sql`update worker_employments set employer_subsidiary_id = ${OTHER_ENTITY} where org_id = ${orgId} and id = ${EMPLOYMENT}`),
+    (error: unknown) => /employer_subsidiary_id is immutable/.test(String((error as { cause?: unknown }).cause ?? error)),
+  );
+  assert.equal((await getBenefitAward(db, orgId, own, award.id)).id, award.id);
+  await assert.rejects(getBenefitAward(db, orgId, foreign, award.id), /not found/);
 });
 
 test("HR award DTOs never serialize private source measurements", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -657,4 +668,87 @@ test("committed run without the award's paid stub cannot report delivery or void
     payRunDocumentId: run, payRunAdjustmentId: queued.adjustmentId }), /no matching paid stub line/);
   await assert.rejects(voidBenefitAward({ orgId, actorId: HRMGR!, awardId: queued.award.id, reason: "Cannot cancel paid run" }), /finalized pay run/);
   assert.equal((await getBenefitAward(db, orgId, HRMGR!, queued.award.id)).status, "queued");
+});
+
+test("draft source replacement records the full before and after policy in the audit", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const orgId = ARTIFACT!.orgId;
+  const program = await draftProgram(`AUD${randomUUID().slice(0, 8).toUpperCase()}`);
+  await updateBenefitProgram({ orgId, actorId: HRMGR!, programId: program.id,
+    sourceAccountIds: [], reason: "Use the component's native expense mapping" });
+  assert.equal((await listProgramSources(db, orgId, HRMGR!, program.id)).length, 0);
+  const rows = (await db.execute<{ changes: {
+    event: string; reason: string; before: { sourceAccountIds: string[] }; after: { sourceAccountIds: string[] };
+  } }>(sql`
+    select changes from audit_log where org_id = ${orgId} and table_name = 'hrm_benefit_programs'
+      and row_id = ${program.id} and changes->>'event' = 'updated'
+  `)).rows;
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0]!.changes.before.sourceAccountIds, [ACCOUNT!]);
+  assert.deepEqual(rows[0]!.changes.after.sourceAccountIds, []);
+  assert.equal(rows[0]!.changes.reason, "Use the component's native expense mapping");
+});
+
+test("direct program and award reads honor the authoritative HRM feature gate", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const orgId = ARTIFACT!.orgId;
+  const program = await draftProgram(`GATE${randomUUID().slice(0, 8).toUpperCase()}`);
+  await activateBenefitProgram({ orgId, actorId: HRMGR!, programId: program.id });
+  const award = await createBenefitAward({ orgId, actorId: HRMGR!, programId: program.id,
+    employmentId: EMPLOYMENT!, periodFrom: "2026-03-01", value: "100.0000", currency: "USD" });
+  try {
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,hrm}', 'false'::jsonb, true) where id = ${orgId}`);
+    await assert.rejects(getBenefitProgram(db, orgId, HRMGR!, program.id), /hrm feature is off/);
+    await assert.rejects(getBenefitAward(db, orgId, HRMGR!, award.id), /hrm feature is off/);
+    await assert.rejects(listProgramSources(db, orgId, HRMGR!, program.id), /hrm feature is off/);
+  } finally {
+    await enableHrm(orgId);
+  }
+  assert.equal((await getBenefitAward(db, orgId, HRMGR!, award.id)).id, award.id);
+});
+
+test("award eligibility unions current active spans and excludes end dates and superseded versions", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const orgId = ARTIFACT!.orgId;
+  const program = await draftProgram(`SPAN${randomUUID().slice(0, 8).toUpperCase()}`);
+  await activateBenefitProgram({ orgId, actorId: HRMGR!, programId: program.id });
+  const consecutive = await seedEmployment(orgId, ENTITY!, { from: "2026-01-01", to: "2026-03-15" });
+  await mkVersion(orgId, consecutive.employmentId, { from: "2026-03-15", versionNo: 2 });
+  const ended = await seedEmployment(orgId, ENTITY!, { from: "2026-01-01", to: "2026-03-15" });
+  const superseded = await seedEmployment(orgId, ENTITY!);
+  await addLiveVersion(orgId, superseded.employmentId, {
+    status: "terminated", from: "2020-01-01", reason: "Corrected service status", sourceRef: `status-${superseded.employmentId}`,
+  });
+  for (const member of [consecutive, ended, superseded]) {
+    await addProgramMembership({ orgId, actorId: HRMGR!, programId: program.id,
+      employmentId: member.employmentId, effectiveFrom: "2026-01-01" });
+  }
+  const base = { orgId, actorId: HRMGR!, programId: program.id,
+    periodFrom: "2026-03-01", periodTo: "2026-03-31", value: "100.0000", currency: "USD" };
+  assert.equal((await createBenefitAward({ ...base, employmentId: consecutive.employmentId })).status, "draft");
+  await assert.rejects(createBenefitAward({ ...base, employmentId: ended.employmentId,
+    periodFrom: "2026-03-15", periodTo: "2026-03-15" }), /end dates exclude their day/);
+  await assert.rejects(createBenefitAward({ ...base, employmentId: superseded.employmentId }), /current employment history/);
+});
+
+test("role allocation never accepts an unweighted member or silently converts equal memberships", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const orgId = ARTIFACT!.orgId;
+  const weighted = await createBenefitProgram({ orgId, actorId: HRMGR!,
+    code: `ROLE${randomUUID().slice(0, 8).toUpperCase()}`, name: "Weighted reward", family: "reward",
+    currency: "USD", legalEntityId: ENTITY!, effectiveFrom: "2026-01-01", payComponentId: COMPONENT!,
+    valuation: "fixed", fixedAmount: "100.0000", allocation: "role" });
+  for (const weight of [null, "0.0000"]) {
+    await assert.rejects(addProgramMembership({ orgId, actorId: HRMGR!, programId: weighted.id,
+      employmentId: EMPLOYMENT!, effectiveFrom: "2026-01-01", weight }), /enter a positive membership weight/);
+  }
+  await addProgramMembership({ orgId, actorId: HRMGR!, programId: weighted.id,
+    employmentId: EMPLOYMENT!, effectiveFrom: "2026-01-01", weight: "2.0000", role: "Lead" });
+  assert.equal((await activateBenefitProgram({ orgId, actorId: HRMGR!, programId: weighted.id })).status, "active");
+  const equal = await draftProgram(`EQUAL${randomUUID().slice(0, 8).toUpperCase()}`);
+  await assert.rejects(updateBenefitProgram({ orgId, actorId: HRMGR!, programId: equal.id,
+    allocation: "role", reason: "Change allocation" }), /keep equal allocation/);
+  assert.equal((await getBenefitProgram(db, orgId, HRMGR!, equal.id)).allocation, "equal");
+  const noRevenue = await createBenefitProgram({ orgId, actorId: HRMGR!,
+    code: `NOBAS${randomUUID().slice(0, 8).toUpperCase()}`, name: "Incomplete profit base", family: "incentive",
+    currency: "USD", legalEntityId: ENTITY!, effectiveFrom: "2026-01-01", payComponentId: COMPONENT!,
+    valuation: "percent", percentRate: "5", metric: "net_profit", metricScope: "company", sourceAccountIds: [ACCOUNT!] });
+  await assert.rejects(activateBenefitProgram({ orgId, actorId: HRMGR!, programId: noRevenue.id }), /without an income source/);
+  assert.equal((await getBenefitProgram(db, orgId, HRMGR!, noRevenue.id)).status, "draft");
 });

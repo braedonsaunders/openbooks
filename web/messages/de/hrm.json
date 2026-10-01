@@ -1510,7 +1510,10 @@
         "program": "Programm",
         "period": "Erarbeiteter Zeitraum",
         "value": "Wert",
-        "status": "Status"
+        "status": "Status",
+        "reversedTitle": "Stornierte Prämienzahlungen",
+        "reversedEmpty": "Keine stornierten Prämienzahlungen.",
+        "reversedStatus": "Storniert"
       }
     },
     "qualifications": {
@@ -2572,10 +2575,10 @@
     "members": {
       "weight": "Gewichtung",
       "weightPlaceholder": "1",
-      "weightHint": "Anteilsgewicht für Topfaufteilungen; leer bedeutet gleich.",
+      "weightHint": "Für die Rollengewichtung ist ein positives Gewicht erforderlich. Gleichmäßige und stundenbasierte Verteilungen verwenden dieses Feld nicht.",
       "role": "Rolle",
       "rolePlaceholder": "Mitwirkender",
-      "roleHint": "Rolle für rollengewichtete Aufteilungen."
+      "roleHint": "Für diese Mitgliedschaft dokumentierte Rolle; Verteilungsgewichte werden separat konfiguriert."
     },
     "addMember": "Mitglied hinzufügen",
     "removeMember": "Mitgliedschaft beenden",
@@ -2651,8 +2654,8 @@
         "payComponent": "Lohnart",
         "reason": "Änderungsgrund"
       },
-      "allEntities": "Alle Träger",
-      "entityHint": "Leer bedeutet jeden Träger, in dem das Programm laufen darf.",
+      "allEntities": "Rechtsträger wählen",
+      "entityHint": "Ein Rechtsträger trägt das Programm und seine Abrechnungsverpflichtungen. Fügen Sie berechtigte Beschäftigte nach dem Erstellen des Entwurfs hinzu.",
       "employmentsTruncated": "Die Beschäftigtenliste zeigt die ersten 500 Namen; die Mitgliedschaft akzeptiert jede berechtigte Beschäftigung.",
       "searchDepartments": "Abteilungen suchen…",
       "searchProjects": "Projekte suchen…",
@@ -2680,7 +2683,12 @@
       "cancel": "Abbrechen",
       "back": "Zurück",
       "next": "Weiter",
-      "amountNoun": "Betrag"
+      "amountNoun": "Betrag",
+      "componentPrerequisite": "Erstellen Sie in der Abrechnungseinrichtung eine aktive Entgeltkomponente. Aktualisieren Sie danach die Optionen und wählen Sie sie aus. Ihre Abrechnungsregeln bestimmen Steuer- und Buchungsbehandlung.",
+      "openPayrollSetup": "Abrechnungseinrichtung öffnen",
+      "accountsPrerequisite": "Keine buchbaren Bemessungskonten sichtbar. Ergänzen Sie die benötigten Konten oder lassen Sie Ihren Rechtsträgerzugriff von der Finanzabteilung prüfen. Aktualisieren Sie danach die Optionen.",
+      "openAccounts": "Kontenplan öffnen",
+      "refreshOptions": "Optionen aktualisieren"
     },
     "awardBuilderTitle": "Neue Zuwendung",
     "awardFields": {

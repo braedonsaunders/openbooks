@@ -11,6 +11,7 @@ import {
   requireHrmBenefitsManage,
   requireHrmBenefitsManageOnEmployment,
 } from "../authorization.ts";
+import { benefitListWindow } from "./list-window.ts";
 import { BenefitsError, isUniqueViolation } from "./errors.ts";
 import {
   assertHrmEnabled,
@@ -241,6 +242,7 @@ export async function getBenefitProgram(
   programId: string,
 ): Promise<BenefitProgram> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
+  await assertHrmEnabled(exec, orgId);
   const row = (
     await exec.execute<Record<string, unknown>>(sql`
       select ${PROGRAM_COLUMNS} from hrm_benefit_programs
@@ -286,8 +288,7 @@ export async function listBenefitPrograms(query: {
   return withOrgTransaction(orgId, async () => {
     const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const limit = query.limit === undefined ? null : Math.max(1, Math.min(2000, Math.floor(query.limit)));
-    const offset = query.offset === undefined ? 0 : Math.max(0, Math.floor(query.offset));
+    const { limit, offset } = benefitListWindow(query.limit, query.offset);
     const total = (
       await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_benefit_programs
@@ -305,7 +306,7 @@ export async function listBenefitPrograms(query: {
            ${query.family !== undefined ? sql`and family = ${query.family}` : sql``}
            ${scope !== null ? sql`and legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
          order by code
-         ${limit !== null ? sql`limit ${limit} offset ${offset}` : sql``}
+         ${limit !== null ? sql`limit ${limit} offset ${offset}` : sql`offset ${offset}`}
       `)
     ).rows;
     const out: BenefitProgram[] = [];
@@ -508,6 +509,20 @@ function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
   }
 }
 
+async function requireRoleMembershipWeights(exec: SqlExecutor, orgId: string, programId: string, code: string, allocation: BenefitAllocation): Promise<void> {
+  if (allocation !== "role") return;
+  const invalid = (await exec.execute<{ display_name: string | null }>(sql`
+    select p.display_name from hrm_benefit_program_members m
+      join worker_employments e on e.org_id = m.org_id and e.id = m.employment_id
+      join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+     where m.org_id = ${orgId} and m.program_id = ${programId} and (m.weight is null or m.weight <= 0)
+     order by m.id limit 1
+  `)).rows[0];
+  if (invalid) {
+    throw new BenefitsError("REFUSED", `program ${code} has a membership for ${invalid.display_name ?? "an employee"} without a positive allocation weight — keep equal allocation, or create a new role-weighted program and enroll members with positive weights`);
+  }
+}
+
 async function auditProgramWrite(
   exec: SqlExecutor,
   orgId: string,
@@ -548,6 +563,9 @@ async function requireProgramSourceAccounts(
   accountIds: readonly string[],
   payComponentId: string | null,
 ): Promise<void> {
+  if (new Set(accountIds).size !== accountIds.length) {
+    throw new BenefitsError("INVALID_INPUT", "a measurement account is selected more than once — select each source account once");
+  }
   const moneyMetric = metric !== null && metric !== "approved_hours";
   const ownExpense = moneyMetric && payComponentId !== null
     ? (await exec.execute<{ expense_account_id: string | null }>(sql`
@@ -581,6 +599,9 @@ async function requireProgramSourceAccounts(
         "REFUSED",
         `program ${programCode} names a source account of another legal entity — choose accounts of its employing entity`,
       );
+    }
+    if (metric === "revenue" && row.type !== "income") {
+      throw new BenefitsError("REFUSED", `program ${programCode} measures revenue but selects a ${row.type} account — select actual income accounts; expense sources do not enter a revenue base`);
     }
     if (moneyMetric && !["income", "cogs", "expense", "expense_other", "expense_deferred"].includes(row.type)) {
       throw new BenefitsError(
@@ -820,7 +841,8 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
       ).rows;
       requireOneRow(stored, "recording the program funding source");
     }
-    await auditProgramWrite(db, orgId, actorId, program.id, "created", null, program, null);
+    await auditProgramWrite(db, orgId, actorId, program.id, "created", null,
+      { ...program, sourceAccountIds: [...sources].sort() }, null);
     return program;
   });
 }
@@ -948,9 +970,11 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
     await requireLegalEntity(db, orgId, next.legalEntityId);
     await requireLegalEntityVisibleToActor(db, orgId, actorId, next.legalEntityId);
     await requireProgramPayComponent(db, orgId, before.code, next.payComponentId, next.deliveryMethod);
-    const selectedSourceIds = query.sourceAccountIds ?? (await db.execute<{ account_id: string }>(sql`
-      select account_id from hrm_benefit_program_sources where org_id = ${orgId} and program_id = ${programId}
+    await requireRoleMembershipWeights(db, orgId, programId, before.code, next.allocation);
+    const previousSourceIds = (await db.execute<{ account_id: string }>(sql`
+      select account_id from hrm_benefit_program_sources where org_id = ${orgId} and program_id = ${programId} order by account_id
     `)).rows.map((row) => String(row.account_id));
+    const selectedSourceIds = query.sourceAccountIds ?? previousSourceIds;
     await requireProgramSourceAccounts(db, orgId, before.code, next.legalEntityId, next.metric, selectedSourceIds, next.payComponentId);
     const updated = requireOneRow(
       (
@@ -993,7 +1017,9 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       }
     }
     const after = toProgram(updated, await loadProgramScopes(db, orgId, programId));
-    await auditProgramWrite(db, orgId, actorId, programId, "updated", before, after, reason);
+    await auditProgramWrite(db, orgId, actorId, programId, "updated",
+      { ...before, sourceAccountIds: previousSourceIds },
+      { ...after, sourceAccountIds: [...selectedSourceIds].sort() }, reason);
     return after;
   });
 }
@@ -1056,6 +1082,7 @@ async function setProgramStatus(
         paymentDelayDays: before.paymentDelayDays,
       });
       await requireProgramPayComponent(db, orgId, before.code, before.payComponentId, before.deliveryMethod);
+      await requireRoleMembershipWeights(db, orgId, programId, before.code, before.allocation);
       const storedAccounts = (
         await db.execute<{ account_id: string }>(sql`
           select account_id from hrm_benefit_program_sources
@@ -1068,17 +1095,17 @@ async function setProgramStatus(
         before.metric !== null &&
         before.metric !== "approved_hours";
       if (needsMeasurementAccount) {
-        const sources = (
-          await db.execute<{ n: number }>(sql`
-            select count(*)::int as n from hrm_benefit_program_sources
-             where org_id = ${orgId} and program_id = ${programId}
-          `)
-        ).rows[0]?.n;
-        if (!sources || sources < 1) {
-          throw new BenefitsError(
-            "REFUSED",
-            `program ${before.code} measures money (${before.metric}) but names no measurement account — select the account the metric posts against in program setup before activation`,
-          );
+        const shape = (await db.execute<{ income: number; costs: number }>(sql`
+          select count(*) filter (where a.type = 'income')::int as income,
+                 count(*) filter (where a.type in ('cogs', 'expense', 'expense_other', 'expense_deferred'))::int as costs
+            from hrm_benefit_program_sources s join accounts a on a.org_id = s.org_id and a.id = s.account_id
+           where s.org_id = ${orgId} and s.program_id = ${programId}
+        `)).rows[0];
+        if (!shape?.income) {
+          throw new BenefitsError("REFUSED", `program ${before.code} measures ${before.metric} without an income source — select at least one actual income account before activation`);
+        }
+        if (before.metric !== "revenue" && !shape.costs) {
+          throw new BenefitsError("REFUSED", `program ${before.code} measures ${before.metric} without cost sources — select the explicit cost accounts subtracted from income before activation`);
         }
       }
     }
@@ -1218,6 +1245,9 @@ export async function addProgramMembership(query: {
       );
     }
     const program = await getBenefitProgram(db, orgId, actorId, programId);
+    if (program.allocation === "role" && (weight === null || BigInt(weight.replace(".", "")) <= 0n)) {
+      throw new BenefitsError("REFUSED", `program ${program.code} allocates by role weight — enter a positive membership weight before enrolling this employee`);
+    }
     if (program.status === "closed") {
       throw new BenefitsError(
         "BAD_STATE",
@@ -1426,7 +1456,10 @@ export async function listProgramSources(
   actorId: string,
   programId: string,
 ): Promise<ReadonlyArray<{ id: string; accountId: string; weightBps: number | null }>> {
-  await getBenefitProgram(exec, orgId, actorId, programId);
+  const program = await getBenefitProgram(exec, orgId, actorId, programId);
+  if (program.metricScope === "project" && !(await lockAndCheckOrgFeature(exec, orgId, "projects"))) {
+    throw new BenefitsError("REFUSED", "project measurement sources are unavailable while Projects is off — enable Projects under Company Settings → Features to use this program");
+  }
   const rows = (
     await exec.execute<{ id: string; accountId: string; weightBps: number | null }>(sql`
       select id, account_id as "accountId", weight_bps as "weightBps"

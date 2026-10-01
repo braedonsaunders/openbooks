@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -8,6 +9,7 @@ import { AlertTriangle, ChartLine, Gift, Shapes, Wallet } from 'lucide-react'
 import { Alert, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { ChoiceCards } from '../../../../components/builder/builder-kit'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useMoney } from '../../../../components/money-provider'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import {
@@ -250,6 +252,7 @@ export function ProgramBuilderDrawer({
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const { money } = useMoney()
   const [draft, setDraft] = useState<ProgramDraft>(() => seedDraft(initialFamily, editSeed))
   const [step, setStep] = useState<Step>('offer')
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -371,10 +374,32 @@ export function ProgramBuilderDrawer({
 
   const stepIndex = STEPS.indexOf(step)
   const summaryLines: string[] = []
-  if (draft.name.trim() !== '') summaryLines.push(draft.name.trim())
-  if (draft.code.trim() !== '') summaryLines.push(draft.code.trim())
-  if (draft.currency.trim() !== '') summaryLines.push(draft.currency.trim().toUpperCase())
-  if (draft.effectiveFrom !== '') summaryLines.push(draft.effectiveFrom)
+  const addSummary = (label: string, value: string) => { if (value.trim()) summaryLines.push(`${label}: ${value}`) }
+  addSummary(t('portfolio.builder.fields.name'), draft.name.trim())
+  addSummary(t('portfolio.builder.fields.code'), draft.code.trim())
+  addSummary(t('portfolio.builder.fields.legalEntity'), subsidiaryOptions.find((option) => option.value === draft.legalEntityId)?.label ?? '')
+  addSummary(t('portfolio.builder.fields.valuation'), t(`portfolio.valuations.${draft.valuation}`))
+  if (/^[A-Z]{3}$/.test(draft.currency)) {
+    for (const field of ['fixedAmount', 'capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
+      if (draft[field] && canonicalDecimal(draft[field], 4) !== null) addSummary(t(`portfolio.builder.fields.${field}`), money(draft[field], { currency: draft.currency }))
+    }
+  }
+  if (draft.percentRate) addSummary(t('portfolio.builder.fields.percentRate'), `${draft.percentRate}%`)
+  if (draft.family === 'incentive') {
+    if (draft.metric) addSummary(t('portfolio.builder.fields.metric'), t(`portfolio.metrics.${draft.metric}`))
+    addSummary(t('portfolio.builder.fields.metricScope'), t(`portfolio.scopes.${draft.metricScope}`))
+    const scopeOptions = draft.metricScope === 'department' ? departmentOptions : projectOptions
+    for (const option of scopeOptions.filter((option) => draft.scopeIds.includes(option.value))) addSummary(t('portfolio.builder.fields.metricScope'), option.label)
+    addSummary(t('portfolio.builder.fields.allocation'), t(`portfolio.allocations.${draft.allocation}`))
+    for (const option of accountOptions.filter((option) => draft.sourceAccountIds.includes(option.value))) addSummary(t('portfolio.builder.fields.measuredAccountIds'), option.label)
+  }
+  addSummary(t('portfolio.builder.fields.effectiveFrom'), draft.effectiveFrom)
+  addSummary(t('portfolio.builder.fields.effectiveTo'), draft.effectiveTo)
+  addSummary(t('portfolio.builder.fields.frequency'), t(`portfolio.frequencies.${draft.frequency}`))
+  if (draft.periodBasis) addSummary(t('portfolio.builder.fields.periodBasis'), t(`portfolio.periodBasis.${draft.periodBasis}`))
+  addSummary(t('portfolio.builder.fields.paymentDelayDays'), draft.paymentDelayDays)
+  addSummary(t('portfolio.builder.fields.deliveryMethod'), t(`portfolio.delivery.${draft.deliveryMethod}`))
+  addSummary(t('portfolio.builder.fields.payComponent'), payComponentOptions.find((option) => option.value === draft.payComponentId)?.label ?? '')
 
   return (
     <Drawer
@@ -752,6 +777,11 @@ export function ProgramBuilderDrawer({
                   error={errors.sourceAccountIds}
                 />
                 <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.measuredHint')}</p>
+                {accountOptions.length === 0 ? <Alert className="flex flex-col gap-2">
+                  <p>{t('portfolio.builder.accountsPrerequisite')}</p>
+                  <Button asChild variant="outline" size="sm"><Link href="/accounts" target="_blank" rel="noopener noreferrer">{t('portfolio.builder.openAccounts')}</Link></Button>
+                  <Button variant="outline" size="sm" onClick={() => router.refresh()}>{t('portfolio.builder.refreshOptions')}</Button>
+                </Alert> : null}
               </>
             ) : (
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.payComponentMapsValue')}</p>
@@ -794,6 +824,11 @@ export function ProgramBuilderDrawer({
                   ))}
                 </Select>
                 <FieldError id="program-builder-payComponentId-error2" message={errors.payComponentId} />
+                {payComponentOptions.length === 0 ? <Alert className="mt-2 flex flex-col gap-2">
+                  <p>{t('portfolio.builder.componentPrerequisite')}</p>
+                  <Button asChild variant="outline" size="sm"><Link href={'/admin/setup/payroll?tab=components' as never} target="_blank" rel="noopener noreferrer">{t('portfolio.builder.openPayrollSetup')}</Link></Button>
+                  <Button variant="outline" size="sm" onClick={() => router.refresh()}>{t('portfolio.builder.refreshOptions')}</Button>
+                </Alert> : null}
               </div>
             ) : (
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.externalHint')}</p>

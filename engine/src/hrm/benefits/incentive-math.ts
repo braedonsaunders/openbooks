@@ -296,6 +296,8 @@ function requirePeriodShape(
       return;
     }
     case "project_complete":
+      // Source measurement separately requires the selected native projects
+      // to be closed; the pure date validator only validates the chosen span.
     case "manual":
       return;
   }

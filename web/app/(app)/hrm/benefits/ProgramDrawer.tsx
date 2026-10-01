@@ -19,8 +19,8 @@ import type { ProgramDetailDrawer } from '../../../../lib/hrm/benefits-workspace
  * accounts with their amounts; closing navigates the param away.
  * Activation, closure (with the required reason), and membership writes
  * ride the benefit-programs route, and the list refreshes after every
- * transition. Settlement preview stays an explicit pending notice until
- * the settlement service lands — the drawer never invents measured totals.
+ * transition. Preview reads the posted financial and approved time sources;
+ * settlement records controlled awards only after the period has closed.
  */
 export function ProgramDrawer({
   drawer,
@@ -93,6 +93,7 @@ export function ProgramDrawer({
 
   async function addMember() {
     const errors = validateMembershipDraft(member)
+    if (program.allocation === 'role' && member.weight.trim() === '') errors.weight = 'portfolio.validation.weight'
     const first = errors.employmentId ?? errors.effectiveFrom ?? errors.effectiveTo ?? errors.weight
     if (first) {
       setMemberError(t(first))
@@ -181,6 +182,7 @@ export function ProgramDrawer({
             <span>
               <span className="block font-medium">{drawer.drawerRefusal.title}</span>
               <span className="block text-xs">{drawer.drawerRefusal.message}</span>
+              <Button variant="outline" size="sm" onClick={() => router.refresh()}>{tCommon('actions.retry')}</Button>
             </span>
           </Alert>
         ) : null}
@@ -203,9 +205,13 @@ export function ProgramDrawer({
               {program.effectiveTo ? `${program.effectiveFrom} – ${program.effectiveTo}` : `${program.effectiveFrom} – …`}
             </dd>
           </div>
+          {drawer.policyLines.map((line) => <div key={`${line.label}:${line.value}`}>
+            <dt className="text-xs text-slate-500 dark:text-slate-400">{line.label}</dt>
+            <dd className="font-medium text-slate-900 dark:text-slate-100">{line.value}</dd>
+          </div>)}
         </dl>
 
-        <div>
+        {!drawer.drawerRefusal ? <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.membersTitle')}</h3>
           {drawer.members.length === 0 ? (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{drawer.membersEmpty}</p>
@@ -216,7 +222,8 @@ export function ProgramDrawer({
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{m.employeeLabel}</span>
                   <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">{m.rangeLabel}</span>
                   {m.role ? <span className="text-xs text-slate-400 dark:text-slate-500">{m.role}</span> : null}
-                  {canManage ? (
+                  {m.weight !== null ? <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('portfolio.members.weight')}: {m.weight}</span> : null}
+                  {canManage && !drawer.drawerRefusal ? (
                     <button
                       type="button"
                       disabled={working}
@@ -244,7 +251,7 @@ export function ProgramDrawer({
               ))}
             </ul>
           )}
-          {canManage && !adding ? (
+          {canManage && program.status !== 'closed' && !adding ? (
             <div className="mt-2 flex justify-end">
               <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
                 {t('portfolio.addMember')}
@@ -326,9 +333,9 @@ export function ProgramDrawer({
               </div>
             </div>
           ) : null}
-        </div>
+        </div> : null}
 
-        {program.family === 'incentive' && program.metric !== 'approved_hours' ? <div>
+        {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' ? <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.sourcesTitle')}</h3>
           {drawer.sources.length === 0 ? (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{drawer.sourcesEmpty}</p>
@@ -337,16 +344,13 @@ export function ProgramDrawer({
               {drawer.sources.map((s) => (
                 <li key={s.id} className="flex items-baseline justify-between gap-3 py-1.5">
                   <span className="text-sm text-slate-600 dark:text-slate-300">{s.accountLabel}</span>
-                  {s.weightBps !== null ? (
-                    <span className="text-sm tabular-nums text-slate-600 dark:text-slate-300">{s.weightBps}</span>
-                  ) : null}
                 </li>
               ))}
             </ul>
           )}
         </div> : null}
 
-        {program.family === 'incentive' ? (
+        {!drawer.drawerRefusal && program.family === 'incentive' ? (
           <div className="flex flex-col gap-3">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.simulate.title')}</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -441,7 +445,7 @@ export function ProgramDrawer({
           </div>
         ) : null}
 
-        {canManage ? (
+        {canManage && !drawer.drawerRefusal ? (
           <div className="flex flex-wrap justify-end gap-2">
             {program.status === 'draft' ? (
               <>

@@ -187,6 +187,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_benefit_program_members", columnName: "role", transform: "redact" },
   { tableName: "hrm_benefit_programs", columnName: "name", transform: "faker_name" },
   { tableName: "hrm_benefit_programs", columnName: "description", transform: "redact" },
+  // Operational reasons and obligation titles may name people. Goods-tax
+  // evidence includes registration details, so retain no authored snapshot.
+  { tableName: "assembly_disassemblies", columnName: "reason", transform: "redact" },
+  { tableName: "provision_obligations", columnName: "name", transform: "redact" },
+  { tableName: "document_goods_tax_snapshots", columnName: "snapshot", transform: "null_out" },
   // HR-9 self-service (0198): the emergency contact is candidate PII —
   // nulled in sandboxes like tax_ids, never faked into a plausible lie.
   { tableName: "parties", columnName: "emergency_contact", transform: "null_out" },

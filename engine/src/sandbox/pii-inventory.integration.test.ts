@@ -66,6 +66,14 @@ function isCoveredByConstruction(table: string, column: string, udtName: string)
  *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
+  // Native disassembly components contain item references, quantities and
+  // inventory values; registration_ids contains UUID references, not numbers.
+  "assembly_disassemblies.components",
+  "document_goods_tax_snapshots.registration_ids",
+  // An opaque content digest, a recognition enum and an ISO currency code.
+  "document_goods_tax_snapshots.fingerprint",
+  "drop_ship_agent_allocations.kind",
+  "provision_obligations.currency",
   "rma_documents.stage",
   "rma_lines.disposition",
   "account_group_members.dimension",

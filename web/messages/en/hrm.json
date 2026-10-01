@@ -1510,7 +1510,10 @@
         "program": "Program",
         "period": "Earned period",
         "value": "Value",
-        "status": "Status"
+        "status": "Status",
+        "reversedTitle": "Reversed award payments",
+        "reversedEmpty": "No reversed award payments.",
+        "reversedStatus": "Reversed"
       }
     },
     "qualifications": {
@@ -2572,10 +2575,10 @@
     "members": {
       "weight": "Weight",
       "weightPlaceholder": "1",
-      "weightHint": "Share weight for pool splits; blank means equal.",
+      "weightHint": "A positive weight is required for role-weighted allocation. Equal and approved-hours allocation do not use this field.",
       "role": "Role",
       "rolePlaceholder": "Contributor",
-      "roleHint": "Role used by role-weighted splits."
+      "roleHint": "Role recorded with this membership; allocation weights are configured separately."
     },
     "addMember": "Add member",
     "removeMember": "End membership",
@@ -2651,8 +2654,8 @@
         "payComponent": "Pay component",
         "reason": "Reason for change"
       },
-      "allEntities": "All entities",
-      "entityHint": "Blank means every entity the program may run in.",
+      "allEntities": "Choose legal entity",
+      "entityHint": "One legal entity owns the program and its payroll obligations. Add eligible employees after creating the draft.",
       "employmentsTruncated": "The employment list shows the first 500 names; membership still accepts any in-scope employment.",
       "searchDepartments": "Search departments…",
       "searchProjects": "Search projects…",
@@ -2680,7 +2683,12 @@
       "cancel": "Cancel",
       "back": "Back",
       "next": "Next",
-      "amountNoun": "Amount"
+      "amountNoun": "Amount",
+      "componentPrerequisite": "Create an active earning component in Payroll Setup, then refresh options and select it. Its native payroll rules determine tax and posting treatment.",
+      "openPayrollSetup": "Open Payroll Setup",
+      "accountsPrerequisite": "No postable measurement accounts are visible. Add the required accounts in the chart of accounts or ask finance to check legal-entity access, then refresh options.",
+      "openAccounts": "Open chart of accounts",
+      "refreshOptions": "Refresh options"
     },
     "awardBuilderTitle": "New award",
     "awardFields": {

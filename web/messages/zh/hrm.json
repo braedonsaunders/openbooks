@@ -1510,7 +1510,10 @@
         "program": "计划",
         "period": "获得期间",
         "value": "金额",
-        "status": "状态"
+        "status": "状态",
+        "reversedTitle": "已冲销奖励付款",
+        "reversedEmpty": "暂无已冲销奖励付款。",
+        "reversedStatus": "已冲销"
       }
     },
     "qualifications": {
@@ -2572,10 +2575,10 @@
     "members": {
       "weight": "权重",
       "weightPlaceholder": "1",
-      "weightHint": "奖金池分配的份额权重。留空表示平均。",
+      "weightHint": "按角色权重分配时必须填写正权重。平均分配和按已批准工时分配不使用此字段。",
       "role": "角色",
       "rolePlaceholder": "成员",
-      "roleHint": "按角色加权分配所用的角色。"
+      "roleHint": "此成员记录的角色；分配权重单独配置。"
     },
     "addMember": "添加成员",
     "removeMember": "结束成员资格",
@@ -2651,8 +2654,8 @@
         "payComponent": "工资项目",
         "reason": "更改原因"
       },
-      "allEntities": "全部实体",
-      "entityHint": "留空表示该计划适用的所有实体。",
+      "allEntities": "选择法人实体",
+      "entityHint": "由一个法人实体负责此计划和工资义务。创建草稿后添加符合资格的员工。",
       "employmentsTruncated": "雇佣名单仅显示前500名。成员登记接受范围内任何雇佣。",
       "searchDepartments": "搜索部门…",
       "searchProjects": "搜索项目…",
@@ -2680,7 +2683,12 @@
       "cancel": "取消",
       "back": "上一步",
       "next": "下一步",
-      "amountNoun": "金额"
+      "amountNoun": "金额",
+      "componentPrerequisite": "请在工资设置中创建有效的收入项目，然后刷新选项并选择该项目。其工资规则决定税务和记账处理。",
+      "openPayrollSetup": "打开工资设置",
+      "accountsPrerequisite": "没有可见的可记账计量科目。请添加所需科目或请财务部门检查法人实体访问权限，然后刷新选项。",
+      "openAccounts": "打开会计科目表",
+      "refreshOptions": "刷新选项"
     },
     "awardBuilderTitle": "新建奖励",
     "awardFields": {

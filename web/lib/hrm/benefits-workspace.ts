@@ -109,6 +109,7 @@ export interface ProgramSimulation {
 
 export interface ProgramDetailDrawer {
   editHref: string
+  policyLines: { label: string; value: string }[]
   simulateHref: string
   /** A refused member/source/simulation read renders inside the drawer with
    *  its message — the drawer never shows partial policy as complete. */
@@ -127,7 +128,6 @@ export interface ProgramDetailDrawer {
   membersEmpty: string
   sources: { id: string; accountId: string; accountLabel: string; weightBps: number | null }[]
   sourcesEmpty: string
-  settlementPending: string
 }
 
 export interface AwardDetailDrawer {
@@ -557,7 +557,30 @@ export async function loadBenefitsPortfolio(
           }
         }
       }
+      const policyLines: ProgramDetailDrawer['policyLines'] = []
+      const policy = (key: string, value: string | null) => {
+        if (value !== null && value !== '') policyLines.push({ label: t(`portfolio.builder.fields.${key}`), value })
+      }
+      policy('legalEntity', subsidiaries.rows.find((entity) => entity.id === found.legalEntityId)?.name ?? null)
+      policy('valuation', t(`portfolio.valuations.${found.valuation}`))
+      for (const field of ['capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
+        if (found[field] !== null) policy(field, amountLabel(found[field], found.currency))
+      }
+      if (found.family === 'incentive') {
+        if (found.metric) policy('metric', t(`portfolio.metrics.${found.metric}`))
+        if (found.metricScope) policy('metricScope', t(`portfolio.scopes.${found.metricScope}`))
+        const scopeOptions = found.metricScope === 'department' ? departments.rows : projects.rows
+        for (const option of scopeOptions.filter((option) => found.scopeIds.includes(option.id))) policy('metricScope', option.name)
+        policy('allocation', t(`portfolio.allocations.${found.allocation}`))
+      }
+      policy('frequency', t(`portfolio.frequencies.${found.frequency}`))
+      if (found.periodBasis) policy('periodBasis', t(`portfolio.periodBasis.${found.periodBasis}`))
+      policy('paymentDelayDays', String(found.paymentDelayDays))
+      policy('deliveryMethod', t(`portfolio.delivery.${found.deliveryMethod}`))
+      const component = payComponents.rows.find((component) => component.id === found.payComponentId)
+      policy('payComponent', component ? `${component.code ?? ''} — ${component.name}` : null)
       programDrawer = {
+        policyLines,
         editHref: portfolioHref(basePath, sp.view, { program: found.id, edit: '1' }),
         simulateHref: portfolioHref(basePath, sp.view, { program: found.id }),
         drawerRefusal,
@@ -584,7 +607,6 @@ export async function loadBenefitsPortfolio(
           }
         }),
         sourcesEmpty: t('portfolio.sourcesEmpty'),
-        settlementPending: t('portfolio.settlementPending'),
       }
     }
   }

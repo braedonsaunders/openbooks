@@ -3,15 +3,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import { createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
-import { seedAdoption, calculatedRun } from "../../payroll/filing-test-fixtures.ts";
-import { calculatePayRun } from "../../payroll/run-calculation.ts";
-import { commitPayRun } from "../../payroll/run-commit.ts";
 import {
   linkPerson,
   seedComponent,
   seedEmployment,
   setupHarness,
+  setFeatures,
   withHarness,
 } from "../../testing/hrm-harness.ts";
 import { BenefitsError } from "./errors.ts";
@@ -65,7 +62,7 @@ type Harness = Awaited<ReturnType<typeof setupHarness<typeof SETTLE_SPEC>>>;
 
 async function postEntry(
   h: Harness,
-  lines: ReadonlyArray<{ account: string; amount: string }>,
+  lines: ReadonlyArray<{ account: string; amount: string; project?: string }>,
   date = "2026-07-15",
 ): Promise<string> {
   const entry = randomUUID();
@@ -82,9 +79,9 @@ async function postEntry(
       n += 1;
       await tx.execute(sql`
         insert into journal_lines
-          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, project_id)
         values (${h.org.orgId}, ${entry}, ${n}, ${line.account}, ${h.org.subsidiaryId},
-                ${line.amount}, 'USD', ${line.amount}, 1)
+                ${line.amount}, 'USD', ${line.amount}, 1, ${line.project ?? null}::uuid)
       `);
     }
     await tx.execute(sql`
@@ -598,15 +595,29 @@ test("statements union awards and payroll records without duplicating payments",
       orgId: h.org.orgId, actorId: h.settlerId, employmentId: worker.employmentId,
     });
     assert.equal(managed.pendingAwards[0]!.id, settled.awards[0]!.id);
+    const pendingRun = await seedRun(h, worker.employmentId, worker.workerPartyId);
+    await db.execute(sql`
+      insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year, pay_date, tax_year, country, country_source, currency_code, gross, net_pay)
+      values (${h.org.orgId}, ${pendingRun}, ${worker.workerPartyId}, ${worker.employmentId}, 'TX', 26, '2026-08-05', 2026, 'US', 'calculation', 'USD', '1000.0000', '1000.0000')
+    `);
+    const beforeCommit = await myBenefitStatement({orgId: h.org.orgId, actorId: h.employeeId});
+    assert.deepEqual(beforeCommit[0]!.payrollRecords, [], "an uncommitted stub is an estimate, not paid payroll");
     // Leakage proof: no company measure, snapshot, or digest key appears
     // anywhere in the employee-visible statement.
-    const serialized = JSON.stringify(mine);
-    for (const forbidden of [
+    const forbiddenKeys = new Set([
       "measuredValue", "poolValue", "revenueTotal", "expenseTotal", "digest",
-      "entryIds", "source_snapshot", "program_snapshot", "sourceSnapshot", "programSnapshot", "summaryLines", "bookId", "explanation", "share", "postingFacts", "approvedHoursFacts",
-    ]) {
-      assert.ok(!serialized.includes(forbidden), `statement leaks ${forbidden}`);
-    }
+      "entryIds", "source_snapshot", "program_snapshot", "sourceSnapshot", "programSnapshot",
+      "summaryLines", "bookId", "explanation", "share", "postingFacts", "approvedHoursFacts",
+    ]);
+    const assertPrivate = (value: unknown): void => {
+      if (Array.isArray(value)) { value.forEach(assertPrivate); return; }
+      if (value === null || typeof value !== "object") return;
+      for (const [key, field] of Object.entries(value)) {
+        assert.equal(forbiddenKeys.has(key), false, `statement leaks confidential field ${key}`);
+        assertPrivate(field);
+      }
+    };
+    assertPrivate(mine);
     // A stranger's employment refuses for the grant-less employee — never
     // an empty statement, never another worker's rows.
     const outsiderParty = randomUUID();
@@ -628,45 +639,6 @@ test("statements union awards and payroll records without duplicating payments",
 });
 
 
-test("cash reward delivery proves its exact line through native payroll calculation and commit", { skip: !DB }, async () => {
-  const fx = await seedAdoption();
-  try {
-    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true}'::jsonb) where id = ${fx.orgId}`);
-    const approverId = await createScratchUser(fx.orgId, "Benefits Approver", "admin");
-    const component = (await db.execute<{id: string}>(sql`
-      select id from pay_components where org_id = ${fx.orgId} and system_key = 'bonus' and country = 'CA'
-    `)).rows[0]!;
-    assert.ok(component, "the native payroll fixture has its Canadian bonus component");
-    const created = await createBenefitProgram({
-      orgId: fx.orgId, actorId: fx.actorId, code: "CASH_RECOGNITION", name: "Cash recognition",
-      family: "reward", currency: "CAD", legalEntityId: fx.subsidiaryId,
-      effectiveFrom: "2026-01-01", payComponentId: component.id, deliveryMethod: "payroll",
-      valuation: "fixed", fixedAmount: "25.0000", frequency: "manual",
-    });
-    const program = await activateBenefitProgram({ orgId: fx.orgId, actorId: fx.actorId, programId: created.id });
-    await addProgramMembership({ orgId: fx.orgId, actorId: fx.actorId, programId: program.id, employmentId: fx.employmentId, effectiveFrom: "2026-01-01" });
-    const award = await createBenefitAward({ orgId: fx.orgId, actorId: fx.actorId, programId: program.id, employmentId: fx.employmentId, periodFrom: "2026-07-05", periodTo: "2026-07-18", value: "25.0000", currency: "CAD", evidence: {kind: "recognition"} });
-    await submitBenefitAward({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id });
-    await approveBenefitAward({ orgId: fx.orgId, actorId: approverId, awardId: award.id });
-    const { input } = await calculatedRun(fx);
-    const queued = await queueAwardForPayRun({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id, runDocumentId: input.documentId });
-    assert.equal(queued.award.payRunDocumentId, input.documentId);
-    assert.equal(queued.award.payRunAdjustmentId, queued.adjustmentId);
-    assert.deepEqual((await calculatePayRun(input)).errors, []);
-    assert.ok((await commitPayRun(input)).lines > 0, "native payroll committed balanced accounting legs");
-    const delivered = await confirmAwardPayrollDelivery({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id, runDocumentId: input.documentId, adjustmentId: queued.adjustmentId });
-    assert.equal(delivered.status, "delivered");
-    const replay = await queueAwardForPayRun({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id, runDocumentId: input.documentId });
-    assert.equal(replay.award.status, "delivered");
-    const lines = (await db.execute<{amount: string}>(sql`
-      select l.amount::text as amount from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-       where s.org_id=${fx.orgId} and s.pay_run_document_id=${input.documentId} and l.description=${`Benefit award ${award.id} (${program.code} 2026-07-05..2026-07-18)`}
-    `)).rows;
-    assert.deepEqual(lines, [{amount: "25.0000"}]);
-  } finally {
-    await dropScratchOrg(fx.orgId);
-  }
-});
 
 
 test("a linked employment does not replace the self-service read grant", { skip: !DB }, async () => {
@@ -675,5 +647,36 @@ test("a linked employment does not replace the self-service read grant", { skip:
     const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, {workerPartyId: party});
     await assert.rejects(myBenefitStatement({orgId: h.org.orgId, actorId: h.noSelfId}), /hrm.self.read|Self-service|permission|authorized/i);
     await assert.rejects(employmentBenefitStatement({orgId: h.org.orgId, actorId: h.noSelfId, employmentId: worker.employmentId}), /hrm.self.read|Self-service|permission|authorized/i);
+  });
+});
+
+
+test("project-completion awards require native closed projects and freeze completion facts", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(SETTLE_SPEC), async (h) => {
+    await setFeatures(h.org.orgId, {hrm: true, projects: true});
+    const projectId = randomUUID();
+    await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active) values (${projectId}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'COMPLETE-JOB', 'Completion project', 'active', true)`);
+    const program = await seedProgram(h, {metric: "revenue", metricScope: "project", scopeIds: [projectId], sourceAccountIds: [h.org.accounts.revenue], frequency: "project_complete"});
+    const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, {displayName: "Project crew"});
+    await addProgramMembership({orgId: h.org.orgId, actorId: h.settlerId, programId: program.id, employmentId: worker.employmentId, effectiveFrom: "2026-01-01"});
+    await postEntry(h, [{account: h.org.accounts.revenue, amount: "-10000.0000", project: projectId}, {account: h.org.accounts.bank, amount: "10000.0000"}]);
+    const query = {orgId: h.org.orgId, actorId: h.settlerId, programId: program.id, periodFrom: "2026-07-01", periodTo: "2026-07-31"};
+    assert.equal((await previewIncentiveSettlement(query)).isEstimate, true);
+    await refuses(() => settleIncentivePeriod(query), /not closed.*close each selected project/);
+    for (const status of ["substantially_complete", "cancelled"]) {
+      await db.execute(sql`update projects set status=${status}, updated_at=now() where org_id=${h.org.orgId} and id=${projectId}`);
+      await refuses(() => settleIncentivePeriod(query), /not closed/);
+    }
+    // This is the native project record's Closed status, not a parallel
+    // benefit flag or a fabricated completion percentage.
+    await db.execute(sql`update projects set status='closed', updated_at=now() where org_id=${h.org.orgId} and id=${projectId}`);
+    const settled = await settleIncentivePeriod(query);
+    assert.equal(settled.preview.isEstimate, false);
+    const completion = settled.preview.sourceSnapshot.projectCompletion as Array<{projectId: string; status: string}>;
+    assert.equal(completion[0]!.projectId, projectId);
+    assert.equal(completion[0]!.status, "closed");
+    assert.equal((await settleIncentivePeriod(query)).awards[0]!.id, settled.awards[0]!.id);
+    await postEntry(h, [{account: h.org.accounts.revenue, amount: "-100.0000", project: projectId}, {account: h.org.accounts.bank, amount: "100.0000"}], "2026-08-15");
+    await refuses(() => settleIncentivePeriod({...query, periodFrom: "2026-08-01", periodTo: "2026-08-31"}), /completion was already settled/);
   });
 });

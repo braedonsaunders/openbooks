@@ -45,3 +45,20 @@ test("the dialogs render only with their dialog data", () => {
   const dialogJson = specJson(withDialog);
   assert.ok(dialogJson.includes("Elect coverage"), "the dialog carries its data");
 });
+
+test("award history uses distinct native paid, pending and reversed lists", () => {
+  const json = specJson(baseData());
+  for (const source of ["me_benefit_awards_paid", "me_benefit_awards_pending", "me_benefit_awards_reversed"]) {
+    assert.equal(json.split(`\"source\":\"${source}\"`).length - 1, 1, `${source} is registered once`);
+  }
+  assert.ok(json.includes('"source":"me_benefits_elections"'), "the original coverage list remains native");
+});
+
+test("a refused award read preserves its remedy without claiming an empty payment history", () => {
+  const data = baseData();
+  data.awardsRefusal = { title: "Reward history unavailable", message: "Link your active employment before reading rewards." };
+  const json = specJson(data);
+  assert.ok(json.includes("Link your active employment before reading rewards."), "the computed remedy reaches the page");
+  assert.ok(!json.includes('"source":"me_benefit_awards_'), "unknown payment history is not rendered as three empty lists");
+  assert.ok(json.includes('"source":"me_benefits_elections"'), "coverage remains independently available");
+});
