@@ -1945,6 +1945,23 @@ export function DocumentDrawer({
     )
   }
 
+  async function retryPostingEffects() {
+    const reason = await promptDialog({
+      title: t('postingEffects.retry'), label: t('postingEffects.reason'),
+      placeholder: t('postingEffects.reasonHelp'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 10 || reason.trim().length > 1000) {
+      refuse(t('postingEffects.reasonHelp'), t('toasts.actionFailed'))
+      return
+    }
+    await execute(() => fetchAction('/api/documents/actions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'retry-effects', documentId: doc.id, reason }),
+    }), { fallbackMessage: t('toasts.actionFailed'),
+      successMessage: t('postingEffects.queued'), onOk: () => router.refresh() })
+  }
+
   async function remove() {
     if (
       !(await confirmDialog({
@@ -2775,6 +2792,21 @@ export function DocumentDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.actionFailed')} />
+        {isPosted && typeof doc.posting_effect_status === 'string' ? (
+          <section role="status" aria-live="polite" className="space-y-2 rounded border p-3 text-sm">
+            <Badge variant={doc.posting_effect_status === 'succeeded' ? 'success' : 'warning'}>
+              {t('postingEffects.title')}: {t.has(`postingEffects.status.${doc.posting_effect_status}`)
+                ? t(`postingEffects.status.${doc.posting_effect_status}`) : t('postingEffects.unknown')}
+            </Badge>
+            {doc.posting_effect_status !== 'succeeded' ? <>
+              <p>{t('postingEffects.incomplete')}</p>
+              {typeof doc.posting_effect_error === 'string' ? <p>{doc.posting_effect_error}</p> : null}
+              {doc.posting_effect_status === 'terminal_failed' && canPost ? (
+                <Button variant="outline" disabled={busy} onClick={retryPostingEffects}>{t('postingEffects.retry')}</Button>
+              ) : null}
+            </> : null}
+          </section>
+        ) : null}
           {config.kind==='customer_invoice' && (editable || nativeGoods) ? <div className="space-y-3 border-b p-4">
             <div className="space-y-1"><FieldLabel fieldName={tCommon('nativeGoodsTax.title')}>{tCommon('nativeGoodsTax.title')}</FieldLabel>
               {editable ? <Select value={nativeGoods ? 'native' : 'manual'} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:event.target.value==='native'

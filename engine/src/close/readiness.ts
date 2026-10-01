@@ -1,4 +1,5 @@
 import { CloseError, NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
+import { incompletePostingEffectsCount } from "../periods/period-locks.ts";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -158,8 +159,9 @@ export async function readinessChecks(
   // Absent on pre-seed orgs reads as on (see sourceEvidencePolicyActive).
   const sourceEvidenceOn = await sourceEvidencePolicyActive(orgId);
 
-  const [drafts, missingPeriod, bank, depreciation, recognition, fx, fxReval, intercompany, variancePolicy] =
+  const [postingEffects, drafts, missingPeriod, bank, depreciation, recognition, fx, fxReval, intercompany, variancePolicy] =
     (await Promise.all([
+      incompletePostingEffectsCount(db, { orgId, periodId: ctx.period_id, bookId: ctx.book_id, subsidiaryIds }),
       db.execute(sql`
       select
         (select count(*) from journal_entries e where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status = 'draft'
@@ -368,6 +370,15 @@ export async function readinessChecks(
        and (v.prior_amount=0 or abs((v.current_amount-v.prior_amount)/nullif(abs(v.prior_amount),0)*100) >= ${threshold.percent}::numeric)`));
 
   return [
+    {
+      code: "posting-effects-incomplete",
+      taskKey: "drafts-cleared",
+      category: "readiness",
+      severity: "critical",
+      title: "close.diagnostics.posting-effects-incomplete.title",
+      message: "close.diagnostics.posting-effects-incomplete.message",
+      count: postingEffects,
+    },
     {
       code: "drafts-open",
       taskKey: "drafts-cleared",

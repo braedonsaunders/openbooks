@@ -16,25 +16,27 @@
  *   checkpoint.json           the diffable ledger checkpoint
  *   badge-conformance.json    shields.io endpoint
  *   badge-invariants.json     shields.io endpoint
- *   history.json              one append-only record per published commit
+ *   history.json              one append-only record per publication
  *
  * Usage:
  *   node scripts/publish-trust.mjs \
  *     --conformance .local/conformance \
  *     --controls .local/controls \
  *     --checkpoint engine/harness-checkpoints \
- *     [--out docs/trust] [--sha <git sha>]
+ *     --verification <verification.json> [--out docs/trust] [--sha <full git sha>]
  *
  * All three inputs are required and must name the published commit: a run
  * that could only produce one part must not publish, because conditional
  * writes preserve the missing parts' stale files under a new label. The
- * bundle is built in a staging directory and swapped in atomically, so a
+ * bundle is built in a staging directory and replaced as a complete set, so a
  * previous bundle is either fully replaced or fully kept — never mixed.
  */
 
+import { validateVerificationReceipt } from "./verification-receipt.mjs";
 import { createHash } from "node:crypto";
 import {
   existsSync,
+  copyFileSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -51,17 +53,9 @@ function flag(name, fallback = null) {
   return index >= 0 ? (process.argv[index + 1] ?? fallback) : fallback;
 }
 
-/**
- * Same-source comparison for evidence SHAs. Producers may record a full or
- * abbreviated commit hash; either direction of prefix match accepts, anything
- * else rejects. Empty or missing SHAs never match — unpublished provenance
- * fails closed rather than publishing under a borrowed label.
- */
+/** Evidence must carry the exact full commit, never an ambiguous prefix. */
 function sameSource(candidate, expected) {
-  if (typeof candidate !== "string" || !candidate || typeof expected !== "string" || !expected) {
-    return false;
-  }
-  return candidate === expected || candidate.startsWith(expected) || expected.startsWith(candidate);
+  return /^[a-f0-9]{40}$/.test(expected ?? "") && candidate === expected;
 }
 
 function sha256Hex(bytes) {
@@ -120,16 +114,6 @@ function readJson(path) {
   }
 }
 
-/** The most recently modified checkpoint in the directory. */
-function latestCheckpoint(dir) {
-  if (!existsSync(dir)) return null;
-  const candidates = readdirSync(dir)
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => ({ name, mtime: statSync(join(dir, name)).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime);
-  return candidates[0] ? readJson(join(dir, candidates[0].name)) : null;
-}
-
 /** The most recently modified checkpoint file, for the provenance record. */
 function latestCheckpointFile(dir) {
   if (!existsSync(dir)) return null;
@@ -156,7 +140,8 @@ const controls = readJson(join(controlsDir, "controls.json"));
 const controlsMarkdown = existsSync(join(controlsDir, "controls-matrix.md"))
   ? readFileSync(join(controlsDir, "controls-matrix.md"), "utf8")
   : null;
-const checkpoint = latestCheckpoint(checkpointDir);
+const checkpointPath = latestCheckpointFile(checkpointDir);
+const checkpoint = checkpointPath ? readJson(checkpointPath) : null;
 
 // Anti-false-green: every ledger invariant passes trivially on an empty company.
 // A checkpoint with no posted entries is not evidence of anything and must
@@ -198,6 +183,40 @@ if (missing.length > 0) {
 // Mixed-source or tampered evidence must never reach the bundle, and a
 // rejection must not create or touch the output directory either.
 validateProvenance({ conformance, controls, checkpoint, sha });
+const verification = readJson(flag("verification", ".local/verification/verification.json"));
+try {
+  validateVerificationReceipt(verification, sha);
+} catch (error) {
+  console.error(`refusing to publish incomplete verification: ${error.message}`);
+  process.exit(1);
+}
+for (const [label, report] of [["conformance", conformance], ["controls", controls]]) {
+  const totals = { pass: 0, fail: 0, gap: 0, skipped: 0 };
+  const ids = new Set();
+  for (const c of report.cases) {
+    if (typeof c.id !== "string" || !c.id || ids.has(c.id) || !Object.hasOwn(totals, c.status)) {
+      console.error(`${label} evidence has duplicate cases or invalid results; refusing publication`);
+      process.exit(1);
+    }
+    ids.add(c.id);
+    totals[c.status]++;
+  }
+  if (Object.entries(totals).some(([key, count]) => (report.totals?.[key] ?? 0) !== count)) {
+    console.error(`${label} totals do not describe the case results; refusing publication`);
+    process.exit(1);
+  }
+  const ledger = report.cases.filter(c => c.tier === "ledger" && c.support !== "not-implemented");
+  if (report.pass !== true || ledger.length === 0 || ledger.some(c => c.status !== "pass") ||
+      report.cases.some(c => c.status === "fail" || c.status === "skipped")) {
+    console.error(`${label} evidence is failed, empty, or not fully executed; refusing publication`);
+    process.exit(1);
+  }
+}
+if (checkpoint.pass !== true || !Array.isArray(checkpoint.checks) || checkpoint.checks.length === 0 ||
+    checkpoint.checks.some(check => check.ok !== true)) {
+  console.error("checkpoint invariants did not execute successfully; refusing publication");
+  process.exit(1);
+}
 
 // The badge and the matrix header are two renderings of one derivation
 // (scripts/trust-badge.mjs): both must state the corpus totals. A matrix
@@ -227,6 +246,14 @@ if (matrixMarkdown) {
 // previous bundle untouched, and stale files cannot survive the swap.
 const outAbs = resolve(outDir);
 const stagedDir = mkdtempSync(join(dirname(outAbs), ".trust-stage-"));
+// Narrative documents have independent provenance and are not generated evidence.
+if (existsSync(outAbs) && statSync(outAbs).isDirectory()) {
+  for (const name of readdirSync(outAbs)) {
+    if (name.endsWith(".md") && !["conformance-matrix.md", "controls-matrix.md"].includes(name)) {
+      copyFileSync(join(outAbs, name), join(stagedDir, name));
+    }
+  }
+}
 
 // -- badges -----------------------------------------------------------------
 // Gaps are reported in the badge message rather than folded into the colour.
@@ -270,9 +297,8 @@ writeFileSync(join(stagedDir, "controls.json"), `${JSON.stringify(controls, null
 writeFileSync(join(stagedDir, "checkpoint.json"), `${JSON.stringify(checkpoint, null, 2)}\n`);
 
 // -- append-only history ----------------------------------------------------
-// One record per published commit, for charting the trend. Append-only by
-// construction: an existing record for the same sha is replaced in place rather
-// than duplicated, and nothing else is ever rewritten. The previous bundle's
+// One record per publication, including repeat runs of the same source commit.
+// Earlier execution evidence is preserved rather than replaced. The previous bundle's
 // history carries forward; the swap below keeps the trend intact.
 const historyPath = join(outAbs, "history.json");
 const history = readJson(historyPath) ?? [];
@@ -289,7 +315,7 @@ const record = {
     digests: {
       conformance: fileDigest(join(conformanceDir, "conformance.json")),
       controls: fileDigest(join(controlsDir, "controls.json")),
-      checkpoint: fileDigest(latestCheckpointFile(checkpointDir)),
+      checkpoint: fileDigest(checkpointPath),
     },
   },
   conformance: {
@@ -316,16 +342,20 @@ const record = {
   },
 };
 
-const existing = history.findIndex((entry) => entry.gitSha === sha);
-if (existing >= 0) history[existing] = record;
-else history.push(record);
+history.push(record);
 
+writeFileSync(join(stagedDir, "verification.json"), `${JSON.stringify(verification, null, 2)}\n`);
 writeFileSync(join(stagedDir, "history.json"), `${JSON.stringify(history, null, 2)}\n`);
+const bundle = {
+  schemaVersion: 1, gitSha: sha, at,
+  components: Object.fromEntries(readdirSync(stagedDir).sort().map(name => [name, fileDigest(join(stagedDir, name))])),
+};
+writeFileSync(join(stagedDir, "bundle.json"), `${JSON.stringify(bundle, null, 2)}\n`);
 
 // -- atomic swap --------------------------------------------------------------
 // The previous bundle (if any) moves aside, the staged bundle takes its
-// place, and only then is the backup removed. Readers of docs/trust either
-// see the complete previous bundle or the complete new one — never a mix —
+// place, and only then is the backup removed. Readers may observe a brief absence between the directory renames, but
+// a visible directory contains one complete bundle —
 // and no stale file can survive, because the new directory contains exactly
 // this run's bundle.
 if (existsSync(outAbs) && !statSync(outAbs).isDirectory()) {

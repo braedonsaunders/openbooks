@@ -44,7 +44,7 @@ export function PagedTable<T>({
   toolbarAfter,
   onRowClick,
   footer,
-  emptyAsRow = false,
+  emptyAsRow,
   selection,
   source,
   leading,
@@ -68,7 +68,8 @@ export function PagedTable<T>({
   footer?: ReactNode
   /** Empty composition: render the toolbar plus the table headers with
    *  `empty` as a single spanning row — the SetupEntitySection/departments
-   *  composition. Default keeps the bare `empty` slot for existing callers. */
+   *  composition. Registered lists retain this chrome by default; callers
+   *  may explicitly opt into a standalone empty state. */
   emptyAsRow?: boolean
   /** Optional checkbox column with a select-all header over the filtered
    *  rows. Selection state lives with the caller; this only renders it. */
@@ -161,11 +162,11 @@ export function PagedTable<T>({
   ) : toolbarAfter ?? null
 
   if (rows.length === 0) {
-    if (!emptyAsRow) return <>{empty}</>
+    if (!(emptyAsRow ?? Boolean(source))) return <>{empty}</>
     return (
       <div className="space-y-3">
         {toolbar}
-        <ListTable rows={[]} columns={columns} rowKey={rowKey} empty={empty} />
+        <ListTable rows={[]} columns={columns} rowKey={rowKey} empty={empty} leading={leading} footer={footer} />
       </div>
     )
   }

@@ -4,7 +4,7 @@ import { defineRoute } from '@/lib/api/route'
 import { guardPermission } from '@/lib/authz'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { notFound } from '@/lib/api/responses'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { LIST_DRAWER_ROUTES, listDrawerRoute, type ListDrawerSource } from '@/lib/list/drawer-routes'
 import { readListDrawer } from '@/lib/list/drawer-reader'
 

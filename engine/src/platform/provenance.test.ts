@@ -1,36 +1,36 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { caseDigest, runId, sourceSha } from "./provenance.ts";
 
-test("sourceSha prefers the explicit source override over the CI default", () => {
-  const savedSource = process.env.OPENBOOKS_SOURCE_SHA;
-  const savedGithub = process.env.GITHUB_SHA;
-  try {
-    process.env.OPENBOOKS_SOURCE_SHA = "abc123";
-    process.env.GITHUB_SHA = "def456";
-    assert.equal(sourceSha(), "abc123");
-    delete process.env.OPENBOOKS_SOURCE_SHA;
-    assert.equal(sourceSha(), "def456");
-  } finally {
-    if (savedSource === undefined) delete process.env.OPENBOOKS_SOURCE_SHA;
-    else process.env.OPENBOOKS_SOURCE_SHA = savedSource;
-    if (savedGithub === undefined) delete process.env.GITHUB_SHA;
-    else process.env.GITHUB_SHA = savedGithub;
-  }
-});
-
-test("sourceSha falls back to the checkout HEAD outside CI", () => {
+test("source provenance rejects a borrowed environment label and refuses a dirty tree", () => {
+  const directory = mkdtempSync(join(tmpdir(), "openbooks-source-"));
   const savedSource = process.env.OPENBOOKS_SOURCE_SHA;
   const savedGithub = process.env.GITHUB_SHA;
   try {
     delete process.env.OPENBOOKS_SOURCE_SHA;
     delete process.env.GITHUB_SHA;
-    const sha = sourceSha();
-    assert.ok(sha && /^[0-9a-f]{40}$/.test(sha), `expected a full HEAD sha, got ${sha}`);
+    const git = (...args: string[]) => execFileSync("git", ["-C", directory, ...args], { encoding: "utf8" }).trim();
+    git("init", "--quiet");
+    git("-c", "user.name=Verification", "-c", "user.email=verification@example.test", "commit", "--quiet", "--allow-empty", "-m", "Initial source");
+    const head = git("rev-parse", "HEAD");
+    assert.equal(sourceSha(directory), head);
+    process.env.GITHUB_SHA = "b".repeat(40);
+    assert.throws(() => sourceSha(directory), /does not match the checked-out full commit/);
+    process.env.OPENBOOKS_SOURCE_SHA = head;
+    assert.equal(sourceSha(directory), head, "the explicitly checked-out workflow source takes precedence");
+    writeFileSync(join(directory, "changed.ts"), "export const changed = true;\n");
+    assert.equal(sourceSha(directory), null, "uncommitted source cannot be labelled as HEAD");
   } finally {
-    if (savedSource !== undefined) process.env.OPENBOOKS_SOURCE_SHA = savedSource;
-    if (savedGithub !== undefined) process.env.GITHUB_SHA = savedGithub;
+    if (savedSource === undefined) delete process.env.OPENBOOKS_SOURCE_SHA;
+    else process.env.OPENBOOKS_SOURCE_SHA = savedSource;
+    if (savedGithub === undefined) delete process.env.GITHUB_SHA;
+    else process.env.GITHUB_SHA = savedGithub;
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 

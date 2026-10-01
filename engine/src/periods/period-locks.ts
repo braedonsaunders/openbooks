@@ -45,6 +45,41 @@ export async function assertCloseScope(
   }
 }
 
+/** A journal is not fully reconciled while its durable downstream work is incomplete.
+ * The caller holds the period/book posting fence through the lock transition. */
+export async function incompletePostingEffectsCount(executor: SqlExecutor, args: {
+  orgId: string; periodId: string; bookId: string; subsidiaryIds?: string[];
+}): Promise<number> {
+  const entities = args.subsidiaryIds ?? [];
+  const inScope = (column: import("drizzle-orm").SQL) => sql`${column} in (${sql.join(entities.map(id => sql`${id}::uuid`), sql`, `)})`;
+  const result = await executor.execute<{ count: string }>(sql`
+    select count(*)::text as count
+      from posting_effects pe
+      join journal_entries e on e.id = pe.entry_id and e.org_id = pe.org_id
+      join documents d on d.id = pe.document_id and d.org_id = pe.org_id
+     where pe.org_id = ${args.orgId} and e.period_id = ${args.periodId}
+       and e.book_id = ${args.bookId} and pe.status <> 'succeeded'
+       and ${entities.length
+         ? sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)}
+             or exists (select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id and ${inScope(sql`l.subsidiary_id`)}))`
+         : sql`true`}
+  `);
+  const count = result.rows[0]?.count;
+  if (typeof count !== "string" || !/^\d+$/.test(count) || BigInt(count) > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new CloseError("posting-effect reconciliation could not be read; refresh the close run and retry");
+  }
+  return Number(count);
+}
+
+export async function assertPostingEffectsSettled(executor: SqlExecutor, args: {
+  orgId: string; periodId: string; bookId: string; subsidiaryId?: string;
+}): Promise<void> {
+  const count = await incompletePostingEffectsCount(executor, { ...args, subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [] });
+  if (count !== 0) {
+    throw new CloseError(`${count} posting effects remain incomplete in this close scope; inspect the posted documents, resolve failures, retry terminal failures with a review reason, and wait for completion before closing GL`);
+  }
+}
+
 export async function upsertLock(args: {
   tx: SqlExecutor;
   orgId: string;
@@ -57,6 +92,10 @@ export async function upsertLock(args: {
   reason: string;
   reopenExpiresAt?: Date;
 }): Promise<void> {
+  if (args.module === "gl" && args.state === "closed") {
+    await periodScopeAdvisoryLock(args.tx, args.orgId, args.periodId, args.bookId);
+    await assertPostingEffectsSettled(args.tx, args);
+  }
   // Snapshot the current lock first: an upsert overwrites the only record of
   // who locked this scope and why, so every transition is mirrored into the
   // audit trail (in the same transaction) with before/after period state.

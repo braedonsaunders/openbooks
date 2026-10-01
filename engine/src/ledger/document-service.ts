@@ -36,12 +36,15 @@ export async function loadDocument(id: string, orgId: string) {
   requireOrganization(orgId)
   const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
+           pe.status as posting_effect_status, pe.attempt_count as posting_effect_attempts,
+           pe.error as posting_effect_error, pe.next_attempt_at::text as posting_effect_next_attempt_at,
            ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "documentRevision",
            ${sql`case when d.status = 'posted' then ap.applied end`} as applied,
            ${sql`case when d.status = 'posted' then d.total - ap.applied end`} as balance_due
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
+      left join posting_effects pe on pe.document_id = d.id and pe.org_id = d.org_id
       ${documentBalanceDueLateral()}
      where d.id = ${id} and d.org_id = ${orgId}
   `))

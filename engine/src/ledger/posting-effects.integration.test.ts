@@ -15,6 +15,7 @@ import {
 import { sql } from "drizzle-orm";
 import { strandedWorkFindings } from "../agents/stranded-work.ts";
 import { db, withOrgContext, withBypassContext } from "../platform/db.ts";
+import { assertPostingEffectsSettled, incompletePostingEffectsCount } from "../periods/period-locks.ts";
 import { ATTR_KIND, ATTR_SURFACE } from "../platform/telemetry.ts";
 import {
   claimPostingEffectsForDocument,
@@ -31,7 +32,7 @@ import {
   POSTING_EFFECTS_WORKER_IDENTITY,
   TERMINAL_FAILURE_LOG_EVENT,
 } from "../platform/terminal-failure.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -58,6 +59,18 @@ async function collectDurations(): Promise<Array<DataPoint<Histogram>>> {
   return (metric as MetricData).dataPoints as Array<DataPoint<Histogram>>;
 }
 
+async function postFixtureDocument(org: ScratchOrg, documentId: string, entryId: string) {
+  await db.execute(sql`
+    insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+    values (${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '100', 'CAD', '100', 1),
+           (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-100', 'CAD', '-100', 1)
+  `);
+  await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId} and org_id=${org.orgId}`);
+  await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId},
+    subsidiary_id=${org.subsidiaryId}, party_id=${org.customerId}, subtotal=100, total=100, open_balance=100
+    where id=${documentId} and org_id=${org.orgId}`);
+}
+
 test("attempt ceiling terminalizes posting effects and authorized replay preserves audit evidence", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = randomUUID();
@@ -72,7 +85,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
     await db.transaction(async (tx) => {
       const role = await tx.execute<{ id: string }>(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
-        values (${org.orgId}, 'posting-effects-operator', 'Posting Effects Operator', false, '[]'::jsonb)
+        values (${org.orgId}, 'posting-effects-operator', 'Posting Effects Operator', false, '["ar.post"]'::jsonb)
         returning id
       `);
       await tx.execute(sql`
@@ -97,6 +110,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
       values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-${documentId}`},
               ${org.date}, 'CAD', 'draft', '{}'::jsonb)
     `);
+    await postFixtureDocument(org, documentId, entryId);
     await db.execute(sql`
       insert into posting_effects
         (id, org_id, document_id, kind, entry_id, posting_date, actor_id,
@@ -143,6 +157,22 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
     assert.deepEqual(await strandedWorkFindings(randomUUID(), "1900-01-01"), [], "durable failures must remain tenant-scoped");
     assert.deepEqual(await strandedWorkFindings(org.orgId, "1900-01-01"), stranded, "the failure remains detectable after its initial notification");
 
+    const closeScope = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
+    assert.equal(await incompletePostingEffectsCount(db, closeScope), 1);
+    await assert.rejects(() => assertPostingEffectsSettled(db, closeScope), /1 posting effects.*retry terminal failures.*before closing GL/);
+    assert.equal(await incompletePostingEffectsCount(db, { ...closeScope, orgId: randomUUID() }), 0);
+    assert.equal(await incompletePostingEffectsCount(db, { ...closeScope, subsidiaryIds: [randomUUID()] }), 0);
+    await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
+      values (${org.orgId},${actorId},'ar.post','deny')`);
+    await assert.rejects(() => replayTerminalPostingEffect({ orgId: org.orgId, id: effectId, actorId,
+      reason: "Controller reviewed the failure before retrying." }), /posting permission and legal-entity access/);
+    assert.equal((await listFailedPostingEffects(org.orgId))[0]!.status, 'terminal_failed');
+    await db.execute(sql`delete from user_permission_overrides where org_id=${org.orgId} and user_id=${actorId} and permission='ar.post'`);
+    await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [] })}::jsonb
+      where org_id=${org.orgId} and key='posting-effects-operator'`);
+    await assert.rejects(() => replayTerminalPostingEffect({ orgId: org.orgId, id: effectId, actorId,
+      reason: "Controller reviewed the failure before retrying." }), /posting permission and legal-entity access/);
+    await db.execute(sql`update app_roles set subsidiary_restriction=null where org_id=${org.orgId} and key='posting-effects-operator'`);
     const replayAt = new Date("2026-07-20T13:00:00.000Z");
     await replayTerminalPostingEffect({
       orgId: org.orgId,
@@ -175,7 +205,9 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
       reason: "Controller verified the inventory configuration and approved a deterministic replay.",
     }]);
 
+    assert.equal(await incompletePostingEffectsCount(db, closeScope), 1, 'queuing a replay does not establish completion');
     const replayResult = await processDuePostingEffects(replayAt, 1, async () => {});
+    await assertPostingEffectsSettled(db, closeScope);
     assert.deepEqual(replayResult, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
     });
   } finally {
@@ -363,7 +395,7 @@ test("failure evidence truncates at one thousand characters and replay guards it
     await db.transaction(async (tx) => {
       const role = await tx.execute<{ id: string }>(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
-        values (${org.orgId}, 'posting-effects-guard', 'Posting Effects Guard', false, '[]'::jsonb)
+        values (${org.orgId}, 'posting-effects-guard', 'Posting Effects Guard', false, '["ar.post"]'::jsonb)
         returning id
       `);
       await tx.execute(sql`
@@ -389,6 +421,7 @@ test("failure evidence truncates at one thousand characters and replay guards it
         values (${docIds[i]}, ${org.orgId}, 'customer_invoice', ${`INV-GUARD-${i}-${docIds[i]}`},
                 ${org.date}, 'CAD', 'draft', '{}'::jsonb)
       `);
+      await postFixtureDocument(org, docIds[i]!, entryIds[i]!);
       await db.execute(sql`
         insert into posting_effects
           (id, org_id, document_id, kind, entry_id, posting_date, status,

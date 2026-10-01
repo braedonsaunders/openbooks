@@ -206,7 +206,7 @@ test("the terminal notice names the document, the kind, the error, and the retry
   assert.match(notice.body, /INV-1042/, "body names the document");
   assert.match(notice.body, /8 attempts/, "body states the exhausted ceiling");
   assert.match(notice.body, /connection reset by peer/, "body carries the last error");
-  assert.match(notice.body, /retry-effects/, "body names the retry action that exists on the document actions route");
+  assert.match(notice.body, /Retry posting effects/, "body names the retry action that exists on the document actions route");
 });
 
 test("the terminal transition stores the named notice for an operator who can retry", async () => {
@@ -229,8 +229,10 @@ test("the terminal transition stores the named notice for an operator who can re
   };
   const notified: unknown[] = [];
   const scripted: StubRows[] = [
-    { rows: [{ document_number: "INV-1042", kind: "customer_invoice" }], rowCount: 1 },
+    { rows: [{ document_number: "INV-1042", kind: "customer_invoice", subsidiary_id: null }], rowCount: 1 },
     { rows: [{ id: "66666666-6666-4666-8666-666666666666" }], rowCount: 1 },
+    { rows: [{ isActive: true, isSuperAdmin: true }], rowCount: 1 },
+    { rows: [{ isActive: true, isSuperAdmin: true }], rowCount: 1 },
     { rows: [], rowCount: 0 },
     { rows: [{ id: "77777777-7777-4777-8777-777777777777" }], rowCount: 1 },
   ];
@@ -247,12 +249,12 @@ test("the terminal transition stores the named notice for an operator who can re
       await markPostingEffectsFailed(failedClaim, new Error("x"), NOW);
     },
   );
-  assert.equal(call, 4, "doc lookup, recipients, dedup check, and the notice insert all run");
+  assert.equal(call, 6, "document lookup, recipients, effective permission/scope checks, dedup and notice insert all run");
   const bound = notified.flatMap(boundParams).filter((p): p is string => typeof p === "string");
   assert.ok(bound.includes(POSTING_EFFECT_TERMINAL_NOTICE_KIND), "the named notice kind is stored");
   assert.ok(bound.some((s) => s.includes("INV-1042") && s.includes("customer_invoice")), "the stored notice names the document and kind");
   assert.ok(
-    bound.some((s) => s.includes("connection reset by peer") && s.includes("retry-effects")),
+    bound.some((s) => s.includes("connection reset by peer") && s.includes("Retry posting effects")),
     "the stored notice carries the last error and the retry remedy",
   );
 });

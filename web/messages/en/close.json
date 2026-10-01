@@ -175,6 +175,10 @@
     "material-variances": {
       "title": "Material fluctuations require explanation",
       "message": "{count, plural, one {# account exceeds the configured materiality thresholds.} other {# accounts exceed the configured materiality thresholds.}}"
+    },
+    "posting-effects-incomplete": {
+      "title": "Posting effects incomplete",
+      "message": "Posted documents have incomplete inventory or revenue projections. Resolve failures, retry terminal failures from the document with a review reason, and wait for completion before closing GL."
     }
   },
   "severity": {

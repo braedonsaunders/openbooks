@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Background, Controls, Handle, MiniMap, Panel, Position, ReactFlow, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
 import { ChevronDown, ChevronUp, Crosshair, Pencil, UserRound, Users } from 'lucide-react'
 import { Button } from '@openbooks/ui'
-import type { OrgChartNode } from '@openbooks/engine/src/hrm/org-chart.ts'
+import type { OrgChartNode } from '@openbooks/engine/hrm/org-chart/contracts'
 import { CARD_HEIGHT, CARD_WIDTH, canConnectManager, departmentColor, layoutChart } from './graph'
 
 type PersonData = Record<string, unknown> & {

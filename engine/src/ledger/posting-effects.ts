@@ -1,3 +1,8 @@
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { postPermission } from "../records/document-kind-permissions.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withOrgContext } from "../platform/db.ts";
 import {
@@ -56,9 +61,8 @@ export function postingEffectTerminalNotice(input: {
       `${input.attemptCount} attempts and will not retry on their own. ` +
       `Last error: ${input.error.slice(0, 500)}. ` +
       `The document stays posted with its ${impact} stranded. ` +
-      `Remedy: retry the effect from the document actions (POST /api/documents/actions ` +
-      `with action "retry-effects", document id ${input.documentId}, and a review reason — ` +
-      `holding the same posting permission used to post the document) or replay it ` +
+      `Remedy: open the posted document and choose Retry posting effects with a review reason. ` +
+      `An operator must hold the document posting permission and legal-entity access. Alternatively, replay it ` +
       `with the posting-effects:ops replay command and a reason.`,
     href: "/inbox",
   };
@@ -66,19 +70,19 @@ export function postingEffectTerminalNotice(input: {
 
 /**
  * Raise the named terminal notice for one stranded effect. Recipients are
- * the operators who can act on it: active super-admins and holders of any
- * posting grant (the retry reuses the document's posting permission, so
- * every posting grant covers some kind). Idempotent per document: a second
+ * active operators with this document's effective posting permission and
+ * legal-entity access. Explicit deny overrides take precedence over grants. Idempotent per document: a second
  * pass finds the unread notice and writes nothing. Best-effort by design —
  * the stamped posting_effects row is the durable record, and a notice that
  * cannot be stored is logged, never fatal.
  */
 async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffectsRow): Promise<void> {
   await withOrgContext(row.org_id, async () => {
-    const doc = (await db.execute<{ document_number: string; kind: string }>(sql`
-      select document_number, kind from documents
+    const doc = (await db.execute<{ document_number: string; kind: string; subsidiary_id: string | null }>(sql`
+      select document_number, kind, subsidiary_id from documents
        where id = ${row.document_id} and org_id = ${row.org_id}
     `)).rows[0];
+    if (!doc) throw new Error("posting-effect document was not found; terminal evidence remains on the outbox row");
     const notice = postingEffectTerminalNotice({
       documentNumber: doc?.document_number ?? row.document_id,
       documentId: row.document_id,
@@ -87,14 +91,12 @@ async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffects
       error: row.terminal_failure_reason,
     });
     const recipients = (await db.execute<{ id: string }>(sql`
-      select distinct u.id::text as id
-        from users u
-        left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
-        left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-       where u.org_id = ${row.org_id} and u.is_active
-         and (u.is_super_admin or r.permissions ? 'gl.post' or r.permissions ? 'ap.post' or r.permissions ? 'ar.post')
+      select id::text as id from users where org_id=${row.org_id} and is_active
     `)).rows;
     for (const recipient of recipients) {
+      if (!await actorHasPermission(db, row.org_id, recipient.id, postPermission(doc.kind))) continue;
+      const allowed = await actorAllowedSubsidiaryIds(db, row.org_id, recipient.id);
+      if (doc.subsidiary_id !== null && allowed !== null && !allowed.has(doc.subsidiary_id)) continue;
       const existing = (await db.execute(sql`
         select 1 as one from notifications
          where org_id = ${row.org_id} and user_id = ${recipient.id}::uuid
@@ -502,6 +504,9 @@ export async function listFailedPostingEffects(
   limit = 100,
 ): Promise<FailedPostingEffect[]> {
   if (!orgId) throw new PostingEffectsReplayError("organization id is required");
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+    throw new PostingEffectsReplayError("posting-effect list limit must be an integer between 1 and 500");
+  }
   const result = await withOrgContext(orgId, () => db.execute<FailedPostingEffect>(sql`
     select id, org_id as "orgId", document_id as "documentId", kind, status,
            attempt_count as "attemptCount", error,
@@ -513,7 +518,7 @@ export async function listFailedPostingEffects(
       from posting_effects
      where org_id=${orgId} and status in ('failed','terminal_failed')
      order by coalesce(terminal_failed_at, finished_at, updated_at) desc
-     limit ${Math.max(1, Math.min(limit, 500))}
+     limit ${limit}
   `));
   return result.rows;
 }
@@ -561,6 +566,22 @@ export async function replayTerminalPostingEffect(input: {
     if (!before) throw new PostingEffectsReplayError("posting effect was not found in the organization");
     if (before.status !== "terminal_failed") {
       throw new PostingEffectsReplayError("only terminal-failed posting effects can be replayed");
+    }
+    const document = (await tx.execute<{ subsidiary_id: string | null; status: string; kind: string }>(sql`
+      select subsidiary_id, status, kind from documents
+       where id=${before.document_id} and org_id=${input.orgId} for update
+    `)).rows[0];
+    if (!document) throw new PostingEffectsReplayError("posting effect document was not found in the organization");
+    try {
+      await lockActorCommandAuthority(tx, input.orgId, input.actorId, document.subsidiary_id, postPermission(document.kind));
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) {
+        throw new PostingEffectsReplayError("replay requires the document's posting permission and legal-entity access; ask an authorized posting operator to review the document");
+      }
+      throw error;
+    }
+    if (document.status !== "posted") {
+      throw new PostingEffectsReplayError("only a posted document's terminal-failed effects can be replayed; review the document status before retrying");
     }
     const reset = await tx.execute(sql`
       update posting_effects

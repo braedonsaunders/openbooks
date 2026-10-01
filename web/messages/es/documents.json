@@ -194,10 +194,10 @@
     "restoreFailed": "No se pudo restaurar",
     "purged": "Eliminado permanentemente",
     "purgeFailed": "No se pudo eliminar",
-   "purgeRetained": "Este archivo se conserva como evidencia de un registro contabilizado y no se puede eliminar permanentemente.",
-   "purgeAttached": "Esta carpeta contiene archivos adjuntos a registros y no se puede eliminar permanentemente.",
-   "purgeSystem": "Las carpetas del sistema no se pueden eliminar permanentemente.",
-   "alreadyGone": "Este elemento ya no existe."
+    "purgeRetained": "Este archivo se conserva como evidencia de un registro contabilizado y no se puede eliminar permanentemente.",
+    "purgeAttached": "Esta carpeta contiene archivos adjuntos a registros y no se puede eliminar permanentemente.",
+    "purgeSystem": "Las carpetas del sistema no se pueden eliminar permanentemente.",
+    "alreadyGone": "Este elemento ya no existe."
   },
   "activity": {
     "title": "Actividad",
@@ -263,5 +263,21 @@
   "rename": {
     "fileTitle": "Renombrar archivo",
     "folderTitle": "Renombrar carpeta"
+  },
+  "postingEffects": {
+    "title": "Procesamiento posterior a la contabilización",
+    "unknown": "Estado desconocido: requiere revisión",
+    "incomplete": "El asiento está contabilizado. Las proyecciones de inventario o ingresos siguen incompletas. Revise los errores y espere a que finalicen correctamente antes de cerrar el libro mayor.",
+    "retry": "Reintentar efectos de contabilización",
+    "reason": "Motivo de la revisión",
+    "reasonHelp": "Explique la corrección y revisión con entre 10 y 1000 caracteres.",
+    "queued": "Reintento en cola; compruebe el estado cuando se ejecute el proceso.",
+    "status": {
+      "pending": "En cola",
+      "running": "Procesando",
+      "failed": "Reintento automático pendiente",
+      "terminal_failed": "Requiere revisión y reintento",
+      "succeeded": "Completado"
+    }
   }
 }

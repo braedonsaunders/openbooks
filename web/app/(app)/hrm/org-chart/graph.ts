@@ -1,4 +1,4 @@
-import type { OrgChartNode } from '@openbooks/engine/src/hrm/org-chart.ts'
+import type { OrgChartNode } from '@openbooks/engine/hrm/org-chart/contracts'
 
 export const CARD_WIDTH = 244
 export const CARD_HEIGHT = 164

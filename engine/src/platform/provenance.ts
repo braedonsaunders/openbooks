@@ -17,16 +17,22 @@ import { execFileSync } from "node:child_process";
 
 /** The commit the current evidence describes. */
 export function sourceSha(repoRoot?: string): string | null {
-  const override = process.env.OPENBOOKS_SOURCE_SHA?.trim();
-  if (override) return override;
-  const ci = process.env.GITHUB_SHA?.trim();
-  if (ci) return ci;
+  const prefix = repoRoot ? ["-C", repoRoot] : [];
+  let head: string;
+  let dirty: boolean;
   try {
-    const args = repoRoot ? ["-C", repoRoot, "rev-parse", "HEAD"] : ["rev-parse", "HEAD"];
-    return execFileSync("git", args, { encoding: "utf8" }).trim() || null;
+    head = execFileSync("git", [...prefix, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    dirty = execFileSync("git", [...prefix, "status", "--porcelain"], { encoding: "utf8" }).trim().length > 0;
   } catch {
     return null;
   }
+  const declared = process.env.OPENBOOKS_SOURCE_SHA?.trim() || process.env.GITHUB_SHA?.trim();
+  if (declared && declared !== head) {
+    throw new Error("evidence source does not match the checked-out full commit; check out the declared source before running verification");
+  }
+  // An uncommitted implementation is not the tree identified by HEAD. A local
+  // report may still be useful, but it cannot carry publishable commit evidence.
+  return !dirty && /^[a-f0-9]{40}$/.test(head) ? head : null;
 }
 
 /** The CI run that produced the current evidence, if any. */
