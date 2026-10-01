@@ -25,7 +25,6 @@ import {
   TableRow,
   Textarea,
   UrlDrawer,
-  cn,
 } from "@openbooks/ui";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";

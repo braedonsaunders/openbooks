@@ -1,7 +1,7 @@
 "use client";
 
 import { cloneElement, isValidElement, useId } from "react";
-import { Badge, Label, cn } from "@openbooks/ui";
+import { Badge, Label } from "@openbooks/ui";
 import { HomeStatTile } from "../../../components/module-home/client";
 import type { Accent } from "../../../components/cockpit/ui";
 import { decimalSum } from "../../../lib/statement-format";

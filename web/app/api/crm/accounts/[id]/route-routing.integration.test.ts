@@ -110,7 +110,7 @@ test('PATCH { route: true } succeeds when the account has no address or territor
 })
 
 test('PATCH { route: true } assigns the matching territory, owner, and assignment event', async () => {
-  const { org, partyId, profileId, ownerId } = await fixture(true)
+  const { org, partyId, profileId } = await fixture(true)
   try {
     const result = await patch(partyId, { route: true, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`)

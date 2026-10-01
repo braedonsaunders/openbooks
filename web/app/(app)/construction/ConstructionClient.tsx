@@ -17,7 +17,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  cn,
 } from "@openbooks/ui";
 import { Field } from "@/components/field";
 import { useDirtyClose } from "@/lib/use-dirty-close";

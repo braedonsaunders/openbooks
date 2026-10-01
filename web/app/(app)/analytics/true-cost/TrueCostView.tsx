@@ -154,7 +154,6 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const t = useTranslations('analytics.trueCost')
-  const router = useRouter()
   const tabs = MODE_TABS[mode]
   const [tab, setTab] = useState<Tab>(tabs[0]!)
   const [openCatId, setOpenCatId] = useState<string | null>(null)

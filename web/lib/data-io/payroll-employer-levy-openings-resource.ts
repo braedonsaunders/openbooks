@@ -94,7 +94,7 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
     },
     async read(readCtx?: ReadCtx) {
       if (readCtx?.page) {
-        const stored = (await readExportWindow<Record<string, CellValue>>(db, sql`
+        const stored = (await readExportWindow<Record<string, CellValue> & { taxYear: number; country: string; levy: string }>(db, sql`
           select tax_year as "taxYear",country,levy_key as levy,region,base_ytd::text as "baseYtd"${transferId(readCtx, sql`id`)}
           from payroll_employer_levy_opening where org_id=${orgId}${transferWhere(readCtx, sql`id`)} order by id limit ${transferLimit(readCtx)}`, readCtx)).rows
         finishExportPage(stored, PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR.label, readCtx)

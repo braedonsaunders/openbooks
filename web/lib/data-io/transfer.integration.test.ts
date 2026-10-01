@@ -56,6 +56,23 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
       assert.equal(await countItems('DUPLICATE'), 0)
     })
 
+    await t.test('consistency evidence collected across batches identifies every conflicting source row', async () => {
+      const job = await preview(await source('CONSISTENCY', 251))
+      const label = 'Register "Monthly" has conflicting period start, period end, or pay date values — use one period tuple per register name and upload the corrected file.'
+      await tenant(async () => {
+        await db.execute(sql`update data_transfer_rows set keys=jsonb_build_array(jsonb_build_object(
+          'key','register:Monthly','value',case when row_no=1 then '2026-01' else '2026-02' end,'label',${label}::text))
+          where org_id=${org.orgId} and job_id=${job.id} and row_no in (1,251)`)
+        await db.execute(sql`update data_transfer_jobs set state='previewing',approval_hash=null where org_id=${org.orgId} and id=${job.id}`)
+      })
+      const checked = await run(job)
+      assert.equal(checked.state, 'ready', checked.error ?? '')
+      assert.equal(checked.preview.failed, 2)
+      assert.deepEqual(checked.preview.errors.map((error) => error.row), [1, 251])
+      assert.ok(checked.preview.errors.every((error) => error.message === label))
+      assert.equal(await countItems('CONSISTENCY'), 0)
+    })
+
     await t.test('a refused second batch rolls back its effects and audit, then retry resumes exactly once', async () => {
       const job = await preview(await source('CHECKPOINT', 501))
       assert.equal(job.preview.failed, 0, JSON.stringify(job.preview.errors))
