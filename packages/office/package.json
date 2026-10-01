@@ -14,6 +14,7 @@
   "dependencies": {
     "@openbooks/reports": "*",
     "exceljs": "^4.4.0",
+    "saxes": "5.0.1",
     "unzipper": "0.10.14"
   },
   "devDependencies": {

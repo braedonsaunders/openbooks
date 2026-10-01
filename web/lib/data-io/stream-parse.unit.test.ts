@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
+import JSZip from 'jszip'
 import { spawn } from 'node:child_process'
 import { parseTransferRows } from './stream-parse'
 
@@ -53,6 +54,65 @@ test('XLSX formulas, including array formulas, cannot masquerade as literal mone
     const binary = Buffer.from(await workbook.xlsx.writeBuffer())
     await assert.rejects(async () => { for await (const _ of parseTransferRows('xlsx', (async function* () { yield binary })())) { /* consume */ } }, /contains formulas.*paste their values/)
   }
+})
+test('numeric spreadsheet XML retains decimal digits while date styles remain dates', async () => {
+  const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet('Data')
+  sheet.addRow(['amount', 'date']); sheet.addRow([2, new Date('2026-01-31T00:00:00Z')])
+  const archive = await JSZip.loadAsync(await workbook.xlsx.writeBuffer())
+  const path = 'xl/worksheets/sheet1.xml'
+  const original = await archive.file(path)!.async('string')
+  assert.ok(original.includes('<v>2</v>'))
+  archive.file(path, original.replace('<v>2</v>', '<v>999999999999998.9999</v>'))
+  const binary = await archive.generateAsync({ type: 'nodebuffer' })
+  const rows = []
+  for await (const record of parseTransferRows('xlsx', (async function* () { yield binary })())) if (record.row) rows.push(record.row)
+  assert.deepEqual(rows, [{ amount: '999999999999998.9999', date: '2026-01-31' }])
+})
+test('invalid numeric spreadsheet tokens refuse with the cell address and a usable remedy', async () => {
+  const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet('Data')
+  sheet.addRow(['amount']); sheet.addRow([2])
+  const archive = await JSZip.loadAsync(await workbook.xlsx.writeBuffer())
+  const path = 'xl/worksheets/sheet1.xml', original = await archive.file(path)!.async('string')
+  assert.ok(original.includes('<v>2</v>'))
+  for (const literal of ['2USD', 'NaN', 'Infinity', '1,234']) {
+    archive.file(path, original.replace('<v>2</v>', `<v>${literal}</v>`))
+    const binary = await archive.generateAsync({ type: 'nodebuffer' })
+    await assert.rejects(async () => {
+      for await (const _ of parseTransferRows('xlsx', (async function* () { yield binary })())) { /* consume */ }
+    }, /A2.*invalid numeric literal.*enter a number or save the cell as text/)
+  }
+})
+test('prefixed spreadsheet records cannot disappear silently in the native decoder', async () => {
+  const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet('Data')
+  sheet.addRow(['amount']); sheet.addRow([2])
+  const archive = await JSZip.loadAsync(await workbook.xlsx.writeBuffer())
+  const path = 'xl/worksheets/sheet1.xml', original = await archive.file(path)!.async('string')
+  const prefixed = original.replace('<worksheet ', '<worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ')
+    .replace(/<(\/?)(row|c|v)(?=[\s>])/g, '<$1x:$2')
+  archive.file(path, prefixed)
+  const binary = await archive.generateAsync({ type: 'nodebuffer' })
+  await assert.rejects(async () => {
+    for await (const _ of parseTransferRows('xlsx', (async function* () { yield binary })())) { /* consume */ }
+  }, /prefixed record elements.*save the data as CSV/)
+})
+test('spreadsheet records are bounded before inline or dictionary text expands into a row', async () => {
+  for (const shared of [false, true]) {
+    const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet('Data')
+    sheet.addRow(Array.from({ length: 150 }, (_, index) => `field${index}`))
+    sheet.addRow(Array.from({ length: 150 }, () => 'x'.repeat(32_000)))
+    const binary = Buffer.from(await workbook.xlsx.writeBuffer({ useSharedStrings: shared }))
+    await assert.rejects(async () => {
+      for await (const _ of parseTransferRows('xlsx', (async function* () { yield binary })())) { /* consume */ }
+    }, /worksheet row.*larger than 4 MiB.*reduce that record/)
+  }
+})
+test('an oversized spreadsheet dictionary entry refuses by name', async () => {
+  const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet('Data')
+  sheet.addRow(['value']); sheet.addRow(['x'.repeat(4 * 1024 * 1024 + 1)])
+  const binary = Buffer.from(await workbook.xlsx.writeBuffer({ useSharedStrings: true }))
+  await assert.rejects(async () => {
+    for await (const _ of parseTransferRows('xlsx', (async function* () { yield binary })())) { /* consume */ }
+  }, /shared string|cell larger than 4 MiB/)
 })
 test('two million CSV rows are consumed with bounded memory and no truncated tail', { timeout: 60_000 }, async () => {
   // A constrained child measures live retention after garbage collection.

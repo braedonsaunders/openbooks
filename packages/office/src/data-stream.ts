@@ -7,6 +7,7 @@ import { Parse } from 'unzipper'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { SaxesParser } from 'saxes'
 import { guardCsvCell, readSheetCellValue, SheetReadError, type SheetCellValue } from './index'
 
 interface WorkbookDecoder {
@@ -17,20 +18,68 @@ interface WorkbookDecoder {
   _parseRels(input: Readable): Promise<void>
   _parseWorksheet(input: AsyncIterable<Uint8Array>, id: number): Iterable<{ value: AsyncIterable<ExcelJS.Row> }>
 }
-/** Reject spreadsheet formulas before their cached results can become literal money. */
-async function* literalSheetBytes(source: AsyncIterable<Uint8Array>): AsyncGenerator<Uint8Array> {
+/** Validate XML before the spreadsheet decoder allocates its record objects. */
+async function* literalSheetBytes(source: AsyncIterable<Uint8Array>, container: 'row' | 'si' = 'row',
+  numbers?: Map<number, Map<string, string>>): AsyncGenerator<Uint8Array> {
   const decoder = new TextDecoder('utf-8', { fatal: true })
+  const parser = new SaxesParser({ xmlns: true })
+  const label = container === 'si' ? 'shared string' : 'worksheet row'
+  let inside = false, recordBytes = 0, rowNumber = 0, address = '', numeric = false, valueOpen = false, value = ''
+  const count = (text: string) => {
+    if (!inside) return
+    recordBytes += Buffer.byteLength(text)
+    if (recordBytes > 4 * 1024 * 1024) throw new SheetReadError(label, 'is larger than 4 MiB — reduce that record before importing')
+  }
+  parser.on('error', () => { throw new SheetReadError(label, 'has malformed XML — save the workbook again before importing') })
+  parser.on('doctype', () => { throw new SheetReadError(label, 'contains a document type declaration — save the data in a new workbook before importing') })
+  parser.on('opentag', (tag) => {
+    if (tag.local === 'f') throw new SheetReadError('worksheet', 'contains formulas — copy the cells and paste their values into a new workbook before importing')
+    if (container === 'row' && tag.prefix && ['row', 'c', 'v', 't', 'is'].includes(tag.local)) throw new SheetReadError('worksheet', 'uses prefixed record elements this decoder cannot read — save the data as CSV before importing')
+    if (tag.local === container) {
+      if (inside) throw new SheetReadError(label, 'contains a nested record — save the workbook again before importing')
+      inside = true; recordBytes = 0
+      if (container === 'row') {
+        rowNumber = Number(tag.attributes.r?.value)
+        if (!Number.isInteger(rowNumber) || rowNumber < 1 || rowNumber > 1_048_576) throw new SheetReadError(label, 'has an invalid row number — save the workbook again before importing')
+      }
+    }
+    for (const attribute of Object.values(tag.attributes)) count(attribute.value)
+    if (inside && container === 'row' && tag.local === 'c') {
+      address = String(tag.attributes.r?.value ?? '').toUpperCase()
+      const reference = /^([A-Z]{1,3})([1-9]\d*)$/.exec(address)
+      const column = reference?.[1]?.split('').reduce((n, letter) => n * 26 + letter.charCodeAt(0) - 64, 0)
+      if (!reference || Number(reference[2]) !== rowNumber || !column || column > 16_384) throw new SheetReadError('worksheet cell', 'has an invalid address — save the workbook again before importing')
+      numeric = !tag.attributes.t || tag.attributes.t.value === 'n'
+      value = ''
+    }
+    if (inside && numeric && tag.local === 'v') valueOpen = true
+  })
+  const text = (part: string) => { count(part); if (valueOpen) value += part }
+  parser.on('text', text); parser.on('cdata', text)
+  parser.on('closetag', (tag) => {
+    if (tag.local === 'v') valueOpen = false
+    if (inside && container === 'row' && tag.local === 'c' && numeric && numbers) {
+      const literal = value.trim()
+      if (literal && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(literal)) throw new SheetReadError(address, 'contains an invalid numeric literal — enter a number or save the cell as text')
+      let row = numbers.get(rowNumber)
+      if (!row) { row = new Map(); numbers.set(rowNumber, row) }
+      row.set(address, literal)
+      numeric = false
+    }
+    if (tag.local === container) inside = false
+  })
   let tail = '', textBytes = 0
   for await (const bytes of source) {
-    const text = tail + decoder.decode(bytes, { stream: true })
-    if (/<f[\s/>]/.test(text)) throw new SheetReadError('worksheet', 'contains formulas — copy the cells and paste their values into a new workbook before importing')
+    const decoded = decoder.decode(bytes, { stream: true })
+    const text = tail + decoded
     const boundary = text.lastIndexOf('<')
     textBytes = boundary === -1 ? textBytes + bytes.length : Buffer.byteLength(text.slice(boundary))
     if (textBytes > 4 * 1024 * 1024) throw new SheetReadError('worksheet', 'contains a cell larger than 4 MiB — reduce that cell before importing')
     tail = text.slice(-8)
+    parser.write(decoded)
     yield bytes
   }
-  decoder.decode()
+  parser.write(decoder.decode()).close()
 }
 
 /** Workbook metadata is finite; worksheet rows and shared strings stream. */
@@ -72,7 +121,7 @@ export async function* readSheetRows(source: AsyncIterable<Uint8Array>): AsyncGe
     for await (const entry of zip) {
       if (entry.path === 'xl/sharedStrings.xml') {
         dictionary.exec('BEGIN')
-        for await (const value of xml._parseSharedStrings(entry)) {
+        for await (const value of xml._parseSharedStrings(Readable.from(literalSheetBytes(entry, 'si')))) {
           const text = textValue(value.text)
           if (Buffer.byteLength(text) > 4 * 1024 * 1024) throw new SheetReadError('shared string', 'is larger than 4 MiB — reduce that cell before importing')
           put.run(value.index, text)
@@ -91,21 +140,20 @@ export async function* readSheetRows(source: AsyncIterable<Uint8Array>): AsyncGe
         } else await entry.autodrain().promise()
       }
     }
-    xml.sharedStrings = new Proxy({}, { get(_target, index) {
-      if (typeof index !== 'string' || !/^\d+$/.test(index)) return undefined
-      const entry = get.get(Number(index))
-      if (!entry) throw new SheetReadError('shared string', 'is missing — save the workbook again and retry')
-      return entry.value
-    } })
+    // Resolve dictionary references only after the XML row is bounded. The
+    // native reader must not expand thousands of large strings into one row.
+    xml.sharedStrings = null
     let firstHeaders: SheetCellValue[] | null = null
     for (const sheet of worksheets.sort((a, b) => a.id - b.id)) {
       let first = true
       const file = createReadStream(sheet.path)
+      const numbers = new Map<number, Map<string, string>>()
       try {
-      const worksheet = [...xml._parseWorksheet(literalSheetBytes(file), sheet.id)][0]?.value
+      const worksheet = [...xml._parseWorksheet(literalSheetBytes(file, 'row', numbers), sheet.id)][0]?.value
       if (!worksheet) throw new SheetReadError('worksheet', 'could not be read — save the workbook again and retry')
       for await (const row of worksheet) {
         const cells: SheetCellValue[] = []
+        let cellBytes = 0
         row.eachCell({ includeEmpty: true }, (cell, column) => {
           let value: unknown = cell.value
           if (value && typeof value === 'object' && 'sharedString' in value) {
@@ -113,8 +161,15 @@ export async function* readSheetRows(source: AsyncIterable<Uint8Array>): AsyncGe
             if (!entry) throw new SheetReadError('shared string', 'is missing — save the workbook again and retry')
             value = entry.value
           }
-          cells[column - 1] = readSheetCellValue(value as ExcelJS.CellValue, false, cell.address)
+          // Numeric XML tokens retain their original decimal digits. Date
+          // styles remain native dates; formulas have already been refused.
+          const raw = typeof value === 'number' ? numbers.get(row.number)?.get(cell.address) : undefined
+          const literal = raw === undefined ? readSheetCellValue(value as ExcelJS.CellValue, false, cell.address) : raw
+          cellBytes += Buffer.byteLength(JSON.stringify(literal))
+          if (cellBytes > 4 * 1024 * 1024) throw new SheetReadError('worksheet row', 'is larger than 4 MiB — reduce that record before importing')
+          cells[column - 1] = literal
         })
+        numbers.delete(row.number)
         if (first) {
           first = false
           if (firstHeaders) {
@@ -125,6 +180,7 @@ export async function* readSheetRows(source: AsyncIterable<Uint8Array>): AsyncGe
         }
         yield cells
       }
+      if (numbers.size) throw new SheetReadError('worksheet', 'contains numeric records the decoder could not read — save the workbook again before importing')
       } finally { file.destroy() }
     }
   } finally {

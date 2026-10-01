@@ -51,6 +51,9 @@ snapshot and replaces only its unpublished output; it never mixes snapshots.
 CSV and JSON output stream directly. XLSX uses a disk-indexed shared-string
 reader and a streaming writer with backpressure; exports start another sheet
 after 1,048,575 data rows. Financial decimals remain text to preserve digits.
+Numeric spreadsheet cells retain their original XML tokens during import;
+date styles retain the native date interpretation. XML records and expanded
+dictionary references are bounded before they can accumulate a large row.
 An individual import record is limited to 4 MiB. Spreadsheet export cells
 are limited to 32,767 characters; a refusal names CSV or JSON as the remedy.
 Configuration resources whose native source is a single settings document
