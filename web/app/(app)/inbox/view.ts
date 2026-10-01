@@ -1,16 +1,27 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { inArray, sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
-import { listInbox, type InboxItem, type InboxSourceNotice } from '@openbooks/engine/src/inbox/index.ts'
+import {
+  listInbox,
+  type InboxItem,
+  type InboxSourceNotice,
+} from '@openbooks/engine/src/inbox/index.ts'
 import {
   approvalWorklistPageForAuthz,
   type ApprovalWorklistItem,
 } from '../../../lib/application/approvals'
-import { inboxContext, inboxCounts, INBOX_FILTER_KINDS, INBOX_TASK_KINDS, maySeeUnion } from '../../../lib/inbox-context'
+import {
+  inboxContext,
+  inboxCounts,
+  INBOX_FILTER_KINDS,
+  INBOX_TASK_KINDS,
+  maySeeUnion,
+} from '../../../lib/inbox-context'
 import {
   badge,
   column,
@@ -22,7 +33,6 @@ import {
   pageHeader,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
@@ -222,7 +232,9 @@ export async function loadApprovals(
   const kindFilter = pickString(sp.kind) || undefined
   const query = pickString(sp.q)?.trim() || undefined
   const rawFilter = pickString(sp.filter)
-  const filter: InboxFilter = (INBOX_FILTERS as readonly string[]).includes(rawFilter ?? '')
+  const filter: InboxFilter = (INBOX_FILTERS as readonly string[]).includes(
+    rawFilter ?? '',
+  )
     ? (rawFilter as InboxFilter)
     : 'all'
   const overdueOnly = onApprovals && filter === 'overdue'
@@ -265,7 +277,11 @@ export async function loadApprovals(
         query,
         overdue: overdueOnly,
       })
-    : { items: [] as ApprovalWorklistItem[], total: 0, kindCounts: new Map<string, number>() }
+    : {
+        items: [] as ApprovalWorklistItem[],
+        total: 0,
+        kindCounts: new Map<string, number>(),
+      }
   const unified: ApprovalWorklistItem[] = unionPage.items
   const unionTotal = unionPage.total
   // Chips ignore the kind filter, so their counts sum to the unfiltered
@@ -275,7 +291,9 @@ export async function loadApprovals(
 
   // Flow names for the gate rows (WorklistGate carries only flowId).
   const flowIds = [
-    ...new Set(unified.flatMap((i) => (i.kind === 'flow_gate' ? [i.flowId] : []))),
+    ...new Set(
+      unified.flatMap((i) => (i.kind === 'flow_gate' ? [i.flowId] : [])),
+    ),
   ]
   const flowNames = new Map<string, string>()
   if (flowIds.length > 0) {
@@ -290,7 +308,9 @@ export async function loadApprovals(
   const assigneeIds = [
     ...new Set(
       unified.flatMap((i) =>
-        i.kind === 'flow_gate' && i.assigneeUserId != null ? [i.assigneeUserId] : [],
+        i.kind === 'flow_gate' && i.assigneeUserId != null
+          ? [i.assigneeUserId]
+          : [],
       ),
     ),
   ]
@@ -311,8 +331,13 @@ export async function loadApprovals(
     return {
       key: `gate:${g.id}`,
       gateId: g.id,
-      overdue: g.escalateAt != null && new Date(g.escalateAt).getTime() < Date.now(),
-      documentNumber: g.document?.documentNumber ?? subject?.summary ?? g.subjectLabel ?? g.subjectId.slice(0, 8),
+      overdue:
+        g.escalateAt != null && new Date(g.escalateAt).getTime() < Date.now(),
+      documentNumber:
+        g.document?.documentNumber ??
+        subject?.summary ??
+        g.subjectLabel ??
+        g.subjectId.slice(0, 8),
       kind,
       kindLabel: kindLabel(kind),
       href: g.href ?? approvalRecordHref(kind, g.subjectId),
@@ -331,7 +356,9 @@ export async function loadApprovals(
   // Document rows link to their record drawer, where the module surface
   // decides gateless approvals; pay-run rows link to the run. Only flow
   // gates carry bulk/delegate actions (GateActions stays gate-scoped).
-  const docToRow = (d: Extract<ApprovalWorklistItem, { kind: 'document' }>): ApprovalRow => ({
+  const docToRow = (
+    d: Extract<ApprovalWorklistItem, { kind: 'document' }>,
+  ): ApprovalRow => ({
     key: `doc:${d.id}`,
     gateId: null,
     documentNumber: d.documentNumber,
@@ -351,7 +378,9 @@ export async function loadApprovals(
 
   // Budget rows link to the budget drawer, where the checker decision is
   // recorded; like documents they carry no gate actions.
-  const budgetToRow = (b: Extract<ApprovalWorklistItem, { kind: 'budget' }>): ApprovalRow => ({
+  const budgetToRow = (
+    b: Extract<ApprovalWorklistItem, { kind: 'budget' }>,
+  ): ApprovalRow => ({
     key: `budget:${b.id}`,
     gateId: null,
     documentNumber: b.name,
@@ -369,7 +398,9 @@ export async function loadApprovals(
     signatureRequired: false,
   })
 
-  const payToRow = (p: Extract<ApprovalWorklistItem, { kind: 'pay_run' }>): ApprovalRow => ({
+  const payToRow = (
+    p: Extract<ApprovalWorklistItem, { kind: 'pay_run' }>,
+  ): ApprovalRow => ({
     key: `payrun:${p.id}`,
     gateId: null,
     documentNumber: p.runNumber,
@@ -393,12 +424,17 @@ export async function loadApprovals(
   const subjectDetails = await resolveApprovalSubjects(
     orgId,
     unified.flatMap((item) =>
-      item.kind === 'flow_gate' ? [{ kind: item.subjectKind, subjectId: item.subjectId }] : [],
+      item.kind === 'flow_gate'
+        ? [{ kind: item.subjectKind, subjectId: item.subjectId }]
+        : [],
     ),
     th,
   )
 
-  const unionToRow = (item: ApprovalWorklistItem, assignee: string | null): ApprovalRow => {
+  const unionToRow = (
+    item: ApprovalWorklistItem,
+    assignee: string | null,
+  ): ApprovalRow => {
     if (item.kind === 'document') return docToRow(item)
     if (item.kind === 'budget') return budgetToRow(item)
     if (item.kind === 'pay_run') return payToRow(item)
@@ -408,7 +444,8 @@ export async function loadApprovals(
   // The engine returns the window in merge order; re-sorting the bounded
   // window is a safety net, not a second paging implementation.
   const byRequestedAt = (a: ApprovalRow, b: ApprovalRow) =>
-    a.requestedAt.localeCompare(b.requestedAt) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+    a.requestedAt.localeCompare(b.requestedAt) ||
+    (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
   const mineRows: ApprovalRow[] = unified
     .map((item) => unionToRow(item, null))
     .sort(byRequestedAt)
@@ -421,7 +458,9 @@ export async function loadApprovals(
     const assigneeOf = (item: ApprovalWorklistItem): string | null => {
       if (item.kind !== 'flow_gate') return null
       if (item.assigneeUserId != null) {
-        return assigneeNames.get(item.assigneeUserId) ?? item.assigneeRole ?? null
+        return (
+          assigneeNames.get(item.assigneeUserId) ?? item.assigneeRole ?? null
+        )
       }
       return item.assigneeRole ?? null
     }
@@ -457,8 +496,12 @@ export async function loadApprovals(
        where r.org_id = ${orgId} and r.status = 'waiting'
          and coalesce(d.created_by, cr.started_by) = ${user.id}
          ${kindFilter ? sql`and coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) = ${kindFilter}` : sql``}
-         ${query ? sql`and position(${query.toLowerCase()} in lower(concat_ws(' ',
-           d.document_number, d.kind, r.subject_kind, f.name, p.display_name, cp.name))) > 0` : sql``}
+         ${
+           query
+             ? sql`and position(${query.toLowerCase()} in lower(concat_ws(' ',
+           d.document_number, d.kind, r.subject_kind, f.name, p.display_name, cp.name))) > 0`
+             : sql``
+         }
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
                 d.subsidiary_id, d.status, cr.id, cr.status, cp.name, p.display_name
@@ -467,31 +510,33 @@ export async function loadApprovals(
     `)
     submittedTotal = Number(flowRes.rows[0]?.fullCount ?? 0)
 
-    submittedRows = flowRes.rows
-      .map((r): SubmittedListRow => {
-        const kind = String(r.kind)
-        const waitingSince = iso(r.waitingSince)
-        return {
-          key: `run:${r.runId}`,
-          documentNumber: String(r.documentNumber),
-          kind,
-          kindLabel: kindLabel(kind),
-          href: approvalRecordHref(kind, String(r.subjectId)),
-          party: (r.partyName as string | null) ?? null,
-          amount: r.total != null ? formatMoney(r.total as string) : null,
-          engineName: String(r.flowName),
-          pendingWith: (r.pendingWith as string | null) ?? null,
-          waitingSince,
-          waitingSinceDate: waitingSince.slice(0, 10),
-          statusLabel: String(r.docStatus).replace(/_/g, ' '),
-        }
-      })
+    submittedRows = flowRes.rows.map((r): SubmittedListRow => {
+      const kind = String(r.kind)
+      const waitingSince = iso(r.waitingSince)
+      return {
+        key: `run:${r.runId}`,
+        documentNumber: String(r.documentNumber),
+        kind,
+        kindLabel: kindLabel(kind),
+        href: approvalRecordHref(kind, String(r.subjectId)),
+        party: (r.partyName as string | null) ?? null,
+        amount: r.total != null ? formatMoney(r.total as string) : null,
+        engineName: String(r.flowName),
+        pendingWith: (r.pendingWith as string | null) ?? null,
+        waitingSince,
+        waitingSinceDate: waitingSince.slice(0, 10),
+        statusLabel: String(r.docStatus).replace(/_/g, ' '),
+      }
+    })
 
     // Budgets submitted through the direct maker/checker path create no flow
     // run, so the query above never sees them. List the caller's own pending
     // scenarios with the approvers who can decide them. The flow
     // leg filters by kind in SQL; this small capped leg filters here.
-    if (can(authz, 'budgets.read') && (!kindFilter || kindFilter === 'budget_scenario')) {
+    if (
+      can(authz, 'budgets.read') &&
+      (!kindFilter || kindFilter === 'budget_scenario')
+    ) {
       const budgetRes = await db.execute<Record<string, unknown>>(sql`
         select bs.id as "budgetId", bs.name as "documentNumber",
                coalesce(sum(bl.amount), 0)::text as total,
@@ -533,7 +578,9 @@ export async function loadApprovals(
     const budgetPushed = submittedRows.length - flowRes.rows.length
     submittedTotal = Number(flowRes.rows[0]?.fullCount ?? 0) + budgetPushed
     submittedRows.sort(
-      (a, b) => a.waitingSince.localeCompare(b.waitingSince) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+      (a, b) =>
+        a.waitingSince.localeCompare(b.waitingSince) ||
+        (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
     )
     submittedRows = submittedRows.slice(offset, offset + perPage)
   }
@@ -552,7 +599,9 @@ export async function loadApprovals(
   // from SQL, so there is deliberately no second filter here.
   const rowsForTab = tab === 'all' ? allRows : mineRows
   const chipCounts = new Map<string, number>(
-    [...unionPage.kindCounts.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    [...unionPage.kindCounts.entries()].sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    ),
   )
   const visibleRows = rowsForTab
   const visibleSubmitted = submittedRows
@@ -571,25 +620,36 @@ export async function loadApprovals(
   // beside the surviving rows. Keyed by kind so the six parallel reads
   // below cannot double-report the same source.
   const taskNoticeByKind = new Map<string, string>()
-  for (const notice of counts.notices) taskNoticeByKind.set(notice.kind, notice.message)
+  for (const notice of counts.notices)
+    taskNoticeByKind.set(notice.kind, notice.message)
   const taskKindsFor = (key: InboxFilter) =>
-    key === 'all' || key === 'overdue' ? INBOX_TASK_KINDS : (INBOX_FILTER_KINDS[key] ?? [])
+    key === 'all' || key === 'overdue'
+      ? INBOX_TASK_KINDS
+      : (INBOX_FILTER_KINDS[key] ?? [])
   const taskItemsFor = async (key: InboxFilter): Promise<InboxItem[]> => {
     const kinds = taskKindsFor(key)
     if (kinds.length === 0) return []
     const collected: InboxSourceNotice[] = []
-    const items = await listInbox(ctx, { kinds, cache: taskCache, notices: collected })
-    for (const notice of collected) taskNoticeByKind.set(notice.kind, notice.message)
-    return key === 'overdue' ? items.filter((item) => item.priority === 'overdue') : items
+    const items = await listInbox(ctx, {
+      kinds,
+      cache: taskCache,
+      notices: collected,
+    })
+    for (const notice of collected)
+      taskNoticeByKind.set(notice.kind, notice.message)
+    return key === 'overdue'
+      ? items.filter((item) => item.priority === 'overdue')
+      : items
   }
-  const [tasksAll, tasksMy, tasksSig, tasksNotices, tasksOverdue, tasksActive] = await Promise.all([
-    taskItemsFor('all'),
-    taskItemsFor('my_tasks'),
-    taskItemsFor('signatures'),
-    taskItemsFor('notices'),
-    taskItemsFor('overdue'),
-    taskItemsFor(filter),
-  ])
+  const [tasksAll, tasksMy, tasksSig, tasksNotices, tasksOverdue, tasksActive] =
+    await Promise.all([
+      taskItemsFor('all'),
+      taskItemsFor('my_tasks'),
+      taskItemsFor('signatures'),
+      taskItemsFor('notices'),
+      taskItemsFor('overdue'),
+      taskItemsFor(filter),
+    ])
   // Named per-source notices for the legs that refused or failed, in stable
   // kind order. The frame is translated; the reason is the designed refusal
   // intact, or a generic reason for an unexpected source failure (driver
@@ -598,7 +658,9 @@ export async function loadApprovals(
   // apart.)
   const failedSourceNotices = [...taskNoticeByKind.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([kind, reason]) => ti('sourceUnavailable', { source: ti(`kinds.${kind}`), reason }))
+    .map(([kind, reason]) =>
+      ti('sourceUnavailable', { source: ti(`kinds.${kind}`), reason }),
+    )
   const toTaskRow = (item: InboxItem): InboxTaskListRow => ({
     id: item.id,
     kindLabel: ti(`kinds.${item.kind}`),
@@ -611,7 +673,12 @@ export async function loadApprovals(
         : item.priority === 'due_soon'
           ? ti('priorities.dueSoon')
           : null,
-    priorityTone: item.priority === 'overdue' ? 'rose' : item.priority === 'due_soon' ? 'amber' : 'slate',
+    priorityTone:
+      item.priority === 'overdue'
+        ? 'rose'
+        : item.priority === 'due_soon'
+          ? 'amber'
+          : 'slate',
     href: item.subjectHref,
     actions: item.actions.map((action) => ({ ...action })),
   })
@@ -624,14 +691,18 @@ export async function loadApprovals(
   const taskRows = tasksActive
     .filter((item) => {
       if (!query) return true
-      const haystack = [item.title, item.subtitle, item.kind].filter(Boolean).join(' ').toLowerCase()
+      const haystack = [item.title, item.subtitle, item.kind]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
       return haystack.includes(query.toLowerCase())
     })
     .map(toTaskRow)
   // A failed source is not "all clear": the empty state stays hidden while
   // a notice names the missing area, and the list block stays mounted so
   // the notice renders even when no rows survived.
-  const tasksEmpty = showTasks && taskRows.length === 0 && failedSourceNotices.length === 0
+  const tasksEmpty =
+    showTasks && taskRows.length === 0 && failedSourceNotices.length === 0
   const filterCount = (key: InboxFilter): number => {
     if (key === 'all') return tasksAll.length
     if (key === 'my_tasks') return tasksMy.length
@@ -655,42 +726,51 @@ export async function loadApprovals(
     label: kindLabel(kind),
     count,
   }))
-  const submittedKindOptions = [...new Set([...KIND_KEYS, 'pay_run'])].map((kind) => ({
-    value: kind,
-    label: kindLabel(kind),
-  }))
-  const toolbarFilters = tab === 'tasks'
-    ? [{
-        paramKey: 'filter',
-        label: ti('columns.task'),
-        allLabel: tc('labels.all'),
-        options: (['my_tasks', 'signatures', 'notices', 'overdue'] as const).map((key) => ({
-          value: key,
-          label: ti(`filters.${key === 'my_tasks' ? 'myTasks' : key}`),
-          count: filterCount(key),
-        })),
-      }]
-    : tab === 'submitted'
-      ? [{
-          paramKey: 'kind',
-          label: t('table.kind'),
-          allLabel: tc('labels.all'),
-          options: submittedKindOptions,
-        }]
-      : [
-          {
-            paramKey: 'kind',
-            label: t('table.kind'),
-            allLabel: tc('labels.all'),
-            options: kindOptions,
-          },
+  const submittedKindOptions = [...new Set([...KIND_KEYS, 'pay_run'])].map(
+    (kind) => ({
+      value: kind,
+      label: kindLabel(kind),
+    }),
+  )
+  const toolbarFilters =
+    tab === 'tasks'
+      ? [
           {
             paramKey: 'filter',
-            label: tc('labels.status'),
+            label: ti('columns.task'),
             allLabel: tc('labels.all'),
-            options: [{ value: 'overdue', label: ti('filters.overdue') }],
+            options: (
+              ['my_tasks', 'signatures', 'notices', 'overdue'] as const
+            ).map((key) => ({
+              value: key,
+              label: ti(`filters.${key === 'my_tasks' ? 'myTasks' : key}`),
+              count: filterCount(key),
+            })),
           },
         ]
+      : tab === 'submitted'
+        ? [
+            {
+              paramKey: 'kind',
+              label: t('table.kind'),
+              allLabel: tc('labels.all'),
+              options: submittedKindOptions,
+            },
+          ]
+        : [
+            {
+              paramKey: 'kind',
+              label: t('table.kind'),
+              allLabel: tc('labels.all'),
+              options: kindOptions,
+            },
+            {
+              paramKey: 'filter',
+              label: tc('labels.status'),
+              allLabel: tc('labels.all'),
+              options: [{ value: 'overdue', label: ti('filters.overdue') }],
+            },
+          ]
 
   return {
     title: t('title'),
@@ -698,7 +778,7 @@ export async function loadApprovals(
     delegateUsers,
     tabs: tabs.map(({ key, label, count }) => ({
       key,
-      href: key === 'mine' ? '/inbox' :  `/inbox?tab=${key}`,
+      href: key === 'mine' ? '/inbox' : `/inbox?tab=${key}`,
       label,
       active: tab === key,
       count: typeof count === 'number' ? count : null,
@@ -711,7 +791,8 @@ export async function loadApprovals(
     emptySubmittedTitle: t('emptySubmitted.title'),
     emptySubmittedDescription: t('emptySubmitted.description'),
     emptyTitle: tab === 'all' ? t('emptyAll.title') : t('empty.title'),
-    emptyDescription: tab === 'all' ? t('emptyAll.description') : t('empty.description'),
+    emptyDescription:
+      tab === 'all' ? t('emptyAll.description') : t('empty.description'),
     currentParams: sp,
     searchPlaceholder: tc('actions.search'),
     toolbarFilters,
@@ -738,7 +819,8 @@ export async function loadApprovals(
     filter,
     showUnion,
     showTasks,
-    tasksPresent: showTasks && (taskRows.length > 0 || failedSourceNotices.length > 0),
+    tasksPresent:
+      showTasks && (taskRows.length > 0 || failedSourceNotices.length > 0),
     tasksEmpty,
     taskRows,
     taskNotices: failedSourceNotices,
@@ -796,7 +878,7 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
             when: f('submittedEmpty'),
           },
           {
-            ...table({
+            ...registeredListTable('inbox', {
               variant: 'app',
               rows: f('submittedRows'),
               rowKey: item('key'),
@@ -809,18 +891,32 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
                   }),
                   { className: 'font-mono text-[13px] font-semibold' },
                 ),
-                column(rootF('columnKind'), badge(item('kindLabel'), { variant: 'secondary' })),
+                column(
+                  rootF('columnKind'),
+                  badge(item('kindLabel'), { variant: 'secondary' }),
+                ),
                 column(rootF('columnParty'), text(item('party'))),
-                column(rootF('columnAmount'), money(item('amount')), { align: 'right' }),
+                column(rootF('columnAmount'), money(item('amount')), {
+                  align: 'right',
+                }),
                 column(
                   rootF('columnApproval'),
-                  widgetCell('approval-engine-cell', { name: item('engineName') }),
+                  widgetCell('approval-engine-cell', {
+                    name: item('engineName'),
+                  }),
                 ),
                 column(rootF('columnPendingWith'), text(item('pendingWith'))),
-                column(rootF('columnWaitingSince'), text(item('waitingSinceDate')), {
-                  className: 'text-slate-500 dark:text-slate-400',
-                }),
-                column(rootF('columnStatus'), badge(item('statusLabel'), { variant: 'outline' })),
+                column(
+                  rootF('columnWaitingSince'),
+                  text(item('waitingSinceDate')),
+                  {
+                    className: 'text-slate-500 dark:text-slate-400',
+                  },
+                ),
+                column(
+                  rootF('columnStatus'),
+                  badge(item('statusLabel'), { variant: 'outline' }),
+                ),
               ],
             }),
             when: f('submittedPresent'),

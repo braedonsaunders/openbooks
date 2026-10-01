@@ -15,7 +15,12 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '../../../lib/authz'
-import { mergeHref, pagedListVisibility, parseListParams, pickString } from '../../../lib/list-params'
+import {
+  mergeHref,
+  pagedListVisibility,
+  parseListParams,
+  pickString,
+} from '../../../lib/list-params'
 import type { NotificationRow } from './NotificationsInbox'
 
 /**
@@ -82,7 +87,11 @@ export async function loadNotifications(
   const t = await getTranslations('shell.notifications')
   const format = await getFormatter()
 
-  const params = parseListParams(sp, { sort: 'at', allowedSorts: ['at'] as const, perPage: 25 })
+  const params = parseListParams(sp, {
+    sort: 'at',
+    allowedSorts: ['at'] as const,
+    perPage: 25,
+  })
   const scope: Scope = pickString(sp.scope) === 'all' ? 'all' : 'unread'
   const kind = pickString(sp.kind)
 
@@ -115,7 +124,10 @@ export async function loadNotifications(
   ])
 
   const unread = counts.rows[0]?.unread ?? 0
-  const visibility = pagedListVisibility(counts.rows[0]?.scoped ?? 0, rows.rows.length)
+  const visibility = pagedListVisibility(
+    counts.rows[0]?.scoped ?? 0,
+    rows.rows.length,
+  )
   const kindText = (code: string) =>
     KNOWN_KINDS.has(code) ? t(`kinds.${code}` as never) : humanize(code)
 
@@ -124,7 +136,10 @@ export async function loadNotifications(
     description: t('description'),
     scopeTabs: (['unread', 'all'] as const).map((value) => ({
       href: mergeHref(BASE, sp, { scope: value, page: 1 }),
-      label: value === 'unread' ? t('tabs.unread', { count: unread }) : t('tabs.all'),
+      label:
+        value === 'unread'
+          ? t('tabs.unread', { count: unread })
+          : t('tabs.all'),
       active: scope === value,
     })),
     kindLabel: t('kindLabel'),
@@ -151,7 +166,8 @@ export async function loadNotifications(
     hasScopedRows: visibility.hasResults,
     isEmpty: visibility.isEmpty,
     emptyTitle: scope === 'unread' ? t('emptyUnreadTitle') : t('emptyTitle'),
-    emptyDescription: scope === 'unread' ? t('emptyUnreadDescription') : t('emptyDescription'),
+    emptyDescription:
+      scope === 'unread' ? t('emptyUnreadDescription') : t('emptyDescription'),
     total: counts.rows[0]?.scoped ?? 0,
     currentPage: params.page,
     perPage: params.perPage,
@@ -169,10 +185,13 @@ export function notificationsSpec(data: NotificationsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget('notifications-mark-all-read', { unread: data.unread })],
+        actionsClassName: 'flex flex-wrap items-center gap-3',
+        actions: [
+          widget('notifications-mark-all-read', { unread: data.unread }),
+          widget('module-home-tabs', { tabs: data.scopeTabs }),
+        ],
       }),
       grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('module-home-tabs', { tabs: data.scopeTabs }),
         widgetBlock('filter-chips', {
           basePath: BASE,
           currentParams: data.currentParams,

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -11,7 +12,6 @@ import {
   pageHeader,
   panel,
   ref,
-  table,
   text,
   widget,
   widgetBlock,
@@ -46,7 +46,11 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
-          widget('link-button', { href: f('fileHref'), label: f('fileButton'), iconKey: 'plus' }),
+          widget('link-button', {
+            href: f('fileHref'),
+            label: f('fileButton'),
+            iconKey: 'plus',
+          }),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -82,12 +86,15 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-0 flex-1',
             blocks: [
-              table({
+              registeredListTable('hrm_my_leave', {
                 variant: 'app',
                 rows: f('requests'),
                 rowKey: item('id'),
                 columns: [
-                  column(f('columns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+                  column(
+                    f('columns.employee'),
+                    link(item('employeeLabel'), item('employeeHref')),
+                  ),
                   column(f('columns.type'), text(item('leaveTypeCode'))),
                   column(
                     f('columns.range'),
@@ -99,11 +106,16 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
                   }),
                   column(
                     f('columns.status'),
-                    badge(item('statusLabel'), { variant: item('statusVariant') }),
+                    badge(item('statusLabel'), {
+                      variant: item('statusVariant'),
+                    }),
                   ),
                   column('', link(item('openLabel'), item('requestHref'))),
                 ],
-                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                empty: {
+                  title: f('emptyTitle'),
+                  description: f('emptyDescription'),
+                },
               }),
               widgetBlock(
                 'hrm-leave-dialog',

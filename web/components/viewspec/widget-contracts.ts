@@ -430,6 +430,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'record-count-cell': { props: ['count', 'href', 'linked'] },
   'record-drawer': { props: ['drawer'] },
   'record-list-view': { props: ['basePath', 'drawer', 'emptyAction', 'recordType', 'rowActions', 'sp'], open: true },
+  'registered-record-list': { props: ['source', 'table'] },
   'related-txn-drawer': { props: ['drawer'] },
   'relationships-section': { props: ['crmEnabled', 'empty', 'rows'] },
   'release-drawer': { props: ['drawer'] },

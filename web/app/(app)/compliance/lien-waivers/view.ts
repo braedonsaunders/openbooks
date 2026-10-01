@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -12,7 +13,6 @@ import {
   pageHeader,
   ref,
   rootRef,
-  table,
   text,
   widgetBlock,
   widgetCell,
@@ -105,7 +105,12 @@ export async function loadLienWaiversPage(
     loadLienWaivers({
       orgId,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-      direction: direction === 'issued' ? 'issued' : direction === 'received' ? 'received' : null,
+      direction:
+        direction === 'issued'
+          ? 'issued'
+          : direction === 'received'
+            ? 'received'
+            : null,
       status,
     }),
     db.execute<{ id: string; label: string }>(sql`
@@ -133,14 +138,25 @@ export async function loadLienWaiversPage(
   const openUuid = openId && isUuid(openId) ? openId : null
   const open: LienWaiverRow | null = openUuid
     ? (waivers.find((w) => w.id === openUuid) ??
-      (await loadLienWaivers({ orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, id: openUuid }))[0] ??
+      (
+        await loadLienWaivers({
+          orgId,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+          id: openUuid,
+        })
+      )[0] ??
       null)
     : null
   // Open bills the vendor could release, so a waiver's amount comes from the
   // money it is exchanged for rather than from retyping.
   const openBills = open
     ? (
-        await db.execute<{ id: string; label: string; amount: string; currency: string }>(sql`
+        await db.execute<{
+          id: string
+          label: string
+          amount: string
+          currency: string
+        }>(sql`
         select id, document_number as label, coalesce(open_balance, total) as amount, currency
           from documents
          where org_id = ${orgId} and party_id = ${open.partyId} and project_id = ${open.projectId}
@@ -202,7 +218,9 @@ export async function loadLienWaiversPage(
           throughDate: waiver.throughDate,
           amount: money(waiver.amount, { currency: waiver.currency }),
           statusLabel: t(`waiverStatus.${waiver.status}`),
-          statusVariant: legacyUnverified ? 'warning' : (STATUS_TONE[waiver.status] ?? 'secondary'),
+          statusVariant: legacyUnverified
+            ? 'warning'
+            : (STATUS_TONE[waiver.status] ?? 'secondary'),
           legacyUnverified,
         }
       }),
@@ -249,7 +267,7 @@ export function lienWaiversSpec(data: LienWaiversData): PageSpec {
         ...grid(
           'mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
           [
-            table({
+            registeredListTable('compliance_lien_waivers', {
               variant: 'app',
               rows: f('rows'),
               rowKey: item('id'),
@@ -264,21 +282,36 @@ export function lienWaiversSpec(data: LienWaiversData): PageSpec {
                   { className: 'font-medium' },
                 ),
                 column(rootF('columnParty'), text(item('partyName'))),
-                column(rootF('columnProject'), text(item('projectName')), { className: MUTED }),
-                column(rootF('columnType'), text(item('typeLabel')), { className: 'text-xs' }),
-                column(rootF('columnThrough'), text(item('throughDate')), { className: 'tabular-nums' }),
+                column(rootF('columnProject'), text(item('projectName')), {
+                  className: MUTED,
+                }),
+                column(rootF('columnType'), text(item('typeLabel')), {
+                  className: 'text-xs',
+                }),
+                column(rootF('columnThrough'), text(item('throughDate')), {
+                  className: 'tabular-nums',
+                }),
                 column(rootF('columnAmount'), text(item('amount')), {
                   align: 'right',
                   className: 'tabular-nums',
                 }),
-                column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                column(
+                  rootF('columnStatus'),
+                  badge(item('statusLabel'), {
+                    variant: item('statusVariant'),
+                  }),
+                ),
               ],
             }),
           ],
         ),
         when: f('hasRows'),
       },
-      widgetBlock('lien-waiver-drawer', { drawer: data.drawerProps }, f('drawerOpen')),
+      widgetBlock(
+        'lien-waiver-drawer',
+        { drawer: data.drawerProps },
+        f('drawerOpen'),
+      ),
     ],
   })
 }

@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Check } from 'lucide-react'
+import { PagedTable } from '../../../components/paged-table'
 import { Alert, Button, cn } from '@openbooks/ui'
 import { useAppAction } from '../../../lib/use-app-action'
 
@@ -64,52 +65,69 @@ export function NotificationsInbox({ rows }: { rows: NotificationRow[] }) {
   }
 
   return (
-    <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-      {failure ? <li className="p-3"><Alert variant="destructive">{failure}</Alert></li> : null}
-      {rows.map((row) => {
-        const unread = !row.read && !justRead[row.id]
-        const clickable = Boolean(row.href)
-        return (
-          <li key={row.id} className="flex items-start gap-3 px-4 py-3">
-            <span
-              aria-hidden
-              className={cn(
-                'mt-2 h-2 w-2 shrink-0 rounded-full',
-                unread ? 'bg-blue-500' : 'bg-transparent',
-              )}
-            />
-            <div className="min-w-0 flex-1">
-              {clickable ? (
-                <button
+    <div className="space-y-3">
+      {failure ? <Alert variant="destructive">{failure}</Alert> : null}
+      <PagedTable
+        source="notifications"
+        rows={rows}
+        rowKey={(row) => row.id}
+        empty=""
+        columns={[
+          {
+            key: 'notification',
+            header: t('title'),
+            cell: (row) => {
+              const unread = !row.read && !justRead[row.id]
+              const body = <RowBody row={row} unread={unread} />
+              return (
+                <div className="flex items-start gap-3">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'mt-2 h-2 w-2 shrink-0 rounded-full',
+                      unread ? 'bg-blue-500' : 'bg-transparent',
+                    )}
+                  />
+                  {row.href ? (
+                    <button
+                      type="button"
+                      onClick={() => open(row)}
+                      className="block min-w-0 flex-1 text-left"
+                    >
+                      {body}
+                    </button>
+                  ) : (
+                    <div className="min-w-0 flex-1">{body}</div>
+                  )}
+                </div>
+              )
+            },
+          },
+          {
+            key: 'read',
+            header: <span className="sr-only">{t('markRead')}</span>,
+            align: 'right',
+            cell: (row) =>
+              !row.read && !justRead[row.id] ? (
+                <Button
                   type="button"
-                  onClick={() => open(row)}
-                  className="block w-full text-left"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => read(row.id)}
+                  disabled={busy}
                 >
-                  <RowBody row={row} unread={unread} />
-                </button>
+                  <Check size={13} aria-hidden />
+                  {t('markRead')}
+                </Button>
               ) : (
-                <RowBody row={row} unread={unread} />
-              )}
-            </div>
-            {unread ? (
-              <button
-                type="button"
-                onClick={() => read(row.id)}
-                disabled={busy}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-              >
-                <Check size={13} aria-hidden />
-                {t('markRead')}
-              </button>
-            ) : (
-              <span className="shrink-0 px-2 py-1 text-xs text-slate-400 dark:text-slate-500">
-                {t('readLabel')}
-              </span>
-            )}
-          </li>
-        )
-      })}
-    </ul>
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {t('readLabel')}
+                </span>
+              ),
+          },
+        ]}
+      />
+    </div>
   )
 }
 
@@ -145,15 +163,24 @@ export function NotificationsMarkAllRead({ unread }: { unread: number }) {
   if (unread <= 0) return null
   return (
     <span className="inline-flex flex-col items-end gap-1">
-      {failure ? <span role="alert" className="text-xs text-red-700 dark:text-red-300">{failure}</span> : null}
-      <Button variant="outline" disabled={busy} onClick={() => {
-        setFailure(null)
-        void execute(() => markRead({ all: true }), {
-          fallbackMessage: t('markFailed'),
-          onRefused: (error) => setFailure(error.displayMessage(t('markFailed'))),
-          onOk: () => router.refresh(),
-        })
-      }}>
+      {failure ? (
+        <span role="alert" className="text-xs text-red-700 dark:text-red-300">
+          {failure}
+        </span>
+      ) : null}
+      <Button
+        variant="outline"
+        disabled={busy}
+        onClick={() => {
+          setFailure(null)
+          void execute(() => markRead({ all: true }), {
+            fallbackMessage: t('markFailed'),
+            onRefused: (error) =>
+              setFailure(error.displayMessage(t('markFailed'))),
+            onOk: () => router.refresh(),
+          })
+        }}
+      >
         <Check size={15} aria-hidden />
         {t('markAllRead')}
       </Button>

@@ -268,7 +268,7 @@ test("a row cap that cuts whole trailing sections still attributes the header an
     // The section column survives (a dropped trailing group would collapse
     // the file to a single section and lose it), and the emitted prefix is
     // the buffered file's own first ten data lines.
-    assert.ok(lines[0]!.startsWith("Section,"), lines[0]);
+    assert.ok(lines[0]!.startsWith("Section,"), lines[0] ?? "Missing export header");
     assert.deepEqual(lines.slice(1, 11), oldLines.slice(1, 11));
     // The footer rides on the report's last section with the truncation
     // notice disclosed — never on the surviving prefix, never silent.

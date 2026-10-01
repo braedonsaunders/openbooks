@@ -1,0 +1,72 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { RegisteredListTable } from './registered-list-table'
+import { PreparedPagedTable } from './prepared-paged-table'
+import { ServerPagedTable } from './server-paged-table'
+
+test('server windows retain rows and source totals without client slicing', () => {
+  const rows = Array.from({ length: 25 }, (_, index) => ({
+    id: String(index),
+    name: `Record ${index}`,
+  }))
+  const result = RegisteredListTable({
+    source: 'admin_api_keys',
+    rows,
+    rowKey: (row) => row.id,
+    empty: 'Empty',
+    state: { total: 250, page: 3, perPage: 25 },
+    columns: [{ key: 'name', header: 'Name', cell: (row) => row.name }],
+  })
+  assert.equal(result.type, ServerPagedTable)
+  assert.equal(result.props.rows, rows)
+  assert.equal(result.props.total, 250)
+  assert.equal(result.props.page, 3)
+  assert.equal(result.props.perPage, 25)
+})
+
+test('loaded lists pass only rendered cells and declared search text across the client boundary', () => {
+  const result = RegisteredListTable({
+    source: 'data_import_history',
+    rows: [{ id: 'record', name: 'Displayed', internal: 'Undisplayed' }],
+    rowKey: (row) => row.id,
+    empty: 'Empty',
+    columns: [
+      {
+        key: 'name',
+        header: 'Name',
+        cell: (row) => row.name,
+        search: (row) => row.name,
+      },
+    ],
+  })
+  assert.equal(result.type, PreparedPagedTable)
+  assert.deepEqual(result.props.rows[0].cells, ['Displayed'])
+  assert.equal(result.props.rows[0].searchText, 'Displayed')
+  assert.equal('internal' in result.props.rows[0], false)
+  assert.equal('cell' in result.props.columns[0], false)
+})
+
+test('rows without unique identities and server lists without counts refuse', () => {
+  const props = {
+    source: 'data_import_history' as const,
+    empty: 'Empty',
+    columns: [],
+    rowKey: (row: { id: string }) => row.id,
+  }
+  assert.throws(
+    () => RegisteredListTable({ ...props, rows: [{ id: '' }] }),
+    /unique stable identities: data_import_history/,
+  )
+  assert.throws(
+    () =>
+      RegisteredListTable({
+        ...props,
+        rows: [{ id: 'duplicate' }, { id: 'duplicate' }],
+      }),
+    /unique stable identities/,
+  )
+  assert.throws(
+    () => RegisteredListTable({ ...props, source: 'admin_api_keys', rows: [] }),
+    /Missing server pagination.*admin_api_keys/,
+  )
+})

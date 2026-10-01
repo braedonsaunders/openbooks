@@ -1,9 +1,11 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -11,17 +13,19 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, isUuid, parseListParams } from '../../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  isUuid,
+  parseListParams,
+} from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
@@ -184,7 +188,7 @@ export function apiKeysSpec(data: ApiKeysData): PageSpec {
       ]),
     ],
     body: [
-      table({
+      registeredListTable('admin_api_keys', {
         variant: 'app',
         rows: f('rows'),
         rowKey: item('id'),
@@ -192,17 +196,36 @@ export function apiKeysSpec(data: ApiKeysData): PageSpec {
         columns: [
           column(
             rootF('columnName'),
-            link(item('name'), item('href'), 'font-medium text-teal-700 hover:underline dark:text-teal-300'),
+            link(
+              item('name'),
+              item('href'),
+              'font-medium text-teal-700 hover:underline dark:text-teal-300',
+            ),
           ),
-          column(rootF('columnKey'), widgetCell('code-cell', { text: item('keyDisplay') })),
+          column(
+            rootF('columnKey'),
+            widgetCell('code-cell', { text: item('keyDisplay') }),
+          ),
           column(
             rootF('columnOwner'),
-            text(item('ownerName'), { suffix: { field: item('ownerEmail'), className: 'text-slate-400' } }),
+            text(item('ownerName'), {
+              suffix: {
+                field: item('ownerEmail'),
+                className: 'text-slate-400',
+              },
+            }),
             { className: MUTED },
           ),
-          column(rootF('columnScopes'), text(item('scopes')), { className: MUTED }),
-          column(rootF('columnLastUsed'), text(item('lastUsed')), { className: MUTED }),
-          column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+          column(rootF('columnScopes'), text(item('scopes')), {
+            className: MUTED,
+          }),
+          column(rootF('columnLastUsed'), text(item('lastUsed')), {
+            className: MUTED,
+          }),
+          column(
+            rootF('columnStatus'),
+            badge(item('statusLabel'), { variant: item('statusVariant') }),
+          ),
         ],
       }),
       pagination({
@@ -211,7 +234,11 @@ export function apiKeysSpec(data: ApiKeysData): PageSpec {
         page: f('currentPage'),
         perPage: f('perPage'),
       }),
-      widgetBlock('api-key-drawer', { keyRow: data.drawerRow }, f('drawerOpen')),
+      widgetBlock(
+        'api-key-drawer',
+        { keyRow: data.drawerRow },
+        f('drawerOpen'),
+      ),
     ],
   })
 }

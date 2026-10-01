@@ -10,22 +10,13 @@
 // posts to /api/inbox/act, which delegates to the source's native service;
 // a refusal toasts the service's message intact and the row stays.
 
+import { PagedTable } from '../../../components/paged-table'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import {
-  Badge,
-  Button,
-  Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@openbooks/ui'
+import { Badge, Button, Select } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
 
 export interface InboxTaskAction {
@@ -47,7 +38,9 @@ export interface InboxTaskRow {
   actions: InboxTaskAction[]
 }
 
-function actionVariant(style: InboxTaskAction['style']): 'default' | 'outline' | 'destructive' {
+function actionVariant(
+  style: InboxTaskAction['style'],
+): 'default' | 'outline' | 'destructive' {
   if (style === 'danger') return 'destructive'
   if (style === 'secondary') return 'outline'
   return 'default'
@@ -84,7 +77,11 @@ export function InboxTaskList({
       const res = await fetch('/api/inbox/act', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId, actionKey, ...(reason ? { reason } : {}) }),
+        body: JSON.stringify({
+          itemId,
+          actionKey,
+          ...(reason ? { reason } : {}),
+        }),
       })
       if (!res.ok) {
         // Error bodies are checked before they are parsed: a refusal is a
@@ -153,76 +150,169 @@ export function InboxTaskList({
         </div>
       ) : null}
       {visible.length > 0 ? (
-      <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{t('columns.task')}</TableHead>
-          <TableHead>{t('columns.detail')}</TableHead>
-          <TableHead>{t('columns.kind')}</TableHead>
-          <TableHead>{t('columns.due')}</TableHead>
-          <TableHead>{t('columns.priority')}</TableHead>
-          <TableHead>{t('columns.actions')}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {visible.map((row) => (
-          <TableRow key={row.id}>
-            <TableCell>
-              <Link href={row.href as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
-                {row.title}
-              </Link>
-            </TableCell>
-            <TableCell className="max-w-md text-slate-500 dark:text-slate-400">
-              <span className="line-clamp-2">{row.subtitle ?? '—'}</span>
-            </TableCell>
-            <TableCell><Badge variant="secondary">{row.kindLabel}</Badge></TableCell>
-            <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">{row.dueLabel ?? '—'}</TableCell>
-            <TableCell>
-              {row.priorityLabel ? (
-                <Badge variant={row.priorityTone === 'slate' ? 'outline' : row.priorityTone === 'amber' ? 'warning' : 'destructive'}>
-                  {row.priorityLabel}
-                </Badge>
-              ) : '—'}
-            </TableCell>
-            <TableCell>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {row.actions.map((action) => (
-                  <Button
-                    key={action.key}
-                    size="sm"
-                    variant={actionVariant(action.style)}
-                    disabled={busy !== null}
-                    onClick={() => run(row, action)}
+        <PagedTable
+          source="inbox_tasks"
+          rows={visible}
+          rowKey={(row) => row.id}
+          empty=""
+          columns={[
+            {
+              key: 'column_0',
+              header: <>{t('columns.task')}</>,
+              cell: (row) => (
+                <>
+                  <Link
+                    href={row.href as never}
+                    className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                   >
-                    {action.label}
-                  </Button>
-                ))}
-                <Button size="sm" variant="ghost" asChild>
-                  <Link href={row.href as never}>{labels.open}</Link>
-                </Button>
-                {delegating === row.id ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-44">
-                      <Select
+                    {row.title}
+                  </Link>
+                </>
+              ),
+              search: (row) =>
+                Object.values(row)
+                  .filter(
+                    (value) =>
+                      typeof value === 'string' || typeof value === 'number',
+                  )
+                  .join(' '),
+            },
+            {
+              key: 'column_1',
+              header: <>{t('columns.detail')}</>,
+              className: 'max-w-md text-slate-500 dark:text-slate-400',
+              cell: (row) => (
+                <>
+                  <span className="line-clamp-2">{row.subtitle ?? '—'}</span>
+                </>
+              ),
+              search: (row) =>
+                Object.values(row)
+                  .filter(
+                    (value) =>
+                      typeof value === 'string' || typeof value === 'number',
+                  )
+                  .join(' '),
+            },
+            {
+              key: 'column_2',
+              header: <>{t('columns.kind')}</>,
+              cell: (row) => (
+                <>
+                  <Badge variant="secondary">{row.kindLabel}</Badge>
+                </>
+              ),
+              search: (row) =>
+                Object.values(row)
+                  .filter(
+                    (value) =>
+                      typeof value === 'string' || typeof value === 'number',
+                  )
+                  .join(' '),
+            },
+            {
+              key: 'column_3',
+              header: <>{t('columns.due')}</>,
+              className: 'tabular-nums text-slate-500 dark:text-slate-400',
+              cell: (row) => <>{row.dueLabel ?? '—'}</>,
+              search: (row) =>
+                Object.values(row)
+                  .filter(
+                    (value) =>
+                      typeof value === 'string' || typeof value === 'number',
+                  )
+                  .join(' '),
+            },
+            {
+              key: 'column_4',
+              header: <>{t('columns.priority')}</>,
+              cell: (row) => (
+                <>
+                  {row.priorityLabel ? (
+                    <Badge
+                      variant={
+                        row.priorityTone === 'slate'
+                          ? 'outline'
+                          : row.priorityTone === 'amber'
+                            ? 'warning'
+                            : 'destructive'
+                      }
+                    >
+                      {row.priorityLabel}
+                    </Badge>
+                  ) : (
+                    '—'
+                  )}
+                </>
+              ),
+              search: (row) =>
+                Object.values(row)
+                  .filter(
+                    (value) =>
+                      typeof value === 'string' || typeof value === 'number',
+                  )
+                  .join(' '),
+            },
+            {
+              key: 'column_5',
+              header: <>{t('columns.actions')}</>,
+              cell: (row) => (
+                <>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {row.actions.map((action) => (
+                      <Button
+                        key={action.key}
+                        size="sm"
+                        variant={actionVariant(action.style)}
                         disabled={busy !== null}
-                        defaultValue=""
-                        onChange={(e) => runDelegate(row, e.target.value)}
+                        onClick={() => run(row, action)}
                       >
-                        <option value="">{labels.delegatePlaceholder}</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                      </Select>
-                    </span>
-                    <Button size="sm" variant="ghost" onClick={() => setDelegating(null)}>×</Button>
-                  </span>
-                ) : null}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                        {action.label}
+                      </Button>
+                    ))}
+                    <Button size="sm" variant="ghost" asChild>
+                      <Link href={row.href as never}>{labels.open}</Link>
+                    </Button>
+                    {delegating === row.id ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-44">
+                          <Select
+                            disabled={busy !== null}
+                            defaultValue=""
+                            onChange={(e) => runDelegate(row, e.target.value)}
+                          >
+                            <option value="">
+                              {labels.delegatePlaceholder}
+                            </option>
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDelegating(null)}
+                        >
+                          ×
+                        </Button>
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              ),
+              search: (row) =>
+                Object.values(row)
+                  .filter(
+                    (value) =>
+                      typeof value === 'string' || typeof value === 'number',
+                  )
+                  .join(' '),
+            },
+          ]}
+        />
       ) : null}
     </>
   )

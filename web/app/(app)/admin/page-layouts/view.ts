@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -11,7 +12,6 @@ import {
   pageHeader,
   ref,
   rootRef,
-  table,
   text,
   widgetBlock,
   type PageSpec,
@@ -19,8 +19,15 @@ import {
 import { requirePermission } from '../../../../lib/authz'
 import { pickString } from '../../../../lib/list-params'
 import { NAV_GROUPS, NAV_MODULES } from '../../../../lib/nav/registry'
-import { describeFields, type FieldDescriptor } from '../../../../lib/page-fields'
-import { MissingSegmentError, PAGE_REGISTRY, PAGE_ROUTES } from '../../../../lib/page-registry'
+import {
+  describeFields,
+  type FieldDescriptor,
+} from '../../../../lib/page-fields'
+import {
+  MissingSegmentError,
+  PAGE_REGISTRY,
+  PAGE_ROUTES,
+} from '../../../../lib/page-registry'
 import { listPageSpecs, loadPageSpec } from '../../../../lib/page-specs'
 import { RENDER_REGISTRIES } from '../../../../components/viewspec/registries'
 import type { PageSpec as Spec } from '@braedonsaunders/appkit-viewspec'
@@ -48,12 +55,15 @@ import type { PageSpec as Spec } from '@braedonsaunders/appkit-viewspec'
 const registries = RENDER_REGISTRIES
 
 /** Nav label and group for a route, longest matching href first. */
-const NAV_BY_HREF = [...NAV_MODULES]
-  .sort((a, b) => b.href.length - a.href.length)
+const NAV_BY_HREF = [...NAV_MODULES].sort(
+  (a, b) => b.href.length - a.href.length,
+)
 const GROUP_LABEL = new Map(NAV_GROUPS.map((group) => [group.key, group.label]))
 
 function locate(route: string): { module: string; group: string } {
-  const match = NAV_BY_HREF.find((item) => route === item.href || route.startsWith(`${item.href}/`))
+  const match = NAV_BY_HREF.find(
+    (item) => route === item.href || route.startsWith(`${item.href}/`),
+  )
   // A route with no nav entry is not mislabelled with itself — the Route
   // column already says that, and repeating it reads as a real module name.
   if (!match) return { module: '—', group: '' }
@@ -158,16 +168,28 @@ async function readLayout(
     data = await module.load({ params: segments })
   } catch (error) {
     if (error instanceof MissingSegmentError) {
-      return { ...base, unavailable: t('unavailable.segment', { segment: error.segment }) }
+      return {
+        ...base,
+        unavailable: t('unavailable.segment', { segment: error.segment }),
+      }
     }
     const digest = (error as { digest?: unknown } | null)?.digest
     if (typeof digest === 'string' && digest.startsWith('NEXT_REDIRECT')) {
       // The destination is fact; the cause is not. A permission and a disabled
       // feature both redirect, and naming the wrong one sends the reader
       // looking in the wrong place.
-      return { ...base, unavailable: t('unavailable.redirect', { href: digest.split(';')[2] ?? '' }) }
+      return {
+        ...base,
+        unavailable: t('unavailable.redirect', {
+          href: digest.split(';')[2] ?? '',
+        }),
+      }
     }
-    if (typeof digest === 'string' && (digest.startsWith('NEXT_HTTP_ERROR_FALLBACK') || digest === 'NEXT_NOT_FOUND')) {
+    if (
+      typeof digest === 'string' &&
+      (digest.startsWith('NEXT_HTTP_ERROR_FALLBACK') ||
+        digest === 'NEXT_NOT_FOUND')
+    ) {
       return { ...base, unavailable: t('unavailable.notFound') }
     }
     throw error
@@ -175,7 +197,12 @@ async function readLayout(
   if (data === null) return { ...base, unavailable: t('unavailable.empty') }
 
   const catalog = describeFields(data)
-  return { ...base, builtIn: module.spec(data), fields: catalog.fields, fieldsTruncated: catalog.truncated }
+  return {
+    ...base,
+    builtIn: module.spec(data),
+    fields: catalog.fields,
+    fieldsTruncated: catalog.truncated,
+  }
 }
 
 export async function loadPageLayouts(
@@ -210,15 +237,24 @@ export async function loadPageLayouts(
       statusVariant: override ? ('success' as const) : ('secondary' as const),
       customized: Boolean(override),
       // Formatted here, never in the spec: a spec binds resolved values.
-      updatedAt: override ? new Date(override.updatedAt).toISOString().slice(0, 10) : '',
+      updatedAt: override
+        ? new Date(override.updatedAt).toISOString().slice(0, 10)
+        : '',
       note: override?.note ?? '',
     }
   })
-    .filter((row) => (status === 'customized' ? row.customized : status === 'builtIn' ? !row.customized : true))
+    .filter((row) =>
+      status === 'customized'
+        ? row.customized
+        : status === 'builtIn'
+          ? !row.customized
+          : true,
+    )
     .filter((row) =>
       search === ''
         ? true
-        : row.route.toLowerCase().includes(search) || row.module.toLowerCase().includes(search),
+        : row.route.toLowerCase().includes(search) ||
+          row.module.toLowerCase().includes(search),
     )
 
   // A route named in the query opens the editor. An unknown one simply does
@@ -227,7 +263,8 @@ export async function loadPageLayouts(
   const drawerRoute = PAGE_REGISTRY[route] ? route : null
   const segments: Record<string, string> = {}
   for (const [key, value] of Object.entries(sp)) {
-    if (key.startsWith('param.') && typeof value === 'string') segments[key.slice('param.'.length)] = value
+    if (key.startsWith('param.') && typeof value === 'string')
+      segments[key.slice('param.'.length)] = value
   }
 
   return {
@@ -248,11 +285,20 @@ export async function loadPageLayouts(
     columnUpdated: t('columns.updated'),
     columnNote: t('columns.note'),
     emptyLabel: t('empty'),
-    summary: t('summary', { customized: byRoute.size, total: PAGE_ROUTES.length }),
+    summary: t('summary', {
+      customized: byRoute.size,
+      total: PAGE_ROUTES.length,
+    }),
     rows,
     drawerOpen: drawerRoute !== null,
     drawer: drawerRoute
-      ? await readLayout(drawerRoute, segments, authz.user.orgId, authz.user.id, t)
+      ? await readLayout(
+          drawerRoute,
+          segments,
+          authz.user.orgId,
+          authz.user.id,
+          t,
+        )
       : null,
   }
 }
@@ -286,7 +332,7 @@ export function pageLayoutsSpec(data: PageLayoutsData): PageSpec {
       ]),
     ],
     body: [
-      table({
+      registeredListTable('admin_page_layouts', {
         variant: 'app',
         rows: f('rows'),
         rowKey: item('id'),
@@ -295,15 +341,29 @@ export function pageLayoutsSpec(data: PageLayoutsData): PageSpec {
           column(rootF('columnRoute'), link(item('route'), item('href'), LINK)),
           column(
             rootF('columnModule'),
-            text(item('module'), { suffix: { field: item('group'), className: 'text-slate-400' } }),
+            text(item('module'), {
+              suffix: { field: item('group'), className: 'text-slate-400' },
+            }),
           ),
-          column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-          column(rootF('columnUpdated'), text(item('updatedAt'), { fallback: '—' })),
-          column(rootF('columnNote'), text(item('note'), { fallback: '—' }), { className: MUTED }),
+          column(
+            rootF('columnStatus'),
+            badge(item('statusLabel'), { variant: item('statusVariant') }),
+          ),
+          column(
+            rootF('columnUpdated'),
+            text(item('updatedAt'), { fallback: '—' }),
+          ),
+          column(rootF('columnNote'), text(item('note'), { fallback: '—' }), {
+            className: MUTED,
+          }),
         ],
       }),
       widgetBlock('page-layout-summary', { text: data.summary }),
-      widgetBlock('page-layout-drawer', { drawer: data.drawer }, f('drawerOpen')),
+      widgetBlock(
+        'page-layout-drawer',
+        { drawer: data.drawer },
+        f('drawerOpen'),
+      ),
     ],
   })
 }

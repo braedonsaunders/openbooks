@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -12,7 +13,6 @@ import {
   panel,
   ref,
   statTile,
-  table,
   text,
   widget,
   widgetBlock,
@@ -20,7 +20,10 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadAnomalyChecks, type AnomalyChecksData } from '../../../../lib/hrm/ai-rails'
+import {
+  loadAnomalyChecks,
+  type AnomalyChecksData,
+} from '../../../../lib/hrm/ai-rails'
 
 /**
  * Payroll checks — the deterministic pre-run anomaly queue (HR-21).
@@ -56,17 +59,43 @@ export function anomalyChecksSpec(data: AnomalyChecksData): PageSpec {
             },
             f('canScan'),
           ),
-          widget('link-button', { href: f('finalizeHref'), label: f('runsLabel'), variant: 'outline' }),
+          widget('link-button', {
+            href: f('finalizeHref'),
+            label: f('runsLabel'),
+            variant: 'outline',
+          }),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
       grid('grid grid-cols-2 gap-4 xl:grid-cols-4', [
-        statTile({ iconKey: 'siren', accent: 'red', label: f('tiles.blocking'), value: f('stats.blocking'), tone: f('blockingTone') }),
-        statTile({ iconKey: 'triangle-alert', accent: 'amber', label: f('tiles.warnings'), value: f('stats.warnings'), tone: f('warningsTone') }),
-        statTile({ iconKey: 'clipboard-check', accent: 'teal', label: f('tiles.acknowledged'), value: f('stats.acknowledged') }),
-        statTile({ iconKey: 'scale', accent: 'indigo', label: f('tiles.falsePositiveRate'), value: f('stats.falsePositiveRate') }),
+        statTile({
+          iconKey: 'siren',
+          accent: 'red',
+          label: f('tiles.blocking'),
+          value: f('stats.blocking'),
+          tone: f('blockingTone'),
+        }),
+        statTile({
+          iconKey: 'triangle-alert',
+          accent: 'amber',
+          label: f('tiles.warnings'),
+          value: f('stats.warnings'),
+          tone: f('warningsTone'),
+        }),
+        statTile({
+          iconKey: 'clipboard-check',
+          accent: 'teal',
+          label: f('tiles.acknowledged'),
+          value: f('stats.acknowledged'),
+        }),
+        statTile({
+          iconKey: 'scale',
+          accent: 'indigo',
+          label: f('tiles.falsePositiveRate'),
+          value: f('stats.falsePositiveRate'),
+        }),
       ]),
       widgetBlock('filter-chips', {
         basePath: '/payroll/anomalies',
@@ -96,20 +125,34 @@ export function anomalyChecksSpec(data: AnomalyChecksData): PageSpec {
         title: f('listTitle'),
         bodyClassName: 'min-h-0 overflow-y-auto p-0',
         blocks: [
-          table({
+          registeredListTable('payroll_anomalies', {
             variant: 'app',
             rows: f('rows'),
             rowKey: item('id'),
             columns: [
-              column(f('columns.severity'), badge(item('severityLabel'), { variant: item('severityVariant') })),
+              column(
+                f('columns.severity'),
+                badge(item('severityLabel'), {
+                  variant: item('severityVariant'),
+                }),
+              ),
               column(f('columns.kind'), text(item('kindLabel'))),
-              column(f('columns.period'), text(item('periodLabel'), { className: 'tabular-nums' })),
+              column(
+                f('columns.period'),
+                text(item('periodLabel'), { className: 'tabular-nums' }),
+              ),
               column(f('columns.employment'), text(item('employmentLabel'))),
               column(f('columns.explanation'), text(item('explanation'))),
-              column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+              column(
+                f('columns.status'),
+                badge(item('statusLabel'), { variant: item('statusVariant') }),
+              ),
               column('', link(item('openLabel'), item('flagHref'))),
             ],
-            empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+            empty: {
+              title: f('emptyTitle'),
+              description: f('emptyDescription'),
+            },
           }),
           widgetBlock(
             'payroll-anomaly-drawer',

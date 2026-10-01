@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { isUuid } from '../../../../lib/list-params'
@@ -13,7 +14,6 @@ import {
   pageHeader,
   ref,
   spanRow,
-  table,
   text,
   widget,
   widgetBlock,
@@ -21,14 +21,24 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
-import { formatFte, HrmPositionError, parseFte } from '@openbooks/engine/src/hrm/positions.ts'
-import { getPositionAsOf, getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
+import {
+  formatFte,
+  HrmPositionError,
+  parseFte,
+} from '@openbooks/engine/src/hrm/positions.ts'
+import {
+  getPositionAsOf,
+  getVacancyAsOf,
+} from '@openbooks/engine/src/hrm/positions-read.ts'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
+import {
+  rootSubsidiary,
+  subsidiaryUiOptions,
+} from '../../../../lib/subsidiaries'
 import { listScopedDepartmentOptions } from '../../../../lib/scoped-options'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
 import type { PositionCreateProps } from './PositionCreateForm'
@@ -166,7 +176,11 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
         actions: [
           // The primary action first, the strip last — the house order on
           // every list page, so the switcher never moves between siblings.
-          widget('link-button', { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' }, f('canManage')),
+          widget(
+            'link-button',
+            { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
+            f('canManage'),
+          ),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -204,7 +218,7 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
             resolved: data.effectiveDate,
           },
         }),
-        table({
+        registeredListTable('hrm_positions', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
@@ -220,10 +234,26 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
                     label: f('totalLabel'),
                     labelColSpan: 4,
                     cells: [
-                      { cell: text(f('totals.plannedFte')), align: 'right', className: 'font-semibold tabular-nums' },
-                      { cell: text(f('totals.fundedFte')), align: 'right', className: 'font-semibold tabular-nums' },
-                      { cell: text(f('totals.filledFte')), align: 'right', className: 'font-semibold tabular-nums' },
-                      { cell: text(f('totals.vacantFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                      {
+                        cell: text(f('totals.plannedFte')),
+                        align: 'right',
+                        className: 'font-semibold tabular-nums',
+                      },
+                      {
+                        cell: text(f('totals.fundedFte')),
+                        align: 'right',
+                        className: 'font-semibold tabular-nums',
+                      },
+                      {
+                        cell: text(f('totals.filledFte')),
+                        align: 'right',
+                        className: 'font-semibold tabular-nums',
+                      },
+                      {
+                        cell: text(f('totals.vacantFte')),
+                        align: 'right',
+                        className: 'font-semibold tabular-nums',
+                      },
                     ],
                   }),
                 ]
@@ -231,13 +261,34 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
           columns: [
             column(data.columns.code, link(item('code'), item('href'))),
             column(data.columns.title, text(item('title'))),
-            column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
-            column(data.columns.department, text(item('department'), { fallback: '—' })),
-            column(data.columns.planned, text(item('plannedFte')), { align: 'right', className: 'tabular-nums' }),
-            column(data.columns.funded, text(item('fundedFte')), { align: 'right', className: 'tabular-nums' }),
-            column(data.columns.filled, text(item('filledFte')), { align: 'right', className: 'tabular-nums' }),
-            column(data.columns.vacant, text(item('vacantFte')), { align: 'right', className: 'tabular-nums' }),
-            column(data.columns.refusal, text(item('refusal'), { fallback: '—' })),
+            column(
+              data.columns.status,
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+            ),
+            column(
+              data.columns.department,
+              text(item('department'), { fallback: '—' }),
+            ),
+            column(data.columns.planned, text(item('plannedFte')), {
+              align: 'right',
+              className: 'tabular-nums',
+            }),
+            column(data.columns.funded, text(item('fundedFte')), {
+              align: 'right',
+              className: 'tabular-nums',
+            }),
+            column(data.columns.filled, text(item('filledFte')), {
+              align: 'right',
+              className: 'tabular-nums',
+            }),
+            column(data.columns.vacant, text(item('vacantFte')), {
+              align: 'right',
+              className: 'tabular-nums',
+            }),
+            column(
+              data.columns.refusal,
+              text(item('refusal'), { fallback: '—' }),
+            ),
             column(data.columns.holder, text(item('holderLabel'))),
           ],
         }),
@@ -251,7 +302,11 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
   })
 }
 
-function hrefFor(effectiveDate: string, status: string | null, positionId: string | null): string {
+function hrefFor(
+  effectiveDate: string,
+  status: string | null,
+  positionId: string | null,
+): string {
   const params = new URLSearchParams({ effectiveDate })
   if (status) params.set('status', status)
   if (positionId) params.set('position', positionId)
@@ -274,27 +329,38 @@ export async function loadPositionsPage(
   const tc = await getTranslations('common')
   const tabs = await hrmGroupTabs(authz, '/hrm/positions')
 
-  const status = typeof sp.status === 'string' && (STATUSES as readonly string[]).includes(sp.status)
-    ? sp.status
-    : null
+  const status =
+    typeof sp.status === 'string' &&
+    (STATUSES as readonly string[]).includes(sp.status)
+      ? sp.status
+      : null
   // Shape is not enough: 2026-02-30 passes the regex and then throws out
   // of getVacancyAsOf into the generic route error. The shared strict
   // parser refuses by calendar at this boundary, like the API's named 400;
   // the page corrects to the business date and names the correction.
   const rawDate = typeof sp.effectiveDate === 'string' ? sp.effectiveDate : null
-  const effectiveDate = rawDate !== null && isCivilDate(rawDate) ? rawDate : await businessToday(authz.user.orgId)
+  const effectiveDate =
+    rawDate !== null && isCivilDate(rawDate)
+      ? rawDate
+      : await businessToday(authz.user.orgId)
   const dateRefusal =
     rawDate !== null && !isCivilDate(rawDate)
       ? {
           title: t('positions.invalidDateTitle'),
-          description: t('positions.invalidDate', { date: rawDate, today: effectiveDate }),
+          description: t('positions.invalidDate', {
+            date: rawDate,
+            today: effectiveDate,
+          }),
         }
       : null
   const canManage = can(authz, 'hrm.position.manage')
   const creating = sp.position === 'new' && canManage
-  const positionId = typeof sp.position === 'string' && sp.position.length > 0 && sp.position !== 'new'
-    ? sp.position
-    : null
+  const positionId =
+    typeof sp.position === 'string' &&
+    sp.position.length > 0 &&
+    sp.position !== 'new'
+      ? sp.position
+      : null
   // A malformed id is never a live row id: 404 like the template page
   // instead of throwing out of the detail read as a 500.
   if (positionId !== null && !isUuid(positionId)) notFound()
@@ -312,23 +378,38 @@ export async function loadPositionsPage(
     }
   }
   const statusLabel = (value: string): string =>
-    value === 'planned' ? t('positions.statusPlanned')
-    : value === 'open' ? t('positions.statusOpen')
-    : value === 'filled' ? t('positions.statusFilled')
-    : value === 'frozen' ? t('positions.statusFrozen')
-    : t('positions.statusClosed')
+    value === 'planned'
+      ? t('positions.statusPlanned')
+      : value === 'open'
+        ? t('positions.statusOpen')
+        : value === 'filled'
+          ? t('positions.statusFilled')
+          : value === 'frozen'
+            ? t('positions.statusFrozen')
+            : t('positions.statusClosed')
   const statusVariant = (value: string): PositionRow['statusVariant'] =>
-    value === 'open' ? 'success'
-    : value === 'planned' ? 'secondary'
-    : value === 'frozen' ? 'warning'
-    : value === 'closed' ? 'outline'
-    : 'default'
+    value === 'open'
+      ? 'success'
+      : value === 'planned'
+        ? 'secondary'
+        : value === 'frozen'
+          ? 'warning'
+          : value === 'closed'
+            ? 'outline'
+            : 'default'
 
   const allRows = vacancy.positions
   const counts = new Map<string, number>()
-  for (const row of allRows) counts.set(row.version.status, (counts.get(row.version.status) ?? 0) + 1)
+  for (const row of allRows)
+    counts.set(row.version.status, (counts.get(row.version.status) ?? 0) + 1)
   const segments: PositionSegment[] = [
-    { key: 'all', label: t('positions.statusAll'), href: hrefFor(effectiveDate, null, null), active: status === null, count: allRows.length },
+    {
+      key: 'all',
+      label: t('positions.statusAll'),
+      href: hrefFor(effectiveDate, null, null),
+      active: status === null,
+      count: allRows.length,
+    },
     ...STATUSES.map((value) => ({
       key: value,
       label: statusLabel(value),
@@ -345,7 +426,9 @@ export async function loadPositionsPage(
   // Totals sum the FILTERED rows beside them: org-wide totals under a
   // status-filtered list read as the segment's own. Vacant derives as
   // planned minus filled, exactly like the engine totals.
-  const visibleRows = allRows.filter((row) => status === null || row.version.status === status)
+  const visibleRows = allRows.filter(
+    (row) => status === null || row.version.status === status,
+  )
   const sumTenths = (pick: (row: PositionRowDTO) => string): bigint =>
     visibleRows.reduce((total, row) => total + parseFte(pick(row)), 0n)
   const totalPlanned = sumTenths((row) => row.vacancy.plannedFte)
@@ -353,26 +436,31 @@ export async function loadPositionsPage(
     plannedFte: formatFte(totalPlanned),
     fundedFte: formatFte(sumTenths((row) => row.vacancy.fundedFte)),
     filledFte: formatFte(sumTenths((row) => row.vacancy.filledFte)),
-    vacantFte: formatFte(totalPlanned - sumTenths((row) => row.vacancy.filledFte)),
+    vacantFte: formatFte(
+      totalPlanned - sumTenths((row) => row.vacancy.filledFte),
+    ),
   }
 
-  const rows: PositionRow[] = visibleRows
-    .map((row) => ({
-      id: row.id,
-      code: row.positionCode,
-      title: row.version.title,
-      status: row.version.status,
-      statusLabel: statusLabel(row.version.status),
-      statusVariant: statusVariant(row.version.status),
-      department: row.version.departmentId === null ? null : (departmentNames.get(row.version.departmentId) ?? row.version.departmentId),
-      plannedFte: row.vacancy.plannedFte,
-      fundedFte: row.vacancy.fundedFte,
-      filledFte: row.vacancy.filledFte,
-      vacantFte: row.vacancy.vacantFte,
-      holderLabel: holderLabel(row),
-      refusal: row.vacancy.refusal?.message ?? null,
-      href: hrefFor(effectiveDate, status, row.id),
-    }))
+  const rows: PositionRow[] = visibleRows.map((row) => ({
+    id: row.id,
+    code: row.positionCode,
+    title: row.version.title,
+    status: row.version.status,
+    statusLabel: statusLabel(row.version.status),
+    statusVariant: statusVariant(row.version.status),
+    department:
+      row.version.departmentId === null
+        ? null
+        : (departmentNames.get(row.version.departmentId) ??
+          row.version.departmentId),
+    plannedFte: row.vacancy.plannedFte,
+    fundedFte: row.vacancy.fundedFte,
+    filledFte: row.vacancy.filledFte,
+    vacantFte: row.vacancy.vacantFte,
+    holderLabel: holderLabel(row),
+    refusal: row.vacancy.refusal?.message ?? null,
+    href: hrefFor(effectiveDate, status, row.id),
+  }))
 
   let detail: PositionsPageData['detail'] = null
   let missingDetail: string | null = null
@@ -388,14 +476,23 @@ export async function loadPositionsPage(
       const to = resolved.version.effectiveTo
       let manage: PositionManageProps | null = null
       if (canManage && resolved.version.status !== 'closed') {
-        const periods = (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
+        const periods = (
+          await db.execute<{
+            id: string
+            name: string
+            startsOn: string
+            endsOn: string
+          }>(sql`
           select id::text as id, name, starts_on::text as "startsOn", ends_on::text as "endsOn"
             from accounting_periods
            where org_id = ${authz.user.orgId}::uuid
            order by starts_on desc, period_number desc
            limit 200
-        `)).rows
-        const fundedByPeriod = new Map(resolved.funding.map((plan) => [plan.periodId, plan.fundedFte]))
+        `)
+        ).rows
+        const fundedByPeriod = new Map(
+          resolved.funding.map((plan) => [plan.periodId, plan.fundedFte]),
+        )
         manage = {
           positionId,
           effectiveDate,
@@ -426,26 +523,50 @@ export async function loadPositionsPage(
       detail = {
         code: resolved.positionCode,
         title: resolved.version.title,
-        version: t('positions.drawer.versionNo', { no: resolved.version.versionNo }),
-        effective: to === null
-          ? t('positions.drawer.effectiveOpen', { from: resolved.version.effectiveFrom })
-          : t('positions.drawer.effective', { from: resolved.version.effectiveFrom, to }),
-        recorded: t('positions.drawer.recorded', { at: resolved.version.recordedAt }),
+        version: t('positions.drawer.versionNo', {
+          no: resolved.version.versionNo,
+        }),
+        effective:
+          to === null
+            ? t('positions.drawer.effectiveOpen', {
+                from: resolved.version.effectiveFrom,
+              })
+            : t('positions.drawer.effective', {
+                from: resolved.version.effectiveFrom,
+                to,
+              }),
+        recorded: t('positions.drawer.recorded', {
+          at: resolved.version.recordedAt,
+        }),
         plannedFte: resolved.version.plannedFte,
         statusLabel: statusLabel(resolved.version.status),
         fundingTitle: t('positions.drawer.funding'),
         funding: resolved.funding.map((plan) => ({
-          period: t('positions.drawer.period', { from: plan.periodStartsOn, to: plan.periodEndsOn }),
+          period: t('positions.drawer.period', {
+            from: plan.periodStartsOn,
+            to: plan.periodEndsOn,
+          }),
           funded: t('positions.drawer.funded', { fte: plan.fundedFte }),
-          costPlan: plan.amount !== null && plan.currency !== null
-            ? t('positions.drawer.costPlan', { amount: plan.amount, currency: plan.currency })
-            : null,
+          costPlan:
+            plan.amount !== null && plan.currency !== null
+              ? t('positions.drawer.costPlan', {
+                  amount: plan.amount,
+                  currency: plan.currency,
+                })
+              : null,
         })),
         unfunded: t('positions.drawer.unfunded'),
         holderTitle: t('positions.drawer.holder'),
-        holder: resolved.holders.length === 0
-          ? null
-          : resolved.holders.map((holder) => t('positions.drawer.holderEmployment', { name: holder.workerName })).join(', '),
+        holder:
+          resolved.holders.length === 0
+            ? null
+            : resolved.holders
+                .map((holder) =>
+                  t('positions.drawer.holderEmployment', {
+                    name: holder.workerName,
+                  }),
+                )
+                .join(', '),
         noHolder: t('positions.drawer.noHolder', { date: effectiveDate }),
         warningsTitle: t('positions.drawer.warnings'),
         warnings: [...resolved.disagreementWarnings],
@@ -456,7 +577,10 @@ export async function loadPositionsPage(
     } catch (error) {
       // A bookmarked id that no longer resolves (never a live list id)
       // renders the drawer with a named absence, never a broken list.
-      if (error instanceof HrmPositionError && (error.code === 'NOT_FOUND' || /not visible/.test(error.message))) {
+      if (
+        error instanceof HrmPositionError &&
+        (error.code === 'NOT_FOUND' || /not visible/.test(error.message))
+      ) {
         missingDetail = t('positions.drawer.missing')
       } else {
         throw error
@@ -472,10 +596,17 @@ export async function loadPositionsPage(
   let create: PositionCreateProps | null = null
   if (creating) {
     const visible = await subsidiaryUiOptions(authz.user.orgId)
-    const scoped = visible.filter((option) => authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id))
+    const scoped = visible.filter(
+      (option) =>
+        authz.allowedSubsidiaryIds === null ||
+        authz.allowedSubsidiaryIds.has(option.id),
+    )
     // Names, never ids: a single-entity org creates against its named root,
     // while a caller scoped out of every visible entity is refused by name.
-    let employers = scoped.map((option) => ({ value: option.id, label: option.name }))
+    let employers = scoped.map((option) => ({
+      value: option.id,
+      label: option.name,
+    }))
     let employerRefusal: string | null = null
     if (employers.length === 0) {
       if (visible.length === 0) {
@@ -486,14 +617,23 @@ export async function loadPositionsPage(
       }
     }
     // Departments the viewer may staff into (NULL subsidiary stays shared).
-    const departmentRows = await listScopedDepartmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds)
+    const departmentRows = await listScopedDepartmentOptions(
+      authz.user.orgId,
+      authz.allowedSubsidiaryIds,
+    )
     create = {
       basePath: '/hrm/positions',
       effectiveDate,
       employers,
       employerRefusal,
-      departments: departmentRows.map((row) => ({ value: row.id, label: row.name })),
-      statuses: (['planned', 'open', 'frozen'] as const).map((value) => ({ value, label: statusLabel(value) })),
+      departments: departmentRows.map((row) => ({
+        value: row.id,
+        label: row.name,
+      })),
+      statuses: (['planned', 'open', 'frozen'] as const).map((value) => ({
+        value,
+        label: statusLabel(value),
+      })),
       labels: {
         code: t('positions.create.code'),
         title: t('positions.create.titleField'),
@@ -512,7 +652,8 @@ export async function loadPositionsPage(
   }
 
   const title = t('positions.title')
-  const drawerOpen = detail !== null || missingDetail !== null || create !== null
+  const drawerOpen =
+    detail !== null || missingDetail !== null || create !== null
   return {
     title,
     description: t('positions.description'),
@@ -535,7 +676,8 @@ export async function loadPositionsPage(
     // The as-of date survives a segment change; the status param itself is
     // driven by the filter, and the drawer selection closes like the native
     // pills did (hrefFor dropped it too).
-    currentParams: status === null ? { effectiveDate } : { effectiveDate, status },
+    currentParams:
+      status === null ? { effectiveDate } : { effectiveDate, status },
     columns: {
       code: t('positions.columns.code'),
       title: t('positions.columns.title'),
@@ -559,7 +701,11 @@ export async function loadPositionsPage(
     drawer: drawerOpen
       ? {
           closeHref: detail?.closeHref ?? hrefFor(effectiveDate, status, null),
-          title: create ? t('positions.create.title') : detail ? detail.code : title,
+          title: create
+            ? t('positions.create.title')
+            : detail
+              ? detail.code
+              : title,
           description: detail ? detail.title : null,
           detail,
           missingDetail,

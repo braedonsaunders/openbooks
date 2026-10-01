@@ -88,7 +88,7 @@ test("list tools preserve the caller scope and surface the safe reader refusal",
       orgId: "foreign-org", actorId: "foreign-actor", allowedSubsidiaryIds: null,
     }, authz);
     assert.deepEqual(result, { ok: false, error: "scope_required: Pass the acting user's explicit subsidiary scope" });
-    assert.equal(reads.length, 1, name);
+    assert.equal(reads.length, 1, name ?? "resourcing tool");
     assert.equal(reads[0]!.recordType, recordType);
     assert.equal(reads[0]!.orgId, authz.user.orgId);
     assert.equal(reads[0]!.actorId, authz.user.id);

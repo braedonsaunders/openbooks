@@ -1,20 +1,18 @@
 'use client'
 
+import { PagedTable } from '../../../../components/paged-table'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { File as FileIcon, Folder as FolderIcon, Loader2, RotateCcw, Trash2 } from 'lucide-react'
 import {
-  Badge,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@openbooks/ui'
+  File as FileIcon,
+  Folder as FolderIcon,
+  Loader2,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
+import { Badge, Button } from '@openbooks/ui'
 import { confirmDialog } from '../../../../lib/confirm'
 
 export interface TrashRow {
@@ -52,7 +50,10 @@ export function TrashList({ items }: { items: TrashRow[] }) {
         router.refresh()
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
-        const key = (err.error && TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ?? 'restoreFailed'
+        const key =
+          (err.error &&
+            TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ??
+          'restoreFailed'
         toast.error(t(key))
       }
     } catch {
@@ -77,7 +78,10 @@ export function TrashList({ items }: { items: TrashRow[] }) {
         router.refresh()
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
-        const key = (err.error && TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ?? 'purgeFailed'
+        const key =
+          (err.error &&
+            TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ??
+          'purgeFailed'
         toast.error(t(key))
       }
     } catch {
@@ -88,17 +92,20 @@ export function TrashList({ items }: { items: TrashRow[] }) {
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{t('title')}</TableHead>
-          <TableHead className="w-40 text-right" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {items.map((row) => (
-          <TableRow key={`${row.kind}-${row.id}`} className="group">
-            <TableCell>
+    <PagedTable
+      source="documents_trash"
+      rows={items}
+      rowKey={(row) => `${row.kind}-${row.id}`}
+      empty=""
+      searchable
+      emptyAsRow
+      rowClassName={() => 'group'}
+      columns={[
+        {
+          key: 'column_0',
+          header: <>{t('title')}</>,
+          cell: (row) => (
+            <>
               <div className="flex items-center gap-2">
                 {row.kind === 'folder' ? (
                   <FolderIcon className="h-4 w-4 shrink-0 text-teal-500" />
@@ -118,10 +125,27 @@ export function TrashList({ items }: { items: TrashRow[] }) {
                     {t('inLocation', { location: row.folderName })}
                   </span>
                 ) : null}
-                <span className="ml-auto shrink-0 text-xs text-slate-400">{row.modifiedLabel}</span>
+                <span className="ml-auto shrink-0 text-xs text-slate-400">
+                  {row.modifiedLabel}
+                </span>
               </div>
-            </TableCell>
-            <TableCell className="text-right">
+            </>
+          ),
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_1',
+          header: <></>,
+          headerClassName: 'w-40 text-right',
+          className: 'text-right',
+          cell: (row) => (
+            <>
               <div className="flex items-center justify-end gap-1">
                 <Button
                   variant="ghost"
@@ -147,10 +171,17 @@ export function TrashList({ items }: { items: TrashRow[] }) {
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+            </>
+          ),
+          search: (row) =>
+            Object.values(row)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+      ]}
+    />
   )
 }

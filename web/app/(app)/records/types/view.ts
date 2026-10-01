@@ -1,9 +1,11 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -11,20 +13,27 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  isUuid,
+  parseListParams,
+  pickString,
+} from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { requirePermission } from '../../../../lib/authz'
-import { loadRecordTypeById, subsidiaryDeclaredTypeIds, type RecordTypeRow } from '../../../../lib/records'
+import {
+  loadRecordTypeById,
+  subsidiaryDeclaredTypeIds,
+  type RecordTypeRow,
+} from '../../../../lib/records'
 import { pgTextArrayLiteral } from '../../../../lib/pg-array'
 import { RECORD_TYPE_STATUSES } from '../../../../lib/record-schema'
 
@@ -111,7 +120,9 @@ export async function loadRecordTypes(
   // A malformed ?type= must resolve like an unknown id (no drawer), never
   // reach the loader to 500 on the uuid cast. 'new' is the create affordance.
   const typeId =
-    typeof sp.type === 'string' && (sp.type === 'new' || isUuid(sp.type)) ? sp.type : undefined
+    typeof sp.type === 'string' && (sp.type === 'new' || isUuid(sp.type))
+      ? sp.type
+      : undefined
   // Unsaved create: `?type=new` renders the builder drawer over a blank form.
   // Nothing is read or written for the id itself — the type exists only after
   // an explicit Save POSTs /api/records/types.
@@ -168,7 +179,9 @@ export async function loadRecordTypes(
       select t.status, count(*) as n from custom_record_types t
        where t.org_id = ${authz.user.orgId}
        group by t.status`),
-    typeId && !isCreate ? loadRecordTypeById(authz.user.orgId, typeId) : Promise.resolve(null),
+    typeId && !isCreate
+      ? loadRecordTypeById(authz.user.orgId, typeId)
+      : Promise.resolve(null),
     typeId
       ? db.execute<{ key: string; name: string }>(sql`
           select key, name from app_roles where org_id = ${authz.user.orgId} order by name`)
@@ -187,7 +200,9 @@ export async function loadRecordTypes(
       : total
 
   const statusText = (value: string) =>
-    (RECORD_TYPE_STATUSES as readonly string[]).includes(value) ? t(`typeStatus.${value}`) : value
+    (RECORD_TYPE_STATUSES as readonly string[]).includes(value)
+      ? t(`typeStatus.${value}`)
+      : value
 
   return {
     title: t('types.title'),
@@ -326,21 +341,32 @@ export function recordTypesSpec(data: RecordTypesData): PageSpec {
         when: f('isEmpty'),
       },
       {
-        ...table({
+        ...registeredListTable('records_types', {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
-          sorting: { basePath: '/records/types', sort: f('sort'), dir: f('dir') },
+          sorting: {
+            basePath: '/records/types',
+            sort: f('sort'),
+            dir: f('dir'),
+          },
           columns: [
-            column(rootF('columnName'), link(item('name'), item('href'), LINK), {
-              sort: 'name',
-              className: 'font-medium',
-            }),
+            column(
+              rootF('columnName'),
+              link(item('name'), item('href'), LINK),
+              {
+                sort: 'name',
+                className: 'font-medium',
+              },
+            ),
             column(rootF('columnKey'), text(item('key')), {
               sort: 'key',
-              className: 'font-mono text-[13px] text-slate-500 dark:text-slate-400',
+              className:
+                'font-mono text-[13px] text-slate-500 dark:text-slate-400',
             }),
-            column(rootF('columnFields'), text(item('fieldCount')), { className: 'tabular-nums' }),
+            column(rootF('columnFields'), text(item('fieldCount')), {
+              className: 'tabular-nums',
+            }),
             column(
               rootF('columnRecords'),
               widgetCell('record-count-cell', {
@@ -352,12 +378,22 @@ export function recordTypesSpec(data: RecordTypesData): PageSpec {
             ),
             column(
               rootF('columnInNav'),
-              widgetCell('in-nav-cell', { shown: item('inNav'), label: item('inNavLabel') }),
+              widgetCell('in-nav-cell', {
+                shown: item('inNav'),
+                label: item('inNavLabel'),
+              }),
             ),
-            column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') }), {
-              sort: 'status',
+            column(
+              rootF('columnStatus'),
+              badge(item('statusLabel'), { variant: item('statusVariant') }),
+              {
+                sort: 'status',
+              },
+            ),
+            column(rootF('columnUpdated'), text(item('updated')), {
+              sort: 'updated',
+              className: MUTED,
             }),
-            column(rootF('columnUpdated'), text(item('updated')), { sort: 'updated', className: MUTED }),
           ],
         }),
         when: f('hasRows'),
@@ -371,7 +407,11 @@ export function recordTypesSpec(data: RecordTypesData): PageSpec {
         }),
         when: f('hasRows'),
       },
-      widgetBlock('type-builder-drawer', { drawer: data.drawerProps }, f('drawerOpen')),
+      widgetBlock(
+        'type-builder-drawer',
+        { drawer: data.drawerProps },
+        f('drawerOpen'),
+      ),
     ],
   })
 }

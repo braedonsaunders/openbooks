@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
@@ -7,6 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { CUSTOM_FIELD_TARGETS } from '@openbooks/customization'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import {
+  pagination,
   badge,
   column,
   field,
@@ -14,17 +16,20 @@ import {
   link,
   page,
   pageHeader,
-  pagination,
   ref,
   rootRef,
-  table,
   text,
   widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { buildListDrawerHref, parseListParams, pickString, isUuid } from '../../../../lib/list-params'
+import {
+  buildListDrawerHref,
+  parseListParams,
+  pickString,
+  isUuid,
+} from '../../../../lib/list-params'
 import { disabledCustomFieldTargets } from '../../../../lib/customization/gates'
 import { BUILT_IN_ROLE_KEYS } from '../../../../lib/permissions'
 
@@ -103,18 +108,27 @@ export async function loadCustomFields(
   const tCustomization = await getTranslations('customization')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
-  const targetFor = (table: string) => CUSTOM_FIELD_TARGETS.find((candidate) => candidate.table === table)
+  const targetFor = (table: string) =>
+    CUSTOM_FIELD_TARGETS.find((candidate) => candidate.table === table)
   const targetLabel = (table: string) => {
     const target = targetFor(table)
-    return target ? t(target.labelKey.replace('admin.customFields.', '')) : t('targetUnknown')
+    return target
+      ? t(target.labelKey.replace('admin.customFields.', ''))
+      : t('targetUnknown')
   }
   const kindLabel = (table: string, kind: string) => {
-    const labelKey = targetFor(table)?.kinds.find((candidate) => candidate.value === kind)?.labelKey
+    const labelKey = targetFor(table)?.kinds.find(
+      (candidate) => candidate.value === kind,
+    )?.labelKey
     return labelKey?.startsWith('customization.')
       ? tCustomization(labelKey.slice('customization.'.length))
       : t('targetUnknown')
   }
-  const params = parseListParams(sp, { sort: 'target', allowedSorts: ['target'] as const, perPage: 100 })
+  const params = parseListParams(sp, {
+    sort: 'target',
+    allowedSorts: ['target'] as const,
+    perPage: 100,
+  })
   const target = pickString(sp.target)
   const fieldId = pickString(sp.field)
   if (fieldId && fieldId !== 'new' && !isUuid(fieldId)) notFound()
@@ -125,11 +139,17 @@ export async function loadCustomFields(
   const kindHide =
     hidden.kinds.length === 0
       ? sql`true`
-      : sql`(target_kind is null or target_kind not in (${sql.join(hidden.kinds.map((k) => sql`${k}`), sql`, `)}))`
+      : sql`(target_kind is null or target_kind not in (${sql.join(
+          hidden.kinds.map((k) => sql`${k}`),
+          sql`, `,
+        )}))`
   const tableHide =
     hidden.tables.length === 0
       ? sql`true`
-      : sql`not (target_kind is null and target_table in (${sql.join(hidden.tables.map((x) => sql`${x}`), sql`, `)}))`
+      : sql`not (target_kind is null and target_table in (${sql.join(
+          hidden.tables.map((x) => sql`${x}`),
+          sql`, `,
+        )}))`
 
   const where = sql`org_id = ${orgId} and ${kindHide} and ${tableHide}
     ${target ? sql` and target_table = ${target}` : sql``}
@@ -144,7 +164,9 @@ export async function loadCustomFields(
     db.execute<{ target_table: string; n: string }>(sql`
       select target_table, count(*) as n from custom_field_defs
        where org_id = ${orgId} and ${kindHide} and ${tableHide} group by 1`),
-    db.execute<{ n: string }>(sql`select count(*) as n from custom_field_defs where ${where}`),
+    db.execute<{ n: string }>(
+      sql`select count(*) as n from custom_field_defs where ${where}`,
+    ),
     fieldId && fieldId !== 'new'
       ? db.execute(sql`
           select custom_field_defs.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
@@ -159,7 +181,8 @@ export async function loadCustomFields(
   if (
     openRow &&
     (hidden.kinds.includes(openRow.target_kind as string) ||
-      (openRow.target_kind == null && hidden.tables.includes(openRow.target_table as string)))
+      (openRow.target_kind == null &&
+        hidden.tables.includes(openRow.target_table as string)))
   ) {
     notFound()
   }
@@ -187,10 +210,17 @@ export async function loadCustomFields(
     rows: defs.rows.map((d) => ({
       id: String(d.id),
       label: String(d.label),
-      href: buildListDrawerHref('/admin/custom-fields', sp, 'field', String(d.id)),
+      href: buildListDrawerHref(
+        '/admin/custom-fields',
+        sp,
+        'field',
+        String(d.id),
+      ),
       key: String(d.key),
       targetTable: targetLabel(String(d.target_table)),
-      targetKindSuffix: d.target_kind ? `:${kindLabel(String(d.target_table), String(d.target_kind))}` : '',
+      targetKindSuffix: d.target_kind
+        ? `:${kindLabel(String(d.target_table), String(d.target_kind))}`
+        : '',
       typeLabel: TYPE_KEYS[String(d.field_type)]
         ? t(`types.${TYPE_KEYS[String(d.field_type)]}.label`)
         : String(d.field_type),
@@ -206,12 +236,16 @@ export async function loadCustomFields(
     hiddenKinds: hidden.kinds,
     hiddenTables: hidden.tables,
     roleOptions: roleRows.rows.map((role) => {
-      const builtInLabel = `drawer.role${role.key.split('_').map((part) => part[0]!.toUpperCase() + part.slice(1)).join('')}`
+      const builtInLabel = `drawer.role${role.key
+        .split('_')
+        .map((part) => part[0]!.toUpperCase() + part.slice(1))
+        .join('')}`
       return {
         value: role.key,
-        label: BUILT_IN_ROLE_KEYS.includes(role.key) && t.has(builtInLabel)
-          ? t(builtInLabel)
-          : role.name,
+        label:
+          BUILT_IN_ROLE_KEYS.includes(role.key) && t.has(builtInLabel)
+            ? t(builtInLabel)
+            : role.name,
       }
     }),
   }
@@ -247,22 +281,35 @@ export function customFieldsSpec(data: CustomFieldsData): PageSpec {
       ]),
     ],
     body: [
-      table({
+      registeredListTable('admin_custom_fields', {
         variant: 'app',
         rows: f('rows'),
         rowKey: item('id'),
         emptyRow: { text: f('emptyLabel'), colSpan: 6, className: MUTED },
         columns: [
           column(rootF('columnField'), link(item('label'), item('href'), LINK)),
-          column(rootF('columnKey'), text(item('key')), { className: 'font-mono text-xs text-slate-500' }),
+          column(rootF('columnKey'), text(item('key')), {
+            className: 'font-mono text-xs text-slate-500',
+          }),
           column(
             rootF('columnTarget'),
-            text(item('targetTable'), { suffix: { field: item('targetKindSuffix'), className: 'text-slate-400' } }),
+            text(item('targetTable'), {
+              suffix: {
+                field: item('targetKindSuffix'),
+                className: 'text-slate-400',
+              },
+            }),
             { className: 'font-mono text-xs' },
           ),
-          column(rootF('columnType'), badge(item('typeLabel'), { variant: 'secondary' })),
+          column(
+            rootF('columnType'),
+            badge(item('typeLabel'), { variant: 'secondary' }),
+          ),
           column(rootF('columnRequired'), text(item('required'))),
-          column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+          column(
+            rootF('columnStatus'),
+            badge(item('statusLabel'), { variant: item('statusVariant') }),
+          ),
         ],
       }),
       pagination({
@@ -273,7 +320,12 @@ export function customFieldsSpec(data: CustomFieldsData): PageSpec {
       }),
       widgetBlock(
         'custom-field-drawer',
-        { def: data.drawerDef, hiddenKinds: data.hiddenKinds, hiddenTables: data.hiddenTables, roleOptions: data.roleOptions },
+        {
+          def: data.drawerDef,
+          hiddenKinds: data.hiddenKinds,
+          hiddenTables: data.hiddenTables,
+          roleOptions: data.roleOptions,
+        },
         f('drawerOpen'),
       ),
     ],

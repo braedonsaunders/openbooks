@@ -1,7 +1,11 @@
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
+import { RegisteredListTable } from '../../../../components/registered-list-table'
 import { Badge } from '@openbooks/ui'
 import { SortTh } from '../../../../components/sortable-th'
-import { EditRoleButton, type RoleRow, type SubsidiaryPickerOption } from './RoleEditor'
+import {
+  EditRoleButton,
+  type RoleRow,
+  type SubsidiaryPickerOption,
+} from './RoleEditor'
 
 export interface AdminRoleRow extends RoleRow {
   permissionCount: number
@@ -39,57 +43,145 @@ export function AdminRolesTable({
 }) {
   const sortProps = { basePath, currentParams, sort, dir }
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <SharedTable className="w-full text-sm">
-        <SharedTableHeader>
-          <SharedTableRow className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
+    <RegisteredListTable
+      source="admin_roles"
+      rows={roles}
+      rowKey={(r) => r.id}
+      empty=""
+      rowClassName={() => 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'}
+      columns={[
+        {
+          key: 'column_0',
+          header: <>{labels.name}</>,
+          headerCell: (
             <SortTh column="name" {...sortProps}>
               {labels.name}
             </SortTh>
-            <SharedTableHead className="px-3 py-2">{labels.key}</SharedTableHead>
-            <SharedTableHead className="px-3 py-2">{labels.description}</SharedTableHead>
+          ),
+          className: 'px-3 py-2 font-medium text-slate-900 dark:text-slate-100',
+          cell: (r) => <>{r.name}</>,
+          search: (r) =>
+            Object.values(r)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_1',
+          header: <>{labels.key}</>,
+          headerClassName: 'px-3 py-2',
+          className:
+            'px-3 py-2 font-mono text-[13px] text-slate-600 dark:text-slate-400',
+          cell: (r) => <>{r.key}</>,
+          search: (r) =>
+            Object.values(r)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_2',
+          header: <>{labels.description}</>,
+          headerClassName: 'px-3 py-2',
+          className: 'max-w-md px-3 py-2 text-slate-600 dark:text-slate-400',
+          cell: (r) => (
+            <>
+              <span className="line-clamp-1">
+                {r.description ?? labels.noDescription}
+              </span>
+            </>
+          ),
+          search: (r) =>
+            Object.values(r)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_3',
+          header: <>{labels.permissions}</>,
+          headerCell: (
             <SortTh column="permissions" {...sortProps}>
               {labels.permissions}
             </SortTh>
+          ),
+          className:
+            'px-3 py-2 tabular-nums text-slate-600 dark:text-slate-400',
+          cell: (r) => <>{r.permissionCount}</>,
+          search: (r) =>
+            Object.values(r)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_4',
+          header: <>{labels.members}</>,
+          headerCell: (
             <SortTh column="members" {...sortProps}>
               {labels.members}
             </SortTh>
-            <SharedTableHead className="px-3 py-2">{labels.type}</SharedTableHead>
-            <SharedTableHead className="px-3 py-2 text-right">{labels.actions}</SharedTableHead>
-          </SharedTableRow>
-        </SharedTableHeader>
-        <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {roles.map((r) => (
-            <SharedTableRow key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-              <SharedTableCell className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
-                {r.name}
-              </SharedTableCell>
-              <SharedTableCell className="px-3 py-2 font-mono text-[13px] text-slate-600 dark:text-slate-400">
-                {r.key}
-              </SharedTableCell>
-              <SharedTableCell className="max-w-md px-3 py-2 text-slate-600 dark:text-slate-400">
-                <span className="line-clamp-1">{r.description ?? labels.noDescription}</span>
-              </SharedTableCell>
-              <SharedTableCell className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-400">
-                {r.permissionCount}
-              </SharedTableCell>
-              <SharedTableCell className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-400">
-                {r.memberCount}
-              </SharedTableCell>
-              <SharedTableCell className="px-3 py-2">
-                {r.isBuiltIn ? (
-                  <Badge variant="secondary">{labels.builtIn}</Badge>
-                ) : (
-                  <Badge variant="outline">{labels.custom}</Badge>
-                )}
-              </SharedTableCell>
-              <SharedTableCell className="px-3 py-2 text-right">
-                <EditRoleButton role={r} subsidiaries={subsidiaries} />
-              </SharedTableCell>
-            </SharedTableRow>
-          ))}
-        </SharedTableBody>
-      </SharedTable>
-    </div>
+          ),
+          className:
+            'px-3 py-2 tabular-nums text-slate-600 dark:text-slate-400',
+          cell: (r) => <>{r.memberCount}</>,
+          search: (r) =>
+            Object.values(r)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_5',
+          header: <>{labels.type}</>,
+          headerClassName: 'px-3 py-2',
+          className: 'px-3 py-2',
+          cell: (r) => (
+            <>
+              {r.isBuiltIn ? (
+                <Badge variant="secondary">{labels.builtIn}</Badge>
+              ) : (
+                <Badge variant="outline">{labels.custom}</Badge>
+              )}
+            </>
+          ),
+          search: (r) =>
+            Object.values(r)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+        {
+          key: 'column_6',
+          header: <>{labels.actions}</>,
+          headerClassName: 'px-3 py-2 text-right',
+          className: 'px-3 py-2 text-right',
+          cell: (r) => (
+            <>
+              <EditRoleButton role={r} subsidiaries={subsidiaries} />
+            </>
+          ),
+          search: (r) =>
+            Object.values(r)
+              .filter(
+                (value) =>
+                  typeof value === 'string' || typeof value === 'number',
+              )
+              .join(' '),
+        },
+      ]}
+    />
   )
 }
