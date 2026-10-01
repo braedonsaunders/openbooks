@@ -3,8 +3,21 @@ import test from "node:test";
 import {
   netSuiteLineColumns,
   netSuiteReconcilableAccount,
+  netSuiteAccountCurrency,
   normalizeNetSuiteClearedStates,
 } from "./netsuite-source.ts";
+
+test("account currency preserves explicit foreign denominations and resolves single-currency subsidiaries", () => {
+  const subsidiaries = [
+    { sourceRef: "1", fields: { baseCurrency: "CAD" } },
+    { sourceRef: "2", fields: { baseCurrency: "EUR" } },
+  ];
+  assert.equal(netSuiteAccountCurrency({ id: "916", accttype: "CredCard", subsidiary: "1" }, subsidiaries, new Map()), "CAD");
+  assert.equal(netSuiteAccountCurrency({ id: "917", accttype: "CredCard", subsidiary: "2" }, subsidiaries, new Map()), "EUR");
+  assert.equal(netSuiteAccountCurrency({ id: "bank", accttype: "Bank", subsidiary: "1", currency: "3" }, subsidiaries, new Map([["3", "USD"]])), "USD");
+  assert.throws(() => netSuiteAccountCurrency({ id: "bank", accttype: "Bank", subsidiary: "1", currency: "99" }, subsidiaries, new Map()), /account bank \(99\); check source currency access/);
+  assert.throws(() => netSuiteAccountCurrency({ id: "bank", accttype: "Bank" }, subsidiaries, new Map()), /account bank; check its source subsidiary/);
+});
 
 /**
  * The reconcilable flag is a bank-reconciliation input: only bank and card

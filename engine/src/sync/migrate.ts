@@ -849,20 +849,33 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const type = String(f.type ?? "");
     if (!type) { s.skipped++; return null; }
     const id = await findByRef("accounts", orgId, refKey, rec.sourceRef);
+    const suppliedCurrency = str(f.currencyRestriction);
+    if (suppliedCurrency && !/^[A-Z]{3}$/.test(suppliedCurrency)) {
+      throw new Error(`account ${rec.sourceRef} currency must be an explicit ISO code; correct the source currency before retrying`);
+    }
     const vals = {
       name: String(f.name ?? `Account ${rec.sourceRef}`), type,
       isSummary: !!f.isSummary, isActive: f.isActive !== false, eliminate: !!f.eliminate, reconcilable: !!f.reconcilable,
     };
     if (id) {
-      await db.execute(sql`update accounts set name=${vals.name}, type=${vals.type}::text,
+      const changed = await db.execute(sql`update accounts set name=${vals.name}, type=${vals.type}::text,
         is_summary=${vals.isSummary}, is_active=${vals.isActive}, eliminate=${vals.eliminate}, reconcilable=${vals.reconcilable}
-        where id=${id} and org_id=${orgId}`);
+        where id=${id} and org_id=${orgId}
+          and (${suppliedCurrency}::text is null or currency_restriction = ${suppliedCurrency}::text)
+        returning id`);
+      if (changed.rows.length !== 1) {
+        throw new Error(`account ${rec.sourceRef} was not updated: source currency conflicts with its existing currency control or the account is unavailable; review the account currency configuration before retrying`);
+      }
       s.updated++; return id;
     }
-    const ins = (await db.execute(sql`insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, custom)
-      values (${orgId}, ${(f.number as string) ?? null}, ${vals.name}, ${vals.type}::text, ${vals.isSummary}, ${vals.isActive}, ${vals.eliminate}, ${vals.reconcilable}, ${custom}::jsonb)
+    if (vals.reconcilable && !suppliedCurrency) {
+      throw new Error(`reconcilable account ${rec.sourceRef} requires an explicit currency; the connector must supply its verified ISO currency before retrying`);
+    }
+    const ins = (await db.execute(sql`insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, custom)
+      values (${orgId}, ${(f.number as string) ?? null}, ${vals.name}, ${vals.type}::text, ${vals.isSummary}, ${vals.isActive}, ${vals.eliminate}, ${vals.reconcilable}, ${suppliedCurrency}, ${custom}::jsonb)
       returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+    if (!ins.rows[0]?.id) throw new Error(`account ${rec.sourceRef} was not created; retry the source import`);
+    s.created++; return ins.rows[0].id;
   }
 
   if (resource === "departments") {
