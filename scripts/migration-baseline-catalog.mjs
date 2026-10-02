@@ -112,6 +112,9 @@ export function assertBaselineCatalogsEqual(expected, actual) {
   for (const section of sections) {
     const comparable = (rows) => section === "relations"
       ? rows?.map((row) => normalizeGeneratedQueryView(row, expected.openbooks_query_catalog_relations ?? []))
+      : section === "schema_acl"
+        ? rows?.filter((row) => !(row.grantee === "openbooks_read" && row.privilege_type === "USAGE" && !row.is_grantable
+          && rows.some((grant) => grant.schema === row.schema && grant.grantee === "PUBLIC" && grant.privilege_type === "USAGE")))
       : section === "extensions" && optionalUnavailable
       ? rows?.filter((row) => row.name !== "pg_trgm")
       : section === "indexes" && optionalUnavailable
