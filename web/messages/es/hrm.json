@@ -2670,8 +2670,8 @@
     "newAward": "Nuevo premio",
     "programsEmptyTitle": "Aún no hay programas de beneficios",
     "programsEmptyDescription": "Cree un programa de cobertura, ahorro, recompensa, asignación, incentivo o personalizado.",
-    "awardsEmptyTitle": "Aún no hay premios",
-    "awardsEmptyDescription": "Los premios aparecen aquí cuando un programa los otorga.",
+    "awardsEmptyTitle": "Aún no hay registros de entrega",
+    "awardsEmptyDescription": "Aquí aparecen concesiones listas y actividad de nómina registrada.",
     "loadFailed": "No se pudo cargar el área de beneficios.",
     "loadFailedTitle": "Beneficios no disponibles",
     "awardsTruncated": "se muestran los primeros 500",
@@ -3088,14 +3088,14 @@
     },
     "scopeHint": "Beneficios define ofertas y concesiones patronales. Nómina gestiona salario, impuestos, contribuciones legales y ciclos de pago.",
     "views": {
-      "overview": "Programas empresariales, participación de empleados y entrega controlada.",
+      "overview": "Beneficios gestiona programas del empleador y elecciones de empleados. Nómina gestiona salarios, impuestos y deducciones legales.",
       "programs": "Abra un programa para gestionar reglas, participantes, actividad y conexión con nómina.",
       "enrolments": "Inscriba empleados en planes de cobertura y ahorro. Gestione los periodos mediante ventanas de inscripción.",
       "rewards": "Registre concesiones de programas activos. Configure ofertas reutilizables en Programas.",
       "incentives": "Gestione programas de rendimiento. Abra un registro para simular, calcular y liquidar pagos.",
       "payouts": "Envíe concesiones listas a nómina y siga su historial. Cree en Recompensas y liquide en Incentivos.",
       "employees": "Consulte programas, coberturas, elecciones y condiciones vigentes de cada empleado. La nómina aplica las reglas del programa.",
-      "delivery": "Libere recompensas e incentivos listos. Siga por separado el procesamiento de nómina y la entrega externa."
+      "delivery": "Revise concesiones listas, aportaciones a beneficios y movimientos de derechos. La nómina y el cumplimiento externo conservan evidencia separada."
     },
     "configureApprovals": "Configurar aprobaciones"
   },

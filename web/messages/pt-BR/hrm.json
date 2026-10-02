@@ -2670,8 +2670,8 @@
     "newAward": "Novo prêmio",
     "programsEmptyTitle": "Ainda não há programas de benefícios",
     "programsEmptyDescription": "Crie um programa de cobertura, poupança, recompensa, auxílio, incentivo ou personalizado.",
-    "awardsEmptyTitle": "Ainda não há prêmios",
-    "awardsEmptyDescription": "Os prêmios aparecem aqui quando um programa os concede.",
+    "awardsEmptyTitle": "Ainda não há registros de entrega",
+    "awardsEmptyDescription": "Concessões prontas e atividade de folha registrada aparecem aqui.",
     "loadFailed": "Não foi possível carregar a área de benefícios.",
     "loadFailedTitle": "Benefícios indisponíveis",
     "awardsTruncated": "mostrando os primeiros 500",
@@ -3088,14 +3088,14 @@
     },
     "scopeHint": "Benefícios define ofertas e concessões patronais. A folha gerencia salário, tributos, contribuições legais e processamento de pagamentos.",
     "views": {
-      "overview": "Programas da empresa, participação dos funcionários e entrega controlada.",
+      "overview": "Benefícios gerencia programas do empregador e escolhas dos funcionários. A folha gerencia salários, impostos e descontos legais.",
       "programs": "Abra um programa para gerenciar regras, participantes, atividade e conexão com a folha.",
       "enrolments": "Inscreva funcionários em planos de cobertura e poupança. Gerencie os períodos pelas janelas de inscrição.",
       "rewards": "Registre concessões de programas ativos. Configure ofertas reutilizáveis em Programas.",
       "incentives": "Gerencie programas de desempenho. Abra um registro para simular, calcular e liquidar pagamentos.",
       "payouts": "Envie concessões prontas à folha e acompanhe o histórico. Crie em Recompensas e liquide em Incentivos.",
       "employees": "Consulte programas, coberturas, escolhas e condições vigentes dos funcionários. A folha aplica as regras do programa.",
-      "delivery": "Libere recompensas e incentivos prontos. Acompanhe processamento da folha e entrega externa separadamente."
+      "delivery": "Revise concessões prontas, contribuições e movimentos de direitos. A folha e a entrega externa mantêm evidências separadas."
     },
     "configureApprovals": "Configurar aprovações"
   },

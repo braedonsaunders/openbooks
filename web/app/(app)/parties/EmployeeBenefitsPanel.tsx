@@ -64,7 +64,7 @@ export function EmployeeBenefitsPanel({ partyId }: { partyId: string }) {
   const policyEntity = kind === 'vacation' ? PAYROLL_VACATION_TERMS_ENTITY : PAYROLL_SERVICE_CREDITS_ENTITY
   const open = (section: string, id: string) => router.push(href(section, id), { scroll: false })
   const dates = [{ key: 'effective_from', header: admin('fields.effectiveFrom'), cell: (row: PolicyRow) => row.effective_from }, { key: 'effective_to', header: admin('fields.effectiveTo'), cell: (row: PolicyRow) => row.effective_to ?? '—' }]
-  const number = (value: unknown) => value == null ? '—' : formatDecimal(locale, String(value), { maximumFractionDigits: 16 })
+  const number = (value: unknown) => value == null ? '—' : formatDecimal(locale, String(value), { maximumFractionDigits: 4 })
   const activeTab = tab === 'service' && !data.payroll || tab === 'balances' && !data.canReadBanks ? 'programs' : tab
   const canCreate = data.canManage && data.payroll && activeTab === 'service'
   return <div className="space-y-4">

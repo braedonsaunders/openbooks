@@ -2670,8 +2670,8 @@
     "newAward": "Neue Zuwendung",
     "programsEmptyTitle": "Noch keine Leistungsprogramme",
     "programsEmptyDescription": "Erstellen Sie einen Versicherungs-, Spar-, Belohnungs-, Zulagen-, Anreiz- oder individuellen Plan.",
-    "awardsEmptyTitle": "Noch keine Zuwendungen",
-    "awardsEmptyDescription": "Zuwendungen erscheinen hier, sobald ein Programm sie gewährt.",
+    "awardsEmptyTitle": "Noch keine Bereitstellungsdaten",
+    "awardsEmptyDescription": "Bereite Zuwendungen und erfasste Lohnabrechnungsaktivitäten erscheinen hier.",
     "loadFailed": "Der Leistungsbereich konnte nicht geladen werden.",
     "loadFailedTitle": "Leistungen nicht verfügbar",
     "awardsTruncated": "die ersten 500 werden angezeigt",
@@ -3088,14 +3088,14 @@
     },
     "scopeHint": "Leistungen definiert Arbeitgeberangebote und Zuwendungen. Die Abrechnung verwaltet Gehalt, Steuern, gesetzliche Beiträge und Abrechnungsläufe.",
     "views": {
-      "overview": "Arbeitgeberprogramme, Mitarbeiterteilnahme und kontrollierte Abwicklung.",
+      "overview": "Benefits verwaltet Arbeitgeberprogramme und Mitarbeiterwahlen. Die Lohnabrechnung verwaltet Entgelt, Steuern und gesetzliche Abzüge.",
       "programs": "Öffnen Sie ein Programm, um Regeln, Teilnehmer, Aktivität und Abrechnungsanbindung zu verwalten.",
       "enrolments": "Melden Sie Beschäftigte zu Versicherungs- und Sparplänen an. Verwalten Sie Zeiträume über Anmeldefenster.",
       "rewards": "Erfassen Sie Zuwendungen aus aktiven Programmen. Wiederverwendbare Angebote konfigurieren Sie unter Programme.",
       "incentives": "Verwalten Sie Leistungsprogramme. Öffnen Sie einen Datensatz zum Simulieren, Berechnen und Abrechnen.",
       "payouts": "Übergeben Sie bereite Zuwendungen an die Abrechnung und verfolgen Sie die Historie. Erstellung unter Prämien, Berechnung unter Anreize.",
       "employees": "Prüfen Sie Programme, Versicherungsschutz, Wahlen und gültige Bedingungen der Mitarbeiter. Die Abrechnung wendet die Programmregeln an.",
-      "delivery": "Geben Sie bereite Prämien und festgestellte Leistungsanreize frei. Verfolgen Sie Abrechnung und externe Erfüllung getrennt."
+      "delivery": "Prüfen Sie bereite Zuwendungen, Leistungsbeiträge und Anspruchsbewegungen. Lohnabrechnung und externe Erfüllung behalten getrennte Nachweise."
     },
     "configureApprovals": "Genehmigungen konfigurieren"
   },
