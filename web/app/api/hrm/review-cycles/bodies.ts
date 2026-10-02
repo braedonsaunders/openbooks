@@ -29,9 +29,12 @@ export const createCycleBody = z.object({
   selfDueOn: civilDate.nullable().optional(),
   managerDueOn: civilDate.nullable().optional(),
   appliesTo,
+  requireManagerReviews:z.boolean().optional(),
 });
 
 export const patchCycleBody = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("update"),revision:z.number().int().positive(),name:z.string().trim().min(1).max(240).optional(),selfDueOn:civilDate.nullable().optional(),managerDueOn:civilDate.nullable().optional(),requireManagerReviews:z.boolean().optional() }),
+  z.object({action:z.literal("assign-reviewer"),revision:z.number().int().positive(),employmentId:uuid,reviewerPartyId:uuid}),
   z.object({ action: z.literal("open") }),
   z.object({ action: z.literal("to-calibrating"), force: z.boolean().optional(), forceReason: reason.optional() }),
   z.object({ action: z.literal("close") }),

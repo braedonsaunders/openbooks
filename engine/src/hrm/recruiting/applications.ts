@@ -302,6 +302,7 @@ export async function attachCandidate(query: AttachCandidateQuery): Promise<Atta
 }
 
 export interface MoveApplicationStageQuery {
+  readonly expectedStageId?:string;
   readonly orgId: string;
   readonly actorId: string;
   readonly applicationId: string;
@@ -325,6 +326,8 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
   const reason = query.reason === undefined || query.reason === null ? null : String(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadApplicationForUpdate(db, orgId, applicationId);
+    if(query.expectedStageId!==undefined&&current.stageId!==requireId(query.expectedStageId,'expectedStageId'))
+      throw new RecruitingError('REFUSED','This application changed stage in another session. Reload it before recording a decision.');
     await requireApplicationMove(db, orgId, actorId, current.requisitionId);
     const requisition = (await db.execute<{ pipelineTemplateId: string | null }>(sql`
       select pipeline_template_id as "pipelineTemplateId"
@@ -382,6 +385,7 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
 }
 
 export interface RejectApplicationQuery {
+  readonly expectedStageId?:string;
   readonly orgId: string;
   readonly actorId: string;
   readonly applicationId: string;
@@ -396,6 +400,8 @@ export async function rejectApplication(query: RejectApplicationQuery): Promise<
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadApplicationForUpdate(db, orgId, applicationId);
+    if(query.expectedStageId!==undefined&&current.stageId!==requireId(query.expectedStageId,'expectedStageId'))
+      throw new RecruitingError('REFUSED','This application changed stage in another session. Reload it before recording a decision.');
     await requireHrmRecruitingManage(db, orgId, actorId, current.requisitionId);
     if (current.status !== "active") {
       throw new RecruitingError(

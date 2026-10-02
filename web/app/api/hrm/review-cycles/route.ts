@@ -54,6 +54,7 @@ export const POST = defineRoute({
         selfDueOn: body.selfDueOn ?? null,
         managerDueOn: body.managerDueOn ?? null,
         appliesTo: body.appliesTo ?? {},
+        requireManagerReviews:body.requireManagerReviews,
       });
       return NextResponse.json({ cycle }, { status: 201 });
     } catch (e) {

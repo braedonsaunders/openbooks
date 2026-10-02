@@ -23,6 +23,7 @@ export default async function PerformancePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
+  if (sp.tab === 'templates') redirect('/hrm/performance/templates')
   if (sp.tab === 'settings') redirect('/admin/setup/performance')
   if (sp.tab === 'talent' && sp.talentView === 'succession') {
     const query = new URLSearchParams({ tab: 'succession' })

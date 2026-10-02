@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { confirmDialog } from '../../../../lib/confirm'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -14,13 +16,29 @@ type Calibration = NonNullable<PerformancePageData['detail']>['calibration']
  * reason recorded on each pending review), or close the cycle. Closing
  * shares nothing by itself. Refusals render as the error.
  */
-export function CycleActions({ cycleId, calibration }: { cycleId: string; calibration: Calibration }) {
+export function CycleActions({
+  cycleId,
+  calibration,
+}: {
+  cycleId: string
+  calibration: Calibration
+}) {
   const router = useRouter()
+  const t = useTranslations('hrm.talentWorkspace')
   const [forceReason, setForceReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function act(body: Record<string, unknown>) {
+    if (
+      body.action === 'close' &&
+      !(await confirmDialog({
+        title: t('closeCycle'),
+        message: t('closeConfirm'),
+        confirmLabel: t('closeCycle'),
+      }))
+    )
+      return
     setBusy(true)
     setError(null)
     try {
@@ -45,18 +63,28 @@ export function CycleActions({ cycleId, calibration }: { cycleId: string; calibr
   return (
     <div className="space-y-3">
       {calibration.gapNote ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{calibration.gapNote}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {calibration.gapNote}
+        </p>
       ) : null}
       {calibration.canOpen ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" disabled={busy} onClick={() => act({ action: 'open' })}>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => act({ action: 'open' })}
+          >
             {calibration.openLabel}
           </Button>
         </div>
       ) : null}
       {calibration.canMove ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" disabled={busy} onClick={() => act({ action: 'to-calibrating' })}>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => act({ action: 'to-calibrating' })}
+          >
             {calibration.moveLabel}
           </Button>
         </div>
@@ -74,14 +102,25 @@ export function CycleActions({ cycleId, calibration }: { cycleId: string; calibr
             type="button"
             variant="outline"
             disabled={busy || forceReason.trim().length === 0}
-            onClick={() => act({ action: 'to-calibrating', force: true, forceReason: forceReason.trim() })}
+            onClick={() =>
+              act({
+                action: 'to-calibrating',
+                force: true,
+                forceReason: forceReason.trim(),
+              })
+            }
           >
             {calibration.forceLabel}
           </Button>
         </div>
       ) : null}
       {calibration.canClose ? (
-        <Button type="button" variant="outline" disabled={busy} onClick={() => act({ action: 'close' })}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act({ action: 'close' })}
+        >
           {calibration.closeLabel}
         </Button>
       ) : null}

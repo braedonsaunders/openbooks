@@ -24,6 +24,7 @@ export function recruitingHref(
   preserved: PreservedParams,
   patch: {
     status?: string | null
+    application?: string | null
     requisition?: string | null
     candidate?: string | null
     offer?: string | null

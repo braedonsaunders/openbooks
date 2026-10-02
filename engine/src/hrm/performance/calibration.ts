@@ -464,15 +464,10 @@ async function loadCycleRatingScale(
   orgId: string,
   cycleId: string,
 ): Promise<RatingScale> {
-  const cycle = (await exec.execute<{ templateId: string | null }>(sql`
-    select template_id as "templateId" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
+  const template = (await exec.execute<{ratingScale:unknown}>(sql`
+    select rating_scale_snapshot as "ratingScale" from hrm_review_cycles
+    where org_id = ${orgId} and id = ${cycleId}
   `)).rows[0];
-  const template = cycle?.templateId
-    ? (await exec.execute<{ ratingScale: unknown }>(sql`
-        select rating_scale as "ratingScale" from hrm_review_templates
-         where org_id = ${orgId} and id = ${cycle.templateId}
-      `)).rows[0]
-    : undefined;
   if (!template) {
     throw new HrmPerformanceError(
       "TEMPLATE_NOT_FOUND",

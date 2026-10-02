@@ -1,4 +1,5 @@
 import 'server-only'
+import {listApplicationWorklist} from '@openbooks/engine/hrm/recruiting'
 
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
@@ -163,6 +164,10 @@ export interface RecruitingPageData {
     opened: string
     status: string
   }
+  applicationRows: {id:string;candidate:string;opening:string;stage:string;status:string;source:string|null;appliedOn:string;owner:string|null;href:string}[]
+  applicationColumns:Record<string,string>
+  applicationFilters:{paramKey:string;label:string;allLabel:string;options:{value:string;label:string}[]}[]
+  applicationSelection:{id:string;candidate:string;opening:string;href:string}|null
   rows: RecruitingRow[]
   empty: string
   totalLabel: string
@@ -325,7 +330,10 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
               ]),
             ]
           : []),
-        ...(data.tab === 'openings'
+        ...(data.tab === 'applications' ? [
+          widgetBlock('list-toolbar',{basePath:'/hrm/recruiting',currentParams:data.currentParams,filters:data.applicationFilters}),
+          registeredListTable('hrm_application_worklist',{variant:'app',rows:f('applicationRows'),rowKey:item('id'),empty:{title:f('empty')},columns:[column(data.applicationColumns.candidate!,link(item('candidate'),item('href'))),...['opening','stage','status','source','appliedOn','owner'].map(key=>column(data.applicationColumns[key]!,text(item(key),{fallback:'—'})))]})
+        ] : data.tab === 'openings'
           ? [
               registeredListTable('hrm_recruiting_rows', {
                 variant: 'app',
@@ -393,6 +401,7 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
       ...(data.poolCreate
         ? [widgetBlock('hrm-pool-create', { create: data.poolCreate })]
         : []),
+      ...(data.applicationSelection?[widgetBlock('hrm-application-review',{selection:data.applicationSelection,queue:data.applicationRows,closeHref:recruitingHref(data.currentParams),canManage:data.canManage})]:[]),
       // URL-backed drawers, portaled to <body> wherever they render.
       {
         ...widgetBlock('hrm-recruiting-drawer', { drawer: data.drawer }),
@@ -422,6 +431,7 @@ export async function loadRecruitingPage(
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   await requireFeatureEnabled(authz.user.orgId, 'hrmRecruiting')
   const t = await getTranslations('hrm')
+  const tw = await getTranslations('hrm.talentWorkspace')
   const tc = await getTranslations('common')
   const tabs = await hrmGroupTabs(authz, '/hrm/recruiting')
   const status =
@@ -430,12 +440,13 @@ export async function loadRecruitingPage(
       ? sp.status
       : null
   // Route sub-tabs. An unknown tab param falls back to Openings.
-  const tab: DepthTab = resolveDepthTab(sp.tab)
+  const tab: DepthTab = resolveDepthTab(sp.tab??(sp.requisition||sp.candidate||sp.offer?'openings':undefined))
   // Drawer hrefs preserve the depth tab, the status filter, and the
   // rehomed setup-section params through the ONE shared helper — closing a
   // drawer returns to the same tab/filter instead of the default view.
   const preservedParams = {
     ...(status ? { status } : {}),
+    ...(tab==='applications'?{applicationStatus:sp.applicationStatus??'active',opening:sp.opening,stage:sp.stage}:{}),
     tab,
     ...setupSectionParams(sp),
   }
@@ -454,6 +465,12 @@ export async function loadRecruitingPage(
   const offerId =
     typeof sp.offer === 'string' && sp.offer.length > 0 ? sp.offer : null
 
+  const applicationSource=tab==='applications'?await listApplicationWorklist({orgId:authz.user.orgId,actorId:authz.user.id,status:sp.applicationStatus==='all'?undefined:sp.applicationStatus??'active',opening:sp.opening,stage:sp.stage}):[]
+  const filterSource=tab==='applications'&&(sp.opening||sp.stage)?await listApplicationWorklist({orgId:authz.user.orgId,actorId:authz.user.id,status:sp.applicationStatus==='all'?undefined:sp.applicationStatus??'active'}):applicationSource
+  const applicationRows=applicationSource.map(row=>({...row,status:tw(`applicationStatuses.${row.status}`),href:recruitingHref(preservedParams,{application:row.id})}))
+  const uniqueOptions=(key:'opening'|'stage',idKey:'requisitionId'|'stageId')=>Array.from(new Map(filterSource.map(row=>[row[idKey],{value:row[idKey],label:row[key]}])).values())
+  const applicationFilters=[{paramKey:'applicationStatus',label:tw('status'),allLabel:tw('active'),options:['all','rejected','withdrawn','hired'].map(value=>({value,label:value==='all'?tw('allApplications'):tw(`applicationStatuses.${value}`)}))},{paramKey:'opening',label:tw('opening'),allLabel:tw('allOpenings'),options:uniqueOptions('opening','requisitionId')},{paramKey:'stage',label:tw('stage'),allLabel:tw('allStages'),options:uniqueOptions('stage','stageId')}]
+  const applicationSelection=tab==='applications'&&sp.application?(applicationRows.find(row=>row.id===sp.application)??{id:sp.application,candidate:tw('application'),opening:'',href:recruitingHref(preservedParams,{application:sp.application})}):null
   const requisitions =
     tab === 'openings'
       ? await listRequisitions({
@@ -982,7 +999,7 @@ export async function loadRecruitingPage(
   // The Setup lists rehomed under this tab. Unknown keys stay absent
   // rather than rendering a section the registry cannot serve.
   const SETUP_BY_TAB: Record<
-    Exclude<DepthTab, 'openings'>,
+    Exclude<DepthTab, 'openings'|'applications'>,
     readonly string[]
   > = {
     interviews: ['hrm-interview-kits', 'hrm-interviewer-pools'],
@@ -991,7 +1008,7 @@ export async function loadRecruitingPage(
     pools: ['hrm-retention-rules'],
   }
   const setupSections: string[] =
-    tab === 'openings'
+    (tab === 'openings'||tab==='applications')
       ? []
       : SETUP_BY_TAB[tab].filter((entityKey) =>
           SETUP_ENTITY_BY_KEY.has(entityKey),
@@ -1029,10 +1046,10 @@ export async function loadRecruitingPage(
   })
   return {
     title: t('recruiting.title'),
-    description: t(`recruiting.workspace.${tab}`),
+    description: tab==='applications'?tw('applicationsDescription'):t(`recruiting.workspace.${tab}`),
     tabs,
     canManage,
-    showCreate: canManage && (tab === 'openings' || tab === 'pools'),
+    showCreate: canManage && (tab === 'applications'||tab === 'openings' || tab === 'pools'),
     setupHref:
       can(authz, 'admin.setup.manage') && setupSections[0]
         ? `/admin/setup/${setupSections[0]}`
@@ -1082,8 +1099,9 @@ export async function loadRecruitingPage(
       opened: t('recruiting.columns.opened'),
       status: t('recruiting.columns.status'),
     },
+    applicationRows,applicationFilters,applicationSelection,applicationColumns:Object.fromEntries(['candidate','opening','stage','status','source','appliedOn','owner'].map(key=>[key,tw(key==='appliedOn'?'applied':key)])),
     rows,
-    empty: t('recruiting.empty'),
+    empty: tab==='applications'?tw('noApplications'):t('recruiting.empty'),
     totalLabel: t('recruiting.total'),
     totals: { headcount: String(headcountTotal), filled: String(filledTotal) },
     drawerOpen,

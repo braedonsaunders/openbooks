@@ -6,6 +6,7 @@ import {
   closeCycle,
   moveToCalibrating,
   openCycle,
+  updateCycleManagement,
 } from "@openbooks/engine/src/hrm/performance/review-cycles.ts";
 import { getCycleDetail } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
 
@@ -68,6 +69,10 @@ export const PATCH = defineRoute({
       );
 
     try {
+      if(body.action==="update"||body.action==="assign-reviewer"){
+        const management=await updateCycleManagement({...body,orgId:gate.user.orgId,actorId:gate.user.id,cycleId:id});
+        return NextResponse.json({management});
+      }
       if (body.action === "open") {
         const opened = await openCycle({
           orgId: gate.user.orgId,
