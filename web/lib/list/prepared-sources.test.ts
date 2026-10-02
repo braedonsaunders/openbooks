@@ -83,3 +83,9 @@ test('registered descriptors preserve typed cells and stable row identity', () =
   assert.deepEqual(table.rows, field('rows'))
   assert.deepEqual(table.rowKey, field('id'))
 })
+
+test('Talent worklists retain record identities when the first saved row appears',()=>{
+ for(const key of ['hrm_goal_worklist','hrm_review_template_documents','hrm_review_worklist','hrm_application_worklist']){
+  const source=preparedListSource(key);assert.equal(source.mode,'loaded',key);assert.equal(source.rowKeyField,'id',key);
+ }
+});

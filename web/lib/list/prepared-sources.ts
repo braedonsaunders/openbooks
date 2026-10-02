@@ -472,6 +472,10 @@ const SOURCES = {
   hrm_succession_candidates: { route: '/hrm/performance', rowsField: 'candidates', rowKeyField: 'id', mode: 'loaded' },
   hrm_succession_plans: { route: '/hrm/performance', rowsField: 'continuous.talent.plans', rowKeyField: 'id', mode: 'loaded' },
   hrm_talent_matrix: { route: '/hrm/performance', rowsField: 'continuous.talent.boxRows', rowKeyField: 'perf', mode: 'loaded' },
+  hrm_goal_worklist: {route:'/hrm/performance/goals',rowsField:'rows',rowKeyField:'id',mode:'loaded'},
+  hrm_review_template_documents: {route:'/hrm/performance/templates',rowsField:'rows',rowKeyField:'id',mode:'loaded'},
+  hrm_review_worklist: {route:'/hrm/performance',rowsField:'reviewRows',rowKeyField:'id',mode:'loaded'},
+  hrm_application_worklist: {route:'/hrm/recruiting',rowsField:'applicationRows',rowKeyField:'id',mode:'loaded'},
   hrm_performance_rows: {
     clientSearch: false,
     route: '/hrm/performance',

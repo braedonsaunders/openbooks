@@ -230,8 +230,9 @@ export async function orderReviewTemplateOutline(
     if (new Set(questionIds).size !== questionIds.length) refuse(400, 'questionIds lists a question twice', 'invalid')
 
     const template = (await tx.execute(sql`
-      select id from hrm_review_templates where org_id = ${actor.orgId} and id = ${templateId} for update`)).rows[0]
+      select id,draft_document as draft,published_document as published from hrm_review_templates where org_id = ${actor.orgId} and id = ${templateId} for update`)).rows[0]
     if (!template) refuse(404, 'not_found')
+    if(template.draft||template.published)refuse(409,'Use Performance → Templates to reorder this published document and save its draft.','managed-document')
     const storedSections = (await tx.execute<{ id: string; position: number }>(sql`
       select id, position from hrm_review_template_sections
        where org_id = ${actor.orgId} and template_id = ${templateId}

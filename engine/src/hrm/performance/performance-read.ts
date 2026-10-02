@@ -17,6 +17,7 @@ import {
   computeTurnover,
   parseAppliesScope,
   parseCivilDay,
+  parseRatingScale,
   type TurnoverResult,
 } from "./performance-math.ts";
 import { loadAnswers, loadReview, projectReviewForReader, type ReviewAnswerDTO, type ReviewDTO } from "./reviews.ts";
@@ -56,7 +57,7 @@ import type { CycleDTO } from "./review-cycles.ts";
 const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(db: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))||!(await lockAndCheckOrgFeature(db,orgId,'hrmPerformance'))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before reading performance",
@@ -267,7 +268,7 @@ export async function listCycleProgress(args: {
       const progress = await cycleProgress(db, orgId, id, visible);
       // A structural viewer sees only cycles they participate in; HR sees all.
       if (!granted && progress.totalSelf + progress.totalManager === 0) continue;
-      out.push({ ...projectCycleForHrScope(cycle, cycleScope.orgWide), scoped: !granted, ...progress });
+      out.push({ ...projectCycleForHrScope(cycle, cycleScope.orgWide && (!granted || allowed !== null)), scoped: !granted, ...progress });
     }
     return out;
   });
@@ -326,7 +327,7 @@ export async function getCycleDetail(args: {
     for (const id of ids) {
       reviews.push(projectReviewForReader(await readReviewRow(db, orgId, id), { granted, actorPartyId: person.partyId }));
     }
-    return { ...projectCycleForHrScope(cycle, cycleScope.orgWide), scoped: !granted, ...progress, reviews };
+    return { ...projectCycleForHrScope(cycle, cycleScope.orgWide && (!granted || allowed !== null)), scoped: !granted, ...progress, reviews };
   });
 }
 
@@ -340,6 +341,8 @@ async function readReviewRow(db: SqlExecutor, orgId: string, reviewId: string): 
   }
   return {
     id: stored.id,
+    revision: stored.revision,
+    draftSavedAt: stored.draftSavedAt,
     cycleId: stored.cycleId,
     cycleStatus: stored.cycleStatus,
     employmentId: stored.employmentId,
@@ -358,6 +361,8 @@ async function readReviewRow(db: SqlExecutor, orgId: string, reviewId: string): 
 }
 
 export interface ReviewDetailDTO {
+  readonly instructions:string;
+  readonly ratingScale:{min:string;max:string;labels:readonly string[]};
   readonly review: ReviewDTO;
   readonly answers: ReviewAnswerDTO[];
 }
@@ -411,7 +416,9 @@ export async function getReviewDetail(args: {
     // subject-safe projection, never in the UI alone.
     const person = await loadApprovalPerson(db, orgId, actorId);
     const review = projectReviewForReader(stored, { granted, actorPartyId: person.partyId });
-    return { review, answers };
+    const cycle=(await db.execute<{scale:unknown;instructions:string|null}>(sql`select rating_scale_snapshot as scale,template_document_snapshot->>'instructions' as instructions from hrm_review_cycles where org_id=${orgId} and id=${review.cycleId}`)).rows[0];
+    const ratingScale=mathRefusal('REFUSED',()=>parseRatingScale(cycle?.scale));
+    return { review, answers,ratingScale,instructions:cycle?.instructions??'' };
   });
 }
 
@@ -903,5 +910,27 @@ export async function getRetentionOverview(args: {
       missingExitRecords: missing,
       exitRecordsWithoutInterview: noInterview,
     };
+  });
+}
+
+/** The review worklist carries only names and task state within the same privacy boundary as review detail. */
+export async function listReviewWorklist(args:{orgId:string;actorId:string}) {
+  const orgId=requireUuid(args.orgId,'orgId'),actorId=requireUuid(args.actorId,'actorId');
+  return withOrgTransaction(orgId,async()=>{
+    await assertPerformanceFeature(db,orgId);
+    const granted=await hasPerformanceGrant(db,orgId,actorId);
+    const allowed=granted?await actorAllowedSubsidiaryIds(db,orgId,actorId):null;
+    const visible=await readableReviewIds(db,orgId,actorId,granted,allowed);
+    const person=await loadApprovalPerson(db,orgId,actorId);
+    const rows=(await db.execute<{isReviewer:boolean;isSubject:boolean;id:string;cycleId:string;employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string|null}>(sql`
+      select r.id,r.reviewer_party_id=${person.partyId}::uuid as "isReviewer",r.subject_party_id=${person.partyId}::uuid as "isSubject",r.cycle_id as "cycleId",p.display_name as employee,m.display_name as reviewer,c.name as cycle,
+        r.kind,r.status,case when r.kind='self' then c.self_due_on else c.manager_due_on end::text as due
+      from hrm_reviews r join hrm_review_cycles c on c.org_id=r.org_id and c.id=r.cycle_id
+      join parties p on p.org_id=r.org_id and p.id=r.subject_party_id
+      join parties m on m.org_id=r.org_id and m.id=r.reviewer_party_id
+      where r.org_id=${orgId} ${visible===null?sql``:visible.size?sql`and r.id in (${sql.join([...visible].map(id=>sql`${id}::uuid`),sql`,`)})`:sql`and false`}
+      order by case when r.status='pending' then 0 else 1 end, c.manager_due_on nulls last, p.display_name,r.id
+    `)).rows;
+    return rows;
   });
 }

@@ -97,3 +97,11 @@ test('allow-list sections stay within their shrink-only ceilings', () => {
   assert.ok(allowlist.dialogWindow.length <= DIALOG_WINDOW_CEILING)
   assert.ok(allowlist.bespokePages.length <= BESPOKE_PAGE_CEILING)
 })
+
+test('redirect-only routes need no page shell, while a redirect import never exempts rendered UI',()=>{
+  const path='web/app/(app)/templates/page.tsx';
+  const entry='import {redirect} from "next/navigation";';
+  assert.deepEqual(rules(path,entry+'export default async function Page({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){await searchParams;redirect("/hrm/performance/templates")}'),[]);
+  assert.deepEqual(rules(path,entry+'export default function Page(){if(false)redirect("/hrm");return <p>Template editor</p>}'),['bespoke-page']);
+  assert.deepEqual(rules(path,entry+'export default function Page(){return <>Editor</>}'),['bespoke-page']);
+});

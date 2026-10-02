@@ -8,6 +8,7 @@ import {
   reopenReview,
   shareReview,
   submitReview,
+  saveReviewDraft,
 } from "@openbooks/engine/src/hrm/performance/reviews.ts";
 import { getReviewDetail } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
 
@@ -73,9 +74,13 @@ export const PATCH = defineRoute({
       reviewId: id,
     };
     try {
+      if(body.action==="save-draft") {
+        return NextResponse.json({review:await saveReviewDraft({...base,answers:body.answers,overallRating:body.overallRating,revision:body.revision})});
+      }
       if (body.action === "submit") {
         const review = await submitReview({
           ...base,
+          revision: body.revision,
           answers: body.answers,
           overallRating: body.overallRating ?? null,
         });

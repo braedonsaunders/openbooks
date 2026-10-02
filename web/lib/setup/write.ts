@@ -1416,6 +1416,19 @@ export async function validateEntityIntegrity(
   // their parent template and questions prove their parent section, both
   // visible in this org — a form that can never open is refused by field
   // name instead of saved as openable.
+  if (['hrm-review-templates','hrm-review-template-sections','hrm-review-template-questions'].includes(entity.key)) {
+    // All authoring paths lock the parent, including legacy rows. A first
+    // document save cannot capture an outline while another editor mutates it.
+    const parent= rowId
+      ? entity.key==='hrm-review-templates'?sql`t.id=${rowId}`
+        : entity.key==='hrm-review-template-sections'?sql`exists(select 1 from hrm_review_template_sections s where s.org_id=t.org_id and s.template_id=t.id and s.id=${rowId})`
+        : sql`exists(select 1 from hrm_review_template_sections s join hrm_review_template_questions q on q.org_id=s.org_id and q.section_id=s.id where s.org_id=t.org_id and s.template_id=t.id and q.id=${rowId})`
+      : entity.key==='hrm-review-template-sections'&&typeof body.templateId==='string'?sql`t.id=${body.templateId}`
+        : entity.key==='hrm-review-template-questions'&&typeof body.sectionId==='string'?sql`exists(select 1 from hrm_review_template_sections s where s.org_id=t.org_id and s.template_id=t.id and s.id=${body.sectionId})`:null
+    if(parent){const template=(await executor.execute(sql`select t.draft_document as draft,t.published_document as published from hrm_review_templates t where t.org_id=${orgId} and ${parent} for update of t`)).rows[0]
+      if(template&&(template.draft||template.published))return 'Use Performance → Templates to edit this document, save its draft, and publish the next version.'
+    }
+  }
   if (entity.key === 'hrm-review-templates') {
     let scale = body.ratingScale as Record<string, unknown> | undefined
     if (rowId) {
@@ -2962,6 +2975,7 @@ export async function deleteSetupRecord(
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
     const found = await setupWriteTransaction(entity, orgId, undefined, id, async (tx) => {
+      if(['hrm-review-templates','hrm-review-template-sections','hrm-review-template-questions'].includes(entity.key)){const refusal=await validateEntityIntegrity(entity,{},orgId,id,tx);if(refusal)throw new SetupWriteRefusal(refusal,409)}
       if (entity.key === 'item-rate-books') {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
       }

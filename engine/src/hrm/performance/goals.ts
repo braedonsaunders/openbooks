@@ -34,7 +34,7 @@ export type GoalStatus = "active" | "achieved" | "missed" | "cancelled";
 const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY)) || !(await lockAndCheckOrgFeature(exec,orgId,'hrmPerformance'))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before setting goals",

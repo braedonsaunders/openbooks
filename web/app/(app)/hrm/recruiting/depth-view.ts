@@ -53,13 +53,13 @@ import { can, type Authz } from '../../../../lib/authz'
  * the module is on, and an unknown tab param falls back to Openings.
  */
 
-export const DEPTH_TABS = ['openings', 'interviews', 'offers', 'postings', 'pools'] as const
+export const DEPTH_TABS = ['applications', 'openings', 'interviews', 'offers', 'postings', 'pools'] as const
 export type DepthTab = (typeof DEPTH_TABS)[number]
 
 type T = Awaited<ReturnType<typeof getTranslations>>
 
 export function resolveDepthTab(tab: unknown): DepthTab {
-  if (typeof tab !== 'string' || !(DEPTH_TABS as readonly string[]).includes(tab)) return 'openings'
+  if (typeof tab !== 'string' || !(DEPTH_TABS as readonly string[]).includes(tab)) return 'applications'
   return tab as DepthTab
 }
 

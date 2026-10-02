@@ -224,7 +224,9 @@ export function scanText(path, text, registeredKeys = new Set()) {
     if (violations.length > 50) break;
   }
   if (/(^|\/)page\.tsx$/.test(path) && path.startsWith("web/app/(app)/")) {
-    if (!/^\s*import\s[^;]*\bModuleView\b/m.test(stripped) && !/<(?:EntityListView|RecordListView)(?=[\s/>])/.test(stripped)) {
+    // A redirect-only route renders no user-facing surface to compose.
+    const redirectOnly=/import\s*\{[^}]*\bredirect\b[^}]*\}\s*from\s*['"]next\/navigation['"]/.test(stripComments(text)) && /\bredirect\s*\(/.test(stripped) && !/<(?:[A-Za-z][\w.:-]*)(?=[\s/>])|<>/.test(stripped);
+    if (!redirectOnly && !/^\s*import\s[^;]*\bModuleView\b/m.test(stripped) && !/<(?:EntityListView|RecordListView)(?=[\s/>])/.test(stripped)) {
       violations.push({ rule: "bespoke-page", path, line: 1 });
     }
   }

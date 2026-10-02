@@ -1,3 +1,7 @@
+import {ConversationCreate} from '../../app/(app)/hrm/performance/conversations/ConversationCreate'
+import {GoalEditor} from '../../app/(app)/hrm/performance/goals/GoalEditor'
+import {ApplicationReview} from '../../app/(app)/hrm/recruiting/ApplicationReview'
+import {ReviewTemplateDesigner} from '../../app/(app)/hrm/performance/ReviewTemplateDesigner'
 import { WindowsManagerDrawer } from '../../app/(app)/hrm/benefits/WindowsManagerDrawer'
 import { CandidatePoolCreateDrawer } from '../../app/(app)/hrm/recruiting/CandidatePoolCreateDrawer'
 import type { ComponentProps } from 'react'
@@ -68,6 +72,9 @@ import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
 export const HRM_WIDGETS = {
+  'hrm-conversation-create':(props)=><ConversationCreate employees={props.employees as ComponentProps<typeof ConversationCreate>['employees']} closeHref={str(props,'closeHref')??'/hrm/performance/conversations'}/>,
+  'hrm-goal-editor':(props)=><GoalEditor initial={props.initial as ComponentProps<typeof GoalEditor>['initial']} employees={props.employees as ComponentProps<typeof GoalEditor>['employees']} canWrite={props.canWrite===true} closeHref={str(props,'closeHref')??'/hrm/performance/goals'}/>,
+  'hrm-application-review': (props) => <ApplicationReview selection={props.selection as ComponentProps<typeof ApplicationReview>['selection']} queue={props.queue as ComponentProps<typeof ApplicationReview>['queue']} closeHref={str(props,'closeHref')??'/hrm/recruiting'} canManage={props.canManage===true}/>,
   'hrm-pool-create': (props) => {
     const create = props.create as ComponentProps<typeof CandidatePoolCreateDrawer>['create']
     return create ? <CandidatePoolCreateDrawer create={create} /> : null
@@ -194,9 +201,11 @@ export const HRM_WIDGETS = {
   },
   /** The review-cycle flyout: the loader-resolved cycle with its reviews
    *  table and calibration island, closing by navigation. */
+  'hrm-review-template-designer': props => <ReviewTemplateDesigner initial={props.initial as ComponentProps<typeof ReviewTemplateDesigner>['initial']} closeHref={String(props.closeHref)} canEdit={!!props.canEdit} competencies={(props.competencies as ComponentProps<typeof ReviewTemplateDesigner>['competencies'])??[]}/>,
   'hrm-cycle-drawer': (props) => (
     <CycleDrawer
       detail={(props.detail as ComponentProps<typeof CycleDrawer>['detail']) ?? null}
+      fallbackTitle={str(props,'fallbackTitle')??''}
       missingDetail={str(props, 'missingDetail') ?? null}
       loadError={(props.loadError as ComponentProps<typeof CycleDrawer>['loadError']) ?? null}
     />
@@ -206,6 +215,7 @@ export const HRM_WIDGETS = {
   'hrm-review-drawer': (props) => (
     <ReviewDrawer
       review={(props.review as ComponentProps<typeof ReviewDrawer>['review']) ?? null}
+      fallbackTitle={str(props,'fallbackTitle')??''}
       missingReview={str(props, 'missingReview') ?? null}
       loadError={(props.loadError as ComponentProps<typeof ReviewDrawer>['loadError']) ?? null}
     />

@@ -184,7 +184,7 @@ test("open refuses a template with no required question and an inverted period",
         assert.ok(e instanceof HrmPerformanceError);
         assert.equal(e.code, "NO_REQUIRED_QUESTION");
         assert.match(e.message, /no required question/);
-        assert.match(e.message, /add a required question to the template under Setup → Workforce → Review templates/);
+        assert.match(e.message, /add a required question to the template under Performance → Templates/);
         return true;
       },
     );

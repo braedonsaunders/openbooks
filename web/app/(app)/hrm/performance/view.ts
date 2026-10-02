@@ -27,6 +27,7 @@ import {
   listMyReviews,
 } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
 import { isUuid } from '@/lib/list-params'
+import {getCycleManagement,listCycleScopeOptions,listReviewWorklist} from '@openbooks/engine/hrm/performance'
 import { listReviewTemplates } from '@openbooks/engine/src/hrm/performance/review-cycles.ts'
 import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
 import { HrmPerformanceError } from '@openbooks/engine/src/hrm/performance/errors.ts'
@@ -89,6 +90,7 @@ export interface PerformanceSegmentOption {
 }
 
 export interface PerformanceReviewRow {
+  employmentId:string
   id: string
   kind: string
   kindLabel: string
@@ -139,6 +141,10 @@ export interface PerformancePageData {
   title: string
   description: string
   tabs: { href: string; label: string; active?: boolean }[]
+  reviewFilters:{paramKey:string;label:string;allLabel:string;options:{value:string;label:string}[]}[]
+  reviewsTab: boolean
+  reviewRows: {id:string;employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string;href:string}[]
+  reviewColumns: {employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string}
   canManage: boolean
   showCreate: boolean
   canRetain: boolean
@@ -160,6 +166,7 @@ export interface PerformancePageData {
   rows: PerformanceCycleRow[]
   empty: string
   detail: {
+    management: Awaited<ReturnType<typeof getCycleManagement>> | null
     cycleId: string
     cycleName: string
     cycleStatus: string
@@ -189,6 +196,10 @@ export interface PerformancePageData {
   detailError: PerformanceLoadError | null
   review: {
     id: string
+    revision: number
+    draftSavedAt:string|null
+    instructions:string
+    ratingScale:{min:string;max:string;labels:readonly string[]}
     kindLabel: string
     statusLabel: string
     overallLabel: string
@@ -281,6 +292,7 @@ export interface PerformancePageData {
     title: string
     closeHref: string
     templates: { value: string; label: string }[]
+    scopeOptions: Awaited<ReturnType<typeof listCycleScopeOptions>>
     initialTemplateId: string
     emptyTemplates: string
     templateLabel: string
@@ -387,6 +399,11 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
           }),
           when: f('cyclesTab'),
         },
+        ...(data.reviewsTab?[widgetBlock('list-toolbar',{basePath:'/hrm/performance',currentParams:data.currentParams,filters:data.reviewFilters}),registeredListTable('hrm_review_worklist',{rows:f('reviewRows'),rowKey:item('id'),empty:{title:data.empty},columns:[
+          column(data.reviewColumns.employee,link(item('employee'),item('href'))),
+          column(data.reviewColumns.reviewer,text(item('reviewer'))),column(data.reviewColumns.cycle,text(item('cycle'))),
+          column(data.reviewColumns.kind,text(item('kind'))),column(data.reviewColumns.status,badge(item('status'))),
+          column(data.reviewColumns.due,text(item('due')))]})]:[]),
         ...continuousBlocks(data.continuous),
         // Retention through the house blocks: three stat tiles and a table,
         // the same vocabulary every other HRM surface uses. It was a bespoke
@@ -467,6 +484,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         ...widgetBlock('hrm-cycle-drawer', {
           detail: data.detail,
           missingDetail: data.missingDetail,
+          fallbackTitle: data.title,
           loadError: data.detailError,
         }),
         when: f('drawerOpen'),
@@ -475,6 +493,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         ...widgetBlock('hrm-review-drawer', {
           review: data.review,
           missingReview: data.missingReview,
+          fallbackTitle: data.title,
           loadError: data.reviewError,
         }),
         when: f('reviewOpen'),
@@ -520,7 +539,8 @@ export async function loadPerformancePage(
   const t = await getTranslations('hrm')
   const commonT = await getTranslations('common')
   const retryLabel = commonT('actions.retry')
-  const openLabel = commonT('actions.open')
+  const tw=await getTranslations('hrm.talentWorkspace')
+  const openLabel = tw('launchCycle')
   const tabs = await hrmGroupTabs(authz, '/hrm/performance')
 
   // The `mine` pseudo-status is the self-service segment: cycles the actor
@@ -541,12 +561,15 @@ export async function loadPerformancePage(
   // Loaded here (not beside the retention panel) so every drawer href below
   // preserves the continuous tab through the shared helper.
   const continuous = await loadContinuousTab(authz, sp, canManage, canRetain)
-  const cyclesTab = continuous.tab === 'cycles'
+  const reviewsTab=sp.tab==='reviews'||(!sp.tab&&!sp.cycle)
+  const cyclesTab = continuous.tab === 'cycles'&&!reviewsTab
+  const worklist=continuous.tab==='cycles'?await listReviewWorklist({orgId:authz.user.orgId,actorId:authz.user.id}):[]
   // Drawer hrefs preserve the segment and the continuous tab — a
   // drawer opened from Retention closes back onto Retention, not Cycles.
   const preservedParams = {
     ...(rawStatus ? { status: rawStatus } : {}),
-    ...(cyclesTab ? {} : { tab: continuous.tab }),
+    ...(reviewsTab?{reviewStatus:sp.reviewStatus,reviewScope:sp.reviewScope,reviewCycle:sp.reviewCycle}:{}),
+    ...(reviewsTab?{tab:'reviews'}:cyclesTab?{tab:'cycles'}:{ tab: continuous.tab }),
     ...(sp.queue === 'interviews' && continuous.tab === 'retention'
       ? { queue: 'interviews' }
       : {}),
@@ -636,7 +659,10 @@ export async function loadPerformancePage(
         actorId: authz.user.id,
         cycleId,
       })
+      let management:NonNullable<PerformancePageData['detail']>['management']=null
+      if(canManage){try{management=await getCycleManagement({orgId:authz.user.orgId,actorId:authz.user.id,cycleId})}catch(error){if(!(error instanceof HrmAuthorizationError))throw error}}
       detail = {
+        management,
         cycleId: full.id,
         cycleName: full.name,
         cycleStatus: full.status,
@@ -644,13 +670,14 @@ export async function loadPerformancePage(
         period: `${full.periodStartOn} → ${full.periodEndOn}`,
         reviews: full.reviews.map((r) => ({
           id: r.id,
+          employmentId:r.employmentId,
           kind: r.kind,
           kindLabel:
             r.kind === 'self'
-              ? t('performance.kindSelf')
+              ? (worklist.find(row=>row.id===r.id)?.employee??'')+' · '+t('performance.kindSelf')
               : r.kind === 'manager'
-                ? t('performance.kindManager')
-                : t('performance.kindPeer'),
+                ? (worklist.find(row=>row.id===r.id)?.employee??'')+' · '+t('performance.kindManager')
+                : (worklist.find(row=>row.id===r.id)?.employee??'')+' · '+t('performance.kindPeer'),
           status: r.status,
           statusLabel: reviewStatusLabel(t, r.status),
           rating: r.calibratedRating ?? r.overallRating,
@@ -668,10 +695,10 @@ export async function loadPerformancePage(
           rating: t('performance.colRating'),
         },
         calibration: {
-          canOpen: canManage && full.status === 'draft',
+          canOpen: management!==null && full.status === 'draft',
           openLabel,
-          canMove: canManage && full.status === 'open',
-          canForce: canManage && full.status === 'open',
+          canMove: management!==null && full.status === 'open',
+          canForce: management!==null && full.status === 'open',
           canClose:
             canManage &&
             (full.status === 'open' || full.status === 'calibrating'),
@@ -747,6 +774,10 @@ export async function loadPerformancePage(
         actorPartyId !== null && full.review.subjectPartyId === actorPartyId
       review = {
         id: full.review.id,
+        revision:full.review.revision,
+        draftSavedAt:full.review.draftSavedAt,
+        ratingScale:full.ratingScale,
+        instructions:full.instructions,
         kindLabel:
           full.review.kind === 'self'
             ? t('performance.kindSelf')
@@ -778,7 +809,7 @@ export async function loadPerformancePage(
         goalsEmpty: t('performance.goalsEmpty'),
         canWriteGoals: isSubject || canManage,
         employmentId: full.review.employmentId,
-        canAnswer: isReviewer && full.review.status === 'pending',
+        canAnswer: isReviewer && full.review.status === 'pending' && full.review.cycleStatus === 'open',
         canShare:
           full.review.kind !== 'self' &&
           (full.review.status === 'submitted' ||
@@ -872,6 +903,7 @@ export async function loadPerformancePage(
       templates: templates
         .filter((tpl) => tpl.isActive)
         .map((tpl) => ({ value: tpl.id, label: tpl.name })),
+      scopeOptions:await listCycleScopeOptions({orgId:authz.user.orgId,actorId:authz.user.id}),
       initialTemplateId: templates.some((tpl) => tpl.id === sp.template && tpl.isActive) ? sp.template! : '',
       emptyTemplates: t('performance.workspace.noReviewForms'),
       templateLabel: t('performance.templateLabel'),
@@ -1026,7 +1058,11 @@ export async function loadPerformancePage(
   }
 
   return {
-    title: t('performance.title'),
+    reviewsTab,
+    reviewFilters:[{paramKey:'reviewStatus',label:tw('status'),allLabel:tw('allStatuses'),options:['pending','submitted','calibrated','shared','acknowledged'].map(value=>({value,label:reviewStatusLabel(t,value)}))},{paramKey:'reviewScope',label:tw('view'),allLabel:tw('allVisible'),options:[{value:'mine',label:tw('myReviews')},{value:'received',label:tw('receivedReviews')}]},{paramKey:'reviewCycle',label:tw('cycle'),allLabel:tw('allCycles'),options:Array.from(new Map(worklist.map(r=>[r.cycleId,{value:r.cycleId,label:r.cycle}])).values())}],
+    reviewRows:worklist.filter(r=>(!sp.reviewStatus||r.status===sp.reviewStatus)&&(!sp.reviewCycle||r.cycleId===sp.reviewCycle)&&(!sp.reviewScope||(sp.reviewScope==='mine'?r.isReviewer:r.isSubject))).map(r=>({...r,kind:t('performance.kind'+r.kind[0]!.toUpperCase()+r.kind.slice(1)),status:reviewStatusLabel(t,r.status),due:r.due??'—',href:performanceHref(preservedParams,{review:r.id})})),
+    reviewColumns:{employee:tw('employee'),reviewer:tw('reviewer'),cycle:tw('cycle'),kind:tw('reviewType'),status:tw('status'),due:tw('due')},
+    title: reviewsTab?tw('reviews'):cyclesTab?tw('cycles'):t('performance.title'),
     description:
       continuous.calibration?.description ??
       continuous.talent?.description ??
@@ -1055,7 +1091,7 @@ export async function loadPerformancePage(
       status: t('performance.colStatus'),
     },
     rows,
-    empty: t('performance.empty'),
+    empty: reviewsTab?tw('noReviews'):t('performance.empty'),
     detail,
     missingDetail,
     detailError,
@@ -1068,10 +1104,10 @@ export async function loadPerformancePage(
     missingExit,
     exitError,
     drawerOpen:
-      detail !== null ||
+      !sp.review && (detail !== null ||
       missingDetail !== null ||
       detailError !== null ||
-      creating,
+      creating),
     reviewOpen:
       review !== null || missingReview !== null || reviewError !== null,
     exitOpen: exit !== null || missingExit !== null || exitError !== null,
@@ -1098,7 +1134,7 @@ function goalStatusLabel(t: (key: string) => string, status: string): string {
   const known = new Set(['active', 'achieved', 'missed', 'cancelled'])
   return t(
     known.has(status)
-      ? `performance.goalStatus.${status}`
-      : 'performance.goalStatus.unknown',
+      ? `me.goalStatus.${status}`
+      : 'me.goalStatus.unknown',
   )
 }

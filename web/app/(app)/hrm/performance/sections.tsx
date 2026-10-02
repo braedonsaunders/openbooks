@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { Button, UrlDrawer } from '@openbooks/ui'
+import { Button } from '@openbooks/ui'
 import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
+import {CycleManagement} from './CycleManagement'
 import { CycleActions } from './CycleActions'
 import { CycleCreateForm } from './CycleCreateForm'
 import { GoalForm, GoalProgressForm } from './GoalForm'
@@ -38,6 +39,7 @@ export function DrawerLoadError({ error }: { error: PerformanceLoadError }) {
 }
 
 export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePageData['detail']> }) {
+  if(detail.management)return <CycleManagement detail={detail}/>
   return (
     <div className="space-y-6">
       <div>
@@ -73,18 +75,22 @@ export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePag
 export function CycleDrawer({
   detail,
   missingDetail,
+  fallbackTitle,
   loadError,
 }: {
   detail: PerformancePageData['detail']
   missingDetail: string | null
+  fallbackTitle: string
   loadError: PerformancePageData['detailError']
 }) {
   if (!detail && !missingDetail && !loadError) return null
   return (
-    <UrlDrawer
+    <DirtyUrlDrawer
       open
+      openKey={detail?.cycleId??"cycle"}
+      size="2xl"
       closeHref={detail?.closeHref ?? '/hrm/performance'}
-      title={detail?.cycleName ?? ''}
+      title={detail?.cycleName ?? fallbackTitle}
       description={detail ? `${detail.templateName} · ${detail.period}` : undefined}
     >
       {detail ? (
@@ -94,7 +100,7 @@ export function CycleDrawer({
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingDetail}</p>
       )}
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }
 
@@ -113,9 +119,13 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
           <p className="text-xs text-slate-500 dark:text-slate-400">{review.calibrationReason}</p>
         ) : null}
       </div>
+      {review.instructions&&<p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{review.instructions}</p>}
       {review.canAnswer ? (
         <ReviewAnswerForm
           reviewId={review.id}
+          revision={review.revision}
+          overallRating={review.overallRating}
+          ratingScale={review.ratingScale}
           cycleId={review.cycleId}
           answers={review.answers}
           submitLabel={review.submitLabel}
@@ -185,10 +195,12 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
 export function ReviewDrawer({
   review,
   missingReview,
+  fallbackTitle,
   loadError,
 }: {
   review: PerformancePageData['review']
   missingReview: string | null
+  fallbackTitle: string
   loadError: PerformancePageData['reviewError']
 }) {
   if (!review && !missingReview && !loadError) return null
@@ -196,7 +208,7 @@ export function ReviewDrawer({
     <DirtyUrlDrawer
       open
       closeHref={review?.closeHref ?? '/hrm/performance'}
-      title={review?.kindLabel ?? ''}
+      title={review?.kindLabel ?? fallbackTitle}
     >
       {review ? (
         <ReviewDrawerBody review={review} />

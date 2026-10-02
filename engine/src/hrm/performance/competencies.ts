@@ -530,12 +530,13 @@ export async function setSectionCompetency(args: {
     if (args.competencyId !== null) {
       await requireCompetencyFrameworkInManageScope(db, orgId, args.competencyId, allowed);
     }
-    const section = (await db.execute<{ id: string }>(sql`
-      select id from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}
+    const section = (await db.execute<{ id: string; draft:unknown; published:unknown }>(sql`
+      select s.id, t.draft_document as draft, t.published_document as published from hrm_review_template_sections s join hrm_review_templates t on t.org_id=s.org_id and t.id=s.template_id where s.org_id = ${orgId} and s.id = ${sectionId} for update of t
     `)).rows[0];
     if (!section) {
       throw new HrmPerformanceError("NOT_FOUND", "review template section was not found — attach the competency to an existing section");
     }
+    if(section.draft||section.published)throw new HrmPerformanceError("REFUSED","This template is managed in Performance → Templates. Edit its competency link there and publish the template.");
     if (args.competencyId) {
       const competency = (await db.execute<{ id: string }>(sql`
         select id from hrm_competencies where org_id = ${orgId} and id = ${args.competencyId}
@@ -673,12 +674,13 @@ export async function competencyProfileForEmployment(args: {
       competency_name: string | null;
       framework_applies_to: unknown;
     }>(sql`
-      select s.id, s.title, s.competency_id::text as competency_id,
+      select s.id, s.title, s."competencyId"::text as competency_id,
              c.name as competency_name, f.applies_to as framework_applies_to
-        from hrm_review_template_sections s
-        left join hrm_competencies c on c.org_id = s.org_id and c.id = s.competency_id
+        from hrm_review_cycles cycle
+        cross join lateral jsonb_to_recordset(cycle.template_document_snapshot->'sections') as s(id uuid,title text,"competencyId" uuid,position integer)
+        left join hrm_competencies c on c.org_id = cycle.org_id and c.id = s."competencyId"
         left join hrm_competency_frameworks f on f.org_id = c.org_id and f.id = c.framework_id
-       where s.org_id = ${orgId} and s.template_id = ${cycle.template_id} and s.competency_id is not null
+       where cycle.org_id = ${orgId} and cycle.id = ${review.cycle_id} and s."competencyId" is not null
        order by s.position
     `)).rows;
     const out: CompetencyProfileRow[] = [];
