@@ -67,15 +67,15 @@ test('setup decimal and percent fields canonicalize without crossing IEEE-754', 
   const rate: SetupField = { key: 'ratePercent', kind: 'percent', required: true }
   const money: SetupField = { key: 'acquisitionCost', kind: 'decimal', required: true }
   assert.deepEqual(coerceField(rate, '13.2500'), { column: 'rate_percent', value: '13.2500000000' })
-  assert.deepEqual(coerceField(rate, 13.25), { error: 'ratePercent must be a number' })
+  assert.match((coerceField(rate, 13.25) as { error: string }).error, /decimal string, not a JSON number.*re-enter/)
   assert.deepEqual(coerceField(money, '00100.1000'), { column: 'acquisition_cost', value: '100.1000000000' })
   assert.deepEqual(coerceField({ key: 'acquisitionRate', kind: 'decimal', required: true }, '1.25'), {
     column: 'acquisition_rate',
     value: '1.2500000000',
   })
-  assert.deepEqual(coerceField(rate, '1e-2'), { error: 'ratePercent must be a number' })
-  assert.deepEqual(coerceField(rate, '0.30000000000000004'), { error: 'ratePercent must be a number' })
-  assert.deepEqual(coerceField(money, 'not-a-number'), { error: 'acquisitionCost must be a number' })
+  assert.match((coerceField(rate, '1e-2') as { error: string }).error, /scientific notation.*expand.*plain digits/)
+  assert.match((coerceField(rate, '0.30000000000000004') as { error: string }).error, /10 decimal places/)
+  assert.match((coerceField(money, 'not-a-number') as { error: string }).error, /decimal number.*not a number/)
 })
 
 test('number-sequence record choices store stable kind tokens without requiring UUIDs', () => {
