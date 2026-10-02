@@ -411,6 +411,32 @@
       "activeBadge": "Aktiv",
       "minimumBalance": "Mindestbetrag (Basiswährung)"
     },
-    "title": "Forderungseinzug"
+    "title": "Forderungseinzug",
+    "actions": {
+      "policies": "Neue Richtlinie",
+      "recurring": "Neuer wiederkehrender Zeitplan",
+      "subscriptions": "Neues Abonnement",
+      "plans": "Neuer Tarif",
+      "versions": "Neue Tarifversion",
+      "contracts": "Neuer Vertrag",
+      "amendments": "Neue Vertragsänderung"
+    },
+    "forms": {
+      "planDetails": "Tarifdetails",
+      "billing": "Abrechnung",
+      "incomeAccount": "Erlöskonto",
+      "interval": "Abrechnungsintervall",
+      "intervalCount": "Anzahl der Intervalle",
+      "subscriptionDetails": "Abonnementdetails",
+      "priceOverride": "Individueller Preis",
+      "startOn": "Startdatum",
+      "scheduleDetails": "Zeitplandetails",
+      "timing": "Zeitplanung",
+      "versionDetails": "Versionsdetails",
+      "componentNumber": "Komponente {number}",
+      "contractTerm": "Vertragslaufzeit",
+      "renewal": "Verlängerung",
+      "amendmentDetails": "Änderungsdetails"
+    }
   }
 }

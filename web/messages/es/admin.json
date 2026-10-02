@@ -5125,7 +5125,12 @@
       "sequence": "Secuencia",
       "subjectTemplate": "Plantilla de asunto",
       "bodyTemplate": "Plantilla de mensaje",
-      "escalate": "Escalar"
+      "escalate": "Escalar",
+      "details": "Detalles de la política",
+      "criteria": "Elegibilidad y envío",
+      "description": "Defina los criterios de cobro y la secuencia de recordatorios.",
+      "reminderNumber": "Recordatorio {number}",
+      "addReminder": "Añadir recordatorio"
     }
   },
   "flows": {

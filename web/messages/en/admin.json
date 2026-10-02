@@ -5125,7 +5125,12 @@
       "sequence": "Sequence",
       "subjectTemplate": "Subject template",
       "bodyTemplate": "Message template",
-      "escalate": "Escalate"
+      "escalate": "Escalate",
+      "details": "Policy details",
+      "criteria": "Eligibility and delivery",
+      "description": "Set collection criteria and compose the reminder sequence.",
+      "reminderNumber": "Reminder {number}",
+      "addReminder": "Add reminder"
     }
   },
   "flows": {

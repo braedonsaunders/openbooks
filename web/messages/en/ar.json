@@ -411,6 +411,32 @@
       "activeBadge": "Active",
       "minimumBalance": "Minimum balance (base currency)"
     },
-    "title": "Collections"
+    "title": "Collections",
+    "actions": {
+      "policies": "New policy",
+      "recurring": "New recurring schedule",
+      "subscriptions": "New subscription",
+      "plans": "New plan",
+      "versions": "New plan version",
+      "contracts": "New contract",
+      "amendments": "New amendment"
+    },
+    "forms": {
+      "planDetails": "Plan details",
+      "billing": "Billing",
+      "incomeAccount": "Income account",
+      "interval": "Billing interval",
+      "intervalCount": "Number of intervals",
+      "subscriptionDetails": "Subscription details",
+      "priceOverride": "Price override",
+      "startOn": "Start date",
+      "scheduleDetails": "Schedule details",
+      "timing": "Timing",
+      "versionDetails": "Version details",
+      "componentNumber": "Component {number}",
+      "contractTerm": "Contract term",
+      "renewal": "Renewal",
+      "amendmentDetails": "Amendment details"
+    }
   }
 }

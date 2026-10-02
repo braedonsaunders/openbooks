@@ -411,6 +411,32 @@
       "activeBadge": "Activo",
       "minimumBalance": "Saldo mínimo (moneda base)"
     },
-    "title": "Cobros"
+    "title": "Cobros",
+    "actions": {
+      "policies": "Nueva política",
+      "recurring": "Nueva programación recurrente",
+      "subscriptions": "Nueva suscripción",
+      "plans": "Nuevo plan",
+      "versions": "Nueva versión del plan",
+      "contracts": "Nuevo contrato",
+      "amendments": "Nueva modificación"
+    },
+    "forms": {
+      "planDetails": "Detalles del plan",
+      "billing": "Facturación",
+      "incomeAccount": "Cuenta de ingresos",
+      "interval": "Intervalo de facturación",
+      "intervalCount": "Número de intervalos",
+      "subscriptionDetails": "Detalles de la suscripción",
+      "priceOverride": "Precio personalizado",
+      "startOn": "Fecha de inicio",
+      "scheduleDetails": "Detalles de la programación",
+      "timing": "Calendario",
+      "versionDetails": "Detalles de la versión",
+      "componentNumber": "Componente {number}",
+      "contractTerm": "Plazo del contrato",
+      "renewal": "Renovación",
+      "amendmentDetails": "Detalles de la modificación"
+    }
   }
 }

@@ -5125,7 +5125,12 @@
       "sequence": "Ordre",
       "subjectTemplate": "Modèle de sujet",
       "bodyTemplate": "Modèle de message",
-      "escalate": "Escalader"
+      "escalate": "Escalader",
+      "details": "Détails de la politique",
+      "criteria": "Admissibilité et envoi",
+      "description": "Définissez les critères de recouvrement et la séquence de rappels.",
+      "reminderNumber": "Rappel {number}",
+      "addReminder": "Ajouter un rappel"
     }
   },
   "flows": {

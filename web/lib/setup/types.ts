@@ -98,6 +98,15 @@ export interface SetupField {
   /** Storage type for stringArray fields; defaults to jsonb. */
   arrayStorage?: 'jsonb' | 'text'
   required?: boolean
+  /** Native form presentation; these options do not change storage or validation. */
+  fullWidth?: boolean
+  booleanStyle?: 'switch'
+  /** Named structured rows keep their domain vocabulary in the shared editor. */
+  itemTitleKey?: string
+  itemTitleField?: string
+  /** On addition only, initialize this integer field above the existing row numbers. */
+  itemSequenceKey?: string
+  addLabelKey?: string
   /** Exact decimal scale declared by the native storage contract. */
   decimalScale?: number
   /** Inclusive resource/domain bounds for integer and percent fields. */
@@ -222,6 +231,10 @@ export interface SetupCommandDescriptor {
 }
 
 export interface SetupEntity {
+  /** Rehomed forms group the same registry fields into shared inspector sections. */
+  formSections?: { titleKey: string; descriptionKey?: string; fields: string[] }[]
+  formDescriptionKey?: string
+  drawerSize?: 'lg' | 'xl' | '2xl'
   /** Domain-owned aggregate endpoint. Generic row writes must refuse these
    * entities because child validation and audit evidence belong to the domain. */
   mutationPath?: string

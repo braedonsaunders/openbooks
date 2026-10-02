@@ -411,6 +411,32 @@
       "activeBadge": "有効",
       "minimumBalance": "最低残高（基準通貨）"
     },
-    "title": "債権回収"
+    "title": "債権回収",
+    "actions": {
+      "policies": "新しいポリシー",
+      "recurring": "新しい定期スケジュール",
+      "subscriptions": "新しいサブスクリプション",
+      "plans": "新しいプラン",
+      "versions": "新しいプランバージョン",
+      "contracts": "新しい契約",
+      "amendments": "新しい契約変更"
+    },
+    "forms": {
+      "planDetails": "プランの詳細",
+      "billing": "請求",
+      "incomeAccount": "収益勘定",
+      "interval": "請求間隔",
+      "intervalCount": "間隔の数",
+      "subscriptionDetails": "サブスクリプションの詳細",
+      "priceOverride": "価格の上書き",
+      "startOn": "開始日",
+      "scheduleDetails": "スケジュールの詳細",
+      "timing": "実行タイミング",
+      "versionDetails": "バージョンの詳細",
+      "componentNumber": "構成要素 {number}",
+      "contractTerm": "契約期間",
+      "renewal": "更新",
+      "amendmentDetails": "契約変更の詳細"
+    }
   }
 }

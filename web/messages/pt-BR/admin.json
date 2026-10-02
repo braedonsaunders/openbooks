@@ -5125,7 +5125,12 @@
       "sequence": "Sequência",
       "subjectTemplate": "Modelo de assunto",
       "bodyTemplate": "Modelo de mensagem",
-      "escalate": "Escalar"
+      "escalate": "Escalar",
+      "details": "Detalhes da política",
+      "criteria": "Elegibilidade e envio",
+      "description": "Defina os critérios de cobrança e a sequência de lembretes.",
+      "reminderNumber": "Lembrete {number}",
+      "addReminder": "Adicionar lembrete"
     }
   },
   "flows": {
