@@ -67,6 +67,7 @@ export * from "./hrm";
 export * from "./hrm-positions";
 export * from "./hrm-benefits";
 export * from "./benefits-programs";
+export * from "./benefit-catalog";
 export * from "./hrm-compensation";
 // HR-16 automations (0226) + action reasons and event verbs (0227).
 export * from "./hrm-automations";

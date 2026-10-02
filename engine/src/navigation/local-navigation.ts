@@ -60,7 +60,7 @@ export function applyLocalNavigationPreferences<T extends { href: string; label:
   return [...result, ...tabs.filter((tab) => !configured.has(tab.href))]
 }
 
-export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 'compensation' | 'rewards', LocalNavigationTab[]> = {
+export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 'compensation' | 'benefits', LocalNavigationTab[]> = {
   people: [
     { href: '/hrm/positions', iconKey: 'briefcase-business', ns: 'hrm', key: 'home.tabs.positions', permission: 'hrm.position.read' },
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
@@ -99,16 +99,11 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
     { href: '/hrm/compensation', iconKey: 'coins', ns: 'hrm', key: 'home.tabs.compensation', permission: 'hrm.compensation.read', feature: 'hrmCompensation', prefix: true },
     { href: '/hrm/compensation/equity', iconKey: 'scale', ns: 'hrm', key: 'equity.title', permission: 'hrm.compensation.read', feature: 'hrmCompensation' },
   ],
-  // Keep the stored workspace identity so existing navigation preferences
-  // survive the broader Benefits portfolio and its new destinations.
-  rewards: [
-    { href: '/hrm/benefits', iconKey: 'gift', ns: 'hrm', key: 'benefits.workspace.tabs.overview', permission: 'hrm.benefits.read' },
+  benefits: [
+    { href: '/hrm/benefits', iconKey: 'heart-handshake', ns: 'hrm', key: 'benefits.workspace.tabs.overview', permission: 'hrm.benefits.read' },
     { href: '/hrm/benefits?view=programs', iconKey: 'heart-handshake', menuKey: 'hrm-benefits-programs', ns: 'hrm', key: 'benefits.workspace.tabs.programs', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=enrolments', iconKey: 'user-check', menuKey: 'hrm-benefits-enrolments', ns: 'hrm', key: 'benefits.workspace.tabs.enrollments', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=rewards', iconKey: 'award', menuKey: 'hrm-benefits-rewards', ns: 'hrm', key: 'benefits.workspace.tabs.rewards', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=incentives', iconKey: 'sparkles', menuKey: 'hrm-benefits-incentives', ns: 'hrm', key: 'benefits.workspace.tabs.incentives', permission: 'hrm.benefits.read' },
-    { href: '/hrm/benefits?view=policies', iconKey: 'calendar', menuKey: 'hrm-benefits-policies', ns: 'hrm', key: 'benefitPolicies.title', permission: 'hrm.benefits.read', requiredFeatures: ['payroll'] },
-    { href: '/hrm/benefits?view=payouts', iconKey: 'banknote-arrow-up', menuKey: 'hrm-benefits-payouts', ns: 'hrm', key: 'benefits.workspace.tabs.payouts', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=employees', iconKey: 'user-check', menuKey: 'hrm-benefits-employees', ns: 'hrm', key: 'benefits.workspace.tabs.employees', permission: 'hrm.benefits.read' },
+    { href: '/hrm/benefits?view=delivery', iconKey: 'banknote-arrow-up', menuKey: 'hrm-benefits-delivery', ns: 'hrm', key: 'benefits.workspace.tabs.delivery', permission: 'hrm.benefits.read' },
   ],
 }
 
@@ -123,7 +118,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
   { id: 'crm-sales', label: 'Sales', feature: 'salesManagement', tabs: [
     ...['overview', 'representatives', 'teams', 'quotas', 'territories'].map((tab) => ({ href: tab==='overview'?'/crm/sales':`/crm/sales/${tab}`, ns: 'crm', key: `sales.tabs.${tab}`, permissionsAny: ['crm.setup.manage', 'crm.forecasts.read'], carry: ['periodStart', 'periodEnd'] })),
   ] },
-  ...Object.entries(HRM_LOCAL_NAVIGATION).map(([id, tabs]) => ({ id: `hrm-${id}`, label: ({ people: 'Employees', hiring: 'Hiring', timeOff: 'Time Off', talent: 'Talent', compensation: 'Compensation', rewards: 'Benefits' } as Record<string, string>)[id]!, feature: 'hrm', tabs })),
+  ...Object.entries(HRM_LOCAL_NAVIGATION).map(([id, tabs]) => ({ id: `hrm-${id}`, label: ({ people: 'Employees', hiring: 'Hiring', timeOff: 'Time Off', talent: 'Talent', compensation: 'Compensation', benefits: 'Benefits' } as Record<string, string>)[id]!, feature: 'hrm', tabs })),
   { id: 'time', label: 'Time', feature: 'timeTracking', tabs: [
     { href: '/timesheets', ns: 'timesheets', key: 'field.timesheetsTab', label: 'Timesheets', permission: 'time.read' },
     { href: '/time/clock', ns: 'timesheets', key: 'field.clockTab', label: 'Time Clock', permission: 'time.clock', feature: 'fieldTime' },

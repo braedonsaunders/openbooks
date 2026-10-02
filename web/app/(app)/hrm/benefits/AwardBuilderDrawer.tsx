@@ -44,26 +44,30 @@ export function AwardBuilderDrawer({
   closeHref,
   programOptions,
   employmentOptions,
+  initialProgramId = '',
 }: {
   closeHref: string
   programOptions: (PortfolioOption & { currency: string; fixedAmount: string | null })[]
   employmentOptions: PortfolioOption[]
   defaultCurrency?: string
+  initialProgramId?: string
 }) {
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const [draft, setDraft] = useState<AwardDraft>({
-    programId: '',
+  const initialProgram = programOptions.find(option => option.value === initialProgramId)
+  const [initialDraft] = useState<AwardDraft>({
+    programId: initialProgram?.value ?? '',
     employmentId: '',
     periodFrom: '',
     periodTo: '',
-    value: '',
-    currency: '',
+    value: initialProgram?.fixedAmount ?? '',
+    currency: initialProgram?.currency ?? '',
     reason: '',
     recipientNote: '',
     recordReference: '',
   })
+  const [draft, setDraft] = useState<AwardDraft>(initialDraft)
   const [errors, setErrors] = useState<AwardFieldErrors>({})
   const [saving, setSaving] = useState(false)
   const [sourceKey] = useState(() => `award:${crypto.randomUUID()}`)
@@ -74,15 +78,7 @@ export function AwardBuilderDrawer({
     router.refresh()
   }
 
-  const dirty = useMemo(
-    () =>
-      draft.programId !== '' ||
-      draft.employmentId !== '' ||
-      draft.periodFrom !== '' ||
-      draft.value.trim() !== '' ||
-      draft.reason.trim() !== '',
-    [draft],
-  )
+  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initialDraft), [draft, initialDraft])
   const closeGuard = useDirtyClose({
     dirty,
     busy: saving,
@@ -173,6 +169,7 @@ export function AwardBuilderDrawer({
           <Label htmlFor="award-builder-program">{t('portfolio.awardFields.program')}</Label>
           <Select
             id="award-builder-program"
+            disabled={initialProgram !== undefined}
             value={draft.programId}
             onChange={(e) => set('programId', e.target.value)}
             aria-invalid={errors.programId !== undefined}

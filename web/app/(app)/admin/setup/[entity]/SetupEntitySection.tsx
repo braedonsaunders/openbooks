@@ -152,8 +152,17 @@ export async function SetupEntitySection({
   drawerOnly = false,
   mutationBasePath,
   fixedFilter,
+  detailsLabel,
+  recordTitle,
+  additionalRecordTabs = [],
+  groupRuleTabs = false,
 }: {
   entity: SetupEntity;
+  /** Host program work areas share the persisted native record's drawer shell. */
+  additionalRecordTabs?: { key: string; label: string; content: React.ReactNode }[]
+  detailsLabel?: string
+  groupRuleTabs?: boolean
+  recordTitle?: string
   /** Server-side presentation slot; list querying and drawers remain shared. */
   renderColumn?: (
     column: SetupColumn,
@@ -532,7 +541,10 @@ export async function SetupEntitySection({
           closeHref={closeHref}
           fixedValues={parentScope?.fixedValues ?? (fixedFilter ? { [fixedFilter.fieldKey]: fixedFilter.value } : undefined)}
           stacked={stacked}
-          nestedTabs={childTabs}
+          nestedTabs={groupRuleTabs ? additionalRecordTabs : [...childTabs, ...additionalRecordTabs]}
+          ruleTabs={groupRuleTabs ? childTabs : undefined}
+          detailsLabel={detailsLabel}
+          recordTitle={recordTitle}
           mutationBasePath={mutationBasePath}
         />
       ) : null}

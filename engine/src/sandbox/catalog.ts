@@ -51,6 +51,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
+  // Recreated by native offering insert triggers; copying would duplicate identities.
+  "hrm_benefit_catalog",
   // Transfers and their immutable source evidence execute only in the original environment.
   "data_transfer_jobs",
   "data_transfer_chunks",

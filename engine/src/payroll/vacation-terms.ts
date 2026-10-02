@@ -12,6 +12,7 @@ export type VacationMethod = 'accrue' | 'pay_each_period' | 'paid_leave';
 export interface VacationTerms {
   id: string;
   employmentId: string;
+  planId: string;
   method: VacationMethod;
   percentFloor: string | null;
   annualDaysFloor: string | null;
@@ -24,13 +25,17 @@ export async function resolveVacationTerms(executor: Pick<typeof db, 'execute'>,
   if (!isIsoCalendarDate(onDate)) throw new PayrollError('Select a valid civil date to resolve vacation terms.');
   await lockPayrollServiceConfiguration(executor, orgId);
   const result = await executor.execute<Record<string, unknown>>(sql`
-    select id, employment_id, method, percent_floor::text, annual_days_floor::text, effective_from, effective_to, source_snapshot
+    select id, employment_id, plan_id, method, percent_floor::text, annual_days_floor::text, effective_from, effective_to, source_snapshot
     from payroll_vacation_terms where org_id = ${orgId} and employment_id = ${employmentId}
       and effective_from <= ${onDate}::date and (effective_to is null or effective_to >= ${onDate}::date)
   `);
   if (result.rows.length > 1) throw new PayrollError('Vacation terms overlap; close the conflicting effective windows before calculating payroll.');
   const row = result.rows[0];
-  return row ? { id: String(row.id), employmentId: String(row.employment_id), method: row.method as VacationMethod,
+  if (row) {
+    const plan = await executor.execute(sql`select id from entitlement_plans where org_id=${orgId} and id=${String(row.plan_id)}::uuid and system_key='vacation'`);
+    if (plan.rows.length !== 1) throw new PayrollError('Employee vacation terms have no governing vacation program; correct their program assignment in Benefits before calculating payroll.');
+  }
+  return row ? { id: String(row.id), employmentId: String(row.employment_id), planId: String(row.plan_id), method: row.method as VacationMethod,
     percentFloor: row.percent_floor == null ? null : String(row.percent_floor), annualDaysFloor: row.annual_days_floor == null ? null : String(row.annual_days_floor),
     effectiveFrom: String(row.effective_from).slice(0, 10), effectiveTo: row.effective_to == null ? null : String(row.effective_to).slice(0, 10), sourceSnapshot: row.source_snapshot as Record<string, unknown> } : null;
 }
@@ -43,9 +48,13 @@ export async function validateVacationTermConfiguration(executor: Pick<typeof db
     const result = await executor.execute<Record<string, unknown>>(sql`select * from payroll_vacation_terms where org_id = ${orgId} and id = ${rowId} for update`);
     if (result.rows.length !== 1) throw new PayrollError('Vacation terms were not found in this organization; reopen the employee vacation record.');
     const row = result.rows[0]!;
-    stored = { employmentId: row.employment_id, method: row.method, percentFloor: row.percent_floor, annualDaysFloor: row.annual_days_floor, effectiveFrom: row.effective_from, effectiveTo: row.effective_to, reason: row.reason };
+    stored = { employmentId: row.employment_id, planId: row.plan_id, method: row.method, percentFloor: row.percent_floor, annualDaysFloor: row.annual_days_floor, effectiveFrom: row.effective_from, effectiveTo: row.effective_to, reason: row.reason };
   }
   const values = { ...stored, ...body };
+  if (!isUuid(values.planId)) throw new PayrollError('Choose the governing vacation program in Benefits before saving employee vacation terms.');
+  const plan = await executor.execute(sql`select id from entitlement_plans where org_id=${orgId} and id=${String(values.planId)}::uuid and system_key='vacation'`);
+  if (plan.rows.length !== 1) throw new PayrollError('Select this organization\'s vacation program for employee vacation terms.');
+  if (stored.planId != null && values.planId !== stored.planId) throw new PayrollError('Employee vacation program ownership is immutable; create effective-dated successor terms.');
   if (!['accrue','pay_each_period','paid_leave'].includes(String(values.method))) throw new PayrollError('Choose accrue, pay each period, or paid leave for the vacation method.');
   for (const key of ['percentFloor','annualDaysFloor']) {
     if (values[key] != null && values[key] !== '') {

@@ -186,7 +186,7 @@ export function EntitlementOpeningsView({
             'No entitlement plans are set up, so there is no bank to carry a balance into.',
           )}{' '}
           <Link
-            href={'/hrm/benefits?view=policies&policy=entitlements' as never}
+            href={'/hrm/benefits?view=programs&type=time_off' as never}
             className="underline"
           >
             {text('configurePlans', 'Set up entitlement plans')}

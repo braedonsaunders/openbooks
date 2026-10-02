@@ -1457,7 +1457,8 @@
       "active": "有效",
       "ended": "已结束",
       "cancelled": "已取消",
-      "inactive": "未启用"
+      "inactive": "未启用",
+      "assigned": "已分配"
     },
     "workspace": {
       "tabs": {
@@ -1466,7 +1467,9 @@
         "enrollments": "参保",
         "rewards": "奖励",
         "incentives": "激励",
-        "payouts": "发放"
+        "payouts": "发放",
+        "employees": "员工福利",
+        "delivery": "履行"
       }
     },
     "newEnrollment": "新增加入",
@@ -2715,8 +2718,8 @@
         "description": "养老金与退休储蓄计划。"
       },
       "allowance": {
-        "title": "津贴与开支",
-        "description": "通过工资发放的定期开支津贴。"
+        "title": "津贴",
+        "description": "按明确的金额、控制条件和交付方式向员工发放津贴。"
       },
       "reward": {
         "title": "奖励与表彰",
@@ -2729,6 +2732,11 @@
       "custom": {
         "title": "自定义计划",
         "description": "公司发放的其他所有福利。"
+      },
+      "time_off": {
+        "title": "休假与时间余额",
+        "description": "定义休假权益、累积、限额及薪资履行。",
+        "action": "创建休假计划"
       }
     },
     "families": {
@@ -2928,7 +2936,42 @@
       "typeTitle": "新建{type}计划",
       "chooseCurrency": "选择币种",
       "currencyHint": "币种遵循所选雇主和公司功能设置。薪资按计划币种处理发放。",
-      "currencyUnavailable": "请选择所选雇主可用的币种。"
+      "currencyUnavailable": "请选择所选雇主可用的币种。",
+      "manualGrantHint": "由授权用户记录单次发放。创建计划不会安排自动付款。",
+      "familySteps": {
+        "reward": {
+          "offer": "计划",
+          "value": "奖励金额",
+          "timing": "可用期间",
+          "controls": "预算与审批",
+          "delivery": "履行",
+          "review": "复核"
+        },
+        "allowance": {
+          "offer": "计划",
+          "value": "津贴金额",
+          "timing": "可用期间",
+          "controls": "预算与审批",
+          "delivery": "履行",
+          "review": "复核"
+        },
+        "incentive": {
+          "offer": "计划",
+          "value": "绩效指标",
+          "timing": "计量期间",
+          "controls": "分配与审批",
+          "delivery": "履行",
+          "review": "复核"
+        },
+        "custom": {
+          "offer": "计划",
+          "value": "福利价值",
+          "timing": "可用期间",
+          "controls": "预算与审批",
+          "delivery": "履行",
+          "review": "复核"
+        }
+      }
     },
     "awardBuilderTitle": "新增奖励",
     "awardFields": {
@@ -3003,11 +3046,11 @@
       "scientific": "{field}：请完整输入 {value} 的十进制形式，不使用科学计数法。",
       "not-a-number": "{field}：请输入可读的十进制金额。"
     },
-    "description": "福利、表彰与激励：明确资格、受控审批和工资发放。",
+    "description": "雇主计划、员工参与及受控履行。",
     "home": {
-      "heroHint": "雇主定义的计划、金额规则和生效日期。",
+      "heroHint": "打开计划以管理规则、参与员工、活动和薪资关联。",
       "directoryTitle": "福利管理",
-      "payrollHint": "所有已记录奖励 · 各币种分别汇总"
+      "payrollHint": "缴款选择生成薪资扣款及雇主缴款。向提供方汇款与员工支付分别管理。"
     },
     "newReward": "新增奖励",
     "newIncentive": "新增激励",
@@ -3038,19 +3081,21 @@
     "awardCurrencyHint": "继承所选计划的币种；薪资不会转换奖励币种。",
     "rewardCreateHint": "按有效计划的金额、币种和交付规则向员工授予福利。在计划中配置方案。",
     "programPurpose": {
-      "reward": "在此定义表彰规则，然后在奖励中向员工授予奖励。可发放的项目进入发放列表。",
-      "allowance": "定义固定津贴及发放周期。员工授予遵循本计划规则；这不会创建支出钱包或报销费用。",
-      "incentive": "定义绩效如何转化为员工发放金额。在激励中模拟和结算；获准结果进入发放列表。",
-      "custom": "定义由雇主提供、金额和交付规则明确的授予方案。在奖励中记录，在发放中交付。"
+      "reward": "定义表彰规则、参与员工与预算。从计划发放奖励并跟踪履行。",
+      "allowance": "定义津贴金额与参与员工。在计划中记录单次发放并跟踪履行。",
+      "incentive": "定义绩效指标与分配规则。在计划内模拟和结算期间，再跟踪履行结果。",
+      "custom": "定义福利、参与和发放规则。在计划内记录员工发放并跟踪履行。"
     },
     "scopeHint": "福利定义雇主提供的方案和员工授予。薪资管理工资、税款、法定缴款和工资核算。",
     "views": {
-      "overview": "连接薪资的雇主福利与员工授予。",
-      "programs": "在此定义各类方案。员工加入保障计划；奖励与激励结果遵循各自计划规则。",
+      "overview": "雇主计划、员工参与及受控履行。",
+      "programs": "打开计划以管理规则、参与员工、活动和薪资关联。",
       "enrolments": "为员工加入保障与储蓄计划。通过参保窗口管理开放期间。",
       "rewards": "按有效计划记录员工表彰和福利授予。在计划中配置可重复使用的方案。",
       "incentives": "管理绩效计划。打开记录以模拟、计算并结算员工发放。",
-      "payouts": "将可发放项目送入薪资并跟踪交付历史。在奖励中创建，在激励中结算。"
+      "payouts": "将可发放项目送入薪资并跟踪交付历史。在奖励中创建，在激励中结算。",
+      "employees": "查看员工计划、保障、选择及有效条件。薪资处理按计划规则执行。",
+      "delivery": "处理已就绪奖励和已结算激励。分别跟踪薪资处理与外部履行。"
     },
     "configureApprovals": "配置审批"
   },
@@ -3283,5 +3328,94 @@
     "coverage": "保障与储蓄",
     "balances": "余额",
     "empty": "尚未记录员工政策。"
+  },
+  "programIdentity": {
+    "types": {
+      "health": "健康与保险",
+      "retirement": "退休与储蓄",
+      "allowance": "津贴",
+      "reward": "表彰",
+      "incentive": "激励",
+      "custom": "自定义福利",
+      "time_off": "休假与时间余额",
+      "recovery": "保费追偿"
+    }
+  },
+  "programWorkspace": {
+    "rules": "规则",
+    "participants": "参与员工",
+    "activity": "活动",
+    "calculations": "计算",
+    "delivery": "履行",
+    "giveReward": "发放奖励",
+    "history": "历史",
+    "configureRules": "配置规则",
+    "activityEmpty": "奖励及已结算激励在此显示员工、期间和生命周期状态。",
+    "deliveryHint": "福利定义员工待遇。薪资计算扣款、缴款和应税金额并进行记账。薪资处理完成不代表款项已支付。",
+    "planDeliveryHint": "缴款选择生成薪资扣款及雇主缴款。向提供方汇款与员工支付分别管理。",
+    "entitlementDeliveryHint": "薪资与休假服务记录权益变动。余额由不可变台账计算。",
+    "participantsEmpty": "此计划尚未分配员工。",
+    "entitlementParticipantsHint": "休假分配属于此计划。认可工龄仍是雇佣记录共用的基准。",
+    "recordDescription": "在同一记录管理规则、员工参与和履行。",
+    "participantsHint": "员工选择及有效保障属于此计划。打开分配记录进行查看或更改。",
+    "assignEmployee": "分配员工",
+    "assignment": "分配记录",
+    "openAssignment": "打开分配记录",
+    "moreParticipants": "还有更多参与员工。请在员工福利中搜索完整分配列表。",
+    "moreActivity": "还有更多活动。请在福利报表查看完整历史。",
+    "processedPayroll": "已在薪资处理",
+    "openPayRun": "打开薪资批次",
+    "date": "日期",
+    "payRun": "薪资批次",
+    "recovery": "保费追偿",
+    "recoveryHint": "这些余额按计划缴款规则记录未缴保费及后续薪资追偿。",
+    "ready": "待执行",
+    "units": {
+      "money": "货币单位",
+      "hours": "小时"
+    },
+    "queuedPayroll": "等待薪资处理",
+    "participantStatus": {
+      "assigned": "已分配",
+      "percent_on_pay": "通过工资",
+      "banked": "休假与时间余额"
+    },
+    "activityStatus": {
+      "approved": "待执行",
+      "queued": "等待薪资处理",
+      "delivered": "已发放",
+      "processed": "已处理",
+      "posted": "已过账",
+      "voided": "已作废",
+      "accrual": "累积",
+      "payout": "支付",
+      "adjustment": "调整"
+    },
+    "createGrant": "记录授予"
+  },
+  "employeeBenefits": {
+    "title": "员工福利",
+    "employee": "员工",
+    "program": "计划",
+    "type": "类型",
+    "effective": "生效日期",
+    "status": "状态",
+    "emptyTitle": "暂无员工福利分配",
+    "programs": "计划",
+    "service": "认可工龄",
+    "balances": "余额",
+    "employeeRecord": "员工记录",
+    "programRecord": "打开计划",
+    "enrolment": "保障参保",
+    "membership": "计划参与",
+    "vacationTerms": "休假条件分配",
+    "assignedByPolicy": "按规则分配",
+    "newService": "添加认可工龄",
+    "manageFromProgram": "在计划中管理参与",
+    "inactive": "未启用",
+    "openAssignment": "打开分配记录",
+    "description": "查看员工计划、保障、选择及有效条件。薪资处理按计划规则执行。",
+    "emptyDescription": "从计划分配福利：办理参保、添加参与员工或记录休假条件。",
+    "policyHint": "余额按适用的计划规则计算，不属于保障参保。"
   }
 }

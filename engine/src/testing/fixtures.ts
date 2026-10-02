@@ -125,9 +125,11 @@ export async function seedVacationTerms(orgId: string, employmentId: string, act
   percentFloor: string | null = "4", method: VacationFixture["method"] = "accrue",
   executor: Pick<typeof db, "execute"> = db): Promise<void> {
   await assertFixtureDatabase();
+  const plan = (await executor.execute<{ id: string }>(sql`select id from entitlement_plans where org_id=${orgId} and system_key='vacation'`)).rows[0];
+  if (!plan) throw new Error('Vacation-term fixtures require an explicitly configured native vacation program.');
   await executor.execute(sql`
-    insert into payroll_vacation_terms (org_id, employment_id, method, percent_floor, effective_from, reason, source_snapshot, created_by, updated_by)
-    values (${orgId}, ${employmentId}, ${method}, ${percentFloor}, '0001-01-01', 'Declared employee vacation terms', '{"source":"fixture"}'::jsonb, ${actorId}, ${actorId})
+    insert into payroll_vacation_terms (org_id, employment_id, plan_id, method, percent_floor, effective_from, reason, source_snapshot, created_by, updated_by)
+    values (${orgId}, ${employmentId}, ${plan.id}, ${method}, ${percentFloor}, '0001-01-01', 'Declared employee vacation terms', '{"source":"fixture"}'::jsonb, ${actorId}, ${actorId})
   `);
 }
 

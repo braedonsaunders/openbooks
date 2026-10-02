@@ -7,12 +7,16 @@ import { useViewerFormat } from '@/lib/viewer-format'
 import { mergeHref } from '@/lib/list-params'
 import { isReportOverlayParam } from '@/lib/report-overlay'
 import { OverlayLink } from './overlay-link'
+import { paginationWindow } from '../lib/pagination-window'
 import { useReportOverlayOptional } from './navigation-provider'
 
 export function Pagination({
   basePath,
   currentParams,
   total,
+  hasMore = false,
+  loadedCount,
+  showRange = true,
   page,
   perPage,
   pageParamKey = 'page',
@@ -21,7 +25,12 @@ export function Pagination({
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
-  total: number
+  total: number | null
+  /** A bounded reader may know only whether another page exists. */
+  hasMore?: boolean
+  loadedCount?: number
+  /** Filtered subsets of a source page retain its cursor without asserting a contiguous range. */
+  showRange?: boolean
   page: number
   perPage: number
   /** URL param that carries the page number. Sub-tables pass a prefixed key. */
@@ -35,10 +44,7 @@ export function Pagination({
   const tCommon = useTranslations('common')
   const overlay = useReportOverlayOptional()
   const overlayNav = Boolean(overlay && isReportOverlayParam(pageParamKey))
-  const pageCount = Math.max(1, Math.ceil(total / perPage))
-  const isOutOfRange = total > 0 && page > pageCount
-  const from = total === 0 ? 0 : (page - 1) * perPage + 1
-  const to = Math.min(total, page * perPage)
+  const {unknownTotal,visibleCount,pageCount,from,to,isOutOfRange} = paginationWindow({total,page,perPage,loadedCount,hasMore})
 
   const prevHref = mergeHref(basePath, currentParams, {
     [pageParamKey]: page > 1 ? page - 1 : 1,
@@ -55,12 +61,12 @@ export function Pagination({
       <span>
         {isOutOfRange
           ? t('outOfRange', { page: number(page) })
-          : total === 0
+          : visibleCount === 0
             ? tCommon('feedback.noResults')
-            : t.rich('showing', {
+            : unknownTotal ? showRange ? t('showingLoaded', {from:number(from),to:number(to)}) : t('pageOnly',{page}) : t.rich('showing', {
                 from: number(from),
                 to: number(to),
-                total: number(total),
+                total: number(total!),
                 strong: (chunks) => (
                   <strong className="font-medium text-slate-900 dark:text-slate-100">
                     {chunks}
@@ -78,14 +84,14 @@ export function Pagination({
           <ChevronLeft size={14} />
           {t('goToPage', { page: number(pageCount) })}
         </PageButton>
-      ) : pageCount > 1 ? (
+      ) : pageCount > 1 || unknownTotal && hasMore ? (
         <div className="flex items-center gap-1">
           <PageButton href={prevHref} onClick={onPageChange ? () => onPageChange(Math.max(1, page - 1)) : undefined} overlayNav={overlayNav} disabled={page <= 1} aria-label={t('previousPageAria')}>
             <ChevronLeft size={14} />
             {!compact && t('prev')}
           </PageButton>
           {!compact && <span className="px-2 text-slate-500 dark:text-slate-400">
-            {t('pageOf', { page, pages: pageCount })}
+            {unknownTotal ? t('pageOnly', {page}) : t('pageOf', { page, pages: pageCount })}
           </span>}
           <PageButton href={nextHref} onClick={onPageChange ? () => onPageChange(Math.min(pageCount, page + 1)) : undefined} overlayNav={overlayNav} disabled={page >= pageCount} aria-label={t('nextPageAria')}>
             {!compact && tCommon('actions.next')}

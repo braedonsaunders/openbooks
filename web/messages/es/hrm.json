@@ -1457,7 +1457,8 @@
       "active": "Activa",
       "ended": "Finalizada",
       "cancelled": "Cancelada",
-      "inactive": "Inactivo"
+      "inactive": "Inactivo",
+      "assigned": "Asignado"
     },
     "workspace": {
       "tabs": {
@@ -1466,7 +1467,9 @@
         "enrollments": "Inscripciones",
         "rewards": "Recompensas",
         "incentives": "Incentivos",
-        "payouts": "Pagos"
+        "payouts": "Pagos",
+        "employees": "Beneficios de empleados",
+        "delivery": "Entrega"
       }
     },
     "newEnrollment": "Nueva inscripción",
@@ -2715,8 +2718,8 @@
         "description": "Planes de pensiones y ahorro para la jubilación."
       },
       "allowance": {
-        "title": "Asignaciones y gastos",
-        "description": "Asignaciones periódicas de gasto pagadas por nómina."
+        "title": "Asignaciones",
+        "description": "Conceda asignaciones a empleados con importes, controles e instrucciones de entrega definidos."
       },
       "reward": {
         "title": "Recompensas y reconocimiento",
@@ -2729,6 +2732,11 @@
       "custom": {
         "title": "Programas personalizados",
         "description": "Todo lo demás que otorga la organización."
+      },
+      "time_off": {
+        "title": "Vacaciones y tiempo libre",
+        "description": "Defina derechos de vacaciones, acumulación, límites y entrega mediante nómina.",
+        "action": "Crear programa de tiempo libre"
       }
     },
     "families": {
@@ -2928,7 +2936,42 @@
       "typeTitle": "Nuevoa: {type}",
       "chooseCurrency": "Elegir moneda",
       "currencyHint": "Las monedas dependen del empleador seleccionado y las funciones de la empresa. Nómina procesa las concesiones en la moneda del programa.",
-      "currencyUnavailable": "Elija una moneda habilitada para el empleador seleccionado."
+      "currencyUnavailable": "Elija una moneda habilitada para el empleador seleccionado.",
+      "manualGrantHint": "Un usuario autorizado registra cada concesión. Crear el programa no programa pagos automáticos.",
+      "familySteps": {
+        "reward": {
+          "offer": "Programa",
+          "value": "Valor de recompensa",
+          "timing": "Disponibilidad",
+          "controls": "Presupuesto y aprobaciones",
+          "delivery": "Entrega",
+          "review": "Revisión"
+        },
+        "allowance": {
+          "offer": "Programa",
+          "value": "Importe de asignación",
+          "timing": "Disponibilidad",
+          "controls": "Presupuesto y aprobaciones",
+          "delivery": "Entrega",
+          "review": "Revisión"
+        },
+        "incentive": {
+          "offer": "Programa",
+          "value": "Medición",
+          "timing": "Períodos de medición",
+          "controls": "Reparto y aprobaciones",
+          "delivery": "Entrega",
+          "review": "Revisión"
+        },
+        "custom": {
+          "offer": "Programa",
+          "value": "Valor del beneficio",
+          "timing": "Disponibilidad",
+          "controls": "Presupuesto y aprobaciones",
+          "delivery": "Entrega",
+          "review": "Revisión"
+        }
+      }
     },
     "awardBuilderTitle": "Nueva recompensa",
     "awardFields": {
@@ -3003,11 +3046,11 @@
       "scientific": "{field}: escriba {value} completo, sin notación científica.",
       "not-a-number": "{field}: introduzca un importe decimal legible."
     },
-    "description": "Beneficios, reconocimiento e incentivos con elegibilidad clara, aprobaciones controladas y pago por nómina.",
+    "description": "Programas empresariales, participación de empleados y entrega controlada.",
     "home": {
-      "heroHint": "Programas del empleador, reglas de valoración y fechas de vigencia.",
+      "heroHint": "Abra un programa para gestionar reglas, participantes, actividad y conexión con nómina.",
       "directoryTitle": "Gestión de beneficios",
-      "payrollHint": "Todas las recompensas registradas · monedas separadas"
+      "payrollHint": "Las elecciones generan deducciones y aportaciones empresariales. Las remesas al proveedor se gestionan aparte del pago al empleado."
     },
     "newReward": "Nueva recompensa",
     "newIncentive": "Nuevo incentivo",
@@ -3038,19 +3081,21 @@
     "awardCurrencyHint": "Heredada del programa seleccionado; nómina no convierte la moneda de las recompensas.",
     "rewardCreateHint": "Conceda un beneficio usando el valor, la moneda y las reglas de un programa activo. Configure la oferta en Programas.",
     "programPurpose": {
-      "reward": "Defina la política aquí y conceda recompensas en Recompensas. Las concesiones listas aparecen en Pagos.",
-      "allowance": "Defina una asignación fija y su calendario. Las concesiones siguen estas reglas; no se crea una cartera ni se reembolsan gastos.",
-      "incentive": "Defina cómo el rendimiento genera pagos. Simule y liquide en Incentivos; los resultados aprobados aparecen en Pagos.",
-      "custom": "Defina una concesión patronal con reglas explícitas. Regístrela en Recompensas y entréguela en Pagos."
+      "reward": "Defina reglas, participantes y presupuesto de reconocimiento. Otorgue recompensas desde el programa y siga su entrega.",
+      "allowance": "Defina importes y participantes. Registre asignaciones individuales en el programa y siga su entrega.",
+      "incentive": "Defina mediciones y reglas de reparto. Simule y liquide períodos en el programa y siga los resultados.",
+      "custom": "Defina el beneficio, la participación y las reglas. Registre concesiones en el programa y siga su entrega."
     },
     "scopeHint": "Beneficios define ofertas y concesiones patronales. Nómina gestiona salario, impuestos, contribuciones legales y ciclos de pago.",
     "views": {
-      "overview": "Beneficios y concesiones patronales conectados con nómina.",
-      "programs": "Defina cada oferta aquí. Los empleados se inscriben en planes; recompensas e incentivos siguen sus programas.",
+      "overview": "Programas empresariales, participación de empleados y entrega controlada.",
+      "programs": "Abra un programa para gestionar reglas, participantes, actividad y conexión con nómina.",
       "enrolments": "Inscriba empleados en planes de cobertura y ahorro. Gestione los periodos mediante ventanas de inscripción.",
       "rewards": "Registre concesiones de programas activos. Configure ofertas reutilizables en Programas.",
       "incentives": "Gestione programas de rendimiento. Abra un registro para simular, calcular y liquidar pagos.",
-      "payouts": "Envíe concesiones listas a nómina y siga su historial. Cree en Recompensas y liquide en Incentivos."
+      "payouts": "Envíe concesiones listas a nómina y siga su historial. Cree en Recompensas y liquide en Incentivos.",
+      "employees": "Consulte programas, coberturas, elecciones y condiciones vigentes de cada empleado. La nómina aplica las reglas del programa.",
+      "delivery": "Libere recompensas e incentivos listos. Siga por separado el procesamiento de nómina y la entrega externa."
     },
     "configureApprovals": "Configurar aprobaciones"
   },
@@ -3283,5 +3328,94 @@
     "coverage": "Cobertura y ahorro",
     "balances": "Saldos",
     "empty": "No hay políticas de empleados registradas."
+  },
+  "programIdentity": {
+    "types": {
+      "health": "Salud y seguros",
+      "retirement": "Jubilación y ahorro",
+      "allowance": "Asignaciones",
+      "reward": "Reconocimiento",
+      "incentive": "Incentivos",
+      "custom": "Beneficio personalizado",
+      "time_off": "Vacaciones y tiempo libre",
+      "recovery": "Recuperación de primas"
+    }
+  },
+  "programWorkspace": {
+    "rules": "Reglas",
+    "participants": "Participantes",
+    "activity": "Actividad",
+    "calculations": "Cálculos",
+    "delivery": "Entrega",
+    "giveReward": "Otorgar recompensa",
+    "history": "Historial",
+    "configureRules": "Configurar reglas",
+    "activityEmpty": "Las recompensas e incentivos liquidados aparecen con empleado, período y estado.",
+    "deliveryHint": "Beneficios define la oferta al empleado. Nómina calcula deducciones, aportaciones e importes imponibles y contabiliza el ciclo. El procesamiento no confirma el pago.",
+    "planDeliveryHint": "Las elecciones generan deducciones y aportaciones empresariales. Las remesas al proveedor se gestionan aparte del pago al empleado.",
+    "entitlementDeliveryHint": "Nómina y ausencias registran movimientos de derechos. Los saldos proceden del libro inmutable.",
+    "participantsEmpty": "No hay empleados asignados a este programa.",
+    "entitlementParticipantsHint": "Las asignaciones de vacaciones pertenecen a este programa. La antigüedad reconocida sigue siendo una base común del empleo.",
+    "recordDescription": "Reglas, participación y entrega en un único registro.",
+    "participantsHint": "Las elecciones y coberturas vigentes pertenecen a este programa. Abra una asignación para revisarla o cambiarla.",
+    "assignEmployee": "Asignar empleado",
+    "assignment": "Asignación",
+    "openAssignment": "Abrir asignación",
+    "moreParticipants": "Hay más participantes. Busque la lista completa en Beneficios de empleados.",
+    "moreActivity": "Hay más actividad. Consulte los informes para ver el historial completo.",
+    "processedPayroll": "Procesado en nómina",
+    "openPayRun": "Abrir ciclo de nómina",
+    "date": "Fecha",
+    "payRun": "Ciclo de nómina",
+    "recovery": "Recuperación de primas",
+    "recoveryHint": "Estos bancos registran primas pendientes y su recuperación posterior según las reglas de aportación del programa.",
+    "ready": "Listo para liberar",
+    "units": {
+      "money": "unidades monetarias",
+      "hours": "horas"
+    },
+    "queuedPayroll": "En cola de nómina",
+    "participantStatus": {
+      "assigned": "Asignado",
+      "percent_on_pay": "Por nómina",
+      "banked": "Vacaciones y tiempo libre"
+    },
+    "activityStatus": {
+      "approved": "Listo para liberar",
+      "queued": "En cola de nómina",
+      "delivered": "Entregado",
+      "processed": "Procesado",
+      "posted": "Contabilizado",
+      "voided": "Anulado",
+      "accrual": "Acumulación",
+      "payout": "Pago",
+      "adjustment": "Ajuste"
+    },
+    "createGrant": "Registrar concesión"
+  },
+  "employeeBenefits": {
+    "title": "Beneficios de empleados",
+    "employee": "Empleado",
+    "program": "Programa",
+    "type": "Tipo",
+    "effective": "Fechas de vigencia",
+    "status": "Estado",
+    "emptyTitle": "Sin beneficios asignados",
+    "programs": "Programas",
+    "service": "Antigüedad reconocida",
+    "balances": "Saldos",
+    "employeeRecord": "Ficha del empleado",
+    "programRecord": "Abrir programa",
+    "enrolment": "Inscripción de cobertura",
+    "membership": "Participación en el programa",
+    "vacationTerms": "Asignación de vacaciones",
+    "assignedByPolicy": "Asignado según las reglas",
+    "newService": "Añadir antigüedad reconocida",
+    "manageFromProgram": "Gestionar participación en el programa",
+    "inactive": "Inactivo",
+    "openAssignment": "Abrir asignación",
+    "description": "Consulte programas, coberturas, elecciones y condiciones vigentes de cada empleado. La nómina aplica las reglas del programa.",
+    "emptyDescription": "Asigne beneficios desde un programa: inscriba en cobertura, añada participantes o registre condiciones de vacaciones.",
+    "policyHint": "Los saldos siguen las reglas aplicables; no son inscripciones de cobertura."
   }
 }

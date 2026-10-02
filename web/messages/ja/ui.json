@@ -9,7 +9,9 @@
     "prev": "前へ",
     "pageOf": "{pages} ページ中 {page} ページ",
     "selectAllMatching": "一致するすべての行を選択",
-    "perPage": "表示件数"
+    "perPage": "表示件数",
+    "pageOnly": "ページ {page}",
+    "showingLoaded": "{from}～{to} を表示"
   },
   "search": {
     "placeholder": "検索…",

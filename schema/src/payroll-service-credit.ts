@@ -28,6 +28,7 @@ export const entitlementServiceTiers = pgTable('entitlement_service_tiers', {
 /** Employee vacation elections are independent of tax and bank-rail configuration. */
 export const payrollVacationTerms = pgTable('payroll_vacation_terms', {
   id: id(), orgId: orgRef(), employmentId: uuid('employment_id').notNull(),
+  planId: uuid('plan_id').notNull(),
   method: text('method', { enum: ['accrue', 'pay_each_period', 'paid_leave'] }).notNull(),
   percentFloor: numeric('percent_floor', { precision: 7, scale: 4 }), annualDaysFloor: numeric('annual_days_floor', { precision: 12, scale: 4 }),
   effectiveFrom: date('effective_from').notNull(), effectiveTo: date('effective_to'), reason: text('reason').notNull(),

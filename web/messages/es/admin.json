@@ -5190,14 +5190,14 @@
     "benefitBuilder": {
       "offer": "Programa",
       "eligibility": "Elegibilidad y fechas",
-      "eligibilityHint": "Defina fechas, espera y aprobaciones. Después añada aportaciones y límites en el registro.",
+      "eligibilityHint": "Configure esperas, vigencia y aprobaciones opcionales. Las aportaciones y elecciones pertenecen al programa.",
       "delivery": "Conexión con nómina",
       "deliveryHint": "Vincule deducciones y aportaciones patronales. Nómina controla el tratamiento fiscal y procesa los importes elegidos.",
       "review": "Revisar",
       "coverageType": "Tipo de cobertura",
       "health": {
         "title": "Programa de salud y seguros",
-        "offer": "Nombre la cobertura, la aseguradora y el empleador responsable. Los empleados eligen cobertura en Inscripciones.",
+        "offer": "Nombre cobertura, aseguradora y empleador responsable. Gestione grupos de cobertura, primas e inscripciones dentro del programa.",
         "costs": "Primas y cobertura",
         "costHint": "Defina las primas de cada parte y los meses parciales. Añada niveles individuales o familiares después de crear.",
         "provider": "Aseguradora",
@@ -5212,7 +5212,7 @@
       },
       "retirement": {
         "title": "Programa de jubilación y ahorro",
-        "offer": "Nombre el plan, el proveedor y el empleador responsable. Los empleados participan mediante Inscripciones.",
+        "offer": "Nombre la oferta de jubilación o ahorro, proveedor y empleador. Gestione aportaciones, reglas de igualación y elecciones dentro del programa.",
         "costs": "Aportaciones al ahorro",
         "costHint": "Elija aportaciones fijas o un porcentaje del salario por parte. Los porcentajes son tasas de aportación, no una fórmula de aportación equivalente.",
         "provider": "Proveedor de pensiones o ahorro",
@@ -5223,6 +5223,24 @@
         "contribution": "Aportaciones",
         "rate": "Importe o tasa de aportación",
         "contributionSingular": "Aportación"
+      },
+      "timeOff": {
+        "title": "Programa de tiempo libre",
+        "description": "Defina vacaciones u otro banco de tiempo, sus reglas de acumulación y la conexión con nómina.",
+        "offer": "Nombre la oferta y elija unidad y finalidad. Las condiciones de vacaciones se gestionan en este programa.",
+        "accrual": "Acumulación y límites",
+        "accrualHint": "Elija cómo crece el saldo. Añada después límites fechados y tramos de antigüedad.",
+        "deliveryHint": "Nómina registra movimientos y pagos mediante sus conceptos y cuentas contables.",
+        "purpose": "Finalidad",
+        "purposeHint": "Vacaciones utiliza condiciones individuales. Los festivos alternativos usan el procesamiento legal. Los demás bancos siguen sus reglas declaradas.",
+        "other": "Otro banco de tiempo",
+        "vacation": "Vacaciones",
+        "alternateHoliday": "Festivo alternativo"
+      },
+      "governingProgram": "Programa aplicable",
+      "vacationAssignmentHint": "Elija el programa que rige estas condiciones de vacaciones. La antigüedad se registra una sola vez en el empleo.",
+      "recovery": {
+        "title": "Recuperación de primas"
       }
     },
     "benefitContributions": {

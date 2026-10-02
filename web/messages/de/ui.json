@@ -9,7 +9,9 @@
     "prev": "Zurück",
     "pageOf": "Seite {page} von {pages}",
     "selectAllMatching": "Alle passenden Zeilen auswählen",
-    "perPage": "Zeilen pro Seite"
+    "perPage": "Zeilen pro Seite",
+    "pageOnly": "Seite {page}",
+    "showingLoaded": "Anzeige {from}–{to}"
   },
   "search": {
     "placeholder": "Suchen…",

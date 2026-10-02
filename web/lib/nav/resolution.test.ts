@@ -136,10 +136,10 @@ test('Talent exposes two workspaces while detailed views remain in authorized lo
   ])
   const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0])
   const recruiting = local.groups.find((group) => group.some((tab) => tab.href === '/hrm/recruiting'))!
-  assert.deepEqual(recruiting.map((tab) => tab.href), ['/hrm/recruiting', '/hrm/positions', ...['interviews', 'offers', 'postings', 'pools'].map((tab) => `/hrm/recruiting?tab=${tab}`)])
+  assert.deepEqual(recruiting.map((tab) => tab.href), ['/hrm/recruiting', '/hrm/recruiting?tab=openings', ...['interviews', 'offers', 'postings', 'pools'].map((tab) => `/hrm/recruiting?tab=${tab}`)])
   const performance = local.groups.find((group) => group.some((tab) => tab.href === '/hrm/performance'))!
-  assert.deepEqual(performance.map((tab) => tab.href), ['/hrm/performance', '/hrm/performance/templates', '/hrm/performance?tab=calibration', '/hrm/performance?tab=talent', '/hrm/performance?tab=succession', '/hrm/performance?tab=retention', '/hrm/surveys'])
-  assert.equal(performance[0]!.label, 'Cycles')
+  assert.deepEqual(performance.map((tab) => tab.href), ['/hrm/performance', '/hrm/performance?tab=cycles', '/hrm/performance/templates', '/hrm/performance/goals', '/hrm/performance/conversations', '/hrm/performance?tab=calibration', '/hrm/performance?tab=talent', '/hrm/performance?tab=succession', '/hrm/performance?tab=retention', '/hrm/surveys'])
+  assert.equal(performance[0]!.label, 'Reviews')
 })
 
 test('explicit Talent shortcuts survive compact defaults and still enforce access', async () => {
@@ -168,24 +168,24 @@ test('independent Talent destinations remain discoverable when their parent work
   features.hrmPerformance = false
   let groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
   let talent = groups.flatMap((group) => group.items).filter((item) => item.subgroup === 'Talent')
-  assert.deepEqual(talent.map((item) => item.href), ['/hrm/positions', '/hrm/surveys'])
+  assert.deepEqual(talent.map((item) => item.href), ['/hrm/surveys']); assert.ok(groups.flatMap(group=>group.items).some(item=>item.href==='/hrm/positions'),'Workforce positions remain available without Talent features')
   reset()
   const permissions = new Set(['hrm.position.read'])
   groups = await resolveNav('company-one', (key) => !key || permissionSetCovers(permissions, key), [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
   talent = groups.flatMap((group) => group.items).filter((item) => item.subgroup === 'Talent')
-  assert.ok(talent.some((item) => item.href === '/hrm/positions'))
+  assert.ok(groups.flatMap(group=>group.items).some(item=>item.href==='/hrm/positions')); assert.ok(!talent.some(item=>item.href==='/hrm/positions'),'Positions belongs to Workforce')
   assert.ok(!talent.some((item) => item.href === '/hrm/recruiting'))
 })
 
 
-test('Enrollment windows are accessible within Enrollments without a separate menu or local tab', async () => {
+test('Enrollment windows are accessible within Employee benefits without a separate menu or local tab', async () => {
   reset()
   const translate = (key: string) => translator(`nav.${key}` as never)
   const has = (key: string) => translator.has(`nav.${key}` as never)
   const windowsHref = '/hrm/benefits?view=windows'
   let groups = await resolveNav('company-one', () => true, [], translate, has)
   const benefits = groups.flatMap((group) => group.items).filter((item) => item.subgroup === 'Benefits')
-  assert.ok(benefits.some((item) => item.href === '/hrm/benefits?view=enrolments'))
+  assert.ok(benefits.some((item) => item.href === '/hrm/benefits?view=employees'))
   assert.ok(!benefits.some((item) => item.href === windowsHref))
   const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['hrm.benefits.read']) } as Parameters<typeof resolveLocalNavigation>[0])
   assert.ok(!local.groups.flat().some((tab) => tab.href === windowsHref), 'windows are managed from enrollment instead of a separate page tab')
@@ -197,8 +197,9 @@ test('Enrollment windows are accessible within Enrollments without a separate me
   assert.ok(!groups.flatMap((group) => group.items).some((item) => item.href.startsWith('/hrm/benefits')), 'shortcuts cannot bypass the HR feature')
   features.hrm = true; features.payroll = false
   groups = await resolveNav('company-one', () => true, [], translate, has)
-  assert.ok(!groups.flatMap(group => group.items).some(item => item.href === '/hrm/benefits?view=policies'), 'policy configuration requires Payroll as well as HR')
-  const noPayroll = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0]); assert.ok(!noPayroll.groups.flat().some(tab => tab.href === '/hrm/benefits?view=policies'))
+  const expected=['/hrm/benefits','/hrm/benefits?view=programs','/hrm/benefits?view=employees','/hrm/benefits?view=delivery']
+  assert.deepEqual(groups.flatMap(group=>group.items).filter(item=>item.subgroup==='Benefits').map(item=>item.href),expected,'Benefits remains available without Payroll')
+  const noPayroll=await resolveLocalNavigation({user:{orgId:'company-one'},permissions:new Set(['hrm.benefits.read'])} as Parameters<typeof resolveLocalNavigation>[0]); assert.deepEqual(noPayroll.groups.flat().filter(tab=>tab.href.startsWith('/hrm/benefits')).map(tab=>tab.href),expected)
 })
 
 

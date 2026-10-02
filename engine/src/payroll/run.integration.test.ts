@@ -86,8 +86,8 @@ test(
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
       });
 
-      await db.execute(sql`insert into payroll_vacation_terms (org_id,employment_id,method,percent_floor,effective_from,reason,created_by,updated_by)
-        values (${org.orgId},${employmentId},'accrue','4','2026-07-01','Employee vacation election',${actorId},${actorId})`);
+      await db.execute(sql`insert into payroll_vacation_terms (org_id,employment_id,plan_id,method,percent_floor,effective_from,reason,created_by,updated_by)
+        select ${org.orgId},${employmentId},id,'accrue','4','2026-07-01','Employee vacation election',${actorId},${actorId} from entitlement_plans where org_id=${org.orgId} and system_key='vacation'`);
       await db.execute(sql`insert into payroll_service_credits (org_id,employment_id,convention,as_of_date,credited_days,effective_from,reason,source_snapshot,created_by,updated_by)
         values (${org.orgId},${employmentId},'actual_365','2026-07-01','1807','2026-07-01','Reviewed prior service','{}'::jsonb,${actorId},${actorId})`);
       await db.execute(sql`
@@ -240,8 +240,8 @@ test(
         costingBasis: 'actual',
       });
       await db.execute(sql`update payroll_vacation_terms set effective_to='2026-07-18',updated_at=now(),updated_by=${actorId} where org_id=${org.orgId} and employment_id=${employmentId}`);
-      await db.execute(sql`insert into payroll_vacation_terms (org_id,employment_id,method,percent_floor,effective_from,reason,created_by,updated_by)
-        values (${org.orgId},${employmentId},'pay_each_period','4','2026-07-19','Vacation payment election',${actorId},${actorId})`);
+      await db.execute(sql`insert into payroll_vacation_terms (org_id,employment_id,plan_id,method,percent_floor,effective_from,reason,created_by,updated_by)
+        values (${org.orgId},${employmentId},${vacationPlanId},'pay_each_period','4','2026-07-19','Vacation payment election',${actorId},${actorId})`);
       await db.execute(sql`insert into employee_pay_components(org_id,employee_party_id,employment_id,component_id,value,effective_from,created_by,updated_by)
         values(${org.orgId},${employeeId},${employmentId},${serviceComponent},10,'2026-07-19',${actorId},${actorId})`);
       for (const [method, gross] of [["pay_each_period", "636.0000"], ["paid_leave", "600.0000"]] as const) {
@@ -593,7 +593,7 @@ test(
       const texEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, usSubId);
       await seedPayrollProfile(org.orgId, employeeId, texEmploymentId, scheduleId, actorId, {
         country: 'US', province: 'TX', payBasis: 'salary', filingStatus: 'married_joint',
-      }, { percentFloor: null, method: 'accrue' });
+      });
       // The federal calculation refuses payroll without a tax-residency
       // status, so the hire states one — U.S. person, like the MFJ status.
       await db.execute(sql`
@@ -614,7 +614,7 @@ test(
       const caEmploymentId = await seedWorkerEmployment(org.orgId, caStateEmployee, usSubId);
       await seedPayrollProfile(org.orgId, caStateEmployee, caEmploymentId, scheduleId, actorId, {
         country: 'US', province: 'CA', payBasis: 'hourly', filingStatus: 'single',
-      }, { percentFloor: null, method: 'accrue' });
+      });
       await db.execute(sql`
         insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
                                                region, sub_region, answers, effective_from,

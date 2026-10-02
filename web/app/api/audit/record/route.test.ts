@@ -42,6 +42,7 @@ stubModules({
                            updated_at: new Date(), updated_by: null, subsidiaryId: null }] }
               : { rows: [] }
           }
+          if (['hrm_benefit_programs','hrm_benefit_plans','entitlement_plans'].some(table=>text.includes('from '+table))) return state.recordExists ? { rows:[{kind:'benefit_program',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}] } : {rows:[]}
           if (text.includes('from hrm_benefit_enrollments')) return state.recordExists ? { rows: [{ kind: 'benefit_enrollment', created_at: new Date(), created_by: null, subsidiaryId: 'employer-1' }] } : { rows: [] }
           if (text.includes('count(*)')) return { rows: [{ n: 0 }] }
           return { rows: [] }
@@ -95,10 +96,12 @@ test('a caller with the kind permission still reads the record', async () => {
 
 test('benefit audit refuses permission and disabled features before disclosing existence', async () => {
   for (const [permissions, featureOn] of [[[], true], [['hrm.benefits.read'], false]] as const) {
-    Object.assign(auditState, { permissions: [...permissions], featureOn, reads: 0 }); assert.equal((await get('hrm_benefit_enrollments', EXISTING_ID)).status, 404); assert.equal(auditState.reads, 0);
+    for (const table of ['hrm_benefit_enrollments','hrm_benefit_programs','hrm_benefit_plans','entitlement_plans']) { Object.assign(auditState,{permissions:[...permissions],featureOn,reads:0}); assert.equal((await get(table,EXISTING_ID)).status,404,table); assert.equal(auditState.reads,0,table) }
   }
 });
-test('benefit audit fences the legal employer and permits scoped lifecycle evidence', async () => {
-  Object.assign(auditState, { permissions: ['hrm.benefits.read'], featureOn: true, recordExists: true, hiddenEmployer: true, reads: 0 }); assert.equal((await get('hrm_benefit_enrollments', EXISTING_ID)).status, 404); assert.equal(auditState.reads, 1);
-  auditState.hiddenEmployer = false; const response = await get('hrm_benefit_enrollments', EXISTING_ID); assert.equal(response.status, 200); assert.equal((await response.json()).recordType, 'benefit_enrollment');
+test('benefit audit fences every program family and permits scoped lifecycle evidence', async () => {
+  for (const table of ['hrm_benefit_enrollments','hrm_benefit_programs','hrm_benefit_plans','entitlement_plans']) {
+    Object.assign(auditState,{permissions:['hrm.benefits.read'],featureOn:true,recordExists:true,hiddenEmployer:true,reads:0}); assert.equal((await get(table,EXISTING_ID)).status,404,table); assert.equal(auditState.reads,1,table);
+    auditState.hiddenEmployer=false; const response=await get(table,EXISTING_ID); assert.equal(response.status,200,table); assert.equal((await response.json()).recordType,table==='hrm_benefit_enrollments'?'benefit_enrollment':'benefit_program',table);
+  }
 });

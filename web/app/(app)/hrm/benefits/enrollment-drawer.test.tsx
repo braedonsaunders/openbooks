@@ -24,7 +24,7 @@ async function mount(t: TestContext, overrides: Partial<typeof record> = {}, man
   const original = globalThis.fetch
   globalThis.fetch = (async (_url, init) => { state.requests.push(JSON.parse(String(init?.body))); return state.response() }) as typeof fetch
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host)
-  await act(async () => { root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><EnrollmentDrawer record={{ ...record, ...overrides }} closeHref="/hrm/benefits?view=enrolments" canManage={manage} canChange={change} /></NextIntlClientProvider>); await tick() })
+  await act(async () => { root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><EnrollmentDrawer record={{ ...record, ...overrides }} closeHref="/hrm/benefits?view=employees" canManage={manage} canChange={change} /></NextIntlClientProvider>); await tick() })
   t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = original })
 }
 async function click(text: string) {

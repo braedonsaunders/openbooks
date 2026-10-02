@@ -1,17 +1,11 @@
 import 'server-only'
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
 
 import { getTranslations } from 'next-intl/server'
 import {
-  badge,
-  column,
-  field as item,
   grid,
-  link,
   page,
   pageHeader,
   ref,
-  text,
   widget,
   widgetBlock,
   type PageSpec,
@@ -25,7 +19,7 @@ import { benefitsOverviewBlocks } from './overview'
  * Benefits uses the Customers module-home composition: native vitals, a
  * registered programs list in the two-column hero, and a scrolling rail
  * with attention, currency-separated award totals, destinations and reports.
- * Enrollment windows open in a drawer from the enrollment workspace.
+ * Enrollment windows open in a drawer from Employee benefits.
  * Builders and record drawers retain their existing URL-driven controls.
  */
 
@@ -35,11 +29,7 @@ const f = ref<BenefitsData>()
 export function benefitsSpec(data: BenefitsData): PageSpec {
   const showingOverview = data.portfolioView === 'overview'
   const showingPrograms = data.portfolioView === 'programs'
-  const showingRewards = data.portfolioView === 'rewards'
-  const showingIncentives = data.portfolioView === 'incentives'
-  const showingPayouts = data.portfolioView === 'payouts'
-  const awardRows =
-    showingRewards ? data.rewardAwardRows : data.payoutAwardRows
+  const showingDelivery = data.portfolioView === 'delivery'
   return page({
     route: '/hrm/benefits',
     layout: 'list',
@@ -50,14 +40,12 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
-          ...(showingPayouts ? [] : [widget('link-button', {
-            href: data.showingEnrolments ? f('newEnrollmentHref') : showingRewards ? f('newAwardHref') : f('newProgramHref'),
-            label: data.showingEnrolments ? f('newEnrollmentButton') : showingRewards ? f('newAwardButton') : f('newProgramButton'),
-            iconKey: 'plus',
-          }, f('canManage'))]),
-          ...(data.showingEnrolments ? [widget('link-button', {
-            href: f('enrollmentWindowsHref'), label: f('enrollmentWindowsButton'), variant: 'outline',
-          })] : []),
+          ...(!showingDelivery ? [widget('link-button', {
+            href: f('newProgramHref'), label: f('newProgramButton'), iconKey: 'plus',
+          }, f('canManage'))] : []),
+          ...(showingOverview ? [widget('link-button', {
+            href: f('newAwardHref'), label: f('newAwardButton'), variant: 'outline',
+          }, f('canManage'))] : []),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -93,49 +81,19 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
             { title: data.optionsRefusal?.title ?? '', description: data.optionsRefusal?.message },
             f('optionsRefusal'),
           ),
-          ...((showingPrograms || showingIncentives) && !data.programsRefusal
+          ...(showingPrograms && !data.programsRefusal
             ? [
                 widgetBlock('hrm-program-table', {
-                  rows: showingIncentives ? data.incentiveProgramRows : data.unifiedProgramRows,
-                  ...(showingPrograms ? { typeFilter: data.programTypeFilter } : {}),
+                  rows: data.unifiedProgramRows, typeFilter: data.programTypeFilter,
                   text: data.programTableText,
-                  total: (showingIncentives ? data.incentiveProgramRows : data.unifiedProgramRows).length,
+                  total: data.unifiedProgramRows.length,
                   truncated: false,
                 }),
               ]
             : []),
-          ...((showingRewards || showingPayouts) && !data.awardsRefusal
+          ...(showingDelivery && !data.awardsRefusal && !data.programsRefusal
             ? [
-                widgetBlock('hrm-award-table', {
-                  rows: awardRows,
-                  text: data.awardTableText,
-                  total: awardRows.length,
-                  truncated: data.awardsTruncated,
-                }),
-              ]
-            : []),
-          ...(data.showingEnrolments
-            ? [
-                registeredListTable('hrm_benefits_enrolments', {
-                  variant: 'app',
-                  rows: f('enrollmentRows'),
-                  rowKey: item('id'),
-                  columns: [
-                    column(f('enrollmentColumns.employee'), link(item('employeeLabel'), item('employeeHref'))),
-                    column(f('enrollmentColumns.plan'), link(item('planCode'), item('configurationHref'))),
-                    column(f('enrollmentColumns.coverage'), text(item('coverageLabel'))),
-                    column(f('enrollmentColumns.employeeAmount'), text(item('employeeContributionLabel')), {
-                      align: 'right',
-                      className: 'tabular-nums',
-                    }),
-                    column(f('enrollmentColumns.employerAmount'), text(item('employerContributionLabel')), {
-                      align: 'right',
-                      className: 'tabular-nums',
-                    }),
-                    column(f('enrollmentColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-                  ],
-                  empty: { title: f('emptyTitle'), description: f('emptyDescription') },
-                }),
+                widgetBlock('hrm-benefit-delivery-table', {rows: data.deliveryRows, text: data.awardTableText}),
               ]
             : []),
           widgetBlock('hrm-benefit-type-cards', {
@@ -202,6 +160,7 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
               programOptions: f('awardProgramOptions'),
               employmentOptions: f('employmentOptions'),
               defaultCurrency: f('defaultAwardCurrency'),
+              initialProgramId: data.programEditSeed?.id ?? data.programRows.find(row => row.programHref === data.dialogCloseHref)?.id,
             },
             f('awardBuilderOpen'),
           ),

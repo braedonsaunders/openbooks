@@ -10,3 +10,9 @@ export function benefitListWindow(limit?: number, offset?: number): { limit: num
   }
   return { limit: limit ?? null, offset: offset ?? 0 };
 }
+
+/** Program workspaces use bounded pages through the same native list-window validation. */
+export function benefitsProgramPage(query: { limit?: number; offset?: number }): { limit: number; offset: number } {
+  const page = benefitListWindow(query.limit ?? 100,query.offset);
+  return { limit: page.limit!,offset: page.offset };
+}

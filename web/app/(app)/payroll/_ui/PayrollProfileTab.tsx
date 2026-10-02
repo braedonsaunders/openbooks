@@ -216,8 +216,8 @@ export function PayrollProfileTab({
   return (
     <>
       <div hidden={section === 'accounts'}>
-        {section === 'general' && state.employmentId ? <Link className="mb-3 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/hrm/benefits?view=policies&policy=service&employment=${encodeURIComponent(state.employmentId)}`}>{t('serviceCreditLink')}</Link> : null}
-        {section === 'general' && state.employmentId ? <Link className="mb-3 ml-4 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/hrm/benefits?view=policies&policy=vacation&employment=${encodeURIComponent(state.employmentId)}`}>{t('vacationTermsLink')}</Link> : null}
+        {section === 'general' && state.employmentId ? <Link className="mb-3 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/entities/employees?party=${encodeURIComponent(partyId)}&entityTab=benefits&benefitsTab=service`}>{t('serviceCreditLink')}</Link> : null}
+        {section === 'general' && state.employmentId ? <Link className="mb-3 ml-4 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/entities/employees?party=${encodeURIComponent(partyId)}&entityTab=benefits`}>{t('vacationTermsLink')}</Link> : null}
         <ProfileEditor
           inline
           readOnly={readOnly}

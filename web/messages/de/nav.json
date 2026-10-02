@@ -136,13 +136,10 @@
     "crm-sales-quotas": "Quotas",
     "crm-sales-territories": "Territories",
     "hrm-benefits-programs": "Programme",
-    "hrm-benefits-enrolments": "Teilnahmen",
-    "hrm-benefits-rewards": "Prämien",
-    "hrm-benefits-incentives": "Anreize",
-    "hrm-benefits-payouts": "Auszahlungen",
     "hrm-performance-succession": "Nachfolgepläne",
     "hrm-performance-templates": "Beurteilungsformulare",
-    "hrm-benefits-policies": "Richtlinien"
+    "hrm-benefits-employees": "Mitarbeiterleistungen",
+    "hrm-benefits-delivery": "Bereitstellung"
   },
   "groups": {
     "workforce": "Belegschaft",
@@ -182,7 +179,7 @@
     "hrm-hiring": "Personalgewinnung",
     "hrm-timeoff": "Abwesenheiten",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Zusatzleistungen",
+    "hrm-benefits": "Zusatzleistungen",
     "payroll": "Gehaltsabrechnung",
     "resourcing": "Ressourcenplanung",
     "warehouse": "Lager",
@@ -208,7 +205,7 @@
     "hrm-hiring": "Personalgewinnung",
     "hrm-timeOff": "Abwesenheiten",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Zusatzleistungen",
+    "hrm-benefits": "Zusatzleistungen",
     "payroll": "Gehaltsabrechnung",
     "resourcing": "Ressourcenplanung",
     "warehouse": "Lager",

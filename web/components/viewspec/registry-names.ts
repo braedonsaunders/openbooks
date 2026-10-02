@@ -286,6 +286,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-benefit-type-cards',
   'hrm-program-table',
   'hrm-award-table',
+  'hrm-benefit-delivery-table',
   'hrm-program-builder',
   'hrm-program-builder-edit',
   'hrm-award-builder',

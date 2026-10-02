@@ -1,5 +1,6 @@
 /** Employer benefit policies, membership and controlled award workflows. */
 export * from './benefits/program-types.ts'
+export * from './benefits/program-catalog.ts'
 export * from './benefits/currency-options.ts'
 export * from './benefits/programs.ts'
 export * from './benefits/awards.ts'

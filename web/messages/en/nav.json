@@ -136,13 +136,10 @@
     "crm-sales-quotas": "Quotas",
     "crm-sales-territories": "Territories",
     "hrm-benefits-programs": "Programs",
-    "hrm-benefits-enrolments": "Enrollments",
-    "hrm-benefits-rewards": "Rewards",
-    "hrm-benefits-incentives": "Incentives",
-    "hrm-benefits-payouts": "Payouts",
     "hrm-performance-succession": "Succession plans",
     "hrm-performance-templates": "Review forms",
-    "hrm-benefits-policies": "Policies"
+    "hrm-benefits-employees": "Employee benefits",
+    "hrm-benefits-delivery": "Delivery"
   },
   "modulesShort": {
     "ap": "Payables",
@@ -187,7 +184,7 @@
     "hrm-hiring": "Hiring",
     "hrm-timeoff": "Time Off",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Benefits",
+    "hrm-benefits": "Benefits",
     "payroll": "Payroll",
     "resourcing": "Resourcing",
     "warehouse": "Warehouse",
@@ -208,7 +205,7 @@
     "hrm-hiring": "Hiring",
     "hrm-timeOff": "Time Off",
     "hrm-talent": "Talent",
-    "hrm-rewards": "Benefits",
+    "hrm-benefits": "Benefits",
     "payroll": "Payroll",
     "resourcing": "Resourcing",
     "warehouse": "Warehouse",

@@ -2,16 +2,20 @@
 
 import Link from 'next/link'
 import { useId, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle } from 'lucide-react'
-import { Alert, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Alert, Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { programResourceUrl, validateMembershipDraft, type MembershipDraft } from '../../../../lib/hrm/benefits-portfolio'
 import type { BuilderOption } from '../../../../lib/hrm/benefits-portfolio'
+import { TransactionDrawer } from '../../../../components/transaction-drawer'
+import { InspectorPanel } from '../../../../components/builder/builder-kit'
+import { PreparedPagedTable } from '../../../../components/prepared-paged-table'
+import { AwardPortfolioTable } from './PortfolioTables'
 import type { ProgramDetailDrawer } from '../../../../lib/hrm/benefits-workspace'
 
 /**
@@ -40,6 +44,8 @@ export function ProgramDrawer({
   const router = useRouter()
   const reasonId = useId()
   const [working, setWorking] = useState(false)
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState(() => { const requested=searchParams.get('transactionTab'); return ['participants','activity','delivery','audit'].includes(requested ?? '') ? requested! : 'details' })
   const [closing, setClosing] = useState(false)
   const [reason, setReason] = useState('')
   const [adding, setAdding] = useState(false)
@@ -151,10 +157,9 @@ export function ProgramDrawer({
         toast.error(await readApiErrorMessage(res, t('portfolio.programActionFailed')))
         return
       }
-      // Settlement records draft awards: land on payouts where the drafts
-      // appear for submit and approval.
+      // Settlement opens the delivery workspace with the recorded obligations.
       const base = closeHref.split('?')[0]
-      router.push(`${base}?view=payouts` as never)
+      router.push(`${base}?view=delivery` as never)
       router.refresh()
     } catch {
       toast.error(t('portfolio.programActionFailed'))
@@ -174,93 +179,54 @@ export function ProgramDrawer({
     )
   }
 
-  return (
-    <Drawer open onClose={() => void closeGuard.close()} title={program.name} description={program.code} size="lg">
-      <div className="flex flex-col gap-5 p-4">
-        {drawer.drawerRefusal ? (
-          <Alert variant="destructive" className="flex items-start gap-2">
-            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-            <span>
-              <span className="block font-medium">{drawer.drawerRefusal.title}</span>
-              <span className="block text-xs">{drawer.drawerRefusal.message}</span>
-              <Button variant="outline" size="sm" onClick={() => router.refresh()}>{tCommon('actions.retry')}</Button>
-            </span>
-          </Alert>
+  const lifecycleActions = <>        {canManage && !drawer.drawerRefusal ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            {program.status === 'draft' ? (
+              <>
+                <Button disabled={working} onClick={() => act({ action: 'activate' })}>
+                  {t('portfolio.activateProgram')}
+                </Button>
+              </>
+            ) : null}
+            {program.status === 'active' && !closing ? (
+              <Button variant="outline" onClick={() => {setClosing(true);setTab('details')}}>
+                {t('portfolio.closeProgram')}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.family')}</dt>
-            <dd className="font-medium text-slate-900 dark:text-slate-100">{program.familyLabel}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.status')}</dt>
-            <dd className="font-medium text-slate-900 dark:text-slate-100">{program.statusLabel}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.value')}</dt>
-            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{program.valueLabel}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.effective')}</dt>
-            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
-              {program.effectiveTo ? `${program.effectiveFrom} – ${program.effectiveTo}` : `${program.effectiveFrom} – …`}
-            </dd>
-          </div>
-          {drawer.policyLines.map((line) => <div key={`${line.label}:${line.value}`}>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{line.label}</dt>
-            <dd className="font-medium text-slate-900 dark:text-slate-100">{line.value}</dd>
-          </div>)}
-        </dl>
-
-        <section className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-          <h3 className="text-sm font-semibold">{t('portfolio.approvalControls.title')}</h3>
-          {program.approvalMode === 'none' ? <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.modes.none')} · {t('portfolio.approvalControls.noneHint')}</p> : drawer.approvalPoliciesRefusal ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{drawer.approvalPoliciesRefusal.message}</p> : <>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t(drawer.approvalPolicies?.configured ? 'portfolio.approvalControls.policiesHint' : 'portfolio.approvalControls.unconfiguredStatus')}</p>
-            {drawer.approvalPolicies?.policies.map((policy) => drawer.canConfigureApprovalPolicies ? <Link key={policy.id} href={policy.href as never} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">{policy.name}</Link> : <p key={policy.id} className="text-sm font-medium">{policy.name}</p>)}
-            {drawer.canConfigureApprovalPolicies ? <div><Button asChild variant="outline" size="sm"><Link href={(drawer.approvalPolicies?.href ?? '/admin/flows') as never}>{t('portfolio.approvalControls.openFlows')}</Link></Button></div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.administratorRemedy')}</p>}
-          </>}
-        </section>
-
-        {!drawer.drawerRefusal ? <div>
+</>
+  const tableText = {
+    program: t('portfolio.columns.program'), recipient: t('portfolio.columns.recipient'),
+    period: t('portfolio.columns.period'), value: t('portfolio.columns.value'), status: t('portfolio.columns.status'),
+    emptyTitle: t('portfolio.awardsEmptyTitle'), emptyDescription: t('programWorkspace.activityEmpty'),
+    totalLabel: t('portfolio.totalLabel'), truncatedLabel: t('portfolio.awardsTruncated'),
+  }
+  const activity = <div className="space-y-4 p-4">
+    {program.family !== 'incentive' && canManage && program.status === 'active' ? <div className="flex justify-end"><Button asChild size="sm"><Link href={`${program.programHref}&award=new` as never}>{t(program.family === 'reward' ? 'programWorkspace.giveReward' : 'programWorkspace.createGrant')}</Link></Button></div> : null}
+    {drawer.activityRefusal ? <Alert variant="destructive">{drawer.activityRefusal.message}</Alert> : <AwardPortfolioTable rows={drawer.activity} text={tableText} total={drawer.activity.length} truncated={drawer.activityTruncated} />}
+  </div>
+  const deliveryRows = drawer.activity.filter(award => ['approved', 'queued', 'delivered'].includes(award.status))
+  return (
+    <TransactionDrawer recordId={program.id} targetTable="hrm_benefit_programs" closeHref={closeHref}
+      title={program.name} description={program.code} beforeClose={closeGuard.beforeClose} actions={lifecycleActions}
+      primaryAction={canManage && program.status === 'draft' && !drawer.drawerRefusal ? <Button variant="outline" size="sm" onClick={()=>router.push(drawer.editHref as never)}>{t('portfolio.editProgram')}</Button> : null}
+      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab}
+      detailTabs={[
+        { key: 'participants', label: t('programWorkspace.participants'), content: <div className="p-4">        {!drawer.drawerRefusal ? <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.membersTitle')}</h3>
-          {drawer.members.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{drawer.membersEmpty}</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
-              {drawer.members.map((m) => (
-                <li key={m.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{m.employeeLabel}</span>
-                  <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">{m.rangeLabel}</span>
-                  {m.role ? <span className="text-xs text-slate-400 dark:text-slate-500">{m.role}</span> : null}
-                  {m.weight !== null ? <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('portfolio.members.weight')}: {m.weight}</span> : null}
-                  {canManage && !drawer.drawerRefusal ? (
-                    <button
-                      type="button"
-                      disabled={working}
-                      onClick={() =>
-                        void (async () => {
-                          const removal = await promptDialog({
-                            title: t('portfolio.removeReasonPrompt'),
-                            label: t('portfolio.removeReasonPrompt'),
-                            confirmLabel: t('portfolio.removeMember'),
-                          })
-                          if (removal === null) return
-                          if (removal.trim() === '') {
-                            toast.error(t('portfolio.removeReasonRequired'))
-                            return
-                          }
-                          await act({ action: 'removeMember', membershipId: m.id, reason: removal.trim() })
-                        })()
-                      }
-                      className="ml-auto text-xs text-red-700 underline-offset-2 hover:underline dark:text-red-300"
-                    >
-                      {t('portfolio.removeMember')}
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
+          <PreparedPagedTable source="hrm_benefit_program_participants" rows={drawer.members.map(m => ({
+            id:m.id,searchText:`${m.employeeLabel} ${m.role ?? ''}`,cells:[
+              m.employeeHref ? <Link key="employee" href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">{m.employeeLabel}</Link> : m.employeeLabel,
+              <span key="range" className="tabular-nums">{m.rangeLabel}</span>,m.role ?? '—',m.weight ?? '—',
+              canManage && program.status !== 'closed' ? <Button key="remove" variant="ghost" size="sm" disabled={working} onClick={async()=>{
+                const removal=await promptDialog({title:t('portfolio.removeReasonPrompt'),label:t('portfolio.removeReasonPrompt'),confirmLabel:t('portfolio.removeMember')})
+                if(removal===null) return
+                if(!removal.trim()){toast.error(t('portfolio.removeReasonRequired'));return}
+                await act({action:'removeMember',membershipId:m.id,reason:removal.trim()})
+              }}>{t('portfolio.removeMember')}</Button> : null,
+            ],
+          }))} columns={[{key:'employee',header:t('benefits.columns.employee')},{key:'effective',header:t('portfolio.columns.effective')},{key:'role',header:t('portfolio.members.role')},{key:'weight',header:t('portfolio.members.weight'),align:'right'},{key:'actions',header:''}]} empty={<p>{drawer.membersEmpty}</p>} />
           {canManage && program.status !== 'closed' && !adding ? (
             <div className="mt-2 flex justify-end">
               <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
@@ -345,22 +311,8 @@ export function ProgramDrawer({
           ) : null}
         </div> : null}
 
-        {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' ? <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.sourcesTitle')}</h3>
-          {drawer.sources.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{drawer.sourcesEmpty}</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
-              {drawer.sources.map((s) => (
-                <li key={s.id} className="flex items-baseline justify-between gap-3 py-1.5">
-                  <span className="text-sm text-slate-600 dark:text-slate-300">{s.accountLabel}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div> : null}
-
-        {!drawer.drawerRefusal && program.family === 'incentive' ? (
+</div> },
+        { key: 'activity', label: t(program.family === 'incentive' ? 'programWorkspace.calculations' : 'programWorkspace.activity'), content: <div>        {!drawer.drawerRefusal && program.family === 'incentive' ? (
           <div className="flex flex-col gap-3">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.simulate.title')}</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -455,28 +407,64 @@ export function ProgramDrawer({
           </div>
         ) : null}
 
-        {canManage && !drawer.drawerRefusal ? (
-          <div className="flex flex-wrap justify-end gap-2">
-            {program.status === 'draft' ? (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => router.push(drawer.editHref as never)}
-                >
-                  {t('portfolio.editProgram')}
-                </Button>
-                <Button disabled={working} onClick={() => act({ action: 'activate' })}>
-                  {t('portfolio.activateProgram')}
-                </Button>
-              </>
-            ) : null}
-            {program.status === 'active' && !closing ? (
-              <Button variant="outline" onClick={() => setClosing(true)}>
-                {t('portfolio.closeProgram')}
-              </Button>
-            ) : null}
-          </div>
+{activity}</div> },
+        { key: 'delivery', label: t('programWorkspace.delivery'), content: <div className="space-y-4 p-4"><p className="text-sm text-slate-500">{t('programWorkspace.deliveryHint')}</p>{drawer.activityRefusal ? <Alert variant="destructive">{drawer.activityRefusal.message}</Alert> : <AwardPortfolioTable rows={deliveryRows} text={tableText} total={deliveryRows.length} truncated={drawer.activityTruncated} />}</div> },
+      ]}>
+      <div className="flex flex-col gap-5 p-4">
+        {drawer.drawerRefusal ? (
+          <Alert variant="destructive" className="flex items-start gap-2">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>
+              <span className="block font-medium">{drawer.drawerRefusal.title}</span>
+              <span className="block text-xs">{drawer.drawerRefusal.message}</span>
+              <Button variant="outline" size="sm" onClick={() => router.refresh()}>{tCommon('actions.retry')}</Button>
+            </span>
+          </Alert>
         ) : null}
+        <InspectorPanel title={program.familyLabel}><dl className="grid gap-x-4 gap-y-4 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.status')}</dt>
+            <dd className="font-medium text-slate-900 dark:text-slate-100">{program.statusLabel}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.value')}</dt>
+            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{program.valueLabel}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.effective')}</dt>
+            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+              {program.effectiveTo ? `${program.effectiveFrom} – ${program.effectiveTo}` : `${program.effectiveFrom} – …`}
+            </dd>
+          </div>
+          {drawer.policyLines.map((line) => <div key={`${line.label}:${line.value}`}>
+            <dt className="text-xs text-slate-500 dark:text-slate-400">{line.label}</dt>
+            <dd className="font-medium text-slate-900 dark:text-slate-100">{line.value}</dd>
+          </div>)}
+        </dl></InspectorPanel>
+
+        <InspectorPanel title={t('portfolio.approvalControls.title')}>
+          {program.approvalMode === 'none' ? <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.modes.none')} · {t('portfolio.approvalControls.noneHint')}</p> : drawer.approvalPoliciesRefusal ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{drawer.approvalPoliciesRefusal.message}</p> : <>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t(drawer.approvalPolicies?.configured ? 'portfolio.approvalControls.policiesHint' : 'portfolio.approvalControls.unconfiguredStatus')}</p>
+            {drawer.approvalPolicies?.policies.map((policy) => drawer.canConfigureApprovalPolicies ? <Link key={policy.id} href={policy.href as never} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">{policy.name}</Link> : <p key={policy.id} className="text-sm font-medium">{policy.name}</p>)}
+            {drawer.canConfigureApprovalPolicies ? <div><Button asChild variant="outline" size="sm"><Link href={(drawer.approvalPolicies?.href ?? '/admin/flows') as never}>{t('portfolio.approvalControls.openFlows')}</Link></Button></div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.administratorRemedy')}</p>}
+          </>}
+        </InspectorPanel>
+
+        {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' ? <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.sourcesTitle')}</h3>
+          {drawer.sources.length === 0 ? (
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{drawer.sourcesEmpty}</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+              {drawer.sources.map((s) => (
+                <li key={s.id} className="flex items-baseline justify-between gap-3 py-1.5">
+                  <span className="text-sm text-slate-600 dark:text-slate-300">{s.accountLabel}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div> : null}
+
         {closing ? (
           <div className="flex flex-col gap-2">
             <Label htmlFor={reasonId}>{t('portfolio.closeReasonLabel')}</Label>
@@ -492,6 +480,6 @@ export function ProgramDrawer({
           </div>
         ) : null}
       </div>
-    </Drawer>
+    </TransactionDrawer>
   )
 }

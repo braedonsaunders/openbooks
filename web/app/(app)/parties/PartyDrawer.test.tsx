@@ -1,17 +1,8 @@
-// The party flyout's tab, grant, and edit-gate contracts, proved by rendering
-// the real PartyDrawer — not by matching its source text. The pure drawer
-// helpers (credit-limit formatting, visited-tab memory) are unit-tested
-// directly; everything else below drives the component the way an operator
-// does: opening tabs, switching modes, and reading what renders.
-//
-// Defects covered: (visited compensation tabs unmounted, discarding
-// edits), (kind control vocabulary vs stored kinds),
-// (drawer-namespace keys leaking untranslated), HR-1/2 (payroll edit gate),
-// HR-9 (confidential tabs need their own grants), (role tabs need the
-// role row, kind falls back without one).
+// The native party drawer retains edits and enforces each confidential panel grant.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
+import { employeeBenefitAssignments } from "../../../lib/hrm/employee-benefits-types";
 import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
@@ -21,7 +12,6 @@ declare global {
   var __partyPromptReason: string | null | undefined;
 }
 
-// jsdom first: the drawer reads browser globals at render.
 await bootJsdomEnvironment({ url: "http://localhost:4800/parties", matchMediaMatches: false });
 
 stubModules({
@@ -35,7 +25,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "next/link": "export default function Link(p){return p.children}",
+    "next/link": "export default function Link(p){return globalThis.React.createElement('a',{href:p.href},p.children)}",
     sonner:
       "export const toast={success(m){(globalThis.__partyToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__partyToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__partyToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
   },
@@ -217,7 +207,7 @@ function employeeRoutes(): Record<string, () => Response> {
         derivedProfileColumns: {},
         defaultCountry: "US",
       }),
-    "/api/hrm/employee-benefits": () => Response.json({ employments: [{ value: "employment-1", label: "Employer" }], enrollments: [], vacation: [], service: [], payroll: true, canManage: true, canReadBanks: true }),
+    "/api/hrm/employee-benefits": () => Response.json({ employments: [{ value: "employment-1", label: "Employer" }], assignments: [], programs: [], enrollments: [], vacation: [], service: [], payroll: true, canManage: true, canReadBanks: true }),
     "/api/payroll/entitlements": () =>
       Response.json({ currency: "USD", balances: [BALANCE_ROW], movements: [MOVEMENT_ROW] }),
   };
@@ -288,6 +278,14 @@ async function renderDrawer(options: {
   };
 }
 
+function renderEmployeeDrawer(options: Parameters<typeof renderDrawer>[0] = {}) {
+  return renderDrawer({ payload: employeePayload("employee", { employee: true }), role: "employee", recordType: "employee", fetchHandler: routeFetch(employeeRoutes()), ...options });
+}
+
+function renderPayrollDrawer(options: Parameters<typeof renderDrawer>[0] = {}) {
+  return renderEmployeeDrawer({ initialTab: "payroll", grants: { canManageWages: true, canManagePayroll: true }, ...options });
+}
+
 function railTabs(scope: ParentNode = document, tree: Record<string, unknown> = enMessages): HTMLButtonElement[] {
   const rail = scope.querySelector(`nav[aria-label="${msg(tree, "common.auditTrail.ariaLabel")}"]`);
   assert.ok(rail, "the flyout must render its tab rail");
@@ -325,18 +323,10 @@ function kindSelect(): HTMLSelectElement | undefined {
   ) as HTMLSelectElement | undefined;
 }
 
-test("credit-limit display preserves large persisted numeric values exactly", () => {
-  assert.equal(formatCreditLimit("9007199254740993.0000"), "9007199254740993.00");
+test("credit-limit formatting preserves large decimals, rounds exact cents and permits an empty value", () => {
+  for (const [value, expected] of [["9007199254740993.0000", "9007199254740993.00"], ["86.6150", "86.62"], [null, ""]] as const) assert.equal(formatCreditLimit(value), expected);
 });
 
-test("credit-limit display rounds fractional cents with exact decimal arithmetic", () => {
-  assert.equal(formatCreditLimit("86.6150"), "86.62");
-  assert.equal(formatCreditLimit(null), "");
-});
-
-// switching employee drawer tabs unmounted the payroll/wage
-// panels, silently discarding unsaved profile edits. Visited compensation
-// tabs must stay mounted (hidden) so their local edits survive a switch.
 test("remembering a visited drawer tab keeps it without mutating the set", () => {
   const kept = rememberDrawerTab(new Set(["overview"]), "payroll");
   assert.ok(kept.has("overview"));
@@ -348,9 +338,6 @@ test("remembering an already kept tab returns the same set", () => {
   assert.equal(rememberDrawerTab(kept, "payroll"), kept);
 });
 
-// the Kind control offered only company|person while parties store
-// customer/vendor/employee kinds, so the control misread the record and the
-// PATCH it echoed back 422'd. The control must offer the stored vocabulary.
 test("the kind control offers every stored kind", async (t) => {
   const { done } = await renderDrawer({ initialMode: "edit" });
   t.after(done);
@@ -376,9 +363,6 @@ test("read mode names the kind instead of offering the control", async (t) => {
   );
 });
 
-// The rail is the shared flyout shell's, driven as a CONTROLLED tab, so the
-// party owns one strip instead of nesting its own under the shell's
-// Details / Attachments / Audit trail. Every switch still lands on showTab.
 test("the rail lists every panel once with overview first", async (t) => {
   const { done } = await renderDrawer({ initialTab: "overview" });
   t.after(done);
@@ -412,17 +396,10 @@ function payrollPanel(): HTMLElement {
   return strip.parentElement as HTMLElement;
 }
 
-// behaviourally: a typed-but-unsaved wage survives a round trip to
-// the payroll tab and back, because the visited panel stays mounted hidden.
 test("a visited compensation tab stays mounted while another shows", async (t) => {
-  const routes = employeeRoutes();
-  const { done } = await renderDrawer({
-    payload: employeePayload("employee", { employee: true }),
-    role: "employee",
-    recordType: "employee",
+  const { done } = await renderEmployeeDrawer({
     initialTab: "wages",
     grants: { canManageWages: true, canManagePayroll: true },
-    fetchHandler: routeFetch(routes),
   });
   t.after(done);
   const rate = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
@@ -462,20 +439,12 @@ test("a visited compensation tab stays mounted while another shows", async (t) =
   );
 });
 
-// HR-9 self-service: a manager opening a report's drawer sees the Employment
-// tab through the structural team fallback, while payroll, wages, and
-// compliance stay hidden unless their own grants hold — the team read selects
-// no pay data, so there is nothing to leak.
 test("each confidential tab needs its own grant", async (t) => {
-  const routes = employeeRoutes();
-  const handler = routeFetch(routes);
   const labels = {
     wages: en("parties.drawer.tabs.wages"),
     payroll: en("parties.drawer.tabs.payroll"),
     employment: en("parties.drawer.tabs.employment"),
   };
-  // One drawer mounted at a time: each matrix row unmounts its predecessor
-  // before the next renders, so document-scoped rail reads stay exact.
   let prior: (() => Promise<void>) | null = null;
   const names = async (grants: Record<string, unknown>): Promise<string[]> => {
     if (prior) {
@@ -483,12 +452,8 @@ test("each confidential tab needs its own grant", async (t) => {
       prior = null;
       await unmount();
     }
-    const { done } = await renderDrawer({
-      payload: employeePayload("employee", { employee: true }),
-      role: "employee",
-      recordType: "employee",
+    const { done } = await renderEmployeeDrawer({
       grants,
-      fetchHandler: handler,
     });
     prior = done;
     return railTabs().map((button) => button.textContent?.trim() ?? "");
@@ -514,20 +479,8 @@ test("each confidential tab needs its own grant", async (t) => {
   if (prior) t.after(prior);
 });
 
-// HR-1 defect 2: the Payroll tab honours the drawer edit mode exactly like
-// Overview (editable = mode === 'edit' && canManage). Read mode renders
-// values; only edit mode renders the editors.
 test("payroll read mode shows values with no editors", async (t) => {
-  const routes = employeeRoutes();
-  const { done } = await renderDrawer({
-    payload: employeePayload("employee", { employee: true }),
-    role: "employee",
-    recordType: "employee",
-    initialTab: "payroll",
-    grants: { canManageWages: true, canManagePayroll: true },
-    bankAccounts: [BANK_ROW],
-    fetchHandler: routeFetch(routes),
-  });
+  const { done } = await renderPayrollDrawer({ bankAccounts: [BANK_ROW] });
   t.after(done);
   const panel = payrollPanel();
   assert.equal(
@@ -543,16 +496,7 @@ test("payroll read mode shows values with no editors", async (t) => {
 });
 
 test("payroll edit mode restores every editor", async (t) => {
-  const routes = employeeRoutes();
-  const { done } = await renderDrawer({
-    payload: employeePayload("employee", { employee: true }),
-    role: "employee",
-    recordType: "employee",
-    initialMode: "edit",
-    initialTab: "payroll",
-    grants: { canManageWages: true, canManagePayroll: true },
-    fetchHandler: routeFetch(routes),
-  });
+  const { done } = await renderPayrollDrawer({ initialMode: "edit" });
   t.after(done);
   const panel = payrollPanel();
   assert.ok(panel.querySelector("#pp-schedule"), "edit mode must offer the pay-schedule editor");
@@ -563,20 +507,8 @@ test("payroll edit mode restores every editor", async (t) => {
   );
 });
 
-// The Payroll tab splits into sub-tabs on the shared drawer strip — the same
-// primitive as the rail, not a second tab style — with every section staying
-// mounted (hidden) so unsaved edits survive sub-tab switches.
 test("payroll sub-tabs keep every section mounted", async (t) => {
-  const routes = employeeRoutes();
-  const { done } = await renderDrawer({
-    payload: employeePayload("employee", { employee: true }),
-    role: "employee",
-    recordType: "employee",
-    initialMode: "edit",
-    initialTab: "payroll",
-    grants: { canManageWages: true, canManagePayroll: true },
-    fetchHandler: routeFetch(routes),
-  });
+  const { done } = await renderPayrollDrawer({ initialMode: "edit" });
   t.after(done);
   const strip = document.querySelector(`nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`);
   assert.ok(strip, "the payroll tab must render its sub-tab strip");
@@ -600,22 +532,9 @@ test("payroll sub-tabs keep every section mounted", async (t) => {
   assert.ok(document.querySelector("#pp-schedule"), "the editor must still be mounted");
 });
 
-// One editor instance serves General and Tax: the single ProfileEditor stays
-// mounted and switches its half by prop, so typed values survive the switch.
 test("general and tax share one profile editor", async (t) => {
-  const routes = employeeRoutes();
-  const { done } = await renderDrawer({
-    payload: employeePayload("employee", { employee: true }),
-    role: "employee",
-    recordType: "employee",
-    initialMode: "edit",
-    initialTab: "payroll",
-    grants: { canManagePayroll: true },
-    fetchHandler: routeFetch(routes),
-  });
+  const { done } = await renderPayrollDrawer({ initialMode: "edit", grants: { canManagePayroll: true } });
   t.after(done);
-  // The house Select shows a trigger button and keeps the genuine native
-  // select underneath: the native control is the editor's state source.
   const nativeSchedule = (): HTMLSelectElement => {
     const matches = [...document.querySelectorAll("select")].filter((candidate) =>
       [...(candidate as HTMLSelectElement).options].some((option) => option.value === "sched-2"),
@@ -651,11 +570,6 @@ test("general and tax share one profile editor", async (t) => {
   );
 });
 
-// a party showing "Kind: Vendor" with no vendor_roles row left the
-// Compliance tab unreachable while a ?role=vendor URL faked it (and wages,
-// payroll, employment the same way) into existence. Every role tab needs its
-// role ROW — never the role filter or the kind column — and the Kind label
-// falls back to Company when no active role backs a role-kind.
 test("a vendor kind without a vendor row hides compliance and reads as company", async (t) => {
   const grants = {
     complianceEnabled: true,
@@ -692,12 +606,6 @@ test("a vendor kind without a vendor row hides compliance and reads as company",
   );
 });
 
-// the blank-name guard and the statement link rendered raw
-// `parties.drawer.drawer.*` keys in every locale, because the drawer called
-// t('drawer.nameRequired') / t('drawer.viewStatement') under the
-// parties.drawer namespace instead of the bare keys that exist in all 7
-// catalogs. Every locale must render translated text — never a key path.
-
 for (const locale of LOCALES) {
   test(`the drawer renders translated text with no key paths in ${locale}`, async (t) => {
     const messages = (await import(`../../../messages/${locale}/index.ts`)).default as Record<string, unknown>;
@@ -716,10 +624,6 @@ for (const locale of LOCALES) {
   });
 }
 
-// Switching tabs remounted TabContent and dropped unsaved
-// relationship, accounting, and compliance input (keep-alive covered only
-// wages and payroll). Those panels now stay mounted once visited, so a
-// half-typed form survives a tab round-trip.
 test("relationship edits survive a tab round-trip", async (t) => {
   const profile = {
     lifecycle_stage: "lead",
@@ -878,12 +782,6 @@ test("compliance class selection survives a tab round-trip", async (t) => {
   assert.equal(revived?.value, "c1", "the chosen class must survive the tab round-trip");
 });
 
-// a stored company-kind party with no role rows is repaired by
-// choosing a role-bearing kind. The server refuses an unbacked kind by name
-// ("turn on the role"), and the overview tab offers no role control — so the
-// kind choice itself must carry the role enablement in the same save.
-// Each test picks the kind, clicks Save, and reads the PATCH body the drawer
-// sends: without the echo the server 422s and the party stays stranded.
 const ORPHAN_PAYLOAD = {
   ...VENDOR_PAYLOAD,
   party: { ...VENDOR_PAYLOAD.party, display_name: "Acme Industrial Supply", kind: "company" },
@@ -943,10 +841,28 @@ for (const kind of ["vendor", "customer", "employee"] as const) {
   });
 }
 
-test("employee Benefits owns vacation terms, credited service and entitlement balances with its own grant", async t => {
-  const ui = await renderDrawer({ payload: employeePayload("employee", { employee: true }), role: "employee", recordType: "employee", initialTab: "benefits", grants: { canReadBenefits: true }, fetchHandler: routeFetch(employeeRoutes()) }); t.after(ui.done);
-  assert.ok(document.body.textContent?.includes(en("hrm.benefitPolicies.vacation")));
+test("employee Benefits owns program assignments, credited service and entitlement balances with its own grant", async t => {
+  const ui = await renderEmployeeDrawer({ initialTab: "benefits", grants: { canReadBenefits: true }, fetchHandler: routeFetch(employeeRoutes()) }); t.after(ui.done);
+  assert.ok(document.body.textContent?.includes(en("hrm.employeeBenefits.programs")));
   assert.ok(document.body.textContent?.includes(en("hrm.benefitPolicies.service")));
   const balances = [...document.querySelectorAll('button')].find(node => node.textContent?.trim() === en("hrm.benefitPolicies.balances")); assert.ok(balances); await clickTab(balances);
   assert.ok(document.body.textContent?.includes("40")); assert.ok(document.body.textContent?.includes(en("payroll.entitlements.title")));
+});
+
+
+test("employee Benefits presents native program and assignment destinations for every relationship", async t => {
+  const assignments = employeeBenefitAssignments([{ id: 'rrsp', name: 'Rassaun RRSP', type: 'retirement' }, { id: 'vac', name: 'Vacation', type: 'time_off' }, { id: 'recognition', name: 'Recognition', type: 'reward' }],
+    ['enrollment', 'vacation_terms', 'membership'].map((nativeKind, index) => ({ id: `assignment-${index}`, nativeKind: nativeKind as 'enrollment' | 'vacation_terms' | 'membership', programId: ['rrsp', 'vac', 'recognition'][index]!, employmentId: 'employment', employeePartyId: EMPLOYEE_ID, employeeName: 'Nadia', status: 'active', effectiveFrom: '2026-01-01', effectiveTo: null })), { type: value => value, status: () => 'Active' });
+  const routes = employeeRoutes(); routes['/api/hrm/employee-benefits'] = () => Response.json({ assignments, programs: [], employments: [], enrollments: [], vacation: [], service: [], payroll: false, canManage: false, canReadBanks: false });
+  const ui = await renderEmployeeDrawer({ initialTab: 'benefits', grants: { canReadBenefits: true }, fetchHandler: routeFetch(routes) }); t.after(ui.done);
+  const navigation: string[] = []; globalThis.__partyRouter!.push = href => navigation.push(href);
+  const rows = [...document.querySelectorAll('tbody tr')]; assert.equal(rows.length, 3);
+  assert.deepEqual(new Set([...document.querySelectorAll('a[href^="/hrm/benefits?view=programs&program="]')].map(link => link.getAttribute('href'))), new Set(assignments.map(row => row.programHref)));
+  for (const name of ['Rassaun RRSP', 'Recognition', 'Vacation']) assert.ok(document.body.textContent?.includes(name));
+  const programsRail = [...document.querySelectorAll('nav')].find(nav => nav.querySelector('button')?.textContent === en('hrm.employeeBenefits.programs'));
+  assert.equal(programsRail?.querySelectorAll('button[aria-pressed]').length, 1, 'only Programs is available without Payroll and bank permissions');
+  for (const [name, expected] of [['Rassaun RRSP', '/parties?benefitPolicyKind=coverage&benefitPolicyRow=assignment-0'], ['Recognition', '/hrm/benefits?view=programs&program=recognition&transactionTab=participants']]) {
+    await act(async () => rows.find(row => row.textContent?.includes(name!))!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    assert.equal(navigation.at(-1), expected);
+  }
 });

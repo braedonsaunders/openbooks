@@ -136,13 +136,10 @@
     "crm-sales-quotas": "Quotas",
     "crm-sales-territories": "Territories",
     "hrm-benefits-programs": "计划",
-    "hrm-benefits-enrolments": "参保登记",
-    "hrm-benefits-rewards": "奖励",
-    "hrm-benefits-incentives": "激励",
-    "hrm-benefits-payouts": "发放",
     "hrm-performance-succession": "继任计划",
     "hrm-performance-templates": "考核表单",
-    "hrm-benefits-policies": "政策"
+    "hrm-benefits-employees": "员工福利",
+    "hrm-benefits-delivery": "发放"
   },
   "groups": {
     "workforce": "员工队伍",
@@ -182,7 +179,7 @@
     "hrm-hiring": "招聘",
     "hrm-timeoff": "休假",
     "hrm-talent": "人才",
-    "hrm-rewards": "福利",
+    "hrm-benefits": "福利",
     "payroll": "工资",
     "resourcing": "资源规划",
     "warehouse": "仓库",
@@ -208,7 +205,7 @@
     "hrm-hiring": "招聘",
     "hrm-timeOff": "休假",
     "hrm-talent": "人才",
-    "hrm-rewards": "福利",
+    "hrm-benefits": "福利",
     "payroll": "工资",
     "resourcing": "资源规划",
     "warehouse": "仓库",

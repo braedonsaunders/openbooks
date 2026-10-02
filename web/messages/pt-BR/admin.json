@@ -5190,14 +5190,14 @@
     "benefitBuilder": {
       "offer": "Programa",
       "eligibility": "Elegibilidade e datas",
-      "eligibilityHint": "Defina datas, carência e aprovações. Depois adicione contribuições e limites no registro.",
+      "eligibilityHint": "Defina carências, vigência e aprovações opcionais. Contribuições e escolhas pertencem ao programa.",
       "delivery": "Conexão com a folha",
       "deliveryHint": "Vincule descontos e contribuições patronais. A folha controla o tratamento tributário e processa os valores escolhidos.",
       "review": "Revisar",
       "coverageType": "Tipo de cobertura",
       "health": {
         "title": "Programa de saúde e seguros",
-        "offer": "Nomeie a cobertura, a seguradora e o empregador responsável. Os funcionários escolhem a cobertura em Inscrições.",
+        "offer": "Nomeie cobertura, seguradora e empregador responsável. Gerencie grupos, prêmios e adesões dentro do programa.",
         "costs": "Prêmios e cobertura",
         "costHint": "Defina os prêmios de cada parte e os meses parciais. Adicione níveis individuais ou familiares após a criação.",
         "provider": "Seguradora",
@@ -5212,7 +5212,7 @@
       },
       "retirement": {
         "title": "Programa de aposentadoria e poupança",
-        "offer": "Nomeie o plano, o provedor e o empregador responsável. A participação ocorre em Inscrições.",
+        "offer": "Nomeie a oferta de aposentadoria ou poupança, fornecedor e empregador. Gerencie contribuições, contrapartidas e escolhas no programa.",
         "costs": "Contribuições de poupança",
         "costHint": "Escolha contribuições fixas ou um percentual do salário de cada parte. Percentuais são taxas de contribuição, não uma fórmula de contrapartida.",
         "provider": "Provedor de previdência ou poupança",
@@ -5223,6 +5223,24 @@
         "contribution": "Contribuições",
         "rate": "Valor ou taxa da contribuição",
         "contributionSingular": "Contribuição"
+      },
+      "timeOff": {
+        "title": "Programa de férias e folgas",
+        "description": "Defina férias ou outro banco de tempo, regras de acúmulo e conexão com a folha.",
+        "offer": "Nomeie a oferta e escolha unidade e finalidade. As condições de férias são gerenciadas neste programa.",
+        "accrual": "Acúmulo e limites",
+        "accrualHint": "Escolha como o saldo cresce. Adicione depois limites datados e faixas de tempo de serviço.",
+        "deliveryHint": "A folha registra movimentos e pagamentos usando seus eventos e contas contábeis.",
+        "purpose": "Finalidade",
+        "purposeHint": "Férias usa condições individuais. Feriados alternativos usam o processamento legal. Outros bancos seguem suas regras declaradas.",
+        "other": "Outro banco de tempo",
+        "vacation": "Férias",
+        "alternateHoliday": "Feriado alternativo"
+      },
+      "governingProgram": "Programa aplicável",
+      "vacationAssignmentHint": "Escolha o programa que rege estas condições de férias. O tempo de serviço é registrado uma única vez no vínculo.",
+      "recovery": {
+        "title": "Recuperação de prêmios"
       }
     },
     "benefitContributions": {

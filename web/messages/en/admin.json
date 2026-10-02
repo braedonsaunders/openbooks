@@ -5190,14 +5190,14 @@
     "benefitBuilder": {
       "offer": "Program",
       "eligibility": "Eligibility and dates",
-      "eligibilityHint": "Set coverage dates, waiting time and approval requirements. After creating the offer, add its contributions and matching limits in the record.",
+      "eligibilityHint": "Set waiting periods, effective dates and optional approvals. Contributions and employee elections belong to this program.",
       "delivery": "Payroll connection",
       "deliveryHint": "Link employee deductions and employer contributions. Payroll owns tax treatment and processes the elected amounts on each pay run.",
       "review": "Review",
       "coverageType": "Coverage type",
       "health": {
         "title": "Health and insurance program",
-        "offer": "Name the coverage, insurance provider and responsible employer. Employees choose their coverage through Enrollments.",
+        "offer": "Name the coverage, insurance provider and responsible employer. Manage coverage groups, premiums and employee enrollments within the program.",
         "costs": "Premiums and coverage",
         "costHint": "Set each side of the premium and how partial months are priced. Add employee-only or family coverage tiers after creation.",
         "provider": "Insurance provider",
@@ -5212,7 +5212,7 @@
       },
       "retirement": {
         "title": "Retirement and savings program",
-        "offer": "Name the savings plan, pension or investment provider and responsible employer. Employees participate through Enrollments.",
+        "offer": "Name the retirement or savings offering, provider and responsible employer. Manage contributions, matching rules and employee elections within the program.",
         "costs": "Savings contributions",
         "costHint": "Choose fixed contributions or a percentage of pay for the employee and employer. Percentages are contribution rates, not a matching formula.",
         "provider": "Pension or savings provider",
@@ -5223,6 +5223,24 @@
         "contribution": "Contributions",
         "rate": "Contribution amount or rate",
         "contributionSingular": "Contribution"
+      },
+      "timeOff": {
+        "title": "Time-off program",
+        "description": "Define vacation or another time bank, its accrual rules and payroll connection.",
+        "offer": "Name the offering and choose its unit and purpose. Employee vacation assignments are managed in this program.",
+        "accrual": "Accrual and limits",
+        "accrualHint": "Choose how the balance grows. Add effective limits and service tiers after creating the program.",
+        "deliveryHint": "Payroll records the bank movements and payouts using its pay components and posting accounts.",
+        "purpose": "Purpose",
+        "purposeHint": "Vacation uses employee vacation terms. Alternate holidays use native statutory holiday processing. Other banks use their declared accrual rules.",
+        "other": "Other time bank",
+        "vacation": "Vacation",
+        "alternateHoliday": "Alternate holiday"
+      },
+      "governingProgram": "Governing program",
+      "vacationAssignmentHint": "Choose the vacation program governing these employee terms. Credited service is recorded once on the employment.",
+      "recovery": {
+        "title": "Premium recovery"
       }
     },
     "benefitContributions": {

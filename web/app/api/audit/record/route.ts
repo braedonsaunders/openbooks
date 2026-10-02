@@ -25,7 +25,7 @@ export const GET = defineRoute({
 
     const table = new URL(request.url).searchParams.get('table')
     const recordId = new URL(request.url).searchParams.get('id')
-    if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions' && table !== 'hrm_benefit_enrollments') || !recordId || !isUuid(recordId)) {
+    if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions' && table !== 'hrm_benefit_enrollments' && table !== 'hrm_benefit_programs' && table !== 'hrm_benefit_plans' && table !== 'entitlement_plans') || !recordId || !isUuid(recordId)) {
       return NextResponse.json({ error: 'invalid record' }, { status: 400 })
     }
 
@@ -38,7 +38,7 @@ export const GET = defineRoute({
     // it, still as a uniform 404.
     const family = table === 'parties'
       ? ['parties.read']
-      : table === 'hrm_benefit_enrollments' ? ['hrm.benefits.read']
+      : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? ['hrm.benefits.read']
       : table === 'item_rate_versions'
         ? ['admin.setup.manage']
         : ['ar.read', 'ap.read', 'gl.read', 'expenses.read']
@@ -49,13 +49,27 @@ export const GET = defineRoute({
       throw error
     }
 
-    if (table === 'hrm_benefit_enrollments' && !await isFeatureEnabled(authz.user.orgId, 'hrm')) return notFound('record')
+    if ((table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') && !await isFeatureEnabled(authz.user.orgId, 'hrm')) return notFound('record')
+
+    if (table === 'entitlement_plans' && !await isFeatureEnabled(authz.user.orgId, 'payroll')) return notFound('record')
 
     // Existence, kind, and creator metadata are disclosures too: resolve the
     // record's subsidiary alongside org scope and gate BEFORE anything is
     // returned. Documents follow the documents-list rule (null fails closed);
     // parties follow the party-list rule (null-subsidiary rows are org-wide).
-    const record = table === 'documents'
+    const record = table === 'hrm_benefit_plans'
+      ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select org_id, 'benefit_program' as kind, created_at, created_by, updated_at, updated_by, employer_subsidiary_id as "subsidiaryId"
+          from hrm_benefit_plans where org_id=${authz.user.orgId} and id=${recordId}`))
+      : table === 'entitlement_plans'
+      ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select org_id, 'benefit_program' as kind, created_at, created_by, updated_at, updated_by, null::uuid as "subsidiaryId"
+          from entitlement_plans where org_id=${authz.user.orgId} and id=${recordId}`))
+      : table === 'hrm_benefit_programs'
+      ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select org_id, 'benefit_program' as kind, created_at, created_by, updated_at, updated_by, legal_entity_id as "subsidiaryId"
+          from hrm_benefit_programs where org_id=${authz.user.orgId} and id=${recordId}`))
+      : table === 'documents'
       ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
           select org_id, kind, created_at, created_by, updated_at, updated_by,
                  subsidiary_id as "subsidiaryId"
@@ -99,10 +113,10 @@ export const GET = defineRoute({
       }
     } else {
       const denied = guardSubsidiaryScope(authz, metadata.subsidiaryId ?? null,
-        table === 'parties' ? { orgWideNull: true } : {})
+        table === 'parties' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans' ? { orgWideNull: true } : {})
       if (denied) return denied
     }
-    const permission = table === 'hrm_benefit_enrollments' ? 'hrm.benefits.read' : table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
+    const permission = (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? 'hrm.benefits.read' : table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
     // Wrong-kind callers learn nothing either: the kind-specific permission
     // fails closed with the same uniform 404, so an ar.read-only caller cannot
     // distinguish an existing AP bill from a missing id (and symmetrically).

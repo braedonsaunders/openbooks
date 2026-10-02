@@ -8,7 +8,7 @@ import { stubModules } from '../../../../testing/stub-modules'
 
 await bootJsdomEnvironment({ url: 'http://localhost/hrm/benefits', scrollIntoView: false, resizeObserver: false, event: 'jsdom' })
 Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true })
-stubModules({ navigation: 'export function useRouter(){return {push(){},refresh(){}}}' })
+stubModules({ navigation: `export function useRouter(){return {push(){},refresh(){},replace(){}}} export function usePathname(){return '/hrm/benefits'} export function useSearchParams(){return new URLSearchParams()}` })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') return { shortCircuit: true, url: 'data:text/javascript,export const toast={error(message){globalThis.__benefitAwardErrors.push(message)}}' }
@@ -155,7 +155,7 @@ for (const canConfigureApprovalPolicies of [false, true]) {
   test(`approval policy editor actions follow workflow grant ${canConfigureApprovalPolicies}`, async (t) => {
     const programDrawer = {
       program: { id: 'program', name: 'Recognition', code: 'THANKS', family: 'reward', familyLabel: 'Reward', approvalMode: 'flows', status: 'closed', statusLabel: 'Closed', valueLabel: '$25', effectiveFrom: '2026-01-01', effectiveTo: null },
-      policyLines: [], members: [], membersEmpty: 'No members', sources: [], sourcesEmpty: 'No sources',
+      policyLines: [], members: [], membersEmpty: 'No members', sources: [], sourcesEmpty: 'No sources', activity: [], activityRefusal: null, activityTruncated: false,
       drawerRefusal: null, simulation: null, simulationRefusal: null,
       canConfigureApprovalPolicies, approvalPoliciesRefusal: null,
       approvalPolicies: { configured: true, href: '/admin/flows', policies: [{ id: 'policy', name: 'Recognition controls', ungatedOutcome: 'require_approval', href: '/admin/flows/policy' }] },

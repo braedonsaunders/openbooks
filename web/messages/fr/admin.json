@@ -5190,14 +5190,14 @@
     "benefitBuilder": {
       "offer": "Programme",
       "eligibility": "Admissibilité et dates",
-      "eligibilityHint": "Définissez les dates, le délai et les approbations. Après création, ajoutez cotisations et plafonds dans le régime.",
+      "eligibilityHint": "Définissez les délais, dates d’effet et approbations facultatives. Les cotisations et choix individuels appartiennent au programme.",
       "delivery": "Lien avec la paie",
       "deliveryHint": "Associez les retenues salariales et cotisations patronales. La paie gère le traitement fiscal et les montants choisis à chaque cycle.",
       "review": "Vérifier",
       "coverageType": "Type de couverture",
       "health": {
         "title": "Programme de santé et d’assurance",
-        "offer": "Nommez la couverture, l’assureur et l’employeur responsable. Les employés choisissent leur couverture dans les inscriptions.",
+        "offer": "Nommez la couverture, l’assureur et l’employeur responsable. Gérez les groupes de couverture, primes et adhésions dans le programme.",
         "costs": "Primes et couverture",
         "costHint": "Définissez les primes de chaque partie et le calcul des mois partiels. Ajoutez les niveaux individuel ou familial après création.",
         "provider": "Assureur",
@@ -5212,7 +5212,7 @@
       },
       "retirement": {
         "title": "Programme de retraite et d’épargne",
-        "offer": "Nommez le régime, le fournisseur et l’employeur responsable. Les employés participent via les inscriptions.",
+        "offer": "Nommez l’offre de retraite ou d’épargne, son fournisseur et l’employeur. Gérez cotisations, abondements et choix individuels dans le programme.",
         "costs": "Cotisations d’épargne",
         "costHint": "Choisissez des cotisations fixes ou un pourcentage du salaire pour chaque partie. Les pourcentages sont des taux de cotisation, pas une formule de contrepartie.",
         "provider": "Fournisseur de retraite ou d’épargne",
@@ -5223,6 +5223,24 @@
         "contribution": "Cotisations",
         "rate": "Montant ou taux de cotisation",
         "contributionSingular": "Cotisation"
+      },
+      "timeOff": {
+        "title": "Programme de congés",
+        "description": "Définissez les vacances ou une banque de temps, ses règles d’acquisition et son lien avec la paie.",
+        "offer": "Nommez l’offre et choisissez son unité et son objet. Les conditions de vacances se gèrent dans ce programme.",
+        "accrual": "Acquisition et limites",
+        "accrualHint": "Choisissez comment le solde augmente. Ajoutez ensuite les limites datées et paliers d’ancienneté.",
+        "deliveryHint": "La paie enregistre les mouvements et versements avec ses rubriques et comptes comptables.",
+        "purpose": "Objet",
+        "purposeHint": "Les vacances utilisent les conditions individuelles. Les jours fériés de remplacement utilisent le traitement légal natif. Les autres banques suivent leurs règles déclarées.",
+        "other": "Autre banque de temps",
+        "vacation": "Vacances",
+        "alternateHoliday": "Jour férié de remplacement"
+      },
+      "governingProgram": "Programme applicable",
+      "vacationAssignmentHint": "Choisissez le programme de vacances régissant ces conditions. L’ancienneté est enregistrée une seule fois dans le dossier d’emploi.",
+      "recovery": {
+        "title": "Recouvrement des primes"
       }
     },
     "benefitContributions": {

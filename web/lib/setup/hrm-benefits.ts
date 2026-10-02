@@ -7,7 +7,7 @@ import { foldWholeNumber } from './whole-number'
 
 export const BENEFIT_PLANS_ENTITY: SetupEntity = {
   key: 'benefit-plans',
-  createDestination: { rowParam: 'plan', tabKey: 'benefit-contribution-rules' },
+  createDestination: { rowParam: 'program', tabKey: 'benefit-contribution-rules' },
   rehomed: true,
   table: 'hrm_benefit_plans',
   groupKey: 'workforce',
@@ -96,6 +96,11 @@ export function benefitPlanPresentation(kind: 'health' | 'retirement', creating 
   const eligibility = ['waitingPeriodDays', 'waitingPeriodMonths', 'approvalMode', 'effectiveFrom', 'effectiveTo', 'isActive']
   return {
     ...BENEFIT_PLANS_ENTITY,
+    formDescriptionKey: `benefitBuilder.${kind}.offer`,
+    formSections: creating ? undefined : [
+      { titleKey: 'benefitBuilder.offer', fields: identity },
+      { titleKey: 'benefitBuilder.eligibility', descriptionKey: 'benefitBuilder.eligibilityHint', fields: eligibility },
+    ],
     recordChildren: BENEFIT_CONTRIBUTION_ENTITIES.filter((child) => child.parentRecords?.some((owner) => owner.entityKey === 'benefit-plans') && (retirement || child.key !== 'benefit-contribution-tiers')).map((child) => ({
       ...child,
       titleKey: child.key === 'benefit-contribution-rules' ? `benefitBuilder.${kind}.contribution` : !retirement && child.key === 'benefit-contribution-classes' ? 'benefitBuilder.health.classes' : undefined,

@@ -132,7 +132,7 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
         </div>
         <Link
-          href={'/hrm/benefits?view=policies&policy=entitlements' as never}
+          href={'/hrm/benefits?view=programs&type=time_off' as never}
           className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
         >
           <Settings2 size={13} aria-hidden /> {t('managePlans')}
@@ -152,7 +152,7 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{row.planName}</p>
+                  <Link href={`/hrm/benefits?view=programs&program=${encodeURIComponent(row.planId)}` as never} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">{row.planName}</Link>
                   <p className="font-mono text-xs text-slate-500 dark:text-slate-400">{row.planCode}</p>
                 </div>
                 {row.overLimit ? <Badge variant="destructive">{t('overLimit')}</Badge>

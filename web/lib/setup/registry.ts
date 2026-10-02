@@ -67,18 +67,18 @@ export function setupChildEntities(parentKey: string): SetupEntity[] {
 export function setupEntityHref(entity: SetupEntity): string {
   if (entity.key === 'benefit-programs') return '/hrm/benefits?view=programs'
   if (entity.key === 'benefit-plans') return '/hrm/benefits?view=programs'
-  if (entity.key === 'entitlement-plans') return '/hrm/benefits?view=policies&policy=entitlements'
-  if (entity.key === 'payroll-vacation-terms') return '/hrm/benefits?view=policies&policy=vacation'
-  if (entity.key === 'payroll-service-credits') return '/hrm/benefits?view=policies&policy=service'
+  if (entity.key === 'entitlement-plans') return '/hrm/benefits?view=programs&type=time_off'
+  if (entity.key === 'payroll-vacation-terms') return '/hrm/benefits?view=employees'
+  if (entity.key === 'payroll-service-credits') return '/hrm/benefits?view=employees'
   const parentKey = entity.parentRecords?.[0]?.entityKey
   if (!parentKey) return `/admin/setup/${entity.key}`
   const parentHomes: Record<string, string> = {
     items: '/items',
     'benefit-plans': '/hrm/benefits?view=programs',
-    'benefit-enrollment-configuration': '/hrm/benefits?view=enrolments',
+    'benefit-enrollment-configuration': '/hrm/benefits?view=employees',
     'benefit-programs': '/hrm/benefits?view=programs',
     'tax-regimes': '/admin/setup/tax-depreciation?tab=regimes',
-    'entitlement-plans': '/hrm/benefits?view=policies&policy=entitlements',
+    'entitlement-plans': '/hrm/benefits?view=programs&type=time_off',
     'pay-components': '/admin/setup/payroll?tab=components',
   }
   const home = parentHomes[parentKey] ?? `/admin/setup/${parentKey}`

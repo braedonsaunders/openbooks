@@ -136,13 +136,10 @@
     "crm-sales-quotas": "Quotas",
     "crm-sales-territories": "Territories",
     "hrm-benefits-programs": "Programas",
-    "hrm-benefits-enrolments": "Inscripciones",
-    "hrm-benefits-rewards": "Recompensas",
-    "hrm-benefits-incentives": "Incentivos",
-    "hrm-benefits-payouts": "Pagos",
     "hrm-performance-succession": "Planes de sucesión",
     "hrm-performance-templates": "Formularios de evaluación",
-    "hrm-benefits-policies": "Políticas"
+    "hrm-benefits-employees": "Beneficios de empleados",
+    "hrm-benefits-delivery": "Entrega"
   },
   "modulesShort": {
     "ap": "Por pagar",
@@ -187,7 +184,7 @@
     "hrm-hiring": "Contratación",
     "hrm-timeoff": "Ausencias",
     "hrm-talent": "Talento",
-    "hrm-rewards": "Beneficios",
+    "hrm-benefits": "Beneficios",
     "payroll": "Nómina",
     "resourcing": "Planificación de recursos",
     "warehouse": "Almacén",
@@ -208,7 +205,7 @@
     "hrm-hiring": "Contratación",
     "hrm-timeOff": "Ausencias",
     "hrm-talent": "Talento",
-    "hrm-rewards": "Beneficios",
+    "hrm-benefits": "Beneficios",
     "payroll": "Nómina",
     "resourcing": "Planificación de recursos",
     "warehouse": "Almacén",
