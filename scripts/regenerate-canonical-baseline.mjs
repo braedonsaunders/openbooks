@@ -1,5 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { splitSqlStatements } from "./check-migration-preflights.mjs";
+import { stripSqlComments } from "./check-migration-headers.mjs";
 
 /**
  * The input is a schema-only dump produced inside the release-pinned
@@ -168,13 +170,25 @@ function assertCuratedQueryViews(functionSql) {
   }
 }
 
-function addReviewedPayrollRelations(source) {
+function addReviewedPayrollRelations(source, registryRelations) {
   const functionMatch = source.match(
     /CREATE FUNCTION public\.openbooks_refresh_query_catalog\(\)[\s\S]*?\n\$_\$;/,
   );
   if (!functionMatch) throw new Error("query-catalog refresh function is missing");
 
   let functionSql = functionMatch[0];
+  if (registryRelations !== undefined) {
+    if (!/select relation\s+from public\.openbooks_query_catalog_relations\s+order by relation/i.test(functionSql)) {
+      throw new Error("query-catalog refresh must read the module registry");
+    }
+    const present = new Set(registryRelations);
+    assertNoUnreviewedExposure(present);
+    assertCuratedQueryViews(functionSql);
+    for (const relation of PAYROLL_QUERY_RELATIONS) {
+      if (!present.has(relation)) throw new Error(`reviewed query relation is missing: ${relation}`);
+    }
+    return source;
+  }
   const present = readAllowlist(functionSql);
   assertNoUnreviewedExposure(present);
   assertCuratedQueryViews(functionSql);
@@ -239,7 +253,7 @@ function restoreHandwrittenAnnotations(source, annotations) {
   return annotated;
 }
 
-export function canonicalizePgDump(rawDump, { annotations = new Map() } = {}) {
+export function canonicalizePgDump(rawDump, { annotations = new Map(), registryRelations } = {}) {
   let source = rawDump.replace(/\r\n?/g, "\n");
   if (!/Dumped from database version 16\.9(?:\D|$)/.test(source)
       || !/Dumped by pg_dump version 16\.9(?:\D|$)/.test(source)) {
@@ -259,26 +273,36 @@ export function canonicalizePgDump(rawDump, { annotations = new Map() } = {}) {
     .replace(/--\n-- PostgreSQL database dump complete\n--\n[\s\S]*$/, "")
     .trimEnd();
 
+  // A schema-selected dump needs explicit extension inclusion, but pg_trgm
+  // remains optional. Its acceleration indexes must honor the same decision
+  // as extension installation on restricted PostgreSQL providers.
+  source = source.replace(/^CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n/gm, "")
+    .replace(/^COMMENT ON EXTENSION pg_trgm IS '[^\n]*';\n/gm, "")
+    .replace(/^CREATE INDEX [^\n]*\bpublic\.(?:gin|gist)_trgm_ops[^\n]*;$/gm,
+      (statement) => `DO $trigram_index$\nBEGIN\n  IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_trgm') THEN\n    ${statement}\n  END IF;\nEND\n$trigram_index$;`);
+
   source = replaceExactly(
     source,
     /CREATE SCHEMA openbooks_query;\n\n\n/g,
     `CREATE SCHEMA openbooks_query;\n\n\n${OPTIONAL_TRIGRAM}`,
     "openbooks_query schema declaration",
   );
-  source = addReviewedPayrollRelations(source);
+  source = addReviewedPayrollRelations(source, registryRelations);
 
   const forbidden = [
     [/^\\/m, "psql meta-command"],
     [/\b(?:ALTER\s+\S+[\s\S]{0,120}\s+OWNER TO|OWNER TO)\b/i, "owner assignment"],
     [/\bCREATE DATABASE\b/i, "database creation"],
     [/\bTABLESPACE\b/i, "tablespace"],
-    [/\b(?:COPY|INSERT INTO)\s+public\./i, "data statement"],
     [/\b(?:GRANT|REVOKE)[^;]*\bopenbooks_app\b/i, "runtime-role ACL"],
     [/\b(?:CREATE TABLE|ALTER TABLE)\s+(?:ONLY\s+)?public\._applied_migrations\b/i, "migration ledger DDL"],
     [/\bCREATE SCHEMA public\b/i, "public schema creation"],
   ];
   for (const [pattern, label] of forbidden) {
     if (pattern.test(source)) throw new Error(`canonical baseline contains forbidden ${label}`);
+  }
+  if (splitSqlStatements(source).some((statement) => /^\s*(?:COPY|INSERT\s+INTO)\s+public\./i.test(stripSqlComments(statement)))) {
+    throw new Error("canonical baseline contains forbidden data statement");
   }
 
   for (const required of [

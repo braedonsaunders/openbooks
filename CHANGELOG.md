@@ -6,6 +6,17 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.29] - 2026-10-02
+
+- Install new databases from one verified release baseline. Preserve historical
+  SQL and migration identities for controlled upgrades of existing databases.
+  Existing installations must complete historical migrations, verify schema
+  equivalence and adopt the release baseline before deployment. See the
+  [baseline cutover procedure](docs/operations/migration-baseline-cutover.md).
+- Consolidate native Benefits contributions and employer vacation policies.
+- Refine Talent recruiting, performance reviews and Conversations workspaces.
+- Use native line action menus with structural editing and distribution controls.
+
 ## [0.1.0-alpha.28.3] - 2026-10-01
 
 - Verify production PDF generation through the application's pinned Puppeteer

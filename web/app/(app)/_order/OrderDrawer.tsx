@@ -1473,7 +1473,7 @@ export function OrderDrawer({
       actions={
         mode === 'edit' ? (
           <>
-            <Button disabled={busy || priceLookupBlocked} onClick={save}>
+            <Button disabled={busy || priceLookupBlocked} onClick={save} title={priceLookupPending.size > 0 ? t('pricingResolving') : undefined}>
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </>
@@ -1570,6 +1570,7 @@ export function OrderDrawer({
       ]}
       footer={
         <div className="flex w-full items-center gap-3">
+          <span role="status" className="sr-only">{priceLookupPending.size > 0 ? t('pricingResolving') : null}</span>
           <span
             className={
               'text-xs ' +
@@ -1599,7 +1600,6 @@ export function OrderDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
-        {priceLookupPending.size > 0 ? <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{t('pricingResolving')}</p> : null}
         {priceLookupFailures.size > 0 ? <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">{[...priceLookupFailures].map(([key, message]) => <li key={key} role="alert">{rows.find((row) => row.clientKey === key)?.description || t('columns.item')}: {message}</li>)}</ul> : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>

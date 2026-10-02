@@ -159,6 +159,25 @@ test("canonical dump rejects a partial payroll query allowlist", () => {
   );
 });
 
+test("a table-driven query catalog preserves registry membership without inventing a function allowlist", () => {
+  const relations = ["pay_schedules", "pay_components", "pay_derived_rules", "pay_run_adjustments", "employee_pay_components", "pay_runs", "pay_stubs", "pay_stub_lines", "payroll_filing_accounts", "payroll_holidays", "payroll_opening_balance_components", "payroll_opening_balances", "union_agreements", "union_classifications", "union_fringes"];
+  const tableDriven = queryFunction.replace(/  safe_relations constant text\[\] := array\[[\s\S]*?\n  \];/, "")
+    .replace("begin\n", "begin\n  for relation_name in select relation from public.openbooks_query_catalog_relations order by relation loop\n    null;\n  end loop;\n");
+  const result = canonicalizePgDump(syntheticDump("", tableDriven), { registryRelations: relations });
+  assert.match(result, /from public\.openbooks_query_catalog_relations/);
+  assert.doesNotMatch(result, /safe_relations/);
+  assert.throws(() => canonicalizePgDump(syntheticDump("", tableDriven), { registryRelations: [...relations, "employee_payroll_profiles"] }), /curated query relation/);
+  assert.throws(() => canonicalizePgDump(syntheticDump("", tableDriven), { registryRelations: [...relations, "auth_sessions"] }), /authentication tables/);
+  assert.throws(() => canonicalizePgDump(syntheticDump("", tableDriven), { registryRelations: relations.filter((name) => name !== "pay_runs") }), /missing: pay_runs/);
+  assert.throws(() => canonicalizePgDump(syntheticDump(), { registryRelations: relations }), /must read the module registry/);
+});
+
+test("stored functions may insert tenant rows while top-level tenant data remains forbidden", () => {
+  const functionSql = "CREATE FUNCTION public.record_event() RETURNS void LANGUAGE plpgsql AS $$ BEGIN INSERT INTO public.audit_log DEFAULT VALUES; END $$;";
+  assert.doesNotThrow(() => canonicalizePgDump(syntheticDump(functionSql)));
+  assert.throws(() => canonicalizePgDump(syntheticDump(functionSql + "\nINSERT INTO public.audit_log DEFAULT VALUES;")), /forbidden data statement/);
+});
+
 test("canonical dump rejects a curated relation on the generic allowlist", () => {
   assert.throws(
     () => canonicalizePgDump(

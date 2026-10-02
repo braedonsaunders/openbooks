@@ -43,6 +43,9 @@
     },
     {
       "tag": "v0.1.0-alpha.27.1"
+    },
+    {
+      "tag": "v0.1.0-alpha.28.3"
     }
   ],
   "requiredDatasetClasses": [

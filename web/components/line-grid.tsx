@@ -8,7 +8,7 @@
  *  - spreadsheet keyboard model: Enter commits + moves down (appending a row
  *    at the bottom), Alt+↑/↓ moves the row, ⌘/Ctrl+D duplicates it,
  *    ⌘/Ctrl+Backspace deletes it, Tab walks cells naturally
- *  - per-row grip menu: insert above/below, duplicate, remove
+ *  - per-row action button and right-click menu: insert above/below, duplicate, remove
  *  - amount cells retain ledger scale; decimal cells preserve commercial
  *    precision while hiding insignificant storage-scale zeroes
  *  - column model is data: text / amount / decimal / select / search-select / readonly
@@ -18,9 +18,9 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Copy, GripVertical, Lock, LockOpen, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, Lock, LockOpen, MoreHorizontal, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, ContextMenu, FieldLabel, Popover, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry, type SearchSelectScanResult } from '@openbooks/ui'
+import { Badge, Button, ContextMenu, FieldLabel, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry, type SearchSelectScanResult } from '@openbooks/ui'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import {
   displayLineDecimal,
@@ -261,9 +261,8 @@ export function LineGrid<Row extends Record<string, unknown>>({
   const headerIds = columns.map((_column, index) => `${headerIdPrefix}-column-${index}`)
   const rowLabelPrefix = `${headerIdPrefix}-row`
   const containerRef = useRef<HTMLDivElement>(null)
-  const [menuRow, setMenuRow] = useState<number | null>(null)
-  const distMenu = useContextMenu()
-  const [distTarget, setDistTarget] = useState<number | null>(null)
+  const rowMenu = useContextMenu()
+  const [menuRowKey, setMenuRowKey] = useState<string | null>(null)
 
   // The distribution column and group headers are edit-mode UX only: the
   // read-only document view and the PDF data shape stay exactly as today.
@@ -271,7 +270,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
 
   const template = readOnly
     ? columns.map((c) => c.width).join(' ')
-    : `34px ${columns.map((c) => c.width).join(' ')}${showDist ? ' 150px' : ''}`
+    : `52px ${columns.map((c) => c.width).join(' ')}${showDist ? ' 150px' : ''}`
 
   const clone: (row: Row) => Row = cloneRow ?? ((row: Row): Row => ({ ...row }))
   const resolveKey = useCallback(
@@ -287,6 +286,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
     rowsRef.current = rows
   }, [rows])
   const rowKeys = rows.map((row, i) => resolveKey(row, i))
+  const menuIndex = menuRowKey === null ? -1 : rowKeys.indexOf(menuRowKey)
 
   /**
    * Uncommitted cell drafts by row identity, then column. A reorder or
@@ -394,6 +394,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   }
   const removeRow = (i: number) => {
     const base = takeCommittedRows()
+    if (i < 0 || i >= base.length) return
     if (base.length <= minRows) {
       onRowsChange(base.map((r, j) => (j === i ? emptyRow() : r)))
       return
@@ -474,24 +475,21 @@ export function LineGrid<Row extends Record<string, unknown>>({
     return map
   }, [showDist, distribution, rows.length])
 
-  const openDistMenu = useCallback(
-    (e: React.MouseEvent, index: number) => {
-      setDistTarget(index)
-      distMenu.onContextMenu(e)
-    },
-    [distMenu, setDistTarget],
-  )
+  function openRowMenu(anchor: HTMLElement, rowKey: string) {
+    setMenuRowKey(rowKey)
+    rowMenu.openBelow(anchor)
+  }
 
-  const distMenuItems: ContextMenuEntry[] = useMemo(() => {
-    if (!showDist || !distribution || distTarget === null) return []
-    const row = rows[distTarget]
+  const distMenuItems: ContextMenuEntry[] = (() => {
+    if (!showDist || !distribution || menuIndex === -1) return []
+    const row = rows[menuIndex]
     if (!row) return []
-    const chip = distribution.chipOf(row, distTarget)
+    const chip = distribution.chipOf(row, menuIndex)
     const suggestName = chip?.kind === 'suggest' ? chip.ruleName : null
-    const groupKey = distribution.groupKeyOf(row, distTarget)
-    return distribution.menuKeysOf(row, distTarget).map((key) => {
+    const groupKey = distribution.groupKeyOf(row, menuIndex)
+    return distribution.menuKeysOf(row, menuIndex).map((key) => {
       if (key === 'split') {
-        return { key, label: tEntry('entry.split'), icon: Split, onSelect: () => distribution.onSplit(distTarget) }
+        return { key, label: tEntry('entry.split'), icon: Split, onSelect: () => distribution.onSplit(menuIndex) }
       }
       if (key === 'unsplit' && groupKey !== null) {
         return { key, label: tEntry('entry.unSplit'), onSelect: () => distribution.onUnsplit(groupKey) }
@@ -516,10 +514,19 @@ export function LineGrid<Row extends Record<string, unknown>>({
         key,
         label: suggestName !== null ? tEntry('entry.suggestSplit', { rule: suggestName }) : tEntry('entry.split'),
         icon: Split,
-        onSelect: () => distribution.onApplySuggestion(distTarget),
+        onSelect: () => distribution.onApplySuggestion(menuIndex),
       }
     })
-  }, [showDist, distribution, distTarget, rows, tEntry])
+  })()
+
+  const rowMenuItems: ContextMenuEntry[] = readOnly || menuIndex === -1 ? [] : [
+    { key: 'insert-above', label: t('insertAbove'), icon: ArrowUp, onSelect: () => insertRow(menuIndex) },
+    { key: 'insert-below', label: t('insertBelow'), icon: ArrowDown, onSelect: () => insertRow(menuIndex + 1) },
+    { key: 'duplicate', label: tCommon('actions.duplicate'), icon: Copy, onSelect: () => duplicateRow(menuIndex) },
+    ...(distMenuItems.length > 0 ? [{ key: 'distribution-separator', separator: true } as const, ...distMenuItems] : []),
+    { key: 'remove-separator', separator: true },
+    { key: 'remove', label: rows.length > minRows ? t('removeLine') : t('clearLine'), icon: Trash2, danger: true, onSelect: () => removeRow(menuIndex) },
+  ]
 
   const cellBase =
     'flex min-h-[38px] items-center border-b border-slate-100 px-1 dark:border-slate-800'
@@ -579,7 +586,22 @@ export function LineGrid<Row extends Record<string, unknown>>({
 
           {/* rows */}
           {rows.map((row, i) => (
-            <div key={rowKeys[i]!} role="row" className="contents">
+            <div
+              key={rowKeys[i]!}
+              role="row"
+              className="contents"
+              onContextMenu={readOnly ? undefined : (event) => {
+                setMenuRowKey(rowKeys[i]!)
+                rowMenu.onContextMenu(event)
+              }}
+              onKeyDown={readOnly ? undefined : (event) => {
+                if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  openRowMenu(event.target as HTMLElement, rowKeys[i]!)
+                }
+              }}
+            >
             <RowCells
               row={row}
               rowKey={rowKeys[i]!}
@@ -595,13 +617,8 @@ export function LineGrid<Row extends Record<string, unknown>>({
               commitTax={commitTax}
               registerDraft={registerDraft}
               handleKeyDown={handleKeyDown}
-              menuOpen={menuRow === i}
-              setMenuOpen={(open) => setMenuRow(open ? i : null)}
-              insertRow={insertRow}
-              duplicateRow={duplicateRow}
-              removeRow={removeRow}
-              moveRow={moveRow}
-              canRemove={rows.length > minRows}
+              menuOpen={rowMenu.open && menuIndex === i}
+              onOpenMenu={(anchor) => openRowMenu(anchor, rowKeys[i]!)}
               formatAmount={formatAmount}
               groupHeader={showDist ? (headersByIndex.get(i) ?? null) : null}
               indented={showDist && (distribution?.groupedIndexes.has(i) ?? false)}
@@ -609,18 +626,10 @@ export function LineGrid<Row extends Record<string, unknown>>({
                 showDist && distribution
                   ? {
                       chip: distribution.chipOf(row, i),
-                      onSplitBelow: (anchor) => {
-                        setDistTarget(i)
-                        distMenu.openBelow(anchor)
-                      },
+                      onSplitBelow: (anchor) => openRowMenu(anchor, rowKeys[i]!),
                       onApplySuggestion: () => distribution.onApplySuggestion(i),
                     }
                   : null
-              }
-              onCellContextMenu={
-                showDist && distribution && distribution.menuKeysOf(row, i).length > 0
-                  ? (e) => openDistMenu(e, i)
-                  : undefined
               }
               onEditGroupTotal={showDist && distribution ? distribution.onEditGroupTotal : undefined}
               onToggleGroupLock={showDist && distribution ? distribution.onToggleLock : undefined}
@@ -630,7 +639,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
           ))}
         </div>
       </div>
-      <ContextMenu open={distMenu.open} position={distMenu.position} items={distMenuItems} onClose={distMenu.close} />
+      <ContextMenu open={!readOnly && menuIndex !== -1 && rowMenu.open} position={rowMenu.position} items={rowMenuItems} onClose={rowMenu.close} />
 
       <div className="mt-2 flex items-center justify-between gap-3">
         {!readOnly && addPlacement === 'bottom' ? (
@@ -783,16 +792,11 @@ function RowCells<Row extends Record<string, unknown>>({
   registerDraft,
   handleKeyDown,
   menuOpen,
-  setMenuOpen,
-  insertRow,
-  duplicateRow,
-  removeRow,
-  canRemove,
+  onOpenMenu,
   formatAmount,
   groupHeader,
   indented,
   dist,
-  onCellContextMenu,
   onEditGroupTotal,
   onToggleGroupLock,
   onUnsplitGroup,
@@ -812,12 +816,7 @@ function RowCells<Row extends Record<string, unknown>>({
   registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
   handleKeyDown: (e: React.KeyboardEvent, i: number, col: number) => void
   menuOpen: boolean
-  setMenuOpen: (open: boolean) => void
-  insertRow: (at: number) => void
-  duplicateRow: (i: number) => void
-  removeRow: (i: number) => void
-  moveRow: (i: number, delta: number) => void
-  canRemove: boolean
+  onOpenMenu: (anchor: HTMLElement) => void
   formatAmount?: (value: string) => React.ReactNode
   groupHeader: GroupHeaderModel | null
   indented: boolean
@@ -826,13 +825,11 @@ function RowCells<Row extends Record<string, unknown>>({
     onSplitBelow: (anchor: HTMLElement) => void
     onApplySuggestion: () => void
   } | null
-  onCellContextMenu?: (e: React.MouseEvent) => void
   onEditGroupTotal?: (groupKey: string, total: string) => void
   onToggleGroupLock?: (groupKey: string) => void
   onUnsplitGroup?: (groupKey: string) => void
 }) {
   const t = useTranslations('ui.lineGrid')
-  const tCommon = useTranslations('common')
   const tScan = useTranslations('ui.select')
   return (
     <>
@@ -847,53 +844,17 @@ function RowCells<Row extends Record<string, unknown>>({
       {!readOnly ? (
         <div className={cn(cellBase, 'justify-center px-0')}>
           <span id={rowLabelId} className="sr-only">{t('lineActionsAria', { number: i + 1 })}</span>
-          <Popover
-            open={menuOpen}
-            onOpenChange={setMenuOpen}
-            align="start"
-            className="w-44"
-            trigger={
-              <button
-                type="button"
-                aria-label={t('lineActionsAria', { number: i + 1 })}
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="group flex h-7 w-7 items-center justify-center rounded text-slate-300 hover:bg-slate-100 hover:text-slate-500 dark:hover:bg-slate-800"
-              >
-                <span className="text-[11px] tabular-nums group-hover:hidden">{i + 1}</span>
-                <GripVertical size={13} className="hidden group-hover:block" />
-              </button>
-            }
+          <button
+            type="button"
+            aria-label={t('lineActionsAria', { number: i + 1 })}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={(event) => onOpenMenu(event.currentTarget)}
+            className="flex h-7 w-11 items-center justify-center gap-1 rounded text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
-            <div className="py-1 text-sm">
-              {[
-                { label: t('insertAbove'), icon: ArrowUp, fn: () => insertRow(i) },
-                { label: t('insertBelow'), icon: ArrowDown, fn: () => insertRow(i + 1) },
-                { label: tCommon('actions.duplicate'), icon: Copy, fn: () => duplicateRow(i) },
-              ].map((a) => (
-                <button
-                  key={a.label}
-                  type="button"
-                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                  onClick={() => {
-                    a.fn()
-                    setMenuOpen(false)
-                  }}
-                >
-                  <a.icon size={14} className="text-slate-400" /> {a.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                onClick={() => {
-                  removeRow(i)
-                  setMenuOpen(false)
-                }}
-              >
-                <Trash2 size={14} /> {canRemove ? t('removeLine') : t('clearLine')}
-              </button>
-            </div>
-          </Popover>
+            <span className="text-[11px] tabular-nums">{i + 1}</span>
+            <MoreHorizontal size={13} aria-hidden="true" />
+          </button>
         </div>
       ) : null}
 
@@ -949,7 +910,6 @@ function RowCells<Row extends Record<string, unknown>>({
               role="gridcell"
             className={cn(cellBase, indented && colIndex === 0 && 'pl-6')}
             onKeyDown={(e) => handleKeyDown(e, i, colIndex)}
-            onContextMenu={onCellContextMenu}
           >
             {c.type === 'search-select' ? (
               <SearchSelect
@@ -1038,7 +998,7 @@ function RowCells<Row extends Record<string, unknown>>({
         )
       })}
       {dist ? (
-        <div className={cn(cellBase, 'px-1.5')} onContextMenu={onCellContextMenu}>
+        <div className={cn(cellBase, 'px-1.5')}>
           <DistributionCell
             chip={dist.chip}
             rowNumber={i + 1}

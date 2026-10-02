@@ -176,7 +176,13 @@ schema_fingerprint() {
   repo=$(git rev-parse --show-toplevel)
   ( cd "$repo/schema/migrations/generated" 2>/dev/null && ls -1 *.sql 2>/dev/null | sort | while read -r f; do
       printf '%s:%s\n' "$f" "$(shasum -a 256 "$f" | cut -d" " -f1)"
-    done ) | shasum -a 256 | cut -d" " -f1
+    done
+    if [ -f "$repo/schema/migrations/baseline.json" ]; then
+      printf 'release-baseline:%s\n' "$(shasum -a 256 "$repo/schema/migrations/baseline.json" | cut -d" " -f1)"
+      for f in "$repo"/schema/migrations/baselines/*.sql; do
+        printf '%s:%s\n' "$(basename "$f")" "$(shasum -a 256 "$f" | cut -d" " -f1)"
+      done
+    fi ) | shasum -a 256 | cut -d" " -f1
 }
 
 migration_count() {

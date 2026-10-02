@@ -8,6 +8,7 @@ import { db, env, longPool, pool, withBypassContext } from "../engine/src/platfo
 import { provisionOrganizationDefaults } from "../engine/src/provisioning/organization-provisioning.ts"
 
 async function main(): Promise<void> {
+  const historicalMigrations = process.argv.includes("--historical-migrations");
   if (process.argv.includes("--check")) {
     // Strictly read-only: this path takes no advisory lock (it must not
     // block a live app), creates nothing, and performs no role, seed, or
@@ -16,7 +17,7 @@ async function main(): Promise<void> {
     const json = process.argv.includes("--json");
     let code = 1;
     try {
-      code = await runUpgradeCheckMain(json);
+      code = await runUpgradeCheckMain(json, historicalMigrations);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(message);
@@ -86,7 +87,7 @@ async function main(): Promise<void> {
         // with (they refuse at import without one).
         await requireRuntimeLoginRole(runtimeConfig);
         if (bypassConfig) await requireBypassLoginRole(bypassConfig);
-        await migrate();
+        await migrate(historicalMigrations);
         await ensureRuntimeDatabaseRole(runtimeConfig, true);
         // The constrained login owns the schema, so it can converge the
         // host-created bypass login's object grants for tables this run
@@ -131,7 +132,7 @@ async function main(): Promise<void> {
       if (bypassConfig && !precreated) {
         await ensureBypassRoleExists(bypassConfig, runtimeConfig?.roleName ?? null);
       }
-      await migrate();
+      await migrate(historicalMigrations);
       if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig, precreated);
       if (bypassConfig && !precreated) {
         await ensureBypassDatabaseRole(bypassConfig, runtimeConfig?.roleName ?? null);
