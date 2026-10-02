@@ -19,7 +19,7 @@ test("inherited Sales placements move to Customers without overriding company ch
   const saved = defaultNavConfig();
   const customers = saved.groups.find((group) => group.id === 'customers')!;
   const accounting = saved.groups.find((group) => group.id === 'accounting')!;
-  const sales = customers.items.filter((item) => item.kind === 'module' && MODULE_BY_KEY.get(item.moduleKey)?.subgroup === 'crm-sales');
+  const sales = customers.items.filter((item) => item.kind === 'module' && item.moduleKey !== 'crm-sales' && MODULE_BY_KEY.get(item.moduleKey)?.subgroup === 'crm-sales');
   assert.equal(sales.length, 4);
   customers.items = customers.items.filter((item) => !sales.includes(item));
   accounting.items.push(...sales);

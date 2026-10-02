@@ -164,7 +164,7 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'crm.forecasts.read',
   },
 
-  { key: 'crm-sales', href: '/crm/sales', label: 'Sales', iconKey: 'users', group: 'customers', subgroup: 'sell-collect', requiredPermissionsAny: ['crm.setup.manage', 'crm.forecasts.read'] },
+  { key: 'crm-sales', href: '/crm/sales', label: 'Overview', iconKey: 'users', group: 'customers', subgroup: 'crm-sales', requiredPermissionsAny: ['crm.setup.manage', 'crm.forecasts.read'] },
 
   // Customer records and the sell-to-collect workflow.
   {
@@ -1104,6 +1104,11 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'crm-activities',
     'crm-opportunities',
     'crm-forecasts',
+    'crm-sales',
+    'crm-sales-representatives',
+    'crm-sales-teams',
+    'crm-sales-quotas',
+    'crm-sales-territories',
     'ar-invoices',
     'sales-orders',
     'estimates',

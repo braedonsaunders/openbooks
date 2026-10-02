@@ -43,17 +43,17 @@ test('default workspaces follow the approved journey-oriented information archit
     'crm-activities',
     'crm-opportunities',
     'crm-forecasts',
+    'crm-sales',
+    'crm-sales-representatives',
+    'crm-sales-teams',
+    'crm-sales-quotas',
+    'crm-sales-territories',
     'ar-invoices',
     'sales-orders',
     'estimates',
     'receipts',
     'collections',
     'ar',
-    'crm-sales',
-    'crm-sales-representatives',
-    'crm-sales-teams',
-    'crm-sales-quotas',
-    'crm-sales-territories',
   ])
   for (const key of ['employees', 'hrm', 'payroll']) {
     assert.ok(DEFAULT_NAV_ORDER.hrm.includes(key))
