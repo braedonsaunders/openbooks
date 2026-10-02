@@ -197,7 +197,7 @@ test("create refuses hostile payloads at the real boundary", async () => {
 test("create forwards org, actor, and body, then 201s", async () => {
   reset();
   const response = await collectionRoute!.POST(
-    postRequest({ templateId: TEMPLATE_ID, name: "FY26", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30" }),
+    postRequest({ templateId: TEMPLATE_ID, name: "FY26", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30", requireManagerReviews: true }),
   );
   assert.equal(response.status, 201);
   assert.deepEqual(routeState.calls[0]!.args, {
@@ -210,6 +210,7 @@ test("create forwards org, actor, and body, then 201s", async () => {
     selfDueOn: null,
     managerDueOn: null,
     appliesTo: {},
+    requireManagerReviews: true,
   });
 });
 

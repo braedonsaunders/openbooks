@@ -43,31 +43,17 @@ const mockSources = new Map<string, string>([
     "mock:service",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-review-item-route-test')]
-      export async function submitReview(args) {
-        state.calls.push({ fn: 'submit', args })
+      const action = (fn, status) => async (args) => {
+        state.calls.push({ fn, args })
         if (state.serviceThrow) throw state.serviceThrow
-        return { id: args.reviewId, status: 'submitted' }
+        return { id: args.reviewId, status }
       }
-      export async function calibrateReview(args) {
-        state.calls.push({ fn: 'calibrate', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { id: args.reviewId, status: 'calibrated' }
-      }
-      export async function shareReview(args) {
-        state.calls.push({ fn: 'share', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { id: args.reviewId, status: 'shared' }
-      }
-      export async function acknowledgeReview(args) {
-        state.calls.push({ fn: 'acknowledge', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { id: args.reviewId, status: 'acknowledged' }
-      }
-      export async function reopenReview(args) {
-        state.calls.push({ fn: 'reopen', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { id: args.reviewId, status: 'pending' }
-      }
+      export const submitReview = action('submit', 'submitted')
+      export const saveReviewDraft = action('save-draft', 'pending')
+      export const calibrateReview = action('calibrate', 'calibrated')
+      export const shareReview = action('share', 'shared')
+      export const acknowledgeReview = action('acknowledge', 'acknowledged')
+      export const reopenReview = action('reopen', 'pending')
     `,
   ],
   [
@@ -169,20 +155,21 @@ test("an unknown id never reaches the service", async () => {
     ]);
   });
 
-  test("submit forwards answers and the overall rating", async () => {
+  for (const action of ["submit", "save-draft"]) test(`${action} forwards the revision, answers and overall rating`, async () => {
     reset();
     const response = await itemRoute!.PATCH(
-      patchRequest({ action: "submit", answers: [{ answerId: ANSWER_ID, rating: "4", text: "strong" }], overallRating: "4" }),
+      patchRequest({ action, revision: 1, answers: [{ answerId: ANSWER_ID, rating: "4", text: "strong" }], overallRating: "4" }),
       params,
     );
     assert.equal(response.status, 200);
     assert.deepEqual(routeState.calls, [
       {
-        fn: "submit",
+        fn: action,
         args: {
           orgId: "org-1",
           actorId: "user-1",
           reviewId: REVIEW_ID,
+          revision: 1,
           answers: [{ answerId: ANSWER_ID, rating: "4", text: "strong" }],
           overallRating: "4",
         },
