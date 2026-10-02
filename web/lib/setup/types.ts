@@ -98,6 +98,8 @@ export interface SetupField {
   /** Storage type for stringArray fields; defaults to jsonb. */
   arrayStorage?: 'jsonb' | 'text'
   required?: boolean
+  /** Exact decimal scale declared by the native storage contract. */
+  decimalScale?: number
   /** Inclusive resource/domain bounds for integer and percent fields. */
   min?: number
   max?: number
@@ -128,6 +130,8 @@ export interface SetupField {
   defaultValue?: string | number | boolean | Record<string, unknown> | unknown[]
   /** Persisted field managed by another visible control; omit it from drawers. */
   hidden?: boolean
+  /** Presentation label for a rehomed, type-specific native form. */
+  labelKey?: string
   /** Optional explanatory copy rendered directly beneath the control. */
   helpTextKey?: string
   /** Heading the drawer groups this field under (message key). Consecutive
@@ -218,6 +222,9 @@ export interface SetupCommandDescriptor {
 }
 
 export interface SetupEntity {
+  /** Domain-owned aggregate endpoint. Generic row writes must refuse these
+   * entities because child validation and audit evidence belong to the domain. */
+  mutationPath?: string
   /** URL slug, e.g. 'tax-codes'. */
   key: string
   /** DB table name. */

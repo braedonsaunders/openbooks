@@ -2,6 +2,30 @@
 import type { SetupEntity } from '../types'
 
 export const BILLING_ENTITIES: SetupEntity[] = [
+  {
+    key: 'dunning-policies', table: 'dunning_policies', groupKey: 'billing',
+    iconKey: 'mail', orgScoped: true, rehomed: true, hasActive: true,
+    orderBy: 'name', singularTitleKey: 'collectionPolicy', writePermission: 'documents.manage', mutationPath: '/api/dunning',
+    columns: [
+      { key: 'name', kind: 'text' }, { key: 'gracePeriodDays', kind: 'number' },
+      { key: 'minBalance', kind: 'number' }, { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'gracePeriodDays', labelKey: 'collectionPolicyFields.gracePeriodDays', kind: 'integer', required: true, min: 0, defaultValue: 0 },
+      { key: 'minBalance', labelKey: 'collectionPolicyFields.minBalance', kind: 'decimal', decimalScale: 4, defaultValue: '0' },
+      { key: 'replyTo', labelKey: 'collectionPolicyFields.replyTo', kind: 'text' },
+      { key: 'isActive', kind: 'boolean', defaultValue: true },
+      { key: 'stages', labelKey: 'collectionPolicyFields.stages', kind: 'objectArray', required: true, fields: [
+        { key: 'sequence', labelKey: 'collectionPolicyFields.sequence', kind: 'integer', required: true },
+        { key: 'name', kind: 'text', required: true },
+        { key: 'offsetDays', labelKey: 'collectionPolicyFields.offsetDays', kind: 'integer', required: true },
+        { key: 'subjectTemplate', labelKey: 'collectionPolicyFields.subjectTemplate', kind: 'text', required: true },
+        { key: 'bodyTemplate', labelKey: 'collectionPolicyFields.bodyTemplate', kind: 'textarea', required: true },
+        { key: 'escalate', labelKey: 'collectionPolicyFields.escalate', kind: 'boolean', defaultValue: false },
+      ] },
+    ],
+  },
   // --- Billing & numbering -------------------------------------------------
   {
     key: 'payment-terms',

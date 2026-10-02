@@ -9,6 +9,8 @@ import { guardUnrestrictedScope } from "../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { isValidEmailAddress } from "@openbooks/emails";
+import { isUuid } from '@/lib/list-params'
+import { claimSetupCreate, SetupCreateConflict } from '@/lib/api/idempotency'
 const stageSchema = z.object({
   sequence: z.number().int(), name: z.string().min(1), offsetDays: z.number().int(),
   subjectTemplate: z.string(), bodyTemplate: z.string(), escalate: z.boolean().optional(),
@@ -113,7 +115,8 @@ export const GET = defineRoute({
     if (scopeDenied) return scopeDenied;
     const policies = (await db.execute<Record<string, unknown>>(sql`
         select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
-               min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive"
+               min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive",
+               to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
           from dunning_policies where org_id = ${authz.user.orgId} order by name
       `));
     const stages = (await db.execute<Record<string, unknown>>(sql`
@@ -136,12 +139,14 @@ export const POST = defineRoute({
   permission: 'documents.manage',
   feature: { none: "This always-on route is governed by documents.manage; the existing route has no separate feature gate." },
   body: POSTBodySchema1,
-  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;
     const scopeDenied = guardUnrestrictedScope(authz);
     if (scopeDenied) return scopeDenied;
 
     const body = (routeBody) as Record<string, unknown>;
+    const requestId = request.headers.get('Idempotency-Key')?.trim() ?? null
+    if (requestId && !isUuid(requestId)) return NextResponse.json({ error: 'Idempotency-Key must be a UUID' }, { status: 400 })
     if (typeof body.name !== "string" || !body.name.trim()) {
         return NextResponse.json({ error: "name is required" }, { status: 400 });
       }
@@ -182,15 +187,25 @@ export const POST = defineRoute({
         return NextResponse.json({ error: "cannot activate a policy with no stages — add at least one stage or create it inactive" }, { status: 422 });
       }
     const id = await db.transaction(async (tx) => {
+        const match = { name: body.name, appliesToKind, gracePeriodDays, minBalance,
+          replyTo: body.replyTo ?? null, isActive: active, stages }
+        if (requestId) {
+          // The request identity serializes creation of the entire policy.
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'dunning-policy-create:' + requestId}, 0))`)
+          const claim = await claimSetupCreate(tx, { orgId: authz.user.orgId, table: 'dunning_policies', key: requestId, match })
+          if (claim.kind === 'replay') return claim.id
+        }
         const created = (await tx.execute<Record<string, unknown>>(sql`
-          insert into dunning_policies (org_id, name, applies_to_kind, grace_period_days, min_balance,
+          insert into dunning_policies (id, org_id, name, applies_to_kind, grace_period_days, min_balance,
                                         reply_to, is_active, created_by, updated_by)
-          values (${authz.user.orgId}, ${body.name}, ${appliesToKind},
+          values (coalesce(${requestId}::uuid, gen_random_uuid()), ${authz.user.orgId}, ${body.name}, ${appliesToKind},
                   ${gracePeriodDays}, ${minBalance},
                   ${(body.replyTo as string | null) ?? null}, ${active},
                   ${authz.user.id}, ${authz.user.id})
-          returning *
+          -- A request identity already claimed cannot create another policy.
+          on conflict (id) do nothing returning *
         `));
+        if (!created.rows[0]) throw new SetupCreateConflict('foreign-key')
         const policyId = created.rows[0]!.id as string;
         const insertedStages: Record<string, unknown>[] = [];
         for (const s of stages) {
@@ -201,17 +216,18 @@ export const POST = defineRoute({
                     ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, ${authz.user.id}, ${authz.user.id})
             returning *
           `));
-          insertedStages.push(stageRow.rows[0]!);
+          if (!stageRow.rows[0]) throw new Error('The reminder stage was not created; policy creation was rolled back.')
+          insertedStages.push(stageRow.rows[0]);
         }
         // The policy decides how overdue customers are chased; record what was
         // created (ladder included) in the same transaction as the writes.
         await tx.execute(sql`
           insert into audit_log
-            (org_id, table_name, row_id, action, changes, actor_id)
+            (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values
             (${authz.user.orgId}, 'dunning_policies', ${policyId}, 'insert',
-             ${JSON.stringify({ after: { ...created.rows[0], stages: insertedStages } })}::jsonb,
-             ${authz.user.id})
+             ${JSON.stringify({ after: { ...created.rows[0], stages: insertedStages }, match })}::jsonb,
+             ${authz.user.id}, ${requestId})
         `);
         return policyId;
       });

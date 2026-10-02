@@ -15,7 +15,7 @@ registerHooks({
         url: 'data:text/javascript,' + encodeURIComponent(`
           export async function getTranslations(namespace){
             return (key) => namespace === 'nav' && key === 'modules.collections' ? 'Collections'
-              : namespace === 'ar' && key === 'collections.pageDescription' ? 'Recurring billing configuration.'
+              : namespace === 'ar' && key === 'collections.pageDescription' ? 'Collect receivables and manage billing.'
               : namespace === 'ar' && key === 'collections.worklistCta' ? 'Open overdue worklist'
               : key;
           }
@@ -51,16 +51,16 @@ function fieldPath(value: unknown): string | undefined {
   return typeof value.$ === 'string' ? value.$ : undefined
 }
 
-test('collections loader describes configuration and only offers the accessible worklist', async () => {
+test('collections loader gates its worklist independently of configuration', async () => {
   state.canReadAr = true
   const accessible = await loadCollections()
-  assert.equal(accessible.description, 'Recurring billing configuration.')
+  assert.equal(accessible.description, 'Collect receivables and manage billing.')
   assert.equal(accessible.worklistHref, '/ar')
   assert.equal(accessible.worklistLabel, 'Open overdue worklist')
 
   state.canReadAr = false
   const restricted = await loadCollections()
-  assert.equal(restricted.description, 'Recurring billing configuration.')
+  assert.equal(restricted.description, 'Collect receivables and manage billing.')
   assert.equal(restricted.worklistHref, null)
 })
 

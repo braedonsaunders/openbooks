@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
+import messages from '../../../messages/en/index.ts'
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: true })
 
 // The test loader compiles workspace UI with the classic JSX runtime.
 Object.assign(globalThis, { React })
@@ -18,8 +21,8 @@ const { CollectionsClient } = await import('./CollectionsClient')
 function panelHtml() {
   return renderToString(
     <MoneyProvider currency="CAD">
-      <NextIntlClientProvider locale="en" messages={{}}>
-        <CollectionsClient />
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <CollectionsClient initialView="recurring" />
       </NextIntlClientProvider>
     </MoneyProvider>,
   )

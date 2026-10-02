@@ -3161,6 +3161,10 @@
         "title": "プログラム所属",
         "singularTitle": "プログラム所属",
         "description": "適用期間・重み・役割付きで雇用をプログラムに結び付ける。"
+      },
+      "dunning-policies": {
+        "title": "ポリシー",
+        "description": "一つのワークスペースで債権回収と請求を管理します。"
       }
     },
     "fields": {
@@ -5109,6 +5113,19 @@
       "row": "行 {number}",
       "addRow": "行を追加",
       "removeRow": "行を削除"
+    },
+    "collectionPolicy": "ポリシー",
+    "collectionPolicyFields": {
+      "policy": "ポリシー",
+      "gracePeriodDays": "猶予期間（日）",
+      "minBalance": "最低残高（基準通貨）",
+      "replyTo": "返信先メール",
+      "stages": "督促段階",
+      "offsetDays": "支払期日超過日数",
+      "sequence": "順序",
+      "subjectTemplate": "件名テンプレート",
+      "bodyTemplate": "本文テンプレート",
+      "escalate": "エスカレーション"
     }
   },
   "flows": {

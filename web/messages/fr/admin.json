@@ -3041,6 +3041,10 @@
         "title": "Membres programme",
         "singularTitle": "Membre programme",
         "description": "Emplois rattachés au programme sur des dates d’effet, avec poids et rôle pour la répartition."
+      },
+      "dunning-policies": {
+        "title": "Politiques",
+        "description": "Recouvrez les créances et gérez la facturation dans un espace de travail unique."
       }
     },
     "fields": {
@@ -5109,6 +5113,19 @@
       "row": "Ligne {number}",
       "addRow": "Ajouter une ligne",
       "removeRow": "Supprimer la ligne"
+    },
+    "collectionPolicy": "Politique",
+    "collectionPolicyFields": {
+      "policy": "Politique",
+      "gracePeriodDays": "Délai de grâce (jours)",
+      "minBalance": "Solde minimum (devise de base)",
+      "replyTo": "Adresse de réponse",
+      "stages": "Étapes de relance",
+      "offsetDays": "Jours après l’échéance",
+      "sequence": "Ordre",
+      "subjectTemplate": "Modèle de sujet",
+      "bodyTemplate": "Modèle de message",
+      "escalate": "Escalader"
     }
   },
   "flows": {

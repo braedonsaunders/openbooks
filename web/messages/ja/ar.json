@@ -178,13 +178,19 @@
     "reissueHint": "このリンクを無効にし、新しいリンクを作成して支払いを回収してください。"
   },
   "collections": {
-    "pageDescription": "定期請求スケジュール、サブスクリプションプラン、督促ラダーはここで設定します。延滞請求リストは売掛金にあります。",
+    "pageDescription": "一つのワークスペースで債権回収と請求を管理します。",
     "worklistCta": "延滞リストを開く",
     "tabs": {
-      "recurring": "定期請求書",
+      "recurring": "定期請求",
       "subscriptions": "サブスクリプション",
       "advanced": "高度なライフサイクル",
-      "dunning": "督促"
+      "dunning": "ポリシー",
+      "worklist": "作業リスト",
+      "policies": "ポリシー",
+      "plans": "プラン",
+      "versions": "プランのバージョン",
+      "contracts": "契約",
+      "amendments": "契約変更"
     },
     "errors": {
       "actionFailed": "アクションに失敗しました",
@@ -324,7 +330,6 @@
         "colNumber": "#",
         "colSubscription": "サブスクリプション",
         "colChange": "変更内容",
-        "colEffective": "発効日",
         "colReason": "理由",
         "noAmendments": "変更はまだありません。",
         "changeType_add_component": "コンポーネントを追加",
@@ -403,7 +408,9 @@
       "delete": "削除",
       "stageDay": "· {day}日目: {name}",
       "noneYet": "督促ポリシーはまだありません。",
-      "activeBadge": "有効"
-    }
+      "activeBadge": "有効",
+      "minimumBalance": "最低残高（基準通貨）"
+    },
+    "title": "債権回収"
   }
 }

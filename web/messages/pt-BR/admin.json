@@ -3086,6 +3086,10 @@
         "title": "Membros do programa",
         "singularTitle": "Membro do programa",
         "description": "Vínculos vinculados ao programa com vigência, peso e papel para rateio."
+      },
+      "dunning-policies": {
+        "title": "Políticas",
+        "description": "Receba valores pendentes e gerencie o faturamento em um único espaço de trabalho."
       }
     },
     "fields": {
@@ -5109,6 +5113,19 @@
       "row": "Linha {number}",
       "addRow": "Adicionar linha",
       "removeRow": "Remover linha"
+    },
+    "collectionPolicy": "Política",
+    "collectionPolicyFields": {
+      "policy": "Política",
+      "gracePeriodDays": "Carência (dias)",
+      "minBalance": "Saldo mínimo (moeda base)",
+      "replyTo": "E-mail de resposta",
+      "stages": "Etapas de lembrete",
+      "offsetDays": "Dias em atraso",
+      "sequence": "Sequência",
+      "subjectTemplate": "Modelo de assunto",
+      "bodyTemplate": "Modelo de mensagem",
+      "escalate": "Escalar"
     }
   },
   "flows": {

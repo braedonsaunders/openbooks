@@ -8,25 +8,8 @@ import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-v
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 
-/**
- * Recurring billing + dunning, split into a loader and a spec.
- *
- * The body is one client island: `CollectionsClient` owns the tab state
- * (recurring / subscriptions / advanced / dunning), every list fetch
- * (`/api/recurring`, `/api/subscriptions`, `/api/dunning`), all four create
- * forms and every row action. Both the tab pair (a button when its feature
- * flag is on, nothing otherwise) and the visible panel (a four-way
- * conditional on client state) are conditionals a spec cannot express, so
- * the body stays whole — the same call the AR cockpit made for its
- * position-fetching client component. The spec places the one shell widget;
- * the loader does the gate, the feature probes and the option queries.
- *
- * Loader work copied verbatim from page.tsx: the documents.manage gate
- * (redirect to /dashboard when absent — a redirect, never a flag), the
- * subscriptionBilling / advancedSubscriptions feature probes, and the
- * customers + income-accounts option queries that only run when
- * subscriptionBilling is on (empty arrays otherwise).
- */
+/** The shell composes shared page chrome, registered lists and domain editors.
+ * Permissions and feature dependencies are resolved before reaching the client. */
 
 export interface CollectionsOption {
   id: string
@@ -37,8 +20,7 @@ export interface CollectionsOption {
 export interface CollectionsData {
   title: string
   description: string
-  /** Deep link to the overdue chase list on /ar — null when the reader
-   *  lacks ar.read, so the page never offers a worklist they cannot open. */
+  /** Availability of the receivables worklist, independently of configuration. */
   worklistHref: string | null
   worklistLabel: string
   subscriptionsEnabled: boolean
@@ -77,9 +59,6 @@ export async function loadCollections(): Promise<CollectionsData> {
 
   return {
     title: tNav('modules.collections'),
-    // This page is recurring/subscription/dunning CONFIGURATION — it must
-    // never borrow the AR cockpit's worklist description again. The overdue
-    // chase list itself lives on /ar; link there instead of describing it.
     description: tAr('collections.pageDescription'),
     worklistHref: can(authz, 'ar.read') ? '/ar' : null,
     worklistLabel: tAr('collections.worklistCta'),
@@ -99,10 +78,6 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
   void data
   return page({
     route: '/collections',
-    // The native page renders its own `mx-auto max-w-6xl` container, which
-    // no list/detail shell reproduces. The spec places the container whole
-    // (it lives in sections.tsx, placed by the widget registry) rather
-    // than composing a wrong-width page around the widget.
     layout: 'bare',
     header: [],
     body: [

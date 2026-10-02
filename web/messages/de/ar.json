@@ -178,13 +178,19 @@
     "reissueHint": "Diesen Link stornieren und einen neuen erstellen, um die Zahlung einzuziehen."
   },
   "collections": {
-    "pageDescription": "Wiederkehrende Pläne, Abonnementtarife und Mahnstufen werden hier konfiguriert. Die Liste überfälliger Rechnungen finden Sie unter Forderungen.",
+    "pageDescription": "Forderungen einziehen und Abrechnung in einem Arbeitsbereich verwalten.",
     "worklistCta": "Liste überfälliger Rechnungen öffnen",
     "tabs": {
-      "recurring": "Wiederkehrende Rechnungen",
+      "recurring": "Wiederkehrende Abrechnung",
       "subscriptions": "Abonnements",
       "advanced": "Erweiterter Lebenszyklus",
-      "dunning": "Mahnwesen"
+      "dunning": "Richtlinien",
+      "worklist": "Arbeitsliste",
+      "policies": "Richtlinien",
+      "plans": "Tarife",
+      "versions": "Tarifversionen",
+      "contracts": "Verträge",
+      "amendments": "Änderungen"
     },
     "errors": {
       "actionFailed": "Aktion fehlgeschlagen",
@@ -252,7 +258,7 @@
         "catalogDescription": "Veröffentlichte Versionen sind unveränderlich. Erstellen Sie eine neue Version, wenn sich die kommerziellen Bedingungen ändern.",
         "publishedCount": "{count} veröffentlicht",
         "colVersion": "Version",
-        "colEffective": "Gültig ab",
+        "colEffective": "Wirksam",
         "colTiming": "Abrechnung",
         "colComponents": "Komponenten",
         "publish": "Veröffentlichen",
@@ -324,7 +330,6 @@
         "colNumber": "#",
         "colSubscription": "Abonnement",
         "colChange": "Änderung",
-        "colEffective": "Wirksam",
         "colReason": "Grund",
         "noAmendments": "Noch keine Änderungen.",
         "changeType_add_component": "Komponente hinzufügen",
@@ -403,7 +408,9 @@
       "delete": "Löschen",
       "stageDay": "· Tag {day}: {name}",
       "noneYet": "Noch keine Mahnstrategien.",
-      "activeBadge": "Aktiv"
-    }
+      "activeBadge": "Aktiv",
+      "minimumBalance": "Mindestbetrag (Basiswährung)"
+    },
+    "title": "Forderungseinzug"
   }
 }

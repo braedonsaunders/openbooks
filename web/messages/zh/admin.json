@@ -3086,6 +3086,10 @@
         "title": "项目成员",
         "singularTitle": "项目成员",
         "description": "按有效期、权重和角色将雇佣关系绑定到项目。"
+      },
+      "dunning-policies": {
+        "title": "政策",
+        "description": "在同一工作区管理应收催收与计费。"
       }
     },
     "fields": {
@@ -5109,6 +5113,19 @@
       "row": "第 {number} 行",
       "addRow": "添加行",
       "removeRow": "删除行"
+    },
+    "collectionPolicy": "政策",
+    "collectionPolicyFields": {
+      "policy": "政策",
+      "gracePeriodDays": "宽限期（天）",
+      "minBalance": "最低余额（本位币）",
+      "replyTo": "回复邮箱",
+      "stages": "提醒阶段",
+      "offsetDays": "逾期天数",
+      "sequence": "顺序",
+      "subjectTemplate": "主题模板",
+      "bodyTemplate": "正文模板",
+      "escalate": "升级"
     }
   },
   "flows": {

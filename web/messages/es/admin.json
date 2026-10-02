@@ -3041,6 +3041,10 @@
         "title": "Miembros del programa",
         "singularTitle": "Miembro del programa",
         "description": "Empleos vinculados al programa con fechas de vigencia, peso y rol para el reparto."
+      },
+      "dunning-policies": {
+        "title": "Políticas",
+        "description": "Cobre cuentas pendientes y gestione la facturación en un único espacio de trabajo."
       }
     },
     "fields": {
@@ -5109,6 +5113,19 @@
       "row": "Fila {number}",
       "addRow": "Añadir fila",
       "removeRow": "Eliminar fila"
+    },
+    "collectionPolicy": "Política",
+    "collectionPolicyFields": {
+      "policy": "Política",
+      "gracePeriodDays": "Período de gracia (días)",
+      "minBalance": "Saldo mínimo (moneda base)",
+      "replyTo": "Correo de respuesta",
+      "stages": "Etapas de recordatorio",
+      "offsetDays": "Días vencidos",
+      "sequence": "Secuencia",
+      "subjectTemplate": "Plantilla de asunto",
+      "bodyTemplate": "Plantilla de mensaje",
+      "escalate": "Escalar"
     }
   },
   "flows": {

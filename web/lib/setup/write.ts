@@ -1855,6 +1855,7 @@ export async function preflightSetupWrite(
   if (method === 'create' && entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (method === 'delete' && entity.key === 'carriers') return CARRIER_DELETE_REFUSAL
   if (method === 'delete' && entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
+  if (entity.mutationPath) return { status: 405, body: { error: `This configuration must be saved through ${entity.mutationPath}, which validates the complete record.` } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   if (method === 'delete' && entity.key === 'accounting-books') return { status: 405, body: { error: 'archive-only' } }
   return null
@@ -1921,6 +1922,7 @@ export async function createSetupRecord(
   const commanded = commandOwnedOnly(entity)
   if (commanded) return commanded
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
+  if (entity.mutationPath) return { status: 405, body: { error: `This configuration must be saved through ${entity.mutationPath}, which validates the complete record.` } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   const requestId = options.requestId ?? randomUUID()
   if (!isUuid(requestId)) {
@@ -2336,6 +2338,7 @@ export async function updateSetupRecord(
   if (owned) return owned
   const commanded = commandOwnedOnly(entity)
   if (commanded) return commanded
+  if (entity.mutationPath) return { status: 405, body: { error: `This configuration must be saved through ${entity.mutationPath}, which validates the complete record.` } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
   let reviewFolded: Record<string, unknown>
@@ -2957,6 +2960,7 @@ export async function deleteSetupRecord(
   if (commanded) return commanded
   if (entity.key === 'carriers') return CARRIER_DELETE_REFUSAL
   if (entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
+  if (entity.mutationPath) return { status: 405, body: { error: `This configuration must be saved through ${entity.mutationPath}, which validates the complete record.` } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   if (entity.key === 'accounting-books') {
     return { status: 405, body: { error: 'archive-only' } }

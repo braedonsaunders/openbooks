@@ -3086,6 +3086,10 @@
         "title": "Program members",
         "singularTitle": "Program member",
         "description": "Employments bound to a program over effective dates, with weight and role for allocation."
+      },
+      "dunning-policies": {
+        "title": "Policies",
+        "description": "Collect receivables and manage billing in one workspace."
       }
     },
     "fields": {
@@ -5109,6 +5113,19 @@
       "row": "Row {number}",
       "addRow": "Add row",
       "removeRow": "Remove row"
+    },
+    "collectionPolicy": "Policy",
+    "collectionPolicyFields": {
+      "policy": "Policy",
+      "gracePeriodDays": "Grace period (days)",
+      "minBalance": "Minimum balance (base currency)",
+      "replyTo": "Reply-to email",
+      "stages": "Reminder stages",
+      "offsetDays": "Days past due",
+      "sequence": "Sequence",
+      "subjectTemplate": "Subject template",
+      "bodyTemplate": "Message template",
+      "escalate": "Escalate"
     }
   },
   "flows": {

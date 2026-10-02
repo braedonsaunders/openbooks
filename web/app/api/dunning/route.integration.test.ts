@@ -30,7 +30,7 @@ registerHooks({
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { POST: create } = await import("./route");
+const { POST: create, GET: read } = await import("./route");
 const { PATCH: patch, DELETE: remove } = await import("./[id]/route");
 
 const json = (method: string, body?: unknown) =>
@@ -104,3 +104,55 @@ test("dunning policies only apply to dunnable receivable kinds", async () => {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test('retrying policy creation replays once and refuses changed details', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId }
+    const key = randomUUID()
+    const request = (name: string) => new Request('http://audit.local/api/dunning', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ name, stages: [ladderStage()] }) })
+    const first = await create(request('Standard'))
+    assert.equal(first.status, 201)
+    const retry = await create(request('Standard'))
+    assert.equal(retry.status, 201)
+    assert.deepEqual(await retry.json(), await first.json())
+    const changed = await create(request('Different policy'))
+    assert.equal(changed.status, 409)
+    assert.match((await changed.json()).error, /different details.*Close and reopen/)
+    const counts = await withBypassContext(() => db.execute<{ policies: number; stages: number; audits: number }>(sql`
+      select (select count(*)::int from dunning_policies where org_id=${org.orgId}) as policies,
+        (select count(*)::int from dunning_stages where org_id=${org.orgId}) as stages,
+        (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='dunning_policies' and action='insert') as audits`))
+    assert.deepEqual(counts.rows[0], { policies: 1, stages: 1, audits: 1 })
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
+test('policy editing retains reminder identity and refuses stale or foreign stages atomically', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId }
+    const created = await create(json('POST', { name: 'Standard', stages: [ladderStage()] }))
+    const { id } = await created.json()
+    const readStages = () => withBypassContext(() => db.execute<{ id: string; created_at: Date; created_by: string; subject_template: string }>(sql`select id, created_at, created_by, subject_template from dunning_stages where org_id=${org.orgId} and policy_id=${id}`))
+    const before = (await readStages()).rows[0]!
+    const listed = await read(json('GET'))
+    const revision = (await listed.json()).policies.find((policy: { id: string }) => policy.id === id).updatedAt
+    assert.match(revision, /\.\d{6}Z$/, 'the conflict token must retain database precision')
+    const edited = await patch(json('PATCH', { name: 'Revised', expectedUpdatedAt: revision, stages: [{ ...ladderStage(), id: before.id, subjectTemplate: 'Revised subject' }] }), params(id))
+    assert.equal(edited.status, 200)
+    const after = (await readStages()).rows[0]!
+    assert.equal(after.id, before.id, 'editing must not reset delivery deduplication')
+    assert.deepEqual(after.created_at, before.created_at)
+    assert.equal(after.created_by, before.created_by)
+    assert.equal(after.subject_template, 'Revised subject')
+    const stale = await patch(json('PATCH', { name: 'Stale overwrite', expectedUpdatedAt: revision }), params(id))
+    assert.equal(stale.status, 409)
+    assert.match((await stale.json()).error, /changed.*refresh Policies.*reopen/)
+    const foreign = await patch(json('PATCH', { name: 'Must roll back', stages: [{ ...ladderStage(), id: randomUUID() }] }), params(id))
+    assert.equal(foreign.status, 409)
+    assert.match((await foreign.json()).error, /belongs to this policy.*Refresh Policies/)
+    const policy = await withBypassContext(() => db.execute<{ name: string }>(sql`select name from dunning_policies where id=${id} and org_id=${org.orgId}`))
+    assert.equal(policy.rows[0]!.name, 'Revised', 'the refused edit cannot partially rename the policy')
+    assert.deepEqual((await readStages()).rows[0], after, 'a refusal preserves the entire reminder')
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})

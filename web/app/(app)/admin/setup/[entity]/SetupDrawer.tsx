@@ -23,6 +23,7 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { setupFieldOptions, setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
+import { setupDomainPayload } from '../../../../../lib/setup/domain-payload'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { coerceField, SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
@@ -196,7 +197,7 @@ export function SetupDrawer({
       // legal input, never a missing requirement.
       if (f.keepDefault && (v === undefined || v === null || String(v).trim() === '')) continue
       if (v === undefined || v === null || String(v).trim() === '') {
-        return t('validation.required', { field: t(`fields.${f.key}`) })
+        return t('validation.required', { field: t(f.labelKey ?? `fields.${f.key}`) })
       }
     }
     return null
@@ -217,14 +218,19 @@ export function SetupDrawer({
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS)
     try {
-      const body: Record<string, unknown> = { ...form, ...fixedValues }
+      let body: Record<string, unknown> = { ...form, ...fixedValues }
+      if (entity.mutationPath) {
+        const payload = setupDomainPayload(entity, body)
+        if (!payload.ok) { setFieldError(payload.error); toast.error(payload.error); return }
+        body = { ...payload.body, ...fixedValues }
+      }
       // Decimal inputs arrive as raw operator text; canonicalize them through
       // the same exact-decimal grammar the server coerces with, so a
       // band min typed as ".5" posts as "0.5" instead of round-tripping raw.
       // Unparseable text posts untouched for the server to refuse by name.
       for (const field of entity.fields) {
         if ((field.kind === 'decimal' || field.kind === 'percent') && typeof body[field.key] === 'string') {
-          body[field.key] = canonicalDecimal(body[field.key], SETUP_DECIMAL_SCALE) ?? body[field.key]
+          body[field.key] = canonicalDecimal(body[field.key], field.decimalScale ?? SETUP_DECIMAL_SCALE) ?? body[field.key]
         }
       }
       // A field the form stopped showing must not persist behind the UI: a pay
@@ -249,7 +255,10 @@ export function SetupDrawer({
       // silently unguarded.
       const commanded = entity.command
       if ((creating || commanded) && !createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
-      const res = await fetch(commanded ? `${mutationBasePath}/${entity.key}/command` : `${mutationBasePath}/${entity.key}`, {
+      const endpoint = entity.mutationPath
+        ? creating ? entity.mutationPath : `${entity.mutationPath}/${encodeURIComponent(String(row![idColumn]))}`
+        : commanded ? `${mutationBasePath}/${entity.key}/command` : `${mutationBasePath}/${entity.key}`
+      const res = await fetch(endpoint, {
         method: commanded ? 'POST' : creating ? 'POST' : 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -287,7 +296,9 @@ export function SetupDrawer({
     if (!(await confirmDialog(t('confirmDelete')))) return
     setBusy(true)
     try {
-      const res = await fetch(`${mutationBasePath}/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {
+      const res = await fetch(entity.mutationPath
+        ? `${entity.mutationPath}/${encodeURIComponent(String(row[idColumn]))}`
+        : `${mutationBasePath}/${entity.key}?id=${encodeURIComponent(String(row[idColumn]))}`, {
         method: 'DELETE',
       })
       if (!res.ok) {
@@ -330,7 +341,7 @@ export function SetupDrawer({
     const missingField = code === 'invalid' && typeof message === 'string'
       ? /^([A-Za-z][A-Za-z0-9]*) is required$/.exec(message)?.[1]
       : undefined
-    if (missingField) return t('validation.required', { field: t(`fields.${missingField}`) })
+    if (missingField) return t('validation.required', { field: t(entity.fields.find((field) => field.key === missingField)?.labelKey ?? `fields.${missingField}`) })
     if (typeof message === 'string' && message) return message
     if (typeof code === 'string' && code) return code
     return tCommon('feedback.saveFailed')
@@ -496,7 +507,7 @@ function FieldControl({
 }) {
   const locale = useLocale()
   const countries = useMemo(() => countryOptions(locale), [locale])
-  const label = t(`fields.${field.key}`)
+  const label = t(field.labelKey ?? `fields.${field.key}`)
   // Authored help renders as the `?` popover on the field label (FieldLabel);
   // without it the label falls back to its generic explanation. Inline text
   // below a control is reserved for validation/state messages only.

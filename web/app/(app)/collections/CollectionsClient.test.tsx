@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// Deleting a dunning policy was fire-and-forget — the DELETE ran
-// without a status check, so a refusal never surfaced and the row silently
-// reappeared on the next load. Mounts the real CollectionsClient under
-// jsdom, opens the dunning tab, and drives the delete refusal.
+// Domain refusals remain visible and retain their records in the shared list.
 const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/collections', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
 
@@ -46,6 +43,7 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../messages/en')).default
 const { CollectionsClient } = await import('./CollectionsClient')
+const { MoneyProvider } = await import('../../../components/money-provider')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -61,7 +59,7 @@ const POLICY = {
   ],
 }
 
-async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false): Promise<void> {
+async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false, view: 'policies' | 'recurring' = 'policies'): Promise<void> {
   script.deletes = []
   script.loads = 0
   script.recurringLoads = 0
@@ -97,7 +95,7 @@ async function mount(t: TestContext, deleteResponder: () => Response, recurringF
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <CollectionsClient />
+        <MoneyProvider currency="CAD"><CollectionsClient initialView={view} /></MoneyProvider>
       </NextIntlClientProvider>,
     )
     await tick()
@@ -116,15 +114,9 @@ function findButton(text: string): HTMLButtonElement | undefined {
   return [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined
 }
 
-async function openDunning(): Promise<void> {
-  const tab = findButton('Dunning ladders')
-  assert.ok(tab, 'the dunning tab must render')
-  await click(tab)
-}
 
 test('a delete refusal names the reason inline and the row stays', async (t) => {
   await mount(t, () => Response.json({ error: 'policy is assigned to 3 customers' }, { status: 422 }))
-  await openDunning()
   assert.ok(document.body.textContent?.includes('Standard net-30'), 'the policy row must render')
   const del = findButton('Delete')
   assert.ok(del, 'the row must offer Delete')
@@ -139,7 +131,6 @@ test('a delete refusal names the reason inline and the row stays', async (t) => 
 
 test('a successful delete reloads the list', async (t) => {
   await mount(t, () => Response.json({ ok: true }))
-  await openDunning()
   const del = findButton('Delete')
   assert.ok(del, 'the row must offer Delete')
   await click(del)
@@ -148,7 +139,7 @@ test('a successful delete reloads the list', async (t) => {
 })
 
 test('a failed recurring-schedule read shows retry instead of none yet', async (t) => {
-  await mount(t, () => Response.json({ ok: true }), true)
+  await mount(t, () => Response.json({ ok: true }), true, 'recurring')
   assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes('Failed to load'))
   assert.ok(!document.body.textContent?.includes('No recurring schedules yet.'))
   await click(findButton('Retry')!)

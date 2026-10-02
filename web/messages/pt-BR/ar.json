@@ -178,13 +178,19 @@
     "reissueHint": "Anule este link e crie um novo para receber o pagamento."
   },
   "collections": {
-    "pageDescription": "Agendamentos recorrentes, planos de assinatura e réguas de cobrança são configurados aqui. A lista de faturas em atraso está em Contas a receber.",
+    "pageDescription": "Receba valores pendentes e gerencie o faturamento em um único espaço de trabalho.",
     "worklistCta": "Abrir a lista de cobranças em atraso",
     "tabs": {
-      "recurring": "Faturas recorrentes",
+      "recurring": "Faturamento recorrente",
       "subscriptions": "Assinaturas",
       "advanced": "Ciclo de vida avançado",
-      "dunning": "Cobrança"
+      "dunning": "Políticas",
+      "worklist": "Lista de trabalho",
+      "policies": "Políticas",
+      "plans": "Planos",
+      "versions": "Versões de planos",
+      "contracts": "Contratos",
+      "amendments": "Alterações"
     },
     "errors": {
       "actionFailed": "Falha na ação",
@@ -324,7 +330,6 @@
         "colNumber": "#",
         "colSubscription": "Assinatura",
         "colChange": "Alteração",
-        "colEffective": "Vigência",
         "colReason": "Motivo",
         "noAmendments": "Ainda não há alterações.",
         "changeType_add_component": "Adicionar componente",
@@ -403,7 +408,9 @@
       "delete": "Excluir",
       "stageDay": "· Dia {day}: {name}",
       "noneYet": "Ainda não há políticas de cobrança.",
-      "activeBadge": "Ativo"
-    }
+      "activeBadge": "Ativo",
+      "minimumBalance": "Saldo mínimo (moeda base)"
+    },
+    "title": "Cobranças"
   }
 }

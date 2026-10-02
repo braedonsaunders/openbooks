@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server"
+import { redirect } from 'next/navigation'
 import { ModuleView } from "../../../components/viewspec/module-view"
 import { loadCollections, collectionsSpec } from "./view"
 
@@ -9,19 +10,14 @@ export async function generateMetadata() {
   return { title: t("modules.collections") };
 }
 
-/**
- * Recurring billing + dunning control surface. Recurring schedules clone a
- * template document on a cadence (engine/src/billing/recurring.ts); dunning policies
- * fire an overdue-invoice reminder ladder (engine/src/receivables/dunning.ts). When the
- * subscriptionBilling feature is on, a Subscriptions tab (plans + subscriptions,
- * engine/src/billing/subscription-billing.ts) is added. All run from the scheduler.
- */
+/** Operational collections and billing, with reporting owned by /reports. */
 export default async function CollectionsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
+  if (sp.view === 'reports') redirect('/reports')
   const data = await loadCollections()
   return <ModuleView spec={collectionsSpec(data)} data={data} searchParams={sp} trusted />
 }
