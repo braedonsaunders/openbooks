@@ -43,12 +43,12 @@ test('default workspaces follow the approved journey-oriented information archit
     'crm-activities',
     'crm-opportunities',
     'crm-forecasts',
-    'estimates',
-    'sales-orders',
-    'ar',
-    'collections',
     'ar-invoices',
+    'sales-orders',
+    'estimates',
     'receipts',
+    'collections',
+    'ar',
     'crm-sales',
   ])
   for (const key of ['employees', 'hrm', 'payroll']) {
@@ -66,11 +66,11 @@ test('default workspaces follow the approved journey-oriented information archit
   assert.equal(DEFAULT_NAV_ORDER.accounting.includes('continuous-close'), false)
   assert.deepEqual(
     DEFAULT_NAV_ORDER.accounting.slice(2, 5),
-    ['revenue', 'assets', 'tax-depreciation'],
+    ['revenue', 'assets', 'leases'],
   )
   assert.deepEqual(
     DEFAULT_NAV_ORDER.accounting.slice(5, 7),
-    ['leases', 'budgets'],
+    ['tax-depreciation', 'budgets'],
   )
   assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(10, 13), [
     'accounting-changes',
