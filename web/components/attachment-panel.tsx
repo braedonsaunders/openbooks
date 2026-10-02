@@ -253,9 +253,8 @@ export function AttachmentPanel({
               ) : null}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="flex flex-wrap items-center gap-2">
               <SearchInput
-                className="min-w-0 sm:w-full"
                 placeholder={t('searchPlaceholder')}
                 paramKey="attq"
                 pageParamKey="attpage"

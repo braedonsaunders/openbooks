@@ -64,7 +64,6 @@ export async function SegmentValuesTab({
         placeholder={t('segmentValues.searchPlaceholder')}
         paramKey="segValQ"
         pageParamKey="segValPage"
-        className="sm:w-full"
       />
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">

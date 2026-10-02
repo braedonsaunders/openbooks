@@ -12,6 +12,7 @@ import {
 } from '../lib/search-input-state'
 import { isReportOverlayParam } from '../lib/report-overlay'
 import { useReportOverlayOptional } from './navigation-provider'
+import { LIST_SEARCH_WIDTH } from './list-search-layout'
 
 export function SearchInput({
   placeholder,
@@ -71,7 +72,7 @@ export function SearchInput({
   }, [liveSearch, overlay, overlayNav, pageParamKey, paramKey, pathname, router, startTransition, value])
 
   return (
-    <div className={cn('relative w-full sm:w-72', className)}>
+    <div className={cn('relative', LIST_SEARCH_WIDTH, className)}>
       <Search
         className="pointer-events-none absolute top-2 left-2.5 text-slate-400 dark:text-slate-500"
         size={16}
