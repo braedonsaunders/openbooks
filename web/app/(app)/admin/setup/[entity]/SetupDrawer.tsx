@@ -1,5 +1,7 @@
 'use client'
 
+import { InspectorPanel } from '@/components/builder/builder-kit'
+import { SwitchField } from '@/components/switch'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
 import { NetInvestmentButton } from '@/app/(app)/accounting/changes/NetInvestmentButton'
@@ -364,7 +366,8 @@ export function SetupDrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
-      size="lg"
+      size={entity.drawerSize ?? 'lg'}
+      description={entity.formDescriptionKey ? t(entity.formDescriptionKey) : undefined}
       beforeClose={confirmDiscard}
       stacked={stacked}
       title={creating ? t('drawer.newTitle', { name: entityTitle }) : t('drawer.editTitle', { name: entityTitle })}
@@ -398,8 +401,18 @@ export function SetupDrawer({
           {fieldError}
         </p>
       ) : null}
+      <div className={entity.formSections ? "space-y-5" : undefined}>
+      {entity.formSections?.map((section) => {
+        const fields = visibleFields.filter((field) => section.fields.includes(field.key))
+        if (!fields.length) return null
+        return <InspectorPanel key={section.titleKey} title={t(section.titleKey)} description={section.descriptionKey ? t(section.descriptionKey) : undefined}>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} formValues={form} t={t} />)}
+          </div>
+        </InspectorPanel>
+      })}
       <div className="grid gap-4 p-1 sm:grid-cols-2">
-        {visibleFields.map((field, index) => (
+        {visibleFields.filter((field) => !entity.formSections?.some((section) => section.fields.includes(field.key))).map((field, index) => (
           <Fragment key={field.key}>
             {field.sectionKey && field.sectionKey !== visibleFields[index - 1]?.sectionKey ? (
               <h3 className="border-t border-slate-200 pt-4 text-sm font-semibold text-slate-800 sm:col-span-2 dark:border-slate-800 dark:text-slate-100">
@@ -480,6 +493,7 @@ export function SetupDrawer({
             </div>
           </div>
         ) : null}
+      </div>
       </div></>}
     </UrlDrawer>
   )
@@ -520,7 +534,7 @@ function FieldControl({
   const requiredMark = field.required && !locked && field.kind !== 'boolean' && field.kind !== 'multiref' && !field.keepDefault
     ? <span className="text-red-500" aria-hidden="true"> *</span>
     : null
-  const full =
+  const full = field.fullWidth ||
     field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray' || field.kind === 'object' || field.kind === 'objectArray'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
   const lockedDisplay = field.kind === 'ref'
@@ -555,16 +569,25 @@ function FieldControl({
     return <div className={wrap}>
       <Label help={help}>{label}{requiredMark}</Label>
       <div className="space-y-3">
-        {entries.map((entry, index) => <fieldset key={index} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          {array ? <legend className="px-1 text-sm font-medium">{t('structuredFields.row', { number: index + 1 })}</legend> : null}
-          <div className="grid gap-4 sm:grid-cols-2">
+        {entries.map((entry, index) => {
+          const controls = <div className={field.itemTitleKey ? "grid gap-5 sm:grid-cols-2" : "grid gap-4 sm:grid-cols-2"}>
             {(field.fields ?? []).filter((child) => setupFieldVisible(child, entry as Record<string, unknown>)).map((child) => <FieldControl key={child.key} field={child} value={(entry as Record<string, unknown>)[child.key]} onChange={(next) => changeEntry(index, child.key, next)} creating={creating} forceLocked={Boolean(locked)} refOptions={child.ref === 'countries' ? countries : []} formValues={entry as Record<string, unknown>} t={t} />)}
           </div>
-          {array && !locked ? <div className="mt-3 flex justify-end"><Button type="button" variant="outline" size="sm" onClick={() => onChange(entries.filter((_, position) => position !== index))}><Trash2 size={14} />{t('structuredFields.removeRow')}</Button></div> : null}
-        </fieldset>)}
-        {array && !locked ? <Button type="button" variant="outline" size="sm" onClick={() => onChange([...entries, Object.fromEntries((field.fields ?? []).map((child) => [child.key, child.defaultValue ?? (child.kind === 'boolean' ? false : child.kind === 'stringArray' ? [] : '')]))])}><Plus size={14} />{t('structuredFields.addRow')}</Button> : null}
+          const remove = array && !locked ? <Button type="button" variant={field.itemTitleKey ? "ghost" : "outline"} size="sm" onClick={() => onChange(entries.filter((_, position) => position !== index))}><Trash2 size={14} />{t('structuredFields.removeRow')}</Button> : null
+          if (field.itemTitleKey) return <InspectorPanel key={index} title={t(field.itemTitleKey, { number: index + 1 })} description={field.itemTitleField ? String((entry as Record<string, unknown>)[field.itemTitleField] ?? '') : undefined} actions={remove}>{controls}</InspectorPanel>
+          return <fieldset key={index} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            {array ? <legend className="px-1 text-sm font-medium">{t('structuredFields.row', { number: index + 1 })}</legend> : null}
+            {controls}
+            {remove ? <div className="mt-3 flex justify-end">{remove}</div> : null}
+          </fieldset>
+        })}
+        {array && !locked ? <Button type="button" variant="outline" size="sm" onClick={() => onChange([...entries, Object.fromEntries((field.fields ?? []).map((child) => [child.key, child.key === field.itemSequenceKey ? entries.reduce((highest, entry) => { const sequence = Number((entry as Record<string, unknown>)[child.key]); return Number.isSafeInteger(sequence) && sequence > highest ? sequence : highest }, 0) + 1 : child.defaultValue ?? (child.kind === 'boolean' ? false : child.kind === 'stringArray' ? [] : '')]))])}><Plus size={14} />{t(field.addLabelKey ?? 'structuredFields.addRow')}</Button> : null}
       </div>
     </div>
+  }
+
+  if (field.kind === 'boolean' && field.booleanStyle === 'switch') {
+    return <div className={wrap}><SwitchField label={label} on={Boolean(value)} disabled={Boolean(locked)} onToggle={() => onChange(!value)} /></div>
   }
 
   if (field.kind === 'boolean') {

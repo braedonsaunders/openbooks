@@ -411,6 +411,32 @@
       "activeBadge": "Ativo",
       "minimumBalance": "Saldo mínimo (moeda base)"
     },
-    "title": "Cobranças"
+    "title": "Cobranças",
+    "actions": {
+      "policies": "Nova política",
+      "recurring": "Nova programação recorrente",
+      "subscriptions": "Nova assinatura",
+      "plans": "Novo plano",
+      "versions": "Nova versão do plano",
+      "contracts": "Novo contrato",
+      "amendments": "Nova alteração"
+    },
+    "forms": {
+      "planDetails": "Detalhes do plano",
+      "billing": "Faturamento",
+      "incomeAccount": "Conta de receita",
+      "interval": "Intervalo de faturamento",
+      "intervalCount": "Número de intervalos",
+      "subscriptionDetails": "Detalhes da assinatura",
+      "priceOverride": "Preço personalizado",
+      "startOn": "Data de início",
+      "scheduleDetails": "Detalhes da programação",
+      "timing": "Calendário",
+      "versionDetails": "Detalhes da versão",
+      "componentNumber": "Componente {number}",
+      "contractTerm": "Prazo do contrato",
+      "renewal": "Renovação",
+      "amendmentDetails": "Detalhes da alteração"
+    }
   }
 }

@@ -7,6 +7,7 @@ await bootJsdomEnvironment({ url: 'http://localhost:4800/collections', matchMedi
 
 const script = {
   deletes: [] as string[],
+  writes: [] as Record<string, unknown>[],
   loads: 0,
   recurringLoads: 0,
   recurringFailFirst: false,
@@ -22,7 +23,7 @@ Object.assign(globalThis, {
 })
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__collectionsTestRouter}export function usePathname(){return "/collections"}export function useSearchParams(){return new URLSearchParams()}' })
+stubModules({ navigation: 'export function useRouter(){return globalThis.__collectionsTestRouter}export function usePathname(){return "/collections"}export function useSearchParams(){return new URLSearchParams(globalThis.__collectionsTestQuery ?? "")}' })
 registerHooks({
   resolve(specifier, context, next) {
 
@@ -54,12 +55,15 @@ const POLICY = {
   gracePeriodDays: 0,
   minBalance: '0',
   isActive: true,
+  updatedAt: "2026-10-01T10:00:00.000001Z",
   stages: [
-    { sequence: 1, name: 'First reminder', offsetDays: 7, subjectTemplate: 's', bodyTemplate: 'b' },
+    { id: 'stage-1', sequence: 4, name: 'First reminder', offsetDays: 7, subjectTemplate: 's', bodyTemplate: 'b' },
   ],
 }
 
-async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false, view: 'policies' | 'recurring' = 'policies'): Promise<void> {
+async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false, view: 'policies' | 'recurring' | 'plans' = 'policies', policyParam = ''): Promise<void> {
+  Object.assign(globalThis, { __collectionsTestQuery: policyParam ? `policy=${policyParam}` : "" })
+  script.writes = []
   script.deletes = []
   script.loads = 0
   script.recurringLoads = 0
@@ -68,6 +72,8 @@ async function mount(t: TestContext, deleteResponder: () => Response, recurringF
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
+    if (method === 'POST' || method === 'PATCH') { script.writes.push(JSON.parse(String(init?.body))); return deleteResponder() }
+    if (url === '/api/subscriptions') return Response.json({ plans: [], subscriptions: [], mrr: '0' })
     if (url === '/api/recurring') return ++script.recurringLoads === 1 && script.recurringFailFirst ? Response.json({}, { status: 503 }) : Response.json({ schedules: [] })
     if (url === '/api/dunning' && method === 'GET') {
       script.loads += 1
@@ -95,7 +101,7 @@ async function mount(t: TestContext, deleteResponder: () => Response, recurringF
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <MoneyProvider currency="CAD"><CollectionsClient initialView={view} /></MoneyProvider>
+        <MoneyProvider currency="CAD"><CollectionsClient initialView={view} subscriptionsEnabled /></MoneyProvider>
       </NextIntlClientProvider>,
     )
     await tick()
@@ -144,4 +150,41 @@ test('a failed recurring-schedule read shows retry instead of none yet', async (
   assert.ok(!document.body.textContent?.includes('No recurring schedules yet.'))
   await click(findButton('Retry')!)
   assert.ok(script.recurringLoads === 2 && document.body.textContent?.includes('No recurring schedules yet.'))
+})
+
+async function fill(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    const prototype = input instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+}
+
+test('a plan save refusal retains its exact decimal draft and names the remedy', async (t) => {
+  await mount(t, () => Response.json({ error: 'The income account is inactive. Choose an active account.' }, { status: 409 }), false, 'plans')
+  await click(findButton('New plan')!)
+  const dialog = document.querySelector('[role="dialog"]')!
+  const name = dialog.querySelector('input[aria-labelledby]') as HTMLInputElement
+  const price = dialog.querySelector('input[inputmode="decimal"]') as HTMLInputElement
+  await fill(name, 'Annual support'); await fill(price, '1234.5600'); await click(findButton('Add plan')!)
+  assert.equal(script.writes.length, 1)
+  assert.equal(script.writes[0].name, 'Annual support'); assert.equal(script.writes[0].amount, '1234.5600')
+  assert.match(dialog.querySelector('[role="alert"]')?.textContent ?? '', /Choose an active account/)
+  assert.equal(document.querySelector('[role="dialog"]'), dialog)
+  assert.equal(name.value, 'Annual support'); assert.equal(price.value, '1234.5600')
+})
+
+test('editing reminders preserves their identities and numbers additions after the stored sequence', async (t) => {
+  await mount(t, () => Response.json({ error: 'Policy changed. Reload before saving.' }, { status: 409 }), false, 'policies', 'pol-1')
+  const dialog = document.querySelector('[role="dialog"]')!
+  await click(findButton('Add reminder')!)
+  assert.deepEqual([...dialog.querySelectorAll('input[aria-label="Sequence"]')].map((input) => (input as HTMLInputElement).value), ['4', '5'])
+  await click([...dialog.querySelectorAll('button')].filter((button) => button.textContent?.includes('Remove row')).at(-1)!)
+  await fill(dialog.querySelector('textarea') as HTMLTextAreaElement, 'Please contact Accounts Receivable.')
+  await click(findButton('Save')!)
+  assert.equal(script.writes.length, 1); assert.equal(script.writes[0].expectedUpdatedAt, POLICY.updatedAt)
+  const stages = script.writes[0].stages as typeof POLICY.stages
+  assert.equal(stages[0].id, 'stage-1'); assert.equal(stages[0].sequence, 4)
+  assert.equal(stages[0].bodyTemplate, 'Please contact Accounts Receivable.')
 })

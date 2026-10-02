@@ -411,6 +411,32 @@
       "activeBadge": "已启用",
       "minimumBalance": "最低余额（本位币）"
     },
-    "title": "应收催收"
+    "title": "应收催收",
+    "actions": {
+      "policies": "新建政策",
+      "recurring": "新建定期计划",
+      "subscriptions": "新建订阅",
+      "plans": "新建套餐",
+      "versions": "新建套餐版本",
+      "contracts": "新建合同",
+      "amendments": "新建合同变更"
+    },
+    "forms": {
+      "planDetails": "套餐详情",
+      "billing": "开票",
+      "incomeAccount": "收入科目",
+      "interval": "开票周期",
+      "intervalCount": "周期数量",
+      "subscriptionDetails": "订阅详情",
+      "priceOverride": "自定义价格",
+      "startOn": "开始日期",
+      "scheduleDetails": "计划详情",
+      "timing": "时间安排",
+      "versionDetails": "版本详情",
+      "componentNumber": "组成项 {number}",
+      "contractTerm": "合同期限",
+      "renewal": "续约",
+      "amendmentDetails": "变更详情"
+    }
   }
 }
