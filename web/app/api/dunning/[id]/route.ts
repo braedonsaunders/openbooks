@@ -9,24 +9,38 @@ import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { isUuid } from "../../../../lib/list-params";
 import { isValidEmailAddress } from "@openbooks/emails";
+import { dunningStageIdentities } from '@/lib/dunning-stage-identity'
 import { notFound } from "@/lib/api/responses";
 const stageSchema = z.object({
+  id: z.string().uuid().optional(),
   sequence: z.number().int(), name: z.string().min(1), offsetDays: z.number().int(),
   subjectTemplate: z.string(), bodyTemplate: z.string(), escalate: z.boolean().optional(),
 });
 const gracePeriodDaysSchema = z.union([z.number().int().nonnegative(), z.string().regex(/^\d+$/), z.null()]);
 const PATCHBodySchema1 = z.object({
+  expectedUpdatedAt: z.string().datetime().optional(),
   appliesToKind: z.union([z.string(), z.number(), z.null()]).optional(),
   gracePeriodDays: gracePeriodDaysSchema.optional(), isActive: z.boolean().optional(),
   minBalance: z.string().nullable().optional(), name: z.string().trim().min(1).optional(),
   replyTo: z.string().email().nullable().optional(), stages: z.array(stageSchema).optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+}).refine((body) => Object.keys(body).some((key) => key !== 'expectedUpdatedAt'), { message: "At least one field must be provided." });
 
 
 
 export const runtime = "nodejs";
 
+class PolicyEditConflict extends Error {
+  readonly status = 409
+  constructor(message = 'This policy changed or was removed while you were editing. Close the editor, refresh Policies, and reopen the record before saving.') { super(message) }
+}
+
+class PolicyStagesRefusal extends Error {
+  readonly status = 422
+  constructor() { super('cannot activate a policy with no stages — add at least one stage or deactivate it first') }
+}
+
 interface StageInput {
+  id?: string;
   sequence: number;
   name: string;
   offsetDays: number;
@@ -53,6 +67,7 @@ function validStages(raw: unknown): StagesParse {
   for (const s of raw) {
     if (typeof s !== "object" || s === null) return invalid;
     const o = s as Record<string, unknown>;
+    if (o.id !== undefined && (typeof o.id !== 'string' || !isUuid(o.id))) return invalid;
     if (typeof o.name !== "string" || !o.name.trim()) return invalid;
     if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return invalid;
     if (o.escalate !== undefined && typeof o.escalate !== "boolean") return invalid;
@@ -61,6 +76,7 @@ function validStages(raw: unknown): StagesParse {
     if (!o.subjectTemplate.trim() || !o.bodyTemplate.trim()) return blank;
     if (!isInt32(Number(o.sequence)) || !isInt32(Number(o.offsetDays))) return invalid;
     stages.push({
+      ...(typeof o.id === 'string' ? { id: o.id } : {}),
       sequence: Number(o.sequence),
       name: o.name,
       offsetDays: Number(o.offsetDays),
@@ -158,26 +174,22 @@ export const PATCH = defineRoute({
         }
         gracePeriodDays = parsed;
       }
-    if (("isActive" in body && body.isActive === true) || "stages" in body) {
-        const current = (await db.execute<{ isActive: boolean; stageCount: number }>(sql`
-          select p.is_active as "isActive",
-                 (select count(*)::int from dunning_stages s where s.policy_id = p.id and s.org_id = p.org_id) as "stageCount"
-            from dunning_policies p where p.id = ${id} and p.org_id = ${authz.user.orgId}
-        `)).rows[0]!;
-        const resultingActive = "isActive" in body ? (body.isActive as boolean) : current.isActive;
-        const resultingStages = stages !== undefined ? stages.length : current.stageCount;
-        if (resultingActive && resultingStages === 0) {
-          return NextResponse.json({ error: "cannot activate a policy with no stages — add at least one stage or deactivate it first" }, { status: 422 });
-        }
-      }
     await db.transaction(async (tx) => {
         // Snapshot the current policy and its ladder before anything changes.
         const beforePolicy = (await tx.execute<Record<string, unknown>>(sql`
-          select * from dunning_policies where id = ${id} and org_id = ${authz.user.orgId}
+          select *, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as policy_revision
+            from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} for update
         `));
+        const before = beforePolicy.rows[0]
+        if (!before) throw new PolicyEditConflict()
+        if (body.expectedUpdatedAt !== undefined &&
+          before.policy_revision !== body.expectedUpdatedAt) throw new PolicyEditConflict()
         const beforeStages = (await tx.execute<Record<string, unknown>>(sql`
           select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
         `));
+        if ((body.isActive ?? before.is_active) === true && (stages ?? beforeStages.rows).length === 0) {
+          throw new PolicyStagesRefusal()
+        }
         const sets = [];
         if ("name" in body) sets.push(sql`name = ${body.name as string}`);
         if ("appliesToKind" in body) sets.push(sql`applies_to_kind = ${body.appliesToKind as string}`);
@@ -186,30 +198,37 @@ export const PATCH = defineRoute({
         if ("replyTo" in body) sets.push(sql`reply_to = ${(body.replyTo as string | null) ?? null}`);
         if ("isActive" in body) sets.push(sql`is_active = ${body.isActive as boolean}`);
         let afterPolicy: Record<string, unknown> | undefined;
-        if (sets.length) {
+        if (sets.length || stages !== undefined) {
+          sets.push(sql`updated_at = now()`, sql`updated_by = ${authz.user.id}`)
           const updated = (await tx.execute<Record<string, unknown>>(sql`
-            update dunning_policies set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
+            update dunning_policies set ${sql.join(sets, sql`, `)}
              where id = ${id} and org_id = ${authz.user.orgId}
             returning *
           `));
           afterPolicy = updated.rows[0];
+          if (!afterPolicy) throw new PolicyEditConflict()
         }
         let afterStages: Record<string, unknown>[] | undefined;
         if (stages) {
-          // Replace the ladder as one unit. dunning_log sent rows are terminal
-          // and never mutated or deleted (the guard refuses every transition out
-          // of sent), and each row keeps its own copy of what was sent, so
-          // pruning stages is safe.
+          const identities = dunningStageIdentities(beforeStages.rows.map((stage) => ({ id: String(stage.id), sequence: Number(stage.sequence) })), stages)
+          if (!identities.ok) throw new PolicyEditConflict(identities.error)
+          // Replace atomically to permit sequence swaps under the unique
+          // index. Retain stage ids and creation evidence: delivery claims
+          // remain attached to the same reminder after an ordinary edit.
           await tx.execute(sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`);
           afterStages = [];
-          for (const s of stages) {
+          for (const [index, s] of stages.entries()) {
+            const stageId = identities.ids[index] ?? null
+            const original = beforeStages.rows.find((row) => row.id === stageId)
             const stageRow = (await tx.execute<Record<string, unknown>>(sql`
-              insert into dunning_stages (org_id, policy_id, sequence, name, offset_days, subject_template,
-                                          body_template, escalate, created_by, updated_by)
-              values (${authz.user.orgId}, ${id}, ${s.sequence}, ${s.name}, ${s.offsetDays},
-                      ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, ${authz.user.id}, ${authz.user.id})
+              insert into dunning_stages (id, org_id, policy_id, sequence, name, offset_days, subject_template,
+                                          body_template, escalate, created_at, created_by, updated_by)
+              values (coalesce(${stageId}::uuid, gen_random_uuid()), ${authz.user.orgId}, ${id}, ${s.sequence}, ${s.name}, ${s.offsetDays},
+                      ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, coalesce(${original?.created_at ?? null}::timestamptz, now()),
+                      ${original?.created_by ?? authz.user.id}, ${authz.user.id})
               returning *
             `));
+            if (!stageRow.rows[0]) throw new PolicyEditConflict()
             afterStages.push(stageRow.rows[0]!);
           }
         }

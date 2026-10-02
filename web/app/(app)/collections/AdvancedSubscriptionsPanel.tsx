@@ -1,9 +1,10 @@
 "use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
+import { PagedTable } from '@/components/paged-table'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Alert, AlertDescription, Badge, Button, Card, Input, Label, Select, Skeleton } from "@openbooks/ui";
+import { Alert, AlertDescription, Badge, Button, Card, Drawer, Input, Label, Select, Skeleton } from "@openbooks/ui";
 import { Field } from "@/components/field";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
@@ -19,8 +20,9 @@ type Amendment = { id: string; subscriptionId: string; amendmentNumber: number; 
 
 const blankComponent = (name: string): Component => ({ componentKey: "base", name, quantity: "1", unitPrice: "0" });
 
-export function AdvancedSubscriptionsPanel() {
+export function AdvancedSubscriptionsPanel({ view = 'versions', creating = false, onClose = () => {} }: { view?: 'versions' | 'contracts' | 'amendments'; creating?: boolean; onClose?: () => void }) {
   const t = useTranslations("ar.collections.subscriptions.advanced");
+  const common = useTranslations('common')
   const { money } = useMoney();
   const today = useBusinessToday();
   const [plans, setPlans] = useState<BasePlan[]>([]);
@@ -43,8 +45,10 @@ export function AdvancedSubscriptionsPanel() {
   // catalog text so the mount effect below stays single-shot per locale.
   const load = useCallback(() => {
     return Promise.all([fetch("/api/subscriptions"), fetch("/api/subscriptions/advanced")])
-      .then(([baseResponse, advancedResponse]) => {
-        if (!baseResponse.ok || !advancedResponse.ok) throw new Error(t("loadFailed"));
+      .then(async ([baseResponse, advancedResponse]) => {
+        if (!baseResponse.ok) throw new Error(await readApiErrorMessage(baseResponse, t("loadFailed")));
+        if (!advancedResponse.ok) throw new Error(await readApiErrorMessage(advancedResponse, t("loadFailed")));
+        setError(null);
         return Promise.all([baseResponse.json(), advancedResponse.json()]).then(([base, advanced]) => {
           setPlans(base.plans ?? []); setSubscriptions(base.subscriptions ?? []);
           setVersions(advanced.versions ?? []); setLifecycles(advanced.lifecycles ?? []); setAmendments(advanced.amendments ?? []);
@@ -91,23 +95,25 @@ export function AdvancedSubscriptionsPanel() {
 
   return (
     <div className="space-y-6">
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && !creating && <Alert variant="destructive"><AlertDescription>{error} <Button variant="outline" onClick={() => void load()}>{common("actions.retry")}</Button></AlertDescription></Alert>}
       {message && <Alert variant="success"><AlertDescription>{message}</AlertDescription></Alert>}
 
-      <Card className="p-4">
+      {view === "versions" && <div className="space-y-4">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div><h3 className="text-sm font-semibold">{t("catalogTitle")}</h3><p className="text-xs text-muted-foreground">{t("catalogDescription")}</p></div>
           <Badge variant="secondary">{t("publishedCount", { count: versions.filter((v) => v.status === "published").length })}</Badge>
         </div>
-        <div className="overflow-x-auto">
-          <SharedTable className="w-full text-sm">
-            <SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("colVersion")}</SharedTableHead><SharedTableHead>{t("colEffective")}</SharedTableHead><SharedTableHead>{t("colTiming")}</SharedTableHead><SharedTableHead>{t("colComponents")}</SharedTableHead><SharedTableHead></SharedTableHead></SharedTableRow></SharedTableHeader>
-            <SharedTableBody>
-              {versions.map((version) => <SharedTableRow key={version.id} className="border-t align-top"><SharedTableCell className="py-2"><span className="font-medium">{version.name}</span> <Badge variant={version.status === "published" ? "default" : "secondary"}>v{version.versionNumber} {version.status}</Badge></SharedTableCell><SharedTableCell>{version.effectiveFrom}</SharedTableCell><SharedTableCell>{timingLabel(version.billingTiming)}</SharedTableCell><SharedTableCell>{version.components.map((c) => c.name).join(", ")}</SharedTableCell><SharedTableCell className="text-right">{version.status === "draft" && <Button size="sm" variant="ghost" disabled={busy} onClick={async () => { if (await post({ action: "publishVersion", versionId: version.id })) setMessage(t("publishedMessage", { name: version.name, version: version.versionNumber })); }}>{t("publish")}</Button>}</SharedTableCell></SharedTableRow>)}
-              {!versions.length && <SharedTableRow><SharedTableCell colSpan={5} className="py-4 text-center text-muted-foreground">{t("noVersions")}</SharedTableCell></SharedTableRow>}
-            </SharedTableBody>
-          </SharedTable>
-        </div>
+
+<PagedTable source="collections_versions" searchable rows={versions} rowKey={(version) => version.id} empty={t("noVersions")} columns={[
+{ key: 'name', header: <>{t("colVersion")}</>, cell: (version) => <><span className="font-medium">{version.name}</span> <Badge variant={version.status === "published" ? "default" : "secondary"}>v{version.versionNumber} {version.status}</Badge></>, search: (version) => version.name ?? '' },
+{ key: 'effectiveFrom', header: <>{t("colEffective")}</>, cell: (version) => <>{version.effectiveFrom}</> },
+{ key: 'billingTiming', header: <>{t("colTiming")}</>, cell: (version) => <>{timingLabel(version.billingTiming)}</> },
+{ key: 'components', header: <>{t("colComponents")}</>, cell: (version) => <>{version.components.map((c) => c.name).join(", ")}</> },
+{ key: 'actions', header: <></>, cell: (version) => <>{version.status === "draft" && <Button size="sm" variant="ghost" disabled={busy} onClick={async () => { if (await post({ action: "publishVersion", versionId: version.id })) setMessage(t("publishedMessage", { name: version.name, version: version.versionNumber })); }}>{t("publish")}</Button>}</> }
+]} />
+      <Drawer open={creating} onClose={onClose} title={t("catalogTitle")} size="xl">
+        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <Field label={t("basePlan")}><Select value={versionForm.planId} onChange={(e) => setVersionForm({ ...versionForm, planId: e.target.value })}><option value="">{t("choosePlan")}</option>{plans.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
           <Field label={t("effectiveFrom")}><Input type="date" value={versionForm.effectiveFrom} onChange={(e) => setVersionForm({ ...versionForm, effectiveFrom: e.target.value })} /></Field>
@@ -115,13 +121,25 @@ export function AdvancedSubscriptionsPanel() {
           <Field label={t("changeSummary")}><Input value={versionForm.changeSummary} onChange={(e) => setVersionForm({ ...versionForm, changeSummary: e.target.value })} placeholder={t("initialCatalog")} /></Field>
         </div>
         <div className="mt-3 space-y-2">
-          {versionForm.components.map((component, index) => <div key={index} className="grid gap-2 rounded-md border p-2 sm:grid-cols-5"><div><Label htmlFor={`catalog-component-key-${index}`}>{t("componentKey")}</Label><Input id={`catalog-component-key-${index}`} placeholder={t("keyPlaceholder")} value={component.componentKey} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, componentKey: e.target.value } : c) })} /></div><div className="sm:col-span-2"><Label htmlFor={`catalog-component-name-${index}`}>{t("componentName")}</Label><Input id={`catalog-component-name-${index}`} placeholder={t("namePlaceholder")} value={component.name} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, name: e.target.value } : c) })} /></div><div><Label htmlFor={`catalog-component-quantity-${index}`}>{t("quantity")}</Label><Input id={`catalog-component-quantity-${index}`} type="number" placeholder={t("qtyPlaceholder")} value={component.quantity} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, quantity: e.target.value } : c) })} /></div><div className="flex gap-1"><div className="flex-1"><Label htmlFor={`catalog-component-price-${index}`}>{t("unitPrice")}</Label><Input id={`catalog-component-price-${index}`} type="number" placeholder={t("pricePlaceholder")} value={component.unitPrice} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, unitPrice: e.target.value } : c) })} /></div>{versionForm.components.length > 1 && <Button size="sm" variant="ghost" aria-label={t("removeComponent", { name: component.name || t("fallbackComponent") })} onClick={() => setVersionForm({ ...versionForm, components: versionForm.components.filter((_, i) => i !== index) })}>×</Button>}</div></div>)}
+          {versionForm.components.map((component, index) => <div key={index} className="grid gap-2 rounded-md border p-2 sm:grid-cols-5"><div><Label htmlFor={`catalog-component-key-${index}`}>{t("componentKey")}</Label><Input id={`catalog-component-key-${index}`} placeholder={t("keyPlaceholder")} value={component.componentKey} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, componentKey: e.target.value } : c) })} /></div><div className="sm:col-span-2"><Label htmlFor={`catalog-component-name-${index}`}>{t("componentName")}</Label><Input id={`catalog-component-name-${index}`} placeholder={t("namePlaceholder")} value={component.name} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, name: e.target.value } : c) })} /></div><div><Label htmlFor={`catalog-component-quantity-${index}`}>{t("quantity")}</Label><Input id={`catalog-component-quantity-${index}`} type="number" placeholder={t("qtyPlaceholder")} value={component.quantity} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, quantity: e.target.value } : c) })} /></div><div className="flex gap-1"><div className="flex-1"><Label htmlFor={`catalog-component-price-${index}`}>{t("unitPrice")}</Label><Input id={`catalog-component-price-${index}`} inputMode="decimal" placeholder={t("pricePlaceholder")} value={component.unitPrice} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, unitPrice: e.target.value } : c) })} /></div>{versionForm.components.length > 1 && <Button size="sm" variant="ghost" aria-label={t("removeComponent", { name: component.name || t("fallbackComponent") })} onClick={() => setVersionForm({ ...versionForm, components: versionForm.components.filter((_, i) => i !== index) })}>×</Button>}</div></div>)}
         </div>
-        <div className="mt-3 flex gap-2"><Button size="sm" variant="secondary" onClick={() => setVersionForm({ ...versionForm, components: [...versionForm.components, { ...blankComponent(t("baseSubscription")), componentKey: `addon-${versionForm.components.length}`, name: t("addonName") }] })}>{t("addComponent")}</Button><Button size="sm" disabled={busy || !versionForm.planId || versionForm.components.some((c) => !c.componentKey || !c.name)} onClick={async () => { const result = await post({ action: "createVersion", ...versionForm }); if (result) { setMessage(t("draftCreated")); setVersionForm({ planId: "", effectiveFrom: today, billingTiming: "advance", changeSummary: "", components: [blankComponent(t("baseSubscription"))] }); } }}>{t("createDraft")}</Button></div>
-      </Card>
+        <div className="mt-3 flex gap-2"><Button size="sm" variant="secondary" onClick={() => setVersionForm({ ...versionForm, components: [...versionForm.components, { ...blankComponent(t("baseSubscription")), componentKey: `addon-${versionForm.components.length}`, name: t("addonName") }] })}>{t("addComponent")}</Button><Button size="sm" disabled={busy || !versionForm.planId || versionForm.components.some((c) => !c.componentKey || !c.name)} onClick={async () => { const result = await post({ action: "createVersion", ...versionForm }); if (result) { onClose(); setMessage(t("draftCreated")); setVersionForm({ planId: "", effectiveFrom: today, billingTiming: "advance", changeSummary: "", components: [blankComponent(t("baseSubscription"))] }); } }}>{t("createDraft")}</Button></div>
 
-      <Card className="p-4">
-        <h3 className="text-sm font-semibold">{t("lifecycleTitle")}</h3><p className="mb-3 text-xs text-muted-foreground">{t("lifecycleDescription")}</p>
+      </Drawer>
+      </div>}
+
+      {view === "contracts" && <div className="space-y-4">
+<PagedTable source="collections_contracts" searchable rows={lifecycles} rowKey={(l) => l.subscriptionId} empty={common('labels.none')} columns={[
+    { key: 'customer', header: t('customerFallback'), search: (l) => subscriptions.find((s) => s.id === l.subscriptionId)?.customerName ?? '', cell: (l) => subscriptions.find((s) => s.id === l.subscriptionId)?.customerName ?? t('customerFallback') },
+    { key: 'plan', header: t('basePlan'), cell: (l) => subscriptions.find((s) => s.id === l.subscriptionId)?.planName ?? t('subscriptionFallback') },
+    { key: 'revision', header: common('labels.reference'), cell: (l) => t('revision', { rev: l.contractRevision }) },
+    { key: 'term', header: t('termStarts'), cell: (l) => t('termLine', { start: l.termStartsOn, end: l.termEndsOn ?? t('openEnd') }) },
+    { key: 'timing', header: t('colTiming'), cell: (l) => timingLabel(l.billingTiming) },
+    { key: 'renewal', header: t('renewal'), cell: (l) => renewalLabel(l.renewalPolicy) },
+    { key: 'components', header: t('colComponents'), cell: (l) => <div className="space-y-1">{l.components.filter((c) => !c.effectiveTo).map((c) => <p key={c.componentKey}>{c.name}: {c.quantity} × {money(c.unitPrice)}</p>)}</div> },
+  ]} />
+      <Drawer open={creating} onClose={onClose} title={t("lifecycleTitle")} size="xl">
+        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
           <Field label={t("subscription")}><Select value={lifecycleForm.subscriptionId} onChange={(e) => setLifecycleForm({ ...lifecycleForm, subscriptionId: e.target.value, planVersionId: "" })}><option value="">{t("choose")}</option>{subscriptions.filter((s) => !lifecycleIds.has(s.id) && s.status !== "canceled").map((s) => <option key={s.id} value={s.id}>{s.customerName ?? t("customerFallback")} · {s.planName}</option>)}</Select></Field>
           <Field label={t("publishedVersion")}><Select value={lifecycleForm.planVersionId} onChange={(e) => setLifecycleForm({ ...lifecycleForm, planVersionId: e.target.value })}><option value="">{t("choose")}</option>{eligibleVersions.map((v) => <option key={v.id} value={v.id}>{v.name} · v{v.versionNumber}</option>)}</Select></Field>
@@ -130,27 +148,37 @@ export function AdvancedSubscriptionsPanel() {
           <Field label={t("trialEnds")}><Input type="date" value={lifecycleForm.trialEndsOn} onChange={(e) => setLifecycleForm({ ...lifecycleForm, trialEndsOn: e.target.value })} /></Field>
           <Field label={t("renewal")}><Select value={lifecycleForm.renewalPolicy} onChange={(e) => setLifecycleForm({ ...lifecycleForm, renewalPolicy: e.target.value })}><option value="auto">{t("renewAuto")}</option><option value="manual">{t("renewManual")}</option><option value="none">{t("renewNone")}</option></Select></Field>
           <Field label={t("renewalTermMonths")}><Input type="number" value={lifecycleForm.renewalTermMonths} onChange={(e) => setLifecycleForm({ ...lifecycleForm, renewalTermMonths: e.target.value })} /></Field>
-          <div className="flex items-end"><Button disabled={busy || !lifecycleForm.subscriptionId || !lifecycleForm.planVersionId} onClick={async () => { if (await post({ action: "activateLifecycle", ...lifecycleForm })) { setMessage(t("lifecycleActivated")); setLifecycleForm({ subscriptionId: "", planVersionId: "", termStartsOn: today, termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" }); } }}>{t("activateLifecycle")}</Button></div>
+          <div className="flex items-end"><Button disabled={busy || !lifecycleForm.subscriptionId || !lifecycleForm.planVersionId} onClick={async () => { if (await post({ action: "activateLifecycle", ...lifecycleForm })) { onClose(); setMessage(t("lifecycleActivated")); setLifecycleForm({ subscriptionId: "", planVersionId: "", termStartsOn: today, termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" }); } }}>{t("activateLifecycle")}</Button></div>
         </div>
-        <div className="mt-4 space-y-2">{lifecycles.map((lifecycle) => { const sub = subscriptions.find((s) => s.id === lifecycle.subscriptionId); return <div key={lifecycle.subscriptionId} className="rounded-md border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><span className="font-medium">{sub?.customerName ?? t("customerFallback")} · {sub?.planName ?? t("subscriptionFallback")}</span><span className="ml-2 text-xs text-muted-foreground">{t("revision", { rev: lifecycle.contractRevision })}</span></div><div className="flex gap-1"><Badge variant="secondary">{timingLabel(lifecycle.billingTiming)}</Badge><Badge variant="secondary">{renewalLabel(lifecycle.renewalPolicy)}</Badge></div></div><div className="mt-1 text-xs text-muted-foreground">{lifecycle.trialEndsOn ? `${t("trialThrough", { date: lifecycle.trialEndsOn })} · ` : ""}{t("termLine", { start: lifecycle.termStartsOn, end: lifecycle.termEndsOn ?? t("openEnd") })}</div><div className="mt-2 flex flex-wrap gap-2">{lifecycle.components.filter((c) => !c.effectiveTo).map((c) => <span key={c.componentKey} className="rounded bg-muted px-2 py-1 text-xs">{c.name}: {c.quantity} × {money(c.unitPrice)}</span>)}</div></div>; })}</div>
-      </Card>
 
-      <Card className="p-4">
-        <h3 className="text-sm font-semibold">{t("amendTitle")}</h3><p className="mb-3 text-xs text-muted-foreground">{t("amendDescription")}</p>
+      </Drawer>
+      </div>}
+
+      {view === "amendments" && <div className="space-y-4">
+<PagedTable source="collections_amendments" searchable rows={amendments} rowKey={(a) => a.id} empty={t("noAmendments")} columns={[
+{ key: 'amendmentNumber', header: <>{t("colNumber")}</>, cell: (a) => <>{a.amendmentNumber}</> },
+{ key: 'subscriptionId', header: <>{t("colSubscription")}</>, cell: (a) => <>{subscriptions.find((s) => s.id === a.subscriptionId)?.planName ?? t("subscriptionFallback")}</> },
+{ key: 'amendmentType', header: <>{t("colChange")}</>, cell: (a) => <>{changeTypeLabel(a.amendmentType)}</> },
+{ key: 'effectiveOn', header: <>{t("colEffective")}</>, cell: (a) => <>{a.effectiveOn}</> },
+{ key: 'reason', header: <>{t("colReason")}</>, cell: (a) => <>{a.reason ?? "—"}</>, search: (a) => a.reason ?? '' }
+]} />
+      <Drawer open={creating} onClose={onClose} title={t("amendTitle")} size="xl">
+        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         <div className="grid gap-3 md:grid-cols-4">
           <Field label={t("subscription")}><Select value={amendForm.subscriptionId} onChange={(e) => setAmendForm({ ...amendForm, subscriptionId: e.target.value })}><option value="">{t("choose")}</option>{subscriptions.filter((s) => lifecycleIds.has(s.id)).map((s) => <option key={s.id} value={s.id}>{s.customerName ?? t("customerFallback")} · {s.planName}</option>)}</Select></Field>
           <Field label={t("change")}><Select value={amendForm.type} onChange={(e) => setAmendForm({ ...amendForm, type: e.target.value })}><option value="add_component">{t("changeAdd")}</option><option value="change_component">{t("changeChange")}</option><option value="remove_component">{t("changeRemove")}</option><option value="change_term">{t("changeTerm")}</option><option value="change_timing">{t("changeTiming")}</option><option value="renew">{t("changeRenew")}</option><option value="coterm">{t("changeCoterm")}</option></Select></Field>
           <Field label={t("effectiveOn")}><Input type="date" value={amendForm.effectiveOn} onChange={(e) => setAmendForm({ ...amendForm, effectiveOn: e.target.value })} /></Field>
           <Field label={t("reason")}><Input value={amendForm.reason} onChange={(e) => setAmendForm({ ...amendForm, reason: e.target.value })} /></Field>
-          {["add_component", "change_component", "remove_component"].includes(amendForm.type) && <><Field label={t("componentKey")}><Input value={amendForm.componentKey} onChange={(e) => setAmendForm({ ...amendForm, componentKey: e.target.value })} /></Field>{amendForm.type !== "remove_component" && <><Field label={t("name")}><Input value={amendForm.name} onChange={(e) => setAmendForm({ ...amendForm, name: e.target.value })} /></Field><Field label={t("quantity")}><Input type="number" value={amendForm.quantity} onChange={(e) => setAmendForm({ ...amendForm, quantity: e.target.value })} /></Field><Field label={t("unitPrice")}><Input type="number" value={amendForm.unitPrice} onChange={(e) => setAmendForm({ ...amendForm, unitPrice: e.target.value })} /></Field></>}</>}
+          {["add_component", "change_component", "remove_component"].includes(amendForm.type) && <><Field label={t("componentKey")}><Input value={amendForm.componentKey} onChange={(e) => setAmendForm({ ...amendForm, componentKey: e.target.value })} /></Field>{amendForm.type !== "remove_component" && <><Field label={t("name")}><Input value={amendForm.name} onChange={(e) => setAmendForm({ ...amendForm, name: e.target.value })} /></Field><Field label={t("quantity")}><Input type="number" value={amendForm.quantity} onChange={(e) => setAmendForm({ ...amendForm, quantity: e.target.value })} /></Field><Field label={t("unitPrice")}><Input inputMode="decimal" value={amendForm.unitPrice} onChange={(e) => setAmendForm({ ...amendForm, unitPrice: e.target.value })} /></Field></>}</>}
           {amendForm.type === "change_term" && <Field label={t("newTermEnd")}><Input type="date" value={amendForm.termEndsOn} onChange={(e) => setAmendForm({ ...amendForm, termEndsOn: e.target.value })} /></Field>}
           {amendForm.type === "change_timing" && <Field label={t("timing")}><Select value={amendForm.billingTiming} onChange={(e) => setAmendForm({ ...amendForm, billingTiming: e.target.value })}><option value="advance">{t("advance")}</option><option value="arrears">{t("arrears")}</option></Select></Field>}
           {amendForm.type === "renew" && <Field label={t("renewalMonths")}><Input type="number" value={amendForm.renewalTermMonths} onChange={(e) => setAmendForm({ ...amendForm, renewalTermMonths: e.target.value })} /></Field>}
           {amendForm.type === "coterm" && <Field label={t("anchorSubscription")}><Select value={amendForm.anchorSubscriptionId} onChange={(e) => setAmendForm({ ...amendForm, anchorSubscriptionId: e.target.value })}><option value="">{t("choose")}</option>{subscriptions.filter((s) => s.id !== amendForm.subscriptionId && lifecycleIds.has(s.id) && (!amendmentSubscription || s.customerName === amendmentSubscription.customerName)).map((s) => <option key={s.id} value={s.id}>{s.planName}</option>)}</Select></Field>}
         </div>
-        <Button className="mt-3" size="sm" disabled={busy || !amendForm.subscriptionId} onClick={async () => { const result = await post({ action: "amend", ...amendForm, idempotencyKey: crypto.randomUUID(), renewalTermMonths: Number(amendForm.renewalTermMonths || 12) }); if (result) { setMessage(t("amendmentApplied")); } }}>{t("applyAmendment")}</Button>
-        <div className="mt-4 overflow-x-auto"><SharedTable className="w-full text-sm"><SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("colNumber")}</SharedTableHead><SharedTableHead>{t("colSubscription")}</SharedTableHead><SharedTableHead>{t("colChange")}</SharedTableHead><SharedTableHead>{t("colEffective")}</SharedTableHead><SharedTableHead>{t("colReason")}</SharedTableHead></SharedTableRow></SharedTableHeader><SharedTableBody>{amendments.map((a) => <SharedTableRow key={a.id} className="border-t"><SharedTableCell className="py-2">{a.amendmentNumber}</SharedTableCell><SharedTableCell>{subscriptions.find((s) => s.id === a.subscriptionId)?.planName ?? t("subscriptionFallback")}</SharedTableCell><SharedTableCell>{changeTypeLabel(a.amendmentType)}</SharedTableCell><SharedTableCell>{a.effectiveOn}</SharedTableCell><SharedTableCell>{a.reason ?? "—"}</SharedTableCell></SharedTableRow>)}{!amendments.length && <SharedTableRow><SharedTableCell colSpan={5} className="py-4 text-center text-muted-foreground">{t("noAmendments")}</SharedTableCell></SharedTableRow>}</SharedTableBody></SharedTable></div>
-      </Card>
+        <Button className="mt-3" size="sm" disabled={busy || !amendForm.subscriptionId} onClick={async () => { const result = await post({ action: "amend", ...amendForm, idempotencyKey: crypto.randomUUID(), renewalTermMonths: Number(amendForm.renewalTermMonths || 12) }); if (result) { onClose(); setMessage(t("amendmentApplied")); } }}>{t("applyAmendment")}</Button>
+
+      </Drawer>
+      </div>}
     </div>
   );
 }

@@ -3161,6 +3161,10 @@
         "title": "Programmitglieder",
         "singularTitle": "Programmitglied",
         "description": "Beschäftigungen mit Gültigkeitsdaten, Gewichtung und Rolle für die Verteilung."
+      },
+      "dunning-policies": {
+        "title": "Richtlinien",
+        "description": "Forderungen einziehen und Abrechnung in einem Arbeitsbereich verwalten."
       }
     },
     "fields": {
@@ -5109,6 +5113,19 @@
       "row": "Zeile {number}",
       "addRow": "Zeile hinzufügen",
       "removeRow": "Zeile entfernen"
+    },
+    "collectionPolicy": "Richtlinie",
+    "collectionPolicyFields": {
+      "policy": "Richtlinie",
+      "gracePeriodDays": "Karenzzeit (Tage)",
+      "minBalance": "Mindestbetrag (Basiswährung)",
+      "replyTo": "Antwortadresse",
+      "stages": "Erinnerungsstufen",
+      "offsetDays": "Tage überfällig",
+      "sequence": "Reihenfolge",
+      "subjectTemplate": "Betreffvorlage",
+      "bodyTemplate": "Nachrichtenvorlage",
+      "escalate": "Eskalieren"
     }
   },
   "flows": {

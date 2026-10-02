@@ -15,6 +15,7 @@ import { coveredSlotFields } from './hrm-rule-slots'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal, compareDecimal } from '../exact-decimal'
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { decimalNullRefusal } from '../payroll-decimal-refusal'
 
 /** Setup decimals include FX rates (numeric(19,10)) as well as ledger money. */
 export const SETUP_DECIMAL_SCALE = 10
@@ -95,8 +96,9 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
     case 'decimal':
     case 'percent': {
       if (!present) return { column, value: null }
-      const exact = canonicalDecimal(raw, SETUP_DECIMAL_SCALE)
-      if (exact === null) return { error: `${field.key} must be a number` }
+      const scale = field.decimalScale ?? SETUP_DECIMAL_SCALE
+      const exact = canonicalDecimal(raw, scale)
+      if (exact === null) return { error: decimalNullRefusal(field.key, field.kind === 'percent' ? 'a percentage' : 'a decimal number', raw, scale) }
       if (field.kind === 'percent') {
         const min = field.min === undefined ? null : canonicalDecimal(String(field.min), SETUP_DECIMAL_SCALE)
         const max = field.max === undefined ? null : canonicalDecimal(String(field.max), SETUP_DECIMAL_SCALE)
@@ -107,7 +109,7 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
         if (max !== null && compareDecimal(exact, max) > 0) return { error: `${field.key} must be at most ${field.max}` }
       }
       try {
-        return { column, value: normalizeDecimal(exact, SETUP_DECIMAL_SCALE) }
+        return { column, value: scale > 10 ? exact : normalizeDecimal(exact, scale) }
       } catch {
         return { error: `${field.key} must be a number` }
       }

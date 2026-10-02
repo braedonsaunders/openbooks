@@ -178,13 +178,19 @@
     "reissueHint": "Anula este enlace y crea uno nuevo para cobrar el pago."
   },
   "collections": {
-    "pageDescription": "Las programaciones recurrentes, los planes de suscripción y las escalas de recobro se configuran aquí. La lista de facturas vencidas está en Cuentas por cobrar.",
+    "pageDescription": "Cobre cuentas pendientes y gestione la facturación en un único espacio de trabajo.",
     "worklistCta": "Abrir la lista de cobros vencidos",
     "tabs": {
-      "recurring": "Facturas recurrentes",
+      "recurring": "Facturación recurrente",
       "subscriptions": "Suscripciones",
       "advanced": "Ciclo de vida avanzado",
-      "dunning": "Cobranza"
+      "dunning": "Políticas",
+      "worklist": "Lista de trabajo",
+      "policies": "Políticas",
+      "plans": "Planes",
+      "versions": "Versiones de planes",
+      "contracts": "Contratos",
+      "amendments": "Modificaciones"
     },
     "errors": {
       "actionFailed": "La acción no se pudo completar",
@@ -324,7 +330,6 @@
         "colNumber": "N.º",
         "colSubscription": "Suscripción",
         "colChange": "Cambio",
-        "colEffective": "Vigencia",
         "colReason": "Motivo",
         "noAmendments": "Aún no hay modificaciones.",
         "changeType_add_component": "Añadir componente",
@@ -403,7 +408,9 @@
       "delete": "Eliminar",
       "stageDay": "· Día {day}: {name}",
       "noneYet": "Aún no hay políticas de cobranza.",
-      "activeBadge": "Activo"
-    }
+      "activeBadge": "Activo",
+      "minimumBalance": "Saldo mínimo (moneda base)"
+    },
+    "title": "Cobros"
   }
 }

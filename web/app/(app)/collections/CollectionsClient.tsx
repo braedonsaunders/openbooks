@@ -1,11 +1,17 @@
 "use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
+import { PagedTable } from '@/components/paged-table'
+import { ListPageLayout } from '@/components/page-layout'
+import { SetupDrawer } from '../admin/setup/[entity]/SetupDrawer'
+import { BILLING_ENTITIES } from '@/lib/setup/entities/billing'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Plus } from 'lucide-react'
+import { CollectionsQueue } from './CollectionsQueue'
 import { useMoney } from '@/components/money-provider'
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { enumLabel } from "@/lib/enum-label";
-import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
+import { Badge, Button, Card, Drawer, Input, Label, PageHeader, Select } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
 import { confirmDialog } from "../../../lib/confirm";
 import { readApiErrorMessage } from "../../../lib/api-error";
@@ -44,6 +50,7 @@ interface Policy {
   minBalance: string;
   isActive: boolean;
   stages: Stage[];
+  updatedAt?: string;
 }
 
 const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"];
@@ -67,46 +74,40 @@ interface SubscriptionActionBody {
   proration?: { documentNumber?: string; amount?: string };
 }
 
-export function CollectionsClient({
-  subscriptionsEnabled = false,
-  advancedSubscriptionsEnabled = false,
-  customers = [],
-  incomeAccounts = [],
+export type CollectionsView = 'worklist' | 'policies' | 'recurring' | 'subscriptions' | 'plans' | 'versions' | 'contracts' | 'amendments'
+type EditorProps = { creating: boolean; onClose: () => void }
+
+export function CollectionsClient({ subscriptionsEnabled = false, advancedSubscriptionsEnabled = false,
+  customers = [], incomeAccounts = [], title, description, worklistEnabled = false, initialView,
 }: {
-  subscriptionsEnabled?: boolean;
-  advancedSubscriptionsEnabled?: boolean;
-  customers?: Opt[];
-  incomeAccounts?: Opt[];
+  subscriptionsEnabled?: boolean; advancedSubscriptionsEnabled?: boolean;
+  customers?: Opt[]; incomeAccounts?: Opt[]; title?: string; description?: string;
+  worklistEnabled?: boolean; initialView?: CollectionsView;
 }) {
-  const [tab, setTab] = useState<"recurring" | "subscriptions" | "advanced" | "dunning">("recurring");
-  const t = useTranslations("ar.collections");
-  return (
-    <div className="mt-6">
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Button variant={tab === "recurring" ? "default" : "ghost"} onClick={() => setTab("recurring")}>
-          {t("tabs.recurring")}
-        </Button>
-        {subscriptionsEnabled && (
-          <Button variant={tab === "subscriptions" ? "default" : "ghost"} onClick={() => setTab("subscriptions")}>
-            {t("tabs.subscriptions")}
-          </Button>
-        )}
-        {advancedSubscriptionsEnabled && (
-          <Button variant={tab === "advanced" ? "default" : "ghost"} onClick={() => setTab("advanced")}>{t("tabs.advanced")}</Button>
-        )}
-        <Button variant={tab === "dunning" ? "default" : "ghost"} onClick={() => setTab("dunning")}>
-          {t("tabs.dunning")}
-        </Button>
-      </div>
-      {tab === "recurring" && <RecurringPanel />}
-      {tab === "subscriptions" && subscriptionsEnabled && <SubscriptionsPanel customers={customers} incomeAccounts={incomeAccounts} />}
-      {tab === "advanced" && advancedSubscriptionsEnabled && <AdvancedSubscriptionsPanel />}
-      {tab === "dunning" && <DunningPanel />}
-    </div>
-  );
+  const search = useSearchParams()
+  const t = useTranslations('ar.collections')
+  const newAction = useTranslations('ar.actions')
+  const requested = initialView ?? search?.get('view') ?? (worklistEnabled ? 'worklist' : 'policies')
+  const available: CollectionsView[] = [ ...(worklistEnabled ? ['worklist' as const] : []), 'policies', 'recurring',
+    ...(subscriptionsEnabled ? ['subscriptions' as const, 'plans' as const] : []),
+    ...(advancedSubscriptionsEnabled ? ['versions' as const, 'contracts' as const, 'amendments' as const] : []),
+  ]
+  const view = available.find((candidate) => candidate === requested) ?? available[0]!
+  const [creatingFor, setCreatingFor] = useState<CollectionsView | null>(null)
+  const router = useRouter()
+  const editor = { creating: creatingFor === view, onClose: () => setCreatingFor(null) }
+  const openNew = () => view === 'policies' ? router.push('/collections?view=policies&policy=new') : setCreatingFor(view)
+  return <ListPageLayout header={<PageHeader title={title ?? t('title')} description={description ?? t('pageDescription')}
+    actions={view !== 'worklist' ? <Button onClick={openNew}><Plus size={16} />{newAction('new')}</Button> : undefined} />}>
+    {view === 'worklist' && <CollectionsQueue />}
+    {view === 'recurring' && <RecurringPanel {...editor} />}
+    {(view === 'subscriptions' || view === 'plans') && <SubscriptionsPanel key={view} view={view} {...editor} customers={customers} incomeAccounts={incomeAccounts} />}
+    {(view === 'versions' || view === 'contracts' || view === 'amendments') && <AdvancedSubscriptionsPanel key={view} view={view} {...editor} />}
+    {view === 'policies' && <DunningPanel />}
+  </ListPageLayout>
 }
 
-function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; incomeAccounts: Opt[] }) {
+function SubscriptionsPanel({ customers, incomeAccounts, view, creating, onClose }: { customers: Opt[]; incomeAccounts: Opt[]; view: 'plans' | 'subscriptions' } & EditorProps) {
   const { money } = useMoney()
   const t = useTranslations("ar.collections.subscriptions");
   const tCommon = useTranslations("common");
@@ -175,36 +176,28 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
   return (
     <div className="space-y-6">
       {loadError && <div role="alert" className="flex items-center gap-3 text-sm text-red-600">{loadError}<Button variant="outline" onClick={() => void load()}>{tCommonActions("retry")}</Button></div>}
-      {loaded && <Card className="flex items-center justify-between p-4">
+      {loaded && view === "subscriptions" && <Card className="flex items-center justify-between p-4">
         <div><div className="text-xs text-muted-foreground">{t("mrr")}</div><div className="text-2xl font-semibold">{money(mrr)}</div></div>
         <div className="text-sm text-muted-foreground">{t("summary", { active: subs.filter((s) => s.status === "active").length, plans: plans.length })}</div>
       </Card>}
 
-      {error && <p className="text-sm text-red-600">{error} <Button size="sm" variant="ghost" onClick={() => void load()}>{tc("actions.retry")}</Button></p>}
+      {error && !creating && !changing && <p role="alert" className="text-sm text-red-600">{error} <Button size="sm" variant="ghost" disabled={action.busy} onClick={() => void load()}>{tc("actions.retry")}</Button></p>}
       {msg && <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>}
 
       {/* Plans */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">{t("plansTitle")}</h3>
-        <div className="overflow-x-auto">
-          <SharedTable className="w-full text-sm">
-            <SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("plansTable.plan")}</SharedTableHead><SharedTableHead className="text-right">{t("plansTable.price")}</SharedTableHead><SharedTableHead>{t("plansTable.billing")}</SharedTableHead><SharedTableHead></SharedTableHead></SharedTableRow></SharedTableHeader>
-            <SharedTableBody>
-              {plans.map((p) => (
-                <SharedTableRow key={p.id} className="border-t">
-                  <SharedTableCell className="py-1 font-medium">{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">{t("archived")}</span>}</SharedTableCell>
-                  <SharedTableCell className="text-right tabular-nums">{money(p.amount, { currency: p.currency ?? undefined })}</SharedTableCell>
-                  <SharedTableCell>{t("every", { count: p.intervalCount > 1 ? `${p.intervalCount} ` : "", unit: p.interval.replace("ly", p.intervalCount > 1 ? "s" : "") })}</SharedTableCell>
-                  <SharedTableCell className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>{t("delete")}</Button></SharedTableCell>
-                </SharedTableRow>
-              ))}
-              {loaded && plans.length === 0 && <SharedTableRow><SharedTableCell colSpan={4} className="py-3 text-center text-muted-foreground">{t("noPlans")}</SharedTableCell></SharedTableRow>}
-            </SharedTableBody>
-          </SharedTable>
-        </div>
+      {view === "plans" && <>
+        <PagedTable source="collections_plans" searchable rows={plans} rowKey={(p) => p.id} empty={loaded ? t("noPlans") : tc("feedback.loading")} columns={[
+{ key: 'name', header: <>{t("plansTable.plan")}</>, cell: (p) => <>{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">{t("archived")}</span>}</>, search: (p) => p.name ?? '' },
+{ key: 'amount', header: <>{t("plansTable.price")}</>, cell: (p) => <>{money(p.amount, { currency: p.currency ?? undefined })}</> },
+{ key: 'interval', header: <>{t("plansTable.billing")}</>, cell: (p) => <>{t("every", { count: p.intervalCount > 1 ? `${p.intervalCount} ` : "", unit: p.interval.replace("ly", p.intervalCount > 1 ? "s" : "") })}</> },
+{ key: 'actions', header: <></>, cell: (p) => <><Button size="sm" variant="ghost" disabled={action.busy} onClick={() => post({ action: "deletePlan", id: p.id })}>{t("delete")}</Button></> }
+        ]} />
+      <Drawer open={creating} onClose={onClose} title={t("plansTitle")} size="lg">
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
         <div className="mt-3 grid gap-2 sm:grid-cols-5">
           <Input placeholder={t("planNamePlaceholder")} value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} className="sm:col-span-2" />
-          <Input placeholder={t("pricePlaceholder")} type="number" value={planForm.amount} onChange={(e) => setPlanForm({ ...planForm, amount: e.target.value })} />
+          <Input placeholder={t("pricePlaceholder")} inputMode="decimal" value={planForm.amount} onChange={(e) => setPlanForm({ ...planForm, amount: e.target.value })} />
           <Select value={planForm.interval} onChange={(e) => setPlanForm({ ...planForm, interval: e.target.value })}>
             {INTERVALS.map((i) => <option key={i} value={i}>{i}</option>)}
           </Select>
@@ -215,42 +208,31 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
             <option value="">{t("defaultIncomeAccount")}</option>
             {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
           </Select>
-          <Button size="sm" disabled={action.busy || !planForm.name || !planForm.amount} onClick={async () => { const r = await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); if (!r) return; setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>{t("addPlan")}</Button>
+          <Button size="sm" disabled={action.busy || !planForm.name || !planForm.amount} onClick={async () => { const r = await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); if (!r) return; onClose(); setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>{t("addPlan")}</Button>
         </div>
-      </Card>
+
+      </Drawer>
+      </>}
 
       {/* Subscriptions */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">{t("subsTitle")}</h3>
-        <div className="overflow-x-auto">
-          <SharedTable className="w-full text-sm">
-            <SharedTableHeader className="text-left text-muted-foreground"><SharedTableRow><SharedTableHead className="py-1">{t("subsTable.customer")}</SharedTableHead><SharedTableHead>{t("subsTable.plan")}</SharedTableHead><SharedTableHead className="text-right">{t("subsTable.qty")}</SharedTableHead><SharedTableHead className="text-right">{t("subsTable.mrr")}</SharedTableHead><SharedTableHead>{t("subsTable.nextBill")}</SharedTableHead><SharedTableHead>{t("subsTable.status")}</SharedTableHead><SharedTableHead></SharedTableHead></SharedTableRow></SharedTableHeader>
-            <SharedTableBody>
-              {subs.map((s) => (
-                <SharedTableRow key={s.id} className="border-t align-top">
-                  <SharedTableCell className="py-1 font-medium">{s.customerName ?? "—"}</SharedTableCell>
-                  <SharedTableCell>{s.planName}</SharedTableCell>
-                  <SharedTableCell className="text-right tabular-nums">{s.quantity}</SharedTableCell>
-                  <SharedTableCell className="text-right tabular-nums">{s.status === "active" ? money(s.mrr, { currency: s.planCurrency ?? undefined }) : "—"}</SharedTableCell>
-                  <SharedTableCell>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</SharedTableCell>
-                  <SharedTableCell><Badge variant={s.status === "active" ? "default" : "secondary"}>{enumLabel(s.status, subscriptionStatusLabels, tCommon("labels.unknownValue"))}</Badge></SharedTableCell>
-                  <SharedTableCell className="whitespace-nowrap text-right">
-                    {s.status === "active" && changing === s.id ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Input type="number" value={changeQty} onChange={(e) => setChangeQty(e.target.value)} className="h-7 w-16" />
-                        <Button size="sm" onClick={async () => { const r = await post({ action: "changeSubscription", id: s.id, quantity: changeQty }); if (r) setMsg(r.documentNumber ? t("toasts.prorated", { adjustment: money(r.adjustment), documentNumber: r.documentNumber }) : t("toasts.qtyUpdatedNoProration")); setChanging(null); }}>{t("apply")}</Button>
-                        <Button size="sm" variant="ghost" onClick={() => setChanging(null)}>×</Button>
-                      </span>
-                    ) : (
+      {view === "subscriptions" && <>
+        <PagedTable source="collections_subscriptions" searchable rows={subs} rowKey={(s) => s.id} empty={loaded ? t("noSubs") : tc("feedback.loading")} columns={[
+{ key: 'customerName', header: <>{t("subsTable.customer")}</>, cell: (s) => <>{s.customerName ?? "—"}</>, search: (s) => s.customerName ?? '' },
+{ key: 'planName', header: <>{t("subsTable.plan")}</>, cell: (s) => <>{s.planName}</>, search: (s) => s.planName ?? '' },
+{ key: 'quantity', header: <>{t("subsTable.qty")}</>, cell: (s) => <>{s.quantity}</> },
+{ key: 'mrr', header: <>{t("subsTable.mrr")}</>, cell: (s) => <>{s.status === "active" ? money(s.mrr, { currency: s.planCurrency ?? undefined }) : "—"}</> },
+{ key: 'nextBillOn', header: <>{t("subsTable.nextBill")}</>, cell: (s) => <>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</> },
+{ key: 'status', header: <>{t("subsTable.status")}</>, cell: (s) => <><Badge variant={s.status === "active" ? "default" : "secondary"}>{enumLabel(s.status, subscriptionStatusLabels, tCommon("labels.unknownValue"))}</Badge></> },
+{ key: 'actions', header: <></>, cell: (s) => <>
                       <>
-                        <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId && r.documentNumber) setMsg(t("toasts.billed", { documentNumber: r.documentNumber })); }}>{t("billNow")}</Button>
-                        {s.status === "active" && !s.advancedLifecycle && <Button size="sm" variant="ghost" onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>{t("changeQty")}</Button>}
+                        <Button size="sm" variant="ghost" disabled={action.busy} onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId && r.documentNumber) setMsg(t("toasts.billed", { documentNumber: r.documentNumber })); }}>{t("billNow")}</Button>
+                        {s.status === "active" && !s.advancedLifecycle && <Button size="sm" variant="ghost" disabled={action.busy} onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>{t("changeQty")}</Button>}
                         {s.status === "active"
-                          ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>{t("pause")}</Button>
+                          ? <Button size="sm" variant="ghost" disabled={action.busy} onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>{t("pause")}</Button>
                           : s.status === "paused"
-                            ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>{t("resume")}</Button>
+                            ? <Button size="sm" variant="ghost" disabled={action.busy} onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>{t("resume")}</Button>
                             : null}
-                        {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={async () => {
+                        {s.status !== "canceled" && <Button size="sm" variant="ghost" disabled={action.busy} onClick={async () => {
                           const confirmed = await confirmDialog({
                             title: t("cancelConfirmTitle"),
                             message: t("cancelConfirmBody"),
@@ -260,14 +242,11 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                           if (confirmed) post({ action: "updateSubscription", id: s.id, status: "canceled" })
                         }}>{t("cancelSub")}</Button>}
                       </>
-                    )}
-                  </SharedTableCell>
-                </SharedTableRow>
-              ))}
-              {loaded && subs.length === 0 && <SharedTableRow><SharedTableCell colSpan={7} className="py-3 text-center text-muted-foreground">{t("noSubs")}</SharedTableCell></SharedTableRow>}
-            </SharedTableBody>
-          </SharedTable>
-        </div>
+                  </> }
+        ]} />
+      <Drawer open={creating} onClose={onClose} title={t("subsTitle")} size="lg">
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
         <div className="mt-3 grid gap-2 sm:grid-cols-6">
           <Select value={subForm.customerId} onChange={(e) => setSubForm({ ...subForm, customerId: e.target.value })} className="sm:col-span-2">
             <option value="">{t("customerPlaceholder")}</option>
@@ -281,19 +260,33 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
           <Input type="date" value={subForm.startOn} onChange={(e) => setSubForm({ ...subForm, startOn: e.target.value })} />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <Input placeholder={t("priceOverridePlaceholder")} type="number" value={subForm.priceOverride} onChange={(e) => setSubForm({ ...subForm, priceOverride: e.target.value })} className="max-w-48" />
+          <Input placeholder={t("priceOverridePlaceholder")} inputMode="decimal" value={subForm.priceOverride} onChange={(e) => setSubForm({ ...subForm, priceOverride: e.target.value })} className="max-w-48" />
           <label className="flex items-center gap-1 text-sm">{t("firstFullBill")} <Input type="date" value={subForm.firstBillOn} onChange={(e) => setSubForm({ ...subForm, firstBillOn: e.target.value })} className="h-8" /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.prorateFirstPeriod} onChange={(e) => setSubForm({ ...subForm, prorateFirstPeriod: e.target.checked })} /> {t("prorateFirstPeriod")}</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.autoPost} onChange={(e) => setSubForm({ ...subForm, autoPost: e.target.checked })} /> {t("autoPostInvoices")}</label>
-          <Button size="sm" disabled={action.busy || !subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if (!r) return; if (r.proration?.documentNumber) setMsg(t("toasts.firstInvoiceProrated", { documentNumber: r.proration.documentNumber, amount: money(r.proration.amount) })); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>{t("addSubscription")}</Button>
+          <Button size="sm" disabled={action.busy || !subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if (!r) return; onClose(); if (r.proration?.documentNumber) setMsg(t("toasts.firstInvoiceProrated", { documentNumber: r.proration.documentNumber, amount: money(r.proration.amount) })); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>{t("addSubscription")}</Button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{t("prorateHint")}</p>
-      </Card>
+
+      </Drawer>
+      </>}
+      <Drawer open={!!changing} onClose={() => setChanging(null)} title={t('changeQty')}>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <Label>{t('subsTable.qty')}</Label>
+        <Input aria-label={t('subsTable.qty')} inputMode="decimal" value={changeQty} onChange={(e) => setChangeQty(e.target.value)} />
+        <Button className="mt-3" disabled={action.busy} onClick={async () => {
+          const r = await post({ action: 'changeSubscription', id: changing, quantity: changeQty })
+          if (!r) return
+          setMsg(r.documentNumber ? t('toasts.prorated', { adjustment: money(r.adjustment), documentNumber: r.documentNumber }) : t('toasts.qtyUpdatedNoProration'))
+          setChanging(null)
+        }}>{t('apply')}</Button>
+      </Drawer>
+
     </div>
   );
 }
 
-function RecurringPanel() {
+function RecurringPanel({ creating, onClose }: EditorProps) {
   const [rows, setRows] = useState<Schedule[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "failed">("loading");
   const action = useAppAction();
@@ -308,13 +301,12 @@ function RecurringPanel() {
   // response), never synchronously in the effect body.
   const load = useCallback(() => {
     setLoadState("loading");
-    setRows([]);
     return fetch("/api/recurring").then(async (r) => {
-      if (!r.ok) throw new Error(common("feedback.loadFailed"));
+      if (!r.ok) throw new Error(await readApiErrorMessage(r, common("feedback.loadFailed")));
       const body = await r.json();
       setRows(body.schedules ?? []);
       setLoadState("loaded");
-    }).catch(() => setLoadState("failed"));
+    }).catch((cause: unknown) => { setLoadState("failed"); setError(cause instanceof Error ? cause.message : common("feedback.loadFailed")); });
   }, [common]);
   useEffect(() => { void Promise.resolve().then(load); }, [load]);
 
@@ -334,6 +326,7 @@ function RecurringPanel() {
       fallbackMessage: tErrors("couldNotCreate"),
       onRefused: (refusal) => setError(refusal.displayMessage(tErrors("couldNotCreate"))),
       onOk: () => {
+        onClose();
         setForm({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
         void load();
       },
@@ -361,7 +354,7 @@ function RecurringPanel() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-4">
+      <Drawer open={creating} onClose={onClose} title={t("newSchedule")} size="lg">
         <h3 className="mb-3 text-sm font-semibold">{t("newSchedule")}</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
@@ -393,190 +386,82 @@ function RecurringPanel() {
             {t("autoPostCheckbox")}
           </label>
         </div>
-        {error && <p className="mt-2 text-sm text-red-600">{error} <Button size="sm" variant="ghost" onClick={() => void load()}>{common("actions.retry")}</Button></p>}
+        {error && <p role="alert" className="mt-2 text-sm text-red-600">{error} <Button size="sm" variant="ghost" disabled={action.busy} onClick={() => void load()}>{common("actions.retry")}</Button></p>}
         <div className="mt-3">
           <Button onClick={create} disabled={busy || !form.templateDocumentNumber}>{t("createSchedule")}</Button>
         </div>
-      </Card>
+      </Drawer>
 
-      <div className="overflow-x-auto">
-        <SharedTable className="w-full text-sm">
-          <SharedTableHeader className="text-left text-muted-foreground">
-            <SharedTableRow>
-              <SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.template")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.customer")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.cadence")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.nextRun")}</SharedTableHead>
-              <SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.runs")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.autoPost")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2">{t("table.status")}</SharedTableHead><SharedTableHead className="whitespace-nowrap px-3 py-2"></SharedTableHead>
-            </SharedTableRow>
-          </SharedTableHeader>
-          <SharedTableBody>
-            {loadState === "loading" && <SharedTableRow><SharedTableCell colSpan={8} className="py-6 text-center text-muted-foreground" role="status">{common("feedback.loading")}</SharedTableCell></SharedTableRow>}
-            {loadState === "failed" && <SharedTableRow><SharedTableCell colSpan={8} className="py-6 text-center text-destructive" role="alert"><span>{common("feedback.loadFailed")}</span> <Button size="sm" variant="outline" onClick={() => { void load(); }}>{common("actions.retry")}</Button></SharedTableCell></SharedTableRow>}
-            {rows.map((s) => (
-              <SharedTableRow key={s.id} className="border-t">
-                <SharedTableCell className="whitespace-nowrap px-3 py-2 font-medium">{s.templateNumber}</SharedTableCell>
-                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.partyName ?? "—"}</SharedTableCell>
-                <SharedTableCell className="whitespace-nowrap px-3 py-2">{t(`cadences.${s.cadence}`)}{s.cron ? ` (${s.cron})` : ""}</SharedTableCell>
-                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.nextRunOn}</SharedTableCell>
-                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.runCount}{s.lastError ? <span className="ml-1 text-red-600" title={s.lastError}>⚠</span> : null}</SharedTableCell>
-                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.autoPost ? t("yes") : t("no")}</SharedTableCell>
-                <SharedTableCell className="whitespace-nowrap px-3 py-2">{s.isActive ? <Badge>{t("active")}</Badge> : <Badge variant="secondary">{t("paused")}</Badge>}</SharedTableCell>
-                <SharedTableCell className="whitespace-nowrap px-3 py-2 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => act(s.id, "POST")}>{t("runNow")}</Button>
-                  <Button size="sm" variant="ghost" onClick={() => act(s.id, "PATCH", { isActive: !s.isActive })}>
-                    {s.isActive ? t("pause") : t("resume")}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => act(s.id, "DELETE")}>{t("delete")}</Button>
-                </SharedTableCell>
-              </SharedTableRow>
-            ))}
-            {loadState === "loaded" && rows.length === 0 && <SharedTableRow><SharedTableCell colSpan={8} className="py-6 text-center text-muted-foreground">{t("noneYet")}</SharedTableCell></SharedTableRow>}
-          </SharedTableBody>
-        </SharedTable>
-      </div>
+      {error && !creating && <p role="alert" className="text-sm text-destructive">{error} <Button variant="outline" onClick={() => void load()}>{common('actions.retry')}</Button></p>}
+      <PagedTable source="collections_recurring" searchable rows={rows} rowKey={(row) => row.id}
+        empty={loadState === 'loaded' ? t('noneYet') : loadState === 'failed' ? common('feedback.loadFailed') : common('feedback.loading')}
+        columns={[
+          { key: 'template', headerClassName: 'whitespace-nowrap', header: t('table.template'), search: (s) => s.templateNumber, cell: (s) => <span className="font-medium">{s.templateNumber}</span> },
+          { key: 'customer', headerClassName: 'whitespace-nowrap', header: t('table.customer'), search: (s) => s.partyName ?? '', cell: (s) => s.partyName ?? '—' },
+          { key: 'cadence', headerClassName: 'whitespace-nowrap', header: t('table.cadence'), cell: (s) => <>{t(`cadences.${s.cadence}`)}{s.cron ? ` (${s.cron})` : ''}</> },
+          { key: 'nextRun', headerClassName: 'whitespace-nowrap', header: t('table.nextRun'), cell: (s) => s.nextRunOn },
+          { key: 'runs', headerClassName: 'whitespace-nowrap', header: t('table.runs'), cell: (s) => <>{s.runCount}{s.lastError && <span className="ml-1 text-destructive" title={s.lastError}>⚠</span>}</> },
+          { key: 'autoPost', headerClassName: 'whitespace-nowrap', header: t('table.autoPost'), cell: (s) => s.autoPost ? t('yes') : t('no') },
+          { key: 'status', headerClassName: 'whitespace-nowrap', header: t('table.status'), cell: (s) => <Badge variant={s.isActive ? 'default' : 'secondary'}>{s.isActive ? t('active') : t('paused')}</Badge> },
+          { key: 'actions', headerClassName: 'whitespace-nowrap', header: '', cell: (s) => <div className="flex justify-end gap-1">
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(s.id, 'POST')}>{t('runNow')}</Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(s.id, 'PATCH', { isActive: !s.isActive })}>{s.isActive ? t('pause') : t('resume')}</Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(s.id, 'DELETE')}>{t('delete')}</Button>
+          </div> },
+        ]} />
     </div>
   );
 }
 
-const BLANK_STAGE: Stage = {
-  sequence: 1,
-  name: "First reminder",
-  offsetDays: 7,
-  subjectTemplate: "Invoice {{invoice}} is past due",
-  bodyTemplate: "Hi {{party}},\n\nInvoice {{invoice}} for {{amount}} was due {{dueDate}} ({{daysOverdue}} days ago). Please arrange payment.\n\n{{orgName}}",
-  escalate: false,
-};
+const policyEntity = BILLING_ENTITIES.find((entity) => entity.key === 'dunning-policies')!
 
 function DunningPanel() {
-  const [policies, setPolicies] = useState<Policy[]>([]);
-  const [draft, setDraft] = useState<{ name: string; gracePeriodDays: number; stages: Stage[] }>({
-    name: "", gracePeriodDays: 0, stages: [BLANK_STAGE],
-  });
-  const [error, setError] = useState<string | null>(null);
-  const t = useTranslations("ar.collections.dunning");
-  const tErrors = useTranslations("ar.collections.errors");
-
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body.
-  const load = useCallback(() => {
-    return fetch("/api/dunning")
-      .then(async (r) => {
-        // The status is checked before the body parses: a non-JSON 502 page
-        // must name the failure, never throw a SyntaxError out of the effect.
-        if (!r.ok) throw new Error(await readApiErrorMessage(r, tErrors("couldNotLoad")));
-        const body = (await r.json()) as { policies?: Policy[] };
-        setPolicies(body.policies ?? []);
-      })
-      .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : tErrors("couldNotLoad"));
-      });
-  }, [tErrors]);
-  useEffect(() => { void load(); }, [load]);
-
-  const create = async () => {
-    setError(null);
-    try {
-      const r = await fetch("/api/dunning", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(draft),
-      });
-      if (!r.ok) throw new Error(await readApiErrorMessage(r, tErrors("couldNotCreate")));
-      await r.json().catch(() => null);
-      setDraft({ name: "", gracePeriodDays: 0, stages: [BLANK_STAGE] });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : tErrors("couldNotCreate"));
-    }
-  };
-
-  // A delete refusal (policy in use, the last active ladder) rides in the
-  // body: it is checked, named, and rendered — never swallowed — and the
-  // row stays until the server confirms the delete, so a refused row can
-  // never silently reappear as a phantom success.
+  const { money } = useMoney()
+  const [policies, setPolicies] = useState<Policy[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const action = useAppAction()
+  const t = useTranslations('ar.collections.dunning')
+  const common = useTranslations('common')
+  const errors = useTranslations('ar.collections.errors')
+  const search = useSearchParams()
+  const router = useRouter()
+  const policyId = search?.get('policy')
+  const load = useCallback(async () => {
+    const result = await fetchAction<{ policies: Policy[] }>('/api/dunning')
+    if (!result.ok) { setError(result.error.displayMessage(errors('couldNotLoad'))); return }
+    setPolicies(result.data.policies); setLoaded(true); setError(null)
+  }, [errors])
+  useEffect(() => { void Promise.resolve().then(load) }, [load, policyId])
   const remove = async (id: string) => {
-    setDeleteError(null);
-    try {
-      const r = await fetch(`/api/dunning/${id}`, { method: "DELETE" });
-      if (!r.ok) throw new Error(await readApiErrorMessage(r, tErrors("couldNotDelete")));
-      await r.json().catch(() => null);
-      await load();
-    } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : tErrors("couldNotDelete"));
-    }
-  };
-
-  const setStage = (i: number, patch: Partial<Stage>) =>
-    setDraft({ ...draft, stages: draft.stages.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
-
-  return (
-    <div className="space-y-6">
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">{t("newPolicy")}</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label>{t("policyNameLabel")}</Label>
-            <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={t("policyNamePlaceholder")} />
-          </div>
-          <div>
-            <Label>{t("gracePeriodLabel")}</Label>
-            <Input type="number" value={draft.gracePeriodDays} onChange={(e) => setDraft({ ...draft, gracePeriodDays: Number(e.target.value) })} />
-          </div>
-        </div>
-        <div className="mt-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{t("reminderLadder")}</span>
-            <Button size="sm" variant="ghost" onClick={() => setDraft({ ...draft, stages: [...draft.stages, { ...BLANK_STAGE, sequence: draft.stages.length + 1, name: t("newStageName", { n: draft.stages.length + 1 }), offsetDays: (draft.stages.at(-1)?.offsetDays ?? 0) + 14 }] })}>
-              {t("addStage")}
-            </Button>
-          </div>
-          {draft.stages.map((s, i) => (
-            <div key={i} className="rounded border p-3">
-              <div className="grid gap-2 sm:grid-cols-3">
-                <div><Label>{t("stageLabels.name")}</Label><Input value={s.name} onChange={(e) => setStage(i, { name: e.target.value })} /></div>
-                <div><Label>{t("stageLabels.daysPastDue")}</Label><Input type="number" value={s.offsetDays} onChange={(e) => setStage(i, { offsetDays: Number(e.target.value) })} /></div>
-                <div><Label>{t("stageLabels.sequence")}</Label><Input type="number" value={s.sequence} onChange={(e) => setStage(i, { sequence: Number(e.target.value) })} /></div>
-              </div>
-              <div className="mt-2"><Label>{t("subjectLabel")}</Label><Input value={s.subjectTemplate} onChange={(e) => setStage(i, { subjectTemplate: e.target.value })} /></div>
-              <div className="mt-2">
-                <Label>{t("bodyLabel")}</Label>
-                <textarea className="w-full rounded border px-2 py-1 text-sm" rows={4} value={s.bodyTemplate} onChange={(e) => setStage(i, { bodyTemplate: e.target.value })} />
-              </div>
-              {draft.stages.length > 1 && (
-                <Button size="sm" variant="ghost" className="mt-2" onClick={() => setDraft({ ...draft, stages: draft.stages.filter((_, j) => j !== i) })}>{t("removeStage")}</Button>
-              )}
-            </div>
-          ))}
-          <p className="text-xs text-muted-foreground">{t("tokensHint")} {"{{party}} {{invoice}} {{amount}} {{dueDate}} {{daysOverdue}} {{orgName}}"}</p>
-        </div>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        <div className="mt-3"><Button onClick={create} disabled={!draft.name}>{t("createPolicy")}</Button></div>
-      </Card>
-
-      <div className="space-y-3">
-        {deleteError && <p role="alert" className="text-sm text-red-600">{deleteError}</p>}
-        {policies.map((p) => (
-          <Card key={p.id} className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="font-medium">{p.name}</span>
-                <span className="ml-2 text-sm text-muted-foreground">
-                  {t("policySummary", { count: p.stages.length, grace: p.gracePeriodDays })}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {p.isActive ? <Badge>{t("activeBadge")}</Badge> : <Badge variant="secondary">{t("off")}</Badge>}
-                <Button size="sm" variant="ghost" onClick={() => remove(p.id)}>{t("delete")}</Button>
-              </div>
-            </div>
-            <ul className="mt-2 text-sm text-muted-foreground">
-              {[...p.stages].sort((a, b) => a.sequence - b.sequence).map((s) => (
-                <li key={s.sequence}>{t("stageDay", { day: s.offsetDays, name: s.name })}</li>
-              ))}
-            </ul>
-          </Card>
-        ))}
-        {policies.length === 0 && <p className="text-center text-muted-foreground">{t("noneYet")}</p>}
-      </div>
-    </div>
-  );
+    setError(null)
+    await action.execute(() => fetchAction(`/api/dunning/${id}`, { method: 'DELETE' }), {
+      fallbackMessage: errors('couldNotDelete'),
+      onRefused: (refusal) => setError(refusal.displayMessage(errors('couldNotDelete'))),
+      onOk: () => { void load() },
+    })
+  }
+  const selected = policies.find((policy) => policy.id === policyId)
+  // The native editor owns its dialog. It mounts only when the full policy
+  // and its stages are available, without an intermediate loading dialog.
+  const row = selected ? {
+    ...selected, grace_period_days: selected.gracePeriodDays, min_balance: selected.minBalance,
+    reply_to: (selected as Policy & { replyTo?: string | null }).replyTo, is_active: selected.isActive,
+  } : null
+  return <div className="space-y-4">
+    {error && <p role="alert" className="text-sm text-destructive">{error} <Button variant="outline" onClick={() => void load()}>{common('actions.retry')}</Button></p>}
+    <PagedTable source="collections_policies" searchable rows={policies} rowKey={(p) => p.id}
+      onRowClick={(p) => router.push(`/collections?view=policies&policy=${encodeURIComponent(p.id)}`)}
+      empty={loaded ? t('noneYet') : common('feedback.loading')} columns={[
+        { key: 'name', header: t('policyNameLabel'), search: (p) => p.name, cell: (p) => <span className="font-medium">{p.name}</span> },
+        { key: 'stages', header: t('reminderLadder'), cell: (p) => <span>{t('policySummary', { count: p.stages.length, grace: p.gracePeriodDays })}</span> },
+        { key: 'minBalance', header: t('minimumBalance'), cell: (p) => money(p.minBalance) },
+        { key: 'status', header: common('labels.status'), cell: (p) => <Badge variant={p.isActive ? 'default' : 'secondary'}>{p.isActive ? t('activeBadge') : t('off')}</Badge> },
+        { key: 'actions', header: '', cell: (p) => <Button size="sm" variant="ghost" disabled={action.busy} onClick={() => void remove(p.id)}>{t('delete')}</Button> },
+      ]} />
+    {loaded && policyId && (policyId === 'new' || selected) && <SetupDrawer key={policyId} entity={policyEntity} row={row}
+      members={[]} refOptions={{}} closeHref="/collections?view=policies" fixedValues={selected?.updatedAt ? { expectedUpdatedAt: selected.updatedAt } : undefined}
+      initialValues={policyId === 'new' ? { stages: [{ sequence: 1, name: '', offsetDays: 7, subjectTemplate: '', bodyTemplate: '', escalate: false }] } : undefined} />}
+    {loaded && policyId && policyId !== 'new' && !selected && <p role="alert" className="text-sm text-destructive">{common('feedback.loadFailed')}</p>}
+  </div>
 }

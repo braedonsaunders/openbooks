@@ -23,6 +23,14 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  collections_worklist: { route: '/collections', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  collections_recurring: { route: '/collections?view=recurring', rowsField: 'schedules', rowKeyField: 'id', mode: 'loaded' },
+  collections_policies: { route: '/collections?view=policies', rowsField: 'policies', rowKeyField: 'id', mode: 'loaded' },
+  collections_plans: { route: '/collections?view=plans', rowsField: 'plans', rowKeyField: 'id', mode: 'loaded' },
+  collections_subscriptions: { route: '/collections?view=subscriptions', rowsField: 'subscriptions', rowKeyField: 'id', mode: 'loaded' },
+  collections_versions: { route: '/collections?view=versions', rowsField: 'versions', rowKeyField: 'id', mode: 'loaded' },
+  collections_contracts: { route: '/collections?view=contracts', rowsField: 'lifecycles', rowKeyField: 'subscriptionId', mode: 'loaded' },
+  collections_amendments: { route: '/collections?view=amendments', rowsField: 'amendments', rowKeyField: 'id', mode: 'loaded' },
   crm_sales_representatives: { route: '/crm/sales/representatives', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' } },
   crm_sales_teams: { route: '/crm/sales/teams', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' } },
   crm_sales_quotas: { route: '/crm/sales/quotas', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'currentPage', perPageField: 'perPage' } },

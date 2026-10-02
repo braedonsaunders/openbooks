@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
@@ -10,6 +11,7 @@ import test from "node:test";
  * storage errors (500). All must refuse as 400 with nothing written.
  */
 const root = pathToFileURL(process.cwd() + "/").href;
+const engineExports = JSON.parse(readFileSync(new URL('engine/package.json', root), 'utf8')).exports as Record<string, string>;
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningMagnitudeUser: state });
 registerHooks({
@@ -28,7 +30,10 @@ registerHooks({
     // Pin the engine to THIS checkout: the environment shares node_modules
     // with the main checkout, so an unmapped @openbooks/engine import would
     // silently exercise main's engine instead of the branch under test.
-    if (specifier.startsWith("@openbooks/engine/")) return next(root + specifier.slice("@openbooks/".length), context);
+    if (specifier.startsWith("@openbooks/engine/")) {
+      const target = engineExports['.' + specifier.slice('@openbooks/engine'.length)];
+      return next(target ? new URL(target, root + 'engine/').href : root + specifier.slice("@openbooks/".length), context);
+    }
     return next(specifier, context);
   },
 });

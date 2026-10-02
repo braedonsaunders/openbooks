@@ -178,13 +178,19 @@
     "reissueHint": "作废此链接并创建新链接以收取付款。"
   },
   "collections": {
-    "pageDescription": "定期计划、订阅方案和催收阶梯在此配置。逾期追收清单位于应收账款。",
+    "pageDescription": "在同一工作区管理应收催收与计费。",
     "worklistCta": "打开逾期收款清单",
     "tabs": {
-      "recurring": "定期发票",
+      "recurring": "定期计费",
       "subscriptions": "订阅",
       "advanced": "高级生命周期",
-      "dunning": "催收"
+      "dunning": "政策",
+      "worklist": "工作列表",
+      "policies": "政策",
+      "plans": "方案",
+      "versions": "方案版本",
+      "contracts": "合同",
+      "amendments": "合同变更"
     },
     "errors": {
       "actionFailed": "操作失败",
@@ -324,7 +330,6 @@
         "colNumber": "#",
         "colSubscription": "订阅",
         "colChange": "变更",
-        "colEffective": "生效日期",
         "colReason": "原因",
         "noAmendments": "暂无修改。",
         "changeType_add_component": "添加组件",
@@ -403,7 +408,9 @@
       "delete": "删除",
       "stageDay": "· 第 {day} 天：{name}",
       "noneYet": "暂无催收政策。",
-      "activeBadge": "已启用"
-    }
+      "activeBadge": "已启用",
+      "minimumBalance": "最低余额（本位币）"
+    },
+    "title": "应收催收"
   }
 }

@@ -5,20 +5,18 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { NextIntlClientProvider } from 'next-intl'
 import messages from '../../../messages/en/index.ts'
 import { MoneyProvider } from '../../../components/money-provider.tsx'
-import { CollectionsShell } from './sections.tsx'
 
-// the /collections page is recurring/subscription/dunning
-// configuration, while the overdue chase list lives on /ar. The shell must
-// link to that worklist for readers who may open it — and offer nothing to
-// readers who may not. Static markup is enough: the link is server-rendered,
-// not client state.
+
+const { stubModules } = await import('../../../testing/stub-modules')
+stubModules({ navigation: true })
+const { CollectionsShell } = await import('./sections.tsx')
 
 Object.assign(globalThis, { React })
 ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 
 const base = {
   title: 'Collections',
-  description: 'Configuration, not the chase list.',
+  description: 'Collect receivables and manage billing.',
   worklistLabel: 'Open the collections worklist',
   subscriptionsEnabled: false,
   advancedSubscriptionsEnabled: false,
@@ -36,13 +34,15 @@ function render(worklistHref: string | null): string {
   )
 }
 
-test('the collections shell links to the /ar worklist', () => {
+test('the collections shell opens its native worklist for ar.read readers', () => {
   const html = render('/ar')
-  assert.match(html, /href="\/ar"/)
-  assert.match(html, /Open the collections worklist/)
+  assert.match(html, /Loading/)
+  assert.doesNotMatch(html, /href="\/ar"/)
+  assert.doesNotMatch(html, /Reports|Strategic accounts|Policy controls/)
 })
 
-test('the collections shell offers no worklist link without ar.read', () => {
+test('configuration readers get policies without a collection worklist or its actions', () => {
   const html = render(null)
-  assert.doesNotMatch(html, /Open the collections worklist/)
+  assert.match(html, /Policy name/)
+  assert.doesNotMatch(html, /Build collection run|Open the collections worklist/)
 })

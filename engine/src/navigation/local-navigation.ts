@@ -104,6 +104,13 @@ export const HRM_LOCAL_NAVIGATION: Record<'people' | 'hiring' | 'timeOff' | 'tal
 }
 
 export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
+  { id: 'collections-views', label: 'Collections', tabs: [
+    { href: '/collections', ns: 'ar', key: 'collections.tabs.worklist', permission: 'documents.manage', permissionsAny: ['ar.read'] },
+    { href: '/collections?view=policies', ns: 'ar', key: 'collections.tabs.policies', permission: 'documents.manage' },
+    { href: '/collections?view=recurring', ns: 'ar', key: 'collections.tabs.recurring', permission: 'documents.manage' },
+    ...['subscriptions', 'plans'].map((view) => ({ href: `/collections?view=${view}`, ns: 'ar', key: `collections.tabs.${view}`, permission: 'documents.manage', permissionsAny: ['ar.read'], feature: 'subscriptionBilling' })),
+    ...['versions', 'contracts', 'amendments'].map((view) => ({ href: `/collections?view=${view}`, ns: 'ar', key: `collections.tabs.${view}`, permission: 'documents.manage', permissionsAny: ['ar.read'], feature: 'advancedSubscriptions' })),
+  ] },
   { id: 'crm-sales', label: 'Sales', feature: 'salesManagement', tabs: [
     ...['overview', 'representatives', 'teams', 'quotas', 'territories'].map((tab) => ({ href: tab==='overview'?'/crm/sales':`/crm/sales/${tab}`, ns: 'crm', key: `sales.tabs.${tab}`, permissionsAny: ['crm.setup.manage', 'crm.forecasts.read'], carry: ['periodStart', 'periodEnd'] })),
   ] },

@@ -178,13 +178,19 @@
     }
   },
   "collections": {
-    "pageDescription": "Recurring schedules, subscription plans, and dunning ladders live here. The overdue chase list lives in Accounts Receivable.",
+    "pageDescription": "Collect receivables and manage billing in one workspace.",
     "worklistCta": "Open the collections worklist",
     "tabs": {
-      "recurring": "Recurring invoices",
+      "recurring": "Recurring billing",
       "subscriptions": "Subscriptions",
       "advanced": "Advanced lifecycle",
-      "dunning": "Dunning ladders"
+      "dunning": "Policies",
+      "worklist": "Worklist",
+      "policies": "Policies",
+      "plans": "Plans",
+      "versions": "Plan versions",
+      "contracts": "Contracts",
+      "amendments": "Amendments"
     },
     "errors": {
       "actionFailed": "Action failed",
@@ -324,7 +330,6 @@
         "colNumber": "#",
         "colSubscription": "Subscription",
         "colChange": "Change",
-        "colEffective": "Effective",
         "colReason": "Reason",
         "noAmendments": "No amendments yet.",
         "changeType_add_component": "Add component",
@@ -403,7 +408,9 @@
       "delete": "Delete",
       "stageDay": "· Day {day}: {name}",
       "noneYet": "No dunning policies yet.",
-      "activeBadge": "Active"
-    }
+      "activeBadge": "Active",
+      "minimumBalance": "Minimum balance (base currency)"
+    },
+    "title": "Collections"
   }
 }

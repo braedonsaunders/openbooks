@@ -178,13 +178,19 @@
     "reissueHint": "Annulez ce lien et créez-en un nouveau pour encaisser le paiement."
   },
   "collections": {
-    "pageDescription": "Les échéanciers récurrents, les formules d'abonnement et les relances d'impayés se configurent ici. La liste des factures en retard se trouve dans Comptes clients.",
+    "pageDescription": "Recouvrez les créances et gérez la facturation dans un espace de travail unique.",
     "worklistCta": "Ouvrir la liste des impayés",
     "tabs": {
-      "recurring": "Factures récurrentes",
+      "recurring": "Facturation récurrente",
       "subscriptions": "Abonnements",
       "advanced": "Cycle de vie avancé",
-      "dunning": "Relances"
+      "dunning": "Politiques",
+      "worklist": "Liste de travail",
+      "policies": "Politiques",
+      "plans": "Offres",
+      "versions": "Versions des offres",
+      "contracts": "Contrats",
+      "amendments": "Avenants"
     },
     "errors": {
       "actionFailed": "L’action a échoué",
@@ -324,7 +330,6 @@
         "colNumber": "#",
         "colSubscription": "Abonnement",
         "colChange": "Changement",
-        "colEffective": "Effet",
         "colReason": "Motif",
         "noAmendments": "Aucun avenant pour l’instant.",
         "changeType_add_component": "Ajouter un composant",
@@ -403,7 +408,9 @@
       "delete": "Supprimer",
       "stageDay": "· Jour {day} : {name}",
       "noneYet": "Aucune politique de relance pour l’instant.",
-      "activeBadge": "Actif"
-    }
+      "activeBadge": "Actif",
+      "minimumBalance": "Solde minimum (devise de base)"
+    },
+    "title": "Recouvrement"
   }
 }
