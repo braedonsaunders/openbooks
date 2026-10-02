@@ -602,7 +602,7 @@ export function FieldControl({
     : null
   const full = field.fullWidth ||
     field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray' || field.kind === 'object' || field.kind === 'objectArray'
-  const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
+  const wrap = full ? 'min-w-0 space-y-1.5 sm:col-span-2' : 'min-w-0 space-y-1.5'
   const selectedOption = field.kind === 'select' ? setupFieldOptions(field, formValues).find(option => option.value === String(value)) : undefined
   const lockedDisplay = field.kind === 'ref'
     ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
@@ -617,7 +617,7 @@ export function FieldControl({
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
-        <div className={cn('flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', field.kind !== 'ref' && 'font-mono')}>
+        <div className={cn('min-h-10 w-full whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 [overflow-wrap:anywhere] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', field.kind !== 'ref' && 'font-mono')}>
           {String(lockedDisplay ?? '') || '—'}
         </div>
       </div>
