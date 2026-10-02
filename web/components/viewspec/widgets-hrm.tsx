@@ -339,10 +339,16 @@ export const HRM_WIDGETS = {
       closeHref={str(props, 'closeHref') ?? '/me/benefits'}
     />
   ),
-  /** Department leave calendar: loader-resolved absence days grouped by
-   *  date over the department/from/to search params. */
+  /** Leave calendar: loader-resolved days with an optional department filter. */
   'hrm-leave-calendar': (props) => (
-    <LeaveCalendar days={(props.days as ComponentProps<typeof LeaveCalendar>['days']) ?? []} empty={str(props, 'empty') ?? ''} />
+    <LeaveCalendar
+      days={(props.days as ComponentProps<typeof LeaveCalendar>['days']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+      from={str(props, 'from') ?? ''}
+      to={str(props, 'to') ?? ''}
+      today={str(props, 'today') ?? ''}
+      scopeLabel={str(props, 'scopeLabel') ?? ''}
+    />
   ),
   /** Self-service balances: TIME per leave type and VALUE per payroll
    *  bank, each labelled with its unit. Loader-resolved rows. */

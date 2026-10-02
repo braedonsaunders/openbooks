@@ -110,9 +110,17 @@ registerHooks({
             `export async function employmentsOnLeave() {
               return (globalThis.__leaveQueueOnLeave || []);
             }
-            export async function absenceCalendarForDepartment() { return []; }`,
+            export async function absenceCalendarForDepartment(...args) {
+              globalThis.__leaveCalendarArgs = args.slice(1);
+              const state = globalThis.__leaveCalendarState;
+              if (state?.error) throw state.error;
+              return state?.days ?? [];
+            }`,
           ),
       };
+    }
+    if (owned && specifier === "../scoped-options") {
+      return { shortCircuit: true, url: "data:text/javascript,export async function listScopedDepartmentOptions(){return globalThis.__leaveQueueDepartments ?? []}" };
     }
     // The sibling change-request label lookup runs through the same stubbed
     // database client: with no labelled rows it resolves to the
@@ -152,6 +160,9 @@ const HR_READER = authzWith(["hrm.leave.read", "hrm.leave.request", "hrm.leave.m
 function stubReads(rows: Array<Record<string, unknown>> | { error: unknown }, onLeave: Array<Record<string, unknown>> = []) {
   gap.__leaveQueueList = Array.isArray(rows) ? { rows } : rows;
   gap.__leaveQueueOnLeave = onLeave;
+  gap.__leaveCalendarState = null;
+  gap.__leaveCalendarArgs = null;
+  gap.__leaveQueueDepartments = [];
 }
 
 function leaveRow(id: string, status: string, startsOn: string, endsOn: string): Record<string, unknown> {
@@ -230,7 +241,7 @@ test("a leave-domain refusal converts the same way an authorization one does", a
   assert.ok(data.refusal.message.includes("not linked"), "the remedy arrives intact");
 });
 
-test("requests and the department calendar are alternative views, never stacked", async () => {
+test("requests and the calendar are alternative views, never stacked", async () => {
   stubReads([]);
   const requests = await loadLeaveQueue(HR_READER, {});
   assert.equal(requests.view, "requests", "the list is the default view");
@@ -254,3 +265,119 @@ test("an unexpected system failure propagates instead of an empty queue", async 
     "the failure reaches the caller, never a null list",
   );
 });
+
+test('the calendar defaults to all departments and the full business month even without absences', async () => {
+  stubReads([])
+  const data = await loadLeaveQueue(HR_READER, { view: 'calendar' })
+  assert.deepEqual(gap.__leaveCalendarArgs, [
+    'org-leave',
+    'actor-leave',
+    null,
+    '2026-09-01',
+    '2026-09-30',
+  ])
+  assert.equal(data.calendarFrom, '2026-09-01')
+  assert.equal(data.calendarTo, '2026-09-30')
+  assert.equal(data.calendarToday, '2026-09-22')
+  assert.equal(data.calendarTitle, 'Calendar')
+  assert.equal(data.hasContent, true)
+  assert.deepEqual(data.calendarDays, [])
+  assert.equal(data.calendarEmpty, 'No absences in this window.')
+})
+
+test('all departments resolves employees together and preserves the selected range through dialogs', async () => {
+  stubReads([])
+  gap.__leaveCalendarState = {
+    days: [
+      {
+        employmentId: 'employment-sales',
+        workerName: 'Ada',
+        onDate: '2026-10-02',
+        hours: '8.00',
+        leaveTypeCode: 'VAC',
+      },
+      {
+        employmentId: 'employment-operations',
+        workerName: 'Grace',
+        onDate: '2026-10-02',
+        hours: '4.00',
+        leaveTypeCode: 'SICK',
+      },
+    ],
+  }
+  const data = await loadLeaveQueue(HR_READER, {
+    view: 'calendar',
+    from: '2026-10-01',
+    to: '2026-10-31',
+  })
+  assert.equal(data.calendarDays.length, 1)
+  assert.deepEqual(
+    data.calendarDays[0]?.entries.map((entry) => entry.workerName),
+    ['Ada', 'Grace'],
+  )
+  const close = new URL(data.dialogCloseHref, 'https://openbooks.test')
+  assert.equal(close.searchParams.get('from'), '2026-10-01')
+  assert.equal(close.searchParams.get('to'), '2026-10-31')
+})
+
+test('calendar failures reach the page with their remedy and requests never read the calendar', async () => {
+  stubReads([])
+  const requests = await loadLeaveQueue(HR_READER, {
+    department: 'stale-filter',
+  })
+  assert.equal(gap.__leaveCalendarArgs, null)
+  assert.equal(requests.refusal, null)
+  const remedy =
+    'calendar access denied — ask an administrator to grant leave read access'
+  gap.__leaveCalendarState = { error: new HrmAuthorizationError(remedy) }
+  const denied = await loadLeaveQueue(HR_READER, { view: 'calendar' })
+  assert.equal(denied.refusal?.message, remedy)
+  assert.equal(denied.hasContent, false)
+})
+
+test('invalid dates and unavailable department filters refuse before a calendar read', async () => {
+  for (const params of [
+    { from: '2026-02-30' },
+    { from: '2026-10-20', to: '2026-10-01' },
+    { from: '2025-01-01', to: '2026-10-01' },
+    { department: 'unavailable' },
+  ]) {
+    stubReads([])
+    const data = await loadLeaveQueue(HR_READER, {
+      view: 'calendar',
+      ...params,
+    })
+    assert.ok(data.refusal?.message)
+    assert.equal(data.hasContent, false)
+    assert.equal(gap.__leaveCalendarArgs, null)
+  }
+})
+
+test('the optional department filter reads only the selected visible department', async () => {
+  stubReads([])
+  gap.__leaveQueueDepartments = [
+    { id: 'sales', name: 'Sales' },
+    { id: 'operations', name: 'Operations' },
+  ]
+  const data = await loadLeaveQueue(HR_READER, {
+    view: 'calendar',
+    department: 'sales',
+    from: '2026-10-01',
+    to: '2026-10-31',
+  })
+  assert.equal(data.refusal, null)
+  assert.deepEqual(gap.__leaveCalendarArgs, [
+    'org-leave',
+    'actor-leave',
+    'sales',
+    '2026-10-01',
+    '2026-10-31',
+  ])
+  assert.equal(data.calendarScopeLabel, 'Sales')
+  assert.equal(
+    new URL(data.dialogCloseHref, 'https://openbooks.test').searchParams.get(
+      'department',
+    ),
+    'sales',
+  )
+})
