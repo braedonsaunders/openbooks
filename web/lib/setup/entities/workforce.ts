@@ -491,12 +491,17 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
       {
-        key: 'unit', kind: 'select', required: true, keepDefault: true,
+        key: 'unit', kind: 'select', required: true, keepDefault: true, lockedOnEdit: true,
         defaultValue: 'money', options: ENTITLEMENT_UNITS,
         helpTextKey: 'fieldHelp.entitlementUnit',
       },
+      { key: 'systemKey', kind: 'select', lockedOnEdit: true, labelKey: 'benefitBuilder.timeOff.purpose', options: [
+        { value: '', labelKey: 'benefitBuilder.timeOff.other' },
+        { value: 'vacation', labelKey: 'benefitBuilder.timeOff.vacation' },
+        { value: 'stat_holiday_alternate', labelKey: 'benefitBuilder.timeOff.alternateHoliday' },
+      ] },
       {
-        key: 'direction', kind: 'select', required: true, keepDefault: true,
+        key: 'direction', kind: 'select', required: true, keepDefault: true, lockedOnEdit: true,
         defaultValue: 'accrue', options: ENTITLEMENT_DIRECTIONS,
         helpTextKey: 'fieldHelp.entitlementDirection',
       },

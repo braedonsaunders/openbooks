@@ -54,7 +54,7 @@ export interface TransactionDrawerProps {
    */
   canRemoveAttachments?: boolean
   /** Persistence table for attachments and audit rows. Defaults to documents. */
-  targetTable?: 'documents' | 'parties' | 'item_rate_versions' | 'hrm_benefit_enrollments'
+  targetTable?: 'documents' | 'parties' | 'item_rate_versions' | 'hrm_benefit_enrollments' | 'hrm_benefit_programs' | 'hrm_benefit_plans' | 'entitlement_plans'
   /**
    * Hide the Attachments and Audit trail tabs. Unsaved-create drawers set
    * this: both panels read the persisted row the drawer has not written yet,

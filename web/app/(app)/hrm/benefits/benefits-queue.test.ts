@@ -35,6 +35,8 @@ stubModules({
     '../../components/module-home/group-tabs': "export async function hrmGroupTabs() { return []; }",
     '../money-server': `export const getMoneyFormatter = async () => ({ money: (value, opts) => value + ' ' + (opts && opts.currency ? opts.currency : '') });`,
     '@openbooks/engine/hrm/benefits': `
+        export async function listBenefitsProgramActivity() { return [] }
+        export async function listBenefitsProgramCatalog() { const a=globalThis.__benefitsReads?.catalogPlans ?? [],b=globalThis.__portfolioReads?.programs ?? [];return [...a.map(p=>({...p,type:p.kind==='retirement'?'retirement':'health',parentProgramIds:[],status:p.isActive?'active':'inactive'})),...b.map(p=>({...p,type:p.family,parentProgramIds:[]}))].sort((a,b)=>a.name.localeCompare(b.name)); }
         export async function benefitCurrencyOptions() { return [{value: 'USD', label: 'USD · US Dollar', scopeValue: null}] }
         export async function listBenefitApprovalPolicies() { return { configured: false, href: '/admin/flows', policies: [] } }
         export async function listBenefitPrograms() { const s = globalThis.__portfolioReads; if (s?.programsError) throw new Error(s.programsError); return { programs: s?.programs ?? [] } }
@@ -109,12 +111,12 @@ test("an unknown segment refuses naming the segment, never an empty table", asyn
 
 test("the enrolments view swaps the table for the other entity", async () => {
   stubReads([windowRow("w-open", "open")], [enrolmentRow("e-1", "w-open")]);
-  const data = await loadBenefits(HR_BENEFITS, { view: "enrolments" });
+  const data = await loadBenefits(HR_BENEFITS, { view: "employees" });
   assert.equal(data.refusal, null, "the enrolments view carries no refusal");
   assert.equal(data.showingEnrolments, true, "the view flag swaps the table");
   assert.equal(data.enrollmentRows.length, 1, "enrolments list on their own view");
   assert.equal(data.enrollmentRows[0]!.employeeLabel, "Ada", "rows resolve the employee name");
-  assert.ok(data.newWindowHref.includes("view=enrolments"), "dialogs opened from the view close back onto it");
+  assert.ok(data.newWindowHref.includes("view=employees"), "dialogs opened from the view close back onto it");
 });
 
 test("the benefits copy ships with translated statuses in every section", () => {
@@ -145,34 +147,15 @@ test('refused source read travels into the edit refusal and never implies a clea
 })
 
 const { benefitsSpec } = await import('./view.ts')
-test('each focused Benefits page has one list and a create action matching its purpose', async () => {
-  for (const [view, label, list] of [
-    ['programs', 'newProgramButton', 'hrm-program-table'],
-    ['enrolments', 'newEnrollmentButton', 'hrm_benefits_enrolments'],
-    ['rewards', 'newAwardButton', 'hrm-award-table'],
-    ['incentives', 'newProgramButton', 'hrm-program-table'],
-  ] as const) {
-    const data = await loadBenefits(HR_BENEFITS, { view })
-    const spec = benefitsSpec(data)
-    const header = spec.header?.find((block) => block.kind === 'page-header')
-    assert.ok(header)
-    const creates = header.actions?.filter((action) => action.widget === 'link-button' && action.props?.iconKey === 'plus') ?? []
-    assert.equal(creates.length, 1, view)
-    assert.ok(JSON.stringify(creates[0]).includes(label))
-    const body = JSON.stringify(spec.body)
-    assert.ok(body.includes(list))
-    if (view === 'incentives') {
-      assert.ok(!body.includes('hrm-award-table'))
-      assert.equal(data.newProgramButton, 'New incentive')
-      assert.equal(data.programBuilderFamily, 'incentive')
-      assert.equal(data.programBuilderLocked, true)
-    }
-    if (view === 'rewards') assert.equal(data.newAwardButton, 'New reward')
-  }
-  const payouts = benefitsSpec(await loadBenefits(HR_BENEFITS, { view: 'payouts' }))
-  const header = payouts.header?.find((block) => block.kind === 'page-header')
-  assert.ok(header)
-  assert.equal(header.actions?.filter((action) => action.widget === 'link-button').length, 0, 'payouts deliver existing approved grants')
+test('Programs has one catalog and Delivery has one existing-obligation queue', async () => {
+  const programs = benefitsSpec(await loadBenefits(HR_BENEFITS, { view:'programs' }))
+  const header = programs.header?.find(block => block.kind === 'page-header')
+  assert.equal(header?.actions?.filter(action => action.widget === 'link-button' && action.props?.iconKey === 'plus').length,1)
+  assert.equal((JSON.stringify(programs.body).match(/"widget":"hrm-program-table"/g) ?? []).length,1)
+  const delivery = benefitsSpec(await loadBenefits(HR_BENEFITS, { view:'delivery' }))
+  const deliveryHeader = delivery.header?.find(block => block.kind === 'page-header')
+  assert.equal(deliveryHeader?.actions?.filter(action => action.widget === 'link-button').length,0)
+  assert.equal((JSON.stringify(delivery.body).match(/"widget":"hrm-benefit-delivery-table"/g) ?? []).length,1)
 })
 
 test('a refused award read shows unknown vitals and omits zero-shaped currency totals', async () => {
@@ -222,29 +205,21 @@ test('Benefits overview preserves exact currency lines in native populated summa
   assert.deepEqual(data.awaitingRows.map((row) => [row.currency, row.amount]), [['JPY', '1000.0000'], ['USD', '25.0000']])
 })
 
-test('Enrollment windows are a header action and drawer, never a second page or body button', async () => {
-  const data = await loadBenefits(HR_BENEFITS, { view: 'enrolments' })
-  const spec = benefitsSpec(data)
-  const header = spec.header?.find((block) => block.kind === 'page-header')
-  assert.ok(header)
-  assert.ok(JSON.stringify(header.actions).includes('enrollmentWindowsHref'))
-  assert.ok(!JSON.stringify(spec.body).includes('enrollmentWindowsButton'))
-  assert.equal(data.enrollmentWindowsHref, '/hrm/benefits?view=enrolments&windows=1')
-  const manager = await loadBenefits(HR_BENEFITS, { view: 'enrolments', windows: '1' })
-  assert.equal(manager.windowsManagerOpen, true)
-  const legacy = await loadBenefits(HR_BENEFITS, { view: 'windows' })
-  assert.equal(legacy.portfolioView, 'enrolments')
-  assert.equal(legacy.windowsManagerOpen, true)
+test('Employee benefits owns window management through its canonical destination', async () => {
+  const data = await loadBenefits(HR_BENEFITS, { view: 'employees', windows: '1' })
+  assert.equal(data.enrollmentWindowsHref, '/hrm/benefits?view=employees&windows=1')
+  assert.equal(data.windowsManagerOpen, true)
+  assert.equal(data.portfolioView, 'employees')
 })
 
 test('New enrollment binds the native controlled election form to the HR filing API', async () => {
   stubReads([windowRow('open', 'open'), windowRow('draft', 'draft')], [])
-  const data = await loadBenefits(HR_BENEFITS, { view: 'enrolments', enrollment: 'new' })
+  const data = await loadBenefits(HR_BENEFITS, { view: 'employees', enrollment: 'new' })
   assert.equal(data.enrollmentDialog?.title, 'New enrollment')
   assert.deepEqual(data.enrollmentDialog?.windows.map((window) => window.value), ['open'])
   const serialized = JSON.stringify(benefitsSpec(data))
   assert.ok(serialized.includes('"mode":"manage"'))
-  const readonly = await loadBenefits(authzWith(['hrm.benefits.read']), { view: 'enrolments', enrollment: 'new' })
+  const readonly = await loadBenefits(authzWith(['hrm.benefits.read']), { view: 'employees', enrollment: 'new' })
   assert.equal(readonly.enrollmentDialog, null)
 })
 
@@ -256,12 +231,12 @@ test('Programs combines insured plans and employer programs in one filterable po
   ] }
   gap.__portfolioReads = { programs: [{ id: 'reward', code: 'RECOG', name: 'Recognition', family: 'reward', currency: 'USD', status: 'active', valuation: 'fixed', fixedAmount: '25.0000', effectiveFrom: '2026-01-01', effectiveTo: null }], awards: [] }
   const data = await loadBenefits(HR_BENEFITS, { view: 'programs' })
-  assert.deepEqual(data.unifiedProgramRows.map((row) => row.id), ['plan:health', 'reward', 'plan:retired'])
+  assert.deepEqual(data.unifiedProgramRows.map((row) => row.id), ['health', 'reward', 'retired'])
   assert.equal(data.unifiedProgramRows[2]?.statusLabel, 'Inactive')
-  assert.equal(data.unifiedProgramRows[0]?.programHref, '/hrm/benefits?view=programs&plan=health')
-  const filtered = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'insured' })
+  assert.equal(data.unifiedProgramRows[0]?.programHref, '/hrm/benefits?view=programs&program=health')
+  const filtered = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'health' })
   assert.equal(filtered.unifiedProgramRows.length, 2)
-  assert.equal(filtered.programTypeFilter.currentParams.type, 'insured')
+  assert.equal(filtered.programTypeFilter.currentParams.type, 'health')
   const body = JSON.stringify(benefitsSpec(data).body)
   assert.equal((body.match(/"widget":"hrm-program-table"/g) ?? []).length, 1)
   assert.ok(body.includes('typeFilter'))
@@ -289,7 +264,7 @@ test('New program chooses a native Benefits type before creating a record', asyn
 
 test('cash payroll processing labels do not claim bank payment', async () => {
   gap.__portfolioReads = { programs: [{ id: 'program', code: 'BONUS', name: 'Bonus', family: 'reward', currency: 'USD', status: 'active', deliveryMethod: 'payroll', valuation: 'fixed', fixedAmount: '25.00' }], awards: [{ id: 'reward', programId: 'program', employmentId: 'employment', value: '25.00', currency: 'USD', status: 'delivered' }] }
-  const data = await loadBenefits(HR_BENEFITS, { view: 'payouts' })
+  const data = await loadBenefits(HR_BENEFITS, { view: 'delivery' })
   assert.equal(data.awardRows[0]?.statusLabel, 'Processed in payroll')
 })
 
@@ -299,7 +274,7 @@ test('external payout progress comes only from verified native payroll consumpti
   const award = { id: 'gift', programId: program.id, employmentId: 'employment', value: '25.00', currency: 'USD', status: 'queued' }
   for (const [payrollProcessed, expected] of [[false, 'Queued on a pay run'], [true, 'Processed in payroll · awaiting fulfillment']] as const) {
     gap.__portfolioReads = { programs: [program], awards: [{ ...award, payrollProcessed }] }
-    const data = await loadBenefits(HR_BENEFITS, { view: 'payouts' })
+    const data = await loadBenefits(HR_BENEFITS, { view: 'delivery' })
     assert.equal(data.awardRows[0]?.statusLabel, expected)
   }
 })
@@ -318,13 +293,13 @@ test('Payouts contains only released delivery obligations and recorded payroll h
   const awards = statuses.map((status) => ({ id: status, programId: program.id, employmentId: 'employment', value: '25.00', currency: 'USD', status, payRunDocumentId: null, payRunAdjustmentId: null }))
   awards.push({ ...awards[6]!, id: 'recorded-void', payRunDocumentId: 'run', payRunAdjustmentId: 'adjustment' } as never)
   gap.__portfolioReads = { programs: [program], awards }
-  const payouts = await loadBenefits(HR_BENEFITS, { view: 'payouts' })
+  const payouts = await loadBenefits(HR_BENEFITS, { view: 'delivery' })
   assert.deepEqual(payouts.payoutAwardRows.map((award) => award.id), ['approved', 'queued', 'delivered', 'recorded-void'])
   const spec = JSON.stringify(benefitsSpec(payouts))
   assert.ok(!spec.includes('"label":"New award"'))
   assert.ok(!spec.includes('"label":"New reward"'))
   assert.ok(!spec.includes('"id":"draft"'))
-  const rewards = await loadBenefits(HR_BENEFITS, { view: 'rewards' })
+  const rewards = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'reward' })
   assert.ok(['draft', 'pending', 'rejected'].every((id) => rewards.rewardAwardRows.some((row) => row.id === id)))
   assert.equal(payouts.overview.attention.find((item) => item.key === 'pending-awards')?.href, '/approvals')
 })

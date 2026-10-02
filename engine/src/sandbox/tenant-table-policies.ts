@@ -1,5 +1,7 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  // Native offering inserts recreate these identities using the rebased native ids.
+  "hrm_benefit_catalog": "skip:no-copy",
   // Transfer execution and source artifacts belong to their original environment.
   "data_transfer_jobs": "skip:no-copy",
   "data_transfer_chunks": "skip:no-copy",

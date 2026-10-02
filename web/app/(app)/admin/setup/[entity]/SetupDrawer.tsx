@@ -111,6 +111,9 @@ export function SetupDrawer({
   fixedValues,
   nestedTab,
   nestedTabs = [],
+  ruleTabs = [],
+  detailsLabel,
+  recordTitle,
   stacked = false,
   mutationBasePath = '/api/admin/setup',
   onSaved,
@@ -124,6 +127,10 @@ export function SetupDrawer({
   fixedValues?: Record<string, unknown>
   nestedTab?: { key: string; label: string; content: ReactNode }
   nestedTabs?: { key: string; label: string; content: ReactNode }[]
+  /** A rehomed record names its native configuration section. */
+  detailsLabel?: string
+  ruleTabs?: { key: string; label: string; content: ReactNode }[]
+  recordTitle?: string
   stacked?: boolean
   /** Refresh the host record after a successful native save. */
   onSaved?: () => void
@@ -176,6 +183,7 @@ export function SetupDrawer({
   const recordTabs = nestedTab ? [nestedTab, ...nestedTabs] : nestedTabs
   const activeNestedTab = !creating ? recordTabs.find((tab) => searchParams.get('setupTab') === tab.key) : undefined
   const nestedTabActive = activeNestedTab !== undefined
+  const activeRuleTab = !creating ? ruleTabs.find(tab => searchParams.get('setupTab') === tab.key) : undefined
 
   function selectTab(key: 'details' | string) {
     const next = new URLSearchParams(searchParams.toString())
@@ -414,13 +422,13 @@ export function SetupDrawer({
       description={entity.formDescriptionKey ? t(entity.formDescriptionKey) : undefined}
       beforeClose={confirmDiscard}
       stacked={stacked}
-      title={creating ? t('drawer.newTitle', { name: entityTitle }) : editing ? t('drawer.editTitle', { name: entityTitle }) : entityTitle}
+      title={creating ? t('drawer.newTitle', { name: entityTitle }) : editing ? t('drawer.editTitle', { name: entityTitle }) : recordTitle ?? entityTitle}
       subtabs={!creating && recordTabs.length > 0 ? (
-        <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
+        <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: detailsLabel ?? t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
       ) : undefined}
       headerActions={<>
         {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
-        {!creating && !entity.readOnly && !editing ? <Button variant="outline" disabled={busy} onClick={() => { setEditing(true); if (nestedTabActive) selectTab('details') }}>{tCommon('actions.edit')}</Button> : null}
+        {!creating && !entity.readOnly && !editing ? <Button variant="outline" disabled={busy} onClick={() => { setEditing(true); if (nestedTabActive || activeRuleTab) selectTab('details') }}>{tCommon('actions.edit')}</Button> : null}
         {!nestedTabActive && !entity.readOnly && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
         </Button> : null}
@@ -445,6 +453,8 @@ export function SetupDrawer({
       }
     >
       {nestedTabActive ? activeNestedTab?.content : <>
+      {!creating && ruleTabs.length ? <div className="mb-4"><RecordTabs label={detailsLabel ?? t('drawer.tabs.ariaLabel')} tabs={[{key:'details',label:t('drawer.tabs.details')}, ...ruleTabs]} active={activeRuleTab?.key ?? 'details'} onChange={selectTab} /></div> : null}
+      {activeRuleTab ? activeRuleTab.content : <>
       {entity.key === "subsidiary-ownership-interests" && row && row.method === "full" ? <div className="mb-4"><LossOfControlButton interestId={String(row.id)} /><NetInvestmentButton interestId={String(row.id)} /></div> : null}
       {fieldError ? (
         <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
@@ -549,6 +559,7 @@ export function SetupDrawer({
         ) : null}
       </div>
       </div></>}
+      </>}
     </UrlDrawer>
   )
 }

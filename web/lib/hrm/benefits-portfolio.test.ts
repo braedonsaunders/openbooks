@@ -24,55 +24,28 @@ test('totals keep one line per currency and never merge them', () => {
     { value: '50.00', currency: 'USD' },
     { value: '10000', currency: 'JPY' },
   ], (value, currency) => createMoneyFormatter('en', currency).money(value, { currency }))
-  assert.deepEqual(
-    lines.map((line) => [line.currency, line.amount]),
-    [
-      ['JPY', '10000.0000'],
-      ['USD', '150.0000'],
-    ],
-  )
+  assert.deepEqual(lines.map(line => [line.currency, line.amount]), [['JPY', '10000.0000'], ['USD', '150.0000']])
 })
+
+const attentionDefaults = { pendingEnrollments: 0, pendingAwards: 0, queuedAwards: 0, draftPrograms: 0, programsMissingComponent: [], format: (key: string) => key, basePath: '/hrm/benefits' }
 
 test('attention items each carry an operable destination', () => {
   const items = buildAttentionQueue({
+    ...attentionDefaults,
     pendingEnrollments: 2,
     pendingAwards: 1,
-    queuedAwards: 0,
     draftPrograms: 1,
     programsMissingComponent: [{ id: 'p1', code: 'BONUS' }],
     format: (key, params) => `${key}:${JSON.stringify(params)}`,
-    basePath: '/hrm/benefits',
   })
   assert.equal(items.length, 4)
-  for (const item of items) {
-    assert.match(item.href, /^(?:\/hrm\/benefits\?|\/approvals$)/)
-  }
+  for (const item of items) assert.match(item.href, /^(?:\/hrm\/benefits\?|\/approvals$)/)
   assert.equal(items.find((item) => item.key === 'pending-awards')?.href, '/approvals')
   assert.ok(items.some((item) => item.key === 'missing-component-p1' && item.tone === 'negative'))
 })
 
 test('empty counts produce an empty queue, never placeholder rows', () => {
-  assert.deepEqual(
-    buildAttentionQueue({
-      pendingEnrollments: 0,
-      pendingAwards: 0,
-      queuedAwards: 0,
-      draftPrograms: 0,
-      programsMissingComponent: [],
-      format: (key) => key,
-      basePath: '/hrm/benefits',
-    }),
-    [],
-  )
-})
-
-test('program drafts refuse missing fields by name', () => {
-  const errors = validateProgramDraft(emptyProgramDraft('reward'))
-  assert.equal(errors.code, 'portfolio.validation.programCode')
-  assert.equal(errors.name, 'portfolio.validation.programName')
-  assert.ok(errors.currency)
-  assert.ok(errors.effectiveFrom)
-  assert.ok(errors.fixedAmount)
+  assert.deepEqual(buildAttentionQueue(attentionDefaults), [])
 })
 
 test('incentive drafts require a metric, scope picks, and a period basis', () => {
@@ -92,30 +65,20 @@ test('incentive drafts require a metric, scope picks, and a period basis', () =>
   assert.equal(errors.periodBasis, 'portfolio.validation.periodBasis')
 })
 
-test('award drafts refuse missing program, recipient, period, value, and reason', () => {
-  const errors = validateAwardDraft({ ...blankFields('programId', 'employmentId', 'periodFrom', 'periodTo', 'value', 'reason', 'recipientNote', 'recordReference'), currency: 'usd' })
-  assert.equal(errors.programId, 'portfolio.validation.awardProgram')
-  assert.equal(errors.employmentId, 'portfolio.validation.awardRecipient')
-  assert.ok(errors.periodFrom)
-  assert.equal(errors.value, 'portfolio.validation.awardValue')
-  assert.ok(errors.currency)
-  assert.equal(errors.reason, 'portfolio.validation.awardReason')
-})
-
-test('membership drafts refuse missing employment and start', () => {
-  const errors = validateMembershipDraft(blankFields('employmentId', 'effectiveFrom', 'effectiveTo', 'weight', 'role'))
-  assert.equal(errors.employmentId, 'portfolio.validation.memberEmployment')
-  assert.ok(errors.effectiveFrom)
+for (const [name, errors, expected] of [
+  ['program', validateProgramDraft(emptyProgramDraft('reward')), { code: 'programCode', name: 'programName', currency: 'currency', effectiveFrom: 'effectiveFrom', fixedAmount: 'fixedAmount' }],
+  ['reward', validateAwardDraft({ ...blankFields('programId', 'employmentId', 'periodFrom', 'periodTo', 'value', 'reason', 'recipientNote', 'recordReference'), currency: 'usd' }), { programId: 'awardProgram', employmentId: 'awardRecipient', periodFrom: 'periodFrom', value: 'awardValue', currency: 'currency', reason: 'awardReason' }],
+  ['participation', validateMembershipDraft(blankFields('employmentId', 'effectiveFrom', 'effectiveTo', 'weight', 'role')), { employmentId: 'memberEmployment', effectiveFrom: 'membershipFrom' }],
+] as const) test(`${name} creation refuses missing inputs with field-specific remedies`, () => {
+  for (const [field, remedy] of Object.entries(expected)) assert.equal((errors as Record<string, string>)[field], `portfolio.validation.${remedy}`, field)
 })
 
 test('portfolio views parse to canonical values with overview default', () => {
   assert.equal(parsePortfolioView(undefined), 'overview')
   assert.equal(parsePortfolioView('programs'), 'programs')
-  assert.equal(parsePortfolioView('windows'), 'enrolments')
-  assert.equal(parsePortfolioView('enrolments'), 'enrolments')
-  assert.equal(parsePortfolioView('rewards'), 'rewards')
-  assert.equal(parsePortfolioView('incentives'), 'incentives')
-  assert.equal(parsePortfolioView('payouts'), 'payouts')
+  assert.equal(parsePortfolioView('employees'), 'employees')
+  assert.equal(parsePortfolioView('delivery'), 'delivery')
+  for (const removed of ['windows', 'enrolments', 'rewards', 'incentives', 'payouts', 'policies']) assert.equal(parsePortfolioView(removed), 'overview')
   assert.equal(parsePortfolioView('nope'), 'overview')
 })
 

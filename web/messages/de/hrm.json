@@ -1457,7 +1457,8 @@
       "active": "Aktiv",
       "ended": "Beendet",
       "cancelled": "Storniert",
-      "inactive": "Inaktiv"
+      "inactive": "Inaktiv",
+      "assigned": "Zugewiesen"
     },
     "workspace": {
       "tabs": {
@@ -1466,7 +1467,9 @@
         "enrollments": "Anmeldungen",
         "rewards": "Prämien",
         "incentives": "Anreize",
-        "payouts": "Auszahlungen"
+        "payouts": "Auszahlungen",
+        "employees": "Mitarbeiterleistungen",
+        "delivery": "Abwicklung"
       }
     },
     "newEnrollment": "Neue Anmeldung",
@@ -2715,8 +2718,8 @@
         "description": "Betriebliche und private Altersvorsorge."
       },
       "allowance": {
-        "title": "Zulagen und Budgets",
-        "description": "Regelmäßige Ausgabenzulagen über die Abrechnung."
+        "title": "Zuschüsse",
+        "description": "Gewähren Sie Mitarbeitenden Zulagen mit festgelegten Beträgen, Kontrollen und Auszahlungsregeln."
       },
       "reward": {
         "title": "Prämien und Anerkennung",
@@ -2729,6 +2732,11 @@
       "custom": {
         "title": "Eigene Programme",
         "description": "Alles andere, was das Unternehmen gewährt."
+      },
+      "time_off": {
+        "title": "Urlaub und Zeitguthaben",
+        "description": "Definieren Sie Urlaubsanspruch, Ansparung, Grenzen und Abrechnungsanbindung.",
+        "action": "Zeitguthabenprogramm erstellen"
       }
     },
     "families": {
@@ -2928,7 +2936,42 @@
       "typeTitle": "Neues Programm: {type}",
       "chooseCurrency": "Währung wählen",
       "currencyHint": "Die Währungen folgen dem gewählten Arbeitgeber und den Unternehmensfunktionen. Die Abrechnung verarbeitet Zuwendungen in der Programmwährung.",
-      "currencyUnavailable": "Wählen Sie eine für den Arbeitgeber verfügbare Währung."
+      "currencyUnavailable": "Wählen Sie eine für den Arbeitgeber verfügbare Währung.",
+      "manualGrantHint": "Ein autorisierter Benutzer erfasst die einzelne Zuwendung. Das Anlegen des Programms plant keine automatischen Zahlungen.",
+      "familySteps": {
+        "reward": {
+          "offer": "Programm",
+          "value": "Prämienwert",
+          "timing": "Verfügbarkeit",
+          "controls": "Budget und Freigaben",
+          "delivery": "Abwicklung",
+          "review": "Prüfung"
+        },
+        "allowance": {
+          "offer": "Programm",
+          "value": "Zuschussbetrag",
+          "timing": "Verfügbarkeit",
+          "controls": "Budget und Freigaben",
+          "delivery": "Abwicklung",
+          "review": "Prüfung"
+        },
+        "incentive": {
+          "offer": "Programm",
+          "value": "Messung",
+          "timing": "Messzeiträume",
+          "controls": "Verteilung und Freigaben",
+          "delivery": "Abwicklung",
+          "review": "Prüfung"
+        },
+        "custom": {
+          "offer": "Programm",
+          "value": "Leistungswert",
+          "timing": "Verfügbarkeit",
+          "controls": "Budget und Freigaben",
+          "delivery": "Abwicklung",
+          "review": "Prüfung"
+        }
+      }
     },
     "awardBuilderTitle": "Neue Anerkennung",
     "awardFields": {
@@ -3003,11 +3046,11 @@
       "scientific": "{field}: Schreiben Sie {value} vollständig statt in wissenschaftlicher Notation.",
       "not-a-number": "{field}: Geben Sie einen lesbaren Dezimalbetrag ein."
     },
-    "description": "Leistungen, Anerkennung und Prämien mit klarer Berechtigung, kontrollierten Genehmigungen und Auszahlung über die Abrechnung.",
+    "description": "Arbeitgeberprogramme, Mitarbeiterteilnahme und kontrollierte Abwicklung.",
     "home": {
-      "heroHint": "Arbeitgeberprogramme, Wertregeln und Gültigkeitszeiträume.",
+      "heroHint": "Öffnen Sie ein Programm, um Regeln, Teilnehmer, Aktivität und Abrechnungsanbindung zu verwalten.",
       "directoryTitle": "Leistungsverwaltung",
-      "payrollHint": "Alle erfassten Prämien · Währungen bleiben getrennt"
+      "payrollHint": "Beitragswahlen werden zu Lohnabzügen und Arbeitgeberbeiträgen. Anbieterüberweisungen sind von Mitarbeiterzahlungen getrennt."
     },
     "newReward": "Neue Anerkennung",
     "newIncentive": "Neuer Anreiz",
@@ -3038,19 +3081,21 @@
     "awardCurrencyHint": "Vom gewählten Programm übernommen; die Abrechnung rechnet Prämienwährungen nicht um.",
     "rewardCreateHint": "Gewähren Sie Leistungen gemäß Wert, Währung und Regeln eines aktiven Programms. Angebote werden unter Programme konfiguriert.",
     "programPurpose": {
-      "reward": "Definieren Sie die Anerkennung hier und vergeben Sie Leistungen unter Prämien. Bereite Zuwendungen erscheinen unter Auszahlungen.",
-      "allowance": "Definieren Sie einen festen Zuschuss und dessen Zeitplan. Zuwendungen folgen diesen Regeln; kein Ausgabenkonto und keine Kostenerstattung entsteht.",
-      "incentive": "Definieren Sie leistungsabhängige Auszahlungen. Simulieren und rechnen Sie unter Anreize ab; genehmigte Ergebnisse erscheinen unter Auszahlungen.",
-      "custom": "Definieren Sie eine Arbeitgeberzuwendung mit klaren Regeln. Erfassen Sie diese unter Prämien und liefern Sie sie unter Auszahlungen aus."
+      "reward": "Definieren Sie Regeln, Teilnehmer und Anerkennungsbudget. Vergeben Sie Prämien im Programm und verfolgen Sie die Abwicklung.",
+      "allowance": "Definieren Sie Zuschüsse und Teilnehmer. Erfassen Sie einzelne Zuwendungen im Programm und verfolgen Sie die Abwicklung.",
+      "incentive": "Definieren Sie Leistungsmessung und Verteilung. Simulieren und rechnen Sie Zeiträume im Programm ab und verfolgen Sie die Ergebnisse.",
+      "custom": "Definieren Sie Leistung, Teilnahme und Vergaberegeln. Erfassen Sie einzelne Zuwendungen im Programm und verfolgen Sie die Abwicklung."
     },
     "scopeHint": "Leistungen definiert Arbeitgeberangebote und Zuwendungen. Die Abrechnung verwaltet Gehalt, Steuern, gesetzliche Beiträge und Abrechnungsläufe.",
     "views": {
-      "overview": "Arbeitgeberleistungen und Zuwendungen mit Abrechnungsanbindung.",
-      "programs": "Definieren Sie alle Angebote hier. Beschäftigte melden sich zu Plänen an; Prämien und Anreize folgen ihren Programmen.",
+      "overview": "Arbeitgeberprogramme, Mitarbeiterteilnahme und kontrollierte Abwicklung.",
+      "programs": "Öffnen Sie ein Programm, um Regeln, Teilnehmer, Aktivität und Abrechnungsanbindung zu verwalten.",
       "enrolments": "Melden Sie Beschäftigte zu Versicherungs- und Sparplänen an. Verwalten Sie Zeiträume über Anmeldefenster.",
       "rewards": "Erfassen Sie Zuwendungen aus aktiven Programmen. Wiederverwendbare Angebote konfigurieren Sie unter Programme.",
       "incentives": "Verwalten Sie Leistungsprogramme. Öffnen Sie einen Datensatz zum Simulieren, Berechnen und Abrechnen.",
-      "payouts": "Übergeben Sie bereite Zuwendungen an die Abrechnung und verfolgen Sie die Historie. Erstellung unter Prämien, Berechnung unter Anreize."
+      "payouts": "Übergeben Sie bereite Zuwendungen an die Abrechnung und verfolgen Sie die Historie. Erstellung unter Prämien, Berechnung unter Anreize.",
+      "employees": "Prüfen Sie Programme, Versicherungsschutz, Wahlen und gültige Bedingungen der Mitarbeiter. Die Abrechnung wendet die Programmregeln an.",
+      "delivery": "Geben Sie bereite Prämien und festgestellte Leistungsanreize frei. Verfolgen Sie Abrechnung und externe Erfüllung getrennt."
     },
     "configureApprovals": "Genehmigungen konfigurieren"
   },
@@ -3283,5 +3328,94 @@
     "coverage": "Versicherung und Vorsorge",
     "balances": "Salden",
     "empty": "Keine Mitarbeiterrichtlinien erfasst."
+  },
+  "programIdentity": {
+    "types": {
+      "health": "Gesundheit und Versicherung",
+      "retirement": "Altersvorsorge und Sparen",
+      "allowance": "Zuschüsse",
+      "reward": "Anerkennung",
+      "incentive": "Leistungsanreize",
+      "custom": "Individuelle Leistung",
+      "time_off": "Urlaub und Zeitguthaben",
+      "recovery": "Prämienrückforderung"
+    }
+  },
+  "programWorkspace": {
+    "rules": "Regeln",
+    "participants": "Teilnehmer",
+    "activity": "Aktivität",
+    "calculations": "Berechnungen",
+    "delivery": "Abwicklung",
+    "giveReward": "Prämie vergeben",
+    "history": "Historie",
+    "configureRules": "Regeln konfigurieren",
+    "activityEmpty": "Prämien und festgestellte Leistungsanreize erscheinen mit Mitarbeiter, Zeitraum und Status.",
+    "deliveryHint": "Leistungen definieren das Mitarbeiterangebot. Die Abrechnung berechnet Abzüge, Beiträge und steuerpflichtige Beträge und verbucht den Lauf. Die Verarbeitung bestätigt keine Zahlung.",
+    "planDeliveryHint": "Beitragswahlen werden zu Lohnabzügen und Arbeitgeberbeiträgen. Anbieterüberweisungen sind von Mitarbeiterzahlungen getrennt.",
+    "entitlementDeliveryHint": "Abrechnung und Abwesenheitsverwaltung erfassen Guthabenbewegungen. Salden ergeben sich aus dem unveränderlichen Journal.",
+    "participantsEmpty": "Diesem Programm sind keine Mitarbeiter zugewiesen.",
+    "entitlementParticipantsHint": "Urlaubszuweisungen gehören zu diesem Programm. Die angerechnete Dienstzeit bleibt eine gemeinsame Grundlage des Beschäftigungsverhältnisses.",
+    "recordDescription": "Programmregeln, Teilnahme und Abwicklung in einem Datensatz.",
+    "participantsHint": "Beitragswahlen und datierter Versicherungsschutz gehören zu diesem Programm. Öffnen Sie eine Zuweisung zum Prüfen oder Ändern.",
+    "assignEmployee": "Mitarbeiter zuweisen",
+    "assignment": "Zuweisung",
+    "openAssignment": "Zuweisung öffnen",
+    "moreParticipants": "Weitere Teilnehmer vorhanden. Suchen Sie die vollständige Liste unter Mitarbeiterleistungen.",
+    "moreActivity": "Weitere Aktivitäten vorhanden. Die Leistungsberichte enthalten die vollständige Historie.",
+    "processedPayroll": "In der Abrechnung verarbeitet",
+    "openPayRun": "Abrechnungslauf öffnen",
+    "date": "Datum",
+    "payRun": "Abrechnungslauf",
+    "recovery": "Prämienrückforderung",
+    "recoveryHint": "Diese Konten erfassen offene Prämien und ihre spätere Rückforderung gemäß den Beitragsregeln des Programms.",
+    "ready": "Bereit zur Freigabe",
+    "units": {
+      "money": "Geldeinheiten",
+      "hours": "Stunden"
+    },
+    "queuedPayroll": "Für Abrechnung vorgemerkt",
+    "participantStatus": {
+      "assigned": "Zugewiesen",
+      "percent_on_pay": "Über die Abrechnung",
+      "banked": "Urlaub und Zeitguthaben"
+    },
+    "activityStatus": {
+      "approved": "Bereit zur Freigabe",
+      "queued": "Für Abrechnung vorgemerkt",
+      "delivered": "Ausgezahlt",
+      "processed": "Verarbeitet",
+      "posted": "Gebucht",
+      "voided": "Storniert",
+      "accrual": "Ansparung",
+      "payout": "Auszahlung",
+      "adjustment": "Anpassung"
+    },
+    "createGrant": "Zuwendung erfassen"
+  },
+  "employeeBenefits": {
+    "title": "Mitarbeiterleistungen",
+    "employee": "Mitarbeiter",
+    "program": "Programm",
+    "type": "Typ",
+    "effective": "Gültigkeitsdaten",
+    "status": "Status",
+    "emptyTitle": "Keine zugewiesenen Mitarbeiterleistungen",
+    "programs": "Programme",
+    "service": "Angerechnete Dienstzeit",
+    "balances": "Salden",
+    "employeeRecord": "Mitarbeiterakte",
+    "programRecord": "Programm öffnen",
+    "enrolment": "Versicherungsanmeldung",
+    "membership": "Programmteilnahme",
+    "vacationTerms": "Urlaubszuweisung",
+    "assignedByPolicy": "Gemäß Regeln zugewiesen",
+    "newService": "Dienstzeit anrechnen",
+    "manageFromProgram": "Teilnahme im Programm verwalten",
+    "inactive": "Inaktiv",
+    "openAssignment": "Zuweisung öffnen",
+    "description": "Prüfen Sie Programme, Versicherungsschutz, Wahlen und gültige Bedingungen der Mitarbeiter. Die Abrechnung wendet die Programmregeln an.",
+    "emptyDescription": "Weisen Sie Leistungen im Programm zu: Versicherung anmelden, Teilnehmer hinzufügen oder Urlaubsbedingungen erfassen.",
+    "policyHint": "Salden folgen den geltenden Programmregeln; sie sind keine Versicherungsanmeldungen."
   }
 }

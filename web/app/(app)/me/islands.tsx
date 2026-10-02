@@ -440,6 +440,7 @@ export function BenefitContributionChoices({ rules, choices, onChange, readOnly 
 }
 
 export interface BenefitElectDialogStrings {
+  initialPlanId?: string
   title: string
   description: string
   employmentLabel: string
@@ -470,7 +471,7 @@ export function BenefitElectDialog({
 }) {
   const router = useRouter()
   const [employmentId, setEmploymentId] = useState('')
-  const [planId, setPlanId] = useState('')
+  const [planId, setPlanId] = useState(dialog?.initialPlanId ?? '')
   const [classKey, setClassKey] = useState('')
   const [matchEligible, setMatchEligible] = useState('')
   const [contributions, setContributions] = useState<Record<string, ContributionChoice>>({})

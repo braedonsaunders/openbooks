@@ -1457,7 +1457,8 @@
       "active": "Active",
       "ended": "Ended",
       "cancelled": "Cancelled",
-      "inactive": "Inactive"
+      "inactive": "Inactive",
+      "assigned": "Assigned"
     },
     "workspace": {
       "tabs": {
@@ -1466,7 +1467,9 @@
         "enrollments": "Enrollments",
         "rewards": "Rewards",
         "incentives": "Incentives",
-        "payouts": "Payouts"
+        "payouts": "Payouts",
+        "employees": "Employee benefits",
+        "delivery": "Delivery"
       }
     },
     "newEnrollment": "New enrollment",
@@ -2715,8 +2718,8 @@
         "description": "Pension and retirement savings plans."
       },
       "allowance": {
-        "title": "Allowances and spending",
-        "description": "Recurring spending allowances paid through payroll."
+        "title": "Allowances",
+        "description": "Grant allowances to employees with defined amounts, controls and delivery instructions."
       },
       "reward": {
         "title": "Rewards and recognition",
@@ -2729,6 +2732,11 @@
       "custom": {
         "title": "Custom programs",
         "description": "Anything else the organization grants."
+      },
+      "time_off": {
+        "title": "Vacation and time off",
+        "description": "Define vacation entitlement, accrual, limits and payroll delivery.",
+        "action": "Create time-off program"
       }
     },
     "families": {
@@ -2928,7 +2936,42 @@
       "typeTitle": "New {type}",
       "chooseCurrency": "Choose currency",
       "currencyHint": "Currencies follow the selected employer and Company Features policy. Payroll processes grants in the program currency.",
-      "currencyUnavailable": "Choose a currency enabled for the selected employer."
+      "currencyUnavailable": "Choose a currency enabled for the selected employer.",
+      "manualGrantHint": "Employees receive this benefit when an authorized user records a grant. Creating the program does not schedule automatic payments.",
+      "familySteps": {
+        "reward": {
+          "offer": "Program",
+          "value": "Reward value",
+          "timing": "Availability",
+          "controls": "Budget and approvals",
+          "delivery": "Fulfillment",
+          "review": "Review"
+        },
+        "allowance": {
+          "offer": "Program",
+          "value": "Allowance amount",
+          "timing": "Availability",
+          "controls": "Budget and approvals",
+          "delivery": "Fulfillment",
+          "review": "Review"
+        },
+        "incentive": {
+          "offer": "Program",
+          "value": "Measurement",
+          "timing": "Measurement periods",
+          "controls": "Allocation and approvals",
+          "delivery": "Fulfillment",
+          "review": "Review"
+        },
+        "custom": {
+          "offer": "Program",
+          "value": "Benefit value",
+          "timing": "Availability",
+          "controls": "Budget and approvals",
+          "delivery": "Fulfillment",
+          "review": "Review"
+        }
+      }
     },
     "awardBuilderTitle": "New reward",
     "awardFields": {
@@ -3003,11 +3046,11 @@
       "scientific": "{field}: write {value} in full decimal form, not scientific notation.",
       "not-a-number": "{field}: enter a readable decimal amount."
     },
-    "description": "Benefits, recognition and incentives — clear eligibility, controlled approvals and payroll delivery.",
+    "description": "Employer programs, employee participation and controlled delivery.",
     "home": {
-      "heroHint": "Employer-defined programs, value rules and effective dates.",
+      "heroHint": "Open a program to manage its rules, participants, activity and payroll connection.",
       "directoryTitle": "Benefits workspace",
-      "payrollHint": "All recorded awards · currencies remain separate"
+      "payrollHint": "Contribution elections become payroll deductions and employer contributions. Provider remittance is managed separately from employee payment."
     },
     "newReward": "New reward",
     "newIncentive": "New incentive",
@@ -3038,19 +3081,21 @@
     "awardCurrencyHint": "Inherited from the selected program; payroll does not convert reward currency.",
     "rewardCreateHint": "Grant a benefit to an employee using an active program’s value, currency and delivery rules. Configure the offer in Programs.",
     "programPurpose": {
-      "reward": "Define your recognition policy here, then issue employee rewards in Rewards. Ready grants appear in Payouts.",
-      "allowance": "Define a fixed allowance and its grant schedule. Employee grants use this program’s rules; it does not create a spending wallet or reimburse expenses.",
-      "incentive": "Define how measured performance becomes employee payouts. Simulate and settle the program in Incentives; approved results appear in Payouts.",
-      "custom": "Define an employer-funded grant with explicit value and delivery rules. Use Rewards to record employee grants and Payouts to deliver them."
+      "reward": "Define recognition rules, participants and budget. Give rewards from the program and follow them in Delivery.",
+      "allowance": "Define allowance amounts and participants. Record individual grants in the program and follow them in Delivery.",
+      "incentive": "Define performance measurements and allocation rules. Simulate and settle periods in this program, then follow the results in Delivery.",
+      "custom": "Define the benefit, participation and grant rules. Record employee grants in the program and follow them in Delivery."
     },
     "scopeHint": "Benefits defines employer-sponsored offers and employee grants. Payroll manages salary, tax, statutory contributions and pay-run processing.",
     "views": {
-      "overview": "Employer-sponsored benefits and grants, connected to payroll.",
-      "programs": "Define every benefit offer here. Employees enroll in coverage plans; rewards and incentive results follow the rules of their programs.",
+      "overview": "Employer programs, employee participation and controlled delivery.",
+      "programs": "Open a program to manage its rules, participants, activity and payroll connection.",
       "enrolments": "Enroll employees in coverage and savings plans. Manage enrollment periods through Enrollment windows.",
       "rewards": "Record employee recognition and benefit grants against an active program. Configure reusable offers in Programs.",
       "incentives": "Manage performance-based programs. Open a record to simulate, calculate and settle employee payouts.",
-      "payouts": "Release ready grants to payroll and follow their delivery history. Create rewards in Rewards and settle measured programs in Incentives."
+      "payouts": "Release ready grants to payroll and follow their delivery history. Create rewards in Rewards and settle measured programs in Incentives.",
+      "employees": "View employee programs, coverage, elections and effective terms. Payroll applies the program rules.",
+      "delivery": "Release ready rewards and settled incentives. Follow payroll processing and external fulfillment separately."
     },
     "configureApprovals": "Configure approvals"
   },
@@ -3283,5 +3328,94 @@
     "coverage": "Coverage and savings",
     "balances": "Balances",
     "empty": "No employee policies recorded."
+  },
+  "programIdentity": {
+    "types": {
+      "health": "Health and insurance",
+      "retirement": "Retirement and savings",
+      "allowance": "Allowances",
+      "reward": "Recognition",
+      "incentive": "Incentives",
+      "custom": "Custom benefit",
+      "time_off": "Vacation and time off",
+      "recovery": "Premium recovery"
+    }
+  },
+  "programWorkspace": {
+    "rules": "Rules",
+    "participants": "Participants",
+    "activity": "Activity",
+    "calculations": "Calculations",
+    "delivery": "Delivery",
+    "giveReward": "Give reward",
+    "history": "History",
+    "configureRules": "Configure rules",
+    "activityEmpty": "Rewards and settled incentives appear here with the employee, period and lifecycle state.",
+    "deliveryHint": "Benefits defines the employee offering. Payroll calculates deductions, contributions and taxable amounts, then accounts for the run. Processing in payroll does not confirm payment.",
+    "planDeliveryHint": "Contribution elections become payroll deductions and employer contributions. Provider remittance is managed separately from employee payment.",
+    "entitlementDeliveryHint": "Payroll and leave services record entitlement movements. Balances come from the immutable ledger.",
+    "participantsEmpty": "No employees are assigned to this program.",
+    "entitlementParticipantsHint": "Vacation assignments belong to this program. Credited service remains a shared employment baseline.",
+    "recordDescription": "Program rules, employee participation and delivery in one record.",
+    "participantsHint": "Employee elections and effective coverage belong to this program. Open an assignment to review or change it.",
+    "assignEmployee": "Assign employee",
+    "assignment": "Assignment",
+    "openAssignment": "Open assignment",
+    "moreParticipants": "More participants exist. Open Employee benefits to search the complete assignment list.",
+    "moreActivity": "More activity exists. Use the Benefits reports for complete historical detail.",
+    "processedPayroll": "Processed in payroll",
+    "openPayRun": "Open pay run",
+    "date": "Date",
+    "payRun": "Pay run",
+    "recovery": "Premium recovery",
+    "recoveryHint": "These recovery banks track unpaid premiums and later payroll recovery under this program’s contribution rules.",
+    "ready": "Ready for release",
+    "units": {
+      "money": "money units",
+      "hours": "hours"
+    },
+    "queuedPayroll": "Queued for payroll",
+    "participantStatus": {
+      "assigned": "Assigned",
+      "percent_on_pay": "Through payroll",
+      "banked": "Vacation and time off"
+    },
+    "activityStatus": {
+      "approved": "Ready for release",
+      "queued": "Queued for payroll",
+      "delivered": "Delivered",
+      "processed": "Processed",
+      "posted": "Posted",
+      "voided": "Voided",
+      "accrual": "Accrual",
+      "payout": "Payout",
+      "adjustment": "Adjustment"
+    },
+    "createGrant": "Record grant"
+  },
+  "employeeBenefits": {
+    "title": "Employee benefits",
+    "employee": "Employee",
+    "program": "Program",
+    "type": "Type",
+    "effective": "Effective dates",
+    "status": "Status",
+    "emptyTitle": "No employee benefit assignments",
+    "programs": "Programs",
+    "service": "Credited service",
+    "balances": "Balances",
+    "employeeRecord": "Employee record",
+    "programRecord": "Open program",
+    "enrolment": "Coverage enrollment",
+    "membership": "Program participation",
+    "vacationTerms": "Vacation assignment",
+    "assignedByPolicy": "Assigned by policy",
+    "newService": "Add credited service",
+    "manageFromProgram": "Manage participation in program",
+    "inactive": "Inactive",
+    "openAssignment": "Open assignment",
+    "description": "View employee programs, coverage, elections and effective terms. Payroll applies the program rules.",
+    "emptyDescription": "Assign employees from a program: enroll them in coverage, add participants or record vacation terms.",
+    "policyHint": "Balances follow applicable program rules; they are not coverage enrollments."
   }
 }

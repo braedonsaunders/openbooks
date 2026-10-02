@@ -337,7 +337,8 @@ export async function calculateStub(
   // Resolved on the plan's ENGINE BINDING, never on its operator-typed code.
   const vacationPlan = vacationPlanOf(plans);
   const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, run.period_end!) : null;
-  if (vacationPlan && !vacationElection) throw new PayrollError(`${emp.display_name ?? employeePartyId} has no effective vacation terms; configure their vacation method and entitlement in Payroll before calculating payroll.`);
+  if (vacationPlan && !vacationElection) throw new PayrollError(`${emp.display_name ?? employeePartyId} has no effective vacation terms; configure their vacation method and entitlement in Benefits before calculating payroll.`);
+  if (vacationElection && vacationElection.planId !== vacationPlan?.id) throw new PayrollError(`${emp.display_name ?? employeePartyId} has vacation terms assigned to a different or inactive program; activate their governing vacation program in Benefits before calculating payroll.`);
   vacationPercent = vacationElection?.percentFloor ?? vacationPlan?.accrualValue ?? null;
   const vacationMethod = vacationElection?.method ?? null;
   assertVacationPlanResolved({ ...emp, vacation_percent: vacationPercent, vacation_method: vacationMethod }, vacationPlan, terminationRun);

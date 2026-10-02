@@ -1457,7 +1457,8 @@
       "active": "Active",
       "ended": "Terminée",
       "cancelled": "Annulée",
-      "inactive": "Inactif"
+      "inactive": "Inactif",
+      "assigned": "Attribué"
     },
     "workspace": {
       "tabs": {
@@ -1466,7 +1467,9 @@
         "enrollments": "Adhésions",
         "rewards": "Récompenses",
         "incentives": "Intéressement",
-        "payouts": "Versements"
+        "payouts": "Versements",
+        "employees": "Avantages des employés",
+        "delivery": "Exécution"
       }
     },
     "newEnrollment": "Nouvelle inscription",
@@ -2715,8 +2718,8 @@
         "description": "Régimes de retraite et d'épargne."
       },
       "allowance": {
-        "title": "Allocations et dépenses",
-        "description": "Allocations de dépenses périodiques versées par la paie."
+        "title": "Allocations",
+        "description": "Attribuez des allocations aux employés avec des montants, des contrôles et des modalités de versement définis."
       },
       "reward": {
         "title": "Récompenses et reconnaissance",
@@ -2729,6 +2732,11 @@
       "custom": {
         "title": "Programmes sur mesure",
         "description": "Tout autre avantage accordé par l'organisation."
+      },
+      "time_off": {
+        "title": "Congés et vacances",
+        "description": "Définissez les droits aux vacances, leur acquisition, les limites et le lien avec la paie.",
+        "action": "Créer un programme de congés"
       }
     },
     "families": {
@@ -2928,7 +2936,42 @@
       "typeTitle": "Nouveaume : {type}",
       "chooseCurrency": "Choisir une devise",
       "currencyHint": "Les devises suivent l’employeur sélectionné et les fonctionnalités de l’entreprise. La paie traite les attributions dans la devise du programme.",
-      "currencyUnavailable": "Choisissez une devise disponible pour l’employeur sélectionné."
+      "currencyUnavailable": "Choisissez une devise disponible pour l’employeur sélectionné.",
+      "manualGrantHint": "Cet avantage est attribué lorsqu’un utilisateur autorisé enregistre une attribution. La création du programme ne planifie aucun paiement automatique.",
+      "familySteps": {
+        "reward": {
+          "offer": "Programme",
+          "value": "Valeur de la récompense",
+          "timing": "Disponibilité",
+          "controls": "Budget et approbations",
+          "delivery": "Exécution",
+          "review": "Contrôle"
+        },
+        "allowance": {
+          "offer": "Programme",
+          "value": "Montant de l’allocation",
+          "timing": "Disponibilité",
+          "controls": "Budget et approbations",
+          "delivery": "Exécution",
+          "review": "Contrôle"
+        },
+        "incentive": {
+          "offer": "Programme",
+          "value": "Mesure",
+          "timing": "Périodes de mesure",
+          "controls": "Répartition et approbations",
+          "delivery": "Exécution",
+          "review": "Contrôle"
+        },
+        "custom": {
+          "offer": "Programme",
+          "value": "Valeur de l’avantage",
+          "timing": "Disponibilité",
+          "controls": "Budget et approbations",
+          "delivery": "Exécution",
+          "review": "Contrôle"
+        }
+      }
     },
     "awardBuilderTitle": "Nouvelle récompense",
     "awardFields": {
@@ -3003,11 +3046,11 @@
       "scientific": "{field} : écrivez {value} en entier, sans notation scientifique.",
       "not-a-number": "{field} : saisissez un montant décimal lisible."
     },
-    "description": "Avantages, reconnaissance et primes : admissibilité claire, approbations contrôlées et versement en paie.",
+    "description": "Programmes employeur, participation des employés et exécution contrôlée.",
     "home": {
-      "heroHint": "Programmes de l’employeur, règles de valorisation et dates d’effet.",
+      "heroHint": "Ouvrez un programme pour gérer ses règles, participants, activité et lien avec la paie.",
       "directoryTitle": "Gestion des avantages",
-      "payrollHint": "Toutes les récompenses enregistrées · devises séparées"
+      "payrollHint": "Les choix de cotisation deviennent des retenues et cotisations patronales. Les remises au fournisseur sont distinctes du paiement à l’employé."
     },
     "newReward": "Nouvelle récompense",
     "newIncentive": "Nouvelle prime",
@@ -3038,19 +3081,21 @@
     "awardCurrencyHint": "Héritée du programme ; la paie ne convertit pas la devise de la récompense.",
     "rewardCreateHint": "Attribuez un avantage selon la valeur, la devise et les règles d’un programme actif. Configurez l’offre dans Programmes.",
     "programPurpose": {
-      "reward": "Définissez la reconnaissance ici, puis attribuez les récompenses aux employés dans Récompenses. Les attributions prêtes apparaissent dans Versements.",
-      "allowance": "Définissez une allocation fixe et son calendrier. Les attributions suivent ce programme ; il ne crée ni portefeuille ni remboursement de frais.",
-      "incentive": "Définissez comment la performance mesurée produit des versements. Simulez et liquidez dans Incitations ; les résultats approuvés apparaissent dans Versements.",
-      "custom": "Définissez une attribution financée par l’employeur avec des règles explicites. Enregistrez-la dans Récompenses et livrez-la dans Versements."
+      "reward": "Définissez les règles, participants et budgets de reconnaissance. Attribuez les récompenses depuis le programme et suivez leur exécution.",
+      "allowance": "Définissez les montants et participants. Enregistrez les allocations individuelles dans le programme et suivez leur exécution.",
+      "incentive": "Définissez les mesures de performance et leur répartition. Simulez et arrêtez les périodes dans le programme, puis suivez leur exécution.",
+      "custom": "Définissez l’avantage, la participation et les règles. Enregistrez les attributions dans le programme et suivez leur exécution."
     },
     "scopeHint": "Avantages définit les offres et attributions patronales. La paie gère salaire, impôt, cotisations légales et cycles de paie.",
     "views": {
-      "overview": "Avantages et attributions patronales liés à la paie.",
-      "programs": "Définissez chaque offre ici. Les employés s’inscrivent aux régimes ; récompenses et incitations suivent leurs programmes.",
+      "overview": "Programmes employeur, participation des employés et exécution contrôlée.",
+      "programs": "Ouvrez un programme pour gérer ses règles, participants, activité et lien avec la paie.",
       "enrolments": "Inscrivez les employés aux régimes de couverture et d’épargne. Gérez les périodes via les fenêtres d’inscription.",
       "rewards": "Enregistrez les attributions dans un programme actif. Configurez les offres réutilisables dans Programmes.",
       "incentives": "Gérez les programmes de performance. Ouvrez un dossier pour simuler, calculer et liquider les versements.",
-      "payouts": "Envoyez les attributions prêtes à la paie et suivez leur livraison. Créez dans Récompenses et liquidez dans Incitations."
+      "payouts": "Envoyez les attributions prêtes à la paie et suivez leur livraison. Créez dans Récompenses et liquidez dans Incitations.",
+      "employees": "Consultez les programmes, couvertures, choix et conditions applicables aux employés. La paie applique les règles du programme.",
+      "delivery": "Exécutez les récompenses et intéressements prêts. Suivez séparément le traitement en paie et la remise externe."
     },
     "configureApprovals": "Configurer les approbations"
   },
@@ -3283,5 +3328,94 @@
     "coverage": "Couverture et épargne",
     "balances": "Soldes",
     "empty": "Aucune politique d’employé enregistrée."
+  },
+  "programIdentity": {
+    "types": {
+      "health": "Santé et assurance",
+      "retirement": "Retraite et épargne",
+      "allowance": "Allocations",
+      "reward": "Reconnaissance",
+      "incentive": "Intéressement",
+      "custom": "Avantage personnalisé",
+      "time_off": "Congés et vacances",
+      "recovery": "Recouvrement des primes"
+    }
+  },
+  "programWorkspace": {
+    "rules": "Règles",
+    "participants": "Participants",
+    "activity": "Activité",
+    "calculations": "Calculs",
+    "delivery": "Exécution",
+    "giveReward": "Attribuer une récompense",
+    "history": "Historique",
+    "configureRules": "Configurer les règles",
+    "activityEmpty": "Les récompenses et intéressements arrêtés apparaissent avec l’employé, la période et leur état.",
+    "deliveryHint": "Les avantages définissent l’offre à l’employé. La paie calcule les retenues, cotisations et montants imposables, puis comptabilise le cycle. Le traitement en paie ne confirme pas le paiement.",
+    "planDeliveryHint": "Les choix de cotisation deviennent des retenues et cotisations patronales. Les remises au fournisseur sont distinctes du paiement à l’employé.",
+    "entitlementDeliveryHint": "Les services de paie et de congés enregistrent les mouvements. Les soldes proviennent du registre immuable.",
+    "participantsEmpty": "Aucun employé n’est affecté à ce programme.",
+    "entitlementParticipantsHint": "Les conditions de vacances appartiennent à ce programme. L’ancienneté reconnue reste commune au dossier d’emploi.",
+    "recordDescription": "Règles, participation et exécution réunies dans un seul dossier.",
+    "participantsHint": "Les choix et couvertures datées appartiennent à ce programme. Ouvrez une attribution pour la consulter ou la modifier.",
+    "assignEmployee": "Affecter un employé",
+    "assignment": "Attribution",
+    "openAssignment": "Ouvrir l’attribution",
+    "moreParticipants": "D’autres participants existent. Consultez Avantages des employés pour parcourir toutes les attributions.",
+    "moreActivity": "D’autres activités existent. Consultez les rapports pour l’historique complet.",
+    "processedPayroll": "Traité en paie",
+    "openPayRun": "Ouvrir le cycle de paie",
+    "date": "Date",
+    "payRun": "Cycle de paie",
+    "recovery": "Recouvrement des primes",
+    "recoveryHint": "Ces banques suivent les primes impayées et leur recouvrement en paie selon les règles de cotisation du programme.",
+    "ready": "Prêt à exécuter",
+    "units": {
+      "money": "unités monétaires",
+      "hours": "heures"
+    },
+    "queuedPayroll": "En attente de paie",
+    "participantStatus": {
+      "assigned": "Attribué",
+      "percent_on_pay": "Par la paie",
+      "banked": "Congés et vacances"
+    },
+    "activityStatus": {
+      "approved": "Prêt à exécuter",
+      "queued": "En attente de paie",
+      "delivered": "Versée",
+      "processed": "Traité",
+      "posted": "Comptabilisé",
+      "voided": "Annulé",
+      "accrual": "Acquisition",
+      "payout": "Versement",
+      "adjustment": "Ajustement"
+    },
+    "createGrant": "Enregistrer une attribution"
+  },
+  "employeeBenefits": {
+    "title": "Avantages des employés",
+    "employee": "Employé",
+    "program": "Programme",
+    "type": "Type",
+    "effective": "Dates d’effet",
+    "status": "Statut",
+    "emptyTitle": "Aucune attribution d’avantage",
+    "programs": "Programmes",
+    "service": "Ancienneté reconnue",
+    "balances": "Soldes",
+    "employeeRecord": "Dossier de l’employé",
+    "programRecord": "Ouvrir le programme",
+    "enrolment": "Adhésion à la couverture",
+    "membership": "Participation au programme",
+    "vacationTerms": "Attribution de vacances",
+    "assignedByPolicy": "Attribué selon les règles",
+    "newService": "Ajouter une ancienneté reconnue",
+    "manageFromProgram": "Gérer la participation dans le programme",
+    "inactive": "Inactif",
+    "openAssignment": "Ouvrir l’attribution",
+    "description": "Consultez les programmes, couvertures, choix et conditions applicables aux employés. La paie applique les règles du programme.",
+    "emptyDescription": "Attribuez les avantages depuis un programme : adhésion, participation ou conditions de vacances.",
+    "policyHint": "Les soldes suivent les règles applicables du programme ; ils ne constituent pas des adhésions à une couverture."
   }
 }

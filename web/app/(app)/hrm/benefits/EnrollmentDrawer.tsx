@@ -69,7 +69,7 @@ export function EnrollmentDrawer({ record, closeHref, canManage, canChange, stac
       if (typeof result.enrollment?.id !== 'string') throw new Error('Invalid enrollment response')
       setMode('view'); setDate(''); setReason('')
       onSaved?.()
-      router.replace(stacked ? closeHref : `/hrm/benefits?view=enrolments&enrollmentConfig=${encodeURIComponent(result.enrollment.id)}`)
+      router.replace(stacked ? closeHref : `/hrm/benefits?view=employees&enrollmentConfig=${encodeURIComponent(result.enrollment.id)}`)
       router.refresh()
     } catch { setError(t('failed')) } finally { setBusy(false) }
   }

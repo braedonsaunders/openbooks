@@ -37,8 +37,7 @@ import { loadBenefitsReportLinks, type BenefitsReportLink } from './benefits-rep
 import { isFeatureEnabled } from '../features'
 
 /**
- * Benefits portfolio workspace — the employer-defined program model beside
- * the insured enrollment windows. Programs and awards load through the
+ * Employer-defined program rules, participants, activity and payroll delivery. Programs and awards load through the
  * domain services (loader-resolved, newest first, actor scope inside),
  * never a direct benefits-table read from the web app. A service refusal
  * travels as data beside the sections it blocks: the cockpit renders the
@@ -124,10 +123,14 @@ export interface ProgramDetailDrawer {
   simulation: ProgramSimulation | null
   simulationRefusal: { title: string; message: string } | null
   program: PortfolioProgramRow
+  activity: PortfolioAwardRow[]
+  activityRefusal: { title: string; message: string } | null
+  activityTruncated: boolean
   members: {
     id: string
     employmentId: string
     employeeLabel: string
+    employeeHref: string | null
     rangeLabel: string
     weight: string | null
     role: string | null
@@ -288,7 +291,7 @@ export async function loadBenefitsPortfolio(
     statusLabel: labelOf(t, 'portfolio.programStatus', program.status as string),
     statusVariant: statusVariant(program.status),
     valueLabel: programValueLabel(program, amountLabel),
-    programHref: portfolioHref(basePath, sp.view, { program: program.id }),
+    programHref: portfolioHref(basePath, 'programs', { program: program.id }),
     openLabel: t('portfolio.openProgram'),
   }))
   const awardRows: PortfolioAwardRow[] = awards.map((award) => {
@@ -480,7 +483,7 @@ export async function loadBenefitsPortfolio(
   let programDrawer: ProgramDetailDrawer | null = null
   // Edit mode renders the builder alone: the seed above carries the
   // authoritative row, so the detail drawer does not stack beneath it.
-  if (sp.program && sp.edit !== '1') {
+  if (sp.program && !sp.award && sp.edit !== '1') {
     const found = programRows.find((row) => row.id === sp.program) ?? null
     if (found) {
       let members: Awaited<ReturnType<typeof listProgramMemberships>> = []
@@ -604,10 +607,14 @@ export async function loadBenefitsPortfolio(
         simulation,
         simulationRefusal,
         program: found,
+        activity: awardRows.filter(award => award.programId === found.id),
+        activityRefusal: awardsRefusal,
+        activityTruncated: awardsTruncated,
         members: members.map((member) => ({
           id: member.id,
           employmentId: member.employmentId,
           employeeLabel: memberLabels.workerByEmployment.get(member.employmentId)?.name ?? member.employmentId,
+          employeeHref: memberLabels.workerByEmployment.get(member.employmentId)?.partyId ? `/entities/employees?party=${memberLabels.workerByEmployment.get(member.employmentId)!.partyId}&partyTab=benefits` : null,
           rangeLabel:
             member.effectiveTo !== null ? `${member.effectiveFrom} – ${member.effectiveTo}` : `${member.effectiveFrom} – …`,
           weight: member.weight,

@@ -136,13 +136,10 @@
     "crm-sales-quotas": "Quotas",
     "crm-sales-territories": "Territories",
     "hrm-benefits-programs": "プログラム",
-    "hrm-benefits-enrolments": "加入登録",
-    "hrm-benefits-rewards": "褒賞",
-    "hrm-benefits-incentives": "インセンティブ",
-    "hrm-benefits-payouts": "支給",
     "hrm-performance-succession": "後継者計画",
     "hrm-performance-templates": "評価フォーム",
-    "hrm-benefits-policies": "方針"
+    "hrm-benefits-employees": "従業員の福利厚生",
+    "hrm-benefits-delivery": "給付処理"
   },
   "groups": {
     "workforce": "従業員体制",
@@ -182,7 +179,7 @@
     "hrm-hiring": "採用",
     "hrm-timeoff": "休暇",
     "hrm-talent": "タレント",
-    "hrm-rewards": "福利厚生",
+    "hrm-benefits": "福利厚生",
     "payroll": "給与",
     "resourcing": "リソース計画",
     "warehouse": "倉庫",
@@ -208,7 +205,7 @@
     "hrm-hiring": "採用",
     "hrm-timeOff": "休暇",
     "hrm-talent": "タレント",
-    "hrm-rewards": "福利厚生",
+    "hrm-benefits": "福利厚生",
     "payroll": "給与",
     "resourcing": "リソース計画",
     "warehouse": "倉庫",

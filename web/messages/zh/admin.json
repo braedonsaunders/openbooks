@@ -5190,14 +5190,14 @@
     "benefitBuilder": {
       "offer": "计划",
       "eligibility": "资格与日期",
-      "eligibilityHint": "设置覆盖日期、等待期及审批要求。创建后在记录中添加缴款和配比上限。",
+      "eligibilityHint": "设置等待期、生效日期与可选审批。缴款及员工选择属于此计划。",
       "delivery": "连接薪资",
       "deliveryHint": "关联员工扣款和雇主缴款。薪资负责税务处理，并在每次工资核算中处理已选择的金额。",
       "review": "核对",
       "coverageType": "保障类型",
       "health": {
         "title": "健康与保险计划",
-        "offer": "填写保障名称、保险机构和负责的雇主。员工通过参保选择保障。",
+        "offer": "命名保障、保险提供方与负责雇主。在计划内管理保障组别、保费及员工参保。",
         "costs": "保费与保障",
         "costHint": "设置双方保费及不足整月的计价方式。创建后可添加个人或家庭保障档次。",
         "provider": "保险机构",
@@ -5212,7 +5212,7 @@
       },
       "retirement": {
         "title": "退休与储蓄计划",
-        "offer": "填写储蓄计划、养老金或投资机构以及负责的雇主。员工通过参保加入。",
+        "offer": "命名退休或储蓄待遇、提供方与雇主。在计划内管理缴款、匹配规则及员工选择。",
         "costs": "储蓄缴款",
         "costHint": "分别选择员工和雇主的固定缴款或工资百分比。百分比为缴款比例，并非匹配缴款公式。",
         "provider": "养老金或储蓄机构",
@@ -5223,6 +5223,24 @@
         "contribution": "缴款",
         "rate": "缴款金额或费率",
         "contributionSingular": "缴款"
+      },
+      "timeOff": {
+        "title": "休假计划",
+        "description": "定义休假或其他时间余额、累积规则及薪资关联。",
+        "offer": "命名待遇并选择单位与用途。在此计划中管理员工休假条件。",
+        "accrual": "累积与限额",
+        "accrualHint": "选择余额增长方式。创建后添加带生效日期的限额与工龄档位。",
+        "deliveryHint": "薪资通过薪资项目与记账科目记录余额变动及付款。",
+        "purpose": "用途",
+        "purposeHint": "休假使用员工休假条件。替代假日使用法定假日处理。其他余额按所声明的累积规则执行。",
+        "other": "其他时间余额",
+        "vacation": "休假",
+        "alternateHoliday": "替代假日"
+      },
+      "governingProgram": "适用计划",
+      "vacationAssignmentHint": "选择管理此员工休假条件的计划。工龄仅在雇佣记录中保存一次。",
+      "recovery": {
+        "title": "保费追偿"
       }
     },
     "benefitContributions": {

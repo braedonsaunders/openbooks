@@ -34,7 +34,7 @@ function programCells(row: UnifiedProgramRow): PreparedTableRow {
         {row.valueLabel}
       </span>,
       <span key="effective" className="tabular-nums">
-        {row.effectiveTo ? `${row.effectiveFrom} – ${row.effectiveTo}` : `${row.effectiveFrom} – …`}
+        {row.effectiveFrom ? row.effectiveTo ? `${row.effectiveFrom} – ${row.effectiveTo}` : `${row.effectiveFrom} – …` : '—'}
       </span>,
       <Badge key="status" variant={row.statusVariant}>
         {row.statusLabel}
@@ -146,4 +146,18 @@ export function AwardPortfolioTable({
       footer={footerBlock(text.totalLabel, total, text.truncatedLabel, truncated)}
     />
   )
+}
+
+/** Cross-program delivery uses one queue for grants and native payroll benefit movements. */
+export function BenefitDeliveryTable({ rows, text }: { rows: import('../../../../lib/hrm/benefits-portfolio').BenefitDeliveryRow[]; text: AwardTableText }) {
+  return <PreparedPagedTable source="hrm_benefit_program_activity" rows={rows.map(row => ({
+    id:row.id,searchText:`${row.programName} ${row.employeeName} ${row.statusLabel}`,cells:[
+      <Link key="program" href={row.programHref as never} className="font-medium text-teal-700 hover:underline">{row.programName}</Link>,
+      <Link key="employee" href={row.employeeHref as never} className="text-teal-700 hover:underline">{row.employeeName}</Link>,
+      <span key="date" className="tabular-nums">{row.onDate}</span>,
+      <span key="amount" className="tabular-nums">{row.valueLabel}</span>,
+      <Badge key="status" variant={row.statusVariant}>{row.statusLabel}</Badge>,
+      row.recordHref ? <Link key="record" href={row.recordHref as never} className="text-teal-700 hover:underline">{row.recordLabel}</Link> : '—',
+    ],
+  }))} columns={[{key:'program',header:text.program},{key:'employee',header:text.recipient},{key:'date',header:text.period},{key:'amount',header:text.value,align:'right'},{key:'status',header:text.status},{key:'record',header:''}]} empty={emptyBlock(text.emptyTitle,text.emptyDescription)} />
 }

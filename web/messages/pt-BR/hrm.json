@@ -1457,7 +1457,8 @@
       "active": "Ativa",
       "ended": "Encerrada",
       "cancelled": "Cancelada",
-      "inactive": "Inativo"
+      "inactive": "Inativo",
+      "assigned": "Atribuído"
     },
     "workspace": {
       "tabs": {
@@ -1466,7 +1467,9 @@
         "enrollments": "Inscrições",
         "rewards": "Recompensas",
         "incentives": "Incentivos",
-        "payouts": "Pagamentos"
+        "payouts": "Pagamentos",
+        "employees": "Benefícios dos funcionários",
+        "delivery": "Entrega"
       }
     },
     "newEnrollment": "Nova adesão",
@@ -2715,8 +2718,8 @@
         "description": "Planos de previdência e poupança para aposentadoria."
       },
       "allowance": {
-        "title": "Auxílios e gastos",
-        "description": "Auxílios periódicos de gasto pagos pela folha."
+        "title": "Auxílios",
+        "description": "Conceda auxílios aos funcionários com valores, controles e instruções de entrega definidos."
       },
       "reward": {
         "title": "Recompensas e reconhecimento",
@@ -2729,6 +2732,11 @@
       "custom": {
         "title": "Programas personalizados",
         "description": "Tudo o mais que a organização concede."
+      },
+      "time_off": {
+        "title": "Férias e folgas",
+        "description": "Defina direitos de férias, acúmulo, limites e entrega pela folha.",
+        "action": "Criar programa de férias e folgas"
       }
     },
     "families": {
@@ -2928,7 +2936,42 @@
       "typeTitle": "Novoa: {type}",
       "chooseCurrency": "Escolher moeda",
       "currencyHint": "As moedas seguem o empregador selecionado e os recursos da empresa. A folha processa concessões na moeda do programa.",
-      "currencyUnavailable": "Escolha uma moeda habilitada para o empregador selecionado."
+      "currencyUnavailable": "Escolha uma moeda habilitada para o empregador selecionado.",
+      "manualGrantHint": "Um usuário autorizado registra cada concessão. Criar o programa não agenda pagamentos automáticos.",
+      "familySteps": {
+        "reward": {
+          "offer": "Programa",
+          "value": "Valor da recompensa",
+          "timing": "Disponibilidade",
+          "controls": "Orçamento e aprovações",
+          "delivery": "Entrega",
+          "review": "Revisão"
+        },
+        "allowance": {
+          "offer": "Programa",
+          "value": "Valor do auxílio",
+          "timing": "Disponibilidade",
+          "controls": "Orçamento e aprovações",
+          "delivery": "Entrega",
+          "review": "Revisão"
+        },
+        "incentive": {
+          "offer": "Programa",
+          "value": "Métrica",
+          "timing": "Períodos de medição",
+          "controls": "Distribuição e aprovações",
+          "delivery": "Entrega",
+          "review": "Revisão"
+        },
+        "custom": {
+          "offer": "Programa",
+          "value": "Valor do benefício",
+          "timing": "Disponibilidade",
+          "controls": "Orçamento e aprovações",
+          "delivery": "Entrega",
+          "review": "Revisão"
+        }
+      }
     },
     "awardBuilderTitle": "Nova recompensa",
     "awardFields": {
@@ -3003,11 +3046,11 @@
       "scientific": "{field}: escreva {value} por inteiro, sem notação científica.",
       "not-a-number": "{field}: insira um valor decimal legível."
     },
-    "description": "Benefícios, reconhecimento e incentivos com elegibilidade clara, aprovações controladas e pagamento na folha.",
+    "description": "Programas da empresa, participação dos funcionários e entrega controlada.",
     "home": {
-      "heroHint": "Programas do empregador, regras de valor e datas de vigência.",
+      "heroHint": "Abra um programa para gerenciar regras, participantes, atividade e conexão com a folha.",
       "directoryTitle": "Gestão de benefícios",
-      "payrollHint": "Todas as recompensas registradas · moedas separadas"
+      "payrollHint": "As escolhas geram descontos e contribuições patronais. Repasses ao fornecedor são separados do pagamento ao funcionário."
     },
     "newReward": "Nova recompensa",
     "newIncentive": "Novo incentivo",
@@ -3038,19 +3081,21 @@
     "awardCurrencyHint": "Herdada do programa selecionado; a folha não converte a moeda da recompensa.",
     "rewardCreateHint": "Conceda um benefício usando valor, moeda e regras de um programa ativo. Configure a oferta em Programas.",
     "programPurpose": {
-      "reward": "Defina a política aqui e conceda recompensas em Recompensas. Concessões prontas aparecem em Pagamentos.",
-      "allowance": "Defina um auxílio fixo e seu calendário. As concessões seguem estas regras; não é criada uma carteira nem um reembolso de despesas.",
-      "incentive": "Defina como o desempenho gera pagamentos. Simule e liquide em Incentivos; os resultados aprovados aparecem em Pagamentos.",
-      "custom": "Defina uma concessão patronal com regras explícitas. Registre-a em Recompensas e entregue-a em Pagamentos."
+      "reward": "Defina regras, participantes e orçamento de reconhecimento. Conceda recompensas pelo programa e acompanhe a entrega.",
+      "allowance": "Defina valores e participantes. Registre concessões individuais no programa e acompanhe a entrega.",
+      "incentive": "Defina métricas e regras de distribuição. Simule e apure períodos no programa e acompanhe os resultados.",
+      "custom": "Defina benefício, participação e regras. Registre concessões no programa e acompanhe a entrega."
     },
     "scopeHint": "Benefícios define ofertas e concessões patronais. A folha gerencia salário, tributos, contribuições legais e processamento de pagamentos.",
     "views": {
-      "overview": "Benefícios e concessões patronais conectados à folha.",
-      "programs": "Defina cada oferta aqui. Funcionários se inscrevem em planos; recompensas e incentivos seguem seus programas.",
+      "overview": "Programas da empresa, participação dos funcionários e entrega controlada.",
+      "programs": "Abra um programa para gerenciar regras, participantes, atividade e conexão com a folha.",
       "enrolments": "Inscreva funcionários em planos de cobertura e poupança. Gerencie os períodos pelas janelas de inscrição.",
       "rewards": "Registre concessões de programas ativos. Configure ofertas reutilizáveis em Programas.",
       "incentives": "Gerencie programas de desempenho. Abra um registro para simular, calcular e liquidar pagamentos.",
-      "payouts": "Envie concessões prontas à folha e acompanhe o histórico. Crie em Recompensas e liquide em Incentivos."
+      "payouts": "Envie concessões prontas à folha e acompanhe o histórico. Crie em Recompensas e liquide em Incentivos.",
+      "employees": "Consulte programas, coberturas, escolhas e condições vigentes dos funcionários. A folha aplica as regras do programa.",
+      "delivery": "Libere recompensas e incentivos prontos. Acompanhe processamento da folha e entrega externa separadamente."
     },
     "configureApprovals": "Configurar aprovações"
   },
@@ -3283,5 +3328,94 @@
     "coverage": "Cobertura e poupança",
     "balances": "Saldos",
     "empty": "Nenhuma política de funcionário registrada."
+  },
+  "programIdentity": {
+    "types": {
+      "health": "Saúde e seguros",
+      "retirement": "Aposentadoria e poupança",
+      "allowance": "Auxílios",
+      "reward": "Reconhecimento",
+      "incentive": "Incentivos",
+      "custom": "Benefício personalizado",
+      "time_off": "Férias e folgas",
+      "recovery": "Recuperação de prêmios"
+    }
+  },
+  "programWorkspace": {
+    "rules": "Regras",
+    "participants": "Participantes",
+    "activity": "Atividade",
+    "calculations": "Cálculos",
+    "delivery": "Entrega",
+    "giveReward": "Conceder recompensa",
+    "history": "Histórico",
+    "configureRules": "Configurar regras",
+    "activityEmpty": "Recompensas e incentivos apurados aparecem com funcionário, período e status.",
+    "deliveryHint": "Benefícios define a oferta ao funcionário. A folha calcula descontos, contribuições e valores tributáveis e contabiliza o ciclo. O processamento não confirma pagamento.",
+    "planDeliveryHint": "As escolhas geram descontos e contribuições patronais. Repasses ao fornecedor são separados do pagamento ao funcionário.",
+    "entitlementDeliveryHint": "Folha e ausências registram os movimentos. Os saldos vêm do livro imutável.",
+    "participantsEmpty": "Nenhum funcionário atribuído a este programa.",
+    "entitlementParticipantsHint": "As condições de férias pertencem ao programa. O tempo de serviço permanece como base compartilhada do vínculo.",
+    "recordDescription": "Regras, participação e entrega em um único registro.",
+    "participantsHint": "Escolhas e coberturas vigentes pertencem ao programa. Abra uma atribuição para revisar ou alterar.",
+    "assignEmployee": "Atribuir funcionário",
+    "assignment": "Atribuição",
+    "openAssignment": "Abrir atribuição",
+    "moreParticipants": "Há mais participantes. Pesquise a lista completa em Benefícios dos funcionários.",
+    "moreActivity": "Há mais atividade. Consulte os relatórios para o histórico completo.",
+    "processedPayroll": "Processado na folha",
+    "openPayRun": "Abrir ciclo da folha",
+    "date": "Data",
+    "payRun": "Ciclo da folha",
+    "recovery": "Recuperação de prêmios",
+    "recoveryHint": "Esses bancos registram prêmios pendentes e sua recuperação posterior conforme as regras de contribuição do programa.",
+    "ready": "Pronto para liberação",
+    "units": {
+      "money": "unidades monetárias",
+      "hours": "horas"
+    },
+    "queuedPayroll": "Na fila da folha",
+    "participantStatus": {
+      "assigned": "Atribuído",
+      "percent_on_pay": "Pela folha",
+      "banked": "Férias e folgas"
+    },
+    "activityStatus": {
+      "approved": "Pronto para liberação",
+      "queued": "Na fila da folha",
+      "delivered": "Entregue",
+      "processed": "Processado",
+      "posted": "Contabilizado",
+      "voided": "Anulado",
+      "accrual": "Acúmulo",
+      "payout": "Pagamento",
+      "adjustment": "Ajuste"
+    },
+    "createGrant": "Registrar concessão"
+  },
+  "employeeBenefits": {
+    "title": "Benefícios dos funcionários",
+    "employee": "Funcionário",
+    "program": "Programa",
+    "type": "Tipo",
+    "effective": "Datas de vigência",
+    "status": "Status",
+    "emptyTitle": "Nenhum benefício atribuído",
+    "programs": "Programas",
+    "service": "Tempo de serviço reconhecido",
+    "balances": "Saldos",
+    "employeeRecord": "Cadastro do funcionário",
+    "programRecord": "Abrir programa",
+    "enrolment": "Adesão à cobertura",
+    "membership": "Participação no programa",
+    "vacationTerms": "Condições de férias",
+    "assignedByPolicy": "Atribuído pelas regras",
+    "newService": "Adicionar tempo de serviço",
+    "manageFromProgram": "Gerenciar participação no programa",
+    "inactive": "Inativo",
+    "openAssignment": "Abrir atribuição",
+    "description": "Consulte programas, coberturas, escolhas e condições vigentes dos funcionários. A folha aplica as regras do programa.",
+    "emptyDescription": "Atribua benefícios pelo programa: inscreva em cobertura, adicione participantes ou registre condições de férias.",
+    "policyHint": "Os saldos seguem as regras aplicáveis; não são adesões à cobertura."
   }
 }

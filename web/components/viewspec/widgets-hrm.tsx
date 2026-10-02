@@ -33,7 +33,7 @@ import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
 import { AwardBuilderDrawer } from '../../app/(app)/hrm/benefits/AwardBuilderDrawer'
 import { AwardDrawer } from '../../app/(app)/hrm/benefits/AwardDrawer'
 import { BenefitTypeCards } from '../../app/(app)/hrm/benefits/BenefitsOverview'
-import { AwardPortfolioTable, ProgramPortfolioTable } from '../../app/(app)/hrm/benefits/PortfolioTables'
+import { AwardPortfolioTable, ProgramPortfolioTable, BenefitDeliveryTable } from '../../app/(app)/hrm/benefits/PortfolioTables'
 import { ProgramBuilderDrawer } from '../../app/(app)/hrm/benefits/ProgramBuilderDrawer'
 import { ProgramDrawer } from '../../app/(app)/hrm/benefits/ProgramDrawer'
 import { HrmFacts } from '../../app/(app)/me/sections'
@@ -388,8 +388,8 @@ export const HRM_WIDGETS = {
   'hrm-windows-manager': (props) => (
     <WindowsManagerDrawer
       rows={(props.rows as ComponentProps<typeof WindowsManagerDrawer>['rows']) ?? []}
-      closeHref={str(props, 'closeHref') ?? '/hrm/benefits?view=enrolments'}
-      newHref={str(props, 'newHref') ?? '/hrm/benefits?view=enrolments&window=new'}
+      closeHref={str(props, 'closeHref') ?? '/hrm/benefits?view=employees'}
+      newHref={str(props, 'newHref') ?? '/hrm/benefits?view=employees&window=new'}
       canManage={props.canManage === true}
     />
   ),
@@ -434,6 +434,7 @@ export const HRM_WIDGETS = {
   /** Award operational list over the prepared hrm_benefit_awards source:
    *  shared PagedTable composition with the true population and the
    *  truncation notice in the footer. */
+  'hrm-benefit-delivery-table': (props) => <BenefitDeliveryTable rows={(props.rows as ComponentProps<typeof BenefitDeliveryTable>['rows']) ?? []} text={props.text as ComponentProps<typeof BenefitDeliveryTable>['text']} />,
   'hrm-award-table': (props) => (
     <AwardPortfolioTable
       rows={(props.rows as ComponentProps<typeof AwardPortfolioTable>['rows']) ?? []}
@@ -498,6 +499,7 @@ export const HRM_WIDGETS = {
     if (!drawer) return null
     return (
       <ProgramDrawer
+        key={drawer.program.id}
         drawer={drawer}
         closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
         canManage={props.canManage === true}
@@ -509,6 +511,7 @@ export const HRM_WIDGETS = {
    *  award with its reason and record reference, then opens the detail. */
   'hrm-award-builder': (props) => (
     <AwardBuilderDrawer
+      initialProgramId={str(props, 'initialProgramId') ?? ''}
       closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
       programOptions={(props.programOptions as ComponentProps<typeof AwardBuilderDrawer>['programOptions']) ?? []}
       employmentOptions={(props.employmentOptions as ComponentProps<typeof AwardBuilderDrawer>['employmentOptions']) ?? []}

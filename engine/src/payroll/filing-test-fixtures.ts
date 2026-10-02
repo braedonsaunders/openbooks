@@ -223,7 +223,11 @@ export async function seedHiredEmployee(
   await db.execute(sql`
     insert into employee_payroll_profiles (${sql.join(profileCols.map((c) => sql.raw(c)), sql`, `)})
     values (${sql.join(profileVals.map((v) => sql`${v}`), sql`, `)})`);
-  await seedVacationTerms(orgId, employmentId, actorId, seed.vacationPercent ?? "4", seed.vacationMethod ?? "accrue");
+  // A hire participates in the declared vacation offering. A scenario without
+  // one creates no phantom election; an explicitly requested election still
+  // refuses through the native fixture writer when its program is missing.
+  const vacationProgram = (await db.execute(sql`select id from entitlement_plans where org_id=${orgId} and system_key='vacation'`)).rows[0];
+  if (vacationProgram || seed.vacationPercent !== undefined || seed.vacationMethod !== undefined) await seedVacationTerms(orgId, employmentId, actorId, seed.vacationPercent ?? "4", seed.vacationMethod ?? "accrue");
   for (const entry of seed.timeEntries ?? []) {
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id,

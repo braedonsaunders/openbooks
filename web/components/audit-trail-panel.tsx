@@ -46,7 +46,7 @@ function changeCount(changes: Record<string, unknown>): number {
   return auditEventDiffs(changes).length
 }
 
-export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties' | 'item_rate_versions' | 'hrm_benefit_enrollments'; recordId: string }) {
+export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties' | 'item_rate_versions' | 'hrm_benefit_enrollments' | 'hrm_benefit_programs' | 'hrm_benefit_plans' | 'entitlement_plans'; recordId: string }) {
   const t = useTranslations('common.auditTrail')
   const ta = useTranslations('admin.audit')
   const [q, setQ] = useState('')

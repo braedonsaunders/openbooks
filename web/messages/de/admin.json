@@ -5190,14 +5190,14 @@
     "benefitBuilder": {
       "offer": "Programm",
       "eligibility": "Berechtigung und Zeitraum",
-      "eligibilityHint": "Legen Sie Zeitraum, Wartezeit und Genehmigungen fest. Beiträge und Grenzen ergänzen Sie anschließend im Datensatz.",
+      "eligibilityHint": "Definieren Sie Wartezeiten, Gültigkeit und optionale Freigaben. Beiträge und Mitarbeiterwahlen gehören zum Programm.",
       "delivery": "Verbindung zur Abrechnung",
       "deliveryHint": "Verknüpfen Sie Arbeitnehmerabzüge und Arbeitgeberbeiträge. Die Abrechnung bestimmt die steuerliche Behandlung und verarbeitet gewählte Beträge.",
       "review": "Prüfen",
       "coverageType": "Deckungsart",
       "health": {
         "title": "Gesundheits- und Versicherungsprogramm",
-        "offer": "Benennen Sie Versicherung, Anbieter und zuständigen Arbeitgeber. Beschäftigte wählen ihren Schutz unter Anmeldungen.",
+        "offer": "Benennen Sie Versicherungsschutz, Anbieter und verantwortlichen Arbeitgeber. Verwalten Sie Versicherungsgruppen, Prämien und Anmeldungen im Programm.",
         "costs": "Prämien und Deckung",
         "costHint": "Legen Sie Prämien beider Seiten und anteilige Monate fest. Deckungsstufen für Einzelpersonen oder Familien folgen nach der Erstellung.",
         "provider": "Versicherungsanbieter",
@@ -5212,7 +5212,7 @@
       },
       "retirement": {
         "title": "Altersvorsorge- und Sparprogramm",
-        "offer": "Benennen Sie Plan, Vorsorgeanbieter und zuständigen Arbeitgeber. Die Teilnahme erfolgt unter Anmeldungen.",
+        "offer": "Benennen Sie Altersvorsorge oder Sparangebot, Anbieter und Arbeitgeber. Verwalten Sie Beiträge, Zuschussregeln und Mitarbeiterwahlen im Programm.",
         "costs": "Sparbeiträge",
         "costHint": "Wählen Sie feste Beiträge oder einen Gehaltsanteil je Seite. Prozentsätze sind Beitragssätze, keine Zuschussformel.",
         "provider": "Vorsorge- oder Sparanbieter",
@@ -5223,6 +5223,24 @@
         "contribution": "Beiträge",
         "rate": "Beitragsbetrag oder Satz",
         "contributionSingular": "Beitrag"
+      },
+      "timeOff": {
+        "title": "Zeitguthabenprogramm",
+        "description": "Definieren Sie Urlaub oder ein anderes Zeitkonto, Ansparregeln und die Abrechnungsanbindung.",
+        "offer": "Benennen Sie das Angebot und wählen Sie Einheit und Zweck. Urlaubszuweisungen werden in diesem Programm verwaltet.",
+        "accrual": "Ansparung und Grenzen",
+        "accrualHint": "Wählen Sie, wie das Guthaben wächst. Ergänzen Sie danach datierte Grenzen und Dienstzeitstufen.",
+        "deliveryHint": "Die Abrechnung erfasst Bewegungen und Auszahlungen über ihre Lohnarten und Buchungskonten.",
+        "purpose": "Zweck",
+        "purposeHint": "Urlaub verwendet individuelle Urlaubsbedingungen. Ersatzfeiertage verwenden die gesetzliche Verarbeitung. Andere Konten folgen ihren Ansparregeln.",
+        "other": "Anderes Zeitkonto",
+        "vacation": "Urlaub",
+        "alternateHoliday": "Ersatzfeiertag"
+      },
+      "governingProgram": "Zuständiges Programm",
+      "vacationAssignmentHint": "Wählen Sie das Urlaubsprogramm für diese Bedingungen. Die Dienstzeit wird einmal je Beschäftigungsverhältnis erfasst.",
+      "recovery": {
+        "title": "Prämienrückforderung"
       }
     },
     "benefitContributions": {

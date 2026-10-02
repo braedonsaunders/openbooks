@@ -1457,7 +1457,8 @@
       "active": "有効",
       "ended": "終了済",
       "cancelled": "取消済",
-      "inactive": "無効"
+      "inactive": "無効",
+      "assigned": "割当済み"
     },
     "workspace": {
       "tabs": {
@@ -1466,7 +1467,9 @@
         "enrollments": "加入",
         "rewards": "報奨",
         "incentives": "インセンティブ",
-        "payouts": "支払い"
+        "payouts": "支払い",
+        "employees": "従業員の福利厚生",
+        "delivery": "履行"
       }
     },
     "newEnrollment": "新規加入",
@@ -2715,8 +2718,8 @@
         "description": "年金・退職貯蓄プラン。"
       },
       "allowance": {
-        "title": "手当・利用枠",
-        "description": "給与経由で支払う定期的な利用手当。"
+        "title": "手当",
+        "description": "金額、管理条件、支給方法を定めて従業員に手当を付与します。"
       },
       "reward": {
         "title": "報奨・表彰",
@@ -2729,6 +2732,11 @@
       "custom": {
         "title": "カスタムプログラム",
         "description": "その他、会社が付与するもの。"
+      },
+      "time_off": {
+        "title": "休暇・時間残高",
+        "description": "休暇権利、積立、上限、給与連携を定義します。",
+        "action": "休暇プログラムを作成"
       }
     },
     "families": {
@@ -2928,7 +2936,42 @@
       "typeTitle": "新規{type}プログラム",
       "chooseCurrency": "通貨を選択",
       "currencyHint": "通貨は選択した雇用主と会社機能設定に従います。給与はプログラム通貨で処理します。",
-      "currencyUnavailable": "選択した雇用主で利用可能な通貨を選んでください。"
+      "currencyUnavailable": "選択した雇用主で利用可能な通貨を選んでください。",
+      "manualGrantHint": "権限のあるユーザーが個別の付与を記録します。プログラム作成では自動支払いを予約しません。",
+      "familySteps": {
+        "reward": {
+          "offer": "プログラム",
+          "value": "報奨額",
+          "timing": "有効期間",
+          "controls": "予算と承認",
+          "delivery": "履行",
+          "review": "確認"
+        },
+        "allowance": {
+          "offer": "プログラム",
+          "value": "手当額",
+          "timing": "有効期間",
+          "controls": "予算と承認",
+          "delivery": "履行",
+          "review": "確認"
+        },
+        "incentive": {
+          "offer": "プログラム",
+          "value": "測定",
+          "timing": "測定期間",
+          "controls": "配分と承認",
+          "delivery": "履行",
+          "review": "確認"
+        },
+        "custom": {
+          "offer": "プログラム",
+          "value": "福利厚生の価値",
+          "timing": "有効期間",
+          "controls": "予算と承認",
+          "delivery": "履行",
+          "review": "確認"
+        }
+      }
     },
     "awardBuilderTitle": "新規報酬",
     "awardFields": {
@@ -3003,11 +3046,11 @@
       "scientific": "{field}：科学表記ではなく、{value} を通常の小数で完全に記述してください。",
       "not-a-number": "{field}：読み取れる小数の金額を入力してください。"
     },
-    "description": "福利厚生、表彰、インセンティブ：明確な資格、管理された承認、給与での支給。",
+    "description": "雇用主プログラム、従業員参加、管理された履行。",
     "home": {
-      "heroHint": "雇用主が定義したプログラム、金額の規則、適用期間。",
+      "heroHint": "プログラムを開き、ルール、参加者、活動、給与連携を管理します。",
       "directoryTitle": "福利厚生の管理",
-      "payrollHint": "記録済みの全報奨 · 通貨ごとに集計"
+      "payrollHint": "拠出の選択内容が給与控除と雇用主拠出に反映されます。提供者への送金は従業員への支払いと別に管理します。"
     },
     "newReward": "新規報酬",
     "newIncentive": "新規インセンティブ",
@@ -3038,19 +3081,21 @@
     "awardCurrencyHint": "選択したプログラムから継承します。給与で報奨通貨の換算は行いません。",
     "rewardCreateHint": "有効なプログラムの金額、通貨、交付ルールに従って従業員に付与します。制度はプログラムで設定します。",
     "programPurpose": {
-      "reward": "ここで表彰方針を設定し、報奨画面で従業員に付与します。交付可能なものは支給画面に表示されます。",
-      "allowance": "定額手当と付与周期を設定します。付与はこのルールに従います。支出ウォレットや経費精算は作成されません。",
-      "incentive": "実績から支給額を計算するルールを設定します。インセンティブで試算・確定し、承認済み結果は支給画面に表示されます。",
-      "custom": "金額と交付ルールが明確な雇用主負担の制度を設定します。報奨画面で記録し、支給画面で交付します。"
+      "reward": "表彰ルール、参加者、予算を定義します。プログラムから報奨を付与し、履行を追跡します。",
+      "allowance": "手当額と参加者を定義します。プログラム内で個別の付与を記録し、履行を追跡します。",
+      "incentive": "測定と配分ルールを定義します。プログラムで期間を試算・確定し、履行を追跡します。",
+      "custom": "福利厚生、参加、付与ルールを定義します。プログラム内で個別の付与を記録し、履行を追跡します。"
     },
     "scopeHint": "福利厚生は雇用主の制度と従業員への付与を管理します。給与は賃金、税金、法定拠出と給与計算を管理します。",
     "views": {
-      "overview": "給与と連携する雇用主の福利厚生と付与。",
-      "programs": "すべての制度をここで定義します。従業員は保障プランに加入し、報奨とインセンティブは各プログラムのルールに従います。",
+      "overview": "雇用主プログラム、従業員参加、管理された履行。",
+      "programs": "プログラムを開き、ルール、参加者、活動、給与連携を管理します。",
       "enrolments": "従業員を保障・貯蓄プランに加入させます。加入受付期間は加入ウィンドウで管理します。",
       "rewards": "有効なプログラムに基づき従業員への付与を記録します。繰り返し使う制度はプログラムで設定します。",
       "incentives": "実績連動プログラムを管理します。記録を開いて試算、計算、支給確定を行います。",
-      "payouts": "交付可能な付与を給与へ送り、履歴を追跡します。報奨で作成し、インセンティブで確定します。"
+      "payouts": "交付可能な付与を給与へ送り、履歴を追跡します。報奨で作成し、インセンティブで確定します。",
+      "employees": "従業員のプログラム、保障、選択内容、有効な条件を確認します。給与計算はプログラムのルールを適用します。",
+      "delivery": "準備済みの報奨と確定済みインセンティブを処理します。給与処理と外部履行を別々に追跡します。"
     },
     "configureApprovals": "承認を設定"
   },
@@ -3283,5 +3328,94 @@
     "coverage": "保障と貯蓄",
     "balances": "残高",
     "empty": "従業員の方針が登録されていません。"
+  },
+  "programIdentity": {
+    "types": {
+      "health": "健康・保険",
+      "retirement": "退職・貯蓄",
+      "allowance": "手当",
+      "reward": "表彰",
+      "incentive": "インセンティブ",
+      "custom": "独自の福利厚生",
+      "time_off": "休暇・時間残高",
+      "recovery": "保険料回収"
+    }
+  },
+  "programWorkspace": {
+    "rules": "ルール",
+    "participants": "参加者",
+    "activity": "活動",
+    "calculations": "計算",
+    "delivery": "履行",
+    "giveReward": "報奨を付与",
+    "history": "履歴",
+    "configureRules": "ルールを設定",
+    "activityEmpty": "報奨と確定済みインセンティブを従業員、期間、状態とともに表示します。",
+    "deliveryHint": "福利厚生は従業員への提供内容を定義します。給与計算は控除、拠出、課税額を計算して記帳します。給与処理の完了は支払完了を意味しません。",
+    "planDeliveryHint": "拠出の選択内容が給与控除と雇用主拠出に反映されます。提供者への送金は従業員への支払いと別に管理します。",
+    "entitlementDeliveryHint": "給与・休暇サービスが権利残高の移動を記録します。残高は変更不可の台帳から算出します。",
+    "participantsEmpty": "このプログラムに割り当てられた従業員はいません。",
+    "entitlementParticipantsHint": "休暇条件はこのプログラムに属します。認定勤続期間は雇用レコード共通の基準です。",
+    "recordDescription": "ルール、従業員参加、履行を一つのレコードで管理します。",
+    "participantsHint": "従業員の選択と有効な保障はこのプログラムに属します。割当を開いて確認・変更します。",
+    "assignEmployee": "従業員を割当",
+    "assignment": "割当",
+    "openAssignment": "割当を開く",
+    "moreParticipants": "他にも参加者がいます。従業員の福利厚生で全割当を検索できます。",
+    "moreActivity": "他にも活動があります。完全な履歴は福利厚生レポートで確認できます。",
+    "processedPayroll": "給与処理済み",
+    "openPayRun": "給与計算を開く",
+    "date": "日付",
+    "payRun": "給与計算",
+    "recovery": "保険料回収",
+    "recoveryHint": "この残高はプログラムの拠出ルールに従い、未払い保険料と後日の給与回収を記録します。",
+    "ready": "処理準備完了",
+    "units": {
+      "money": "通貨単位",
+      "hours": "時間"
+    },
+    "queuedPayroll": "給与処理待ち",
+    "participantStatus": {
+      "assigned": "割当済み",
+      "percent_on_pay": "給与経由",
+      "banked": "休暇・時間残高"
+    },
+    "activityStatus": {
+      "approved": "処理準備完了",
+      "queued": "給与処理待ち",
+      "delivered": "支払い済み",
+      "processed": "処理済み",
+      "posted": "転記済み",
+      "voided": "取消済み",
+      "accrual": "積立",
+      "payout": "支払い",
+      "adjustment": "調整"
+    },
+    "createGrant": "給付を記録"
+  },
+  "employeeBenefits": {
+    "title": "従業員の福利厚生",
+    "employee": "従業員",
+    "program": "プログラム",
+    "type": "種類",
+    "effective": "有効期間",
+    "status": "状態",
+    "emptyTitle": "福利厚生の割当がありません",
+    "programs": "プログラム",
+    "service": "認定勤続期間",
+    "balances": "残高",
+    "employeeRecord": "従業員レコード",
+    "programRecord": "プログラムを開く",
+    "enrolment": "保険加入",
+    "membership": "プログラム参加",
+    "vacationTerms": "休暇条件の割当",
+    "assignedByPolicy": "ルールに基づく割当",
+    "newService": "認定勤続期間を追加",
+    "manageFromProgram": "プログラムで参加を管理",
+    "inactive": "無効",
+    "openAssignment": "割当を開く",
+    "description": "従業員のプログラム、保障、選択内容、有効な条件を確認します。給与計算はプログラムのルールを適用します。",
+    "emptyDescription": "プログラムから保障への加入、参加者の追加、休暇条件の割当を行ってください。",
+    "policyHint": "残高は適用されるルールに従います。保険加入とは異なります。"
   }
 }

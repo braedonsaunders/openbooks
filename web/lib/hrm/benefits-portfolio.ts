@@ -59,20 +59,12 @@ import { parseCivilDate } from '@openbooks/engine/hrm/benefits/calculation'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { decimalNullCause, suppliedValue } from '../payroll-decimal-refusal'
 
-/**
- * Canonical portfolio views on /hrm/benefits, carried by the `view` search
- * param. Overview is the default; windows and enrolments preserve the
- * existing insured-enrollment tables; programs, rewards, incentives, and
- * payouts focus the employer-defined portfolio.
- */
-export const PORTFOLIO_VIEWS = ['overview', 'programs', 'enrolments', 'rewards', 'incentives', 'payouts'] as const
+/** Benefits destinations separate the program catalog, employee relationships and delivery work. */
+export const PORTFOLIO_VIEWS = ['overview', 'programs', 'employees', 'delivery'] as const
 export type PortfolioView = (typeof PORTFOLIO_VIEWS)[number]
 
 export function parsePortfolioView(value: string | undefined): PortfolioView {
-  if (value === 'windows') return 'enrolments'
-  if (value === 'programs' || value === 'rewards' || value === 'incentives') return value
-  if (value === 'enrolments' || value === 'payouts') return value
-  return 'overview'
+  return value === 'programs' || value === 'employees' || value === 'delivery' ? value : 'overview'
 }
 
 /** One portfolio card: title, destination, and an optional live count. */
@@ -102,14 +94,9 @@ export interface VitalsLabels {
   cardsTitle: string
 }
 
-/**
- * The six portfolio cards. Health/insurance and retirement/savings resolve
- * to the existing insured-plan Setup drawers; the other four open the new
- * program builder with their family preselected. A card never renders
- * without a working destination.
- */
+/** Each program type opens its own native configuration form from the shared catalog. */
 export interface ProgramTypeCard {
-  key: 'health' | 'retirement' | 'allowance' | 'reward' | 'incentive' | 'custom'
+  key: 'health' | 'retirement' | 'time_off' | 'allowance' | 'reward' | 'incentive' | 'custom'
   family: ProgramFamily | null
   iconKey: string
 }
@@ -117,6 +104,7 @@ export interface ProgramTypeCard {
 export const PROGRAM_TYPE_CARDS: readonly ProgramTypeCard[] = [
   { key: 'health', family: null, iconKey: 'heart-pulse' },
   { key: 'retirement', family: null, iconKey: 'piggy-bank' },
+  { key: 'time_off', family: null, iconKey: 'calendar' },
   { key: 'allowance', family: 'allowance', iconKey: 'wallet' },
   { key: 'reward', family: 'reward', iconKey: 'gift' },
   { key: 'incentive', family: 'incentive', iconKey: 'chart-line' },
@@ -352,7 +340,7 @@ export function buildAttentionQueue(input: {
       key: 'pending-enrollments',
       tone: 'warning',
       text: input.format('portfolio.attention.pendingEnrollments', { count: input.pendingEnrollments }),
-      href: portfolioHref(input.basePath, 'enrolments', {}),
+      href: portfolioHref(input.basePath, 'employees', {}),
     })
   }
   if (input.pendingAwards > 0) {
@@ -368,7 +356,7 @@ export function buildAttentionQueue(input: {
       key: 'queued-awards',
       tone: 'warning',
       text: input.format('portfolio.attention.queuedAwards', { count: input.queuedAwards }),
-      href: portfolioHref(input.basePath, 'payouts', {}),
+      href: portfolioHref(input.basePath, 'delivery', {}),
     })
   }
   if (input.draftPrograms > 0) {
@@ -410,10 +398,10 @@ export interface UnifiedProgramRow {
   id: string
   code: string
   name: string
-  family: ProgramFamily | 'insured'
+  family: ProgramFamily | 'health' | 'retirement' | 'time_off' | 'recovery'
   familyLabel: string
   valueLabel: string
-  effectiveFrom: string
+  effectiveFrom: string | null
   effectiveTo: string | null
   statusLabel: string
   statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
@@ -519,4 +507,19 @@ export function translatedFieldErrors<T extends Record<string, string | undefine
   t: (key: string) => string,
 ): T {
   return Object.fromEntries(Object.entries(errors).map(([field, key]) => [field, key ? t(key) : key])) as T
+}
+
+/** One delivery row retains its governing program and native downstream record. */
+export interface BenefitDeliveryRow {
+  id: string
+  programName: string
+  programHref: string
+  employeeName: string
+  employeeHref: string
+  onDate: string
+  valueLabel: string
+  statusLabel: string
+  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  recordHref: string | null
+  recordLabel: string
 }

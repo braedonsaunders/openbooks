@@ -9,7 +9,9 @@
     "prev": "Ant.",
     "pageOf": "Página {page} de {pages}",
     "selectAllMatching": "Seleccionar todas las filas coincidentes",
-    "perPage": "Filas por página"
+    "perPage": "Filas por página",
+    "pageOnly": "Página {page}",
+    "showingLoaded": "Mostrando {from}–{to}"
   },
   "search": {
     "placeholder": "Buscar…",
