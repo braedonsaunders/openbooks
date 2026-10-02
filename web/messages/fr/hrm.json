@@ -1468,7 +1468,7 @@
         "rewards": "Récompenses",
         "incentives": "Intéressement",
         "payouts": "Versements",
-        "employees": "Avantages des employés",
+        "employees": "Avantages",
         "delivery": "Exécution"
       }
     },
@@ -3361,7 +3361,7 @@
     "assignEmployee": "Affecter un employé",
     "assignment": "Attribution",
     "openAssignment": "Ouvrir l’attribution",
-    "moreParticipants": "D’autres participants existent. Consultez Avantages des employés pour parcourir toutes les attributions.",
+    "moreParticipants": "D’autres participants existent. Consultez Avantages pour parcourir toutes les attributions.",
     "moreActivity": "D’autres activités existent. Consultez les rapports pour l’historique complet.",
     "processedPayroll": "Traité en paie",
     "openPayRun": "Ouvrir le cycle de paie",
@@ -3394,7 +3394,7 @@
     "createGrant": "Enregistrer une attribution"
   },
   "employeeBenefits": {
-    "title": "Avantages des employés",
+    "title": "Avantages",
     "employee": "Employé",
     "program": "Programme",
     "type": "Type",

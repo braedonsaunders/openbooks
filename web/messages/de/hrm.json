@@ -1468,7 +1468,7 @@
         "rewards": "Prämien",
         "incentives": "Anreize",
         "payouts": "Auszahlungen",
-        "employees": "Mitarbeiterleistungen",
+        "employees": "Benefits",
         "delivery": "Abwicklung"
       }
     },
@@ -3361,7 +3361,7 @@
     "assignEmployee": "Mitarbeiter zuweisen",
     "assignment": "Zuweisung",
     "openAssignment": "Zuweisung öffnen",
-    "moreParticipants": "Weitere Teilnehmer vorhanden. Suchen Sie die vollständige Liste unter Mitarbeiterleistungen.",
+    "moreParticipants": "Weitere Teilnehmer sind vorhanden. Öffnen Sie Benefits, um die vollständige Zuordnungsliste zu durchsuchen.",
     "moreActivity": "Weitere Aktivitäten vorhanden. Die Leistungsberichte enthalten die vollständige Historie.",
     "processedPayroll": "In der Abrechnung verarbeitet",
     "openPayRun": "Abrechnungslauf öffnen",
@@ -3394,7 +3394,7 @@
     "createGrant": "Zuwendung erfassen"
   },
   "employeeBenefits": {
-    "title": "Mitarbeiterleistungen",
+    "title": "Benefits",
     "employee": "Mitarbeiter",
     "program": "Programm",
     "type": "Typ",

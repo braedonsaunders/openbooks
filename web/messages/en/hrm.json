@@ -1468,7 +1468,7 @@
         "rewards": "Rewards",
         "incentives": "Incentives",
         "payouts": "Payouts",
-        "employees": "Employee benefits",
+        "employees": "Benefits",
         "delivery": "Delivery"
       }
     },
@@ -3361,7 +3361,7 @@
     "assignEmployee": "Assign employee",
     "assignment": "Assignment",
     "openAssignment": "Open assignment",
-    "moreParticipants": "More participants exist. Open Employee benefits to search the complete assignment list.",
+    "moreParticipants": "More participants exist. Open Benefits to search the complete assignment list.",
     "moreActivity": "More activity exists. Use the Benefits reports for complete historical detail.",
     "processedPayroll": "Processed in payroll",
     "openPayRun": "Open pay run",
@@ -3394,7 +3394,7 @@
     "createGrant": "Record grant"
   },
   "employeeBenefits": {
-    "title": "Employee benefits",
+    "title": "Benefits",
     "employee": "Employee",
     "program": "Program",
     "type": "Type",

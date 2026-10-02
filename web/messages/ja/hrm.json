@@ -1468,7 +1468,7 @@
         "rewards": "報奨",
         "incentives": "インセンティブ",
         "payouts": "支払い",
-        "employees": "従業員の福利厚生",
+        "employees": "福利厚生",
         "delivery": "履行"
       }
     },
@@ -3361,7 +3361,7 @@
     "assignEmployee": "従業員を割当",
     "assignment": "割当",
     "openAssignment": "割当を開く",
-    "moreParticipants": "他にも参加者がいます。従業員の福利厚生で全割当を検索できます。",
+    "moreParticipants": "ほかにも参加者がいます。福利厚生を開いてすべての割り当てを検索してください。",
     "moreActivity": "他にも活動があります。完全な履歴は福利厚生レポートで確認できます。",
     "processedPayroll": "給与処理済み",
     "openPayRun": "給与計算を開く",
@@ -3394,7 +3394,7 @@
     "createGrant": "給付を記録"
   },
   "employeeBenefits": {
-    "title": "従業員の福利厚生",
+    "title": "福利厚生",
     "employee": "従業員",
     "program": "プログラム",
     "type": "種類",
