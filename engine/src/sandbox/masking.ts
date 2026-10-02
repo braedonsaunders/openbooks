@@ -128,6 +128,9 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  // Checklist responses are employee-authored evidence; publication reasons may name people.
+  { tableName: "hrm_process_steps", columnName: "response", transform: "null_out" },
+  { tableName: "hrm_process_template_versions", columnName: "reason", transform: "redact" },
   // Sales target names, reasons and authored coverage can contain personal
   // details. Published definitions are removed from masked sandboxes so
   // routing cannot act on a partially anonymized definition.

@@ -1,3 +1,5 @@
+import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
+import { checklistStepsFlowAdapter, checklistStepSubjectProfile } from "./checklist-steps-adapter.ts";
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
 import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import { FINANCIAL_CHANGE_SUBJECT_KIND, financialChangeSubjectProfile, financialChangesFlowAdapter } from "./financial-changes-adapter.ts";
@@ -96,6 +98,7 @@ import { db } from "../platform/db.ts";
 const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
+  if (subjectKind === CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
   if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
   if (subjectKind === FINANCIAL_CHANGE_SUBJECT_KIND) return financialChangesFlowAdapter;
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
@@ -146,6 +149,7 @@ export function handlerReleasedSubjectKinds(): string[] {
 /** Every subject kind flows can be authored over, with its profile (builder UI). */
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
+    checklistStepSubjectProfile,
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
     benefitAwardSubjectProfile,
     financialChangeSubjectProfile,

@@ -296,6 +296,7 @@ export const TENANT_TABLE_POLICIES = {
   "hrm_pipeline_templates": "clone:catalog-uuid-rebase",
   "hrm_posting_events": "clone:catalog-uuid-rebase",
   "hrm_process_steps": "clone:catalog-uuid-rebase",
+  "hrm_process_template_versions": "clone:catalog-uuid-rebase",
   "hrm_process_template_steps": "clone:catalog-uuid-rebase",
   "hrm_process_templates": "clone:catalog-uuid-rebase",
   "hrm_processes": "clone:catalog-uuid-rebase",

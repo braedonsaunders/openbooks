@@ -317,6 +317,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason: "hiring config; hiring-manager actor-side.",
   },
   {
+    table: "hrm_process_template_versions",
+    reason: "published process configuration; employee execution evidence stays on checklist instances.",
+  },
+  {
     table: "hrm_process_template_steps",
     reason: "template defaults; instances on subject processes are deferred above.",
   },

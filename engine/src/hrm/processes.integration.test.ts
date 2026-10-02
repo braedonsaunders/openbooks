@@ -380,13 +380,17 @@ test("self-service completes only one's own steps and reads only the step", { sk
     );
     const seen = await getOwnStep({ orgId: h.org.orgId, actorId: employeeId, stepId: own });
     assert.deepEqual(Object.keys(seen).sort(), [
+      "approvalStatus", "attachmentId", "blocked",
       "description",
+      "design",
       "dueOn",
       "evidenceKind",
       "id",
       "overdue",
       "processId",
+      "processStatus",
       "required",
+      "response",
       "status",
       "title",
     ]);

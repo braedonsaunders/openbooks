@@ -14,10 +14,12 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label } from '@openbooks/ui'
+import { Button, Input, Label, Textarea } from '@openbooks/ui'
 
 type PromptOptions = {
   title: string
+  message?: string
+  multiline?: boolean
   /** Field label above the input. */
   label?: string
   /** Pre-filled (and pre-selected) value. */
@@ -74,7 +76,7 @@ export function PromptRoot() {
     () => null,
   )
   const [value, setValue] = React.useState('')
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const inputRef = React.useRef<HTMLInputElement | HTMLTextAreaElement>(null)
 
   // Reset the field each time a new request opens, during render (same
   // committed value, no extra render). Focus + scroll-lock stay in the effect
@@ -149,6 +151,7 @@ export function PromptRoot() {
                 >
                   {req.title}
                 </h2>
+                {req.message ? <p className="text-sm text-slate-500 dark:text-slate-400">{req.message}</p> : null}
                 {req.label ? (
                   <Label htmlFor="prompt-input" className="text-xs text-slate-500 dark:text-slate-400">
                     {req.label}
@@ -167,10 +170,12 @@ export function PromptRoot() {
                       </option>
                     ))}
                   </select>
+                ) : req.multiline ? (
+                  <Textarea id="prompt-input" rows={8} ref={inputRef as React.Ref<HTMLTextAreaElement>} value={value} placeholder={req.placeholder} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') settle(null) }} />
                 ) : (
                   <Input
                     id="prompt-input"
-                    ref={inputRef}
+                    ref={inputRef as React.Ref<HTMLInputElement>}
                     value={value}
                     placeholder={req.placeholder}
                     onChange={(e) => setValue(e.target.value)}

@@ -1,3 +1,4 @@
+import { runChecklistReminders } from "../hrm/processes.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
@@ -178,6 +179,18 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
         });
       } catch (e) {
         summary.errors.push(`${automation.name}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    const checklistOrgs = (
+      await db.execute<{ org_id: string }>(
+        sql`select distinct org_id from hrm_process_steps where status='pending' and design->>'reminderDays' is not null`,
+      )
+    ).rows;
+    for (const org of checklistOrgs) {
+      try {
+        await runChecklistReminders(org.org_id);
+      } catch (e) {
+        summary.errors.push(`Checklist reminders: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
     const drained = await drainEventQueue(now);

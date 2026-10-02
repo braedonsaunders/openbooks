@@ -24,38 +24,8 @@ export function StepCompleteButton({
   label: string
   failedLabel: string
 }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
   if (!stepId) return null
-  const complete = async (): Promise<void> => {
-    setBusy(true)
-    setStatus(null)
-    try {
-      const res = await fetch(`/api/hrm/processes/steps/${stepId}/complete`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      if (!res.ok) {
-        setStatus(await readApiErrorMessage(res, failedLabel))
-        return
-      }
-      router.refresh()
-    } catch {
-      setStatus(failedLabel)
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <span className="inline-flex flex-col items-end gap-1">
-      <Button size="sm" variant="outline" disabled={busy} onClick={complete}>
-        {label}
-      </Button>
-      {status ? <span className="text-xs text-red-600 dark:text-red-400">{status}</span> : null}
-    </span>
-  )
+  return <Button asChild size="sm" variant="outline"><a href={`/me/checklists?step=${encodeURIComponent(stepId)}`}>{label}</a></Button>
 }
 
 interface ProfileDialogStrings {

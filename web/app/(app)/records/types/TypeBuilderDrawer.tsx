@@ -879,7 +879,7 @@ function IconPicker({ value, onChange }: { value: string; onChange: (v: string) 
 
 // --- Add-field palette ------------------------------------------------------------
 
-function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
+export function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
   const t = useTranslations('records')
   const [open, setOpen] = useState(false)
   return (
@@ -920,7 +920,7 @@ function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
 
 // --- Field row + config panel --------------------------------------------------------
 
-function FieldRow({
+export function FieldRow({
   field: f,
   index,
   count,

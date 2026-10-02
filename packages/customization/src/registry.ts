@@ -1082,7 +1082,7 @@ const HRM_PROCESS_TEMPLATE: RecordTypeMeta = {
     { key: "kind", labelKey: "hrm.processes.templates.kind", kind: "select", operators: OPERATORS_BY_KIND.select,
       options: ["onboarding", "offboarding", "transfer"].map((value) => ({ value, labelKey: `hrm.processes.templates.kinds.${value}` })) },
     { key: "status", labelKey: "hrm.processes.templates.status", kind: "select", operators: OPERATORS_BY_KIND.select,
-      options: ["active", "retired"].map((value) => ({ value, labelKey: `hrm.processes.templates.${value}` })) },
+      options: ["draft", "changes_pending", "active", "retired"].map((value) => ({ value, labelKey: `hrm.processes.templates.statuses.${value}` })) },
   ],
 };
 

@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { Button, Drawer, Input, Label, SearchSelect } from '@openbooks/ui'
+import { ChoiceCards } from '../../../../components/builder/builder-kit'
+import { ClipboardList } from 'lucide-react'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 
@@ -176,7 +178,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   }
 
   return (
-    <Drawer open onClose={close} title={t('processes.newChecklist')} size="md">
+    <Drawer open onClose={close} title={t('processes.newChecklist')} size="xl">
       <div className="flex flex-col gap-4 p-4">
         <div>
           <Label htmlFor="process-employment">{t('processes.columns.employee')}</Label>
@@ -210,19 +212,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
         </div>
         <div>
           <Label htmlFor="process-template">{t('processes.templates.template')}</Label>
-          <SearchSelect
-            id="process-template"
-            value={templateId}
-            onChange={setTemplateId}
-            options={templateOptions}
-            ariaLabel={t('processes.templates.template')}
-            sheetTitle={t('processes.templates.template')}
-            emptyLabel="—"
-            disabled={!employmentId || !effectiveDate || templatesLoading}
-            loading={templatesLoading}
-            statusMessage={templateStatus}
-            statusTone={templateStatus ? 'muted' : undefined}
-          />
+          <div id="process-template"><ChoiceCards ariaLabel={t('processes.templates.title')} value={templateId} options={templateOptions.map(option=>({value:option.value,label:option.label,description:t(`processes.kinds.${option.kind}`),icon:<ClipboardList size={18}/>}))} onChange={setTemplateId} disabled={saving || templatesLoading} /></div>
           {templateStatus ? (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {templateStatus}{' '}

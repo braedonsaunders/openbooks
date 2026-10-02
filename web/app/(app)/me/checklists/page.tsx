@@ -1,3 +1,7 @@
+import { getOwnStep } from '@openbooks/engine/hrm/processes'
+import { requirePermission } from '../../../../lib/authz'
+import { isUuid } from '../../../../lib/list-params'
+import { OwnChecklistDrawer } from './OwnChecklistDrawer'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadMeChecklistsPage, meChecklistsSpec, meChecklistsTitle } from './view'
 
@@ -19,5 +23,8 @@ export default async function MeChecklistsPage({
 }) {
   const sp = await searchParams
   const data = await loadMeChecklistsPage()
-  return <ModuleView spec={meChecklistsSpec(data)} data={data} searchParams={sp} trusted />
+  const selected=isUuid(sp.step ?? '') ? sp.step : null
+  const authz=selected ? await requirePermission('hrm.self.read') : null
+  const step=selected && authz ? await getOwnStep({orgId:authz.user.orgId,actorId:authz.user.id,stepId:selected}) : null
+  return <><ModuleView spec={meChecklistsSpec(data)} data={data} searchParams={sp} trusted />{step ? <OwnChecklistDrawer step={step}/> : null}</>
 }

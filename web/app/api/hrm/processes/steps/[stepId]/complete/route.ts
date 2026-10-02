@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { completeProcessStep } from "@openbooks/engine/src/hrm/processes.ts";
+import { completeProcessStep } from "@openbooks/engine/hrm/processes";
 import { guardPermission } from "../../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { isUuid } from "../../../../../../../lib/list-params";
@@ -47,9 +47,7 @@ export const POST = defineRoute({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         stepId,
-        ...(body.attachmentId === undefined
-          ? {}
-          : { attachmentId: body.attachmentId }),
+        ...body,
       });
       return NextResponse.json({ ok: true });
     } catch (e) {

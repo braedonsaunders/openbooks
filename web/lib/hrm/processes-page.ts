@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { isUuid, mergeHref } from '../list-params'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
-import { HrmProcessError } from '@openbooks/engine/src/hrm/processes.ts'
+import { HrmProcessError, getChecklistForStep } from '@openbooks/engine/hrm/processes'
 import { getProcess, listProcesses, type ProcessDetail, type ProcessSegment } from '@openbooks/engine/src/hrm/processes-read.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
@@ -24,7 +24,7 @@ import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from './
  * the drawer with the named load failure, never a broken list.
  */
 
-const SEGMENTS: readonly ProcessSegment[] = ['open', 'overdue', 'completed', 'cancelled']
+const SEGMENTS: readonly ProcessSegment[] = ['open', 'needs_action', 'overdue', 'completed', 'cancelled']
 
 export interface ProcessSegmentView {
   key: string
@@ -55,6 +55,7 @@ export interface ProcessRow {
   overdueSteps: number
   overdueBadge: string | null
   nextDueOn: string | null
+  nextActionLabel: string | null
   href: string
 }
 
@@ -74,6 +75,7 @@ export interface ProcessesPageData {
     effective: string
     progress: string
     nextDue: string
+    nextAction: string
   }
   rows: ProcessRow[]
   empty: string
@@ -119,15 +121,15 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
   // given.
   const [t, tc] = await Promise.all([getTranslations('hrm'), getTranslations('common')])
   const segment: ProcessSegment =
-    sp.segment === 'open' || sp.segment === 'overdue' || sp.segment === 'completed' || sp.segment === 'cancelled' ? sp.segment : 'open'
-  const processId = typeof sp.process === 'string' && sp.process.length > 0 ? sp.process : null
+    sp.segment === 'open' || sp.segment === 'needs_action' || sp.segment === 'overdue' || sp.segment === 'completed' || sp.segment === 'cancelled' ? sp.segment : 'open'
+  let processId = typeof sp.process === 'string' && sp.process.length > 0 ? sp.process : null
   // A malformed id is never a live row id: 404 like the template page
   // instead of throwing out of the detail read as a 500.
   if (processId !== null && !isUuid(processId)) notFound()
   const canManage = can(authz, 'hrm.process.manage')
   const createOpen = sp.new === '1' && canManage
 
-  const [openItems, overdueItems, completedItems, cancelledItems, effectiveDate] = await Promise.all([
+  const [openItems, overdueItems, completedItems, cancelledItems, needsActionItems, effectiveDate] = await Promise.all([
     listProcesses({
       orgId: authz.user.orgId,
       actorId: authz.user.id,
@@ -148,10 +150,12 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
       actorId: authz.user.id,
       segment: 'cancelled',
     }),
+    listProcesses({orgId:authz.user.orgId,actorId:authz.user.id,segment:'needs_action'}),
     createOpen ? businessToday(authz.user.orgId) : Promise.resolve(''),
   ])
   const bySegment: Record<ProcessSegment, typeof openItems> = {
     open: openItems,
+    needs_action:needsActionItems,
     overdue: overdueItems,
     completed: completedItems,
     cancelled: cancelledItems,
@@ -164,7 +168,7 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
         : t('processes.kinds.transfer')
 
   const segmentLabel = (key: ProcessSegment): string =>
-    key === 'open'
+    key === 'needs_action' ? t('processes.designer.needsAction') : key === 'open'
       ? t('processes.segments.open')
       : key === 'overdue'
         ? t('processes.segments.overdue')
@@ -199,14 +203,16 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
     overdueSteps: row.overdueSteps,
     overdueBadge: row.overdueSteps > 0 ? t('processes.overdueBadge', { count: row.overdueSteps }) : null,
     nextDueOn: row.nextDueOn,
+    nextActionLabel:row.nextActionTitle ? `${row.nextActionTitle} · ${t(`processes.owners.${row.nextActionOwner}`)}` : null,
     href: hrefFor(segment, row.id),
   }))
 
   let detail: ProcessDetail | null = null
   let missingDetail: string | null = null
-  if (processId !== null) {
+  if (processId !== null || isUuid(sp.step ?? '')) {
     try {
-      detail = await getProcess({
+      if(processId===null) {detail=await getChecklistForStep({orgId:authz.user.orgId,actorId:authz.user.id,stepId:sp.step!});processId=detail.id}
+      detail ??= await getProcess({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         processId,
@@ -258,6 +264,7 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
       effective: t('processes.columns.effective'),
       progress: t('processes.columns.progress'),
       nextDue: t('processes.columns.nextDue'),
+      nextAction:t('processes.designer.nextStep'),
     },
     rows,
     empty: t('processes.empty'),
