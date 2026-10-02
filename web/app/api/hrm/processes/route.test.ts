@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
-import nodeTest from "node:test";
+import { stubModules } from "../../../../testing/stub-modules";
+import test from "node:test";
 import { NextResponse } from "next/server";
 
 interface RouteState {
@@ -13,7 +13,6 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-processes-route-test");
-const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
@@ -34,24 +33,12 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.hrm-processes-route-test')]
       export async function guardPermission(permission) {
         const NextResponse = globalThis.openbooksHrmProcessRouteNextResponse
-        if (permission === 'hrm.self.read') {
-          // The step-complete fallback: only that route asks, and only
-          // after hrm.process.read denies. Null selfGate means the caller
-          // under test never reaches the fallback.
-          if (state.selfGate && 'status' in state.selfGate) {
-            return NextResponse.json({ error: 'denied' }, { status: state.selfGate.status })
-          }
-          if (state.selfGate) return state.selfGate
-          throw new Error('unexpected self.read gate call')
-        }
-        if (!permission.startsWith('hrm.process.')) {
+        if (permission !== 'hrm.self.read' && !permission.startsWith('hrm.process.')) {
           throw new Error('unexpected permission ' + permission)
         }
-        if (state.gate && 'status' in state.gate) {
-          const NextResponse = globalThis.openbooksHrmProcessRouteNextResponse
-          return NextResponse.json({ error: 'denied' }, { status: state.gate.status })
-        }
-        return state.gate
+        const gate = permission === 'hrm.self.read' ? state.selfGate : state.gate
+        if (!gate) throw new Error('unexpected self.read gate call')
+        return 'status' in gate ? NextResponse.json({ error: 'denied' }, { status: gate.status }) : gate
       }
       export async function getAuthz() { return state.gate && 'status' in state.gate && state.gate.status === 401 ? null : state.gate }
       export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
@@ -63,43 +50,22 @@ const mockSources = new Map<string, string>([
   [
     "mock:processes-service",
     `
-      // Re-export the real module so error classes keep their identity;
-      // only the DB-touching service functions are stubbed (explicit
-      // exports win over export *).
-      export * from '${processesRealUrl}'
+            export * from '${processesRealUrl}'
       const state = globalThis[Symbol.for('openbooks.hrm-processes-route-test')]
-      export async function openProcess(args) {
-        state.calls.push({ fn: 'open', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { id: 'process-1', status: 'open' }
-      }
-      export async function saveChecklistDraft(args) { state.calls.push({fn:'saveChecklistDraft',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
-      export async function publishChecklistDraft(args) { state.calls.push({fn:'publishChecklistDraft',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
-      export async function retireChecklistTemplate(args) { state.calls.push({fn:'retireChecklistTemplate',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
-      export async function getChecklistDesigner(args) { state.calls.push({fn:'getChecklistDesigner',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
-      export async function getChecklistVersion(args) { state.calls.push({fn:'getChecklistVersion',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
-      export async function previewChecklistCoverage(args) { state.calls.push({fn:'previewChecklistCoverage',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
-      export async function submitChecklistStepApproval(args) { state.calls.push({fn:'submitChecklistStepApproval',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
-      export async function completeProcessStep(args) {
-        state.calls.push({ fn: 'completeStep', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return undefined
-      }
-      export async function skipProcessStep(args) {
-        state.calls.push({ fn: 'skipStep', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return undefined
-      }
-      export async function completeProcess(args) {
-        state.calls.push({ fn: 'completeProcess', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return undefined
-      }
-      export async function cancelProcess(args) {
-        state.calls.push({ fn: 'cancelProcess', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return undefined
-      }
+      function record(fn, result) { return async args => { state.calls.push({fn,args}); if(state.serviceThrow) throw state.serviceThrow; return typeof result==='function' ? result(args) : result } }
+      export const openProcess=record('open',{id:'process-1',status:'open'})
+      export const completeProcessStep=record('completeStep')
+      export const skipProcessStep=record('skipStep')
+      export const completeProcess=record('completeProcess')
+      export const cancelProcess=record('cancelProcess')
+      const designerResult=args=>({id:args.templateId,revision:1})
+      export const saveChecklistDraft=record('saveChecklistDraft',designerResult)
+      export const publishChecklistDraft=record('publishChecklistDraft',designerResult)
+      export const retireChecklistTemplate=record('retireChecklistTemplate',designerResult)
+      export const getChecklistDesigner=record('getChecklistDesigner',designerResult)
+      export const getChecklistVersion=record('getChecklistVersion',designerResult)
+      export const previewChecklistCoverage=record('previewChecklistCoverage',designerResult)
+      export const submitChecklistStepApproval=record('submitChecklistStepApproval',designerResult)
     `,
   ],
   [
@@ -107,87 +73,34 @@ const mockSources = new Map<string, string>([
     `
       export * from '${processesReadRealUrl}'
       const state = globalThis[Symbol.for('openbooks.hrm-processes-route-test')]
-      export async function listProcesses(args) {
-        state.calls.push({ fn: 'list', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return [{ id: 'process-1', status: 'open' }]
-      }
-      export async function getProcess(args) {
-        state.calls.push({ fn: 'get', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { id: 'process-1', status: 'open' }
-      }
+      function record(fn, result) { return async args => { state.calls.push({fn,args}); if(state.serviceThrow) throw state.serviceThrow; return result } }
+      export const listProcesses = record('list', [{id:'process-1',status:'open'}])
+      export const getProcess = record('get', {id:'process-1',status:'open'})
     `,
   ],
 ]);
 
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmProcessRouteNextResponse = NextResponse;
 
-// Every depth the processes routes import at: the collection, the record,
-// and the nested action routes each spell the same modules differently.
-const authzDepths = [
-  "../../../../lib/authz",
-  "../../../../../lib/authz",
-  "../../../../../../lib/authz",
-  "../../../../../../../lib/authz",
-];
-const featureDepths = [
-  "../../../../lib/features",
-  "../../../../../lib/features",
-  "../../../../../../lib/features",
-  "../../../../../../../lib/features",
-];
+// Authorization and feature outcomes vary per test; JSON validation stays real.
+stubModules({
+  authz: mockSources.get('mock:authz')!, features: mockSources.get('mock:authz')!,
+  extra: {
+    '@openbooks/engine/src/hrm/processes.ts': mockSources.get('mock:processes-service')!,
+    '@openbooks/engine/hrm/processes': mockSources.get('mock:processes-service')!,
+    '@openbooks/engine/src/hrm/processes-read.ts': mockSources.get('mock:processes-read-service')!,
+    '@/lib/feature-gates': mockSources.get('mock:authz')!,
+  },
+});
+type RouteModule = Record<string, ((req: Request, ctx?: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined>;
+const loadRoute = async (path: string): Promise<RouteModule> => import(path);
 
-const mockUrls = new Map<string, string>([
-  ...authzDepths.map((specifier) => [specifier, "mock:authz"] as const),
-  ...featureDepths.map((specifier) => [specifier, "mock:authz"] as const),
-  ["@openbooks/engine/src/hrm/processes.ts", "mock:processes-service"],
-  ["@openbooks/engine/hrm/processes", "mock:processes-service"],
-  ["@/lib/features", "mock:authz"],
-  ["@openbooks/engine/src/hrm/processes-read.ts", "mock:processes-read-service"],
-  ["@/lib/authz", "mock:authz"],
-  ["@/lib/feature-gates", "mock:authz"],
-]);
-
-type RouteModule = Record<
-  string,
-  ((req: Request, ctx?: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined
->;
-
-async function loadRoute(path: string): Promise<RouteModule> {
-  const hooks = registerHooks({
-    resolve(specifier, context, nextResolve) {
-      // The real JSON boundary is pure (Request + schema → value) and runs
-      // for real: a test double that cannot produce the refusal is not a test of the
-      // refusal, so parseJsonBody is never mocked here.
-      // The real error mapping must see the real error classes: _lib.ts
-      // keeps its own engine import while every route reads the stubbed
-      // service, so instanceof keeps working end to end.
-      const parent = (context as { parentURL?: string }).parentURL ?? "";
-      if (parent.endsWith("/_lib.ts")) return nextResolve(specifier);
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  try {
-    return (await import(path)) as RouteModule;
-  } finally {
-    test.after(() => hooks.deregister());
-  }
-}
-
-const collectionRoute: RouteModule | undefined = await loadRoute("./route.ts?hrm-processes-collection");
-const recordRoute: RouteModule | undefined = await loadRoute("./[id]/route.ts?hrm-processes-record");
-const completeRoute: RouteModule | undefined = await loadRoute("./[id]/complete/route.ts?hrm-processes-complete");
-const cancelRoute: RouteModule | undefined = await loadRoute("./[id]/cancel/route.ts?hrm-processes-cancel");
-const stepCompleteRoute: RouteModule | undefined = await loadRoute("./steps/[stepId]/complete/route.ts?hrm-processes-step-complete");
-const stepSkipRoute: RouteModule | undefined = await loadRoute("./steps/[stepId]/skip/route.ts?hrm-processes-step-skip");
+const collectionRoute = await loadRoute("./route.ts?hrm-processes-collection");
+const recordRoute = await loadRoute("./[id]/route.ts?hrm-processes-record");
+const completeRoute = await loadRoute("./[id]/complete/route.ts?hrm-processes-complete");
+const cancelRoute = await loadRoute("./[id]/cancel/route.ts?hrm-processes-cancel");
+const stepCompleteRoute = await loadRoute("./steps/[stepId]/complete/route.ts?hrm-processes-step-complete");
+const stepSkipRoute = await loadRoute("./steps/[stepId]/skip/route.ts?hrm-processes-step-skip");
 
 const designerRoute = await loadRoute("../process-templates/designer/route.ts?checklist-designer");
 const submitRoute = await loadRoute("./steps/[stepId]/submit/route.ts?checklist-submit");
@@ -197,6 +110,23 @@ const PROCESS_ID = "00000000-0000-4000-8000-000000000022";
 const STEP_ID = "00000000-0000-4000-8000-000000000023";
 const FILE_ID = "00000000-0000-4000-8000-000000000024";
 
+const OPEN_BODY = { employmentId: EMPLOYMENT_ID, kind: 'onboarding', effectiveDate: '2026-09-01' };
+const ORG_ACTOR = { orgId: 'org-1', actorId: 'user-1' };
+function expectCall(fn: string, args: Record<string, unknown>) {
+  assert.deepEqual(routeState.calls, [{ fn, args: { ...ORG_ACTOR, ...args } }]);
+}
+
+const routePaths = new Map<RouteModule, string>([
+  [collectionRoute, '/api/hrm/processes'], [completeRoute, '/api/hrm/processes/'+PROCESS_ID+'/complete'],
+  [cancelRoute, '/api/hrm/processes/'+PROCESS_ID+'/cancel'], [stepCompleteRoute, '/api/hrm/processes/steps/x/complete'],
+  [stepSkipRoute, '/api/hrm/processes/steps/x/skip'], [designerRoute, '/api/hrm/process-templates/designer'],
+  [submitRoute, '/api/hrm/processes/steps/x/submit'],
+]);
+function invokePost(route: RouteModule, body: unknown, params?: Record<string, string>) {
+  const url=routePaths.get(route); assert.ok(url, 'Every POST fixture names its route');
+  return route.POST!(jsonRequest('http://openbooks.test'+url, body), params ? ctx(params) : undefined);
+}
+
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
   routeState.selfGate = null;
@@ -205,12 +135,12 @@ function reset(): void {
   routeState.serviceThrow = null;
 }
 
+test.beforeEach(reset);
+
 function jsonRequest(url: string, body: unknown): Request {
   return new Request(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    // A string body rides through raw so the hostile-payload test exercises
-    // the real boundary parser; anything else is serialized.
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -220,46 +150,32 @@ function ctx(params: Record<string, string>): { params: Promise<Record<string, s
 }
 
 test("a missing feature flag 404s before any service runs", async () => {
-    reset();
+
     routeState.featureOn = false;
     const get = await collectionRoute!.GET!(new Request("http://openbooks.test/api/hrm/processes"));
     assert.equal(get.status, 404);
-    const post = await collectionRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes", {
-        employmentId: EMPLOYMENT_ID,
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-      }),
-    );
+    const post = await invokePost(collectionRoute, OPEN_BODY);
     assert.equal(post.status, 404);
     assert.deepEqual(routeState.calls, []);
   });
 
   test("an unauthenticated caller never reaches the service", async () => {
-    reset();
+
     routeState.gate = { status: 401 };
-    const response = await collectionRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes", {
-        employmentId: EMPLOYMENT_ID,
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-      }),
-    );
+    const response = await invokePost(collectionRoute, OPEN_BODY);
     assert.equal(response.status, 401);
     assert.deepEqual(routeState.calls, []);
   });
 
   test("open validates the body through the real parser before the service runs", async () => {
-    reset();
-    // Missing employmentId, unknown kind, and a non-date are all refused at
-    // the boundary — the service never sees them.
+
     for (const body of [
       { kind: "onboarding", effectiveDate: "2026-09-01" },
       { employmentId: EMPLOYMENT_ID, kind: "orientation", effectiveDate: "2026-09-01" },
       { employmentId: EMPLOYMENT_ID, kind: "onboarding", effectiveDate: "September" },
     ]) {
       assert.equal(
-        (await collectionRoute!.POST!(jsonRequest("http://openbooks.test/api/hrm/processes", body))).status,
+        (await invokePost(collectionRoute, body)).status,
         400,
         `boundary accepted an invalid open body: ${JSON.stringify(body)}`,
       );
@@ -268,42 +184,27 @@ test("a missing feature flag 404s before any service runs", async () => {
   });
 
   test("open forwards org, actor, employment, kind, and date, then 201s", async () => {
-    reset();
-    const response = await collectionRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes", {
-        employmentId: EMPLOYMENT_ID,
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-      }),
-    );
+
+    const response = await invokePost(collectionRoute, OPEN_BODY);
     assert.equal(response.status, 201);
     assert.deepEqual(await response.json(), { process: { id: "process-1", status: "open" } });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "open",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
-          employmentId: EMPLOYMENT_ID,
+    expectCall("open", {employmentId: EMPLOYMENT_ID,
           kind: "onboarding",
-          effectiveDate: "2026-09-01",
-        },
-      },
-    ]);
+          effectiveDate: "2026-09-01", });
   });
 
   test("list rejects unknown segments and filters nothing server-side", async () => {
-    reset();
+
     const bad = await collectionRoute!.GET!(new Request("http://openbooks.test/api/hrm/processes?segment=someday"));
     assert.equal(bad.status, 400);
     assert.deepEqual(routeState.calls, []);
     const ok = await collectionRoute!.GET!(new Request("http://openbooks.test/api/hrm/processes?segment=overdue"));
     assert.equal(ok.status, 200);
-    assert.deepEqual(routeState.calls, [{ fn: "list", args: { orgId: "org-1", actorId: "user-1", segment: "overdue" } }]);
+    expectCall("list", {segment: "overdue" });
   });
 
   test("record fetch validates the id before the service runs", async () => {
-    reset();
+
     const bad = await recordRoute!.GET!(new Request("http://openbooks.test/api/hrm/processes/nope"), ctx({ id: "nope" }));
     assert.equal(bad.status, 400);
     assert.deepEqual(routeState.calls, []);
@@ -312,32 +213,18 @@ test("a missing feature flag 404s before any service runs", async () => {
       ctx({ id: PROCESS_ID }),
     );
     assert.equal(ok.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "get", args: { orgId: "org-1", actorId: "user-1", processId: PROCESS_ID } },
-    ]);
+    expectCall("get", {processId: PROCESS_ID });
   });
 
   test("step complete forwards an optional attachment; skip requires a reason", async () => {
-    reset();
-    const done = await stepCompleteRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes/steps/x/complete", { attachmentId: FILE_ID }),
-      ctx({ stepId: STEP_ID }),
-    );
+
+    const done = await invokePost(stepCompleteRoute, { attachmentId: FILE_ID }, { stepId: STEP_ID });
     assert.equal(done.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "completeStep", args: { orgId: "org-1", actorId: "user-1", stepId: STEP_ID, attachmentId: FILE_ID } },
-    ]);
-    // A blank skip reason is refused at the boundary with the real parser.
-    const blank = await stepSkipRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes/steps/x/skip", { reason: "  " }),
-      ctx({ stepId: STEP_ID }),
-    );
+    expectCall("completeStep", {stepId: STEP_ID, attachmentId: FILE_ID });
+    const blank = await invokePost(stepSkipRoute, { reason: "  " }, { stepId: STEP_ID });
     assert.equal(blank.status, 400);
     assert.equal(routeState.calls.length, 1);
-    const skipped = await stepSkipRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes/steps/x/skip", { reason: "desk ready" }),
-      ctx({ stepId: STEP_ID }),
-    );
+    const skipped = await invokePost(stepSkipRoute, { reason: "desk ready" }, { stepId: STEP_ID });
     assert.equal(skipped.status, 200);
     assert.deepEqual(routeState.calls[1], {
       fn: "skipStep",
@@ -346,82 +233,47 @@ test("a missing feature flag 404s before any service runs", async () => {
   });
 
   test("step complete admits a self-service reader through the fallback gate", async () => {
-    reset();
-    // process.read denies, self.read grants: the service still runs — the
-    // service's ownership check (not this gate) refuses strangers.
+
     routeState.gate = { status: 403 };
     routeState.selfGate = { user: { id: "user-1", orgId: "org-1" } };
-    const admitted = await stepCompleteRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes/steps/x/complete", {}),
-      ctx({ stepId: STEP_ID }),
-    );
+    const admitted = await invokePost(stepCompleteRoute, {}, { stepId: STEP_ID });
     assert.equal(admitted.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "completeStep", args: { orgId: "org-1", actorId: "user-1", stepId: STEP_ID } },
-    ]);
-    // Both deny: the process.read denial answers, and the service never runs.
+    expectCall("completeStep", {stepId: STEP_ID });
     reset();
     routeState.gate = { status: 403 };
     routeState.selfGate = { status: 403 };
-    const refused = await stepCompleteRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes/steps/x/complete", {}),
-      ctx({ stepId: STEP_ID }),
-    );
+    const refused = await invokePost(stepCompleteRoute, {}, { stepId: STEP_ID });
     assert.equal(refused.status, 403);
     assert.deepEqual(routeState.calls, []);
   });
 
   test("complete refuses hostile payloads at the real boundary before the service runs", async () => {
-    reset();
-    // Complete takes no body, but it still parses one: malformed JSON and
-    // non-object payloads are refused at the shared boundary — the service
-    // never sees them. The parser here is the real parseJsonBody (never
-    // mocked above), so this is a test of the refusal, not of a double.
+
     for (const body of ["{not json", "null"]) {
-      const refused = await completeRoute!.POST!(
-        jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, body),
-        ctx({ id: PROCESS_ID }),
-      );
+      const refused = await invokePost(completeRoute, body, { id: PROCESS_ID });
       assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
     }
     assert.deepEqual(routeState.calls, []);
-    const done = await completeRoute!.POST!(
-      jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, {}),
-      ctx({ id: PROCESS_ID }),
-    );
+    const done = await invokePost(completeRoute, {}, { id: PROCESS_ID });
     assert.equal(done.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "completeProcess", args: { orgId: "org-1", actorId: "user-1", processId: PROCESS_ID } },
-    ]);
+    expectCall("completeProcess", {processId: PROCESS_ID });
   });
 
   test("cancel reaches the service with the record id and reason", async () => {
-    reset();
-    const cancelled = await cancelRoute!.POST!(
-      jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/cancel`, { reason: "hire withdrawn" }),
-      ctx({ id: PROCESS_ID }),
-    );
+
+    const cancelled = await invokePost(cancelRoute, { reason: "hire withdrawn" }, { id: PROCESS_ID });
     assert.equal(cancelled.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "cancelProcess", args: { orgId: "org-1", actorId: "user-1", processId: PROCESS_ID, reason: "hire withdrawn" } },
-    ]);
+    expectCall("cancelProcess", {processId: PROCESS_ID, reason: "hire withdrawn" });
   });
 
   test("a service refusal reaches the caller with its message intact", async () => {
-    reset();
+
     const { HrmProcessError } = await import("@openbooks/engine/src/hrm/processes.ts");
     routeState.serviceThrow = new HrmProcessError(
       "DUPLICATE_OPEN",
       "an open onboarding process already exists for this employment — complete or cancel it before opening another",
     );
-    const response = await collectionRoute!.POST!(
-      jsonRequest("http://openbooks.test/api/hrm/processes", {
-        employmentId: EMPLOYMENT_ID,
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-      }),
-    );
-    // 409 names the conflict shape; the body carries the remedy verbatim.
+    const response = await invokePost(collectionRoute, OPEN_BODY);
     assert.equal(response.status, 409);
     assert.deepEqual(await response.json(), {
       error:
@@ -432,23 +284,23 @@ test("a missing feature flag 404s before any service runs", async () => {
 test("designer validation refuses invalid revisions, missing reasons and impossible dates before writes",async()=>{
  reset();
  for(const body of [{action:'publish',templateId:PROCESS_ID,revision:-1,reason:'Review'}, {action:'retire',templateId:PROCESS_ID,revision:1,reason:' '}, {action:'preview',employmentId:EMPLOYMENT_ID,effectiveDate:'2026-02-30',document:{name:'Welcome',kind:'onboarding',appliesTo:{employerSubsidiaryId:null,departmentId:null},steps:[]}}]) {
-  const response=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',body));assert.equal(response.status,400)
+  const response=await invokePost(designerRoute, body);assert.equal(response.status,400)
  }
  assert.deepEqual(routeState.calls,[])
 })
 test("designer and approval submission honor feature and permission refusals",async()=>{
  reset();routeState.featureOn=false
- const disabled=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',{action:'load',templateId:PROCESS_ID}));assert.equal(disabled.status,404)
+ const disabled=await invokePost(designerRoute, {action:'load',templateId:PROCESS_ID});assert.equal(disabled.status,404)
  reset();routeState.gate={status:403}
- const denied=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',{action:'load',templateId:PROCESS_ID}));assert.equal(denied.status,403)
+ const denied=await invokePost(designerRoute, {action:'load',templateId:PROCESS_ID});assert.equal(denied.status,403)
  routeState.selfGate={status:403}
- const submitted=await submitRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/processes/steps/x/submit',{}),ctx({stepId:STEP_ID}));assert.equal(submitted.status,403);assert.deepEqual(routeState.calls,[])
+ const submitted=await invokePost(submitRoute, {}, {stepId:STEP_ID});assert.equal(submitted.status,403);assert.deepEqual(routeState.calls,[])
 })
 test("designer publication carries the domain refusal and its actual remedy to the operator",async()=>{
  reset();const {HrmProcessError}=await import('@openbooks/engine/src/hrm/processes.ts');routeState.serviceThrow=new HrmProcessError('REFUSED','Another editor saved this draft — reload the latest revision before applying your changes. Your edits have not been overwritten.')
- const response=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',{action:'publish',templateId:PROCESS_ID,revision:1,reason:'Reviewed checklist'}));assert.equal(response.status,422);assert.deepEqual(await response.json(),{error:(routeState.serviceThrow as Error).message})
+ const response=await invokePost(designerRoute, {action:'publish',templateId:PROCESS_ID,revision:1,reason:'Reviewed checklist'});assert.equal(response.status,422);assert.deepEqual(await response.json(),{error:(routeState.serviceThrow as Error).message})
 })
 test("approval submission forwards acknowledged form evidence through the self-service boundary",async()=>{
  reset();routeState.gate={status:403};routeState.selfGate={user:{id:'self-user',orgId:'org-1'}}
- const response=await submitRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/processes/steps/x/submit',{acknowledged:true,response:{asset:'Laptop'}}),ctx({stepId:STEP_ID}));assert.equal(response.status,200);assert.deepEqual(routeState.calls,[{fn:'submitChecklistStepApproval',args:{orgId:'org-1',actorId:'self-user',stepId:STEP_ID,acknowledged:true,response:{asset:'Laptop'}}}])
+ const response=await invokePost(submitRoute, {acknowledged:true,response:{asset:'Laptop'}}, {stepId:STEP_ID});assert.equal(response.status,200);assert.deepEqual(routeState.calls,[{fn:'submitChecklistStepApproval',args:{orgId:'org-1',actorId:'self-user',stepId:STEP_ID,acknowledged:true,response:{asset:'Laptop'}}}])
 })

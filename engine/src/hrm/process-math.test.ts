@@ -1,3 +1,4 @@
+import { checklistStep } from "../testing/checklist-documents.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -9,20 +10,10 @@ import {
   summarizeProgress,
 } from "./process-math.ts";
 
-function step(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "step-1",
-    position: 0,
-    title: "Collect documents",
-    description: null,
-    ownerKind: "hr",
-    ownerPartyId: null,
-    dueOffsetDays: 0,
-    required: true,
-    evidenceKind: "none",
-    ...overrides,
-  };
-}
+const step = (overrides: Record<string, unknown> = {}) => ({
+  ...checklistStep({ id: 'step-1', title: 'Collect documents', description: null, ownerKind: 'hr', evidenceKind: 'none' }),
+  position: 0, ...overrides,
+});
 
 test("offsets walk the civil grid across month, year, and leap boundaries", () => {
   assert.equal(addOffsetDays("2026-01-31", 1), "2026-02-01");
@@ -95,26 +86,16 @@ test("snapshots copy the template in position order with concrete due dates", ()
 
 test("snapshots refuse empty, duplicated, and malformed templates by name", () => {
   assert.throws(() => snapshotTemplateSteps("tpl-empty", [], "2026-09-01"), /carries no steps/);
-  assert.throws(
-    () => snapshotTemplateSteps("tpl-dupe", [step({ id: "a", position: 0 }), step({ id: "b", position: 0 })], "2026-09-01"),
-    /lists position 0 twice/,
-  );
-  assert.throws(
-    () => snapshotTemplateSteps("tpl-owner", [step({ ownerKind: "peer" })], "2026-09-01"),
-    /names owner "peer"/,
-  );
-  assert.throws(
-    () => snapshotTemplateSteps("tpl-party", [step({ ownerKind: "hr", ownerPartyId: "p-1" })], "2026-09-01"),
-    /pairs owner hr with a party/,
-  );
-  assert.throws(
-    () => snapshotTemplateSteps("tpl-evidence", [step({ evidenceKind: "video" })], "2026-09-01"),
-    /names evidence "video"/,
-  );
-  assert.throws(
-    () => snapshotTemplateSteps("tpl-blank", [step({ title: "  " })], "2026-09-01"),
-    /blank title/,
-  );
+  const invalid: Array<[string, ReturnType<typeof step>[], RegExp]> = [
+    ['tpl-dupe', [step({ id: 'a', position: 0 }), step({ id: 'b', position: 0 })], /lists position 0 twice/],
+    ['tpl-owner', [step({ ownerKind: 'peer' })], /names owner "peer"/],
+    ['tpl-party', [step({ ownerKind: 'hr', ownerPartyId: 'p-1' })], /pairs owner hr with a party/],
+    ['tpl-evidence', [step({ evidenceKind: 'video' })], /names evidence "video"/],
+    ['tpl-blank', [step({ title: '  ' })], /blank title/],
+  ];
+  for (const [id, steps, message] of invalid) {
+    assert.throws(() => snapshotTemplateSteps(id, steps, '2026-09-01'), message);
+  }
 });
 
 test("template resolution prefers the most specific cover and refuses ties by id", () => {

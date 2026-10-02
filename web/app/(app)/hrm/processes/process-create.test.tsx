@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import React, { act } from 'react'
-import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { bootJsdomEnvironment, setJsdomInput } from '../../../../testing/jsdom-env'
 import { stubModules } from '../../../../testing/stub-modules'
 await bootJsdomEnvironment({url:'http://localhost/hrm/processes?segment=overdue&sub=entity-one'})
 Object.assign(globalThis,{React})
@@ -105,8 +105,7 @@ test('an earlier template response cannot replace the selection for a changed ef
     templateResponse=undefined
     const date=document.getElementById('process-effective') as HTMLInputElement
     await act(async()=>{
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value')!.set!.call(date,'2026-10-01')
-      date.dispatchEvent(new window.Event('input',{bubbles:true}))
+      setJsdomInput(date,'2026-10-01')
       date.dispatchEvent(new window.Event('change',{bubbles:true}))
       await new Promise(resolve=>setTimeout(resolve,30))
     })

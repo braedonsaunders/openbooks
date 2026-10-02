@@ -93,3 +93,14 @@ export async function bootJsdomEnvironment(
   }
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 }
+
+/** Dispatch through the element's realm so React observes the browser's native value setter. */
+export function setJsdomInput(input: HTMLInputElement, value: string): void {
+  const realm = input.ownerDocument.defaultView!;
+  Object.getOwnPropertyDescriptor(realm.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+  input.dispatchEvent(new realm.Event('input', { bubbles: true }));
+}
+export function clickJsdomElement(element: Element): void {
+  const realm = element.ownerDocument.defaultView!;
+  element.dispatchEvent(new realm.MouseEvent('click', { bubbles: true }));
+}

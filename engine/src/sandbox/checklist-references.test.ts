@@ -1,3 +1,4 @@
+import { checklistDocument, checklistStep } from "../testing/checklist-documents.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { emptyStepDesign } from "@openbooks/forms-core";
@@ -39,24 +40,11 @@ test("sandbox checklist rebasing preserves structure and moves every declared te
       ],
     },
   };
-  const document = {
-    name: "Welcome",
-    kind: "onboarding" as const,
-    appliesTo: { employerSubsidiaryId: source, departmentId: source },
-    steps: [
-      {
-        id: source,
-        title: "Welcome colleague",
-        description: null,
-        ownerKind: "named_party" as const,
-        ownerPartyId: source,
-        dueOffsetDays: 0,
-        required: true,
-        evidenceKind: "none" as const,
-        design,
-      },
-    ],
-  };
+  const document = checklistDocument({
+    name: "Welcome", appliesTo: { employerSubsidiaryId: source, departmentId: source },
+    steps: [checklistStep({ id: source, title: "Welcome colleague", description: null,
+      ownerKind: "named_party", ownerPartyId: source, evidenceKind: "none", design })],
+  });
   const result = remapChecklistDocument(document, ids);
   assert.equal(result.steps[0]?.id, target);
   assert.equal(result.appliesTo.departmentId, target);
