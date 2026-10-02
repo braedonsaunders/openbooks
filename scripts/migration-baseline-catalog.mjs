@@ -116,7 +116,12 @@ export function assertBaselineCatalogsEqual(expected, actual) {
       ? rows?.filter((row) => row.name !== "pg_trgm")
       : section === "indexes" && optionalUnavailable
         ? rows?.filter((row) => !/\b(?:gin|gist)_trgm_ops\b/.test(row.definition)) : rows;
-    if (JSON.stringify(comparable(expected[section])) !== JSON.stringify(comparable(actual[section]))) {
+    const ordered = (rows) => ["schema_acl", "function_acl", "acl"].includes(section)
+      ? rows?.toSorted((left, right) => {
+        const a = JSON.stringify(left), b = JSON.stringify(right);
+        return a < b ? -1 : a > b ? 1 : 0;
+      }) : rows;
+    if (JSON.stringify(ordered(comparable(expected[section]))) !== JSON.stringify(ordered(comparable(actual[section])))) {
       throw new Error(`baseline catalog differs in ${section}; inspect the replay and fresh catalog evidence before cutting the release`);
     }
   }

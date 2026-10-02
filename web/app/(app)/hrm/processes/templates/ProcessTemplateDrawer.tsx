@@ -174,8 +174,9 @@ function ChecklistDesigner({
   const [previewValues, setPreviewValues] = useState<Record<string, unknown>>({})
   const id = useRef(template?.id ?? null)
   const revision = useRef(template?.revision ?? 0)
+  const [currentRevision, setCurrentRevision] = useState(template?.revision ?? 0)
   const documentRef = useRef(document)
-  documentRef.current = document
+  useEffect(() => { documentRef.current = document }, [document])
   const pending = useRef<Promise<boolean> | null>(null)
   const mounted = useRef(true)
   const dirty = JSON.stringify(document) !== saved && !starter
@@ -222,7 +223,7 @@ function ChecklistDesigner({
       return { ...d, steps }
     })
   }
-  async function request(body: unknown) {
+  const request = useCallback(async (body: unknown) => {
     const response = await fetch('/api/hrm/process-templates/designer', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -230,11 +231,11 @@ function ChecklistDesigner({
     })
     if (!response.ok) throw new Error(await readApiErrorMessage(response, t('saveFailed')))
     return response.json()
-  }
-  const save = useCallback(async (): Promise<boolean> => {
+  }, [t])
+  const save = useCallback(async function saveLatest(): Promise<boolean> {
     if (pending.current) {
       if (!(await pending.current)) return false
-      return save()
+      return saveLatest()
     }
     const next = documentRef.current,
       fingerprint = JSON.stringify(next)
@@ -266,6 +267,7 @@ function ChecklistDesigner({
           document: next,
         })) as ChecklistDesignerValue
         revision.current = result.revision
+        if (mounted.current) setCurrentRevision(result.revision)
         savedRef.current = fingerprint
         if (mounted.current) setSaved(fingerprint)
         return true
@@ -279,7 +281,7 @@ function ChecklistDesigner({
     })()
     pending.current = work
     return work
-  }, [saved, t])
+  }, [request, t])
   useEffect(() => {
     if (!dirty || !document.name.trim() || busy || error) return
     const timer = setTimeout(() => {
@@ -578,7 +580,7 @@ function ChecklistDesigner({
           <Badge variant="outline">
             {version ? t('version', { version }) : active ? t('legacyActive') : t('draft')}
           </Badge>
-          {active && revision.current > publishedRevision ? (
+          {active && currentRevision > publishedRevision ? (
             <Badge variant="outline">{t('pendingChanges')}</Badge>
           ) : null}
           {version > 0 && !active ? <Badge variant="outline">{t('retired')}</Badge> : null}
@@ -795,7 +797,7 @@ function ChecklistDesigner({
               <div>
                 <Label>{t('kind')}</Label>
                 <ChoiceCards
-                  disabled={revision.current > 0}
+                  disabled={currentRevision > 0}
                   value={document.kind}
                   options={(['onboarding', 'offboarding', 'transfer'] as const).map((value) => ({
                     value,

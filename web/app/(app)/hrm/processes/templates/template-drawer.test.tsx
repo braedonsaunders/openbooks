@@ -133,7 +133,7 @@ test('invalid due days name the valid range and never reach the save endpoint',a
 })
 
 test('a refused save retains local edits and a saved-draft reload keeps the same dialog',async()=>{
- let mode='refuse';const m=await mount(false,async body=>mode==='refuse'?Response.json({error:'Another editor saved this draft — reload the latest revision before applying your changes.'},{status:422}):Response.json({...template,revision:2,document:{...template.document,name:'Latest colleague welcome'}}));
+ let mode='refuse';const m=await mount(false,async _body=>mode==='refuse'?Response.json({error:'Another editor saved this draft — reload the latest revision before applying your changes.'},{status:422}):Response.json({...template,revision:2,document:{...template.document,name:'Latest colleague welcome'}}));
  const {act}=await import('react');try{
   const shell=m.document.querySelector('[role="dialog"]');await act(async()=>m.setInput(m.document.getElementById('step-title') as HTMLInputElement,'My local task'))
   await act(async()=>m.click(button(m,'Save draft')));await flushAsync()
