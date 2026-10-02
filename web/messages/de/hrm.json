@@ -1456,7 +1456,8 @@
       "pending_approval": "Zur Genehmigung",
       "active": "Aktiv",
       "ended": "Beendet",
-      "cancelled": "Storniert"
+      "cancelled": "Storniert",
+      "inactive": "Inaktiv"
     },
     "workspace": {
       "tabs": {

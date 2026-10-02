@@ -1456,7 +1456,8 @@
       "pending_approval": "Aprobación pendiente",
       "active": "Activa",
       "ended": "Finalizada",
-      "cancelled": "Cancelada"
+      "cancelled": "Cancelada",
+      "inactive": "Inactivo"
     },
     "workspace": {
       "tabs": {

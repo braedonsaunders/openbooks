@@ -1456,7 +1456,8 @@
       "pending_approval": "待批准",
       "active": "有效",
       "ended": "已结束",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "inactive": "未启用"
     },
     "workspace": {
       "tabs": {
