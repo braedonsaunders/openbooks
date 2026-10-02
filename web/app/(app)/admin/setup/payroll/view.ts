@@ -59,11 +59,6 @@ const ENTITY_BY_TAB = {
   schedules: 'pay-schedules',
   components: 'pay-components',
   union: 'union-agreements',
-  // Entitlement plans own their scoped caps and service schedules. Pay
-  // components own their eligibility schedules in their record drawers.
-  entitlements: 'entitlement-plans',
-  serviceCredits: 'payroll-service-credits',
-  vacationTerms: 'payroll-vacation-terms',
 } as const
 
 const TABS = [
@@ -76,7 +71,7 @@ const TABS = [
   // employment attribute (engine/src/payroll/work-schedules.ts) that several
   // jurisdictions' statutory holiday pay is computed FROM.
   'workSchedules',
-  'entitlements', 'vacationTerms', 'serviceCredits', 'derived', 'derivedPreview',
+  'derived', 'derivedPreview',
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
   'holidays', 'holidayCalendar',
@@ -89,10 +84,9 @@ type EntityTab = keyof typeof ENTITY_BY_TAB
 const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 
 /** Configuration families use a picker; only the selected family has a local row. */
-const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
+const GROUPS: { key: 'foundations' | 'earnings' | 'payday'; tabs: Tab[] }[] = [
   { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
   { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
-  { key: 'entitlements', tabs: ['entitlements', 'vacationTerms', 'serviceCredits'] },
   { key: 'payday', tabs: ['payday'] },
 ]
 
@@ -281,7 +275,7 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
         // Registry entity tabs share the `setup-section` slot
         // (already registered): the slot re-derives org id, entry and
         // manage gate from the session. `onEntityTab` covers filing,
-        // schedules, components, union and entitlements —
+        // schedules, components and union —
         // the flags are mutually exclusive, so exactly one block ever reads
         // `entityKey`.
         {

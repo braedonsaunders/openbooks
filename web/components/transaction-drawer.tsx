@@ -10,6 +10,7 @@ import { AuditTrailPanel } from './audit-trail-panel'
 import { DrawerTabStrip } from './drawer-tab-strip'
 
 export interface TransactionDrawerProps {
+  stacked?: boolean
   closeHref: string
   /** Optional guard for unsaved edits, forwarded to the UrlDrawer shell. */
   beforeClose?: () => boolean | Promise<boolean>
@@ -53,7 +54,7 @@ export interface TransactionDrawerProps {
    */
   canRemoveAttachments?: boolean
   /** Persistence table for attachments and audit rows. Defaults to documents. */
-  targetTable?: 'documents' | 'parties' | 'item_rate_versions'
+  targetTable?: 'documents' | 'parties' | 'item_rate_versions' | 'hrm_benefit_enrollments'
   /**
    * Hide the Attachments and Audit trail tabs. Unsaved-create drawers set
    * this: both panels read the persisted row the drawer has not written yet,
@@ -61,6 +62,8 @@ export interface TransactionDrawerProps {
    * Defaults to true.
    */
   showEvidenceTabs?: boolean
+  /** Records without attachment storage retain Audit trail without an unsupported upload surface. */
+  showAttachments?: boolean
 }
 
 const TransactionDrawerContext = createContext<((props: TransactionDrawerProps | null) => void) | null>(null)
@@ -77,7 +80,8 @@ export function TransactionDrawerHost({ pending, children }: { pending: Transact
 
 /** Shared transaction chrome, with primary lifecycle controls and the standard Actions menu. */
 export function TransactionDrawer(props: TransactionDrawerProps) {
-  const register = useContext(TransactionDrawerContext)
+  const host = useContext(TransactionDrawerContext)
+  const register = props.stacked ? null : host
   useLayoutEffect(() => {
     if (!register) return
     register(props)
@@ -88,6 +92,7 @@ export function TransactionDrawer(props: TransactionDrawerProps) {
 
 function TransactionDrawerFrame({
   closeHref,
+  stacked = false,
   beforeClose,
   recordId,
   title,
@@ -107,6 +112,7 @@ function TransactionDrawerFrame({
   canRemoveAttachments,
   targetTable = 'documents',
   showEvidenceTabs = true,
+  showAttachments = true,
 }: TransactionDrawerProps) {
   const t = useTranslations('common')
   const searchParams = useSearchParams()
@@ -116,7 +122,7 @@ function TransactionDrawerFrame({
     ...detailTabs.map((tab) => ({ key: tab.key, label: tab.label })),
     ...(showEvidenceTabs
       ? [
-          { key: 'attachments', label: t('auditTrail.tabs.attachments') },
+          ...(showAttachments ? [{ key: 'attachments', label: t('auditTrail.tabs.attachments') }] : []),
           { key: 'audit', label: t('auditTrail.tabs.audit') },
         ]
       : []),
@@ -132,7 +138,7 @@ function TransactionDrawerFrame({
   const requestedActiveTab = controlledActiveTab ?? localActiveTab
   // A hidden evidence tab must never stay selected: without a persisted
   // record there is nothing for those panels to read.
-  const activeTab = !showEvidenceTabs && (requestedActiveTab === 'attachments' || requestedActiveTab === 'audit')
+  const activeTab = (!showAttachments && requestedActiveTab === 'attachments') || (!showEvidenceTabs && (requestedActiveTab === 'attachments' || requestedActiveTab === 'audit'))
     ? 'details'
     : requestedActiveTab
   const hasActions = actions != null || actionsMenuHeader != null
@@ -146,7 +152,7 @@ function TransactionDrawerFrame({
       open
       closeHref={nestedReturn ?? closeHref}
       beforeClose={beforeClose}
-      stacked={nestedReturn != null && (searchParams.has('relatedParty') || searchParams.has('reportRecord') || searchParams.has('projectTxn'))}
+      stacked={stacked || nestedReturn != null && (searchParams.has('relatedParty') || searchParams.has('reportRecord') || searchParams.has('projectTxn'))}
       size="2xl"
       panelClassName={panelClassName}
       title={title}

@@ -195,6 +195,10 @@ test('Enrollment windows are accessible within Enrollments without a separate me
   features.hrm = false
   groups = await resolveNav('company-one', () => true, [], translate, has)
   assert.ok(!groups.flatMap((group) => group.items).some((item) => item.href.startsWith('/hrm/benefits')), 'shortcuts cannot bypass the HR feature')
+  features.hrm = true; features.payroll = false
+  groups = await resolveNav('company-one', () => true, [], translate, has)
+  assert.ok(!groups.flatMap(group => group.items).some(item => item.href === '/hrm/benefits?view=policies'), 'policy configuration requires Payroll as well as HR')
+  const noPayroll = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0]); assert.ok(!noPayroll.groups.flat().some(tab => tab.href === '/hrm/benefits?view=policies'))
 })
 
 

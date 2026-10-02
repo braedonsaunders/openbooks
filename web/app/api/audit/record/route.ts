@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { can, guardSubsidiaryScope } from '../../../../lib/authz';
+import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
@@ -24,7 +25,7 @@ export const GET = defineRoute({
 
     const table = new URL(request.url).searchParams.get('table')
     const recordId = new URL(request.url).searchParams.get('id')
-    if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions') || !recordId || !isUuid(recordId)) {
+    if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions' && table !== 'hrm_benefit_enrollments') || !recordId || !isUuid(recordId)) {
       return NextResponse.json({ error: 'invalid record' }, { status: 400 })
     }
 
@@ -37,6 +38,7 @@ export const GET = defineRoute({
     // it, still as a uniform 404.
     const family = table === 'parties'
       ? ['parties.read']
+      : table === 'hrm_benefit_enrollments' ? ['hrm.benefits.read']
       : table === 'item_rate_versions'
         ? ['admin.setup.manage']
         : ['ar.read', 'ap.read', 'gl.read', 'expenses.read']
@@ -47,6 +49,8 @@ export const GET = defineRoute({
       throw error
     }
 
+    if (table === 'hrm_benefit_enrollments' && !await isFeatureEnabled(authz.user.orgId, 'hrm')) return notFound('record')
+
     // Existence, kind, and creator metadata are disclosures too: resolve the
     // record's subsidiary alongside org scope and gate BEFORE anything is
     // returned. Documents follow the documents-list rule (null fails closed);
@@ -56,6 +60,11 @@ export const GET = defineRoute({
           select org_id, kind, created_at, created_by, updated_at, updated_by,
                  subsidiary_id as "subsidiaryId"
             from documents where id = ${recordId} and org_id = ${authz.user.orgId}`))
+      : table === 'hrm_benefit_enrollments' ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select e.org_id,'benefit_enrollment' as kind,e.created_at,e.created_by,e.updated_at,e.updated_by,
+                 w.employer_subsidiary_id as "subsidiaryId"
+          from hrm_benefit_enrollments e join worker_employments w on w.org_id=e.org_id and w.id=e.employment_id
+          where e.org_id=${authz.user.orgId} and e.id=${recordId}`))
       : table === 'parties' ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
           select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by,
                  subsidiary_id as "subsidiaryId"
@@ -93,7 +102,7 @@ export const GET = defineRoute({
         table === 'parties' ? { orgWideNull: true } : {})
       if (denied) return denied
     }
-    const permission = table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
+    const permission = table === 'hrm_benefit_enrollments' ? 'hrm.benefits.read' : table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
     // Wrong-kind callers learn nothing either: the kind-specific permission
     // fails closed with the same uniform 404, so an ar.read-only caller cannot
     // distinguish an existing AP bill from a missing id (and symmetrically).
@@ -105,6 +114,11 @@ export const GET = defineRoute({
     const page = Math.max(1, Number.parseInt(new URL(request.url).searchParams.get('page') ?? '1', 10) || 1)
     const perPage = 15
 
+    const enrollmentEvents = table === 'hrm_benefit_enrollments' ? sql`
+      union all
+      select b.id::text,b.kind as action,jsonb_build_object('reason',b.reason) as changes,b.actor as actor_id,b.recorded_at as at,null::text as request_id
+      from hrm_benefit_events b where b.org_id=${authz.user.orgId} and b.enrollment_id=${recordId}
+    ` : sql``
     const events = sql`
       select a.id::text as id, a.action, a.changes, a.actor_id, a.at, a.request_id
         from audit_log a
@@ -119,6 +133,7 @@ export const GET = defineRoute({
           where a.org_id = ${authz.user.orgId} and a.table_name = ${table}
             and a.row_id = ${recordId} and a.action = 'insert'
        )
+      ${enrollmentEvents}
     `
     const filters = sql`
       ${action ? sql`and e.action = ${action}` : sql``}

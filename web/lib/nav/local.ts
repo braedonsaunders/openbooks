@@ -25,7 +25,7 @@ export async function resolveLocalNavigation(authz: Authz): Promise<{ groups: Vi
   const groups = LOCAL_NAVIGATION.filter((set) => !set.inline).filter((set) => !set.feature || featureEnabled(state, set.feature)).map((set, group) => {
     const tabs = set.tabs.filter((tab) => {
       const menu = menuByHref.get(tab.href)
-      return !menu?.item.hidden && (tab.permissionsAny ? tab.permissionsAny.some((permission) => can(authz, permission)) : !tab.permission || can(authz, tab.permission)) && (!tab.feature || featureEnabled(state, tab.feature))
+      return !menu?.item.hidden && (tab.permissionsAny ? tab.permissionsAny.some((permission) => can(authz, permission)) : !tab.permission || can(authz, tab.permission)) && (!tab.feature || featureEnabled(state, tab.feature)) && (!tab.requiredFeatures || tab.requiredFeatures.every(feature => featureEnabled(state, feature)))
     }).map((tab) => {
       const t = translations.get(tab.ns)!
       const menu = menuByHref.get(tab.href)

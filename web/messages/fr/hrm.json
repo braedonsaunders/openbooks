@@ -3253,5 +3253,35 @@
     "employeeLoadFailed": "Impossible de charger les employés. Réessayez.",
     "upgradeRequired": "Mise à jour de Performance requise",
     "upgradeDescription": "Un administrateur doit appliquer la mise à jour de la base de données Talent avant d’ouvrir les modèles d’évaluation."
+  },
+  "enrollmentRecord": {
+    "contributions": "Cotisations choisies",
+    "changeHint": "L’enregistrement crée un remplacement daté. La couverture actuelle reste en vigueur jusqu’à la fin des approbations requises.",
+    "failed": "L’action sur l’adhésion n’a pas pu être enregistrée.",
+    "dateReasonRequired": "Saisissez une date d’effet et un motif.",
+    "laterDateRequired": "Choisissez une date de modification après le {date}.",
+    "termsRequired": "Choisissez au moins une cotisation et saisissez chaque taux choisi.",
+    "rulesNotEffective": "Une règle sélectionnée ne couvre pas cette date. Choisissez une règle applicable ou une autre date.",
+    "addContribution": "Ajouter une cotisation",
+    "chooseContribution": "Choisir une cotisation",
+    "end": "Mettre fin à l’adhésion",
+    "cancel": "Annuler l’adhésion",
+    "approvals": "Voir les approbations",
+    "effectiveDate": "Date d’effet",
+    "reason": "Motif",
+    "plan": "Régime",
+    "currency": "Devise",
+    "from": "En vigueur à partir du",
+    "to": "En vigueur jusqu’au"
+  },
+  "benefitPolicies": {
+    "title": "Politiques",
+    "entitlements": "Régimes de droits",
+    "vacation": "Conditions de congés des employés",
+    "service": "Service reconnu",
+    "description": "Définissez ici les droits et les conditions des employés. La paie applique ces données datées lors du calcul.",
+    "coverage": "Couverture et épargne",
+    "balances": "Soldes",
+    "empty": "Aucune politique d’employé enregistrée."
   }
 }

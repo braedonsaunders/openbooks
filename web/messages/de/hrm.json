@@ -3253,5 +3253,35 @@
     "employeeLoadFailed": "Mitarbeiter konnten nicht geladen werden. Versuchen Sie es erneut.",
     "upgradeRequired": "Performance-Upgrade erforderlich",
     "upgradeDescription": "Ein Administrator muss das Talent-Datenbankupgrade anwenden, bevor Beurteilungsvorlagen geöffnet werden können."
+  },
+  "enrollmentRecord": {
+    "contributions": "Beitragswahlen",
+    "changeHint": "Speichern erstellt einen datierten Nachfolger. Der bisherige Versicherungsschutz bleibt bis zum Abschluss erforderlicher Genehmigungen bestehen.",
+    "failed": "Die Einschreibungsaktion konnte nicht gespeichert werden.",
+    "dateReasonRequired": "Geben Sie ein Wirksamkeitsdatum und einen Grund ein.",
+    "laterDateRequired": "Wählen Sie ein Änderungsdatum nach dem {date}.",
+    "termsRequired": "Wählen Sie mindestens einen Beitrag und geben Sie jeden gewählten Satz ein.",
+    "rulesNotEffective": "Eine ausgewählte Beitragsregel gilt nicht für dieses Datum. Wählen Sie eine gültige Regel oder ein anderes Datum.",
+    "addContribution": "Beitrag hinzufügen",
+    "chooseContribution": "Beitrag auswählen",
+    "end": "Einschreibung beenden",
+    "cancel": "Einschreibung stornieren",
+    "approvals": "Genehmigungen anzeigen",
+    "effectiveDate": "Wirksamkeitsdatum",
+    "reason": "Grund",
+    "plan": "Plan",
+    "currency": "Währung",
+    "from": "Gültig ab",
+    "to": "Gültig bis"
+  },
+  "benefitPolicies": {
+    "title": "Richtlinien",
+    "entitlements": "Anspruchspläne",
+    "vacation": "Urlaubsbedingungen der Mitarbeiter",
+    "service": "Angerechnete Dienstzeit",
+    "description": "Definieren Sie hier Ansprüche und Mitarbeiterbedingungen. Die Lohnabrechnung verwendet diese datierten Datensätze bei der Berechnung.",
+    "coverage": "Versicherung und Vorsorge",
+    "balances": "Salden",
+    "empty": "Keine Mitarbeiterrichtlinien erfasst."
   }
 }

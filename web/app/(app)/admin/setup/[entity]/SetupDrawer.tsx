@@ -31,6 +31,7 @@ import { setupDomainPayload } from '../../../../../lib/setup/domain-payload'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { coerceField, SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { formatDecimal } from '../../../../../lib/money-format'
 import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string; scopeValue?: string | null }
@@ -112,6 +113,7 @@ export function SetupDrawer({
   nestedTabs = [],
   stacked = false,
   mutationBasePath = '/api/admin/setup',
+  onSaved,
 }: {
   entity: SetupEntity
   row: Record<string, unknown> | null
@@ -123,6 +125,8 @@ export function SetupDrawer({
   nestedTab?: { key: string; label: string; content: ReactNode }
   nestedTabs?: { key: string; label: string; content: ReactNode }[]
   stacked?: boolean
+  /** Refresh the host record after a successful native save. */
+  onSaved?: () => void
   /** Host-specific authorized adapter, sharing native setup commands. */
   mutationBasePath?: string
 }) {
@@ -132,6 +136,7 @@ export function SetupDrawer({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const creating = !row
+  const [editing, setEditing] = useState(creating)
   const idColumn = entity.idColumn ?? 'id'
   const closeHref = closeHrefProp ?? `/admin/setup/${entity.key}`
 
@@ -140,9 +145,9 @@ export function SetupDrawer({
     for (const f of entity.fields) init[f.key] = f.kind === 'multiref' ? members : initialValue(f, row)
     return { ...init, ...initialValues, ...fixedValues }
   })
-  // The pristine form: `set` always replaces the object, so the
-  // first-render value stays a valid dirtiness baseline for the close guard.
-  const [initialForm] = useState(form)
+  // The pristine form advances after a successful save; Cancel restores
+  // this baseline and the close guard compares unsaved changes against it.
+  const [initialForm, setInitialForm] = useState(form)
   const [busy, setBusy] = useState(false)
   const [officialBusy, setOfficialBusy] = useState(false)
   // One idempotency key per mounted create session (POST /api/accounts
@@ -227,6 +232,7 @@ export function SetupDrawer({
   }
 
   async function save() {
+    if (busy || entity.readOnly || !editing) return
     const err = validate()
     if (err) {
       setFieldError(err)
@@ -307,7 +313,9 @@ export function SetupDrawer({
         destination = `${target.pathname}${target.search}`
       }
       toast.success(creating ? t('created') : t('updated'))
-      router.push(destination)
+      if (creating) router.push(destination)
+      else { setInitialForm(form); setEditing(false); setFieldError(null) }
+      onSaved?.()
       router.refresh()
     } catch (e) {
       // A rejected transport previously escaped with zero feedback:
@@ -393,6 +401,11 @@ export function SetupDrawer({
     })
   }
 
+  async function cancelEditing() {
+    if (!await confirmDiscard()) return
+    setForm(initialForm); setFieldError(null); setEditing(false)
+  }
+
   return (
     <UrlDrawer
       open
@@ -401,15 +414,17 @@ export function SetupDrawer({
       description={entity.formDescriptionKey ? t(entity.formDescriptionKey) : undefined}
       beforeClose={confirmDiscard}
       stacked={stacked}
-      title={creating ? t('drawer.newTitle', { name: entityTitle }) : t('drawer.editTitle', { name: entityTitle })}
+      title={creating ? t('drawer.newTitle', { name: entityTitle }) : editing ? t('drawer.editTitle', { name: entityTitle }) : entityTitle}
       subtabs={!creating && recordTabs.length > 0 ? (
         <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
       ) : undefined}
       headerActions={<>
         {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
-        {!nestedTabActive && !entity.readOnly && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
+        {!creating && !entity.readOnly && !editing ? <Button variant="outline" disabled={busy} onClick={() => { setEditing(true); if (nestedTabActive) selectTab('details') }}>{tCommon('actions.edit')}</Button> : null}
+        {!nestedTabActive && !entity.readOnly && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
         </Button> : null}
+        {!creating && editing ? <Button variant="outline" disabled={busy} onClick={() => void cancelEditing()}>{tCommon('actions.cancel')}</Button> : null}
       </>}
       footer={
         steps.length ? <div className="flex w-full justify-between gap-2">
@@ -446,7 +461,7 @@ export function SetupDrawer({
         if (!fields.length) return null
         return <InspectorPanel key={section.titleKey} title={t(section.titleKey)} description={section.descriptionKey ? t(section.descriptionKey) : undefined}>
           <div className="grid gap-5 sm:grid-cols-2">
-            {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} formValues={form} t={t} />)}
+            {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={!editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} formValues={form} t={t} />)}
           </div>
         </InspectorPanel>
       })}
@@ -463,7 +478,7 @@ export function SetupDrawer({
               value={form[field.key]}
               onChange={(v) => set(field.key, v)}
               creating={creating}
-              forceLocked={reviewing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)}
+              forceLocked={reviewing || !editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)}
               refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
               formValues={form}
               t={t}
@@ -559,6 +574,7 @@ export function FieldControl({
   t: ReturnType<typeof useTranslations>
 }) {
   const locale = useLocale()
+  const common = useTranslations('common')
   const countries = useMemo(() => countryOptions(locale), [locale])
   const label = t(field.labelKey ?? `fields.${field.key}`)
   // Authored help renders as the `?` popover on the field label (FieldLabel);
@@ -576,11 +592,14 @@ export function FieldControl({
   const full = field.fullWidth ||
     field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray' || field.kind === 'object' || field.kind === 'objectArray'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
+  const selectedOption = field.kind === 'select' ? setupFieldOptions(field, formValues).find(option => option.value === String(value)) : undefined
   const lockedDisplay = field.kind === 'ref'
     ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
-    : Array.isArray(value)
-      ? value.join(', ')
-      : value
+    : selectedOption ? setupOptionLabel(selectedOption, t)
+      : field.kind === 'boolean' && value !== null && value !== undefined && value !== '' ? common(value === true || value === 'true' ? 'labels.yes' : 'labels.no')
+        : ['decimal', 'percent', 'integer'].includes(field.kind) && value !== null && value !== undefined && value !== '' ? formatDecimal(locale, String(value), { maximumFractionDigits: field.decimalScale ?? SETUP_DECIMAL_SCALE })
+          : Array.isArray(value) ? value.join(', ') : value
+
 
   // Locked natural keys are shown read-only when editing.
   if (locked && field.kind !== 'object' && field.kind !== 'objectArray') {

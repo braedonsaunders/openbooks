@@ -65,7 +65,7 @@ export const validateContributionWrite: SetupEntityValidationHook = async ({ ent
       const authz = await getAuthz()
       if (!authz || authz.user.orgId !== orgId) return 'The current session cannot manage this organization; reopen Benefits'
       await requireHrmBenefitsManageOnEmployment(executor, orgId, authz.user.id, enrollment.employment_id)
-      if (enrollment.status !== 'elected' || enrollment.submission_snapshot != null) return 'Submitted and active enrollment elections are immutable; use Change enrollment on the active record'
+      if (enrollment.status !== 'elected' || enrollment.submission_snapshot != null) return 'Submitted and active enrollment elections are immutable; open the active enrollment and choose Edit to create a dated replacement'
       if (entity.key === 'benefit-enrollment-configuration') {
         if (values.classKey != null && values.classKey !== '') {
           const selected = (await executor.execute(sql`select id from hrm_benefit_contribution_classes where org_id=${orgId} and plan_id=${enrollment.plan_id} and class_key=${String(values.classKey)}`)).rows[0]

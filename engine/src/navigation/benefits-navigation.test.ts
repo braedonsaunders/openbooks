@@ -8,10 +8,10 @@ test('Benefits owns programs, enrollment, rewards and incentives while compensat
   const benefits = LOCAL_NAVIGATION.find((workspace) => workspace.id === 'hrm-rewards')!
   assert.equal(benefits.label, 'Benefits')
   assert.equal(benefits.tabs[0]?.href, '/hrm/benefits')
-  for (const view of ['programs', 'enrolments', 'rewards', 'incentives', 'payouts']) {
+  for (const view of ['programs', 'enrolments', 'rewards', 'incentives', 'policies', 'payouts']) {
     const tab = benefits.tabs.find((candidate) => candidate.href === `/hrm/benefits?view=${view}`)
     assert.ok(tab, view)
-    assert.equal(tab.permission, 'hrm.benefits.read')
+    assert.equal(tab.permission, 'hrm.benefits.read'); assert.equal(NAV_MODULES.find(module => module.href === tab.href)?.featureKey, 'hrm')
   }
   assert.ok(!benefits.tabs.some((tab) => tab.href.startsWith('/hrm/compensation')))
   assert.equal(HRM_LOCAL_NAVIGATION.compensation[0]?.href, '/hrm/compensation')

@@ -3253,5 +3253,35 @@
     "employeeLoadFailed": "Employees could not be loaded. Try again.",
     "upgradeRequired": "Performance upgrade required",
     "upgradeDescription": "An administrator must apply the Talent database upgrade before review templates can be opened."
+  },
+  "enrollmentRecord": {
+    "contributions": "Contribution elections",
+    "changeHint": "Save creates an effective-dated replacement. Current coverage remains in place until any required approvals finish.",
+    "failed": "The enrollment action could not be saved.",
+    "dateReasonRequired": "Enter an effective date and a reason.",
+    "laterDateRequired": "Choose a change date after {date}.",
+    "termsRequired": "Choose at least one contribution and enter each elected rate.",
+    "rulesNotEffective": "A selected contribution rule does not cover this date. Choose an effective rule or another date.",
+    "addContribution": "Add contribution",
+    "chooseContribution": "Choose a contribution",
+    "end": "End enrollment",
+    "cancel": "Cancel enrollment",
+    "approvals": "View approvals",
+    "effectiveDate": "Effective date",
+    "reason": "Reason",
+    "plan": "Plan",
+    "currency": "Currency",
+    "from": "Effective from",
+    "to": "Effective to"
+  },
+  "benefitPolicies": {
+    "title": "Policies",
+    "entitlements": "Entitlement plans",
+    "vacation": "Employee vacation terms",
+    "service": "Credited service",
+    "description": "Define entitlement policies and employee terms here. Payroll applies these effective-dated records when calculating pay.",
+    "coverage": "Coverage and savings",
+    "balances": "Balances",
+    "empty": "No employee policies recorded."
   }
 }

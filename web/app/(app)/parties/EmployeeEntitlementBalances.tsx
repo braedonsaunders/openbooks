@@ -41,9 +41,7 @@ interface MovementRow {
 }
 
 /**
- * Pay banks on the employee record, beside the payroll profile and wage
- * history — the same place every other compensation fact about this person
- * already lives. Read-only: a bank moves through payroll or an explicit
+ * Entitlement balances on the employee Benefits record. Read-only: a bank moves through payroll or an explicit
  * adjustment, never by typing a new balance over the old one (the ledger is
  * append-only and is the balance).
  *
@@ -134,7 +132,7 @@ export function EmployeeEntitlementBalances({ partyId, readOnly }: { partyId: st
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
         </div>
         <Link
-          href={'/admin/setup/payroll?tab=entitlements' as never}
+          href={'/hrm/benefits?view=policies&policy=entitlements' as never}
           className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
         >
           <Settings2 size={13} aria-hidden /> {t('managePlans')}

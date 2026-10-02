@@ -30,6 +30,12 @@ export default async function SetupEntityPage({
     if (row) params.set(entityKey === 'benefit-plans' ? 'plan' : 'program', row)
     redirect(`/hrm/benefits?${params}`)
   }
+  const benefitPolicies: Record<string, string> = { 'entitlement-plans': 'entitlements', 'payroll-vacation-terms': 'vacation', 'payroll-service-credits': 'service' }
+  if (benefitPolicies[entityKey]) {
+    const query = new URLSearchParams({ view: 'policies', policy: benefitPolicies[entityKey]! })
+    for (const [key, value] of Object.entries(sp)) if (typeof value === 'string' && !['view', 'policy'].includes(key)) query.set(key, value)
+    redirect(`/hrm/benefits?${query}`)
+  }
   const data = await loadSetupEntity(entityKey, sp)
   return <ModuleView spec={setupEntitySpec(data)} data={data} searchParams={sp} trusted />
 }

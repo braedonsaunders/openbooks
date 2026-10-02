@@ -465,7 +465,8 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     singularTitleKey: 'entities.entitlement-plans.singular',
     groupKey: 'workforce',
     featureKey: 'payroll',
-    rehomed: true, // subtab of the Payroll setup workspace
+    rehomed: true, // policy configuration lives in Benefits
+    writePermission: 'hrm.benefits.manage',
     iconKey: 'coins',
     orgScoped: true,
     actorCols: true,
@@ -526,7 +527,8 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     singularTitleKey: 'entities.entitlement-plan-limits.singular',
     groupKey: 'workforce',
     featureKey: 'payroll',
-    rehomed: true, // subtab of the Payroll setup workspace
+    rehomed: true, // policy configuration lives in Benefits
+    writePermission: 'hrm.benefits.manage',
     iconKey: 'gauge',
     orgScoped: true,
     actorCols: true,
@@ -573,7 +575,8 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     singularTitleKey: 'entities.entitlement-service-tiers.singular',
     groupKey: 'workforce',
     featureKey: 'payroll',
-    rehomed: true, // subtab of the Payroll setup workspace
+    rehomed: true, // policy configuration lives in Benefits
+    writePermission: 'hrm.benefits.manage',
     iconKey: 'calendar',
     orgScoped: true,
     actorCols: true,

@@ -75,6 +75,7 @@ async function mountDrawer(
   initialValues?: Record<string, unknown>,
   mutationBasePath?: string,
   presentation?: ReturnType<typeof benefitPlanPresentation>,
+  startEditing = true,
 ) {
   const entity = presentation ?? SETUP_ENTITY_BY_KEY.get(entityKey)
   assert.ok(entity, `the registry must declare ${entityKey}`)
@@ -117,6 +118,11 @@ async function mountDrawer(
     await tick()
   })
   await tick()
+  if (row && !entity.readOnly && startEditing) await act(async () => {
+    const button = [...document.querySelectorAll('button')].find(node => node.textContent?.trim() === 'Edit')
+    assert.ok(button, 'persisted setup records enter editing explicitly')
+    button.click(); await tick()
+  })
   t.after(async () => {
     await act(async () => root.unmount())
     host.remove()
@@ -349,6 +355,7 @@ test('availability rows use named inputs and preserve zoned instants while editi
   assert.equal(ui.seen.length, 1)
   assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).availability, [{ ...windows[0], endsAt: '2026-10-01T11:00:00-04:00' }])
   assert.equal(document.querySelector('[role="dialog"]'), shell)
+  await act(async () => clickButton(commonCatalog.actions!.edit!).click())
   await act(async () => clickButton(adminCatalog.structuredFields!.addRow!).click())
   assert.equal(document.querySelectorAll('fieldset').length, 2)
   await clickSave(false)
@@ -394,3 +401,16 @@ for (const target of ['plan', 'component'] as const) {
     assert.equal(payload.accrualValue, target === 'plan' ? '0' : null)
   })
 }
+
+ test('persisted configuration opens read-only and keeps its dialog through Edit and Cancel', async t => {
+  await mountDrawer(t, { id: 'group', code: 'GROUP', name: 'Employee policies', is_active: true }, () => Response.json({ ok: true }), ENTITY_KEY, undefined, undefined, undefined, false)
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog)
+  assert.equal([...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Save'), false)
+  await act(async () => { [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Edit')!.click(); await tick() })
+  assert.equal(document.querySelector('[role="dialog"]'), dialog)
+  assert.ok(document.querySelector('input[aria-label="Name"]'))
+  await act(async () => { [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Cancel')!.click(); await tick() })
+  assert.equal(document.querySelector('[role="dialog"]'), dialog)
+  assert.equal(document.querySelector('input[aria-label="Name"]'), null)
+})

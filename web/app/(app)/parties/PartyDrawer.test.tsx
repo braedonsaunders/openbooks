@@ -217,6 +217,7 @@ function employeeRoutes(): Record<string, () => Response> {
         derivedProfileColumns: {},
         defaultCountry: "US",
       }),
+    "/api/hrm/employee-benefits": () => Response.json({ employments: [{ value: "employment-1", label: "Employer" }], enrollments: [], vacation: [], service: [], payroll: true, canManage: true, canReadBanks: true }),
     "/api/payroll/entitlements": () =>
       Response.json({ currency: "USD", balances: [BALANCE_ROW], movements: [MOVEMENT_ROW] }),
   };
@@ -555,8 +556,7 @@ test("payroll edit mode restores every editor", async (t) => {
   t.after(done);
   const panel = payrollPanel();
   assert.ok(panel.querySelector("#pp-schedule"), "edit mode must offer the pay-schedule editor");
-  const search = [...panel.querySelectorAll('input[placeholder="Search"]')];
-  assert.ok(search.length > 0, "edit mode must offer the movement search");
+  assert.ok(!panel.textContent?.includes(en("payroll.entitlements.title")), "Benefits owns entitlement balances");
   assert.ok(
     panel.textContent?.includes(en("parties.drawer.addBankAccount")),
     "edit mode must offer the bank add",
@@ -591,12 +591,9 @@ test("payroll sub-tabs keep every section mounted", async (t) => {
   const editorHidden = () =>
     (editorWrap.closest("div[hidden]") as HTMLElement | null) !== null;
 
-  await clickTab(subTab("Pay banks"));
-  assert.ok(editorHidden(), "the profile editor must hide behind the banks half");
-  assert.ok(
-    document.body.textContent?.includes(en("payroll.entitlements.title")),
-    "the banks half must show the entitlement balances",
-  );
+  await clickTab(subTab("Bank accounts"));
+  assert.ok(editorHidden(), "the profile editor must hide behind the accounts tab");
+  assert.ok(document.body.textContent?.includes(en("parties.drawer.addBankAccount")), "bank accounts remain in Payroll");
 
   await clickTab(subTab("General"));
   assert.equal(editorHidden(), false, "returning must show the same mounted editor");
@@ -945,3 +942,11 @@ for (const kind of ["vendor", "customer", "employee"] as const) {
     );
   });
 }
+
+test("employee Benefits owns vacation terms, credited service and entitlement balances with its own grant", async t => {
+  const ui = await renderDrawer({ payload: employeePayload("employee", { employee: true }), role: "employee", recordType: "employee", initialTab: "benefits", grants: { canReadBenefits: true }, fetchHandler: routeFetch(employeeRoutes()) }); t.after(ui.done);
+  assert.ok(document.body.textContent?.includes(en("hrm.benefitPolicies.vacation")));
+  assert.ok(document.body.textContent?.includes(en("hrm.benefitPolicies.service")));
+  const balances = [...document.querySelectorAll('button')].find(node => node.textContent?.trim() === en("hrm.benefitPolicies.balances")); assert.ok(balances); await clickTab(balances);
+  assert.ok(document.body.textContent?.includes("40")); assert.ok(document.body.textContent?.includes(en("payroll.entitlements.title")));
+});

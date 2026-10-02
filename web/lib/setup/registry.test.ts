@@ -73,7 +73,7 @@ test('record-owned setup collections leave the rail and declare their parent bin
   assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('tax-registrations')!), '/admin/setup/tax-jurisdictions?setupTab=tax-registrations')
   assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('item-identifiers')!), '/items?itemSetup=item-identifiers')
   assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('tax-pool-classes')!), '/admin/setup/tax-depreciation?tab=regimes&setupTab=tax-pool-classes')
-  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('entitlement-plan-limits')!), '/admin/setup/payroll?tab=entitlements&setupTab=entitlement-plan-limits')
+  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('entitlement-plan-limits')!), '/hrm/benefits?view=policies&policy=entitlements&setupTab=entitlement-plan-limits')
   const tierFields = SETUP_ENTITY_BY_KEY.get('entitlement-service-tiers')!.fields
   for (const target of [{ planId: 'saved-plan', componentId: null }, { planId: null, componentId: 'saved-component' }]) {
     assert.equal(setupFieldVisible(tierFields.find(field => field.key === 'eligible')!, target), Boolean(target.componentId))
@@ -475,3 +475,9 @@ test('single-key and ungated entities keep their existing verdicts', () => {
   )
   assert.deepEqual(resolveSetupEntityGate({}, {}), { enabled: true, remedy: null })
 })
+
+test('Benefits is the sole configuration home and write authority for entitlement and employee policies', () => {
+  for (const [key, policy] of [['entitlement-plans','entitlements'],['payroll-vacation-terms','vacation'],['payroll-service-credits','service']]) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key!)!; assert.equal(entity.rehomed, true); assert.equal(entity.writePermission, 'hrm.benefits.manage'); assert.equal(setupEntityHref(entity), `/hrm/benefits?view=policies&policy=${policy}`);
+  }
+});

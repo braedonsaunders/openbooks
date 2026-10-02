@@ -23,6 +23,7 @@ export function visibleNavigationHref(href: string, allowed: (permission: string
   }).sort((a, b) => navPathname(b.href).length - navPathname(a.href).length || (b.href.includes('?') ? 1 : 0) - (a.href.includes('?') ? 1 : 0))[0]
   if (owner) {
     if (owner.featureKey && !featureEnabled(state, owner.featureKey)) return false
+    if (owner.requiredFeatures?.some(feature => !featureEnabled(state, feature))) return false
     if (FEATURES.some((feature) => feature.navModules?.includes(owner.key) && !featureEnabled(state, feature.key))) return false
     const permissions = owner.key === ADMIN_MODULE_KEY ? ADMIN_HUB_PERMISSIONS : owner.requiredPermissionsAny
     if (permissions ? !permissions.some((permission) => allowed(permission)) : !allowed(owner.requiredPermission)) return false

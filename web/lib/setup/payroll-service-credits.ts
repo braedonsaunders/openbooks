@@ -4,7 +4,7 @@ import type { SetupEntity } from './types'
 export const PAYROLL_SERVICE_CREDITS_ENTITY: SetupEntity = {
   key: 'payroll-service-credits', table: 'payroll_service_credits', groupKey: 'workforce', featureKey: 'payroll',
   rehomed: true, iconKey: 'calendar', orgScoped: true, actorCols: true, hasActive: false, orderBy: 'as_of_date',
-  writePermission: 'payroll.manage',
+  writePermission: 'hrm.benefits.manage',
   columns: [{ key: 'employmentId', kind: 'ref', ref: 'worker-employments' }, { key: 'convention', kind: 'badge', options: [{ value: 'calendar_months', labelKey: 'serviceCredit.calendarMonths' }, { value: 'actual_365', labelKey: 'serviceCredit.actual365' }] }, { key: 'asOfDate', kind: 'date' }, { key: 'creditedDays', kind: 'number' }, { key: 'creditedMonths', kind: 'number' }, { key: 'effectiveFrom', kind: 'date' }, { key: 'effectiveTo', kind: 'date' }],
   fields: [{ key: 'employmentId', kind: 'ref', ref: 'worker-employments', required: true, lockedOnEdit: true },
     { key: 'convention', kind: 'select', required: true, options: [{ value: 'calendar_months', labelKey: 'serviceCredit.calendarMonths' }, { value: 'actual_365', labelKey: 'serviceCredit.actual365' }], helpTextKey: 'serviceCredit.conventionHint' },

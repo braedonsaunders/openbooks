@@ -693,7 +693,7 @@ export async function changeEnrollment(query: ChangeEnrollmentQuery): Promise<En
     if (changeDate <= current.effectiveFrom) {
       throw new BenefitsError(
         "REFUSED",
-        `change date ${changeDate} is not after the enrolment start ${current.effectiveFrom} — change from a later date, or cancel and elect anew`,
+        `change date ${changeDate} is not after the enrolment start ${current.effectiveFrom} — choose a change date after the enrollment start`,
       );
     }
     if (current.effectiveTo !== null && changeDate > current.effectiveTo) {

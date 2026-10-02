@@ -3253,5 +3253,35 @@
     "employeeLoadFailed": "No se pudieron cargar los empleados. Inténtelo de nuevo.",
     "upgradeRequired": "Se requiere actualizar Desempeño",
     "upgradeDescription": "Un administrador debe aplicar la actualización de la base de datos de Talento antes de abrir las plantillas de evaluación."
+  },
+  "enrollmentRecord": {
+    "contributions": "Aportaciones elegidas",
+    "changeHint": "Guardar crea una sustitución con fecha de vigencia. La cobertura actual se mantiene hasta finalizar las aprobaciones necesarias.",
+    "failed": "No se pudo guardar la acción de inscripción.",
+    "dateReasonRequired": "Introduzca una fecha de vigencia y un motivo.",
+    "laterDateRequired": "Elija una fecha de cambio posterior a {date}.",
+    "termsRequired": "Elija al menos una aportación e introduzca cada tasa elegida.",
+    "rulesNotEffective": "Una regla seleccionada no cubre esta fecha. Elija una regla vigente u otra fecha.",
+    "addContribution": "Añadir aportación",
+    "chooseContribution": "Elegir una aportación",
+    "end": "Finalizar inscripción",
+    "cancel": "Cancelar inscripción",
+    "approvals": "Ver aprobaciones",
+    "effectiveDate": "Fecha de vigencia",
+    "reason": "Motivo",
+    "plan": "Plan",
+    "currency": "Moneda",
+    "from": "Vigente desde",
+    "to": "Vigente hasta"
+  },
+  "benefitPolicies": {
+    "title": "Políticas",
+    "entitlements": "Planes de derechos",
+    "vacation": "Condiciones de vacaciones del empleado",
+    "service": "Antigüedad reconocida",
+    "description": "Defina aquí las políticas y condiciones del empleado. La nómina aplica estos registros según su fecha de vigencia.",
+    "coverage": "Cobertura y ahorro",
+    "balances": "Saldos",
+    "empty": "No hay políticas de empleados registradas."
   }
 }

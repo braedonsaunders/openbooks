@@ -46,7 +46,7 @@ function changeCount(changes: Record<string, unknown>): number {
   return auditEventDiffs(changes).length
 }
 
-export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties' | 'item_rate_versions'; recordId: string }) {
+export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties' | 'item_rate_versions' | 'hrm_benefit_enrollments'; recordId: string }) {
   const t = useTranslations('common.auditTrail')
   const ta = useTranslations('admin.audit')
   const [q, setQ] = useState('')
@@ -156,7 +156,7 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
                     <TableCell><Badge variant={ACTION_VARIANT[row.action] ?? 'secondary'}>{actionLabel(row.action)}</Badge></TableCell>
                     <TableCell className="max-w-sm">
                       <span className="flex items-center justify-between gap-2 text-sm font-medium text-teal-700 dark:text-teal-300">
-                        <span>{count > 0 ? t('changeCount', { count }) : inspectable ? t('viewChanges') : t('noChanges')}</span>
+                        <span className="truncate">{typeof row.changes.reason === 'string' && row.changes.reason.trim() ? row.changes.reason : count > 0 ? t('changeCount', { count }) : inspectable ? t('viewChanges') : t('noChanges')}</span>
                         <ChevronRight size={15} aria-hidden />
                       </span>
                     </TableCell>
