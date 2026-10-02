@@ -105,7 +105,9 @@ those writes.
 Catalog comparison uses UTC and compares columns by name. For registry-generated
 query views, physical column order is ignored while the selected column set,
 isolation predicate and all security attributes must match. Curated expressions
-and function bodies remain exact.
+and function bodies remain exact. A direct read-role schema USAGE grant is
+redundant when PUBLIC already has USAGE; catalog equivalence compares that
+effective access while still refusing added PUBLIC CREATE privileges.
 
 ### Complete a historical upgrade
 
@@ -135,3 +137,8 @@ post-data, then restore those original function settings before any application
 connects. Preserve existing explicit search paths, especially security-definer
 functions. Verify the restored catalog and financial fingerprints against the
 source snapshot. Keep the restoration target isolated until verification passes.
+
+When adoption runs as a database administrator, ensure the installation audit is
+included in subsequent backups: grant the dedicated backup login USAGE on
+`openbooks_migrations` and SELECT on its audit tables. Keep CREATE, INSERT,
+UPDATE and DELETE restricted to the maintenance owner.

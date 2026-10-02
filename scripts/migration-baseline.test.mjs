@@ -141,3 +141,11 @@ test("catalog ACL comparison is independent of database collation", () => {
   assert.doesNotThrow(() => assertBaselineCatalogsEqual({ schema_acl: grants }, { schema_acl: grants.toReversed() }));
   assert.throws(() => assertBaselineCatalogsEqual({ schema_acl: grants }, { schema_acl: grants.slice(1) }), /differs in schema_acl/);
 });
+
+test("public schema usage covers a redundant read-role grant without admitting public writes", () => {
+  const usage = { schema: "public", grantee: "PUBLIC", privilege_type: "USAGE", is_grantable: false };
+  const read = { ...usage, grantee: "openbooks_read" };
+  assert.doesNotThrow(() => assertBaselineCatalogsEqual({ schema_acl: [usage, read] }, { schema_acl: [usage] }));
+  assert.throws(() => assertBaselineCatalogsEqual({ schema_acl: [usage, read] }, { schema_acl: [read] }), /differs in schema_acl/);
+  assert.throws(() => assertBaselineCatalogsEqual({ schema_acl: [usage] }, { schema_acl: [usage, { ...usage, privilege_type: "CREATE" }] }), /differs in schema_acl/);
+});
