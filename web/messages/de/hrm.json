@@ -3046,7 +3046,7 @@
       "scientific": "{field}: Schreiben Sie {value} vollständig statt in wissenschaftlicher Notation.",
       "not-a-number": "{field}: Geben Sie einen lesbaren Dezimalbetrag ein."
     },
-    "description": "Arbeitgeberprogramme, Mitarbeiterteilnahme und kontrollierte Abwicklung.",
+    "description": "Benefits verwaltet Arbeitgeberprogramme und Mitarbeiterwahlen. Die Lohnabrechnung verwaltet Entgelt, Steuern und gesetzliche Abzüge.",
     "home": {
       "heroHint": "Öffnen Sie ein Programm, um Regeln, Teilnehmer, Aktivität und Abrechnungsanbindung zu verwalten.",
       "directoryTitle": "Leistungsverwaltung",

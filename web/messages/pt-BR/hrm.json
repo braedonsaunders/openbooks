@@ -3046,7 +3046,7 @@
       "scientific": "{field}: escreva {value} por inteiro, sem notação científica.",
       "not-a-number": "{field}: insira um valor decimal legível."
     },
-    "description": "Programas da empresa, participação dos funcionários e entrega controlada.",
+    "description": "Benefícios gerencia programas do empregador e escolhas dos funcionários. A folha gerencia salários, impostos e descontos legais.",
     "home": {
       "heroHint": "Abra um programa para gerenciar regras, participantes, atividade e conexão com a folha.",
       "directoryTitle": "Gestão de benefícios",

@@ -94,13 +94,13 @@ test('finance selects an editable scoped native run and the server refusal prese
 
 const { AwardBuilderDrawer } = await import('./AwardBuilderDrawer')
 
-test('a fixed award carries its denomination and one request identity survives a network retry', async (t) => {
+for (const family of ['reward', 'allowance'] as const) test(`a fixed ${family} carries its denomination and one request identity survives a network retry`, async (t) => {
   const requests: Record<string, unknown>[] = []
   const fetcher = (async (_url: RequestInfo | URL, init?: RequestInit) => {
     requests.push(JSON.parse(String(init?.body)))
     throw new Error('Connection interrupted')
   }) as typeof fetch
-  await mount(t, <AwardBuilderDrawer closeHref="/hrm/benefits" defaultCurrency="USD" programOptions={[{ value: 'program', label: 'Recognition', currency: 'USD', fixedAmount: '25.0000' }]} employmentOptions={[{ value: 'employment', label: 'Ada' }]} />, fetcher)
+  await mount(t, <AwardBuilderDrawer closeHref="/hrm/benefits" programOptions={[{ value: 'program', label: 'Recognition', family, currency: 'USD', fixedAmount: '25.0000' }]} employmentOptions={[{ value: 'employment', label: 'Ada' }]} />, fetcher)
   await fill('award-builder-program', 'program')
   const value = document.getElementById('award-builder-value') as HTMLInputElement
   assert.equal(value.value, '25.0000')
@@ -111,7 +111,7 @@ test('a fixed award carries its denomination and one request identity survives a
   await fill('award-builder-recipient', 'employment')
   await fill('award-builder-from', '2026-01-01')
   await fill('award-builder-reason', 'Recognize excellent service')
-  const submit = () => Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Create reward')!
+  const submit = () => Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === (family === 'reward' ? 'Create reward' : 'Record grant'))!
   await act(async () => submit().click())
   await act(async () => submit().click())
   assert.equal(requests.length, 2, 'both attempts reach the domain boundary')

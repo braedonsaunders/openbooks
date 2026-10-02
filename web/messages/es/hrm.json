@@ -3046,7 +3046,7 @@
       "scientific": "{field}: escriba {value} completo, sin notación científica.",
       "not-a-number": "{field}: introduzca un importe decimal legible."
     },
-    "description": "Programas empresariales, participación de empleados y entrega controlada.",
+    "description": "Beneficios gestiona programas del empleador y elecciones de empleados. Nómina gestiona salarios, impuestos y deducciones legales.",
     "home": {
       "heroHint": "Abra un programa para gestionar reglas, participantes, actividad y conexión con nómina.",
       "directoryTitle": "Gestión de beneficios",

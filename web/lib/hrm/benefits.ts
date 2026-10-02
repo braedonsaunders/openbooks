@@ -183,7 +183,6 @@ export interface BenefitsData {
   programBuilderFamily: ProgramFamily
   programBuilderLocked: boolean
   awardBuilderOpen: boolean
-  defaultAwardCurrency: string
   currencyOptions: PortfolioData['currencyOptions']
   accountOptions: BuilderOption[]
   payComponentOptions: BenefitPayComponentOption[]
@@ -194,7 +193,7 @@ export interface BenefitsData {
   awardDrawer: AwardDetailDrawer | null
   awardCloseHref: string
   canQueue: boolean
-  awardProgramOptions: { value: string; label: string; currency: string; fixedAmount: string | null }[]
+  awardProgramOptions: { value: string; label: string; currency: string; fixedAmount: string | null; family: ProgramFamily }[]
   vitalsRefusal: { title: string; message: string } | null
   awardsTotal: number
   awardsTruncated: boolean
@@ -414,7 +413,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     portfolioFields.unifiedProgramRows = catalog.filter(program=>program.parentProgramIds.length===0).map((program): UnifiedProgramRow => ({
       id: program.id, code: program.code, name: program.name, family: program.type,
       familyLabel: t(`programIdentity.types.${program.type}`),
-      valueLabel: portfolio.programs.find(row => row.id === program.id)?.valueLabel ?? t('portfolio.planCostsInRecord'),
+      valueLabel: portfolio.programs.find(row => row.id === program.id)?.valueLabel ?? t(program.nativeKind === 'entitlement' ? 'programWorkspace.rules' : 'portfolio.planCostsInRecord'),
       effectiveFrom: program.effectiveFrom, effectiveTo: program.effectiveTo,
       statusLabel: t.has(`portfolio.programStatus.${program.status}`) ? t(`portfolio.programStatus.${program.status}`) : t(`benefits.statusNames.${program.status}`),
       statusVariant: program.status === 'active' ? 'success' : program.status === 'draft' ? 'warning' : 'outline',
@@ -571,7 +570,6 @@ function emptyPortfolioFields(
   | 'programBuilderFamily'
   | 'programBuilderLocked'
   | 'awardBuilderOpen'
-  | 'defaultAwardCurrency'
   | 'currencyOptions'
   | 'accountOptions'
   | 'payComponentOptions'
@@ -662,7 +660,6 @@ function emptyPortfolioFields(
     programBuilderFamily: 'reward',
     programBuilderLocked: false,
     awardBuilderOpen: false,
-    defaultAwardCurrency: '',
     currencyOptions: [],
     accountOptions: [],
     payComponentOptions: [],
@@ -833,9 +830,6 @@ function toPortfolioFields(
   const requestedFamily = sp.family === 'reward' || sp.family === 'allowance' || sp.family === 'incentive' || sp.family === 'custom'
     ? sp.family
     : null
-  const currencies = new Map<string, number>()
-  for (const program of portfolio.programs) currencies.set(program.currency, (currencies.get(program.currency) ?? 0) + 1)
-  const defaultAwardCurrency = [...currencies.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
   return {
     portfolioView,
     overview: {
@@ -895,7 +889,6 @@ function toPortfolioFields(
     programBuilderFamily: requestedFamily ?? 'reward',
     programBuilderLocked: requestedFamily !== null,
     awardBuilderOpen: sp.award === 'new' && canManage && portfolio.optionsRefusal === null,
-    defaultAwardCurrency,
     currencyOptions: portfolio.currencyOptions,
     accountOptions: portfolio.accountOptions,
     payComponentOptions: portfolio.payComponentOptions,
@@ -971,7 +964,7 @@ function toPortfolioFields(
     // here; they settle from their program drawer.
     awardProgramOptions: portfolio.programs
       .filter((program) => program.status === 'active' && program.family !== 'incentive')
-      .map((program) => ({ value: program.id, label: `${program.code} — ${program.name}`, currency: program.currency, fixedAmount: program.valuation === 'fixed' ? program.fixedAmount : null })),
+      .map((program) => ({ value: program.id, label: `${program.code} — ${program.name}`, family: program.family, currency: program.currency, fixedAmount: program.valuation === 'fixed' ? program.fixedAmount : null })),
   }
 }
 

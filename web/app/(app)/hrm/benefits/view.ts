@@ -159,7 +159,6 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
               closeHref: f('dialogCloseHref'),
               programOptions: f('awardProgramOptions'),
               employmentOptions: f('employmentOptions'),
-              defaultCurrency: f('defaultAwardCurrency'),
               initialProgramId: data.programEditSeed?.id ?? data.programRows.find(row => row.programHref === data.dialogCloseHref)?.id,
             },
             f('awardBuilderOpen'),

@@ -3046,7 +3046,7 @@
       "scientific": "{field} : écrivez {value} en entier, sans notation scientifique.",
       "not-a-number": "{field} : saisissez un montant décimal lisible."
     },
-    "description": "Programmes employeur, participation des employés et exécution contrôlée.",
+    "description": "Avantages gère les programmes employeur et les choix des employés. La paie gère les salaires, les impôts et les retenues légales.",
     "home": {
       "heroHint": "Ouvrez un programme pour gérer ses règles, participants, activité et lien avec la paie.",
       "directoryTitle": "Gestion des avantages",
