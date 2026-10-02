@@ -58,16 +58,14 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return { cycle: { id: args.cycleId }, instantiated: 1, managerReviews: 0, gaps: 0 }
       }
-      export async function moveToCalibrating(args) {
-        state.calls.push({ fn: 'calibrating', args })
+      const change = (fn) => async (args) => {
+        state.calls.push({ fn, args })
         if (state.serviceThrow) throw state.serviceThrow
         return { id: args.cycleId }
       }
-      export async function closeCycle(args) {
-        state.calls.push({ fn: 'close', args })
-        if (state.serviceThrow) throw state.serviceThrow
-        return { id: args.cycleId }
-      }
+      export const moveToCalibrating = change('calibrating')
+      export const closeCycle = change('close')
+      export const updateCycleManagement = change('update')
     `,
   ],
   [
@@ -194,11 +192,12 @@ test("actions discriminate and validate at the real boundary", async () => {
   ]);
 });
 
-test("open and close reach the service with the record id", async () => {
+test("open, close and management updates reach the service with the record id", async () => {
   reset();
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "open" }), params)).status, 200);
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status, 200);
-  assert.deepEqual(routeState.calls.map((c) => c.fn), ["open", "close"]);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "update", revision: 1, name: "Quarterly review" }), params)).status, 200);
+  assert.deepEqual(routeState.calls.map((c) => c.fn), ["open", "close", "update"]);
 });
 
 test("action routes refuse hostile payloads at the real boundary", async () => {
