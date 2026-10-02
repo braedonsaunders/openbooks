@@ -11,7 +11,7 @@ export function isDefaultLocalNavigationItem(groupId: string, item: NavItemConfi
 /**
  * Reconcile shipped destinations without replacing company-defined groups,
  * labels, visibility, shortcuts, or deliberate placements. Legacy default
- * people destinations move together; subsequent editor moves are explicit.
+ * people and misplaced Sales destinations move together; editor moves are explicit.
  */
 export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
   const groups = saved.groups.map((group) => ({ ...group, items: group.items.map((item) => ({ ...item })) }))
@@ -39,6 +39,16 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
         const [item] = operations.items.splice(index, 1)
         ensureGroup(key === 'me' ? 'my-work' : 'hrm').items.push(item!)
       }
+    }
+  }
+  // Correct inherited Sales placements while retaining deliberate company moves
+  // and each destination's labels, visibility, mobile pinning and relative order.
+  const accounting = groups.find((group) => group.id === 'accounting' && group.label === 'Accounting')
+  if (accounting) {
+    const sales = accounting.items.filter((item) => item.kind === 'module' && item.placement !== 'custom' && MODULE_BY_KEY.get(item.moduleKey)?.subgroup === 'crm-sales' && MODULE_BY_KEY.get(item.moduleKey)?.group === 'customers')
+    if (sales.length) {
+      accounting.items = accounting.items.filter((item) => !sales.includes(item))
+      ensureGroup('customers').items.push(...sales)
     }
   }
   const present = new Set(groups.flatMap((group) => group.items.flatMap((item) => item.kind === 'module' ? [item.moduleKey] : [])))
