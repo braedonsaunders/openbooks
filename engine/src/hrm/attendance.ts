@@ -10,6 +10,7 @@ import { inputGuards } from "./input-guards.ts";
 import { isUniqueViolation } from "./field-time/errors.ts";
 import { addHours, formatCents, parseHoursToCents } from "./leave-math.ts";
 import { parseCivilDate } from "./temporal.ts";
+import { inclusiveCalendarDays } from "../platform/civil-date.ts";
 
 /**
  * HRM attendance (HR-5): the absence record written after the fact, and the
@@ -44,15 +45,15 @@ export interface AbsenceDay {
   readonly source: "request" | "recorded";
 }
 
-function requireCivilDate(value: unknown): string {
+function requireCivilDate(value: unknown, field = "on_date"): string {
   if (typeof value !== "string") {
-    throw new LeaveError("INVALID_INPUT", "on_date must be a real YYYY-MM-DD calendar date in years 0001 through 9999");
+    throw new LeaveError("INVALID_INPUT", `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`);
   }
   try {
     parseCivilDate(value);
     return value;
   } catch {
-    throw new LeaveError("INVALID_INPUT", "on_date must be a real YYYY-MM-DD calendar date in years 0001 through 9999");
+    throw new LeaveError("INVALID_INPUT", `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`);
   }
 }
 
@@ -135,61 +136,88 @@ export interface DepartmentAbsenceDay extends AbsenceDay {
 }
 
 /**
- * Calendar read per department for a date range: every absence day of every
- * employment whose primary assignment sits in the department, net of
- * reversals. Members outside the actor's subsidiary allowlist never list —
- * the department view is a manager lens, not a cross-entity window.
+ * Calendar read across all departments, or one selected department. A null
+ * department includes employments without a department assignment. Every
+ * employment is authorized and subsidiary-scoped before its days are read.
+ * Department membership is resolved on the absence date, so a transfer does
+ * not move historical leave into the employee's new department.
  */
 export async function absenceCalendarForDepartment(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
-  departmentId: string,
+  departmentId: string | null,
   from: string,
   to: string,
 ): Promise<DepartmentAbsenceDay[]> {
-  if (to < from) throw new LeaveError("INVALID_INPUT", `calendar end ${to} must not precede start ${from}`);
+  requireOrgId(orgId);
+  requireActorId(actorId);
+  if (departmentId !== null) requireId(departmentId, "departmentId");
+  requireCivilDate(from, "calendar start");
+  requireCivilDate(to, "calendar end");
+  if (to < from) throw new LeaveError("INVALID_INPUT", `calendar end ${to} must not precede start ${from} — choose an end on or after the start`);
+  if (inclusiveCalendarDays(from, to) > 366) {
+    throw new LeaveError("INVALID_INPUT", "the calendar window must not exceed 366 days — choose a shorter date range");
+  }
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && allowed.size === 0) return [];
+  const scope = allowed === null ? sql`` : sql`and e.employer_subsidiary_id in (${sql.join(
+    [...allowed].map((id) => sql`${id}::uuid`), sql`, `,
+  )})`;
   const members = (await exec.execute<{ employment_id: string; employer_subsidiary_id: string; worker_name: string }>(sql`
-    select distinct v.employment_id, e.employer_subsidiary_id, p.display_name as worker_name
-      from employment_assignment_versions v
-      join worker_employments e on e.id = v.employment_id and e.org_id = v.org_id
-      join parties p on p.id = e.worker_party_id and p.org_id = v.org_id
-     where v.org_id = ${orgId} and v.is_primary and v.recorded_until is null
-       and v.department_id = ${departmentId}
-       and v.effective_from <= ${to} and (v.effective_to is null or v.effective_to > ${from})
+    select e.id as employment_id, e.employer_subsidiary_id, p.display_name as worker_name
+      from worker_employments e
+      join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
+     where e.org_id = ${orgId} ${scope}
+       and exists (
+         select 1 from hrm_absences a
+          where a.org_id = e.org_id and a.employment_id = e.id
+            and a.on_date >= ${from} and a.on_date <= ${to}
+       )
+     order by p.display_name, e.id
   `)).rows;
   const visible = members.filter((member) => allowed === null || allowed.has(member.employer_subsidiary_id));
-  // One read gate per visible employment: department membership alone never
-  // grants sight — the employment gate still decides.
   const days: DepartmentAbsenceDay[] = [];
   for (const member of visible) {
     await requireHrmLeaveRead(exec, orgId, actorId, member.employment_id);
+    const department = departmentId === null ? sql`` : sql`and exists (
+      select 1 from employment_assignment_versions v
+       where v.org_id = a.org_id and v.employment_id = a.employment_id
+         and v.is_primary and v.recorded_until is null
+         and v.department_id = ${departmentId}
+         and v.effective_from <= a.on_date
+         and (v.effective_to is null or v.effective_to > a.on_date)
+    )`;
     const rows = (await exec.execute<{
       id: string; on_date: string; hours: string; code: string; source: "request" | "recorded";
     }>(sql`
       select a.id, a.on_date::text as on_date, a.hours::text as hours, t.code, a.source
         from hrm_absences a join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
        where a.org_id = ${orgId} and a.employment_id = ${member.employment_id}
-         and a.on_date >= ${from} and a.on_date <= ${to}
-       order by a.on_date
+         and a.on_date >= ${from} and a.on_date <= ${to} ${department}
+       order by a.on_date, t.code, a.id
     `)).rows;
-    const net = new Map<string, { hours: string; code: string; source: "request" | "recorded"; id: string }>();
+    // Net each leave type independently: a cancelled vacation and a new
+    // sick day on the same date must not inherit each other's type or hours.
+    const net = new Map<string, { onDate: string; hours: string; code: string; source: "request" | "recorded"; id: string }>();
     for (const row of rows) {
-      const day = String(row.on_date).slice(0, 10);
-      const current = net.get(day);
-      net.set(day, {
+      const onDate = String(row.on_date).slice(0, 10);
+      const key = `${onDate}:${row.code}`;
+      const current = net.get(key);
+      net.set(key, {
         id: row.id,
+        onDate,
         hours: current ? addHours(current.hours, String(row.hours)) : String(row.hours),
         code: row.code,
         source: row.source,
       });
     }
-    for (const [onDate, entry] of net) {
+    for (const entry of net.values()) {
+      if (parseHoursToCents(entry.hours) === 0n) continue;
       days.push({
         id: entry.id,
         employmentId: member.employment_id,
-        onDate,
+        onDate: entry.onDate,
         hours: entry.hours,
         leaveTypeCode: entry.code,
         source: entry.source,
@@ -197,7 +225,7 @@ export async function absenceCalendarForDepartment(
       });
     }
   }
-  days.sort((a, b) => (a.onDate < b.onDate ? -1 : a.onDate > b.onDate ? 1 : a.workerName.localeCompare(b.workerName)));
+  days.sort((a, b) => a.onDate.localeCompare(b.onDate) || a.workerName.localeCompare(b.workerName) || a.employmentId.localeCompare(b.employmentId) || a.leaveTypeCode.localeCompare(b.leaveTypeCode));
   return days;
 }
 

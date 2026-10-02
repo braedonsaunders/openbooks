@@ -9,8 +9,8 @@ export async function generateMetadata() {
 
 /**
  * The org-wide leave queue — the Leave tab. Segments for pending approval,
- * upcoming, on leave today, and history, plus a calendar view by
- * department. Rows open the LeaveDrawer with balances in time and, where a
+ * upcoming, on leave today, and history, plus a calendar with an optional
+ * department filter. Rows open the LeaveDrawer with balances in time and, where a
  * bank exists, in value — both labelled. Renders only when the hrm feature
  * gate is on and the actor holds hrm.leave.read — the view 404s otherwise.
  */
@@ -21,5 +21,12 @@ export default async function LeaveQueuePage({
 }) {
   const sp = await searchParams
   const data = await loadLeaveQueuePage(sp)
-  return <ModuleView spec={leaveQueueSpec(data, '/hrm/leave')} data={data} searchParams={sp} trusted />
+  return (
+    <ModuleView
+      spec={leaveQueueSpec(data, '/hrm/leave')}
+      data={data}
+      searchParams={sp}
+      trusted
+    />
+  )
 }

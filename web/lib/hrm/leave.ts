@@ -23,6 +23,7 @@ import { can, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { loadQueueLabels } from './change-requests'
 import { listScopedDepartmentOptions } from '../scoped-options'
+import { leaveCalendarWindow } from './leave-calendar'
 
 /**
  * Leave workspace loaders — one read per surface behind the Leave tab, the
@@ -47,7 +48,8 @@ export interface LeaveQueueRow extends LeaveRequestSummary {
   employeeLabel: string
   employeeHref: string | null
   statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  statusVariant:
+    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   requestHref: string
   openLabel: string
   rangeLabel: string
@@ -98,7 +100,19 @@ export interface LeaveQueueData {
   calendarAllDepartments: string
   calendarFromLabel: string
   calendarToLabel: string
-  calendarDays: { date: string; entries: { workerName: string; hours: string; leaveTypeCode: string }[] }[]
+  calendarFrom: string
+  calendarTo: string
+  calendarToday: string
+  calendarScopeLabel: string
+  calendarDays: {
+    date: string
+    entries: {
+      employmentId: string
+      workerName: string
+      hours: string
+      leaveTypeCode: string
+    }[]
+  }[]
   calendarEmpty: string
   departmentOptions: { value: string; label: string }[]
   queue: { notAvailable: string; openEmployee: string }
@@ -112,7 +126,10 @@ export interface LeaveQueueData {
   recordOpen: boolean
 }
 
-function segmentOf(row: LeaveRequestSummary, today: string): 'pending' | 'upcoming' | 'today' | 'history' {
+function segmentOf(
+  row: LeaveRequestSummary,
+  today: string,
+): 'pending' | 'upcoming' | 'today' | 'history' {
   if (row.status === 'submitted') return 'pending'
   if (row.status === 'approved' && row.endsOn >= today) return 'upcoming'
   return 'history'
@@ -137,7 +154,9 @@ function leaveHref(
 }
 
 function leaveStatusLabel(t: LeaveCatalog, status: string): string {
-  return t.has(`leave.statusNames.${status}`) ? t(`leave.statusNames.${status}`) : status
+  return t.has(`leave.statusNames.${status}`)
+    ? t(`leave.statusNames.${status}`)
+    : status
 }
 
 function leaveStatusVariant(status: string): LeaveQueueRow['statusVariant'] {
@@ -159,12 +178,24 @@ export async function loadLeaveQueue(
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
   const today = await businessToday(orgId)
-  // Requests and the department calendar are two VIEWS of leave, not two
+  // Requests and the calendar are two VIEWS of leave, not two
   // sections of one page. Stacked, the calendar sat below a table that fills
   // the viewport, so nobody scrolled to it and neither surface could be read
   // on its own.
-  const view: 'requests' | 'calendar' = sp.view === 'calendar' ? 'calendar' : 'requests'
-  const keepView: Record<string, string> = view === 'calendar' ? { view: 'calendar' } : {}
+  const view: 'requests' | 'calendar' =
+    sp.view === 'calendar' ? 'calendar' : 'requests'
+  const keepView: Record<string, string> =
+    view === 'calendar'
+      ? {
+          view: 'calendar',
+          ...Object.fromEntries(
+            ['department', 'from', 'to'].flatMap((key) =>
+              sp[key] ? [[key, sp[key]!]] : [],
+            ),
+          ),
+        }
+      : {}
+  const defaultWindow = leaveCalendarWindow(undefined, undefined, today)
   const base = {
     title: t('leave.title'),
     description: t('leave.description'),
@@ -197,19 +228,32 @@ export async function loadLeaveQueue(
     calendarFromLabel: t('leave.calendarFromLabel'),
     calendarToLabel: t('leave.calendarToLabel'),
     calendarEmpty: t('leave.calendarEmpty'),
+    calendarFrom: defaultWindow.from,
+    calendarTo: defaultWindow.to,
+    calendarToday: today,
+    calendarScopeLabel: t('leave.calendarAllDepartments'),
     view,
     onRequests: view === 'requests',
     onCalendar: view === 'calendar',
-    queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
+    queue: {
+      notAvailable: t('queue.notAvailable'),
+      openEmployee: t('queue.openEmployee'),
+    },
     currentParams: sp as Record<string, string | string[] | undefined>,
     openRequest: t('leave.openRequest'),
     // The dialogs keep the active VIEW as well as the segment: filing a
     // request from the calendar and closing it must not silently move you
     // to the requests list.
     fileHref: leaveHref('/hrm/leave', sp.segment, { ...keepView, file: '1' }),
-    recordHref: leaveHref('/hrm/leave', sp.segment, { ...keepView, record: '1' }),
-    dialogOpen: sp.file !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
-    dialogRequestId: typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
+    recordHref: leaveHref('/hrm/leave', sp.segment, {
+      ...keepView,
+      record: '1',
+    }),
+    dialogOpen:
+      sp.file !== undefined ||
+      (typeof sp.request === 'string' && sp.request !== ''),
+    dialogRequestId:
+      typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
     dialogCloseHref: leaveHref('/hrm/leave', sp.segment, keepView),
     // ?record=1 is the manager absence-recording action, not a second
     // spelling of ?file=1: it opens the record dialog below, which posts
@@ -217,11 +261,17 @@ export async function loadLeaveQueue(
     recordOpen: sp.record !== undefined,
   }
 
-  const segmentParam = sp.segment
-  if (segmentParam !== undefined && !['pending', 'upcoming', 'today', 'history'].includes(segmentParam)) {
+  const segmentParam = view === 'requests' ? sp.segment : undefined
+  if (
+    segmentParam !== undefined &&
+    !['pending', 'upcoming', 'today', 'history'].includes(segmentParam)
+  ) {
     return {
       ...base,
-      refusal: { title: t('leave.unknownSegmentTitle'), message: t('leave.unknownSegment', { segment: segmentParam }) },
+      refusal: {
+        title: t('leave.unknownSegmentTitle'),
+        message: t('leave.unknownSegment', { segment: segmentParam }),
+      },
       hasContent: false,
       counts: {},
       total: 0,
@@ -306,31 +356,66 @@ export async function loadLeaveQueue(
     }
   })
 
-  const departments = await listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)
+  const departments = await listScopedDepartmentOptions(
+    orgId,
+    authz.allowedSubsidiaryIds,
+  )
 
-  // Department calendar: absence days in the window, grouped by date. The
-  // engine scopes every member row; an empty window reads empty, never all.
+  // The calendar reads all visible departments unless the operator filters
+  // it. Dates default to the full business month, even with no absence facts.
   let calendarDays: LeaveQueueData['calendarDays'] = []
   let calendarRefusal: LeaveRefusal | null = null
-  const departmentId = sp.department ?? ''
-  const from = sp.from ?? today
-  const to = sp.to ?? today
-  if (departmentId) {
+  let calendarWindow = defaultWindow
+  const departmentId = sp.department || null
+  if (view === 'calendar') {
     try {
-      const days = await absenceCalendarForDepartment(db, orgId, authz.user.id, departmentId, from, to)
-      const byDate = new Map<string, { workerName: string; hours: string; leaveTypeCode: string }[]>()
+      try {
+        calendarWindow = leaveCalendarWindow(sp.from, sp.to, today)
+      } catch (error) {
+        if (!(error instanceof RangeError)) throw error
+        throw new LeaveError('INVALID_INPUT', error.message)
+      }
+      if (departmentId && !departments.some((row) => row.id === departmentId)) {
+        throw new LeaveError(
+          'REFUSED',
+          t('leave.calendarDepartmentUnavailable'),
+        )
+      }
+      const days = await absenceCalendarForDepartment(
+        db,
+        orgId,
+        authz.user.id,
+        departmentId,
+        calendarWindow.from,
+        calendarWindow.to,
+      )
+      const byDate = new Map<
+        string,
+        LeaveQueueData['calendarDays'][number]['entries']
+      >()
       for (const day of days) {
         const entries = byDate.get(day.onDate) ?? []
-        entries.push({ workerName: day.workerName, hours: day.hours, leaveTypeCode: day.leaveTypeCode })
+        entries.push({
+          employmentId: day.employmentId,
+          workerName: day.workerName,
+          hours: day.hours,
+          leaveTypeCode: day.leaveTypeCode,
+        })
         byDate.set(day.onDate, entries)
       }
       calendarDays = [...byDate.entries()]
-        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, entries]) => ({ date, entries }))
     } catch (error) {
-      if (!(error instanceof HrmAuthorizationError) && !(error instanceof LeaveError)) throw error
-      calendarRefusal = { title: t('leave.refusedTitle'), message: error.message }
-      calendarDays = []
+      if (
+        !(error instanceof HrmAuthorizationError) &&
+        !(error instanceof LeaveError)
+      )
+        throw error
+      calendarRefusal = {
+        title: t('leave.refusedTitle'),
+        message: error.message,
+      }
     }
   }
 
@@ -343,8 +428,16 @@ export async function loadLeaveQueue(
     truncated,
     segments,
     rows: queueRows,
-    departmentOptions: departments.map((row) => ({ value: row.id, label: row.name })),
+    departmentOptions: departments.map((row) => ({
+      value: row.id,
+      label: row.name,
+    })),
     calendarDays,
+    calendarFrom: calendarWindow.from,
+    calendarTo: calendarWindow.to,
+    calendarScopeLabel:
+      departments.find((row) => row.id === departmentId)?.name ??
+      t('leave.calendarAllDepartments'),
   }
 }
 

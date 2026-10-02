@@ -32,7 +32,7 @@ import { loadLeaveQueue, type LeaveQueueData } from '../../../../lib/hrm/leave'
  * dialog. The list itself is loader-resolved through the leave read service,
  * newest start first, with subsidiary scope enforced inside it.
  *
- * Requests and the department calendar are TABS on the shared subtab strip
+ * Requests and the calendar are TABS on the shared subtab strip
  * (`?view=`), not two panels down one page. Stacked, the calendar lived
  * under a table sized to fill the viewport — so it was below the fold on
  * every screen, and the page read as a list with something unexplained
@@ -107,8 +107,8 @@ export function leaveQueueSpec(
               }),
               when: f('onRequests'),
             },
-            // The calendar's own controls, on the SAME toolbar: department
-            // picks the roster, from/to the window.
+            // Department is optional; an unfiltered calendar covers every
+            // employment the reader is permitted to see.
             {
               ...widgetBlock('list-toolbar', {
                 basePath,
@@ -129,59 +129,77 @@ export function leaveQueueSpec(
                 fromLabel: data.calendarFromLabel,
                 toLabel: data.calendarToLabel,
                 clearLabel: data.allLabel,
+                defaultFrom: data.calendarFrom,
+                defaultTo: data.calendarTo,
               }),
               when: f('onCalendar'),
             },
           ]),
-          // No panel around either surface: the active tab already names it,
-          // and a card headed "Leave requests" under a tab reading "Leave
-          // requests" is the same words twice with a border between them.
           {
             ...grid('flex min-h-0 flex-1 flex-col gap-4', [
-              registeredListTable('hrm_leave', {
-                variant: 'app',
-                rows: f('rows'),
-                rowKey: item('id'),
-                columns: [
-                  column(
-                    f('columns.employee'),
-                    link(item('employeeLabel'), item('employeeHref')),
-                  ),
-                  column(f('columns.type'), text(item('leaveTypeCode'))),
-                  column(
-                    f('columns.range'),
-                    text(item('rangeLabel'), { className: 'tabular-nums' }),
-                  ),
-                  column(f('columns.hours'), text(item('hours')), {
-                    align: 'right',
-                    className: 'tabular-nums',
-                  }),
-                  column(
-                    f('columns.status'),
-                    badge(item('statusLabel'), {
-                      variant: item('statusVariant'),
-                    }),
-                  ),
-                  column('', link(item('openLabel'), item('requestHref'))),
-                ],
-                empty: {
-                  title: f('emptyTitle'),
-                  description: f('emptyDescription'),
-                },
-                ...(data.truncated
-                  ? {
-                      trailing: [
-                        spanRow({
-                          label: f('truncatedNote'),
-                          labelColSpan: 6,
-                          labelClassName:
-                            'text-center text-xs text-slate-400 dark:text-slate-500',
-                          cells: [],
+              // No panel around either surface: the active tab already names it,
+              // and a card headed "Leave requests" under a tab reading "Leave
+              // requests" is the same words twice with a border between them.
+              {
+                ...grid('flex min-h-0 flex-1 flex-col gap-4', [
+                  registeredListTable('hrm_leave', {
+                    variant: 'app',
+                    rows: f('rows'),
+                    rowKey: item('id'),
+                    columns: [
+                      column(
+                        f('columns.employee'),
+                        link(item('employeeLabel'), item('employeeHref')),
+                      ),
+                      column(f('columns.type'), text(item('leaveTypeCode'))),
+                      column(
+                        f('columns.range'),
+                        text(item('rangeLabel'), { className: 'tabular-nums' }),
+                      ),
+                      column(f('columns.hours'), text(item('hours')), {
+                        align: 'right',
+                        className: 'tabular-nums',
+                      }),
+                      column(
+                        f('columns.status'),
+                        badge(item('statusLabel'), {
+                          variant: item('statusVariant'),
                         }),
-                      ],
-                    }
-                  : {}),
-              }),
+                      ),
+                      column('', link(item('openLabel'), item('requestHref'))),
+                    ],
+                    empty: {
+                      title: f('emptyTitle'),
+                      description: f('emptyDescription'),
+                    },
+                    ...(data.truncated
+                      ? {
+                          trailing: [
+                            spanRow({
+                              label: f('truncatedNote'),
+                              labelColSpan: 6,
+                              labelClassName:
+                                'text-center text-xs text-slate-400 dark:text-slate-500',
+                              cells: [],
+                            }),
+                          ],
+                        }
+                      : {}),
+                  }),
+                ]),
+                when: f('onRequests'),
+              },
+              {
+                ...widgetBlock('hrm-leave-calendar', {
+                  days: data.calendarDays,
+                  empty: data.calendarEmpty,
+                  from: data.calendarFrom,
+                  to: data.calendarTo,
+                  today: data.calendarToday,
+                  scopeLabel: data.calendarScopeLabel,
+                }),
+                when: f('onCalendar'),
+              },
               widgetBlock(
                 'hrm-leave-dialog',
                 {
@@ -204,17 +222,9 @@ export function leaveQueueSpec(
                 f('recordOpen'),
               ),
             ]),
-            when: f('onRequests'),
-          },
-          {
-            ...widgetBlock('hrm-leave-calendar', {
-              days: data.calendarDays,
-              empty: data.calendarEmpty,
-            }),
-            when: f('onCalendar'),
+            when: f('hasContent'),
           },
         ]),
-        when: f('hasContent'),
       },
     ],
   })
