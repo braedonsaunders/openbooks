@@ -711,9 +711,7 @@ function ConfigListControls({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-64 max-w-md flex-1">
-        <SearchInput paramKey={`${listKey}Q`} pageParamKey={`${listKey}Page`} />
-      </div>
+      <SearchInput paramKey={`${listKey}Q`} pageParamKey={`${listKey}Page`} />
       <Pagination
         basePath={BASE}
         currentParams={currentParams}
@@ -1102,14 +1100,12 @@ function PeriodsTab(props: Props) {
           </Button>
         }
       />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-64 max-w-md flex-1">
-          <SearchInput
-            paramKey="periodQ"
-            pageParamKey="periodPage"
-            placeholder={t("periods.searchPlaceholder")}
-          />
-        </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <SearchInput
+          paramKey="periodQ"
+          pageParamKey="periodPage"
+          placeholder={t("periods.searchPlaceholder")}
+        />
         <div className="flex flex-wrap items-end gap-2">
           <Field label={t("fields.book")}>
             {props.books.length > 1 ? (
@@ -1622,9 +1618,7 @@ function ReopenList(props: Props) {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-64 max-w-md flex-1">
-            <SearchInput paramKey="reopenQ" pageParamKey="reopenPage" />
-          </div>
+          <SearchInput paramKey="reopenQ" pageParamKey="reopenPage" />
           <Pagination
             basePath={BASE}
             currentParams={props.currentParams}

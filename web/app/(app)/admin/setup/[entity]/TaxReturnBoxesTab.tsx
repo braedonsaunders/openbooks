@@ -85,7 +85,6 @@ export async function TaxReturnBoxesTab({
         placeholder={t('taxBoxes.searchPlaceholder')}
         paramKey="taxBoxQ"
         pageParamKey="taxBoxPage"
-        className="sm:w-full"
       />
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">

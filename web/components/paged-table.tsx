@@ -5,6 +5,7 @@ import { Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, TableCell, TableHead } from '@openbooks/ui'
 import { ListTable, type ListTableColumn } from './list-table'
+import { LIST_SEARCH_WIDTH } from './list-search-layout'
 import {
   preparedListSource,
   type PreparedListSourceKey,
@@ -132,7 +133,7 @@ export function PagedTable<T>({
   const toolbar = searchable ? (
     toolbarAfter ? (
       <div className={`flex flex-wrap gap-2${toolbarAlign === 'end' ? ' items-end' : ''}`}>
-        <div className="relative min-w-56 flex-1">
+        <div className={`relative ${LIST_SEARCH_WIDTH}`}>
           <Search
             className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
             size={15}
@@ -159,7 +160,7 @@ export function PagedTable<T>({
         }}
         aria-label={t('actions.search')}
         placeholder={t('actions.search')}
-        className="max-w-xs"
+        className={LIST_SEARCH_WIDTH}
       />
     )
   ) : toolbarAfter ?? null
