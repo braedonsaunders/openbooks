@@ -417,7 +417,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       familyLabel: `${t('portfolio.families.insured')} · ${plan.kind}`,
       valueLabel: t('portfolio.planCostsInRecord'),
       effectiveFrom: plan.effectiveFrom, effectiveTo: plan.effectiveTo,
-      statusLabel: t(plan.isActive ? 'benefits.statusNames.active' : 'benefits.statusNames.closed'),
+      statusLabel: t(plan.isActive ? 'benefits.statusNames.active' : 'benefits.statusNames.inactive'),
       statusVariant: plan.isActive ? 'success' : 'outline',
       programHref: `${basePath}?view=programs&plan=${encodeURIComponent(plan.id)}`,
     }))
