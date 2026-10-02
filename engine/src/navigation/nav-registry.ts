@@ -1049,11 +1049,13 @@ NAV_MODULES.push(
 /** Native local destinations are also discoverable and editable in the main menu. */
 for (const workspace of LOCAL_NAVIGATION) {
   if (workspace.inline) continue
+  // Derived pages share the registered entry point's workspace ownership.
+  const entryPointGroup = NAV_MODULES.find((module) => module.href === workspace.tabs[0]?.href)?.group
   for (const tab of workspace.tabs) {
     if ((tab.href.includes('?') && !tab.menuKey) || NAV_MODULES.some((module) => module.href === tab.href)) continue
-    const group: NavGroupKey = workspace.id.startsWith('hrm-') || workspace.id === 'payroll'
+    const group: NavGroupKey = entryPointGroup ?? (workspace.id.startsWith('hrm-') || workspace.id === 'payroll'
       ? 'hrm' : workspace.id === 'resourcing' || workspace.id === 'warehouse' || workspace.id === 'time' ? 'operations'
-      : workspace.id === 'compliance' ? 'purchasing' : 'accounting'
+      : workspace.id === 'compliance' ? 'purchasing' : 'accounting')
     const moduleKey = tab.menuKey ?? tab.href.slice(1).replaceAll('/', '-')
     NAV_MODULES.push({
       key: moduleKey, href: tab.href, label: tab.label ?? LOCAL_DESTINATION_LABELS[tab.href]!,
