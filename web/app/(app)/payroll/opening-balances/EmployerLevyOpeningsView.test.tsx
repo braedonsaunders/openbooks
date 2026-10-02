@@ -67,9 +67,10 @@ test('declared levies render with their stored base year-to-date', async (t) => 
   })
   assert.ok(bodyText().includes('Employer health tax'), 'the levy label renders');
   assert.ok(bodyText().includes('ON'), 'the stored region renders');
+  await act(async () => { (document.querySelector('tr[aria-label="Employer health tax"]') as HTMLElement).click() })
   const input = document.querySelector('input[aria-label="Employer health tax base year-to-date, ON"]') as HTMLInputElement | null
   assert.ok(input, 'the base cell is editable');
-  await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '200000'); input.dispatchEvent(new window.Event('input', { bubbles: true })) }); await changeYear({ year: 2027, levies, rows: [{ country: 'CA', levyKey: 'eht', region: 'ON', baseYtd: '160000' }], canManage: true }); assert.equal((document.querySelector('input[aria-label="Employer health tax base year-to-date, ON"]') as HTMLInputElement).value, '160000', 'the prior year edit is not reused in this year')
+  await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '200000'); input.dispatchEvent(new window.Event('input', { bubbles: true })) }); await changeYear({ year: 2027, levies, rows: [{ country: 'CA', levyKey: 'eht', region: 'ON', baseYtd: '160000' }], canManage: true }); await act(async () => { (document.querySelector('tr[aria-label="Employer health tax"]') as HTMLElement).click() }); assert.equal((document.querySelector('input[aria-label="Employer health tax base year-to-date, ON"]') as HTMLInputElement).value, '160000', 'the prior year edit is not reused in this year')
   await act(async () => { const addRegion = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Add a region')); assert.ok(addRegion); addRegion.click() });
   assert.ok(document.querySelector('input[aria-label="Employer health tax · New region base year-to-date"]'), 'new-row base field names its levy as well as its function');
 })

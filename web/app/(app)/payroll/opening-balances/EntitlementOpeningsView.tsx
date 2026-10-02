@@ -1,14 +1,25 @@
 'use client'
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, Download, Info, Lock, Upload } from 'lucide-react'
-import { Badge, Button, FieldHelp, Input, Label, cn } from '@openbooks/ui'
-import { canonicalDecimal, isZeroDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import {
+  AlertTriangle,
+  ChevronRight,
+  Download,
+  Info,
+  Lock,
+  Upload,
+} from 'lucide-react'
+import { Badge, Button, Drawer, Input, Label } from '@openbooks/ui'
+import {
+  canonicalDecimal,
+  isZeroDecimal,
+} from '@openbooks/engine/src/money/exact-decimal.ts'
+import { apiJson, ApiResponseError } from '../../../../lib/api-error'
+import { PagedTable } from '../../../../components/paged-table'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements.ts'
 
@@ -18,29 +29,15 @@ interface SaveError {
   message: string
 }
 
-/**
- * Opening balances for entitlement PLANS — the vacation and banked-time banks an
- * employee arrives holding at a mid-year adoption.
- *
- * A SIBLING SECTION rather than more columns on the year grid above, and the
- * reason is the key, not the layout. A statutory carry-in is a fact about one
- * employee in one TAX YEAR; a bank has one lifetime balance (the ledger's
- * uniqueness is (org, plan, employee), with no year in it). Putting these in the
- * year-scoped grid would show the same balance under every year in the picker and
- * invite an operator to enter it again for 2027 — doubling a real liability with
- * no error anywhere. The date these carry is the ADOPTION date, which is why this
- * section owns one, and it is a different question from "which tax year".
- *
- * Everything else is deliberately identical to the grid above: one screen for the
- * whole workforce, one Save, the same lock badge on anything a committed run has
- * consumed, and the same refusal from the API behind it.
- */
+/** Entitlement banks are lifetime balances, dated at adoption rather than by tax year. */
 export function EntitlementOpeningsView({
   initial,
   canManage,
+  onDirtyChange,
 }: {
   initial: EntitlementOpeningsResult
   canManage: boolean
+  onDirtyChange?: (count: number) => void
 }) {
   const t = useTranslations('payroll')
   const router = useRouter()
@@ -55,9 +52,13 @@ export function EntitlementOpeningsView({
   const [errors, setErrors] = useState<SaveError[]>([])
   const [warnings, setWarnings] = useState<SaveError[]>([])
 
+  const workspace = useTranslations('payroll.openingBalances.workspace')
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const activeRow = initial.rows.find((row) => row.employeePartyId === activeId)
   const plans = initial.plans
   const legacyCount = useMemo(
-    () => initial.rows.filter((row) => row.legacyVacationBalance !== null).length,
+    () =>
+      initial.rows.filter((row) => row.legacyVacationBalance !== null).length,
     [initial.rows],
   )
   const vacationPlan = useMemo(
@@ -68,9 +69,13 @@ export function EntitlementOpeningsView({
   const valueOf = (employeePartyId: string, planId: string): string => {
     const edited = draft[employeePartyId]?.[planId]
     if (edited !== undefined) return edited
-    const stored = initial.rows.find((r) => r.employeePartyId === employeePartyId)?.amounts[planId]
+    const stored = initial.rows.find(
+      (r) => r.employeePartyId === employeePartyId,
+    )?.amounts[planId]
     if (stored === undefined) return ''
-    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+    return stored !== '' &&
+      canonicalDecimal(stored, 4) !== null &&
+      isZeroDecimal(stored)
       ? ''
       : trimZeros(stored)
   }
@@ -78,11 +83,17 @@ export function EntitlementOpeningsView({
   const setValue = (employeePartyId: string, planId: string, value: string) => {
     setDraft((current) => ({
       ...current,
-      [employeePartyId]: { ...(current[employeePartyId] ?? {}), [planId]: value },
+      [employeePartyId]: {
+        ...(current[employeePartyId] ?? {}),
+        [planId]: value,
+      },
     }))
   }
 
   const dirtyIds = Object.keys(draft)
+  useEffect(() => {
+    onDirtyChange?.(dirtyIds.length)
+  }, [dirtyIds.length, onDirtyChange])
 
   const save = async () => {
     if (dirtyIds.length === 0) return
@@ -100,7 +111,9 @@ export function EntitlementOpeningsView({
       // round trip. Blank clears; untouched banks were already accepted.
       const clientErrors: SaveError[] = []
       for (const employeePartyId of dirtyIds) {
-        const row = initial.rows.find((r) => r.employeePartyId === employeePartyId)
+        const row = initial.rows.find(
+          (r) => r.employeePartyId === employeePartyId,
+        )
         for (const plan of plans) {
           const edited = draft[employeePartyId]?.[plan.id]
           if (edited === undefined || edited.trim() === '') continue
@@ -111,7 +124,11 @@ export function EntitlementOpeningsView({
             4,
           )
           if (refusal !== null) {
-            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+            clientErrors.push({
+              employeePartyId,
+              employeeName: row?.employeeName,
+              message: refusal,
+            })
           }
         }
       }
@@ -120,49 +137,20 @@ export function EntitlementOpeningsView({
         toast.error(fallback)
         return
       }
-      const response = await fetch('/api/payroll/opening-balances/entitlements', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ movementDate: asOf, rows: payload }),
-      })
-      // The body is parsed defensively and the status decides: a non-JSON
-      // error body (a proxy page, an empty 502) must surface the fallback
-      // with the status, never a SyntaxError from `response.json()` — the
-      // same status-first contract as readApiErrorMessage, keeping the
-      // server's per-row reasons when the refusal is JSON.
-      let body: {
-        error?: string
-        errors?: SaveError[]
-        warnings?: SaveError[]
+      const body = await apiJson<{
         created?: number
         updated?: number
         deleted?: number
-      } | null = null
-      try {
-        body = (await response.json()) as {
-          error?: string
-          errors?: SaveError[]
-          warnings?: SaveError[]
-          created?: number
-          updated?: number
-          deleted?: number
-        }
-      } catch {
-        body = null
-      }
-      const named = typeof body?.error === 'string' && body.error.trim() !== '' ? body.error : null
-      if (!response.ok) {
-        const message = named ?? `${fallback} (status ${response.status})`
-        setErrors(body?.errors ?? [{ employeePartyId: '', message }])
-        toast.error(message)
-        return
-      }
-      if (!body) {
-        const message = `${fallback} (status ${response.status})`
-        setErrors([{ employeePartyId: '', message }])
-        toast.error(message)
-        return
-      }
+        warnings?: SaveError[]
+      }>(
+        '/api/payroll/opening-balances/entitlements',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ movementDate: asOf, rows: payload }),
+        },
+        fallback,
+      )
       setDraft({})
       setWarnings(body.warnings ?? [])
       toast.success(
@@ -175,7 +163,11 @@ export function EntitlementOpeningsView({
       // failure with a toast, never an unhandled rejection that leaves the
       // grid showing stale edits as saved.
       const message = e instanceof Error ? e.message : fallback
-      setErrors([{ employeePartyId: '', message }])
+      const reasons =
+        e instanceof ApiResponseError
+          ? (e.body as { errors?: SaveError[] } | null)?.errors
+          : undefined
+      setErrors(reasons?.length ? reasons : [{ employeePartyId: '', message }])
       toast.error(message)
     } finally {
       setSaving(false)
@@ -189,8 +181,14 @@ export function EntitlementOpeningsView({
           {text('title', 'Bank carry-ins (vacation, banked time)')}
         </h2>
         <p className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {text('noPlans', 'No entitlement plans are set up, so there is no bank to carry a balance into.')}{' '}
-          <Link href={'/admin/setup/entitlement-plans' as never} className="underline">
+          {text(
+            'noPlans',
+            'No entitlement plans are set up, so there is no bank to carry a balance into.',
+          )}{' '}
+          <Link
+            href={'/admin/setup/entitlement-plans' as never}
+            className="underline"
+          >
             {text('configurePlans', 'Set up entitlement plans')}
           </Link>
         </p>
@@ -205,10 +203,13 @@ export function EntitlementOpeningsView({
       </h2>
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <Label htmlFor="entitlement-openings-asof" help={text(
-            'asOfHelp',
-            'The adoption date the carry-in is dated. A pay run only counts movements dated on or before its pay date, so this must fall before your first pay run here. It is not a tax year: a bank has one lifetime balance.',
-          )}>
+          <Label
+            htmlFor="entitlement-openings-asof"
+            help={text(
+              'asOfHelp',
+              'The adoption date the carry-in is dated. A pay run only counts movements dated on or before its pay date, so this must fall before your first pay run here. It is not a tax year: a bank has one lifetime balance.',
+            )}
+          >
             {text('asOf', 'Carried in as at')}
           </Label>
           <Input
@@ -234,10 +235,15 @@ export function EntitlementOpeningsView({
         </Button>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {text('entered', 'Carried in')}: {initial.entered} / {initial.rows.length}
+            {text('entered', 'Carried in')}: {initial.entered} /{' '}
+            {initial.rows.length}
           </span>
           {canManage && (
-            <Button size="sm" disabled={saving || dirtyIds.length === 0} onClick={save}>
+            <Button
+              size="sm"
+              disabled={saving || dirtyIds.length === 0}
+              onClick={save}
+            >
               {saving
                 ? text('saving', 'Saving…')
                 : `${text('save', 'Save')}${dirtyIds.length ? ` (${dirtyIds.length})` : ''}`}
@@ -314,113 +320,210 @@ export function EntitlementOpeningsView({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <SharedTable className="w-full min-w-max text-sm">
-          <SharedTableHeader className="bg-slate-50 text-left dark:bg-slate-900">
-            <SharedTableRow>
-              <SharedTableHead className="sticky left-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                {text('employee', 'Employee')}
-              </SharedTableHead>
-              {plans.map((plan) => (
-                <SharedTableHead
-                  key={plan.id}
-                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {plan.name}
-                    <FieldHelp
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {workspace('bankHint')}
+      </p>
+      <PagedTable
+        source="payroll_opening_banks"
+        rows={initial.rows}
+        pageSize={25}
+        searchable
+        rowKey={(row) => row.employeePartyId}
+        rowLabel={(row) => row.employeeName}
+        onRowClick={(row) => setActiveId(row.employeePartyId)}
+        empty={text(
+          'empty',
+          'No employees have an active payroll profile yet.',
+        )}
+        columns={[
+          {
+            key: 'employee',
+            header: text('employee', 'Employee'),
+            search: (row) => `${row.employeeName} ${row.employeeNumber ?? ''}`,
+            cell: (row) => (
+              <div className="font-medium">
+                {row.employeeName}
+                <p className="text-xs font-normal text-slate-400">
+                  {row.employeeNumber ?? '—'}
+                </p>
+              </div>
+            ),
+          },
+          {
+            key: 'status',
+            header: workspace('status'),
+            cell: (row) => (
+              <Badge variant="outline">
+                {dirtyIds.includes(row.employeePartyId)
+                  ? workspace('unsaved')
+                  : Object.keys(row.amounts).length
+                    ? workspace('recorded')
+                    : workspace('noCarryIn')}
+              </Badge>
+            ),
+          },
+          {
+            key: 'banks',
+            header: workspace('banks'),
+            cell: (row) => Object.keys(row.amounts).length,
+          },
+          {
+            key: 'locks',
+            header: workspace('controls'),
+            cell: (row) =>
+              Object.keys(row.locked).length ? (
+                <Badge variant="outline">
+                  <Lock size={11} aria-hidden />
+                  {Object.keys(row.locked).length} {workspace('lockedBanks')}
+                </Badge>
+              ) : (
+                '—'
+              ),
+          },
+          {
+            key: 'open',
+            header: <span className="sr-only">{workspace('review')}</span>,
+            align: 'right',
+            cell: () => (
+              <ChevronRight
+                size={16}
+                className="ml-auto text-slate-400"
+                aria-hidden
+              />
+            ),
+          },
+        ]}
+      />
+      <Drawer
+        open={!!activeRow}
+        onClose={() => {
+          if (!saving) setActiveId(null)
+        }}
+        title={activeRow?.employeeName ?? workspace('banks')}
+        description={`${workspace('banks')} · ${asOf}`}
+        size="lg"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">{workspace('draftHint')}</p>
+            <Button
+              variant="outline"
+              disabled={saving}
+              onClick={() => setActiveId(null)}
+            >
+              {workspace('done')}
+            </Button>
+            {canManage && (
+              <Button disabled={saving || dirtyIds.length === 0} onClick={save}>
+                {saving
+                  ? text('saving', 'Saving…')
+                  : `${workspace('saveAll')} (${dirtyIds.length})`}
+              </Button>
+            )}
+          </div>
+        }
+      >
+        {activeRow && (
+          <div className="space-y-5">
+            {initial.blocked[activeRow.employeePartyId] && (
+              <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                {text('blocked', 'Paid on')}{' '}
+                {initial.blocked[activeRow.employeePartyId]!.payDate} (
+                {initial.blocked[activeRow.employeePartyId]!.documentNumber ??
+                  '—'}
+                ) — {text('blockedHint', 'date the carry-in after it')}
+              </p>
+            )}
+            {errors.length > 0 && (
+              <div
+                role="alert"
+                className="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300"
+              >
+                {errors.map((error, index) => (
+                  <p key={index}>
+                    {error.employeeName ? `${error.employeeName}: ` : ''}
+                    {error.message}
+                  </p>
+                ))}
+              </div>
+            )}
+            {warnings.length > 0 && (
+              <div
+                role="status"
+                className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+              >
+                {warnings.map((warning, index) => (
+                  <p key={index}>
+                    {warning.employeeName ? `${warning.employeeName}: ` : ''}
+                    {warning.message}
+                  </p>
+                ))}
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {plans.map((plan) => {
+                const lock = activeRow.locked[plan.id]
+                return (
+                  <div
+                    key={plan.id}
+                    className="space-y-1.5 rounded-xl border border-slate-200 p-4 dark:border-slate-800"
+                  >
+                    <Label
                       help={
                         plan.direction === 'owe'
                           ? text(
                               'oweHelp',
-                              'A balance the EMPLOYEE owes the employer, so it is negative — enter −1200 for an outstanding 1,200. It is recouped from future pay until it reaches exactly zero.',
+                              'A balance the employee owes the employer: enter a negative amount.',
                             )
                           : plan.unit === 'hours'
-                            ? text('hoursHelp', 'The balance carried in, in hours.')
-                            : text(
-                                'moneyHelp',
-                                'The balance carried in, in dollars. Banks are stored as the money they were earned at, and displayed as hours at the employee’s current wage.',
+                            ? text(
+                                'hoursHelp',
+                                'The balance carried in, in hours.',
                               )
+                            : text('moneyHelp', 'The money balance carried in.')
                       }
-                    />
-                  </span>
-                </SharedTableHead>
-              ))}
-            </SharedTableRow>
-          </SharedTableHeader>
-          <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {initial.rows.length === 0 && (
-              <SharedTableRow>
-                <SharedTableCell
-                  colSpan={plans.length + 1}
-                  className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
-                >
-                  {text('empty', 'No employees have an active payroll profile yet.')}
-                </SharedTableCell>
-              </SharedTableRow>
-            )}
-            {initial.rows.map((row) => {
-              const blocked = initial.blocked[row.employeePartyId]
-              return (
-                <SharedTableRow key={row.employeePartyId}>
-                  <SharedTableCell className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap dark:bg-slate-950">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-800 dark:text-slate-100">
-                        {row.employeeName}
+                    >
+                      {plan.name}{' '}
+                      <span className="text-xs font-normal text-slate-500">
+                        · {plan.unit}
                       </span>
-                      {row.employeeNumber && (
-                        <span className="text-xs text-slate-400">{row.employeeNumber}</span>
-                      )}
-                      {row.legacyVacationBalance !== null && (
-                        <span className="text-xs text-amber-600 dark:text-amber-400">
-                          {text('legacyShort', 'legacy')} {trimZeros(row.legacyVacationBalance)}
-                        </span>
-                      )}
-                    </div>
-                    {blocked && (
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        {text('blocked', 'Paid on')} {blocked.payDate}
-                        {blocked.documentNumber ? ` (${blocked.documentNumber})` : ''} —{' '}
-                        {text('blockedHint', 'date the carry-in after it')}
+                    </Label>
+                    {lock && (
+                      <p className="text-xs text-slate-500">
+                        <Lock size={11} className="mr-1 inline" aria-hidden />
+                        {text('lockedBy', 'Committed pay run')}{' '}
+                        {lock.documentNumber} · {lock.payDate}
                       </p>
                     )}
-                  </SharedTableCell>
-                  {plans.map((plan) => {
-                    const lock = row.locked[plan.id]
-                    return (
-                      <SharedTableCell key={plan.id} className="px-2 py-1.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {lock && (
-                            <Badge
-                              variant="default"
-                              title={`${text('lockedBy', 'Committed pay run')} ${lock.documentNumber ?? ''} · ${lock.payDate}`}
-                            >
-                              <Lock size={11} aria-hidden />
-                            </Badge>
-                          )}
-                          <MoneyInput
-                            ariaLabel={`${row.employeeName} — ${plan.name}`}
-                            value={valueOf(row.employeePartyId, plan.id)}
-                            onChange={(value) =>
-                              setValue(row.employeePartyId, plan.id, value)
-                            }
-                            field={plan.name}
-                            noun={plan.unit === 'hours' ? 'a number of hours' : 'a money amount'}
-                            maxScale={4}
-                            placeholder="0.00"
-                            disabled={!canManage || lock !== undefined || saving}
-                            className={cn('w-32 text-right tabular-nums')}
-                          />
-                        </div>
-                      </SharedTableCell>
-                    )
-                  })}
-                </SharedTableRow>
-              )
-            })}
-          </SharedTableBody>
-        </SharedTable>
-      </div>
+                    <MoneyInput
+                      ariaLabel={`${activeRow.employeeName} — ${plan.name}`}
+                      value={valueOf(activeRow.employeePartyId, plan.id)}
+                      onChange={(value) =>
+                        setValue(activeRow.employeePartyId, plan.id, value)
+                      }
+                      field={plan.name}
+                      noun={
+                        plan.unit === 'hours'
+                          ? 'a number of hours'
+                          : 'a money amount'
+                      }
+                      maxScale={4}
+                      placeholder="0.00"
+                      disabled={!canManage || lock !== undefined || saving}
+                      className="text-right tabular-nums"
+                    />
+                    {activeRow.dates[plan.id] && (
+                      <p className="text-xs text-slate-400">
+                        {text('asOf', 'Carried in as at')}{' '}
+                        {activeRow.dates[plan.id]}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </Drawer>
     </section>
   )
 }

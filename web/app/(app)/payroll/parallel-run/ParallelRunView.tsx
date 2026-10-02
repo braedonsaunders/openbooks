@@ -12,6 +12,7 @@ import {
   CircleCheck,
   Download,
   Scale,
+  Plus,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -19,6 +20,7 @@ import {
   Badge,
   Button,
   Drawer,
+  EmptyState,
   FieldHelp,
   Input,
   Label,
@@ -28,7 +30,12 @@ import {
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useAppAction } from '../../../../lib/use-app-action'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
-import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
+import { RecordTabs } from '../../../../components/module-home/record-tabs'
+import { confirmDialog } from '../../../../lib/confirm'
+import {
+  PagedTable,
+  type PagedColumn,
+} from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 
 /* ------------------------------------------------------------------ */
@@ -78,14 +85,24 @@ interface Tolerance {
  * must surface the fallback with the status, never a SyntaxError from
  * `response.json()`.
  */
-export async function discardParallelRegister(registerId: string): Promise<Tolerance[]> {
-  const response = await fetch(`/api/payroll/parallel-run/registers/${registerId}`, {
-    method: 'DELETE',
-  })
+export async function discardParallelRegister(
+  registerId: string,
+): Promise<Tolerance[]> {
+  const response = await fetch(
+    `/api/payroll/parallel-run/registers/${registerId}`,
+    {
+      method: 'DELETE',
+    },
+  )
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, 'could not discard the register'))
+    throw new Error(
+      await readApiErrorMessage(response, 'could not discard the register'),
+    )
   }
-  const body = (await response.json()) as { tolerances?: Tolerance[]; error?: string }
+  const body = (await response.json()) as {
+    tolerances?: Tolerance[]
+    error?: string
+  }
   return body.tolerances ?? []
 }
 
@@ -163,12 +180,15 @@ function isZeroAmount(value: string | null | undefined): boolean {
  */
 const CLASS_TONE: Record<string, string> = {
   match: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-  within_tolerance: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+  within_tolerance:
+    'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
   difference: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
   prior_only: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
   our_only: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
-  employee_prior_only: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
-  employee_our_only: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
+  employee_prior_only:
+    'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
+  employee_our_only:
+    'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
   unattributed: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300',
 }
 
@@ -216,9 +236,14 @@ export function ParallelRunView({
   const router = useRouter()
   const { money } = useMoney()
   const text = (key: string, fallback: string) =>
-    t.has(`parallelRun.${key}` as never) ? t(`parallelRun.${key}` as never) : fallback
+    t.has(`parallelRun.${key}` as never)
+      ? t(`parallelRun.${key}` as never)
+      : fallback
 
-  const [registerId, setRegisterId] = useState(registers[0]?.id ?? '')
+  const [view, setView] = useState<'comparisons' | 'registers'>('comparisons')
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [compareFailure, setCompareFailure] = useState<string | null>(null)
+  const [registerId, setRegisterId] = useState('')
   const [payRunDocumentId, setPayRunDocumentId] = useState('')
   const [running, setRunning] = useState(false)
   const [openComparison, setOpenComparison] = useState<Comparison | null>(null)
@@ -233,21 +258,27 @@ export function ParallelRunView({
 
   const register = registers.find((row) => row.id === registerId) ?? null
 
-  // The run whose PERIOD matches the register. Offered, never assumed: silently
-  // pairing a register with the wrong period produces a screen full of
-  // differences nobody can explain.
+  // Suggest only a unique run for the same period and pay date. The operator
+  // explicitly accepts the pairing before a comparison can be created.
   const suggested = useMemo(() => {
     if (!register) return null
-    const exact = runs.filter((run) => run.payDate === register.payDate)
+    const exact = runs.filter(
+      (run) =>
+        run.payDate === register.payDate &&
+        run.periodStart === register.periodStart &&
+        run.periodEnd === register.periodEnd,
+    )
     return exact.length === 1 ? exact[0]! : null
   }, [register, runs])
 
-  const effectiveRunId = payRunDocumentId || suggested?.documentId || ''
-  const selectedRun = runs.find((run) => run.documentId === effectiveRunId) ?? null
+  const effectiveRunId = payRunDocumentId
+  const selectedRun =
+    runs.find((run) => run.documentId === effectiveRunId) ?? null
 
   const compare = async () => {
     if (!registerId || !effectiveRunId) return
     setRunning(true)
+    setCompareFailure(null)
     try {
       const response = await fetch('/api/payroll/parallel-run', {
         method: 'POST',
@@ -257,9 +288,12 @@ export function ParallelRunView({
       // The status is checked before the body is parsed: a non-JSON error body
       // must surface the failure, never a SyntaxError from response.json().
       if (!response.ok) {
-        toast.error(
-          await readApiErrorMessage(response, text('compareFailed', 'The comparison could not be run.')),
+        const message = await readApiErrorMessage(
+          response,
+          text('compareFailed', 'The comparison could not be run.'),
         )
+        setCompareFailure(message)
+        toast.error(message)
         return
       }
       const body = (await response.json()) as {
@@ -267,22 +301,52 @@ export function ParallelRunView({
         comparison?: { status: string; blockedReason: string | null }
       }
       const status = body.comparison?.status
+      if (
+        !status ||
+        ![
+          'no_comparable_data',
+          'clean',
+          'clean_within_tolerance',
+          'differences',
+        ].includes(status)
+      )
+        throw new Error(
+          text('compareFailed', 'The comparison could not be run.'),
+        )
       if (status === 'no_comparable_data') {
-        toast.error(body.comparison?.blockedReason ?? STATUS_FALLBACK.no_comparable_data!)
+        toast.error(
+          body.comparison?.blockedReason ?? STATUS_FALLBACK.no_comparable_data!,
+        )
       } else if (status === 'clean') {
         toast.success(text('cleanToast', 'Every amount reconciled exactly.'))
       } else if (status === 'clean_within_tolerance') {
-        toast.success(text('toleranceToast', 'Reconciled, with a tolerance applied.'))
+        toast.success(
+          text('toleranceToast', 'Reconciled, with a tolerance applied.'),
+        )
       } else {
-        toast.warning(text('differencesToast', 'Differences found — open the comparison.'))
+        toast.warning(
+          text('differencesToast', 'Differences found — open the comparison.'),
+        )
       }
+      setCompareOpen(false)
+      setView('comparisons')
       router.refresh()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : text('compareFailed', 'The comparison could not be run.')
+      setCompareFailure(message)
+      toast.error(message)
     } finally {
       setRunning(false)
     }
   }
 
-  const openDrawer = async (comparison: Comparison, employeePartyId?: string) => {
+  const openDrawer = async (
+    comparison: Comparison,
+    employeePartyId?: string,
+  ) => {
     const request = ++findingsRequest.current
     setOpenComparison(comparison)
     setEmployeeFilter(employeePartyId ?? null)
@@ -296,14 +360,20 @@ export function ParallelRunView({
       )
       // The status is checked before the body is parsed (see compare above).
       if (!response.ok) {
-        const message = await readApiErrorMessage(response, 'could not load the comparison')
+        const message = await readApiErrorMessage(
+          response,
+          'could not load the comparison',
+        )
         if (request === findingsRequest.current) {
           toast.error(message)
           setFindingsLoadFailed(true)
         }
         return
       }
-      const body = (await response.json()) as { findings?: Finding[]; error?: string }
+      const body = (await response.json()) as {
+        findings?: Finding[]
+        error?: string
+      }
       if (request === findingsRequest.current) setFindings(body.findings ?? [])
     } catch {
       if (request === findingsRequest.current) {
@@ -325,13 +395,26 @@ export function ParallelRunView({
   }
 
   const discardRegister = async (row: Register) => {
+    if (
+      !(await confirmDialog({
+        message: text(
+          'workspace.discardConfirm',
+          `Discard the imported register “${row.name}”?`,
+        ),
+        confirmLabel: text('discard', 'Discard'),
+        tone: 'danger',
+      }))
+    )
+      return
     try {
       await discardParallelRegister(row.id)
     } catch (e) {
       toast.error((e as Error).message)
       return
     }
-    toast.success(text('registerDiscarded', 'The imported register was discarded.'))
+    toast.success(
+      text('registerDiscarded', 'The imported register was discarded.'),
+    )
     router.refresh()
   }
 
@@ -348,7 +431,9 @@ export function ParallelRunView({
       key: 'register',
       header: text('columns.register', 'Prior register'),
       cell: (row) => (
-        <span className="font-medium text-slate-700 dark:text-slate-200">{row.registerName}</span>
+        <span className="font-medium text-slate-700 dark:text-slate-200">
+          {row.registerName}
+        </span>
       ),
       search: (row) => row.registerName,
     },
@@ -376,10 +461,12 @@ export function ParallelRunView({
         <span
           className={cn(
             'tabular-nums',
-            row.comparedEmployeeCount === 0 && 'font-medium text-red-700 dark:text-red-400',
+            row.comparedEmployeeCount === 0 &&
+              'font-medium text-red-700 dark:text-red-400',
           )}
         >
-          {row.comparedEmployeeCount} / {row.priorEmployeeCount} · {row.ourEmployeeCount}
+          {row.comparedEmployeeCount} / {row.priorEmployeeCount} ·{' '}
+          {row.ourEmployeeCount}
         </span>
       ),
     },
@@ -390,7 +477,9 @@ export function ParallelRunView({
       cell: (row) => (
         <span className="tabular-nums">
           {row.differenceCount > 0 ? (
-            <span className="font-medium text-red-700 dark:text-red-400">{row.differenceCount}</span>
+            <span className="font-medium text-red-700 dark:text-red-400">
+              {row.differenceCount}
+            </span>
           ) : (
             <span className="text-slate-400">0</span>
           )}
@@ -433,10 +522,13 @@ export function ParallelRunView({
       header: text('columns.register', 'Prior register'),
       cell: (row) => (
         <div>
-          <div className="font-medium text-slate-700 dark:text-slate-200">{row.name}</div>
+          <div className="font-medium text-slate-700 dark:text-slate-200">
+            {row.name}
+          </div>
           <div className="text-xs text-slate-500 dark:text-slate-400">
             {row.providerName ? `${row.providerName} · ` : ''}
-            {row.periodStart} → {row.periodEnd} · {text('paid', 'paid')} {row.payDate}
+            {row.periodStart} → {row.periodEnd} · {text('paid', 'paid')}{' '}
+            {row.payDate}
           </div>
         </div>
       ),
@@ -448,8 +540,8 @@ export function ParallelRunView({
       align: 'right',
       cell: (row) => (
         <span className="tabular-nums">
-          {row.employeeCount} {text('employeesShort', 'employees')} · {row.amountCount}{' '}
-          {text('amountsShort', 'amounts')}
+          {row.employeeCount} {text('employeesShort', 'employees')} ·{' '}
+          {row.amountCount} {text('amountsShort', 'amounts')}
         </span>
       ),
     },
@@ -478,7 +570,9 @@ export function ParallelRunView({
       ),
       cell: (row) =>
         row.unmappedColumns.length === 0 ? (
-          <span className="text-xs text-slate-400">{text('allMapped', 'All mapped')}</span>
+          <span className="text-xs text-slate-400">
+            {text('allMapped', 'All mapped')}
+          </span>
         ) : (
           <span className="text-xs text-red-700 dark:text-red-400">
             {row.unmappedColumns
@@ -497,7 +591,10 @@ export function ParallelRunView({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => void discardRegister(row)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void discardRegister(row)
+                }}
                 aria-label={text('discard', 'Discard')}
               >
                 <Trash2 size={14} aria-hidden />
@@ -529,7 +626,9 @@ export function ParallelRunView({
           <div>{row.slotLabel}</div>
           <div className="text-xs text-slate-400">
             {text(`kinds.${row.kind}`, KIND_FALLBACK[row.kind] ?? row.kind)}
-            {row.sourceColumn ? ` · ${text('fromColumn', 'from')} “${row.sourceColumn}”` : ''}
+            {row.sourceColumn
+              ? ` · ${text('fromColumn', 'from')} “${row.sourceColumn}”`
+              : ''}
           </div>
         </div>
       ),
@@ -539,7 +638,9 @@ export function ParallelRunView({
       key: 'prior',
       header: text('columns.priorSystem', 'Prior system'),
       align: 'right',
-      cell: (row) => <Amount value={row.priorAmount} money={money} text={text} />,
+      cell: (row) => (
+        <Amount value={row.priorAmount} money={money} text={text} />
+      ),
     },
     {
       key: 'ours',
@@ -583,7 +684,9 @@ export function ParallelRunView({
       align: 'right',
       cell: (row) =>
         isZeroAmount(row.toleranceApplied) ? (
-          <span className="text-xs text-slate-400">{text('exact', 'exact')}</span>
+          <span className="text-xs text-slate-400">
+            {text('exact', 'exact')}
+          </span>
         ) : (
           <span className="tabular-nums text-amber-700 dark:text-amber-400">
             ±{money(row.toleranceApplied)}
@@ -593,134 +696,255 @@ export function ParallelRunView({
     {
       key: 'classification',
       header: text('columns.result', 'Result'),
-      cell: (row) => <ClassBadge classification={row.classification} text={text} />,
+      cell: (row) => (
+        <ClassBadge classification={row.classification} text={text} />
+      ),
       search: (row) => row.classification,
     },
   ]
 
   return (
     <div className="space-y-5">
-      {/* Compare */}
-      <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-64">
-            <Label
-              htmlFor="parallel-register"
-              help={text(
-                'help.register',
-                'A register imported from the payroll system you are leaving — one pay period, one row per employee. Load it through Import & Export, resource “Prior payroll register”, where you map the old system’s column names onto this payroll’s components.',
-              )}
-            >
-              {text('fields.register', 'Prior register')}
-            </Label>
-            <Select
-              id="parallel-register"
-              value={registerId}
-              onChange={(event) => {
-                setRegisterId(event.target.value)
-                setPayRunDocumentId('')
-              }}
-            >
-              <option value="">{text('fields.registerPlaceholder', 'Select a register…')}</option>
-              {registers.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name} — {row.employeeCount} {text('employeesShort', 'employees')}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="min-w-64">
-            <Label
-              htmlFor="parallel-run"
-              help={text(
-                'help.payRun',
-                'The run to check against. Calculated runs count: the point of a parallel run is to prove the numbers before the money leaves. A draft run has no stubs and cannot be compared.',
-              )}
-            >
-              {text('fields.payRun', 'Our pay run')}
-            </Label>
-            <Select
-              id="parallel-run"
-              value={effectiveRunId}
-              onChange={(event) => setPayRunDocumentId(event.target.value)}
-            >
-              <option value="">{text('fields.payRunPlaceholder', 'Select a pay run…')}</option>
-              {runs.map((run) => (
-                <option key={run.documentId} value={run.documentId}>
-                  {run.label} — {run.periodStart} → {run.periodEnd} ({run.runStatus},{' '}
-                  {run.employeeCount} {text('employeesShort', 'employees')})
-                </option>
-              ))}
-            </Select>
-          </div>
-
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+        <RecordTabs
+          label={text('workspace.views', 'Parallel run views')}
+          active={view}
+          onChange={setView}
+          tabs={[
+            {
+              key: 'comparisons',
+              label: text('comparisonsTitle', 'Comparisons'),
+              count: comparisons.length,
+            },
+            {
+              key: 'registers',
+              label: text('registersTitle', 'Imported registers'),
+              count: registers.length,
+            },
+          ]}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={'/data/import' as never}>
+              <Upload size={14} aria-hidden />
+              {text('importRegister', 'Import a register')}
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={'/data/export' as never}>
+              <Download size={14} aria-hidden />
+              {text('export', 'Export')}
+            </Link>
+          </Button>
           {canManage && (
-            <Button disabled={!registerId || !effectiveRunId || running} onClick={compare}>
-              <Scale size={15} aria-hidden />
-              {running ? text('comparing', 'Comparing…') : text('compare', 'Compare')}
-            </Button>
-          )}
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={'/data/import' as never}>
-                <Upload size={14} aria-hidden />
-                {text('importRegister', 'Import a register')}
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={'/data/export' as never}>
-                <Download size={14} aria-hidden />
-                {text('export', 'Export')}
-              </Link>
-            </Button>
-            {canManage && (
-              <Button variant="outline" size="sm" onClick={() => setToleranceOpen(true)}>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setToleranceOpen(true)}
+              >
                 {text('tolerances', 'Tolerances')} ({liveTolerances.length})
               </Button>
-            )}
-          </div>
+              <Button
+                size="sm"
+                disabled={registers.length === 0 || runs.length === 0}
+                onClick={() => {
+                  setCompareFailure(null)
+                  setCompareOpen(true)
+                }}
+              >
+                <Plus size={14} aria-hidden />
+                {text('workspace.newComparison', 'New comparison')}
+              </Button>
+            </>
+          )}
         </div>
+      </div>
+      <Drawer
+        open={compareOpen}
+        onClose={() => {
+          if (!running) setCompareOpen(false)
+        }}
+        title={text('workspace.newComparison', 'New comparison')}
+        description={text(
+          'workspace.compareHint',
+          'Pair a prior register with the matching pay run. Review dates and population before comparing.',
+        )}
+        size="md"
+        footer={
+          <Button
+            disabled={!registerId || !effectiveRunId || running}
+            onClick={compare}
+          >
+            <Scale size={15} aria-hidden />
+            {running
+              ? text('comparing', 'Comparing…')
+              : text('compare', 'Compare')}
+          </Button>
+        }
+      >
+        <div className="space-y-5">
+          <div className="grid gap-5">
+            <div className="min-w-64">
+              <Label
+                htmlFor="parallel-register"
+                help={text(
+                  'help.register',
+                  'A register imported from the payroll system you are leaving — one pay period, one row per employee. Load it through Import & Export, resource “Prior payroll register”, where you map the old system’s column names onto this payroll’s components.',
+                )}
+              >
+                {text('fields.register', 'Prior register')}
+              </Label>
+              <Select
+                id="parallel-register"
+                value={registerId}
+                disabled={running}
+                onChange={(event) => {
+                  setRegisterId(event.target.value)
+                  setPayRunDocumentId('')
+                }}
+              >
+                <option value="">
+                  {text('fields.registerPlaceholder', 'Select a register…')}
+                </option>
+                {registers.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name} — {row.employeeCount}{' '}
+                    {text('employeesShort', 'employees')}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
-        {/* Inline text below a control is validation/state only. */}
-        {register && selectedRun && register.payDate !== selectedRun.payDate && (
-          <p className="mt-3 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
-            <AlertTriangle size={15} aria-hidden />
-            {text(
-              'periodMismatch',
-              'These two sides cover different pay dates. Comparing them will report differences that are really a period mismatch.',
+            <div className="min-w-64">
+              <Label
+                htmlFor="parallel-run"
+                help={text(
+                  'help.payRun',
+                  'The run to check against. Calculated runs count: the point of a parallel run is to prove the numbers before the money leaves. A draft run has no stubs and cannot be compared.',
+                )}
+              >
+                {text('fields.payRun', 'Our pay run')}
+              </Label>
+              <Select
+                id="parallel-run"
+                value={effectiveRunId}
+                disabled={running}
+                onChange={(event) => setPayRunDocumentId(event.target.value)}
+              >
+                <option value="">
+                  {text('fields.payRunPlaceholder', 'Select a pay run…')}
+                </option>
+                {runs.map((run) => (
+                  <option key={run.documentId} value={run.documentId}>
+                    {run.label} — {run.periodStart} → {run.periodEnd} (
+                    {run.runStatus}, {run.employeeCount}{' '}
+                    {text('employeesShort', 'employees')})
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          {/* Inline text below a control is validation/state only. */}
+          {register &&
+            selectedRun &&
+            (register.payDate !== selectedRun.payDate ||
+              register.periodStart !== selectedRun.periodStart ||
+              register.periodEnd !== selectedRun.periodEnd) && (
+              <p className="mt-3 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+                <AlertTriangle size={15} aria-hidden />
+                {text(
+                  'periodMismatch',
+                  'The selected register and pay run cover different dates. Review the pairing before comparing.',
+                )}
+              </p>
             )}
+          {register && register.employeeCount === 0 && (
+            <p className="mt-3 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+              <AlertTriangle size={15} aria-hidden />
+              {text(
+                'emptyRegister',
+                'This register holds no employees. A comparison against it will report “Nothing was compared”, not a clean result.',
+              )}
+            </p>
+          )}
+          {register && register.unmappedColumns.length > 0 && (
+            <p className="mt-3 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+              <AlertTriangle size={15} aria-hidden />
+              {text(
+                'unmappedWarning',
+                'Columns in this register were never mapped:',
+              )}{' '}
+              {register.unmappedColumns
+                .map((column) => column.column)
+                .join(', ')}
+            </p>
+          )}
+          {registers.length === 0 && (
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+              {text(
+                'noRegisters',
+                'No prior register has been imported yet. Start with Import a register.',
+              )}
+            </p>
+          )}
+        </div>
+        {suggested && !payRunDocumentId && (
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => setPayRunDocumentId(suggested.documentId)}
+          >
+            {text('workspace.useSuggested', 'Use matching run')}:{' '}
+            {suggested.label}
+          </Button>
+        )}
+        {register && selectedRun && (
+          <div className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-900">
+            <div>
+              <p className="mb-2 font-medium">
+                {text('fields.register', 'Prior register')}
+              </p>
+              <p>
+                {register.periodStart} – {register.periodEnd}
+              </p>
+              <p>
+                {text('paid', 'paid')} {register.payDate}
+              </p>
+              <p>
+                {register.employeeCount} {text('employeesShort', 'employees')}
+              </p>
+            </div>
+            <div>
+              <p className="mb-2 font-medium">
+                {text('fields.payRun', 'Our pay run')}
+              </p>
+              <p>
+                {selectedRun.periodStart} – {selectedRun.periodEnd}
+              </p>
+              <p>
+                {text('paid', 'paid')} {selectedRun.payDate}
+              </p>
+              <p>
+                {selectedRun.employeeCount}{' '}
+                {text('employeesShort', 'employees')} · {selectedRun.runStatus}
+              </p>
+            </div>
+          </div>
+        )}
+        {compareFailure && (
+          <p
+            role="alert"
+            className="mt-4 text-sm text-red-700 dark:text-red-300"
+          >
+            {compareFailure}
           </p>
         )}
-        {register && register.employeeCount === 0 && (
-          <p className="mt-3 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
-            <AlertTriangle size={15} aria-hidden />
-            {text(
-              'emptyRegister',
-              'This register holds no employees. A comparison against it will report “Nothing was compared”, not a clean result.',
-            )}
-          </p>
-        )}
-        {register && register.unmappedColumns.length > 0 && (
-          <p className="mt-3 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
-            <AlertTriangle size={15} aria-hidden />
-            {text('unmappedWarning', 'Columns in this register were never mapped:')}{' '}
-            {register.unmappedColumns.map((column) => column.column).join(', ')}
-          </p>
-        )}
-        {registers.length === 0 && (
-          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-            {text(
-              'noRegisters',
-              'No prior register has been imported yet. Start with Import a register.',
-            )}
-          </p>
-        )}
-      </section>
+      </Drawer>
 
       {/* Comparisons */}
-      <section className="space-y-2">
+      <section hidden={view !== 'comparisons'} className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
             {text('comparisonsTitle', 'Comparisons')}
@@ -738,28 +962,57 @@ export function ParallelRunView({
           columns={comparisonColumns}
           rowKey={(row) => row.id}
           searchable
-          pageSize={10}
+          pageSize={25}
+          rowLabel={(row) => `${row.registerName} · ${row.payRunNumber}`}
           onRowClick={(row) => void openDrawer(row)}
           empty={
-            <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-              {text('noComparisons', 'No comparison has been run yet.')}
-            </p>
+            <EmptyState
+              icon={<Scale />}
+              title={text(
+                'workspace.emptyTitle',
+                'Prove payroll before paying',
+              )}
+              description={
+                registers.length === 0
+                  ? text('noRegisters', 'Import a prior register to begin.')
+                  : runs.length === 0
+                    ? text(
+                        'workspace.noRuns',
+                        'Calculate a pay run before creating a comparison.',
+                      )
+                    : text(
+                        'workspace.emptyHint',
+                        'Create a comparison, then review differences by employee and component.',
+                      )
+              }
+            />
           }
         />
       </section>
 
       {/* Registers */}
-      <section className="space-y-2">
+      <section hidden={view !== 'registers'} className="space-y-2">
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
           {text('registersTitle', 'Imported registers')}
         </h2>
         <PagedTable
           source="payroll_parallel_registers"
+          rowLabel={(row) => row.name}
+          onRowClick={
+            canManage
+              ? (row) => {
+                  setRegisterId(row.id)
+                  setPayRunDocumentId('')
+                  setCompareFailure(null)
+                  setCompareOpen(true)
+                }
+              : undefined
+          }
           rows={registers}
           columns={registerColumns}
           rowKey={(row) => row.id}
           searchable
-          pageSize={10}
+          pageSize={25}
           empty={
             <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
               {text('noRegistersRow', 'Nothing imported yet.')}
@@ -784,9 +1037,10 @@ export function ParallelRunView({
               <StatusBadge status={openComparison.status} text={text} />
               <span className="text-xs">
                 {openComparison.comparedEmployeeCount}{' '}
-                {text('comparedOf', 'compared of')} {openComparison.priorEmployeeCount}{' '}
-                {text('onRegister', 'on the register')} / {openComparison.ourEmployeeCount}{' '}
-                {text('inRun', 'in the run')}
+                {text('comparedOf', 'compared of')}{' '}
+                {openComparison.priorEmployeeCount}{' '}
+                {text('onRegister', 'on the register')} /{' '}
+                {openComparison.ourEmployeeCount} {text('inRun', 'in the run')}
               </span>
             </span>
           ) : undefined
@@ -813,8 +1067,8 @@ export function ParallelRunView({
                   {openComparison.unmappedColumns.map((column) => (
                     <li key={column.column}>
                       {column.column} —{' '}
-                      {text('valuedRows', 'carried a value in')} {column.valuedRows}{' '}
-                      {text('rowsShort', 'row(s)')}
+                      {text('valuedRows', 'carried a value in')}{' '}
+                      {column.valuedRows} {text('rowsShort', 'row(s)')}
                     </li>
                   ))}
                 </ul>
@@ -823,11 +1077,14 @@ export function ParallelRunView({
 
             {openComparison.tolerancesApplied.length > 0 && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
-                <p className="font-medium">{text('toleranceTitle', 'Tolerances in force')}</p>
+                <p className="font-medium">
+                  {text('toleranceTitle', 'Tolerances in force')}
+                </p>
                 <ul className="mt-1 space-y-0.5">
                   {openComparison.tolerancesApplied.map((tolerance) => (
                     <li key={`${tolerance.kind}/${tolerance.slot}`}>
-                      {tolerance.slot} ±{money(tolerance.tolerance)} — {tolerance.reason}
+                      {tolerance.slot} ±{money(tolerance.tolerance)} —{' '}
+                      {tolerance.reason}
                     </li>
                   ))}
                 </ul>
@@ -875,7 +1132,9 @@ export function ParallelRunView({
                   {text('tiles.cells', 'Cells')}
                 </div>
                 <div className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-                  <span className="font-semibold tabular-nums">{openComparison.matchCount}</span>{' '}
+                  <span className="font-semibold tabular-nums">
+                    {openComparison.matchCount}
+                  </span>{' '}
                   {text('matched', 'matched')}
                   {openComparison.differenceCount > 0 && (
                     <>
@@ -906,10 +1165,19 @@ export function ParallelRunView({
                 onClick={() => setShowMatches((current) => !current)}
               >
                 {text('showMatches', 'Show exact matches')} (
-                {findings.filter((finding) => finding.classification === 'match').length})
+                {
+                  findings.filter(
+                    (finding) => finding.classification === 'match',
+                  ).length
+                }
+                )
               </Button>
               {employeeFilter && (
-                <Button variant="outline" size="sm" onClick={() => void openDrawer(openComparison)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void openDrawer(openComparison)}
+                >
                   {text('clearEmployee', 'All employees')}
                 </Button>
               )}
@@ -929,9 +1197,23 @@ export function ParallelRunView({
                 {text('loading', 'Loading…')}
               </p>
             ) : findingsLoadFailed ? (
-              <div role="alert" className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-8 text-sm text-red-700 dark:border-red-900 dark:text-red-300">
-                <span>{text('findingsLoadFailed', 'Could not load comparison findings.')}</span>
-                <Button variant="outline" size="sm" onClick={() => void openDrawer(openComparison, employeeFilter ?? undefined)}>
+              <div
+                role="alert"
+                className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-8 text-sm text-red-700 dark:border-red-900 dark:text-red-300"
+              >
+                <span>
+                  {text(
+                    'findingsLoadFailed',
+                    'Could not load comparison findings.',
+                  )}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    void openDrawer(openComparison, employeeFilter ?? undefined)
+                  }
+                >
                   {text('retryFindings', 'Retry')}
                 </Button>
               </div>
@@ -951,8 +1233,14 @@ export function ParallelRunView({
                 empty={
                   <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
                     {findings.length === 0
-                      ? text('noFindings', 'This comparison has no findings at all.')
-                      : text('noExceptions', 'No exceptions — every cell matched exactly.')}
+                      ? text(
+                          'noFindings',
+                          'This comparison has no findings at all.',
+                        )
+                      : text(
+                          'noExceptions',
+                          'No exceptions — every cell matched exactly.',
+                        )}
                   </p>
                 }
               />
@@ -1007,7 +1295,10 @@ function ClassBadge({
 }) {
   return (
     <Badge className={cn('whitespace-nowrap', CLASS_TONE[classification])}>
-      {text(`classes.${classification}`, CLASS_FALLBACK[classification] ?? classification)}
+      {text(
+        `classes.${classification}`,
+        CLASS_FALLBACK[classification] ?? classification,
+      )}
     </Badge>
   )
 }
@@ -1024,7 +1315,9 @@ function Amount({
 }) {
   if (value === null) {
     return (
-      <span className="text-xs text-slate-400 italic">{text('notPresent', 'not present')}</span>
+      <span className="text-xs text-slate-400 italic">
+        {text('notPresent', 'not present')}
+      </span>
     )
   }
   return <span className="tabular-nums">{money(value)}</span>
@@ -1111,21 +1404,31 @@ function ToleranceDrawer({
   const { busy, execute } = useAppAction()
   const [failure, setFailure] = useState<string | null>(null)
 
-  const selected = slots.find((slot) => `${slot.kind}/${slot.slot}` === slotKey) ?? null
+  const selected =
+    slots.find((slot) => `${slot.kind}/${slot.slot}` === slotKey) ?? null
 
   const save = async () => {
     if (!selected) return
-    const fallbackMessage = text('toleranceSaveFailed', 'Could not save the tolerance.')
-    await execute(() => fetchAction<{ tolerances?: Tolerance[] }>('/api/payroll/parallel-run/tolerances', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          kind: selected.kind,
-          slot: selected.slot,
-          tolerance: amount,
-          reason,
-        }),
-      }), {
+    const fallbackMessage = text(
+      'toleranceSaveFailed',
+      'Could not save the tolerance.',
+    )
+    await execute(
+      () =>
+        fetchAction<{ tolerances?: Tolerance[] }>(
+          '/api/payroll/parallel-run/tolerances',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              kind: selected.kind,
+              slot: selected.slot,
+              tolerance: amount,
+              reason,
+            }),
+          },
+        ),
+      {
         fallbackMessage,
         onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
         onOk: (body) => {
@@ -1136,22 +1439,30 @@ function ToleranceDrawer({
           setReason('')
           toast.success(text('toleranceSaved', 'Tolerance saved.'))
         },
-      })
+      },
+    )
   }
 
   const remove = async (tolerance: Tolerance) => {
-    const fallbackMessage = text('toleranceRemoveFailed', 'Could not remove the tolerance.')
-    await execute(() => fetchAction<{ tolerances?: Tolerance[] }>(
-      `/api/payroll/parallel-run/tolerances?kind=${tolerance.kind}&slot=${encodeURIComponent(tolerance.slot)}`,
-      { method: 'DELETE' },
-    ), {
-      fallbackMessage,
-      onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
-      onOk: (body) => {
-        setFailure(null)
-        onChange(body.tolerances ?? [])
+    const fallbackMessage = text(
+      'toleranceRemoveFailed',
+      'Could not remove the tolerance.',
+    )
+    await execute(
+      () =>
+        fetchAction<{ tolerances?: Tolerance[] }>(
+          `/api/payroll/parallel-run/tolerances?kind=${tolerance.kind}&slot=${encodeURIComponent(tolerance.slot)}`,
+          { method: 'DELETE' },
+        ),
+      {
+        fallbackMessage,
+        onRefused: (error) => setFailure(error.displayMessage(fallbackMessage)),
+        onOk: (body) => {
+          setFailure(null)
+          onChange(body.tolerances ?? [])
+        },
       },
-    })
+    )
   }
 
   return (
@@ -1166,7 +1477,14 @@ function ToleranceDrawer({
       )}
     >
       <div className="space-y-5">
-        {failure ? <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">{failure}</div> : null}
+        {failure ? (
+          <div
+            role="alert"
+            className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200"
+          >
+            {failure}
+          </div>
+        ) : null}
         <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <div>
             <Label
@@ -1183,9 +1501,14 @@ function ToleranceDrawer({
               value={slotKey}
               onChange={(event) => setSlotKey(event.target.value)}
             >
-              <option value="">{text('fields.componentPlaceholder', 'Select…')}</option>
+              <option value="">
+                {text('fields.componentPlaceholder', 'Select…')}
+              </option>
               {slots.map((slot) => (
-                <option key={`${slot.kind}/${slot.slot}`} value={`${slot.kind}/${slot.slot}`}>
+                <option
+                  key={`${slot.kind}/${slot.slot}`}
+                  value={`${slot.kind}/${slot.slot}`}
+                >
                   {slot.label}
                 </option>
               ))}
@@ -1230,20 +1553,31 @@ function ToleranceDrawer({
           </div>
           <Button
             disabled={
-              !selected
-              || busy
-              || !reason.trim()
-              || moneyFieldError(text('fields.tolerance', 'Allowance'), 'a money amount', amount, 4, { required: true }) !== null
+              !selected ||
+              busy ||
+              !reason.trim() ||
+              moneyFieldError(
+                text('fields.tolerance', 'Allowance'),
+                'a money amount',
+                amount,
+                4,
+                { required: true },
+              ) !== null
             }
             onClick={save}
           >
-            {busy ? text('saving', 'Saving…') : text('addTolerance', 'Add tolerance')}
+            {busy
+              ? text('saving', 'Saving…')
+              : text('addTolerance', 'Add tolerance')}
           </Button>
         </div>
 
         {tolerances.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {text('noTolerances', 'No tolerance is configured — every component compares exactly.')}
+            {text(
+              'noTolerances',
+              'No tolerance is configured — every component compares exactly.',
+            )}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1260,7 +1594,13 @@ function ToleranceDrawer({
                     {tolerance.reason}
                   </div>
                 </div>
-                    <Button variant="ghost" size="sm" aria-label={tCommon('actions.delete')} disabled={busy} onClick={() => void remove(tolerance)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={tCommon('actions.delete')}
+                  disabled={busy}
+                  onClick={() => void remove(tolerance)}
+                >
                   <Trash2 size={14} aria-hidden />
                 </Button>
               </li>

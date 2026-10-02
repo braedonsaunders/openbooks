@@ -1,13 +1,21 @@
 'use client'
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { Fragment, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, Download, Plus, Upload } from 'lucide-react'
-import { Button, FieldHelp, Input } from '@openbooks/ui'
+import {
+  AlertTriangle,
+  ChevronRight,
+  Download,
+  Plus,
+  Upload,
+} from 'lucide-react'
+import { Badge, Button, Drawer, FieldHelp, Input, Label } from '@openbooks/ui'
+import { apiJson, ApiResponseError } from '../../../../lib/api-error'
+import { PagedTable } from '../../../../components/paged-table'
+import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import { isZeroDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 
 interface DeclaredLevy {
@@ -48,23 +56,13 @@ interface AddedRegionRow {
   baseYtd: string
 }
 
-/**
- * Employer-side adoption carry-in: the base the employer earned before the
- * adoption date in each pack-declared aggregate levy's scope.
- *
- * A SIBLING SECTION rather than more columns on the year grid above, and the
- * reason is the key, not the layout. A statutory carry-in is a fact about one
- * employee; an employer levy is a fact about the whole employer (or one
- * region) — it has no employee row to hang on. Levy kinds come from the
- * country packs, so this names no country: a third pack's levy arrives with
- * the pack. When no pack declares a levy there is nothing to carry in, and
- * the section renders nothing rather than an empty grid.
- */
+/** Aggregate employer carry-ins have an employer or regional scope, never an employee scope. */
 type EmployerLevyOpeningsViewProps = {
   year: number
   levies: DeclaredLevy[]
   rows: StoredLevyOpening[]
   canManage: boolean
+  onDirtyChange?: (count: number) => void
 }
 
 export function EmployerLevyOpeningsView(props: EmployerLevyOpeningsViewProps) {
@@ -76,6 +74,7 @@ function EmployerLevyOpeningsYearView({
   levies,
   rows,
   canManage,
+  onDirtyChange,
 }: EmployerLevyOpeningsViewProps) {
   const t = useTranslations('payroll')
   const router = useRouter()
@@ -92,15 +91,25 @@ function EmployerLevyOpeningsYearView({
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<LevySaveError[]>([])
 
-  if (levies.length === 0) return null
+  const workspace = useTranslations('payroll.openingBalances.workspace')
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const activeLevy = levies.find(
+    (levy) => `${levy.country}:${levy.levyKey}` === activeKey,
+  )
 
   const rowKey = (country: string, levyKey: string, region: string | null) =>
     `${country}${levyKey}${region ?? ''}`
 
   const storedFor = (levy: DeclaredLevy) =>
-    rows.filter((row) => row.country === levy.country && row.levyKey === levy.levyKey)
+    rows.filter(
+      (row) => row.country === levy.country && row.levyKey === levy.levyKey,
+    )
 
-  const valueOf = (country: string, levyKey: string, region: string | null): string => {
+  const valueOf = (
+    country: string,
+    levyKey: string,
+    region: string | null,
+  ): string => {
     const key = rowKey(country, levyKey, region)
     const edited = draft[key]
     if (edited !== undefined) return edited
@@ -114,7 +123,12 @@ function EmployerLevyOpeningsYearView({
     return isZeroDecimal(stored) ? '' : trimZeros(stored)
   }
 
-  const setAmount = (country: string, levyKey: string, region: string | null, value: string) => {
+  const setAmount = (
+    country: string,
+    levyKey: string,
+    region: string | null,
+    value: string,
+  ) => {
     const key = rowKey(country, levyKey, region)
     setDraft((current) => ({ ...current, [key]: value }))
   }
@@ -122,8 +136,18 @@ function EmployerLevyOpeningsYearView({
   // Every row carrying an amount the operator typed (a blanked cell is a
   // clear only where a carry-in is stored — the service deletes on zero, so
   // a blank over nothing sends nothing).
-  const payload = (): { country: string; levyKey: string; region: string | null; baseYtd: string }[] => {
-    const out: { country: string; levyKey: string; region: string | null; baseYtd: string }[] = []
+  const payload = (): {
+    country: string
+    levyKey: string
+    region: string | null
+    baseYtd: string
+  }[] => {
+    const out: {
+      country: string
+      levyKey: string
+      region: string | null
+      baseYtd: string
+    }[] = []
     for (const [key, value] of Object.entries(draft)) {
       const baseYtd = value.trim()
       if (baseYtd === '') continue
@@ -148,40 +172,45 @@ function EmployerLevyOpeningsYearView({
   }
 
   const dirtyCount = payload().length
+  useEffect(() => {
+    onDirtyChange?.(dirtyCount)
+  }, [dirtyCount, onDirtyChange])
 
   const save = async () => {
     const body_rows = payload()
     if (body_rows.length === 0) return
+    const clientErrors = body_rows.flatMap((row) => {
+      const levy = levies.find(
+        (candidate) =>
+          candidate.country === row.country &&
+          candidate.levyKey === row.levyKey,
+      )
+      const refusal = moneyFieldError(
+        levy?.label ?? row.levyKey,
+        'a money amount',
+        row.baseYtd,
+        4,
+      )
+      return refusal
+        ? [{ levyKey: row.levyKey, region: row.region, message: refusal }]
+        : []
+    })
+    if (clientErrors.length) {
+      setErrors(clientErrors)
+      return
+    }
     setSaving(true)
     setErrors([])
     try {
-      const response = await fetch('/api/payroll/opening-balances/employer-levies', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ taxYear: year, rows: body_rows }),
-      })
-      // The body is read once, tolerantly: a non-JSON error body (a proxy
-      // page, an empty 502) falls back instead of throwing a SyntaxError out
-      // of res.json(), and the status below decides how it is interpreted.
-      // Named responseBody: the outer payload() builds the request rows, and
-      // a typeof-self query on a shadowed name collapses the body to never.
-      let responseBody: LevySaveResult | null = null
-      try {
-        responseBody = (await response.json()) as LevySaveResult
-      } catch {
-        responseBody = null
-      }
-      if (!response.ok) {
-        const rawError = responseBody?.error
-        const message =
-          typeof rawError === 'string' && rawError.trim() !== ''
-            ? rawError
-            : `${text('saveFailed', 'Nothing was saved.')} (status ${response.status})`
-        setErrors(responseBody?.errors ?? [{ levyKey: '', region: null, message }])
-        toast.error(message)
-        return
-      }
-      const body: LevySaveResult = responseBody ?? {}
+      const body = await apiJson<LevySaveResult>(
+        '/api/payroll/opening-balances/employer-levies',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ taxYear: year, rows: body_rows }),
+        },
+        text('saveFailed', 'Nothing was saved.'),
+      )
       setDraft({})
       setAdded([])
       toast.success(
@@ -189,10 +218,25 @@ function EmployerLevyOpeningsYearView({
           ` (${body.created ?? 0} new, ${body.updated ?? 0} updated, ${body.deleted ?? 0} cleared)`,
       )
       router.refresh()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : text('saveFailed', 'Nothing was saved.')
+      const reasons =
+        error instanceof ApiResponseError
+          ? (error.body as LevySaveResult | null)?.errors
+          : undefined
+      setErrors(
+        reasons?.length ? reasons : [{ levyKey: '', region: null, message }],
+      )
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
+
+  if (levies.length === 0) return null
 
   return (
     <section className="space-y-4" id="employer-levies">
@@ -220,7 +264,11 @@ function EmployerLevyOpeningsYearView({
         </Button>
         <div className="ml-auto flex items-center gap-3">
           {canManage && (
-            <Button size="sm" disabled={saving || dirtyCount === 0} onClick={save}>
+            <Button
+              size="sm"
+              disabled={saving || dirtyCount === 0}
+              onClick={save}
+            >
               {saving
                 ? text('saving', 'Saving…')
                 : `${text('save', 'Save')}${dirtyCount ? ` (${dirtyCount})` : ''}`}
@@ -238,7 +286,9 @@ function EmployerLevyOpeningsYearView({
           <ul className="mt-2 space-y-1 text-red-700 dark:text-red-300">
             {errors.map((error, index) => (
               <li key={`${error.levyKey}-${error.region ?? ''}-${index}`}>
-                {error.levyKey ? `${error.levyKey}${error.region ? ` (${error.region})` : ''}: ` : ''}
+                {error.levyKey
+                  ? `${error.levyKey}${error.region ? ` (${error.region})` : ''}: `
+                  : ''}
                 {error.message}
               </li>
             ))}
@@ -246,137 +296,253 @@ function EmployerLevyOpeningsYearView({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <SharedTable className="w-full min-w-max text-sm">
-          <SharedTableHeader className="bg-slate-50 text-left dark:bg-slate-900">
-            <SharedTableRow>
-              <SharedTableHead className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
-                {text('levy', 'Levy')}
-              </SharedTableHead>
-              <SharedTableHead className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
-                {text('region', 'Region')}
-              </SharedTableHead>
-              <SharedTableHead className="px-3 py-2 font-medium text-slate-600 dark:text-slate-300">
-                {text('baseYtd', 'Base year-to-date')}
-              </SharedTableHead>
-            </SharedTableRow>
-          </SharedTableHeader>
-          <SharedTableBody>
-            {levies.map((levy) => {
-              const stored = storedFor(levy)
-              // An org levy is one row; a region levy is one row per stored
-              // region. An org levy renders a blank row when nothing is
-              // stored so it stays enterable. A region levy needs an
-              // explicit region code, so its empty state is entered through
-              // the Add a region row below rather than a null-region cell
-              // whose save the service always refuses.
-              const editable =
-                stored.length > 0
-                  ? stored
-                  : levy.scope === 'region'
-                    ? []
-                    : [{ country: levy.country, levyKey: levy.levyKey, region: null as string | null, baseYtd: '0' }]
-              const levyAdded = added.filter(
-                (row) => row.country === levy.country && row.levyKey === levy.levyKey,
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {workspace('employerHint', { year })}
+      </p>
+      <PagedTable
+        source="payroll_opening_levies"
+        rows={levies}
+        searchable
+        pageSize={25}
+        rowKey={(levy) => `${levy.country}:${levy.levyKey}`}
+        rowLabel={(levy) => levy.label}
+        onRowClick={(levy) => setActiveKey(`${levy.country}:${levy.levyKey}`)}
+        empty={workspace('noLevies')}
+        columns={[
+          {
+            key: 'levy',
+            header: text('levy', 'Levy'),
+            search: (levy) =>
+              `${levy.label} ${levy.country} ${levy.description} ${storedFor(
+                levy,
               )
-              return (
-                <Fragment key={`${levy.country} ${levy.levyKey}`}>
-                  {editable.map((row) => {
-                    const key = rowKey(levy.country, levy.levyKey, row.region)
-                    return (
-                      <SharedTableRow key={key} className="border-t border-slate-200 dark:border-slate-800">
-                        <SharedTableCell className="px-3 py-2">
-                          <span className="font-medium">{levy.label}</span>{' '}
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            {levy.country} · {levy.description}
-                          </span>
-                        </SharedTableCell>
-                        <SharedTableCell className="px-3 py-2 text-slate-500 dark:text-slate-400">
-                          {levy.scope === 'region' ? (row.region ?? '—') : '—'}
-                        </SharedTableCell>
-                        <SharedTableCell className="px-3 py-2">
-                          <Input
-                            aria-label={`${levy.label} base year-to-date${row.region ? `, ${row.region}` : ''}`}
-                            value={valueOf(levy.country, levy.levyKey, row.region)}
-                            disabled={!canManage || saving}
-                            className="w-40"
-                            inputMode="decimal"
-                            onChange={(event) => setAmount(levy.country, levy.levyKey, row.region, event.target.value)}
-                          />
-                        </SharedTableCell>
-                      </SharedTableRow>
-                    )
-                  })}
-                  {levyAdded.map((row) => (
-                    <SharedTableRow key={`added-${row.id}`} className="border-t border-slate-200 dark:border-slate-800">
-                      <SharedTableCell className="px-3 py-2">
-                        <span className="font-medium">{levy.label}</span>{' '}
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {levy.country} · {levy.description}
-                        </span>
-                      </SharedTableCell>
-                      <SharedTableCell className="px-3 py-2">
-                        <Input
-                          aria-label={text('regionLabel', 'Region code')}
-                          placeholder={text('regionPlaceholder', 'e.g. ON')}
-                          value={row.region}
-                          disabled={!canManage || saving}
-                          className="w-32"
-                          onChange={(event) =>
-                            setAdded((current) =>
-                              current.map((candidate) =>
-                                candidate.id === row.id ? { ...candidate, region: event.target.value } : candidate,
-                              ),
-                            )
-                          }
-                        />
-                      </SharedTableCell>
-                      <SharedTableCell className="px-3 py-2">
-                        <Input
-                          aria-label={`${levy.label} · ${text('newBaseLabel', 'New region base year-to-date')}${row.region ? ` · ${row.region}` : ''}`}
-                          className="w-40"
-                          inputMode="decimal"
-                          disabled={!canManage || saving}
-                          value={row.baseYtd}
-                          onChange={(event) =>
-                            setAdded((current) =>
-                              current.map((candidate) =>
-                                candidate.id === row.id ? { ...candidate, baseYtd: event.target.value } : candidate,
-                              ),
-                            )
-                          }
-                        />
-                      </SharedTableCell>
-                    </SharedTableRow>
-                  ))}
-                  {levy.scope === 'region' && canManage && (
-                    <SharedTableRow className="border-t border-slate-200 dark:border-slate-800">
-                      <SharedTableCell colSpan={3} className="px-3 py-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={saving}
-                          onClick={() => {
-                            const id = nextId
-                            setNextId(id + 1)
-                            setAdded((current) => [
-                              ...current,
-                              { id, country: levy.country, levyKey: levy.levyKey, region: '', baseYtd: '' },
-                            ])
-                          }}
-                        >
-                          <Plus size={14} aria-hidden />
-                          {text('addRegion', 'Add a region')}
-                        </Button>
-                      </SharedTableCell>
-                    </SharedTableRow>
-                  )}
-                </Fragment>
-              )
-            })}
-          </SharedTableBody>
-        </SharedTable>
-      </div>
+                .map((row) => row.region)
+                .join(' ')}`,
+            cell: (levy) => (
+              <div>
+                <p className="font-medium">{levy.label}</p>
+                <p className="max-w-lg text-xs text-slate-500">
+                  {levy.description}
+                </p>
+              </div>
+            ),
+          },
+          {
+            key: 'country',
+            header: workspace('jurisdiction'),
+            cell: (levy) => levy.country,
+          },
+          {
+            key: 'scope',
+            header: workspace('scope'),
+            cell: (levy) => (
+              <div>
+                {levy.scope === 'region'
+                  ? workspace('regional')
+                  : workspace('employer')}
+                <p className="text-xs text-slate-400">
+                  {storedFor(levy)
+                    .map((row) => row.region)
+                    .filter(Boolean)
+                    .join(', ')}
+                </p>
+              </div>
+            ),
+          },
+          {
+            key: 'status',
+            header: workspace('status'),
+            cell: (levy) => (
+              <Badge variant="outline">
+                {Object.keys(draft).some((key) =>
+                  key.startsWith(`${levy.country}\u001f${levy.levyKey}\u001f`),
+                ) ||
+                added.some(
+                  (row) =>
+                    row.country === levy.country &&
+                    row.levyKey === levy.levyKey,
+                )
+                  ? workspace('unsaved')
+                  : storedFor(levy).length
+                    ? workspace('recorded')
+                    : workspace('noCarryIn')}
+              </Badge>
+            ),
+          },
+          {
+            key: 'open',
+            header: <span className="sr-only">{workspace('review')}</span>,
+            align: 'right',
+            cell: () => (
+              <ChevronRight
+                size={16}
+                className="ml-auto text-slate-400"
+                aria-hidden
+              />
+            ),
+          },
+        ]}
+      />
+      <Drawer
+        open={!!activeLevy}
+        onClose={() => {
+          if (!saving) setActiveKey(null)
+        }}
+        title={activeLevy?.label ?? workspace('employer')}
+        description={`${year} · ${activeLevy?.country ?? ''}`}
+        size="lg"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">{workspace('draftHint')}</p>
+            <Button
+              variant="outline"
+              disabled={saving}
+              onClick={() => setActiveKey(null)}
+            >
+              {workspace('done')}
+            </Button>
+            {canManage && (
+              <Button disabled={saving || dirtyCount === 0} onClick={save}>
+                {saving
+                  ? text('saving', 'Saving…')
+                  : `${workspace('saveAll')} (${dirtyCount})`}
+              </Button>
+            )}
+          </div>
+        }
+      >
+        {activeLevy && (
+          <div className="space-y-5">
+            <p className="text-sm text-slate-500">{activeLevy.description}</p>
+            <p className="text-sm text-slate-500">
+              {text(
+                'hint',
+                'The base already counted this year. Enter zero to clear a carry-in.',
+              )}
+            </p>
+            {errors.length > 0 && (
+              <div
+                role="alert"
+                className="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300"
+              >
+                {errors.map((error, index) => (
+                  <p key={index}>
+                    {error.levyKey} {error.region} {error.message}
+                  </p>
+                ))}
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(storedFor(activeLevy).length
+                ? storedFor(activeLevy)
+                : activeLevy.scope === 'region'
+                  ? []
+                  : [
+                      {
+                        country: activeLevy.country,
+                        levyKey: activeLevy.levyKey,
+                        region: null,
+                        baseYtd: '0',
+                      },
+                    ]
+              ).map((row) => (
+                <div
+                  key={rowKey(row.country, row.levyKey, row.region)}
+                  className="space-y-2 rounded-xl border border-slate-200 p-4 dark:border-slate-800"
+                >
+                  <Label>
+                    {row.region ?? workspace('employer')} ·{' '}
+                    {text('baseYtd', 'Base year-to-date')}
+                  </Label>
+                  <MoneyInput
+                    ariaLabel={`${activeLevy.label} base year-to-date${row.region ? `, ${row.region}` : ''}`}
+                    value={valueOf(row.country, row.levyKey, row.region)}
+                    onChange={(value) =>
+                      setAmount(row.country, row.levyKey, row.region, value)
+                    }
+                    field={activeLevy.label}
+                    noun="a money amount"
+                    maxScale={4}
+                    disabled={!canManage || saving}
+                    className="text-right tabular-nums"
+                  />
+                </div>
+              ))}
+              {added
+                .filter(
+                  (row) =>
+                    row.country === activeLevy.country &&
+                    row.levyKey === activeLevy.levyKey,
+                )
+                .map((row) => (
+                  <div
+                    key={row.id}
+                    className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800"
+                  >
+                    <Label>{text('regionLabel', 'Region code')}</Label>
+                    <Input
+                      aria-label={text('regionLabel', 'Region code')}
+                      placeholder={text('regionPlaceholder', 'e.g. ON')}
+                      value={row.region}
+                      disabled={saving}
+                      onChange={(event) =>
+                        setAdded((current) =>
+                          current.map((candidate) =>
+                            candidate.id === row.id
+                              ? { ...candidate, region: event.target.value }
+                              : candidate,
+                          ),
+                        )
+                      }
+                    />
+                    <Label>{text('baseYtd', 'Base year-to-date')}</Label>
+                    <MoneyInput
+                      ariaLabel={`${activeLevy.label} · ${text('newBaseLabel', 'New region base year-to-date')}${row.region ? ` · ${row.region}` : ''}`}
+                      value={row.baseYtd}
+                      onChange={(value) =>
+                        setAdded((current) =>
+                          current.map((candidate) =>
+                            candidate.id === row.id
+                              ? { ...candidate, baseYtd: value }
+                              : candidate,
+                          ),
+                        )
+                      }
+                      field={activeLevy.label}
+                      noun="a money amount"
+                      maxScale={4}
+                      disabled={saving}
+                      className="text-right tabular-nums"
+                    />
+                  </div>
+                ))}
+            </div>
+            {activeLevy.scope === 'region' && canManage && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => {
+                  setNextId(nextId + 1)
+                  setAdded((current) => [
+                    ...current,
+                    {
+                      id: nextId,
+                      country: activeLevy.country,
+                      levyKey: activeLevy.levyKey,
+                      region: '',
+                      baseYtd: '',
+                    },
+                  ])
+                }}
+              >
+                <Plus size={14} aria-hidden />
+                {text('addRegion', 'Add a region')}
+              </Button>
+            )}
+          </div>
+        )}
+      </Drawer>
     </section>
   )
 }

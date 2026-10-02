@@ -212,6 +212,7 @@ export function WorkLocationsView() {
         pageSize={10}
         onRowClick={edit}
         empty="Choose an employee and period to review saved allocations."
+        toolbarAlign="end"
         toolbarAfter={
           <>
             <div className="space-y-1 min-w-64 flex-1">
@@ -232,6 +233,7 @@ export function WorkLocationsView() {
                 ))}
               </Select>
             </div>
+            <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
             <div className="space-y-1">
               <Label htmlFor="period-start">Period start</Label>
               <Input
@@ -250,7 +252,9 @@ export function WorkLocationsView() {
                 onChange={(event) => setPeriodEnd(event.target.value)}
               />
             </div>
+            </div>
             <Button
+              className="w-full sm:w-auto"
               disabled={!selectedEmployee || !periodStart || !periodEnd}
               onClick={() => {
                 setEditingId(null);
