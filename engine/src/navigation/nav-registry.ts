@@ -1149,12 +1149,12 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   banking: [
     'banking-cash',
     'banking',
+    'banking-rules',
+    'banking-imports',
     'banking-transactions',
     'banking-match',
     'banking-recons',
     'banking-psp-settlements',
-    'banking-rules',
-    'banking-imports',
   ],
   accounting: [
     'journal',
