@@ -108,6 +108,7 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
               }),
               { align: 'right', className: 'tabular-nums' },
             ),
+            column(data.columns.nextAction,text(item('nextActionLabel'),{fallback:'—'})),
             column(
               data.columns.nextDue,
               text(item('nextDueOn'), { fallback: '—' }),

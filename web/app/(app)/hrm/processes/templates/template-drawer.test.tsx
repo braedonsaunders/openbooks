@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import React from 'react'
 
@@ -7,7 +6,7 @@ const confirmCalls: unknown[] = []
 const toastErrors: string[] = []
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../../../testing/stub-modules')
-stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })' })
+stubModules({ navigation: true })
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'sonner') {
@@ -32,29 +31,14 @@ const { ProcessTemplateDrawer } = await import('./ProcessTemplateDrawer')
 Object.assign(globalThis, { React })
 Object.assign(globalThis, { __templateConfirmCalls: confirmCalls, __templateToastErrors: toastErrors })
 
-const hrmMessages = JSON.parse(readFileSync(new URL('../../../../../messages/en/hrm.json', import.meta.url), 'utf8'))
-const commonMessages = JSON.parse(readFileSync(new URL('../../../../../messages/en/common.json', import.meta.url), 'utf8'))
-const uiMessages = JSON.parse(readFileSync(new URL('../../../../../messages/en/ui.json', import.meta.url), 'utf8'))
+const {default:messages}=await import('../../../../../messages/en')
 
 const template = {
-  id: 'tpl-1',
-  kind: 'onboarding' as const,
-  name: 'Onboarding',
-  appliesTo: { employerSubsidiaryId: null, departmentId: null },
-  isActive: true,
-  steps: [
-    {
-      id: 'step-1',
-      position: 0,
-      title: 'Collect documents',
-      description: null,
-      ownerKind: 'manager',
-      ownerPartyId: null,
-      dueOffsetDays: 3,
-      required: true,
-      evidenceKind: 'none',
-    },
-  ],
+  id: '10000000-0000-4000-8000-000000000010', revision:1,publishedVersion:1,isActive:true,
+  document:{name:'Onboarding',kind:'onboarding' as const,appliesTo:{employerSubsidiaryId:null,departmentId:null},steps:[{
+    id:'10000000-0000-4000-8000-000000000011',title:'Collect documents',description:null,ownerKind:'manager' as const,ownerPartyId:null,dueOffsetDays:3,required:true,evidenceKind:'none' as const,
+    design:{section:'Preparation',dependencies:[],condition:null,form:null,approval:false,reminderDays:null,resources:[]},
+  }]},
 }
 
 interface Mount {
@@ -66,7 +50,7 @@ interface Mount {
   unmount: () => Promise<void>
 }
 
-async function mount(): Promise<Mount> {
+async function mount(creating=false,respond?:(body:Record<string,unknown>)=>Promise<Response>): Promise<Mount> {
   const { JSDOM } = await import('jsdom')
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: 'http://localhost/hrm/processes/templates?template=tpl-1',
@@ -112,14 +96,14 @@ async function mount(): Promise<Mount> {
   ;(globalThis as Record<string, unknown>).fetch = async (input: unknown, init?: { method?: string; body?: string }) => {
     const url = String(input)
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? (JSON.parse(init.body) as Record<string, unknown>) : null })
-    return { ok: true, json: async () => ({}) }
+    const body=init?.body ? JSON.parse(init.body):{};if(respond)return respond(body);return Response.json({...template,revision:body.revision+1,document:body.document ?? template.document})
   }
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale="en" messages={{ hrm: hrmMessages, common: commonMessages, ui: uiMessages }}>
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
         <ProcessTemplateDrawer
-          template={template}
-          creating={false}
+          template={creating?null:template}
+          creating={creating}
           closeHref="/hrm/processes/templates"
           subsidiaries={[]}
           departments={[]}
@@ -172,66 +156,50 @@ async function flushAsync(): Promise<void> {
   })
 }
 
-// Step deletion goes through the house confirm dialog — the native
-// confirm must never fire.
-test('deleting a step asks the house confirm dialog, never the native confirm', async () => {
-  confirmCalls.length = 0
-  const m = await mount()
-  try {
-    const { act } = await import('react')
-    await act(async () => {
-      const del = m.document.querySelector('button[aria-label="Delete step"]')
-      assert.ok(del, 'the step delete button renders')
-      m.click(del!)
-    })
-    await flushAsync()
-    assert.equal(m.nativeConfirmCalls, 0, 'the native confirm never fires')
-    assert.equal(confirmCalls.length, 1, 'the house dialog gates the delete')
-    const deletes = m.calls.filter((c) => c.method === 'DELETE')
-    assert.equal(deletes.length, 1, 'confirming deletes the step')
-    assert.match(deletes[0]?.url ?? '', /process-templates\/tpl-1\/steps\/step-1/)
-  } finally {
-    await m.unmount()
-  }
+const button=(m:Mount,label:string)=>{const result=[...m.document.querySelectorAll('button')].find(b=>b.textContent===label);assert.ok(result,`Button ${label} must render`);return result}
+test('new templates offer six starters and accept steps before the first save',async()=>{
+ const m=await mount(true);const {act}=await import('react');try{
+  assert.equal(m.document.querySelectorAll('[role="radio"]').length,6)
+  await act(async()=>m.click([...m.document.querySelectorAll('[role="radio"]')].find(b=>b.textContent?.includes('Start from scratch'))!))
+  await act(async()=>m.setInput(m.document.getElementById('checklist-name') as HTMLInputElement,'Custom welcome'))
+  await act(async()=>m.click(button(m,'Add step')))
+  await act(async()=>m.setInput(m.document.getElementById('step-title') as HTMLInputElement,'Arrange introductions'))
+  assert.equal(m.calls.length,0,'local step editing needs no record creation first')
+  const shell=m.document.querySelector('[role="dialog"]')
+  await act(async()=>m.click(button(m,'Save draft')));await flushAsync()
+  assert.equal(m.calls[0]?.url,'/api/hrm/process-templates/designer');const doc=m.calls[0]?.body?.document as typeof template.document;assert.equal(doc.name,'Custom welcome');assert.equal(doc.steps[0]?.title,'Arrange introductions')
+  assert.equal(m.document.querySelector('[role="dialog"]'),shell,'the drawer shell survives the first save')
+ }finally{await m.unmount()}
+})
+test('deleting a step confirms once and saves the whole draft without a destructive step request',async()=>{
+ confirmCalls.length=0;const m=await mount();const {act}=await import('react');try{
+  await act(async()=>m.click(m.document.querySelector('button[aria-label="Delete"]')!));await flushAsync()
+  assert.equal(m.nativeConfirmCalls,0);assert.equal(confirmCalls.length,1)
+  assert.ok(!m.document.body.textContent?.includes('Collect documents'))
+  await act(async()=>m.click(button(m,'Save draft')));await flushAsync()
+  assert.equal(m.calls.some(c=>c.method==='DELETE'),false)
+  assert.equal((m.calls[0]?.body?.document as typeof template.document).steps.length,0)
+ }finally{await m.unmount()}
+})
+test('invalid due days name the valid range and never reach the save endpoint',async()=>{
+ const m=await mount();const {act}=await import('react');try{
+  await act(async()=>m.setInput(m.document.getElementById('step-days') as HTMLInputElement,'99999'))
+  await act(async()=>m.click(button(m,'Save draft')));await flushAsync()
+  assert.equal(m.calls.length,0)
+  assert.match(m.document.querySelector('[role="alert"]')?.textContent ?? '',/whole number of days between -3650 and 3650/)
+ }finally{await m.unmount()}
 })
 
-// An out-of-range due offset refuses by name — nothing is posted.
-test('an out-of-range due offset refuses by name and posts nothing', async () => {
-  toastErrors.length = 0
-  const m = await mount()
-  try {
-    const { act } = await import('react')
-    await act(async () => {
-      // Open the step editor from the step row.
-      const row = [...m.document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Collect documents'))
-      assert.ok(row, 'the step row renders')
-      m.click(row!)
-    })
-    await act(async () => {
-      const offset = m.document.getElementById('step-offset') as HTMLInputElement
-      assert.ok(offset, 'the offset field renders')
-      m.setInput(offset, '99999')
-    })
-    await act(async () => {
-      // The header carries its own Save for the template: scope to the step
-      // editor opened above.
-      const editor = [...m.document.querySelectorAll('h4')]
-        .find((h) => h.textContent === 'Edit step')
-        ?.closest('div')
-      const save = [...(editor?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Save')
-      assert.ok(save, 'the step save button renders')
-      m.click(save!)
-    })
-    await flushAsync()
-    assert.ok(
-      m.calls.every((c) => c.method === 'GET' || !c.url.includes('/steps')),
-      'no step create or update is posted on an invalid offset',
-    )
-    assert.ok(
-      toastErrors.some((message) => message.includes('whole number of days between -3650 and 3650')),
-      'the refusal names the valid range',
-    )
-  } finally {
-    await m.unmount()
-  }
+test('a refused save retains local edits and a saved-draft reload keeps the same dialog',async()=>{
+ let mode='refuse';const m=await mount(false,async body=>mode==='refuse'?Response.json({error:'Another editor saved this draft — reload the latest revision before applying your changes.'},{status:422}):Response.json({...template,revision:2,document:{...template.document,name:'Latest colleague welcome'}}));
+ const {act}=await import('react');try{
+  const shell=m.document.querySelector('[role="dialog"]');await act(async()=>m.setInput(m.document.getElementById('step-title') as HTMLInputElement,'My local task'))
+  await act(async()=>m.click(button(m,'Save draft')));await flushAsync()
+  assert.match(m.document.querySelector('[role="alert"]')?.textContent ?? '',/Another editor saved this draft/)
+  assert.equal((m.document.getElementById('step-title') as HTMLInputElement).value,'My local task')
+  mode='load';await act(async()=>m.click(button(m,'Reload saved draft')));await flushAsync()
+  assert.equal(m.document.querySelector('[role="dialog"]'),shell)
+  assert.equal((m.document.getElementById('step-title') as HTMLInputElement).value,'Collect documents')
+  assert.equal(m.calls.at(-1)?.body?.action,'load')
+ }finally{await m.unmount()}
 })

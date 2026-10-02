@@ -1,3 +1,4 @@
+import { rebaseChecklistReferences } from "./checklist-references.ts";
 import { sql } from "drizzle-orm";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { db } from "../platform/db.ts";
@@ -116,6 +117,7 @@ export async function rebaseClonedJsonReferences(args: {
       await recordRebase(args.sandboxOrgId, "subsidiaries", subsidiary.id, "control_accounts", before, after);
     }
   }
+  await rebaseChecklistReferences(args);
   const scoped = SCOPE_FILTER_TABLES.filter((table) => args.copiedTables.has(table));
   if (scoped.length) {
     // A refresh that re-copies the HRM rules always re-copies the entity tree

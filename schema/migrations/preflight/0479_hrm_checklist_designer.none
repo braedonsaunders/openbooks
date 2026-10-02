@@ -1,0 +1,1 @@
+Adds draft and publication metadata with safe defaults, an empty version history table, and guards applying only after a template adopts the designer. No existing checklist or step is rewritten.

@@ -1014,6 +1014,12 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_pipeline_templates.name",
   "hrm_posting_events.kind",
   "hrm_posting_events.payload",
+  // Checklist definitions are configuration; employee responses are masked separately.
+  "hrm_process_steps.design",
+  "hrm_process_steps.approval_status",
+  "hrm_process_template_steps.design",
+  "hrm_process_templates.draft_document",
+  "hrm_process_template_versions.document",
   "hrm_process_steps.description",
   "hrm_process_steps.evidence_kind",
   "hrm_process_steps.owner_kind",

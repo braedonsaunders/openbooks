@@ -43,6 +43,7 @@ async function click(element: Element) {
   await act(async()=>{element.dispatchEvent(new MouseEvent('click',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,30))})
 }
 async function choose(id:string,label:string) {
+  if(id==='process-template') {const card=[...document.querySelectorAll('[role=radio]')].find(option=>option.textContent?.includes(label));assert.ok(card,`missing template card: ${label}`);await click(card);return}
   await click(document.getElementById(id)!)
   const choice=[...document.querySelectorAll('[role=option]')].find(option=>option.textContent?.includes(label))
   assert.ok(choice,`missing choice: ${label}`)

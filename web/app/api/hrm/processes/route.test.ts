@@ -73,6 +73,13 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return { id: 'process-1', status: 'open' }
       }
+      export async function saveChecklistDraft(args) { state.calls.push({fn:'saveChecklistDraft',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
+      export async function publishChecklistDraft(args) { state.calls.push({fn:'publishChecklistDraft',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
+      export async function retireChecklistTemplate(args) { state.calls.push({fn:'retireChecklistTemplate',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
+      export async function getChecklistDesigner(args) { state.calls.push({fn:'getChecklistDesigner',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
+      export async function getChecklistVersion(args) { state.calls.push({fn:'getChecklistVersion',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
+      export async function previewChecklistCoverage(args) { state.calls.push({fn:'previewChecklistCoverage',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
+      export async function submitChecklistStepApproval(args) { state.calls.push({fn:'submitChecklistStepApproval',args}); if (state.serviceThrow) throw state.serviceThrow; return {id:args.templateId,revision:1} }
       export async function completeProcessStep(args) {
         state.calls.push({ fn: 'completeStep', args })
         if (state.serviceThrow) throw state.serviceThrow
@@ -135,6 +142,8 @@ const mockUrls = new Map<string, string>([
   ...authzDepths.map((specifier) => [specifier, "mock:authz"] as const),
   ...featureDepths.map((specifier) => [specifier, "mock:authz"] as const),
   ["@openbooks/engine/src/hrm/processes.ts", "mock:processes-service"],
+  ["@openbooks/engine/hrm/processes", "mock:processes-service"],
+  ["@/lib/features", "mock:authz"],
   ["@openbooks/engine/src/hrm/processes-read.ts", "mock:processes-read-service"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
@@ -179,6 +188,9 @@ const completeRoute: RouteModule | undefined = await loadRoute("./[id]/complete/
 const cancelRoute: RouteModule | undefined = await loadRoute("./[id]/cancel/route.ts?hrm-processes-cancel");
 const stepCompleteRoute: RouteModule | undefined = await loadRoute("./steps/[stepId]/complete/route.ts?hrm-processes-step-complete");
 const stepSkipRoute: RouteModule | undefined = await loadRoute("./steps/[stepId]/skip/route.ts?hrm-processes-step-skip");
+
+const designerRoute = await loadRoute("../process-templates/designer/route.ts?checklist-designer");
+const submitRoute = await loadRoute("./steps/[stepId]/submit/route.ts?checklist-submit");
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 const PROCESS_ID = "00000000-0000-4000-8000-000000000022";
@@ -416,3 +428,27 @@ test("a missing feature flag 404s before any service runs", async () => {
         "an open onboarding process already exists for this employment — complete or cancel it before opening another",
     });
   });
+
+test("designer validation refuses invalid revisions, missing reasons and impossible dates before writes",async()=>{
+ reset();
+ for(const body of [{action:'publish',templateId:PROCESS_ID,revision:-1,reason:'Review'}, {action:'retire',templateId:PROCESS_ID,revision:1,reason:' '}, {action:'preview',employmentId:EMPLOYMENT_ID,effectiveDate:'2026-02-30',document:{name:'Welcome',kind:'onboarding',appliesTo:{employerSubsidiaryId:null,departmentId:null},steps:[]}}]) {
+  const response=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',body));assert.equal(response.status,400)
+ }
+ assert.deepEqual(routeState.calls,[])
+})
+test("designer and approval submission honor feature and permission refusals",async()=>{
+ reset();routeState.featureOn=false
+ const disabled=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',{action:'load',templateId:PROCESS_ID}));assert.equal(disabled.status,404)
+ reset();routeState.gate={status:403}
+ const denied=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',{action:'load',templateId:PROCESS_ID}));assert.equal(denied.status,403)
+ routeState.selfGate={status:403}
+ const submitted=await submitRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/processes/steps/x/submit',{}),ctx({stepId:STEP_ID}));assert.equal(submitted.status,403);assert.deepEqual(routeState.calls,[])
+})
+test("designer publication carries the domain refusal and its actual remedy to the operator",async()=>{
+ reset();const {HrmProcessError}=await import('@openbooks/engine/src/hrm/processes.ts');routeState.serviceThrow=new HrmProcessError('REFUSED','Another editor saved this draft — reload the latest revision before applying your changes. Your edits have not been overwritten.')
+ const response=await designerRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/process-templates/designer',{action:'publish',templateId:PROCESS_ID,revision:1,reason:'Reviewed checklist'}));assert.equal(response.status,422);assert.deepEqual(await response.json(),{error:(routeState.serviceThrow as Error).message})
+})
+test("approval submission forwards acknowledged form evidence through the self-service boundary",async()=>{
+ reset();routeState.gate={status:403};routeState.selfGate={user:{id:'self-user',orgId:'org-1'}}
+ const response=await submitRoute.POST!(jsonRequest('http://openbooks.test/api/hrm/processes/steps/x/submit',{acknowledged:true,response:{asset:'Laptop'}}),ctx({stepId:STEP_ID}));assert.equal(response.status,200);assert.deepEqual(routeState.calls,[{fn:'submitChecklistStepApproval',args:{orgId:'org-1',actorId:'self-user',stepId:STEP_ID,acknowledged:true,response:{asset:'Laptop'}}}])
+})

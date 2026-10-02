@@ -20,6 +20,8 @@ export const openProcessBody = z.object({
 
 export const completeStepBody = z.object({
   attachmentId: uuid.optional(),
+  acknowledged: z.boolean().optional(),
+  response: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const skipStepBody = z.object({

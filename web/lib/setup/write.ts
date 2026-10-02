@@ -1168,9 +1168,10 @@ export async function validateEntityIntegrity(
     let values = body
     if (rowId) {
       const current = await executor.execute(sql`
-        select applies_to as "appliesTo" from hrm_process_templates where id = ${rowId} and org_id = ${orgId}
+        select applies_to as "appliesTo", designer_managed from hrm_process_templates where id = ${rowId} and org_id = ${orgId}
       `)
       if (!current.rows[0]) return 'Process template not found'
+      if (current.rows[0].designer_managed) return 'Open this template in HRM Checklist templates to edit and publish its whole draft, or use Retire template there.'
       values = { ...(current.rows[0] as Record<string, unknown>), ...body }
     }
     const raw = values.appliesTo
@@ -1409,6 +1410,8 @@ export async function validateEntityIntegrity(
         ${ownerParty ? sql`exists(select 1 from parties where id = ${ownerParty} and org_id = ${orgId})` : sql`true`} as party_ok
     `)
     if (!refs.rows[0]?.template_ok) return 'The parent template is not visible in this organization'
+    const parent = await executor.execute(sql`select designer_managed from hrm_process_templates where org_id=${orgId} and id=${values.templateId}`)
+    if (parent.rows[0]?.designer_managed) return 'Edit steps in HRM Checklist templates and publish the complete draft instead.'
     if (!refs.rows[0]?.party_ok) return 'The owner party is not visible in this organization'
   }
   // HRM pipeline stages (0195): the parent funnel must live in this org

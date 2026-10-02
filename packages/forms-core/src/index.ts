@@ -87,3 +87,8 @@ export type {
   FlowStatusDef,
   FlowSubjectProfile,
 } from './flow-subjects'
+
+export { CHECKLIST_STEP_SUBJECT_KIND, checklistContextFields, checklistStepDesignSchema, checklistStepSchema, checklistDocumentSchema, checklistIssues, checklistConditionPredicates, actionableChecklistSteps, includedChecklistSteps, emptyStepDesign } from './checklists'
+export type { ChecklistDocument, ChecklistStep, ChecklistStepDesign, ChecklistIssue } from './checklists'
+
+export { splitRecordData, mergeRecordData, withComputedFormulas, RECORD_FIELD_TYPES } from './record-data'

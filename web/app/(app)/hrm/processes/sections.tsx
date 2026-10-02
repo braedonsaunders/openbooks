@@ -1,4 +1,4 @@
-import { UrlDrawer } from '@openbooks/ui'
+import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 import { ProcessChecklistBody } from '../processes-client'
 import type { ProcessesPageData } from '../../../../lib/hrm/processes-page'
 
@@ -27,8 +27,9 @@ export function ProcessDrawer({
 }) {
   if (!drawer) return null
   return (
-    <UrlDrawer
+    <DirtyUrlDrawer
       open
+      size="2xl"
       closeHref={drawer.closeHref}
       title={drawer.title}
       description={drawer.description ?? undefined}
@@ -45,6 +46,6 @@ export function ProcessDrawer({
       ) : drawer.missingDetail ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
       ) : null}
-    </UrlDrawer>
+    </DirtyUrlDrawer>
   )
 }

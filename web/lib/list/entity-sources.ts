@@ -385,36 +385,43 @@ const SOURCES: Record<string, EntityListSource> = {
     readPermission: 'hrm.process.manage',
     baseJoins: sql`left join lateral (
       select count(*)::int as step_count from hrm_process_template_steps step
-       where step.org_id=t.org_id and step.template_id=t.id
+       where step.org_id=t.org_id and step.template_id=t.id and step.is_current
     ) steps on true`,
     countJoins: sql``,
     builtInExpr: {
-      name: sql`t.name`, kind: sql`t.kind`,
+      name: sql`coalesce(t.draft_document->>'name',t.name)`, kind: sql`t.kind`,
       scope: sql`case when t.applies_to->>'employer_subsidiary_id' is not null or t.applies_to->>'department_id' is not null then 'limited' else 'all' end`,
-      step_count: sql`steps.step_count`,
-      status: sql`case when t.is_active then 'active' else 'retired' end`,
+      step_count: sql`case when t.draft_document is not null then jsonb_array_length(t.draft_document->'steps') else steps.step_count end`, published_version:sql`t.published_version`,
+      status: sql`case when t.designer_managed and t.published_version=0 and not t.is_active then 'draft' when t.is_active and t.draft_revision>t.published_revision then 'changes_pending' when t.is_active then 'active' else 'retired' end`,
     },
-    sorts: { name: sql`t.name`, kind: sql`t.kind`, steps: sql`steps.step_count`, status: sql`t.is_active` },
-    defaultSort: sql`t.name`,
-    statusExpr: sql`case when t.is_active then 'active' else 'retired' end`,
+    sorts: { name: sql`coalesce(t.draft_document->>'name',t.name)`, kind: sql`t.kind`, steps: sql`steps.step_count`, status: sql`t.is_active` },
+    defaultSort: sql`coalesce(t.draft_document->>'name',t.name)`,
+    statusExpr: sql`case when t.designer_managed and t.published_version=0 and not t.is_active then 'draft' when t.is_active and t.draft_revision>t.published_revision then 'changes_pending' when t.is_active then 'active' else 'retired' end`,
     quickFilters: [{ paramKey: 'kind', filterKey: 'kind' }, { paramKey: 'status', filterKey: 'status' }],
-    // Templates are organization configuration, matching the native template
-    // reader's process-management grant; employee execution is scoped separately.
-    where: (view, adhoc, orgId) => {
+    // Both the published definition and its draft must be visible in the
+    // caller's employer scope; a draft move cannot expose configuration elsewhere.
+    where: (view, adhoc, orgId, allowed) => {
       const parts: SQL[] = [sql`t.org_id=${orgId}`]
-      const status = sql`case when t.is_active then 'active' else 'retired' end`
+      if(allowed!==null) {
+        if(!allowed || allowed.size===0) parts.push(sql`and false`)
+        else parts.push(sql`and (t.applies_to->>'employer_subsidiary_id' in(select value from jsonb_array_elements_text(${JSON.stringify([...allowed])}::jsonb) as ids(value)) or (t.applies_to->>'employer_subsidiary_id' is null and (t.applies_to->>'department_id' is null or exists(select 1 from departments d where d.org_id=t.org_id and d.id::text=t.applies_to->>'department_id' and (d.subsidiary_id is null or d.subsidiary_id::text in(select value from jsonb_array_elements_text(${JSON.stringify([...allowed])}::jsonb) as ids(value)))))))`)
+      }
+      if (allowed !== null && allowed?.size) {
+        parts.push(sql`and (t.draft_document is null or t.draft_document->'appliesTo'->>'employerSubsidiaryId' in(select value from jsonb_array_elements_text(${JSON.stringify([...allowed])}::jsonb) as ids(value)) or (t.draft_document->'appliesTo'->>'employerSubsidiaryId' is null and (t.draft_document->'appliesTo'->>'departmentId' is null or exists(select 1 from departments d where d.org_id=t.org_id and d.id::text=t.draft_document->'appliesTo'->>'departmentId' and (d.subsidiary_id is null or d.subsidiary_id::text in(select value from jsonb_array_elements_text(${JSON.stringify([...allowed])}::jsonb) as ids(value)))))))`)
+      }
+      const status = sql`case when t.designer_managed and t.published_version=0 and not t.is_active then 'draft' when t.is_active and t.draft_revision>t.published_revision then 'changes_pending' when t.is_active then 'active' else 'retired' end`
       for (const filter of view.filters) {
-        if (filter.key === 'status') pushNonprofitStatusFilter(parts, filter, status, ['active', 'retired'])
+        if (filter.key === 'status') pushNonprofitStatusFilter(parts, filter, status, ['draft','changes_pending','active','retired'])
         else if (filter.key === 'kind') pushNonprofitStatusFilter(parts, { ...filter, key: 'status' }, sql`t.kind`, ['onboarding', 'offboarding', 'transfer'])
         else parts.push(sql`and false`)
       }
-      if (adhoc.q) parts.push(sql`and (t.name ilike ${`%${adhoc.q}%`} or t.kind ilike ${`%${adhoc.q}%`})`)
+      if (adhoc.q) parts.push(sql`and (coalesce(t.draft_document->>'name',t.name) ilike ${`%${adhoc.q}%`} or t.kind ilike ${`%${adhoc.q}%`})`)
       if (adhoc.filters?.status) parts.push(sql`and ${status}=${adhoc.filters.status}`)
       if (adhoc.filters?.kind) parts.push(sql`and t.kind=${adhoc.filters.kind}`)
       return sql.join(parts, sql` `)
     },
     drawerParam: 'template', basePath: '/hrm/processes/templates',
-    statusVariant: (_row, value) => value === 'active' ? 'success' : 'outline',
+    statusVariant: (_row, value) => value === 'active' ? 'success' : value==='changes_pending'?'warning':'outline',
   },
 
   change_set: {

@@ -1,3 +1,5 @@
+import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
+import { releaseChecklistStepApproval } from "../hrm/processes.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { registerScriptJournalWriter } from "../scripting/journal-writer.ts";
 import { registerFlowApprovalReleaseHandler } from "../flows/approval-release-hook.ts";
@@ -54,6 +56,7 @@ import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
  */
 export function installEngineSeams(): void {
   registerScriptJournalWriter(createScriptJournal);
+  registerFlowApprovalReleaseHandler(CHECKLIST_STEP_SUBJECT_KIND, releaseChecklistStepApproval);
   registerBalancingLegProvider("fund", fundBalancingLegProvider);
   registerBalancingLegProvider("budgetary-control", budgetaryControlProvider);
   registerReturnInputProvider("form990", form990ReturnInputProvider);

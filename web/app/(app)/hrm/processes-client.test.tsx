@@ -8,20 +8,14 @@ await bootJsdomEnvironment({ url: 'http://localhost/hrm/processes', scrollIntoVi
 Object.assign(globalThis, { React })
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export const useRouter=()=>({refresh(){}})', extra: { 'next-intl': 'export const useTranslations=()=>key=>key' } })
+stubModules({ navigation: true, extra: { 'next-intl': 'export const useTranslations=()=>key=>key;export const useLocale=()=>"en"' } })
 registerHooks({
   resolve(specifier, context, next) {
 
     if (specifier === '@openbooks/ui') {
       return {
         shortCircuit: true,
-        url: `data:text/javascript,const React=globalThis.React;export const Button=({children,...p})=>React.createElement('button',p,children);export const Label=({children,...p})=>React.createElement('label',p,children);export const Textarea=p=>React.createElement('textarea',p);export const SearchSelect=({options,onSearchChange,id})=>React.createElement('div',null,React.createElement('input',{id,onInput:e=>onSearchChange(e.target.value)}),...options.map(o=>React.createElement('option',{key:o.value,value:o.value},o.label)))`,
-      }
-    }
-    if (specifier.endsWith('/lib/use-app-action')) {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useAppAction=()=>({busy:false,async execute(){return false}})',
+        url: `data:text/javascript,export * from ${JSON.stringify(new URL('../../../../packages/ui/src/index.ts',import.meta.url).href)};const React=globalThis.React;export const SearchSelect=({options,onSearchChange,id})=>React.createElement('div',null,React.createElement('input',{id,onInput:e=>onSearchChange(e.target.value)}),...options.map(o=>React.createElement('option',{key:o.value,value:o.value},o.label)))`,
       }
     }
     return next(specifier, context)
@@ -92,4 +86,18 @@ test('file suggestions are query-bound and a failed new search reports an error'
   assert.ok(host.querySelector('[role="alert"]')?.textContent?.includes('processes.fileSearchFailed'))
   await act(async () => root.unmount())
   host.remove()
+})
+
+test('approved acknowledgement evidence remains checked and can complete without re-editing reviewed input',async t=>{
+ const {emptyStepDesign}=await import('@openbooks/forms-core')
+ const calls:{url:string;body:unknown}[]=[];const realFetch=globalThis.fetch
+ globalThis.fetch=async(input,init)=>{calls.push({url:String(input),body:JSON.parse(String(init?.body))});return Response.json({ok:true})};t.after(()=>{globalThis.fetch=realFetch})
+ const approved:import('@openbooks/engine/hrm/processes').ProcessDetail={id:'proc-2',kind:'onboarding',effectiveDate:'2026-10-01',status:'open',employmentId:'employment-2',workerPartyId:'worker-2',workerName:'Jamie',openedByChangeId:null,canManage:false,progress:{total:1,required:1,doneRequired:0,allRequiredDone:false},steps:[{id:'step-2',position:0,title:'Review handbook',description:'Confirm the reviewed policy.',ownerKind:'employee',ownerPartyId:null,dueOn:'2026-10-01',required:true,evidenceKind:'acknowledgement',status:'pending',overdue:false,doneBy:null,skipReason:null,attachmentId:null,approvalStatus:'approved',canComplete:true,canSkip:false,design:{...emptyStepDesign(),approval:true}}]}
+ const host=document.createElement('div');document.body.append(host);const root=createRoot(host)
+ try {
+  await act(async()=>root.render(<ProcessChecklistBody detail={approved}/>))
+  const acknowledgement=host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;assert.equal(acknowledgement.checked,true);assert.equal(acknowledgement.disabled,true)
+  const complete=[...host.querySelectorAll<HTMLButtonElement>('button')].find(b=>b.textContent==='processes.completeStep')!;assert.equal(complete.disabled,false)
+  await act(async()=>complete.click());assert.deepEqual(calls,[{url:'/api/hrm/processes/steps/step-2/complete',body:{acknowledged:true}}])
+ } finally {await act(async()=>root.unmount());host.remove()}
 })
