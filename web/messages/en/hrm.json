@@ -3046,7 +3046,7 @@
       "scientific": "{field}: write {value} in full decimal form, not scientific notation.",
       "not-a-number": "{field}: enter a readable decimal amount."
     },
-    "description": "Employer programs, employee participation and controlled delivery.",
+    "description": "Benefits manages employer programs and employee choices. Payroll manages pay, taxes and statutory deductions.",
     "home": {
       "heroHint": "Open a program to manage its rules, participants, activity and payroll connection.",
       "directoryTitle": "Benefits workspace",

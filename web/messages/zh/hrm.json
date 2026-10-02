@@ -3046,7 +3046,7 @@
       "scientific": "{field}：请完整输入 {value} 的十进制形式，不使用科学计数法。",
       "not-a-number": "{field}：请输入可读的十进制金额。"
     },
-    "description": "雇主计划、员工参与及受控履行。",
+    "description": "福利管理雇主计划和员工选择。薪资管理工资、税款和法定扣款。",
     "home": {
       "heroHint": "打开计划以管理规则、参与员工、活动和薪资关联。",
       "directoryTitle": "福利管理",

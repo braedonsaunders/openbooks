@@ -14,6 +14,7 @@ import {
   validateAwardDraft,
   translatedFieldErrors,
   decimalFieldRefusal,
+  type ProgramFamily,
   type AwardDraft,
   type AwardFieldErrors,
   type BuilderOption as PortfolioOption,
@@ -47,9 +48,8 @@ export function AwardBuilderDrawer({
   initialProgramId = '',
 }: {
   closeHref: string
-  programOptions: (PortfolioOption & { currency: string; fixedAmount: string | null })[]
+  programOptions: (PortfolioOption & { currency: string; fixedAmount: string | null; family: ProgramFamily })[]
   employmentOptions: PortfolioOption[]
-  defaultCurrency?: string
   initialProgramId?: string
 }) {
   const t = useTranslations('hrm')
@@ -72,6 +72,7 @@ export function AwardBuilderDrawer({
   const [saving, setSaving] = useState(false)
   const [sourceKey] = useState(() => `award:${crypto.randomUUID()}`)
   const selectedProgram = programOptions.find((option) => option.value === draft.programId)
+  const isGrant = selectedProgram !== undefined && selectedProgram.family !== 'reward'
 
   function close() {
     router.push(closeHref as never)
@@ -162,7 +163,7 @@ export function AwardBuilderDrawer({
   }
 
   return (
-    <Drawer open onClose={() => void closeGuard.close()} title={t('portfolio.awardBuilderTitle')} size="md">
+    <Drawer open onClose={() => void closeGuard.close()} title={t(isGrant ? 'programWorkspace.createGrant' : 'portfolio.awardBuilderTitle')} size="md">
       <div className="flex flex-col gap-4 p-4">
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.rewardCreateHint')}</p>
         <div>
@@ -280,7 +281,7 @@ export function AwardBuilderDrawer({
             {t('portfolio.builder.cancel')}
           </Button>
           <Button disabled={saving} onClick={save}>
-            {t('portfolio.awardCreate')}
+            {t(isGrant ? 'programWorkspace.createGrant' : 'portfolio.awardCreate')}
           </Button>
         </div>
       </div>

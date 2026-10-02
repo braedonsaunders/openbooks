@@ -187,7 +187,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hiring-pipeline-index': { props: [], open: true },
   'hrm-ai-draft-drawer': { props: ['draft'] },
   'hrm-application-review': { props: ['canManage', 'closeHref', 'queue', 'selection'] },
-  'hrm-award-builder': { props: ['closeHref', 'defaultCurrency', 'employmentOptions', 'initialProgramId', 'programOptions'] },
+  'hrm-award-builder': { props: ['closeHref', 'employmentOptions', 'initialProgramId', 'programOptions'] },
   'hrm-award-drawer': { props: ['canManage', 'canQueue', 'closeHref', 'drawer'] },
   'hrm-award-table': { props: ['rows', 'text', 'total', 'truncated'] },
   'hrm-benefit-change-dialog': { props: ['closeHref', 'dialog'] },

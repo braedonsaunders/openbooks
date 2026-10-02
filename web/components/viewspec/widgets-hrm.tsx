@@ -515,7 +515,6 @@ export const HRM_WIDGETS = {
       closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
       programOptions={(props.programOptions as ComponentProps<typeof AwardBuilderDrawer>['programOptions']) ?? []}
       employmentOptions={(props.employmentOptions as ComponentProps<typeof AwardBuilderDrawer>['employmentOptions']) ?? []}
-      defaultCurrency={str(props, 'defaultCurrency') ?? ''}
     />
   ),
   /** The award flyout: stored figures with the lifecycle moves the
