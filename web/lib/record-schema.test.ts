@@ -1,10 +1,3 @@
-// Run with:  node --import tsx --test web/lib/record-schema.test.ts   (from repo root)
-//
-// Unit tests for the section-aware record-type helpers: canonical validation,
-// linting header + repeating (line-list) sections with rollup formulas, the
-// merged-data ⇄ (values, rows) split, unknown-key stripping, value validation
-// (incl. repeating minRows), and live formula/rollup computation.
-
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { FormSection } from '@openbooks/forms-core'
@@ -22,52 +15,26 @@ import {
 
 // A representative type: a header group (with a rollup formula) + a repeating
 // line list whose rows carry a per-row product formula.
+type Field = FormSection['fields'][number]
+const field = (id: string, type: Field['type'], label: string): Field => ({ id, type, label })
+const ref = (fieldKey: string) => ({ kind: 'field_ref' as const, fieldKey })
+const literal = (value: number) => ({ kind: 'literal' as const, value })
+const formula = (id: string, label: string, value: Field['formula'], currency = false): Field => ({
+  ...field(id, 'formula', label), formula: value, ...(currency ? { config: { format: 'currency' } } : {}),
+})
 const SECTIONS: FormSection[] = [
-  {
-    id: 'main',
-    title: 'Details',
-    fields: [
-      { id: 'name', type: 'text', label: 'Name' },
-      {
-        id: 'grand_total',
-        type: 'formula',
-        label: 'Grand total',
-        config: { format: 'currency' },
-        formula: { kind: 'sum', of: [{ kind: 'sum_section', sectionKey: 'lines', rowFieldKey: 'amount' }] },
-      },
-    ],
-  },
-  {
-    id: 'lines',
-    title: 'Lines',
-    repeating: true,
-    minRows: 1,
-    fields: [
-      { id: 'desc', type: 'text', label: 'Description' },
-      { id: 'qty', type: 'number', label: 'Qty' },
-      { id: 'price', type: 'currency', label: 'Price' },
-      {
-        id: 'amount',
-        type: 'formula',
-        label: 'Amount',
-        config: { format: 'currency' },
-        formula: {
-          kind: 'product',
-          of: [
-            { kind: 'field_ref', fieldKey: 'qty' },
-            { kind: 'field_ref', fieldKey: 'price' },
-          ],
-        },
-      },
-    ],
-  },
+  { id: 'main', title: 'Details', fields: [
+    field('name', 'text', 'Name'),
+    formula('grand_total', 'Grand total', { kind: 'sum', of: [{ kind: 'sum_section', sectionKey: 'lines', rowFieldKey: 'amount' }] }, true),
+  ] },
+  { id: 'lines', title: 'Lines', repeating: true, minRows: 1, fields: [
+    field('desc', 'text', 'Description'), field('qty', 'number', 'Qty'), field('price', 'currency', 'Price'),
+    formula('amount', 'Amount', { kind: 'product', of: [ref('qty'), ref('price')] }, true),
+  ] },
 ]
 
 test('flat custom-record field definitions are rejected by the canonical section model', () => {
-  const flat = [
-    { id: 'a', type: 'text', label: 'A' },
-    { id: 'b', type: 'number', label: 'B' },
-  ]
+  const flat = [field('a', 'text', 'A'), field('b', 'number', 'B')]
   assert.equal(lintRecordFields(flat, 'Asset').success, false)
 })
 
@@ -91,56 +58,29 @@ test('lintRecordFields accepts header + repeating sections with a valid rollup',
   )
 })
 
-test('lintRecordFields flags a duplicate id across sections', () => {
-  const dup: FormSection[] = [
-    { id: 's1', fields: [{ id: 'shared', type: 'text', label: 'A' }] },
-    { id: 's2', repeating: true, fields: [{ id: 'shared', type: 'text', label: 'B' }] },
-  ]
-  const lint = lintRecordFields(dup, 'X')
-  assert.equal(lint.success, true)
-  if (!lint.success) return
-  assert.ok(lint.issues.some((i) => /[Dd]uplicate/.test(i.message)))
-})
-
-test('lintRecordFields rejects a field type not allowed on records', () => {
-  const bad: FormSection[] = [
-    { id: 's1', fields: [{ id: 'sig', type: 'signature', label: 'Sign' }] },
-  ]
-  const lint = lintRecordFields(bad, 'X')
-  assert.equal(lint.success, true)
-  if (!lint.success) return
-  assert.ok(lint.issues.some((i) => i.message.includes('not available on custom records')))
-})
-
-test('lintRecordFields flags a rollup that references an unknown section', () => {
-  const bad: FormSection[] = [
-    {
-      id: 'main',
-      fields: [
-        {
-          id: 'total',
-          type: 'formula',
-          label: 'T',
-          formula: { kind: 'sum_section', sectionKey: 'missing', rowFieldKey: 'x' },
-        },
-      ],
-    },
-  ]
-  const lint = lintRecordFields(bad, 'X')
-  assert.equal(lint.success, true)
-  if (!lint.success) return
-  assert.ok(lint.issues.some((i) => /unknown repeating section/.test(i.message)))
-})
-
-test('lintRecordFields flags repeating minRows > maxRows', () => {
-  const bad: FormSection[] = [
-    { id: 'lines', repeating: true, minRows: 5, maxRows: 2, fields: [{ id: 'a', type: 'text', label: 'A' }] },
-  ]
-  const lint = lintRecordFields(bad, 'X')
-  assert.equal(lint.success, true)
-  if (!lint.success) return
-  assert.ok(lint.issues.some((i) => /maxRows/.test(i.message)))
-})
+const lintCases: Array<[string, FormSection[], RegExp]> = [
+  ['lintRecordFields flags a duplicate id across sections', [
+    { id: 's1', fields: [field('shared', 'text', 'A')] },
+    { id: 's2', repeating: true, fields: [field('shared', 'text', 'B')] },
+  ], /[Dd]uplicate/],
+  ['lintRecordFields rejects a field type not allowed on records', [
+    { id: 's1', fields: [field('sig', 'signature', 'Sign')] },
+  ], /not available on custom records/],
+  ['lintRecordFields flags a rollup that references an unknown section', [
+    { id: 'main', fields: [formula('total', 'T', { kind: 'sum_section', sectionKey: 'missing', rowFieldKey: 'x' })] },
+  ], /unknown repeating section/],
+  ['lintRecordFields flags repeating minRows > maxRows', [
+    { id: 'lines', repeating: true, minRows: 5, maxRows: 2, fields: [field('a', 'text', 'A')] },
+  ], /maxRows/],
+]
+for (const [title, sections, message] of lintCases) {
+  test(title, () => {
+    const lint = lintRecordFields(sections, 'X')
+    assert.equal(lint.success, true)
+    if (!lint.success) return
+    assert.ok(lint.issues.some(issue => message.test(issue.message)))
+  })
+}
 
 test('splitRecordData / mergeRecordData round-trip header vs rows', () => {
   const data = { name: 'Widget', lines: [{ qty: 2, price: 3 }], stray: 'x' }
@@ -206,7 +146,7 @@ test('withComputedFormulas computes per-row formulas and the header rollup', () 
   assert.equal(out.grand_total, 40) // sum of amounts
 })
 
-test('formatFieldValue formats currency without a float round-trip (F-u1 P10)', () => {
+test('formatFieldValue formats currency without a float round-trip', () => {
   const price = { id: 'price', type: 'currency', label: 'Price' } as const
   // Past 2^53 the double cannot hold the cents: the exact ledger string must
   // reach Intl, exactly as pdfMoney and the statement renderer do.
@@ -230,69 +170,16 @@ test('formatFieldValue formats percentages without a float round-trip', () => {
 
 test('withComputedFormulas resolves chained formulas in headers and repeating rows', () => {
   const sections: FormSection[] = [
-    {
-      id: 'main',
-      title: 'Details',
-      fields: [
-        { id: 'base', type: 'number', label: 'Base' },
-        {
-          id: 'plus_one',
-          type: 'formula',
-          label: 'Plus one',
-          formula: {
-            kind: 'sum',
-            of: [
-              { kind: 'field_ref', fieldKey: 'double' },
-              { kind: 'literal', value: 1 },
-            ],
-          },
-        },
-        {
-          id: 'double',
-          type: 'formula',
-          label: 'Double',
-          formula: {
-            kind: 'product',
-            of: [
-              { kind: 'field_ref', fieldKey: 'base' },
-              { kind: 'literal', value: 2 },
-            ],
-          },
-        },
-      ],
-    },
-    {
-      id: 'lines',
-      title: 'Lines',
-      repeating: true,
-      fields: [
-        { id: 'qty', type: 'number', label: 'Qty' },
-        {
-          id: 'row_plus_one',
-          type: 'formula',
-          label: 'Plus one',
-          formula: {
-            kind: 'sum',
-            of: [
-              { kind: 'field_ref', fieldKey: 'row_double_qty' },
-              { kind: 'literal', value: 1 },
-            ],
-          },
-        },
-        {
-          id: 'row_double_qty',
-          type: 'formula',
-          label: 'Double quantity',
-          formula: {
-            kind: 'product',
-            of: [
-              { kind: 'field_ref', fieldKey: 'qty' },
-              { kind: 'literal', value: 2 },
-            ],
-          },
-        },
-      ],
-    },
+    { id: 'main', title: 'Details', fields: [
+      field('base', 'number', 'Base'),
+      formula('plus_one', 'Plus one', { kind: 'sum', of: [ref('double'), literal(1)] }),
+      formula('double', 'Double', { kind: 'product', of: [ref('base'), literal(2)] }),
+    ] },
+    { id: 'lines', title: 'Lines', repeating: true, fields: [
+      field('qty', 'number', 'Qty'),
+      formula('row_plus_one', 'Plus one', { kind: 'sum', of: [ref('row_double_qty'), literal(1)] }),
+      formula('row_double_qty', 'Double quantity', { kind: 'product', of: [ref('qty'), literal(2)] }),
+    ] },
   ]
 
   const out = withComputedFormulas(sections, {

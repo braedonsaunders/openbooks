@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 
+const { bootJsdomEnvironment, setJsdomInput, clickJsdomElement } = await import('../../../../../testing/jsdom-env')
+await bootJsdomEnvironment({ url: 'http://localhost/hrm/processes/templates?template=tpl-1', matchMediaMatches: false, html: '<!doctype html><html><body><div id="root"></div></body></html>' })
+
 const confirmCalls: unknown[] = []
 const toastErrors: string[] = []
 const { registerHooks } = await import('node:module')
@@ -9,19 +12,12 @@ const { stubModules } = await import('../../../../../testing/stub-modules')
 stubModules({ navigation: true })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast = { success(){}, error(msg){ globalThis.__templateToastErrors.push(msg) } }',
-      }
-    }
-
-    if (specifier.endsWith('/lib/confirm')) {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export async function confirmDialog(options){ globalThis.__templateConfirmCalls.push(options); return true }',
-      }
-    }
+    const source = specifier === 'sonner'
+      ? 'export const toast = { success(){}, error(msg){ globalThis.__templateToastErrors.push(msg) } }'
+      : specifier.endsWith('/lib/confirm')
+        ? 'export async function confirmDialog(options){ globalThis.__templateConfirmCalls.push(options); return true }'
+        : null
+    if (source) return { shortCircuit: true, url: 'data:text/javascript,' + source }
     return next(specifier, context)
   },
 })
@@ -41,58 +37,23 @@ const template = {
   }]},
 }
 
-interface Mount {
-  document: Document
-  calls: { url: string; method: string; body: Record<string, unknown> | null }[]
-  nativeConfirmCalls: number
-  setInput: (el: HTMLInputElement, value: string) => void
-  click: (el: Element) => void
-  unmount: () => Promise<void>
-}
+type Mount = Awaited<ReturnType<typeof mount>>
 
-async function mount(creating=false,respond?:(body:Record<string,unknown>)=>Promise<Response>): Promise<Mount> {
-  const { JSDOM } = await import('jsdom')
-  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
-    url: 'http://localhost/hrm/processes/templates?template=tpl-1',
-  })
-  const previous = {
-    window: (globalThis as Record<string, unknown>).window,
-    document: (globalThis as Record<string, unknown>).document,
-    navigator: (globalThis as Record<string, unknown>).navigator,
-    fetch: (globalThis as Record<string, unknown>).fetch,
-    self: (globalThis as Record<string, unknown>).self,
-  }
-  Object.defineProperty(globalThis, 'window', { value: dom.window, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'document', { value: dom.window.document, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'self', { value: dom.window, configurable: true, writable: true })
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  const win = dom.window as unknown as { matchMedia?: (query: string) => unknown }
-  if (typeof win.matchMedia !== 'function') {
-    win.matchMedia = () => ({
-      matches: false,
-      addEventListener() {},
-      removeEventListener() {},
-      addListener() {},
-      removeListener() {},
-      dispatchEvent() {
-        return false
-      },
-    })
-  }
+async function mount(creating=false,respond?:(body:Record<string,unknown>)=>Promise<Response>) {
+  const previousFetch = globalThis.fetch
   // The native confirm must never fire: deletes go through the house dialog.
   let nativeConfirmCalls = 0
-  const winRec = dom.window as unknown as Record<string, unknown>
+  const winRec = window as unknown as Record<string, unknown>
   const prevConfirm = winRec.confirm
   winRec.confirm = () => {
     nativeConfirmCalls += 1
     return false
   }
-  const doc = dom.window.document
+  const doc = document
   const { createRoot } = await import('react-dom/client')
   const { act } = await import('react')
   const root = createRoot(doc.getElementById('root')!)
-  const calls: Mount['calls'] = []
+  const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = []
   ;(globalThis as Record<string, unknown>).fetch = async (input: unknown, init?: { method?: string; body?: string }) => {
     const url = String(input)
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? (JSON.parse(init.body) as Record<string, unknown>) : null })
@@ -112,39 +73,20 @@ async function mount(creating=false,respond?:(body:Record<string,unknown>)=>Prom
       </NextIntlClientProvider>,
     )
   })
-  const fireInput = (el: Element): void => {
-    const { Event: RealmEvent } = dom.window as unknown as { Event: typeof globalThis.Event }
-    el.dispatchEvent(new RealmEvent('input', { bubbles: true }))
-  }
   return {
     document: doc as unknown as Document,
     calls,
     get nativeConfirmCalls() {
       return nativeConfirmCalls
     },
-    setInput: (el, value) => {
-      const { HTMLInputElement: RealmInput } = dom.window as unknown as {
-        HTMLInputElement: typeof globalThis.HTMLInputElement
-      }
-      const setter = Object.getOwnPropertyDescriptor(RealmInput.prototype, 'value')!.set!
-      setter.call(el, value)
-      fireInput(el)
-    },
-    click: (el) => {
-      const { MouseEvent: RealmMouseEvent } = dom.window as unknown as { MouseEvent: typeof globalThis.MouseEvent }
-      el.dispatchEvent(new RealmMouseEvent('click', { bubbles: true }))
-    },
+    setInput: setJsdomInput,
+    click: clickJsdomElement,
     unmount: async () => {
       await act(async () => {
         root.unmount()
       })
       winRec.confirm = prevConfirm
-      Object.defineProperty(globalThis, 'window', { value: previous.window, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'document', { value: previous.document, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'navigator', { value: previous.navigator, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'fetch', { value: previous.fetch, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'self', { value: previous.self, configurable: true, writable: true })
-      dom.window.close()
+      globalThis.fetch = previousFetch
     },
   }
 }

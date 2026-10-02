@@ -1,3 +1,4 @@
+import { checklistActor, openChecklist, checklistRefusal, checklistRow, setupChecklistHarness } from "../testing/checklist-fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -15,8 +16,6 @@ import {
   grant,
   mkEmployment,
   mkParty,
-  mkVersion,
-  setupHarness,
   withHarness,
 } from "../testing/hrm-harness.ts";
 import { decideGate } from "../flows/gates.ts";
@@ -32,49 +31,29 @@ import {
   completeProcessStep,
   createProcessTemplate,
   deleteProcessTemplate,
-  HrmProcessError,
   listProcessTemplates,
-  openProcess,
   skipProcessStep,
   upsertProcessTemplateStep,
 } from "./processes.ts";
 import { getOnboardingOverview, getOwnStep, getProcess, listProcesses } from "./processes-read.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
-// Gate releases and post_document run through the installed engine
-// seams; without this the gates strand on a not-registered
-// refusal instead of releasing.
+// Native approval decisions release through the installed engine handlers.
 installEngineSeams();
 
-/**
- * Onboarding / offboarding / transfer processes over the real 0193 tables — DB-owned.
- *
- * Proofs are read back from storage, never from the service's own return
- * values alone, and every refusal asserts its code AND its message: the
- * message is the entire product of a failing check. A second organization
- * proves RLS invisibility on the read service.
- */
 
 
-// Same shape as the change-request suite: the approval release refuses an
-// approver with no linked person by design, so every decider gets one.
 async function mkFolder(orgId: string, name: string, ownerId: string | null, isPrivate: boolean): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
+  return (await checklistRow<{ id: string }>(sql`
     insert into folders (org_id, name, owner_id, is_private)
-    values (${orgId}, ${name}, ${ownerId}, ${isPrivate}) returning id`)).rows[0]!.id;
+    values (${orgId}, ${name}, ${ownerId}, ${isPrivate}) returning id`))!.id;
 }
 
 async function mkFile(orgId: string, folderId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
+  return (await checklistRow<{ id: string }>(sql`
     insert into files (org_id, folder_id, name, file_type, content_type, size_bytes)
-    values (${orgId}, ${folderId}, ${name}, 'other', 'application/octet-stream', 10) returning id`)).rows[0]!.id;
+    values (${orgId}, ${folderId}, ${name}, 'other', 'application/octet-stream', 10) returning id`))!.id;
 }
-
-const PROCESSES_SPEC = {
-  users: [
-    { key: "managerId", name: "HRM Process Manager", handle: "hrm_process_manager", permissions: ["hrm.process.read", "hrm.process.manage", "hrm.employment.manage"], link: true },
-  ],
-} as const;
 
 async function seedTemplate(
   orgId: string,
@@ -117,13 +96,9 @@ async function stepRows(processId: string): Promise<Array<{ id: string; title: s
      where process_id = ${processId} order by position`)).rows;
 }
 
-async function setupProcessesHarness() {
-  return setupHarness(PROCESSES_SPEC, async (base) => {
-    const workerPartyId = await mkParty(base.org.orgId, "Process Worker");
-    const employmentId = await mkEmployment(base.org.orgId, workerPartyId, base.org.subsidiaryId);
-    await mkVersion(base.org.orgId, employmentId, { from: "2020-01-01" });
-    return { workerPartyId, employmentId };
-  });
+const setupProcessesHarness = () => setupChecklistHarness();
+function processTest(title: string, check: (h: Awaited<ReturnType<typeof setupProcessesHarness>>) => Promise<void>) {
+  return test(title, { skip: !DB }, () => withHarness(setupProcessesHarness, check));
 }
 
 test("0193 migration exposes four org-isolated tables with the open-process unique", { skip: !DB }, async () => {
@@ -141,9 +116,7 @@ test("0193 migration exposes four org-isolated tables with the open-process uniq
       assert.equal(table.force, true, `${table.tbl} must keep FORCE RLS live`);
       assert.equal(table.policies, 1, `${table.tbl} must keep exactly the org_isolation policy`);
     }
-    // A partial uniqueness rule is an INDEX in Postgres (a UNIQUE constraint
-    // cannot carry a WHERE clause), so it is probed in pg_indexes and its
-    // predicate is pinned: only OPEN processes are unique per kind.
+    // The partial unique index restricts only open processes.
     const unique = (await db.execute<{ name: string; def: string }>(sql`
       select indexname as name, indexdef as def from pg_indexes
        where schemaname = 'public' and indexname = 'hrm_processes_open_one_per_kind'`)).rows;
@@ -158,16 +131,9 @@ test("0193 migration exposes four org-isolated tables with the open-process uniq
   }
 });
 
-test("open snapshots the template and refuses duplicates and versionless employments", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+processTest("open snapshots the template and refuses duplicates and versionless employments", async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding");
-    const opened = await openProcess({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
-      employmentId: h.employmentId,
-      kind: "onboarding",
-      effectiveDate: "2026-09-01",
-    });
+    const opened = await openChecklist(h);
     assert.equal(opened.status, "open");
     assert.deepEqual(opened.progress, { total: 2, required: 2, doneRequired: 0, allRequiredDone: false });
     const steps = await stepRows(opened.id);
@@ -178,8 +144,7 @@ test("open snapshots the template and refuses duplicates and versionless employm
     // The snapshot is the record: later template edits never rewrite it.
     const templateId = opened.templateId;
     const extra = await upsertProcessTemplateStep({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
+      ...checklistActor(h),
       templateId,
       position: 2,
       title: "Late addition",
@@ -189,38 +154,18 @@ test("open snapshots the template and refuses duplicates and versionless employm
     assert.equal((await stepRows(opened.id)).length, 2);
 
     await assert.rejects(
-      openProcess({
-        orgId: h.org.orgId,
-        actorId: h.managerId,
-        employmentId: h.employmentId,
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-      }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "DUPLICATE_OPEN" &&
-        /complete or cancel it before opening another/.test(error.message),
+      openChecklist(h),
+      checklistRefusal("DUPLICATE_OPEN", /complete or cancel it before opening another/),
     );
 
     const bare = await mkEmployment(h.org.orgId, await mkParty(h.org.orgId, "Versionless"), h.org.subsidiaryId);
     await assert.rejects(
-      openProcess({
-        orgId: h.org.orgId,
-        actorId: h.managerId,
-        employmentId: bare,
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-      }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "NO_LIVE_VERSION" &&
-        /has no live version on 2026-09-01/.test(error.message),
+      openChecklist(h, { employmentId: bare }),
+      checklistRefusal("NO_LIVE_VERSION", /has no live version on 2026-09-01/),
     );
   });
-});
 
-test("the template picker and explicit open both enforce the employment scope", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+processTest("the template picker and explicit open both enforce the employment scope", async (h) => {
     const otherSubsidiaryId = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
@@ -230,8 +175,7 @@ test("the template picker and explicit open both enforce the employment scope", 
       appliesTo: { employerSubsidiaryId: otherSubsidiaryId },
     });
     const offered = await listProcessTemplates({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
+      ...checklistActor(h),
       activeOnly: true,
       kind: "onboarding",
       employmentId: h.employmentId,
@@ -239,101 +183,63 @@ test("the template picker and explicit open both enforce the employment scope", 
     });
     assert.deepEqual(offered, [], "the picker never offers a template outside this employment's scope");
     await assert.rejects(
-      openProcess({
-        orgId: h.org.orgId,
-        actorId: h.managerId,
-        employmentId: h.employmentId,
-        kind: "onboarding",
-        effectiveDate: "2026-09-01",
-        templateId,
-      }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "REFUSED" &&
-        /does not cover this employment.*choose a template offered by the checklist picker/.test(error.message),
+      openChecklist(h, { templateId }),
+      checklistRefusal("REFUSED", /does not cover this employment.*choose a template offered by the checklist picker/),
     );
-    const written = (await db.execute<{ n: number }>(sql`
+    const written = (await checklistRow<{ n: number }>(sql`
       select count(*)::int as n from hrm_processes where org_id = ${h.org.orgId} and employment_id = ${h.employmentId}
-    `)).rows[0]!.n;
+    `))!.n;
     assert.equal(written, 0, "the refused explicit template wrote no checklist");
   });
-});
 
-test("step evidence, required skips, and process completion refuse by name", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+processTest("step evidence, required skips, and process completion refuse by name", async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding", {
       steps: [
         { position: 0, title: "Upload contract", ownerKind: "hr", evidenceKind: "attachment" },
         { position: 1, title: "Sign handbook", ownerKind: "employee", evidenceKind: "acknowledgement" },
       ],
     });
-    const opened = await openProcess({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
-      employmentId: h.employmentId,
-      kind: "onboarding",
-      effectiveDate: "2026-09-01",
-    });
+    const opened = await openChecklist(h);
     const steps = await stepRows(opened.id);
     const upload = steps[0]!.id;
     const sign = steps[1]!.id;
 
     await assert.rejects(
       completeProcessStep({ orgId: h.org.orgId, actorId: h.managerId, stepId: upload }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "EVIDENCE_REQUIRED" &&
-        /requires attachment evidence/.test(error.message),
+      checklistRefusal("EVIDENCE_REQUIRED", /requires attachment evidence/),
     );
     await assert.rejects(
       completeProcessStep({ orgId: h.org.orgId, actorId: h.managerId, stepId: upload, attachmentId: randomUUID() }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "UNREADABLE_ATTACHMENT" &&
-        /not readable by this actor|no file|not a file id/.test(error.message),
+      checklistRefusal("UNREADABLE_ATTACHMENT", /not readable by this actor|no file|not a file id/),
     );
     const folder = await mkFolder(h.org.orgId, "Shared", null, false);
     const file = await mkFile(h.org.orgId, folder, "contract.pdf");
     await completeProcessStep({ orgId: h.org.orgId, actorId: h.managerId, stepId: upload, attachmentId: file });
-    const stored = (await db.execute<{ status: string; attachment_id: string | null }>(sql`
-      select status, attachment_id::text as attachment_id from hrm_process_steps where id = ${upload}`)).rows[0]!;
+    const stored = (await checklistRow<{ status: string; attachment_id: string | null }>(sql`
+      select status, attachment_id::text as attachment_id from hrm_process_steps where id = ${upload}`))!;
     assert.equal(stored.status, "done");
     assert.equal(stored.attachment_id, file);
 
-    // The manager holds employment.manage in this harness, so a required
-    // skip with a reason succeeds; the refusal leg is proven below with a
-    // manager who lacks it. Completion while required steps pend refuses.
     await assert.rejects(
       completeProcess({ orgId: h.org.orgId, actorId: h.managerId, processId: opened.id }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "REFUSED" &&
-        /1 required step\(s\) still pending \("Sign handbook"\)/.test(error.message),
+      checklistRefusal("REFUSED", /1 required step\(s\) still pending \("Sign handbook"\)/),
     );
     await completeProcessStep({ orgId: h.org.orgId, actorId: h.managerId, stepId: sign });
-    const done = (await db.execute<{ done_by: string | null; done_at: string | null }>(sql`
-      select done_by::text as done_by, done_at::text as done_at from hrm_process_steps where id = ${sign}`)).rows[0]!;
+    const done = (await checklistRow<{ done_by: string | null; done_at: string | null }>(sql`
+      select done_by::text as done_by, done_at::text as done_at from hrm_process_steps where id = ${sign}`))!;
     assert.equal(done.done_by, h.managerId, "acknowledgement records who");
     assert.ok(done.done_at, "acknowledgement records when");
     await completeProcess({ orgId: h.org.orgId, actorId: h.managerId, processId: opened.id });
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from hrm_processes where id = ${opened.id}`)).rows[0]!.status;
+    const status = (await checklistRow<{ status: string }>(sql`
+      select status from hrm_processes where id = ${opened.id}`))!.status;
     assert.equal(status, "completed");
   });
-});
 
-test("skipping a required step without employment.manage is refused", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+processTest("skipping a required step without employment.manage is refused", async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding");
     const limited = await createScratchUser(h.org.orgId, "HRM Limited", "hrm_limited");
     await grant(h.org.orgId, limited, ["hrm.process.read", "hrm.process.manage"]);
-    const opened = await openProcess({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
-      employmentId: h.employmentId,
-      kind: "onboarding",
-      effectiveDate: "2026-09-01",
-    });
+    const opened = await openChecklist(h);
     const steps = await stepRows(opened.id);
     await assert.rejects(
       skipProcessStep({ orgId: h.org.orgId, actorId: limited, stepId: steps[0]!.id, reason: "not needed" }),
@@ -343,15 +249,13 @@ test("skipping a required step without employment.manage is refused", { skip: !D
     );
     // ...while the employment.manage holder skips with a reason.
     await skipProcessStep({ orgId: h.org.orgId, actorId: h.managerId, stepId: steps[0]!.id, reason: "desk ready" });
-    const status = (await db.execute<{ status: string; skip_reason: string | null }>(sql`
-      select status, skip_reason from hrm_process_steps where id = ${steps[0]!.id}`)).rows[0]!;
+    const status = (await checklistRow<{ status: string; skip_reason: string | null }>(sql`
+      select status, skip_reason from hrm_process_steps where id = ${steps[0]!.id}`))!;
     assert.equal(status.status, "skipped");
     assert.equal(status.skip_reason, "desk ready");
   });
-});
 
-test("self-service completes only one's own steps and reads only the step", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+processTest("self-service completes only one's own steps and reads only the step", async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding", {
       steps: [
         { position: 0, title: "Sign handbook", ownerKind: "employee", evidenceKind: "acknowledgement" },
@@ -360,23 +264,14 @@ test("self-service completes only one's own steps and reads only the step", { sk
     });
     const employeeId = await createScratchUser(h.org.orgId, "HRM Employee", "hrm_employee");
     await db.execute(sql`update users set party_id = ${h.workerPartyId} where id = ${employeeId}`);
-    const opened = await openProcess({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
-      employmentId: h.employmentId,
-      kind: "onboarding",
-      effectiveDate: "2026-09-01",
-    });
+    const opened = await openChecklist(h);
     const steps = await stepRows(opened.id);
     const own = steps[0]!.id;
     const foreign = steps[1]!.id;
     await completeProcessStep({ orgId: h.org.orgId, actorId: employeeId, stepId: own });
     await assert.rejects(
       completeProcessStep({ orgId: h.org.orgId, actorId: employeeId, stepId: foreign }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "FORBIDDEN" &&
-        /owned by someone else/.test(error.message),
+      checklistRefusal("FORBIDDEN", /owned by someone else/),
     );
     const seen = await getOwnStep({ orgId: h.org.orgId, actorId: employeeId, stepId: own });
     assert.deepEqual(Object.keys(seen).sort(), [
@@ -396,21 +291,13 @@ test("self-service completes only one's own steps and reads only the step", { sk
     ]);
     await assert.rejects(
       getOwnStep({ orgId: h.org.orgId, actorId: employeeId, stepId: foreign }),
-      (error: unknown) => error instanceof HrmProcessError && error.code === "NOT_FOUND",
+      checklistRefusal("NOT_FOUND"),
     );
   });
-});
 
-test("reads segment overdue work and the overview under RLS with a second org", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+processTest("reads segment overdue work and the overview under RLS with a second org", async (h) => {
     await seedTemplate(h.org.orgId, h.managerId, "onboarding");
-    const opened = await openProcess({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
-      employmentId: h.employmentId,
-      kind: "onboarding",
-      effectiveDate: "2020-06-01",
-    });
+    const opened = await openChecklist(h, { effectiveDate: "2020-06-01" });
     const overdue = await listProcesses({ orgId: h.org.orgId, actorId: h.managerId, segment: "overdue" });
     assert.equal(overdue.length, 1);
     assert.equal(overdue[0]!.id, opened.id);
@@ -421,9 +308,6 @@ test("reads segment overdue work and the overview under RLS with a second org", 
     assert.equal(overview.openProcesses.length, 1);
     assert.ok(overview.overdueSteps.length > 0);
 
-    // The foreign org needs the hrm switch on too: with it off the reads
-    // refuse FEATURE_OFF before RLS is ever exercised, so invisibility
-    // would prove nothing.
     const foreign = await createScratchOrg();
     await enableHrm(foreign.orgId);
     try {
@@ -435,23 +319,21 @@ test("reads segment overdue work and the overview under RLS with a second org", 
       );
       await assert.rejects(
         getProcess({ orgId: foreign.orgId, actorId: outsider, processId: opened.id }),
-        (error: unknown) => error instanceof HrmProcessError && error.code === "NOT_FOUND",
+        checklistRefusal("NOT_FOUND"),
       );
     } finally {
       await dropScratchOrg(foreign.orgId);
     }
   });
-});
 
-test("approved hire auto-opens onboarding in the apply transaction", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+async function approvedHire(h: Awaited<ReturnType<typeof setupProcessesHarness>>, withTemplate: boolean) {
     await seedApprovalFlow(h.org.orgId, {
       subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
       assignees: [{ type: "user", userId: h.managerId }],
       mode: "any",
     });
     await grant(h.org.orgId, h.managerId, ["hrm.employment.read", "hrm.employment.approve"]);
-    await seedTemplate(h.org.orgId, h.managerId, "onboarding");
+    if (withTemplate) await seedTemplate(h.org.orgId, h.managerId, "onboarding");
     const workerPartyId = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -474,9 +356,14 @@ test("approved hire auto-opens onboarding in the apply transaction", { skip: !DB
       requestId: draft.id,
       reason: "September cohort",
     });
-    const gate = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${draft.id} order by created_at`)).rows[0]!;
+    const gate = (await checklistRow<{ id: string }>(sql`
+      select id from flow_gates where subject_id = ${draft.id} order by created_at`))!;
     await decideGate({ gateId: gate.id, decision: "approved", userId: h.managerId });
+    return { employmentId, draft };
+}
+
+processTest("approved hire auto-opens onboarding in the apply transaction", async (h) => {
+    const { employmentId } = await approvedHire(h, true);
     const processes = (await db.execute<{ kind: string; opened_by_change_id: string | null; steps: number }>(sql`
       select p.kind, p.opened_by_change_id::text as opened_by_change_id,
              (select count(*)::int from hrm_process_steps s where s.process_id = p.id) as steps
@@ -486,109 +373,51 @@ test("approved hire auto-opens onboarding in the apply transaction", { skip: !DB
     assert.ok(processes[0]!.opened_by_change_id, "the process evidences the change that opened it");
     assert.equal(processes[0]!.steps, 2);
   });
-});
 
-test("hire without a template applies the hire and opens no checklist; the explicit open still refuses", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
-    await seedApprovalFlow(h.org.orgId, {
-      subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
-      assignees: [{ type: "user", userId: h.managerId }],
-      mode: "any",
-    });
-    await grant(h.org.orgId, h.managerId, ["hrm.employment.read", "hrm.employment.approve"]);
-    const workerPartyId = randomUUID();
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${workerPartyId}, ${h.org.orgId}, 'person', 'Hired Worker', true, '{}'::jsonb)`);
-    const employmentId = randomUUID();
-    await db.execute(sql`
-      insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-      values (${employmentId}, ${h.org.orgId}, ${workerPartyId}, ${h.org.subsidiaryId}, 1)`);
-    const author = await createScratchUser(h.org.orgId, "HRM Author", "hrm_author");
-    await grant(h.org.orgId, author, ["hrm.employment.read", "hrm.employment.manage"]);
-    const draft = await createChangeRequestDraft({
-      orgId: h.org.orgId,
-      actorId: author,
-      employmentId,
-      payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
-    });
-    await submitChangeRequest({
-      orgId: h.org.orgId,
-      actorId: author,
-      requestId: draft.id,
-      reason: "September cohort",
-    });
-    const gate = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status from flow_gates where subject_id = ${draft.id} order by created_at`)).rows[0]!;
-    // No onboarding template exists. A checklist is a side effect of the
-    // hire, never a condition on it: the approval applies, the versions and
-    // the change event are recorded, and no process or step is opened — an
-    // org that has configured no checklists can still hire.
-    await decideGate({ gateId: gate.id, decision: "approved", userId: h.managerId });
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from hrm_employment_change_requests where id = ${draft.id}`)).rows[0]!.status;
+processTest("hire without a template applies the hire and opens no checklist; the explicit open still refuses", async (h) => {
+    const { employmentId, draft } = await approvedHire(h, false);
+    const status = (await checklistRow<{ status: string }>(sql`
+      select status from hrm_employment_change_requests where id = ${draft.id}`))!.status;
     assert.equal(status, "applied", "the hire applies without a checklist template");
-    const versions = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from worker_employment_versions where employment_id = ${employmentId}`)).rows[0]!.n;
+    const versions = (await checklistRow<{ n: number }>(sql`
+      select count(*)::int as n from worker_employment_versions where employment_id = ${employmentId}`))!.n;
     assert.ok(versions >= 1, "the applied hire wrote its version");
-    const changes = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from employment_changes where employment_id = ${employmentId}`)).rows[0]!.n;
+    const changes = (await checklistRow<{ n: number }>(sql`
+      select count(*)::int as n from employment_changes where employment_id = ${employmentId}`))!.n;
     assert.ok(changes >= 1, "the applied hire recorded its change event");
-    const processes = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`)).rows[0]!.n;
+    const processes = (await checklistRow<{ n: number }>(sql`
+      select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`))!.n;
     assert.equal(processes, 0, "nothing was owed, so no process opened");
-    const steps = (await db.execute<{ n: number }>(sql`
+    const steps = (await checklistRow<{ n: number }>(sql`
       select count(*)::int as n from hrm_process_steps
-       where process_id in (select id from hrm_processes where employment_id = ${employmentId})`)).rows[0]!.n;
+       where process_id in (select id from hrm_processes where employment_id = ${employmentId})`))!.n;
     assert.equal(steps, 0, "no steps were snapshotted");
-    // The EXPLICIT path keeps the refusal: an operator who asks for an
-    // onboarding checklist by name hears that none covers this employment,
-    // with the remedy, and nothing is written.
     await assert.rejects(
-      openProcess({
-        orgId: h.org.orgId,
-        actorId: h.managerId,
-        employmentId,
-        kind: "onboarding",
-        effectiveDate: "2026-09-14",
-      }),
+      openChecklist(h, { employmentId, effectiveDate: "2026-09-14" }),
       /no active onboarding template covers this employment — create or activate one under HRM → Process checklists → Checklist templates/,
     );
-    const stillNone = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`)).rows[0]!.n;
+    const stillNone = (await checklistRow<{ n: number }>(sql`
+      select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`))!.n;
     assert.equal(stillNone, 0, "the refused explicit open wrote nothing");
   });
-});
 
-test("deleting a template that opened processes is refused with the remedy", { skip: !DB }, async () => {
-  await withHarness(() => setupProcessesHarness(), async (h) => {
+processTest("deleting a template that opened processes is refused with the remedy", async (h) => {
     const templateId = await seedTemplate(h.org.orgId, h.managerId, "onboarding");
-    await openProcess({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
-      employmentId: h.employmentId,
-      kind: "onboarding",
-      effectiveDate: "2026-09-01",
-    });
+    await openChecklist(h);
     await assert.rejects(
       deleteProcessTemplate({ orgId: h.org.orgId, actorId: h.managerId, templateId }),
-      (error: unknown) =>
-        error instanceof HrmProcessError &&
-        error.code === "REFUSED" &&
-        /set is_active = false to retire it/.test(error.message),
+      checklistRefusal("REFUSED", /set is_active = false to retire it/),
     );
     // Cancellation keeps history: terminal processes stay recorded.
     const processes = (await db.execute<{ id: string }>(sql`
       select id from hrm_processes where template_id = ${templateId}`)).rows;
     await cancelProcess({
-      orgId: h.org.orgId,
-      actorId: h.managerId,
+      ...checklistActor(h),
       processId: processes[0]!.id,
       reason: "hire withdrawn",
     });
-    const cancelled = (await db.execute<{ status: string; cancel_reason: string }>(sql`
-      select status, cancel_reason from hrm_processes where id = ${processes[0]!.id}`)).rows[0]!;
+    const cancelled = (await checklistRow<{ status: string; cancel_reason: string }>(sql`
+      select status, cancel_reason from hrm_processes where id = ${processes[0]!.id}`))!;
     assert.equal(cancelled.status, "cancelled");
     assert.equal(cancelled.cancel_reason, "hire withdrawn");
   });
-});
