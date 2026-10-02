@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, ChartLine, Gift, Shapes, Wallet } from 'lucide-react'
-import { Alert, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
-import { ChoiceCards } from '../../../../components/builder/builder-kit'
+import { AlertTriangle } from 'lucide-react'
+import { Alert, Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
+import { FormSteps } from '../../../../components/builder/builder-kit'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useMoney } from '../../../../components/money-provider'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
@@ -49,7 +49,6 @@ import {
 const STEPS = ['offer', 'eligibility', 'value', 'timing', 'controls', 'delivery', 'review'] as const
 type Step = (typeof STEPS)[number]
 
-const FAMILY_ICONS = { reward: Gift, allowance: Wallet, incentive: ChartLine, custom: Shapes } as const
 
 function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): ProgramDraft {
   if (!seed) return emptyProgramDraft(family)
@@ -229,8 +228,8 @@ function FieldError({ id, message }: { id: string; message: string | undefined }
 export function ProgramBuilderDrawer({
   closeHref,
   initialFamily,
-  familyLocked,
   subsidiaryOptions,
+  currencyOptions,
   departmentOptions,
   projectOptions,
   payComponentOptions,
@@ -244,6 +243,7 @@ export function ProgramBuilderDrawer({
   closeHref: string
   initialFamily: ProgramFamily
   familyLocked: boolean
+  currencyOptions: (PortfolioOption & { scopeValue: string | null })[]
   subsidiaryOptions: PortfolioOption[]
   departmentOptions: PortfolioOption[]
   projectOptions: PortfolioOption[]
@@ -260,6 +260,7 @@ export function ProgramBuilderDrawer({
   const router = useRouter()
   const { money } = useMoney()
   const [draft, setDraft] = useState<ProgramDraft>(() => seedDraft(initialFamily, editSeed))
+  const enabledCurrencies = currencyOptions.filter((option) => option.scopeValue === null || option.scopeValue === draft.legalEntityId)
   const deliveryComponents = componentsForDelivery(payComponentOptions, draft.deliveryMethod)
   const [step, setStep] = useState<Step>('offer')
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -291,7 +292,11 @@ export function ProgramBuilderDrawer({
   })
 
   function set<K extends keyof ProgramDraft>(key: K, value: ProgramDraft[K]) {
-    setDraft((current) => ({ ...current, [key]: value }))
+    setDraft((current) => {
+      const next = { ...current, [key]: value }
+      if (key === 'legalEntityId' && !currencyOptions.some((option) => option.value === current.currency && (option.scopeValue === null || option.scopeValue === value))) next.currency = ''
+      return next
+    })
     setErrors((current) => {
       if (!current[key]) return current
       const next = { ...current }
@@ -303,6 +308,7 @@ export function ProgramBuilderDrawer({
   /** Step-local refusals: only the current step's fields block Next. */
   function next() {
     const all = translatedFieldErrors(validateProgramDraft(draft), t)
+    if (draft.currency && !enabledCurrencies.some((option) => option.value === draft.currency)) all.currency = t('portfolio.builder.currencyUnavailable')
     const blocking = stepFields(step).filter((field) => all[field] !== undefined)
     if (blocking.length > 0) {
       const scoped: FieldErrors = {}
@@ -316,7 +322,7 @@ export function ProgramBuilderDrawer({
     // single gate; moneyRefusal only composes the message.
     for (const field of ['fixedAmount', 'percentRate', 'capAmount', 'budgetAmount', 'thresholdAmount'] as const) {
       const raw = draft[field].trim()
-      if (raw !== '' && canonicalDecimal(raw, 4) === null) {
+      if (stepFields(step).includes(field) && raw !== '' && canonicalDecimal(raw, 4) === null) {
         const message = decimalFieldRefusal(raw, t(`portfolio.builder.fields.${field}`), t)
         setErrors({ [field]: message })
         return
@@ -335,9 +341,10 @@ export function ProgramBuilderDrawer({
       }
     }
     const all = translatedFieldErrors(validateProgramDraft(draft), t)
+    if (draft.currency && !enabledCurrencies.some((option) => option.value === draft.currency)) all.currency = t('portfolio.builder.currencyUnavailable')
     if (Object.keys(all).length > 0) {
       setErrors(all)
-      setStep('offer')
+      setStep(STEPS.find((name) => stepFields(name).some((field) => all[field] !== undefined)) ?? 'offer')
       toast.error(t('portfolio.builder.fixFields'))
       return
     }
@@ -413,65 +420,21 @@ export function ProgramBuilderDrawer({
     <Drawer
       open
       onClose={() => void closeGuard.close()}
-      title={mode === 'edit' ? t('portfolio.builder.editTitle') : familyLocked && initialFamily === 'incentive' ? t('portfolio.newIncentive') : t('portfolio.builder.title')}
+      title={mode === 'edit' ? t('portfolio.builder.editTitle') : t('portfolio.builder.typeTitle', { type: t(`portfolio.cards.${draft.family}.title`) })}
       size="lg"
     >
       <div className="flex flex-col gap-4 p-4">
-        <ol aria-label={t('portfolio.builder.stepsLabel')} className="flex flex-wrap gap-1.5">
-          {STEPS.map((name, index) => (
-            <li key={name}>
-              <button
-                type="button"
-                disabled={index > stepIndex}
-                onClick={() => setStep(name)}
-                aria-current={name === step ? 'step' : undefined}
-                className={
-                  name === step
-                    ? 'rounded-full bg-teal-600 px-2.5 py-1 text-xs font-medium text-white'
-                    : index < stepIndex
-                      ? 'rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-200'
-                      : 'rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                }
-              >
-                {t(`portfolio.builder.steps.${name}`)}
-              </button>
-            </li>
-          ))}
-        </ol>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2"><Badge variant="secondary">{t(`portfolio.cards.${draft.family}.title`)}</Badge></div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t(`portfolio.programPurpose.${draft.family}`)}</p>
+          <FormSteps steps={STEPS.map((key) => ({ key, label: t(`portfolio.builder.steps.${key}`) }))} current={stepIndex} onChange={(index) => setStep(STEPS[index]!)} label={t('portfolio.builder.stepsLabel')} />
+        </div>
 
         {step === 'offer' ? (
           <fieldset className="flex flex-col gap-4">
             <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {t('portfolio.builder.steps.offer')}
             </legend>
-            <div>
-              <span id="program-builder-family-label" className="mb-1 block text-sm font-medium">
-                {t('portfolio.builder.fields.family')}
-              </span>
-              <ChoiceCards<ProgramFamily>
-                value={draft.family}
-                ariaLabel={t('portfolio.builder.fields.family')}
-                columns={2}
-                disabled={familyLocked || mode === 'edit'}
-                onChange={(value: ProgramFamily) =>
-                  setDraft((current) => ({
-                    ...emptyProgramDraft(value),
-                    code: current.code,
-                    name: current.name,
-                    description: current.description,
-                  }))
-                }
-                options={(Object.keys(FAMILY_ICONS) as ProgramFamily[]).map((value) => {
-                  const Icon = FAMILY_ICONS[value]
-                  return {
-                    value,
-                    label: t(`portfolio.families.${value}`),
-                    description: t(`portfolio.familyHints.${value}`),
-                    icon: <Icon size={16} />,
-                  }
-                })}
-              />
-            </div>
             <div>
               <Label htmlFor="program-builder-code">{t('portfolio.builder.fields.code')}</Label>
               <Input
@@ -536,14 +499,18 @@ export function ProgramBuilderDrawer({
             </legend>
             <div>
               <Label htmlFor="program-builder-currency">{t('portfolio.builder.fields.currency')}</Label>
-              <Input
+              <SearchSelect
                 id="program-builder-currency"
                 value={draft.currency}
-                onChange={(e) => set('currency', e.target.value)}
-                placeholder="USD"
-                aria-describedby={errors.currency ? 'program-builder-currency-error' : undefined}
-                aria-invalid={errors.currency !== undefined}
+                onChange={(value) => set('currency', value)}
+                options={enabledCurrencies}
+                ariaLabel={t('portfolio.builder.fields.currency')}
+                sheetTitle={t('portfolio.builder.fields.currency')}
+                placeholder={t('portfolio.builder.chooseCurrency')}
+                clearable={false}
+                invalid={errors.currency !== undefined}
               />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.currencyHint')}</p>
               <FieldError id="program-builder-currency-error" message={errors.currency} />
             </div>
             <div>
@@ -554,8 +521,8 @@ export function ProgramBuilderDrawer({
                 onChange={(e) => set('valuation', e.target.value as ProgramDraft['valuation'])}
               >
                 <option value="fixed">{t('portfolio.valuations.fixed')}</option>
-                <option value="percent">{t('portfolio.valuations.percent')}</option>
-                <option value="pool">{t('portfolio.valuations.pool')}</option>
+                {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'percent' ? <option value="percent">{t('portfolio.valuations.percent')}</option> : null}
+                {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'pool' ? <option value="pool">{t('portfolio.valuations.pool')}</option> : null}
               </Select>
             </div>
             {draft.valuation === 'fixed' ? (
@@ -659,7 +626,8 @@ export function ProgramBuilderDrawer({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="program-builder-cap">{t('portfolio.builder.fields.capAmount')}</Label>
-                <Input id="program-builder-cap" inputMode="decimal" value={draft.capAmount} onChange={(e) => set('capAmount', e.target.value)} />
+                <Input id="program-builder-cap" inputMode="decimal" value={draft.capAmount} onChange={(e) => set('capAmount', e.target.value)} aria-describedby={errors.capAmount ? 'program-builder-capAmount-error' : undefined} aria-invalid={errors.capAmount !== undefined} />
+                <FieldError id="program-builder-capAmount-error" message={errors.capAmount} />
               </div>
               <div>
                 <Label htmlFor="program-builder-threshold">{t('portfolio.builder.fields.thresholdAmount')}</Label>
@@ -668,7 +636,10 @@ export function ProgramBuilderDrawer({
                   inputMode="decimal"
                   value={draft.thresholdAmount}
                   onChange={(e) => set('thresholdAmount', e.target.value)}
+                  aria-describedby={errors.thresholdAmount ? 'program-builder-thresholdAmount-error' : undefined}
+                  aria-invalid={errors.thresholdAmount !== undefined}
                 />
+                <FieldError id="program-builder-thresholdAmount-error" message={errors.thresholdAmount} />
               </div>
             </div>
           </fieldset>
@@ -716,7 +687,7 @@ export function ProgramBuilderDrawer({
                   <option value="monthly">{t('portfolio.frequencies.monthly')}</option>
                   <option value="quarterly">{t('portfolio.frequencies.quarterly')}</option>
                   <option value="annual">{t('portfolio.frequencies.annual')}</option>
-                  <option value="project_complete">{t('portfolio.frequencies.project_complete')}</option>
+                  {draft.family === 'incentive' && draft.metricScope === 'project' || draft.frequency === 'project_complete' ? <option value="project_complete" disabled={draft.family !== 'incentive' || draft.metricScope !== 'project'}>{t('portfolio.frequencies.project_complete')}</option> : null}
                   <option value="manual">{t('portfolio.frequencies.manual')}</option>
                 </Select>
               </div>
@@ -770,7 +741,7 @@ export function ProgramBuilderDrawer({
                 {canConfigureApprovalPolicies ? <div><Button asChild variant="outline" size="sm"><Link href="/admin/flows" target="_blank" rel="noopener noreferrer">{t('portfolio.approvalControls.openFlows')}</Link></Button></div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.administratorRemedy')}</p>}
               </> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.noneHint')}</p>}
             </div>
-            <div>
+            {draft.family === 'incentive' ? <div>
               <Label htmlFor="program-builder-allocation">{t('portfolio.builder.fields.allocation')}</Label>
               <Select
                 id="program-builder-allocation"
@@ -781,7 +752,7 @@ export function ProgramBuilderDrawer({
                 <option value="hours">{t('portfolio.allocations.hours')}</option>
                 <option value="role">{t('portfolio.allocations.role')}</option>
               </Select>
-            </div>
+            </div> : null}
             {draft.family === 'incentive' && draft.metric !== '' && draft.metric !== 'approved_hours' ? (
               <>
                 <OptionMultiPicker
@@ -813,6 +784,7 @@ export function ProgramBuilderDrawer({
             <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {t('portfolio.builder.steps.delivery')}
             </legend>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.scopeHint')}</p>
             <div>
               <Label htmlFor="program-builder-delivery">{t('portfolio.builder.fields.deliveryMethod')}</Label>
               <Select

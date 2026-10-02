@@ -5,9 +5,12 @@ import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { createScratchOrg, seedFlowActors, seedWorkerEmployment, seedVacationTerms } from "../testing/fixtures.ts";
+import { type VacationMethod } from "./vacation-terms.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { setPackSlotAccount } from "./packs.ts";
+
+export { seedVacationTerms } from "../testing/fixtures.ts";
 
 export interface AdoptionFixture {
   orgId: string;
@@ -150,7 +153,7 @@ export interface HiredEmployeeSeed {
   federalClaimCode?: number | null;
   provincialClaimCode?: number | null;
   vacationPercent?: string | null;
-  vacationMethod?: string | null;
+  vacationMethod?: VacationMethod | null;
   filingStatus?: string | null;
   partySubsidiaryId?: string | null;
   employeeNumber?: string | null;
@@ -209,8 +212,6 @@ export async function seedHiredEmployee(
   const profileExtra: [string, unknown][] = [
     ["federal_claim_code", seed.federalClaimCode ?? undefined],
     ["provincial_claim_code", seed.provincialClaimCode ?? undefined],
-    ["vacation_percent", seed.vacationPercent ?? undefined],
-    ["vacation_method", seed.vacationMethod ?? undefined],
     ["filing_status", seed.filingStatus ?? undefined],
   ];
   for (const [col, val] of profileExtra) {
@@ -222,6 +223,7 @@ export async function seedHiredEmployee(
   await db.execute(sql`
     insert into employee_payroll_profiles (${sql.join(profileCols.map((c) => sql.raw(c)), sql`, `)})
     values (${sql.join(profileVals.map((v) => sql`${v}`), sql`, `)})`);
+  await seedVacationTerms(orgId, employmentId, actorId, seed.vacationPercent ?? "4", seed.vacationMethod ?? "accrue");
   for (const entry of seed.timeEntries ?? []) {
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id,
@@ -274,10 +276,11 @@ async function seedEmployee(
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            province, pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
+                                           provincial_claim_code,
                                            is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
-            '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
+            true, ${fx.actorId}, ${fx.actorId})`);
+  await seedVacationTerms(fx.orgId, employmentId, fx.actorId);
   return { employeeId, employmentId };
 }
 

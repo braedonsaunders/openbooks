@@ -1,10 +1,11 @@
+import { PayrollError } from "./error.ts";
+import { resolveEmploymentServiceCredit } from "./service-credit.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, div, isZero, mulDecimal, roundMoney } from "../money/money.ts";
 import { pickPlanLimit } from "./entitlements-limits.ts";
 import {
-  monthsOfService,
   type ResolvedServiceTiers,
   resolveServiceTiersFrom,
   type ServiceTierRow,
@@ -91,9 +92,25 @@ export function alternateDayPlanOf(
   return plans.find((plan) => plan.systemKey === STAT_HOLIDAY_ALTERNATE_PLAN_SYSTEM_KEY) ?? null;
 }
 
+async function entitlementEmployment(executor: Executor, orgId: string, employeePartyId: string, onDate: string, employmentId?: string) {
+  const employments = await executor.execute<{ id: string; service_start: string | null; employer_subsidiary_id: string }>(sql`
+    select e.id, e.service_start, e.employer_subsidiary_id from worker_employments e
+    where e.org_id = ${orgId} and e.worker_party_id = ${employeePartyId}
+      and ${employmentId ? sql`e.id = ${employmentId}` : sql`e.id in (
+        select employment_id from payroll_vacation_terms where org_id = ${orgId}
+          and effective_from <= ${onDate}::date and (effective_to is null or effective_to >= ${onDate}::date)
+        union select employment_id from employee_payroll_profiles where org_id = ${orgId} and employee_party_id = ${employeePartyId} and is_active
+      )`}
+  `);
+  if (employments.rows.length > 1) throw new PayrollError('Multiple employments resolve for this employee; select the specific employment before resolving service entitlements.');
+  if (employmentId && employments.rows.length === 0) throw new PayrollError('Select an employment belonging to this employee and organization before resolving entitlements.');
+  return employments.rows[0];
+}
+
 /** The scope keys an employee competes on — the wage resolver's inputs. */
 export async function employeeScope(
   executor: Executor, orgId: string, employeePartyId: string,
+  context?: { onDate: string; employmentId?: string },
 ): Promise<EntitlementScopeKeys> {
   const r = (await executor.execute<{
       job_title: string | null; trade_id: string | null;
@@ -105,12 +122,13 @@ export async function employeeScope(
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
   `));
   const row = r.rows[0];
+  const employment = await entitlementEmployment(executor, orgId, employeePartyId, context?.onDate ?? await businessToday(orgId), context?.employmentId);
   return {
     employeePartyId,
     jobTitle: row?.job_title ?? null,
     tradeId: row?.trade_id ?? null,
     departmentId: row?.department_id ?? null,
-    subsidiaryId: row?.subsidiary_id ?? null,
+    subsidiaryId: employment?.employer_subsidiary_id ?? row?.subsidiary_id ?? null,
   };
 }
 
@@ -127,8 +145,9 @@ export async function resolvePlanLimit(
   onDate: string,
   /** Pre-loaded scope keys — a pay run resolves them once per employee. */
   knownScope?: EntitlementScopeKeys,
+  employmentId?: string,
 ): Promise<EntitlementPlanLimit | null> {
-  const scope = knownScope ?? await employeeScope(executor, orgId, employeePartyId);
+  const scope = knownScope ?? await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId });
   const r = (await executor.execute<Record<string, unknown>>(sql`
     select id, plan_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id,
            max_balance, notify_balance, effective_from, effective_to, is_active
@@ -155,25 +174,25 @@ export async function resolvePlanLimit(
 }
 
 /**
- * Months of continuous service (from employee_roles.hired_on) and everything
- * the reached rungs decide: raised plan accrual values and the pay components
- * service has made the employee eligible for.
+ * The employment credited-service baseline and effective schedule determine
+ * monetary plan rates, separate annual day allowances, and component eligibility.
  */
 export async function resolveServiceTier(
   executor: Executor,
   orgId: string,
   employeePartyId: string,
   onDate: string,
+  employmentId?: string,
 ): Promise<ResolvedServiceTiers> {
-  const hire = (await executor.execute<{ hired_on: string | null }>(sql`
-    select hired_on from employee_roles
-     where org_id = ${orgId} and party_id = ${employeePartyId}
-  `));
-  const hiredOn = hire.rows[0]?.hired_on ? String(hire.rows[0].hired_on).slice(0, 10) : null;
+  const employment = await entitlementEmployment(executor, orgId, employeePartyId, onDate, employmentId);
+  const hiredOn = employment?.service_start ? String(employment.service_start).slice(0, 10) : null;
+  const service = employment ? await resolveEmploymentServiceCredit(executor, { orgId, employmentId: employment.id, asOf: onDate }) : null;
   const tiers = (await executor.execute<Record<string, unknown>>(sql`
-    select id, plan_id, component_id, after_months, accrual_value, eligible, is_active
+    select id, plan_id, component_id, after_months, accrual_value, eligible, is_active, annual_days, employer_subsidiary_id
       from entitlement_service_tiers
-     where org_id = ${orgId} and is_active
+     where org_id = ${orgId} and is_active and effective_from <= ${onDate}::date
+       and (effective_to is null or effective_to >= ${onDate}::date)
+       and (employer_subsidiary_id is null or employer_subsidiary_id = ${employment?.employer_subsidiary_id ?? null})
      order by after_months
   `));
   const rows: ServiceTierRow[] = tiers.rows.map((row) => ({
@@ -182,11 +201,14 @@ export async function resolveServiceTier(
     componentId: row.component_id != null ? String(row.component_id) : null,
     afterMonths: Number(row.after_months),
     accrualValue: row.accrual_value != null ? String(row.accrual_value) : null,
+    employerSubsidiaryId: row.employer_subsidiary_id == null ? null : String(row.employer_subsidiary_id),
+    annualDays: row.annual_days != null ? String(row.annual_days) : null,
     eligible: row.eligible == null ? null : row.eligible === true || row.eligible === "true",
     isActive: row.is_active !== false,
   }));
-  const months = hiredOn ? monthsOfService(hiredOn, onDate) : null;
-  return resolveServiceTiersFrom(rows, months, hiredOn);
+  if (rows.length > 0 && service == null) throw new PayrollError('Service-based entitlements need credited service or a documented employment service start; record the employee service baseline before calculating payroll.');
+  const months = service?.completedMonths ?? null;
+  return resolveServiceTiersFrom(rows, months, hiredOn, employment?.employer_subsidiary_id);
 }
 
 export interface EntitlementBalance {
@@ -226,6 +248,8 @@ export async function entitlementBalances(
   asOf?: string,
   opts: {
     executor?: Executor;
+    /** Employment whose legal employer owns the effective bank limit. */
+    employmentId?: string;
     /** Ignore this run's own movements — required from inside a calculation. */
     excludeRunDocumentId?: string | null;
     /** Plans to report on; loaded from the org when omitted. */
@@ -252,7 +276,7 @@ export async function entitlementBalances(
   const { resolveWage } = await import("../projects/labor-costing.ts");
   const resolved = await resolveWage(orgId, employeePartyId, onDate);
   const wage = resolved && cmp(resolved.wage, "0") > 0 ? resolved.wage : null;
-  const scope = await employeeScope(executor, orgId, employeePartyId);
+  const scope = await employeeScope(executor, orgId, employeePartyId, { onDate, employmentId: opts.employmentId });
 
   const balances: EntitlementBalance[] = [];
   for (const plan of plans) {

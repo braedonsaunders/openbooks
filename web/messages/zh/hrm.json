@@ -150,7 +150,7 @@
       "openWindows": "进行中",
       "noOpenWindow": "没有正在进行的参保窗口。",
       "pendingSub": "待处理的批准",
-      "missingSub": "缺少输入的参保"
+      "missingSub": "缺少缴款选择的登记"
     }
   },
   "queue": {
@@ -1388,7 +1388,7 @@
   },
   "benefits": {
     "title": "福利",
-    "description": "计划、参保窗口、参保以及进入工资的月度金额。",
+    "description": "在此定义福利方案和员工选择的缴费条件。工资模块计算实际金额，并负责税务处理、过账和权益余额。",
     "windowsTitle": "参保窗口",
     "enrolmentsTitle": "参保",
     "segmentsLabel": "显示",
@@ -1704,7 +1704,7 @@
         "coverage": "保障",
         "status": "状态",
         "effective": "有效期",
-        "monthly": "扣款 / 周期",
+        "monthly": "员工缴费",
         "window": "窗口",
         "kind": "类型",
         "range": "日期",
@@ -1713,7 +1713,7 @@
       },
       "electionsEmpty": "暂无参保",
       "electionsEmptyDescription": "所选保障将显示在这里。",
-      "monthlyHint": "工资每周期扣除的存储金额 — 不会重新计算。",
+      "monthlyHint": "所选费率保留其声明的单位；工资模块计算实际扣款。",
       "windowsTitle": "开放中的投保窗口",
       "windowsEmpty": "暂无开放窗口",
       "windowsEmptyDescription": "雇主的窗口在开放期间显示在这里。",
@@ -2665,7 +2665,7 @@
     "newProgram": "新建计划",
     "newAward": "新建奖励",
     "programsEmptyTitle": "尚无福利计划",
-    "programsEmptyDescription": "创建第一个雇主计划，用于发放奖励、津贴或激励。",
+    "programsEmptyDescription": "创建保障、储蓄、奖励、津贴、激励或自定义计划。",
     "awardsEmptyTitle": "尚无奖励",
     "awardsEmptyDescription": "计划发放奖励后将在此显示。",
     "loadFailed": "无法加载福利工作区。",
@@ -2735,7 +2735,7 @@
       "allowance": "津贴",
       "incentive": "激励",
       "custom": "自定义",
-      "insured": "保险福利计划"
+      "insured": "保障或储蓄计划"
     },
     "familyHints": {
       "reward": "一次性表彰:奖金、礼品卡、即时奖励。",
@@ -2923,7 +2923,11 @@
       "openPayrollSetup": "打开工资设置",
       "accountsPrerequisite": "没有可见的可记账计量科目。请添加所需科目或请财务部门检查法人实体访问权限，然后刷新选项。",
       "openAccounts": "打开会计科目表",
-      "refreshOptions": "刷新选项"
+      "refreshOptions": "刷新选项",
+      "typeTitle": "新建{type}计划",
+      "chooseCurrency": "选择币种",
+      "currencyHint": "币种遵循所选雇主和公司功能设置。薪资按计划币种处理发放。",
+      "currencyUnavailable": "请选择所选雇主可用的币种。"
     },
     "awardBuilderTitle": "新增奖励",
     "awardFields": {
@@ -3029,6 +3033,24 @@
     "directProcessingHint": "Flows已授权直接处理；此奖励已可添加到工资单。",
     "rewardProgramPrerequisite": "记录奖励前，请创建并启用奖励或津贴方案。",
     "createRewardProgram": "创建奖励方案",
-    "noApprovalSubmissionHint": "无需审批。授权提交已记录，此奖励已可进入工资处理。"
+    "noApprovalSubmissionHint": "无需审批。授权提交已记录，此奖励已可进入工资处理。",
+    "awardCurrencyHint": "继承所选计划的币种；薪资不会转换奖励币种。",
+    "rewardCreateHint": "按有效计划的金额、币种和交付规则向员工授予福利。在计划中配置方案。",
+    "programPurpose": {
+      "reward": "在此定义表彰规则，然后在奖励中向员工授予奖励。可发放的项目进入发放列表。",
+      "allowance": "定义固定津贴及发放周期。员工授予遵循本计划规则；这不会创建支出钱包或报销费用。",
+      "incentive": "定义绩效如何转化为员工发放金额。在激励中模拟和结算；获准结果进入发放列表。",
+      "custom": "定义由雇主提供、金额和交付规则明确的授予方案。在奖励中记录，在发放中交付。"
+    },
+    "scopeHint": "福利定义雇主提供的方案和员工授予。薪资管理工资、税款、法定缴款和工资核算。",
+    "views": {
+      "overview": "连接薪资的雇主福利与员工授予。",
+      "programs": "在此定义各类方案。员工加入保障计划；奖励与激励结果遵循各自计划规则。",
+      "enrolments": "为员工加入保障与储蓄计划。通过参保窗口管理开放期间。",
+      "rewards": "按有效计划记录员工表彰和福利授予。在计划中配置可重复使用的方案。",
+      "incentives": "管理绩效计划。打开记录以模拟、计算并结算员工发放。",
+      "payouts": "将可发放项目送入薪资并跟踪交付历史。在奖励中创建，在激励中结算。"
+    },
+    "configureApprovals": "配置审批"
   }
 }

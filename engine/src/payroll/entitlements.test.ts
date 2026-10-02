@@ -1,3 +1,5 @@
+import { seedPayrollLine } from '../testing/fixtures.ts';
+import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -10,6 +12,9 @@ import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import {
   computePlanMovement,
+  computeEmploymentServiceCredit,
+  meetsServiceYears,
+  serviceCreditMilestoneDate,
   entitlementMoneyValue,
   limitScopeOf,
   monthsOfService,
@@ -360,29 +365,28 @@ test("owe: caps do not apply — the balance is bounded by zero", () => {
 /* Service tiers                                                       */
 /* ------------------------------------------------------------------ */
 
-test("monthsOfService: the anniversary day decides — exactly 12 months", () => {
-  assert.equal(monthsOfService("2025-01-15", "2026-01-14"), 11);
-  assert.equal(monthsOfService("2025-01-15", "2026-01-15"), 12);
-  assert.equal(monthsOfService("2025-01-15", "2026-01-16"), 12);
+test("calendar service preserves anniversary, month-end, leap-year and prehire boundaries", () => {
+  for (const [hired, on, expected] of [
+    ["2025-01-15", "2026-01-14", 11], ["2025-01-15", "2026-01-15", 12], ["2025-01-15", "2026-01-16", 12],
+    ["2026-03-02", "2026-06-01", 2], ["2026-03-02", "2026-06-02", 3],
+    ["2026-01-31", "2026-02-27", 0], ["2026-01-31", "2026-02-28", 1],
+    ["2028-01-31", "2028-02-28", 0], ["2028-01-31", "2028-02-29", 1], ["2026-06-01", "2026-05-01", -1],
+  ] as const) assert.equal(monthsOfService(hired, on), expected, `${hired} on ${on}`);
 });
-
-test("monthsOfService: three-month benefits eligibility boundary", () => {
-  assert.equal(monthsOfService("2026-03-02", "2026-06-01"), 2);
-  assert.equal(monthsOfService("2026-03-02", "2026-06-02"), 3);
+test("ACT/365 credited service retains fractional evidence at a tier boundary", () => {
+  const baseline = { id: "credit", convention: "actual_365" as const, asOfDate: "2026-09-26", creditedDays: "1824.9999999999999999", creditedMonths: null, sourceSnapshot: { source: "observed" } };
+  const before = computeEmploymentServiceCredit(baseline, baseline.asOfDate);
+  const after = computeEmploymentServiceCredit(baseline, "2026-09-27");
+  assert.equal(before.completedMonths, 59);
+  assert.equal(meetsServiceYears(before, 5), false);
+  assert.equal(meetsServiceYears(after, 5), true);
+  assert.equal(after.serviceDays, "1825.9999999999999999");
+  assert.equal(serviceCreditMilestoneDate(baseline, 60), "2026-09-27");
+  assert.throws(() => computeEmploymentServiceCredit({ ...baseline, creditedDays: "1e3" }, baseline.asOfDate), /Credited service/);
 });
-
-test("monthsOfService: a month-end hire date clamps to the shorter month", () => {
-  // Hired 31 January reaches one month on 28 February, not 3 March.
-  assert.equal(monthsOfService("2026-01-31", "2026-02-27"), 0);
-  assert.equal(monthsOfService("2026-01-31", "2026-02-28"), 1);
-  // Leap year: February has a 29th, so the 28th is still short.
-  assert.equal(monthsOfService("2028-01-31", "2028-02-28"), 0);
-  assert.equal(monthsOfService("2028-01-31", "2028-02-29"), 1);
-});
-
-test("monthsOfService: dates before the hire date are negative, not zero", () => {
-  assert.equal(monthsOfService("2026-06-01", "2026-05-01"), -1);
-  assert.ok(monthsOfService("2026-06-01", "2026-05-01") < 0);
+test("vacation progression preserves a separately granted higher personal rate", () => {
+  const result = computePlanMovement(move({ plan: plan({ systemKey: "vacation" }), earnings: "3000.0000", employeeAccrualValue: "11.0000", serviceAccrualValue: "9.0000" }));
+  assert.equal(result.movements[0]!.amount, "330.0000");
 });
 
 const vacationLadder: ServiceTierRow[] = [
@@ -423,6 +427,13 @@ test("service tiers resolve plan rates and component eligibility together", () =
   assert.equal(atSixYears.componentEligibility.get("cmp-rrsp"), true);
 });
 
+test("legal-employer service ladder overrides the default without leaking to another employer", () => {
+  const rows = [...vacationLadder, ...vacationLadder.slice(0, 2).map((row) => ({ ...row, id: `employer-${row.id}`, employerSubsidiaryId: "employer-a", accrualValue: "7.0000" }))];
+  assert.equal(resolveServiceTiersFrom(rows, 120, "2016-01-01", "employer-a").planAccrualValues.get("plan-vac"), "7.0000");
+  assert.equal(resolveServiceTiersFrom(rows, 120, "2016-01-01", "employer-b").planAccrualValues.get("plan-vac"), "8.0000");
+  assert.equal(resolveServiceTiersFrom(rows.slice(4), 120, "2016-01-01", "employer-b").planAccrualValues.size, 0);
+});
+
 test("no hire date on file resolves no tiers at all", () => {
   const resolved = resolveServiceTiersFrom(vacationLadder, null, null);
   assert.equal(resolved.planAccrualValues.size, 0);
@@ -440,18 +451,10 @@ test("a reached rung overrides the plan's base accrual value", () => {
 });
 
 test("rate precedence: service rung > per-employee rate > plan base", () => {
-  const base = move({ earnings: "3000.0000" });
-  assert.equal(computePlanMovement(base).movements[0]!.amount, "120.0000"); // 4%
-  assert.equal(
-    computePlanMovement({ ...base, employeeAccrualValue: "5.0000" }).movements[0]!.amount,
-    "150.0000",
-  );
-  assert.equal(
-    computePlanMovement({
-      ...base, employeeAccrualValue: "5.0000", serviceAccrualValue: "8.0000",
-    }).movements[0]!.amount,
-    "240.0000",
-  );
+  for (const [personal, tier, expected] of [[null, null, "120.0000"], ["5.0000", null, "150.0000"], ["5.0000", "8.0000", "240.0000"]] as const) {
+    const result = computePlanMovement(move({ earnings: "3000.0000", employeeAccrualValue: personal, serviceAccrualValue: tier }));
+    assert.equal(result.movements[0]!.amount, expected, `personal ${personal}, tier ${tier}`);
+  }
 });
 
 /* ------------------------------------------------------------------ */
@@ -577,11 +580,10 @@ test(
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const payoutComponentId = randomUUID();
-      await db.execute(sql`
-        insert into pay_components (id, org_id, code, name, kind, system_key, is_active,
-                                    created_by, updated_by)
-        values (${payoutComponentId}, ${org.orgId}, 'VACPAY', 'Vacation payout', 'earning',
-                'vacation_payout', true, ${actorId}, ${actorId})`);
+      await seedPayrollComponent(org.orgId, payoutComponentId, {
+        code: 'VACPAY', name: 'Vacation payout', kind: 'earning', systemKey: 'vacation_payout', isActive: true,
+        createdBy: actorId, updatedBy: actorId,
+      });
 
       const scheduleId = randomUUID();
       await db.execute(sql`
@@ -615,11 +617,10 @@ test(
         rows: { employeePartyId: string; accrued: string; payout: string }[],
       ): Promise<void> => {
         const documentId = randomUUID();
-        await db.execute(sql`
-          insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                                 currency, status, created_by, updated_by)
-          values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${payDate}`},
-                  ${org.subsidiaryId}, ${payDate}, 'CAD', 'approved', ${actorId}, ${actorId})`);
+        await seedPayrollDocument(org.orgId, documentId, {
+          kind: 'pay_run', documentNumber: `PAY-${payDate}`, subsidiaryId: org.subsidiaryId, documentDate: payDate,
+          currency: 'CAD', status: 'approved', createdBy: actorId, updatedBy: actorId,
+        });
         await db.execute(sql`
           insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                                 pay_date, tax_year, run_status, created_by, updated_by)
@@ -627,19 +628,16 @@ test(
                   2026, 'committed', ${actorId}, ${actorId})`);
         for (const row of rows) {
           const stubId = randomUUID();
-          await db.execute(sql`
-            insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
-                                   province, periods_per_year, pay_date, tax_year, currency_code,
-                                   vacation_accrued, created_by, updated_by)
-            values (${stubId}, ${org.orgId}, ${documentId}, ${row.employeePartyId},
-                    ${employments.get(row.employeePartyId)}, 'ON', 26,
-                    ${payDate}, 2026, 'CAD', ${row.accrued}, ${actorId}, ${actorId})`);
+          const employmentId = employments.get(row.employeePartyId);
+          assert.ok(employmentId, "The declared employee must have a native employment");
+          await seedPayrollStub(org.orgId, documentId, row.employeePartyId, employmentId, {
+            id: stubId, province: 'ON', periodsPerYear: 26, payDate: payDate, taxYear: 2026, currency: 'CAD',
+            vacationAccrued: row.accrued, createdBy: actorId, updatedBy: actorId,
+          });
           if (row.payout !== "0") {
-            await db.execute(sql`
-              insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
-                                          created_by, updated_by)
-              values (${org.orgId}, ${stubId}, ${payoutComponentId}, 'earning', 'Vacation payout',
-                      ${row.payout}, ${actorId}, ${actorId})`);
+            await seedPayrollLine(org.orgId, stubId, payoutComponentId, {
+              kind: 'earning', description: 'Vacation payout', amount: row.payout, createdBy: actorId, updatedBy: actorId,
+            });
           }
         }
       };

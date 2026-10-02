@@ -140,6 +140,7 @@ function jsonRequest(url: string, body: unknown): Request {
 
 const electBody = {
   action: "elect",
+  contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1.2345678912"}],
   employmentId: EMPLOYMENT_ID,
   planId: PLAN_ID,
   windowId: WINDOW_ID,

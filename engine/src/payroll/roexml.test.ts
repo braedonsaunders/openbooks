@@ -153,12 +153,8 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
               ${actorId}, ${actorId})`);
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
-                                             pay_basis, country, federal_claim_code,
-                                             provincial_claim_code, vacation_percent, vacation_method,
-                                             sin_encrypted, sin_last3, is_active, created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, '4', 'accrue',
-              ${sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" })}, '286', true, ${actorId}, ${actorId})`);
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province, pay_basis, country, federal_claim_code, provincial_claim_code, sin_encrypted, sin_last3, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, ${sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" })}, '286', true, ${actorId}, ${actorId})`);
 
     const documentId = randomUUID();
     await db.execute(sql`

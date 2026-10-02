@@ -1,4 +1,5 @@
 import 'server-only'
+import { benefitContributionLabels } from './benefit-contribution-labels'
 import type { BenefitElectDialogStrings } from '../../app/(app)/me/islands'
 
 import { getTranslations } from 'next-intl/server'
@@ -66,8 +67,11 @@ export interface BenefitsWindowRow extends EnrollmentWindowSummary {
 }
 
 export interface BenefitsEnrollmentRow extends EnrollmentSummary {
+  employeeContributionLabel: string
+  employerContributionLabel: string
   employeeLabel: string
   employeeHref: string | null
+  configurationHref: string
   statusLabel: string
   statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   openLabel: string
@@ -185,6 +189,7 @@ export interface BenefitsData {
   programBuilderLocked: boolean
   awardBuilderOpen: boolean
   defaultAwardCurrency: string
+  currencyOptions: PortfolioData['currencyOptions']
   accountOptions: BuilderOption[]
   payComponentOptions: BenefitPayComponentOption[]
   employmentOptions: BuilderOption[]
@@ -275,7 +280,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   if (segment === null) {
     return {
       title: t('benefits.title'),
-      description: t('portfolio.description'),
+      description: t(`portfolio.views.${parsePortfolioView(sp.view)}`),
       listTitle: '',
       tabs,
       refusal: { title: t('benefits.unknownSegmentTitle'), message: t('benefits.unknownSegment', { segment: rawSegment }) },
@@ -316,6 +321,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   // Segment badges count every window: the selected segment filters only the
   // visible rows below, so Draft and Closed never read 0 beside a filtered list.
   const windows = await listEnrollmentWindows(db, orgId, actorId)
+  const contributionText = await getTranslations('admin')
   const enrolments = await listEnrollments(db, orgId, actorId)
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
@@ -356,9 +362,12 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     return {
       ...e,
       employeeLabel: label,
+      employeeContributionLabel: benefitContributionLabels(e.contributions, e.currency, contributionText, 'employee'),
+      employerContributionLabel: benefitContributionLabels(e.contributions, e.currency, contributionText, 'employer'),
       employeeHref: worker?.partyId ? `/entities/employees?party=${encodeURIComponent(worker.partyId)}` : null,
       statusLabel: statusLabel(t, e.status),
       statusVariant: statusVariant(e.status),
+      configurationHref: `${basePath}?view=enrolments&enrollmentConfig=${encodeURIComponent(e.id)}`,
       openLabel: t('benefits.openEnrollment'),
       windowHref: null,
     }
@@ -430,7 +439,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       title: t('benefits.newEnrollment'), description: t('me.benefits.electDescription'),
       employmentLabel: t('benefits.columns.employee'), employments: portfolio.employmentOptions,
       planLabel: t('me.benefits.columns.plan'), plans,
-      levelLabel: t('me.benefits.columns.coverage'), windowLabel: t('me.benefits.columns.window'),
+      windowLabel: t('me.benefits.columns.window'),
       windows: windows.filter((window) => window.status === 'open').map((window) => ({ value: window.id, label: `${window.name} (${window.opensOn} – ${window.closesOn})` })),
       fromLabel: t('me.benefits.fromLabel'), lifeEventLabel: t('me.benefits.lifeEventLabel'),
       lifeEventPlaceholder: t('me.benefits.lifeEventPlaceholder'),
@@ -455,7 +464,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
 
   return {
     title: t('benefits.title'),
-    description: t('portfolio.description'),
+    description: t(`portfolio.views.${parsePortfolioView(sp.view)}`),
     listTitle,
     tabs,
     refusal: null,
@@ -554,6 +563,7 @@ function emptyPortfolioFields(
   | 'programBuilderLocked'
   | 'awardBuilderOpen'
   | 'defaultAwardCurrency'
+  | 'currencyOptions'
   | 'accountOptions'
   | 'payComponentOptions'
   | 'employmentOptions'
@@ -643,6 +653,7 @@ function emptyPortfolioFields(
     programBuilderLocked: false,
     awardBuilderOpen: false,
     defaultAwardCurrency: '',
+    currencyOptions: [],
     accountOptions: [],
     payComponentOptions: [],
     employmentOptions: [],
@@ -784,7 +795,7 @@ function toPortfolioFields(
       key: 'reward',
       title: t('portfolio.cards.reward.title'),
       description: t('portfolio.cards.reward.description'),
-      href: `${viewParam('rewards')}&program=new&family=reward`,
+      href: `${viewParam('programs')}&program=new&family=reward`,
       iconKey: 'gift',
       countLabel: countLabel(familyCount('reward')),
     },
@@ -792,7 +803,7 @@ function toPortfolioFields(
       key: 'incentive',
       title: t('portfolio.cards.incentive.title'),
       description: t('portfolio.cards.incentive.description'),
-      href: `${viewParam('incentives')}&program=new&family=incentive`,
+      href: `${viewParam('programs')}&program=new&family=incentive`,
       iconKey: 'chart-line',
       countLabel: countLabel(familyCount('incentive')),
     },
@@ -872,6 +883,7 @@ function toPortfolioFields(
     programBuilderLocked: portfolioView === 'incentives' || requestedFamily !== null,
     awardBuilderOpen: sp.award === 'new' && canManage && portfolio.optionsRefusal === null,
     defaultAwardCurrency,
+    currencyOptions: portfolio.currencyOptions,
     accountOptions: portfolio.accountOptions,
     payComponentOptions: portfolio.payComponentOptions,
     employmentOptions: portfolio.employmentOptions,
@@ -976,7 +988,7 @@ export interface BenefitsPanelData {
   queueHref: string
 }
 
-/** Cockpit Benefits panel: open windows, pending approvals, months missing inputs. Null without the grant. */
+/** Cockpit Benefits panel: open windows, pending approvals, enrollments missing contribution elections. Null without the grant. */
 export async function loadBenefitsPanel(authz: Authz): Promise<BenefitsPanelData | null> {
   if (!can(authz, 'hrm.benefits.read')) return null
   const orgId = authz.user.orgId
@@ -990,7 +1002,7 @@ export async function loadBenefitsPanel(authz: Authz): Promise<BenefitsPanelData
     openEmpty: t('overview.benefits.noOpenWindow'),
     pendingCount: cockpit.pendingApprovals.length,
     pendingLabel: t('overview.benefits.pendingSub'),
-    missingCount: cockpit.missingInputs.length,
+    missingCount: cockpit.missingElections.length,
     missingLabel: t('overview.benefits.missingSub'),
     queueHref: '/hrm/benefits?view=enrolments',
   }

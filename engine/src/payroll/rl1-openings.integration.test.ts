@@ -1,10 +1,14 @@
+import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollPerson, seedPayrollProfile, createScratchOrg, dropScratchOrgReporting, seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { rl1Return, rl1Slips, rl1Summary } from "./canada/quebec/rl1.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -119,11 +123,10 @@ async function seedQcYear(): Promise<QcFixture> {
     update pay_components set tax_treatment = 'union_dues' where id = ${unionId} and org_id = ${org.orgId}`);
 
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
 
   const qcStubEmployee = randomUUID();
   const qcOpeningOnlyEmployee = randomUUID();
@@ -134,26 +137,22 @@ async function seedQcYear(): Promise<QcFixture> {
     [qcOpeningOnlyEmployee, "Jean Lapointe", "QC"],
     [onOpeningOnlyEmployee, "Oliver Twist", "ON"],
   ] as const) {
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
-      values (${id}, ${org.orgId}, 'person', ${name}, true, ${org.subsidiaryId}, '{}'::jsonb)`);
+    await seedPayrollPerson(org.orgId, id, name, {
+      subsidiaryId: org.subsidiaryId,
+    });
     const employmentId = await seedWorkerEmployment(org.orgId, id, org.subsidiaryId);
     if (id === qcStubEmployee) qcStubEmploymentId = employmentId;
-    await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, province,
-                                             pay_basis, country, federal_claim_code,
-                                             provincial_claim_code, vacation_percent, vacation_method,
-                                             is_active, created_by, updated_by)
-      values (${org.orgId}, ${id}, ${employmentId}, ${scheduleId}, ${province}, 'hourly', 'CA', 1, 1, '4', 'accrue',
-              true, ${actorId}, ${actorId})`);
+    await seedPayrollProfile(org.orgId, id, employmentId, scheduleId, actorId, {
+      province: province, payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+    }, { percentFloor: '4', method: 'accrue' });
+
   }
 
   const documentId = randomUUID();
-  await db.execute(sql`
-    insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                           currency, status, created_by, updated_by)
-    values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-            ${org.subsidiaryId}, '2026-07-21', 'CAD', 'draft', ${actorId}, ${actorId})`);
+  await seedPayrollDocument(org.orgId, documentId, {
+    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: org.subsidiaryId,
+    documentDate: '2026-07-21', currency: 'CAD', status: 'draft', createdBy: actorId, updatedBy: actorId,
+  });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                           tax_year, run_status, calculated_at, created_by, updated_by)
@@ -164,14 +163,12 @@ async function seedQcYear(): Promise<QcFixture> {
   // The stub's QPIP program base DIVERGES from its EI base on purpose:
   // 30,000 EI-insurable but only 22,000 QPIP-insurable (benefits the QPIP
   // program excludes). Box I must follow the program factor, never EI.
-  await db.execute(sql`
-    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                           periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                           pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-    values (${stubId}, ${org.orgId}, ${documentId}, ${qcStubEmployee}, ${qcStubEmploymentId}, 'QC', 26, '2026-07-21',
-            2026, 'CAD', '30000.0000', '24000.0000', '30000.0000', '30000.0000',
-            ${JSON.stringify({ C: "1500.00", EI: "390.00", QPIP: "129.00", IE_QPIP: "22000.00" })}::jsonb,
-            ${actorId}, ${actorId})`);
+  await seedPayrollStub(org.orgId, documentId, qcStubEmployee, qcStubEmploymentId, {
+    id: stubId, province: 'QC', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
+    gross: '30000.0000', netPay: '24000.0000', pensionableEarnings: '30000.0000', insurableEarnings: '30000.0000',
+    factors: { C: "1500.00", EI: "390.00", QPIP: "129.00", IE_QPIP: "22000.00" }, createdBy: actorId,
+    updatedBy: actorId,
+  });
   await db.execute(sql`
     insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
                                 created_by, updated_by)

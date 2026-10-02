@@ -17,6 +17,7 @@ import {
   seedComponent,
   seedEmployment,
   seedPlan,
+  seededContributionTerms,
   seedWindow,
   setupHarness,
   withHarness,
@@ -30,7 +31,6 @@ import {
 import { HrmAuthorizationError } from "./authorization.ts";
 import { BenefitsError } from "./benefits/errors.ts";
 import {
-  approveEnrollment,
   cancelEnrollment,
   changeEnrollment,
   electEnrollment,
@@ -48,10 +48,7 @@ import {
   closeEnrollmentWindow,
   openEnrollmentWindow,
 } from "./benefits/windows.ts";
-import {
-  generateBenefitPayrollInputs,
-  voidBenefitPayrollInput,
-} from "./benefits/benefits-payroll.ts";
+
 import {
   listEnrollments,
   myEnrollments,
@@ -68,7 +65,7 @@ installEngineSeams();
  * skips without OPENBOOKS_DB_URL): migration 0197 bootstraps plus RLS,
  * every named refusal through the real code path, the termination hook
  * through the real change-request apply path (and its rollback),
- * idempotent input generation with the consumed/voided refusals, the RLS
+ * fixed and policy-following native contribution elections, the RLS
  * second-org case, and the self-service scope.
  *
  * Proofs are read back from storage, never from the service's own return
@@ -83,22 +80,6 @@ const BENEFITS_SPEC = {
   ],
 } as const;
 
-async function seedSchedule(orgId: string, periodsPerYear: number): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
-    values (${id}, ${orgId}, ${`Sched ${id.slice(0, 6)}`}, 'biweekly', ${periodsPerYear}, '2026-01-01'::date)
-  `);
-  return id;
-}
-
-async function stampProfile(orgId: string, employmentId: string, workerPartyId: string, scheduleId: string): Promise<void> {
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province)
-    values (${orgId}, ${workerPartyId}, ${employmentId}, ${scheduleId}, 'US', 'TX')
-  `);
-}
-
 async function enrollmentsOf(orgId: string, employmentId: string): Promise<Array<{ id: string; status: string; effective_to: string | null }>> {
   const rows = (await db.execute<{ id: string; status: string; effective_to: string | null }>(sql`
     select id, status, effective_to::text as effective_to from hrm_benefit_enrollments
@@ -110,16 +91,6 @@ async function enrollmentsOf(orgId: string, employmentId: string): Promise<Array
 async function eventsOf(enrollmentId: string): Promise<Array<{ kind: string; reason: string }>> {
   const rows = (await db.execute<{ kind: string; reason: string }>(sql`
     select kind, reason from hrm_benefit_events where enrollment_id = ${enrollmentId} order by recorded_at
-  `)).rows;
-  return rows;
-}
-
-async function inputsOf(enrollmentId: string): Promise<Array<{ kind: string; amount: string; currency: string; from: string; to: string; status: string; component: string }>> {
-  const rows = (await db.execute<{ kind: string; amount: string; currency: string; from: string; to: string; status: string; component: string }>(sql`
-    select kind, amount::text as amount, currency, coverage_from::text as "from",
-           coverage_to::text as "to", status, pay_component_id::text as component
-      from hrm_benefit_payroll_inputs where enrollment_id = ${enrollmentId}
-      order by kind, coverage_from
   `)).rows;
   return rows;
 }
@@ -202,7 +173,7 @@ test("migration 0197 bootstraps: eight tables, RLS forced, 0194 intact", { skip:
   });
 });
 
-test("elect happy path stores basis amounts and evidences activation", { skip: !DB }, async () => {
+test("elect happy path stores fixed contribution terms and evidences activation", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
     const { planId } = await seedPlan(h.org.orgId);
@@ -212,44 +183,45 @@ test("elect happy path stores basis amounts and evidences activation", { skip: !
       actorId: h.adminId,
       employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
       effectiveFrom: "2026-03-01",
     });
     assert.equal(dto.status, "active");
-    assert.equal(dto.employeeAmountPerPeriod, "250.0000");
-    assert.equal(dto.employerAmountPerPeriod, "500.0000");
     assert.equal(dto.currency, "USD");
     const stored = (await db.execute<{ employee: string; employer: string }>(sql`
       select employee_amount_per_period::text as employee, employer_amount_per_period::text as employer
         from hrm_benefit_enrollments where id = ${dto.id}
     `)).rows[0]!;
-    assert.equal(stored.employee, "250.0000");
-    assert.equal(stored.employer, "500.0000");
+    assert.equal(stored.employee, null);
+    assert.equal(stored.employer, null);
+    const terms = (await db.execute<{ rate: string; mode: string }>(sql`select elected_rate::text as rate,election_mode as mode from hrm_benefit_enrollment_terms where enrollment_id=${dto.id} order by elected_rate`)).rows;
+    assert.deepEqual(terms.map(t => [t.rate,t.mode]), [['250.0000000000','fixed'],['500.0000000000','fixed']]);
     assert.deepEqual((await eventsOf(dto.id)).map((e) => e.kind), ["elected", "activated"]);
   });
 });
 
-test("approval-required plans pend then approve; double approve refused", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const { planId } = await seedPlan(h.org.orgId, { requires_approval: true });
-    const windowId = await seedWindow(h.org.orgId);
-    const dto = await electEnrollment({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      employmentId,
-      planId,
-      windowId,
-      effectiveFrom: "2026-03-01",
-    });
-    assert.equal(dto.status, "pending_approval");
-    const approved = await approveEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: dto.id });
-    assert.equal(approved.status, "active");
-    assert.deepEqual((await eventsOf(dto.id)).map((e) => e.kind), ["elected", "approved"]);
-    await assert.rejects(
-      approveEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: dto.id }),
-      (e: unknown) => e instanceof BenefitsError && /only a pending approval is approved/.test(e.message),
-    );
+test("native Flows authorize a successor without interrupting prior coverage", {skip: !DB}, async () => {
+  await withHarness(() => setupHarness(BENEFITS_SPEC),async h=>{
+    const {employmentId}=await seedEmployment(h.org.orgId,h.org.subsidiaryId);
+    const {planId}=await seedPlan(h.org.orgId);
+    const windowId=await seedWindow(h.org.orgId);
+    const first=await electEnrollment({orgId:h.org.orgId,actorId:h.adminId,employmentId,planId,windowId,effectiveFrom:'2026-03-01',contributionTerms:await seededContributionTerms(h.org.orgId,planId)});
+    await db.execute(sql`update hrm_benefit_plans set approval_mode='flows' where org_id=${h.org.orgId} and id=${planId}`);
+    await seedApprovalFlow(h.org.orgId,{subjectKind:'hrm_benefit_enrollment',assignees:[{type:'user',userId:h.adminId}],mode:'any',preventSelfApproval:false});
+    const next=await changeEnrollment({orgId:h.org.orgId,actorId:h.adminId,enrollmentId:first.id,changeDate:'2026-04-01',reason:'Contribution election changed',contributionTerms:(await seededContributionTerms(h.org.orgId,planId)).map(t=>({...t,electedRate:'300'}))});
+    assert.equal(next.status,'pending_approval');
+    assert.equal((await enrollmentsOf(h.org.orgId,employmentId)).find(e=>e.id===first.id)?.status,'active');
+    await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollment_terms set elected_rate=400 where org_id=${h.org.orgId} and enrollment_id=${next.id}`),/submitted contribution elections are immutable/i);
+    const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_benefit_enrollment' and subject_id=${next.id} and status='pending'`)).rows[0]!;
+    await assertStorageRefusal(db.transaction(async tx=>{
+      await tx.execute(sql`update flow_gates set status='approved',decided_by=${h.adminId},decided_at=now() where org_id=${h.org.orgId} and id=${gate.id}`);
+      await tx.execute(sql`update hrm_benefit_enrollments set status='ended',effective_to='2026-03-31' where org_id=${h.org.orgId} and id=${first.id}`);
+      await tx.execute(sql`update hrm_benefit_enrollments set status='active',updated_by=${h.adminId},decision_snapshot=jsonb_build_object('outcome','approved','mode','human','runId',flow_run_id) where org_id=${h.org.orgId} and id=${next.id}`);
+    }),/approval stages remain incomplete|assigned native Flow decision/i);
+    await decideGate({gateId:gate.id,decision:'approved',userId:h.adminId});
+    assert.deepEqual((await enrollmentsOf(h.org.orgId,employmentId)).map(e=>[e.status,e.effective_to]),[['ended','2026-03-31'],['active',null]]);
+    await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollments set class_key='other' where org_id=${h.org.orgId} and id=${next.id}`),/submitted benefit evidence is immutable/i);
   });
 });
 
@@ -263,6 +235,7 @@ test("elect refusals leave no rows: plan, employment, window, tier, component", 
       actorId: h.adminId,
       employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
       effectiveFrom: "2026-03-01",
     };
@@ -327,48 +300,22 @@ test("elect refusals leave no rows: plan, employment, window, tier, component", 
     assert.equal(life.status, "active");
     assert.deepEqual((await eventsOf(life.id)).map((e) => e.kind), ["life_event", "activated"]);
 
-    // Tiers.
-    const tiered = await seedPlan(h.org.orgId, { levels: true });
+    const tiered = await seedPlan(h.org.orgId, { classes: true });
+    const tierTerms = await seededContributionTerms(h.org.orgId, tiered.planId);
     const afterLife = await enrollmentCount(h.org.orgId);
     const sinceLife = async () => (await enrollmentCount(h.org.orgId)) - afterLife;
-    await assertBenefitsRefusal(
-      () => electEnrollment({ ...base, planId: tiered.planId }),
-      /prices tiers \(single, family\)/,
-      sinceLife,
-    );
-    await assertBenefitsRefusal(
-      () => electEnrollment({ ...base, planId: tiered.planId, coverageLevelKey: "platinum" }),
-      /is not a tier of plan/,
-      sinceLife,
-    );
-    await assertBenefitsRefusal(
-      () => electEnrollment({ ...base, coverageLevelKey: "single" }),
-      /prices no coverage tiers/,
-      sinceLife,
-    );
-    // Overlap: elect family tier, then elect again over the same dates.
-    await electEnrollment({ ...base, planId: tiered.planId, coverageLevelKey: "family" });
-    await assertBenefitsRefusal(
-      () => electEnrollment({ ...base, planId: tiered.planId, coverageLevelKey: "single" }),
-      /already holds this plan/,
-      async () => (await enrollmentCount(h.org.orgId)) - 2,
-    );
-    // Components.
-    const noComponent = await seedPlan(h.org.orgId, {});
-    await db.execute(sql`update hrm_benefit_plans set employee_pay_component_id = null where id = ${noComponent.planId}`);
-    await assertBenefitsRefusal(
-      () => electEnrollment({ ...base, planId: noComponent.planId }),
-      /names no employee pay component/,
-      async () => (await enrollmentCount(h.org.orgId)) - 2,
-    );
-    const wrongKind = await seedComponent(h.org.orgId, { code: `W_${randomUUID().slice(0, 6)}`, kind: "deduction" });
-    const badEmployer = await seedPlan(h.org.orgId, {});
-    await db.execute(sql`update hrm_benefit_plans set employer_pay_component_id = ${wrongKind} where id = ${badEmployer.planId}`);
-    await assertBenefitsRefusal(
-      () => electEnrollment({ ...base, planId: badEmployer.planId }),
-      /must be kind employer_contribution/,
-      async () => (await enrollmentCount(h.org.orgId)) - 2,
-    );
+    await assertBenefitsRefusal(() => electEnrollment({ ...base, planId: tiered.planId, contributionTerms: undefined }), /record the contribution elections/i, sinceLife);
+    await assertBenefitsRefusal(() => electEnrollment({ ...base, planId: tiered.planId, contributionTerms: tierTerms, classKey: 'platinum' }), /selected contribution class is not on this plan/i, sinceLife);
+    await assertBenefitsRefusal(() => electEnrollment({ ...base, planId: tiered.planId, contributionTerms: [{ ...tierTerms[0]!, electedRate: '-1' }] }), /must be non-negative/, sinceLife);
+    await electEnrollment({ ...base, planId: tiered.planId, contributionTerms: tierTerms, classKey: 'family' });
+    await assertBenefitsRefusal(() => electEnrollment({ ...base, planId: tiered.planId, contributionTerms: tierTerms, classKey: 'single' }), /already holds this plan/, async () => (await enrollmentCount(h.org.orgId)) - 2);
+    const noRules = await seedPlan(h.org.orgId);
+    await db.execute(sql`delete from hrm_benefit_contribution_rules where org_id=${h.org.orgId} and plan_id=${noRules.planId}`);
+    await assertBenefitsRefusal(() => electEnrollment({ ...base, planId: noRules.planId }), /add effective contribution rules/i, async () => (await enrollmentCount(h.org.orgId)) - 2);
+    const badEmployer = await seedPlan(h.org.orgId);
+    const wrongKind = await seedComponent(h.org.orgId, { kind: 'deduction' });
+    await db.execute(sql`update hrm_benefit_contribution_rules set pay_component_id=${wrongKind} where org_id=${h.org.orgId} and plan_id=${badEmployer.planId} and kind='employer_contribution'`);
+    await assertBenefitsRefusal(() => electEnrollment({ ...base, planId: badEmployer.planId }), /Link an active user payroll component.*employer contribution/, async () => (await enrollmentCount(h.org.orgId)) - 2);
   });
 });
 
@@ -387,7 +334,6 @@ test("waive evidences decline; reason required", { skip: !DB }, async () => {
       reason: "covered by spouse",
     });
     assert.equal(dto.status, "waived");
-    assert.equal(dto.employeeAmountPerPeriod, null);
     assert.deepEqual((await eventsOf(dto.id)).map((e) => e.kind), ["waived"]);
     await assert.rejects(
       waiveEnrollment({
@@ -407,15 +353,16 @@ test("waive evidences decline; reason required", { skip: !DB }, async () => {
 test("change ends and opens anew; end and cancel hold their boundaries", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const { planId } = await seedPlan(h.org.orgId, { levels: true });
+    const { planId } = await seedPlan(h.org.orgId, { classes: true });
     const windowId = await seedWindow(h.org.orgId);
     const first = await electEnrollment({
       orgId: h.org.orgId,
       actorId: h.adminId,
       employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
-      coverageLevelKey: "single",
+      classKey: "single",
       effectiveFrom: "2026-01-01",
     });
     const second = await changeEnrollment({
@@ -423,18 +370,19 @@ test("change ends and opens anew; end and cancel hold their boundaries", { skip:
       actorId: h.adminId,
       enrollmentId: first.id,
       changeDate: "2026-04-01",
-      coverageLevelKey: "family",
+      classKey: "family",
+      contributionTerms: (await seededContributionTerms(h.org.orgId, planId)).map(t => ({...t,electedRate: t.electedRate.startsWith("250.") ? "600" : "900"})),
       reason: "new child",
     });
-    assert.equal(second.coverageLevelKey, "family");
-    assert.equal(second.employeeAmountPerPeriod, "600.0000");
+    const changedTerms = (await db.execute<{ rate: string }>(sql`select elected_rate::text as rate from hrm_benefit_enrollment_terms where enrollment_id=${second.id} order by elected_rate`)).rows;
+    assert.deepEqual(changedTerms.map(t => t.rate), ['600.0000000000','900.0000000000']);
     assert.equal(second.effectiveFrom, "2026-04-01");
     const rows = await enrollmentsOf(h.org.orgId, employmentId);
     assert.deepEqual(rows.map((r) => [r.status, r.effective_to]), [
       ["ended", "2026-03-31"],
       ["active", null],
     ]);
-    assert.deepEqual((await eventsOf(second.id)).map((e) => e.kind), ["elected", "changed"]);
+    assert.deepEqual((await eventsOf(second.id)).map((e) => e.kind), ["elected", "changed", "activated"]);
     await assert.rejects(
       changeEnrollment({
         orgId: h.org.orgId,
@@ -460,12 +408,14 @@ test("change ends and opens anew; end and cancel hold their boundaries", { skip:
       (e: unknown) => e instanceof BenefitsError && /only a not-yet-active enrolment is cancelled/.test(e.message),
     );
     // Cancel a pending instead.
-    const pendingPlan = await seedPlan(h.org.orgId, { requires_approval: true });
+    const pendingPlan = await seedPlan(h.org.orgId, { approval_mode: "flows" });
+    await seedApprovalFlow(h.org.orgId,{subjectKind:"hrm_benefit_enrollment",assignees:[{type:"user",userId:h.adminId}],mode:"any",preventSelfApproval:false});
     const pending = await electEnrollment({
       orgId: h.org.orgId,
       actorId: h.adminId,
       employmentId,
       planId: pendingPlan.planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, pendingPlan.planId),
       windowId,
       effectiveFrom: "2026-07-01",
     });
@@ -495,12 +445,14 @@ test("windows open with overlap refusal; close cancels pendings with events", { 
     );
     // Pending election cancelled with its own event on close.
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const { planId } = await seedPlan(h.org.orgId, { requires_approval: true });
+    const { planId } = await seedPlan(h.org.orgId, { approval_mode: "flows" });
+    await seedApprovalFlow(h.org.orgId,{subjectKind:"hrm_benefit_enrollment",assignees:[{type:"user",userId:h.adminId}],mode:"any",preventSelfApproval:false});
     const pending = await electEnrollment({
       orgId: h.org.orgId,
       actorId: h.adminId,
       employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId: draftId,
       effectiveFrom: "2026-03-01",
     });
@@ -523,210 +475,6 @@ test("windows open with overlap refusal; close cancels pendings with events", { 
   });
 });
 
-test("generation writes monthly rows, prorates daily, idempotent on retry", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const seed = await seedPlan(h.org.orgId, {});
-    const windowId = await seedWindow(h.org.orgId);
-    const dto = await electEnrollment({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      employmentId,
-      planId: seed.planId,
-      windowId,
-      effectiveFrom: "2026-01-01",
-    });
-    const first = await generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" });
-    assert.equal(first.length, 2);
-    const again = await generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" });
-    assert.deepEqual(again.map((r) => r.id).sort(), first.map((r) => r.id).sort(), "retry lands on the same rows");
-    const stored = await inputsOf(dto.id);
-    assert.deepEqual(stored.map((r) => [r.kind, r.amount, r.currency, r.from, r.to, r.status]), [
-      ["benefit_deduction", "250.0000", "USD", "2026-03-01", "2026-03-31", "pending"],
-      ["employer_contribution", "500.0000", "USD", "2026-03-01", "2026-03-31", "pending"],
-    ]);
-    assert.equal(stored[0]!.component, seed.employeeComponentId);
-    assert.equal(stored[1]!.component, seed.employerComponentId);
-    // Daily proration on a mid-month election.
-    const daily = await seedPlan(h.org.orgId, { proration_basis: "daily" });
-    const mid = await electEnrollment({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      employmentId,
-      planId: daily.planId,
-      windowId,
-      effectiveFrom: "2026-04-11",
-    });
-    await generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-04" });
-    const midRows = await inputsOf(mid.id);
-    // 20 of 30 April days: 250*20/30 = 166.6667; 500*20/30 = 333.3333.
-    assert.deepEqual(midRows.map((r) => [r.kind, r.amount, r.from, r.to]), [
-      ["benefit_deduction", "166.6667", "2026-04-11", "2026-04-30"],
-      ["employer_contribution", "333.3333", "2026-04-11", "2026-04-30"],
-    ]);
-  });
-});
-
-test("concurrent generators for one month share one row per kind without aborting", async () => {
-  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const seed = await seedPlan(h.org.orgId, {});
-    const windowId = await seedWindow(h.org.orgId);
-    const dto = await electEnrollment({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      employmentId,
-      planId: seed.planId,
-      windowId,
-      effectiveFrom: "2026-01-01",
-    });
-    // Two generators on two connections at once: the unique constraint
-    // arbitrates, the loser re-reads the winner, and neither transaction
-    // aborts (a 23505 caught inside the open transaction used to fail every
-    // later statement with 25P02 and roll both generations back).
-    const query = { orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" };
-    const [first, second] = await Promise.all([
-      generateBenefitPayrollInputs(query),
-      generateBenefitPayrollInputs(query),
-    ]);
-    for (const [index, result] of [first, second].entries()) {
-      assert.equal(result.length, 2, `generator ${index} returns both kinds`);
-    }
-    assert.deepEqual(first.map((r) => r.id).sort(), second.map((r) => r.id).sort(), "both generators land on the same rows");
-    const stored = await inputsOf(dto.id);
-    assert.equal(stored.length, 2, "exactly one row per kind survives the race");
-    assert.deepEqual(stored.map((r) => [r.kind, r.amount, r.status]), [
-      ["benefit_deduction", "250.0000", "pending"],
-      ["employer_contribution", "500.0000", "pending"],
-    ]);
-  });
-});
-
-test("generation converts per_period by schedule and refuses guesses", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
-    const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const windowId = await seedWindow(h.org.orgId);
-    const periodic = await seedPlan(h.org.orgId, { employee_cost_basis: "per_period", employer_cost_basis: "per_period" });
-    await db.execute(sql`
-      update hrm_benefit_plans set employee_cost = '100.0000', employer_cost = '50.0000'
-       where id = ${periodic.planId}
-    `);
-    const dto = await electEnrollment({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      employmentId,
-      planId: periodic.planId,
-      windowId,
-      effectiveFrom: "2026-01-01",
-    });
-    // No stamped schedule: refused by name, nothing written.
-    await assert.rejects(
-      generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" }),
-      (e: unknown) => e instanceof BenefitsError && /no usable pay schedule/.test(e.message),
-    );
-    assert.equal((await inputsOf(dto.id)).length, 0);
-    // 26-period schedule: 100*26/12 = 216.6667; 50*26/12 = 108.3333.
-    const scheduleId = await seedSchedule(h.org.orgId, 26);
-    await stampProfile(h.org.orgId, employmentId, workerPartyId, scheduleId);
-    await generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" });
-    assert.deepEqual((await inputsOf(dto.id)).map((r) => [r.kind, r.amount]), [
-      ["benefit_deduction", "216.6667"],
-      ["employer_contribution", "108.3333"],
-    ]);
-    // percent_of_pay: refused by name until the run supplies the basis.
-    const pct = await seedPlan(h.org.orgId, { employee_cost_basis: "percent_of_pay", employer_cost_basis: "per_month" });
-    await db.execute(sql`
-      update hrm_benefit_plans set employee_cost = '6.0000' where id = ${pct.planId}
-    `);
-    const pctDto = await electEnrollment({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      employmentId,
-      planId: pct.planId,
-      windowId,
-      effectiveFrom: "2026-05-01",
-    });
-    await assert.rejects(
-      generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-05" }),
-      (e: unknown) => e instanceof BenefitsError && /has not supplied the pay basis/.test(e.message),
-    );
-    assert.equal((await inputsOf(pctDto.id)).length, 0, "a refused month writes no rows");
-  });
-});
-
-test("consumed months refuse, voided months stay voided, void keeps the link", { skip: !DB }, async () => {
-  await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const { planId } = await seedPlan(h.org.orgId);
-    const windowId = await seedWindow(h.org.orgId);
-    const dto = await electEnrollment({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      employmentId,
-      planId,
-      windowId,
-      effectiveFrom: "2026-01-01",
-    });
-    await generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" });
-    const runId = randomUUID();
-    const deductionId = await inputIdOf(dto.id, "benefit_deduction");
-    const contributionId = await inputIdOf(dto.id, "employer_contribution");
-    // Void the still-pending contribution first: clean void, no run link.
-    const voidedPending = await voidBenefitPayrollInput({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      inputId: contributionId,
-      reason: "duplicated month",
-    });
-    assert.equal(voidedPending.status, "voided");
-    // Consume the deduction, then void it: the run link must survive.
-    await db.execute(sql`
-      update hrm_benefit_payroll_inputs
-         set status = 'consumed', consumed_by_run_document_id = ${runId}, consumed_at = now()
-       where id = ${deductionId}
-    `);
-    await assert.rejects(
-      generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" }),
-      (e: unknown) => e instanceof BenefitsError && new RegExp(runId).test(e.message),
-    );
-    const voidedConsumed = await voidBenefitPayrollInput({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      inputId: deductionId,
-      reason: "stale calc",
-    });
-    assert.equal(voidedConsumed.status, "voided");
-    const kept = (await db.execute<{ run: string | null }>(sql`
-      select consumed_by_run_document_id::text as run from hrm_benefit_payroll_inputs where id = ${deductionId}
-    `)).rows[0]!;
-    assert.equal(kept.run, runId, "voiding never clears the run link");
-    // Regenerating a voided month is refused: corrections carry a new election.
-    await assert.rejects(
-      generateBenefitPayrollInputs({ orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" }),
-      (e: unknown) => e instanceof BenefitsError && /stays voided/.test(e.message),
-    );
-    // Storage guards: clearing the link or deleting rows is refused.
-    await assertStorageRefusal(
-      db.execute(sql`
-        update hrm_benefit_payroll_inputs set consumed_by_run_document_id = null
-         where id = ${deductionId}
-      `),
-      /keeps that link/,
-    );
-    await assertStorageRefusal(
-      db.execute(sql`delete from hrm_benefit_payroll_inputs where enrollment_id = ${dto.id}`),
-      /retained as history/,
-    );
-  });
-});
-
-async function inputIdOf(enrollmentId: string, kind: string): Promise<string> {
-  const rows = (await db.execute<{ id: string }>(sql`
-    select id from hrm_benefit_payroll_inputs where enrollment_id = ${enrollmentId} and kind = ${kind}
-  `)).rows;
-  return rows[0]!.id;
-}
-
 test("dependents link within one employment and refuse across it", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(BENEFITS_SPEC), async (h) => {
     const empA = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
@@ -738,6 +486,7 @@ test("dependents link within one employment and refuse across it", { skip: !DB }
       actorId: h.adminId,
       employmentId: empA.employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
       effectiveFrom: "2026-03-01",
     });
@@ -792,6 +541,7 @@ test("termination ends live enrolments in the same transaction", { skip: !DB }, 
       actorId: h.adminId,
       employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
       effectiveFrom: "2026-02-01",
     });
@@ -801,6 +551,7 @@ test("termination ends live enrolments in the same transaction", { skip: !DB }, 
       actorId: h.adminId,
       employmentId,
       planId: otherPlan.planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, otherPlan.planId),
       windowId,
       effectiveFrom: "2026-03-01",
       effectiveTo: "2026-06-30",
@@ -810,9 +561,11 @@ test("termination ends live enrolments in the same transaction", { skip: !DB }, 
       actorId: h.adminId,
       employmentId,
       planId: otherPlan.planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, otherPlan.planId),
       windowId,
       effectiveFrom: "2026-12-01",
     });
+    await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollments set status='cancelled' where org_id=${h.org.orgId} and id=${future.id}`),/lifecycle transition is not permitted/i);
     const draft = await createChangeRequestDraft({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -842,6 +595,7 @@ test("termination ends live enrolments in the same transaction", { skip: !DB }, 
       actorId: h.adminId,
       employmentId: emp2,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
       effectiveFrom: "2026-02-01",
     });
@@ -874,6 +628,7 @@ test("RLS isolates orgs and self scope holds", { skip: !DB }, async () => {
       actorId: h.employeeId,
       employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
       effectiveFrom: "2026-03-01",
       selfService: true,
@@ -886,6 +641,7 @@ test("RLS isolates orgs and self scope holds", { skip: !DB }, async () => {
         actorId: h.employeeId,
         employmentId: otherId,
         planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
         windowId,
         effectiveFrom: "2026-03-01",
         selfService: true,
@@ -926,6 +682,7 @@ test("storage guards refuse event rewrites and history deletes", { skip: !DB }, 
       actorId: h.adminId,
       employmentId,
       planId,
+      contributionTerms: await seededContributionTerms(h.org.orgId, planId),
       windowId,
       effectiveFrom: "2026-03-01",
     });

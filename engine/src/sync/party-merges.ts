@@ -58,6 +58,10 @@ export interface PartyMergeResult {
  * Catalog-verified: party-merge-catalog.test asserts this list plus
  * ROLE_PARTY_REFS and GUARDED_PARTY_REFS cover every FK to parties(id).
  */
+const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
+  ["pay_run_benefit_allocations", "employee_party_id"],
+];
+
 const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
   ["addresses", "party_id"],
   ["ap_capture_items", "vendor_candidate_id"],
@@ -739,6 +743,12 @@ async function applyMergeTx(
     }
   }
 
+  for (const [table, column] of IMMUTABLE_PARTY_REFS) {
+    const referenced = (await tx.execute(sql`select id from ${sql.identifier(table)}
+      where org_id=${orgId} and ${sql.identifier(column)}=${absorbedId} limit 1`)).rows;
+    if (referenced.length) throw new PartyMergeError("This employee has native benefit payroll evidence. Keep the employee identities separate to preserve its recorded payroll subject.");
+  }
+
   {
     const moved: Record<string, number> = {};
     const retained: Record<string, number> = {};
@@ -835,10 +845,11 @@ async function applyMergeTx(
 }
 
 /**
- * Every typed party column the merge follows, for the catalog test: plain
- * moves plus role moves plus guarded moves plus the period-aware journal move.
+ * Every typed party column covered by merge policy: movable references,
+ * immutable payroll subjects, and the period-aware journal move.
  */
 export const PARTY_MERGE_REF_COVERAGE: readonly (readonly [table: string, column: string])[] = [
+  ...IMMUTABLE_PARTY_REFS,
   ...SIMPLE_PARTY_REFS,
   ...ROLE_PARTY_REFS,
   ...GUARDED_PARTY_REFS.map((ref) => [ref.table, ref.column] as const),
@@ -852,6 +863,7 @@ export async function findPartyReferences(
   partyId: string,
 ): Promise<PartyMergeMove[]> {
   const branches = [
+    ...IMMUTABLE_PARTY_REFS,
     ...SIMPLE_PARTY_REFS,
     ...ROLE_PARTY_REFS,
     ...GUARDED_PARTY_REFS.map((ref) => [ref.table, ref.column] as const),

@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { UrlDrawer } from '@openbooks/ui'
 import { useRouter } from 'next/navigation'
 import { ChoiceCards } from '../../../../components/builder/builder-kit'
@@ -33,6 +34,7 @@ const CARD_ICONS: Record<string, LucideIcon> = {
 
 export function BenefitTypeCards({ cards, closeHref, title }: { cards: OverviewCard[]; closeHref?: string; title?: string }) {
   const router = useRouter()
+  const t = useTranslations('hrm')
   const choices = (
     <ChoiceCards
       value=""
@@ -52,5 +54,5 @@ export function BenefitTypeCards({ cards, closeHref, title }: { cards: OverviewC
       }}
     />
   )
-  return closeHref ? <UrlDrawer open closeHref={closeHref} title={title ?? ''} size="lg"><div className="p-4">{choices}</div></UrlDrawer> : choices
+  return closeHref ? <UrlDrawer open closeHref={closeHref} title={title ?? ''} size="lg"><div className="space-y-5 p-4"><p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.scopeHint')}</p>{choices}</div></UrlDrawer> : choices
 }

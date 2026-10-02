@@ -1,5 +1,5 @@
-import { daysInCivilMonth } from "../platform/civil-date.ts";
-const at = (value: string) => new Date(`${value}T00:00:00Z`);
+import { daysInCivilMonth, parseIsoDate } from "../platform/civil-date.ts";
+const at = parseIsoDate;
 
 /**
  * Completed months of continuous service between two ISO dates.
@@ -31,6 +31,10 @@ export interface ServiceTierRow {
   accrualValue: string | null;
   eligible: boolean | null;
   isActive: boolean;
+  employerSubsidiaryId?: string | null;
+  annualDays?: string | null;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
 }
 
 /**
@@ -59,6 +63,8 @@ export interface ResolvedServiceTiers {
   planAccrualValues: Map<string, string>;
   /** componentId → whether service has made the component eligible. */
   componentEligibility: Map<string, boolean>;
+  /** Annual time allowance remains separate from monetary vacation pay. */
+  planAnnualDays: Map<string, string>;
 }
 
 /** Group tier rows by target and resolve each ladder. Pure. */
@@ -66,10 +72,12 @@ export function resolveServiceTiersFrom(
   rows: readonly ServiceTierRow[],
   months: number | null,
   hiredOn: string | null,
+  employerSubsidiaryId?: string | null,
 ): ResolvedServiceTiers {
   const planAccrualValues = new Map<string, string>();
   const componentEligibility = new Map<string, boolean>();
-  if (months === null) return { hiredOn, months, planAccrualValues, componentEligibility };
+  const planAnnualDays = new Map<string, string>();
+  if (months === null) return { hiredOn, months, planAccrualValues, componentEligibility, planAnnualDays };
 
   const byPlan = new Map<string, ServiceTierRow[]>();
   const byComponent = new Map<string, ServiceTierRow[]>();
@@ -84,13 +92,18 @@ export function resolveServiceTiersFrom(
       byComponent.set(row.componentId, list);
     }
   }
+  const scopedLadder = (list: ServiceTierRow[]): ServiceTierRow[] => {
+    const employerRows = employerSubsidiaryId ? list.filter((row) => row.isActive && row.employerSubsidiaryId === employerSubsidiaryId) : [];
+    return employerRows.length > 0 ? employerRows : list.filter((row) => row.employerSubsidiaryId == null);
+  };
   for (const [planId, list] of byPlan) {
-    const tier = pickServiceTier(list, months);
+    const tier = pickServiceTier(scopedLadder(list), months);
     if (tier?.accrualValue != null) planAccrualValues.set(planId, tier.accrualValue);
+    if (tier?.annualDays != null) planAnnualDays.set(planId, tier.annualDays);
   }
   for (const [componentId, list] of byComponent) {
-    const tier = pickServiceTier(list, months);
+    const tier = pickServiceTier(scopedLadder(list), months);
     if (tier?.eligible != null) componentEligibility.set(componentId, tier.eligible);
   }
-  return { hiredOn, months, planAccrualValues, componentEligibility };
+  return { hiredOn, months, planAccrualValues, componentEligibility, planAnnualDays };
 }

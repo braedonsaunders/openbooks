@@ -1,3 +1,4 @@
+import type { EnrollmentContributionSummary } from "@openbooks/engine/hrm/benefits";
 import "server-only";
 import { z } from "zod";
 import {
@@ -1040,7 +1041,7 @@ const enrollmentStatuses = ['elected', 'waived', 'pending_approval', 'active', '
 const hrmBenefits: AssistantToolDef = {
   name: 'hrm_benefits',
   description:
-    'Benefit enrollment windows and elections for one employment (or every visible employment): window, plan, coverage tier, status, and stored per-period amounts. Read-only.',
+    'Benefit enrollment windows and elections for one employment (or every visible employment): window, program, eligibility class, status, and effective contribution elections with their declared units. Read-only.',
   category: 'search',
   gate: { mode: 'anyOf', perms: ['hrm.benefits.read'] },
   feature: 'hrm',
@@ -1073,9 +1074,8 @@ const hrmBenefits: AssistantToolDef = {
         id: string;
         status: string;
         planCode: string;
-        coverageLevelKey: string | null;
-        employeeAmountPerPeriod: string | null;
-        employerAmountPerPeriod: string | null;
+        classKey: string | null;
+        contributions: readonly EnrollmentContributionSummary[];
         currency: string;
       }[] = [];
       // Sequential, never parallel: one pinned client per loader call, the
@@ -1092,9 +1092,8 @@ const hrmBenefits: AssistantToolDef = {
             id: election.id,
             status: election.status,
             planCode: election.planCode,
-            coverageLevelKey: election.coverageLevelKey,
-            employeeAmountPerPeriod: election.employeeAmountPerPeriod,
-            employerAmountPerPeriod: election.employerAmountPerPeriod,
+            classKey: election.classKey,
+            contributions: election.contributions,
             currency: election.currency,
           });
         }
@@ -1187,7 +1186,7 @@ const hrmMe: AssistantToolDef = {
                   planName: election.planName,
                   coverageLabel: election.coverageLabel,
                   status: election.status,
-                  employeeAmountPerPeriod: election.employeeAmountPerPeriod,
+                  contributions: election.contributions,
                   currency: election.currency,
                 })),
                 openWindows: benefits.openWindows.map((window) => ({

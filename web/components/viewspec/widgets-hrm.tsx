@@ -24,7 +24,6 @@ import { QualificationRequirementManager, QualificationRequirementRemove } from 
 import { ComplianceActions } from '../../app/(app)/hrm/compliance/ComplianceActions'
 import { GenerateDialog } from '../../app/(app)/hrm/compliance/GenerateDialog'
 // HR-13 end
-import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRowActions'
 import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
 import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
 import { AwardBuilderDrawer } from '../../app/(app)/hrm/benefits/AwardBuilderDrawer'
@@ -405,18 +404,6 @@ export const HRM_WIDGETS = {
       />
     )
   },
-  /** One row's approve island inside the shared enrolments table:
-   *  pending rows carry it for managers; every other status renders
-   *  nothing, refreshing the list after the transition. */
-  'hrm-enrollment-actions': (props) => (
-    <EnrollmentRowActions
-      enrollmentId={str(props, 'enrollmentId') ?? ''}
-      enrollmentStatus={str(props, 'enrollmentStatus') ?? ''}
-      approveLabel={str(props, 'approveLabel') ?? ''}
-      failedLabel={str(props, 'failedLabel') ?? ''}
-      canManage={props.canManage === true}
-    />
-  ),
   /** Program-type cards as one panel body: insured plans resolve to the
    *  rehomed Setup drawers, employer-defined families to the builder. */
   'hrm-benefit-type-cards': (props) => (
@@ -457,6 +444,7 @@ export const HRM_WIDGETS = {
           : 'reward'
       }
       familyLocked={props.familyLocked === true}
+      currencyOptions={(props.currencyOptions as ComponentProps<typeof ProgramBuilderDrawer>['currencyOptions']) ?? []}
       canConfigureApprovalPolicies={props.canConfigureApprovalPolicies === true}
       subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}
@@ -480,6 +468,7 @@ export const HRM_WIDGETS = {
         closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
         initialFamily={seed.family}
         familyLocked
+        currencyOptions={(props.currencyOptions as ComponentProps<typeof ProgramBuilderDrawer>['currencyOptions']) ?? []}
         canConfigureApprovalPolicies={props.canConfigureApprovalPolicies === true}
         subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
         departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}

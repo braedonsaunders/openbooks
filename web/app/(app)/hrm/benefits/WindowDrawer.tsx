@@ -108,7 +108,7 @@ export function WindowDrawer({
                     {e.coverageLabel ? ` · ${e.coverageLabel}` : ''}
                   </span>
                   <span className="ml-auto text-sm tabular-nums text-slate-600 dark:text-slate-300">
-                    {e.employeeAmountPerPeriod ?? '–'} / {e.employerAmountPerPeriod ?? '–'} {e.currency}
+                    {[e.employeeContributionLabel, e.employerContributionLabel].filter(Boolean).join(' · ') || '–'}
                   </span>
                   <span className="basis-full text-xs text-slate-400 dark:text-slate-500">{e.statusLabel}</span>
                 </li>

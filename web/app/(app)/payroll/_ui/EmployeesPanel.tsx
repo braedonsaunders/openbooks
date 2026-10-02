@@ -130,6 +130,7 @@ export interface PackProfileDeclaration {
 export type ProfileRow = {
   id: string
   employee_party_id: string
+  employment_id?: string
   employee_name: string
   pay_schedule_id: string
   schedule_name: string | null
@@ -179,8 +180,6 @@ export type ProfileRow = {
   br_dependentes: number | null
   br_pensao_mensal: string | null
   br_salario_familia_filhos: number | null
-  vacation_percent: string | null
-  vacation_method: 'accrue' | 'pay_each_period'
   filing_account_id: string | null
   stub_delivery: 'email' | 'print' | 'both'
   /** Payroll override of the pay rail; null inherits the party preference. */
@@ -300,8 +299,6 @@ export function ProfileEditor(props: {
   const [ficaExempt, setFicaExempt] = useState(p.fica_exempt)
   const [futaExempt, setFutaExempt] = useState(p.futa_exempt)
   const [suiExempt, setSuiExempt] = useState(p.sui_exempt)
-  const [vacationPercent, setVacationPercent] = useState(p.vacation_percent ?? '')
-  const [vacationMethod, setVacationMethod] = useState<'accrue' | 'pay_each_period'>(p.vacation_method)
   const [isActive, setIsActive] = useState(p.is_active)
   const [sin, setSin] = useState('')
   const [filingAccountId, setFilingAccountId] = useState(p.filing_account_id ?? '')
@@ -439,7 +436,7 @@ export function ProfileEditor(props: {
     cppExempt, eiExempt, taxExempt, filingStatus, multipleJobs,
     dependentCredits, otherIncomeAnnual, deductionsAnnual,
     w4Pre2020, w4Allowances, ficaExempt, futaExempt, suiExempt,
-    vacationPercent, vacationMethod, isActive, sin,
+    isActive, sin,
     filingAccountId, stubDelivery, paymentMethod, paidOnCommission, occupationClass,
     extraColumns, rowAnswers,
   ])
@@ -577,8 +574,6 @@ export function ProfileEditor(props: {
           ficaExempt: declaredColumns.has('fica_exempt') && ficaExempt,
           futaExempt: declaredColumns.has('futa_exempt') && futaExempt,
           suiExempt: declaredColumns.has('sui_exempt') && suiExempt,
-          vacationPercent: vacationPercent || null,
-          vacationMethod,
           filingAccountId: filingAccountId || null,
           stubDelivery,
           paymentMethod: paymentMethod || null,
@@ -1119,32 +1114,6 @@ export function ProfileEditor(props: {
         ))}
         </>)}
 
-        {showGeneral && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="pp-vac-pct">{t('fields.vacationPercent')}</Label>
-            <Input
-              id="pp-vac-pct"
-              inputMode="decimal"
-              value={vacationPercent}
-              onChange={(e) => setVacationPercent(e.target.value)}
-              placeholder="4.00"
-            />
-          </div>
-          <div>
-            <Label htmlFor="pp-vac-method">{t('fields.vacationMethod')}</Label>
-            <Select
-              id="pp-vac-method"
-              value={vacationMethod}
-              onChange={(e) => setVacationMethod(e.target.value as 'accrue' | 'pay_each_period')}
-            >
-              <option value="accrue">{t('vacation.accrue')}</option>
-              <option value="pay_each_period">{t('vacation.pay_each_period')}</option>
-            </Select>
-          </div>
-        </div>
-        )}
-
         <div className="space-y-2">
           {sectionFlags.map((entry) => (
             <label
@@ -1260,7 +1229,6 @@ export function ProfileEditor(props: {
                   ),
               )
               : null}
-            {roRow('vacation', t('fields.vacationPercent'), `${vacationPercent || '—'} · ${t(`vacation.${vacationMethod}`)}`)}
             {roRow('active', t('fields.isActive'), isActive ? t('active') : t('inactive'))}
           </div>
         )}

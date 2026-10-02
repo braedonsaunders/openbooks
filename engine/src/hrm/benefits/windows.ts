@@ -1,3 +1,4 @@
+import { cancelEnrollmentFlows } from "./enrollments.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
@@ -314,6 +315,7 @@ export async function closeEnrollmentWindow(query: {
       `)
     ).rows;
     for (const row of pending) {
+      await cancelEnrollmentFlows(orgId,actorId,row.id);
       await db.execute(sql`
         insert into hrm_benefit_events (org_id, enrollment_id, kind, reason, actor, created_by)
         values (${orgId}, ${row.id}, 'cancelled',

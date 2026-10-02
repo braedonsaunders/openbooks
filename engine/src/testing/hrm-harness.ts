@@ -315,8 +315,8 @@ export async function seedEmployment(
   }
   const employmentId = randomUUID();
   await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
+    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision, service_start, service_start_provenance)
+    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1, ${opts.withVersion === false ? null : opts.from ?? "2020-01-01"}::date, ${opts.withVersion === false ? null : "Declared fixture hire date"})
   `);
   if (opts.withVersion !== false) {
     await db.execute(sql`
@@ -760,45 +760,32 @@ export async function seedComponent(
 
 export type PlanSeed = { planId: string; employeeComponentId: string; employerComponentId: string };
 
-/**
- * Health benefit plan with deduction and employer-contribution components.
- * The benefits copy is the superset: `levels: true` adds the single/family
- * tiers and any other key is applied as a column update.
- */
-export async function seedPlan(
-  orgId: string,
-  overrides: Record<string, unknown> = {},
-): Promise<PlanSeed> {
-  const employeeComponentId = await seedComponent(orgId, { code: `DED_${randomUUID().slice(0, 6)}`, kind: "deduction" });
-  const employerComponentId = await seedComponent(orgId, { code: `ER_${randomUUID().slice(0, 6)}`, kind: "employer_contribution" });
-  const planId = randomUUID();
-  const code = `MED_${randomUUID().slice(0, 6)}`;
-  await db.execute(sql`
-    insert into hrm_benefit_plans
-      (id, org_id, code, name, kind, currency, employee_cost_basis, employee_cost,
-       employer_cost_basis, employer_cost, employee_pay_component_id,
-       employer_pay_component_id, proration_basis, waiting_period_days,
-       requires_approval, is_active, effective_from)
-    values (${planId}, ${orgId}, ${code}, ${code}, 'health', 'USD',
-            'per_month', '250.0000', 'per_month', '500.0000',
-            ${employeeComponentId}, ${employerComponentId},
-            'full_month', 0, false, true, '2020-01-01')
-  `);
-  if (overrides.levels === true) {
-    await db.execute(sql`
-      insert into hrm_benefit_plan_levels (org_id, plan_id, level_key, label, employee_cost, employer_cost, position)
-      values (${orgId}, ${planId}, 'single', 'Employee only', '250.0000', '500.0000', 0),
-             (${orgId}, ${planId}, 'family', 'Family', '600.0000', '900.0000', 1)
-    `);
-  }
-  for (const [column, value] of Object.entries(overrides)) {
-    if (column === "levels") continue;
-    await db.execute(sql`
-      update hrm_benefit_plans set ${sql.identifier(column)} = ${value as string}
-       where org_id = ${orgId} and id = ${planId}
-    `);
+/** Native health offer with independent recurring deduction and employer contribution rules. */
+export async function seedPlan(orgId: string, overrides: Record<string, unknown> = {}): Promise<PlanSeed> {
+  const employeeComponentId = await seedComponent(orgId, { kind: "deduction" });
+  const employerComponentId = await seedComponent(orgId, { kind: "employer_contribution" });
+  const planId = randomUUID(), code = `MED_${randomUUID().slice(0, 6)}`;
+  await db.execute(sql`insert into hrm_benefit_plans
+    (id,org_id,code,name,kind,currency,waiting_period_days,approval_mode,is_active,effective_from)
+    values (${planId},${orgId},${code},${code},'health','USD',0,'none',true,'2020-01-01')`);
+  await db.execute(sql`insert into hrm_benefit_contribution_rules
+    (org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,proration,effective_from)
+    values (${orgId},${planId},'employee','Employee coverage','employee_deduction',${employeeComponentId},'per_period',250,'elected_rate','none','2020-01-01'),
+      (${orgId},${planId},'employer','Employer coverage','employer_contribution',${employerComponentId},'per_period',500,'elected_rate','none','2020-01-01')`);
+  if (overrides.classes === true) await db.execute(sql`insert into hrm_benefit_contribution_classes (org_id,plan_id,class_key,name)
+    values (${orgId},${planId},'single','Employee only'),(${orgId},${planId},'family','Family')`);
+  for (const [column,value] of Object.entries(overrides)) {
+    if (column === 'classes') continue;
+    await db.execute(sql`update hrm_benefit_plans set ${sql.identifier(column)}=${value as string} where org_id=${orgId} and id=${planId}`);
   }
   return { planId, employeeComponentId, employerComponentId };
+}
+
+/** Explicit fixed elections for native contribution fixtures; callers can amend or omit them to test admission. */
+export async function seededContributionTerms(orgId: string, planId: string): Promise<{ ruleId: string; electionMode: 'fixed'; electedRate: string }[]> {
+  const rows = (await db.execute<{ ruleId: string; electedRate: string }>(sql`select id as "ruleId",rate::text as "electedRate"
+    from hrm_benefit_contribution_rules where org_id=${orgId} and plan_id=${planId} order by position,rule_key`)).rows;
+  return rows.map(row => ({ ...row, electionMode: 'fixed' }));
 }
 
 export type EnrollmentWindowSeed = {

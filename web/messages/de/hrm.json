@@ -150,7 +150,7 @@
       "openWindows": "Offen",
       "noOpenWindow": "Kein Anmeldefenster ist offen.",
       "pendingSub": "Ausstehende Genehmigungen",
-      "missingSub": "Anmeldungen ohne Eingaben"
+      "missingSub": "Anmeldungen ohne Beitragswahl"
     }
   },
   "queue": {
@@ -1388,7 +1388,7 @@
   },
   "benefits": {
     "title": "Leistungen",
-    "description": "Pläne, Anmeldefenster, Anmeldungen und die monatlichen Beträge für die Abrechnung.",
+    "description": "Definieren Sie hier Zusatzleistungen und die Beitragswahlen der Beschäftigten. Die Lohnabrechnung berechnet die tatsächlichen Beträge und verwaltet Steuerbehandlung, Buchungen und Anspruchskonten.",
     "windowsTitle": "Anmeldefenster",
     "enrolmentsTitle": "Anmeldungen",
     "segmentsLabel": "Anzeigen",
@@ -1704,7 +1704,7 @@
         "coverage": "Deckung",
         "status": "Status",
         "effective": "Wirksam",
-        "monthly": "Abzug / Periode",
+        "monthly": "Arbeitnehmerbeiträge",
         "window": "Fenster",
         "kind": "Art",
         "range": "Zeitraum",
@@ -1713,7 +1713,7 @@
       },
       "electionsEmpty": "Keine Wahlen",
       "electionsEmptyDescription": "Gewählte Deckung steht hier.",
-      "monthlyHint": "Der gespeicherte Betrag, den die Abrechnung je Periode abzieht — nie neu berechnet.",
+      "monthlyHint": "Gewählte Sätze behalten ihre festgelegten Einheiten; die Lohnabrechnung berechnet die tatsächlichen Abzüge.",
       "windowsTitle": "Offene Anmeldefenster",
       "windowsEmpty": "Kein offenes Fenster",
       "windowsEmptyDescription": "Fenster Ihres Arbeitgebers stehen hier, solange sie offen sind.",
@@ -2665,7 +2665,7 @@
     "newProgram": "Neues Programm",
     "newAward": "Neue Zuwendung",
     "programsEmptyTitle": "Noch keine Leistungsprogramme",
-    "programsEmptyDescription": "Legen Sie das erste arbeitgeberfinanzierte Programm für Prämien, Zulagen oder Anreize an.",
+    "programsEmptyDescription": "Erstellen Sie einen Versicherungs-, Spar-, Belohnungs-, Zulagen-, Anreiz- oder individuellen Plan.",
     "awardsEmptyTitle": "Noch keine Zuwendungen",
     "awardsEmptyDescription": "Zuwendungen erscheinen hier, sobald ein Programm sie gewährt.",
     "loadFailed": "Der Leistungsbereich konnte nicht geladen werden.",
@@ -2735,7 +2735,7 @@
       "allowance": "Zulage",
       "incentive": "Anreiz",
       "custom": "Eigen",
-      "insured": "Versicherter Leistungsplan"
+      "insured": "Versicherungs- oder Sparplan"
     },
     "familyHints": {
       "reward": "Einmalige Anerkennung: Boni, Geschenkkarten, Spontanprämien.",
@@ -2795,7 +2795,7 @@
     },
     "columns": {
       "program": "Programm",
-      "family": "Familie",
+      "family": "Typ",
       "value": "Wert",
       "effective": "Gültig",
       "status": "Status",
@@ -2923,7 +2923,11 @@
       "openPayrollSetup": "Abrechnungseinrichtung öffnen",
       "accountsPrerequisite": "Keine buchbaren Bemessungskonten sichtbar. Ergänzen Sie die benötigten Konten oder lassen Sie Ihren Rechtsträgerzugriff von der Finanzabteilung prüfen. Aktualisieren Sie danach die Optionen.",
       "openAccounts": "Kontenplan öffnen",
-      "refreshOptions": "Optionen aktualisieren"
+      "refreshOptions": "Optionen aktualisieren",
+      "typeTitle": "Neues Programm: {type}",
+      "chooseCurrency": "Währung wählen",
+      "currencyHint": "Die Währungen folgen dem gewählten Arbeitgeber und den Unternehmensfunktionen. Die Abrechnung verarbeitet Zuwendungen in der Programmwährung.",
+      "currencyUnavailable": "Wählen Sie eine für den Arbeitgeber verfügbare Währung."
     },
     "awardBuilderTitle": "Neue Anerkennung",
     "awardFields": {
@@ -3029,6 +3033,24 @@
     "directProcessingHint": "Flows hat die direkte Verarbeitung autorisiert; diese Prämie ist bereit für die Gehaltsabrechnung.",
     "rewardProgramPrerequisite": "Erstellen und aktivieren Sie vor dem Erfassen einer Prämie ein Prämien- oder Zulagenprogramm.",
     "createRewardProgram": "Prämienprogramm erstellen",
-    "noApprovalSubmissionHint": "Keine Genehmigungen erforderlich. Die autorisierte Einreichung wurde protokolliert; diese Prämie ist für die Lohnabrechnung bereit."
+    "noApprovalSubmissionHint": "Keine Genehmigungen erforderlich. Die autorisierte Einreichung wurde protokolliert; diese Prämie ist für die Lohnabrechnung bereit.",
+    "awardCurrencyHint": "Vom gewählten Programm übernommen; die Abrechnung rechnet Prämienwährungen nicht um.",
+    "rewardCreateHint": "Gewähren Sie Leistungen gemäß Wert, Währung und Regeln eines aktiven Programms. Angebote werden unter Programme konfiguriert.",
+    "programPurpose": {
+      "reward": "Definieren Sie die Anerkennung hier und vergeben Sie Leistungen unter Prämien. Bereite Zuwendungen erscheinen unter Auszahlungen.",
+      "allowance": "Definieren Sie einen festen Zuschuss und dessen Zeitplan. Zuwendungen folgen diesen Regeln; kein Ausgabenkonto und keine Kostenerstattung entsteht.",
+      "incentive": "Definieren Sie leistungsabhängige Auszahlungen. Simulieren und rechnen Sie unter Anreize ab; genehmigte Ergebnisse erscheinen unter Auszahlungen.",
+      "custom": "Definieren Sie eine Arbeitgeberzuwendung mit klaren Regeln. Erfassen Sie diese unter Prämien und liefern Sie sie unter Auszahlungen aus."
+    },
+    "scopeHint": "Leistungen definiert Arbeitgeberangebote und Zuwendungen. Die Abrechnung verwaltet Gehalt, Steuern, gesetzliche Beiträge und Abrechnungsläufe.",
+    "views": {
+      "overview": "Arbeitgeberleistungen und Zuwendungen mit Abrechnungsanbindung.",
+      "programs": "Definieren Sie alle Angebote hier. Beschäftigte melden sich zu Plänen an; Prämien und Anreize folgen ihren Programmen.",
+      "enrolments": "Melden Sie Beschäftigte zu Versicherungs- und Sparplänen an. Verwalten Sie Zeiträume über Anmeldefenster.",
+      "rewards": "Erfassen Sie Zuwendungen aus aktiven Programmen. Wiederverwendbare Angebote konfigurieren Sie unter Programme.",
+      "incentives": "Verwalten Sie Leistungsprogramme. Öffnen Sie einen Datensatz zum Simulieren, Berechnen und Abrechnen.",
+      "payouts": "Übergeben Sie bereite Zuwendungen an die Abrechnung und verfolgen Sie die Historie. Erstellung unter Prämien, Berechnung unter Anreize."
+    },
+    "configureApprovals": "Genehmigungen konfigurieren"
   }
 }

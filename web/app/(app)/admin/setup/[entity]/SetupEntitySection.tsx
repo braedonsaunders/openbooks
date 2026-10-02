@@ -19,6 +19,7 @@ import { Pagination } from '../../../../../components/pagination'
 import { mergeHref, parseListParams, parsePrefixedListParams, pickString } from '../../../../../lib/list-params'
 import { setupParentScope } from '../../../../../lib/setup/parent-scope'
 import { setupEntityForFeatureState, setupChildEntities, resolveSetupEntityGate, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
+import { setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
 import { setupEntityClientDescriptor } from '../../../../../lib/setup/types'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
@@ -106,13 +107,13 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
   t: (key: string) => string
 }) {
   if (!row) return []
-  return setupChildEntities(entity.key)
+  return (entity.recordChildren ?? setupChildEntities(entity.key))
     .filter((child) => resolveSetupEntityGate(child, features).enabled)
     .map((child) => {
       const binding = child.parentRecords!.find((owner) => owner.entityKey === entity.key)!
       return {
         key: child.key,
-        label: t(`entities.${child.key}.title`),
+        label: t(child.titleKey ?? `entities.${child.key}.title`),
         content: pickString(sp.setupTab) === child.key ? (
           <SetupEntitySection
             entity={{ ...child, ...(entity.readOnly ? { readOnly: true } : {}), columns: child.columns.filter((column) => column.key !== binding.fieldKey) }}
@@ -150,6 +151,7 @@ export async function SetupEntitySection({
   stacked = false,
   drawerOnly = false,
   mutationBasePath,
+  fixedFilter,
 }: {
   entity: SetupEntity;
   /** Server-side presentation slot; list querying and drawers remain shared. */
@@ -186,6 +188,8 @@ export async function SetupEntitySection({
   /** Compose the shared record editor under a host-owned unified list. */
   drawerOnly?: boolean
   mutationBasePath?: string
+  /** A server-authorized reference filter keeps record links within the native list. */
+  fixedFilter?: { fieldKey: string; value: string }
 }) {
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const gated = setupEntityForFeatureState(baseEntity, {
@@ -222,7 +226,7 @@ export async function SetupEntitySection({
   const listOptions = { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 }
   const list = paramPrefix ? parsePrefixedListParams(sp, paramPrefix, listOptions) : parseListParams(sp, listOptions)
   const parentScope = setupParentScope(entity, parent)
-  const children = setupChildEntities(entity.key)
+  const children = entity.recordChildren ?? setupChildEntities(entity.key)
   const closeHref = mergeHref(basePath, sp, {
     [rowParam]: undefined,
     ...(children.length ? { setupTab: undefined, childRow: undefined, childQ: undefined, childPage: undefined, childShowInactive: undefined } : {}),
@@ -244,7 +248,14 @@ export async function SetupEntitySection({
       : sql`and ${sql.raw(toSnake(filter.key))} = ${value}`,
   )
   const idColumn = entity.idColumn ?? 'id'
+  const fixedField = fixedFilter ? entity.fields.find((field) => field.key === fixedFilter.fieldKey && field.kind === 'ref') : undefined
+  if (fixedFilter && !fixedField) throw new Error('Setup record filter must name a declared reference field')
+  const fixedPredicate = fixedFilter ? sql`and ${sql.raw(toSnake(fixedFilter.fieldKey))}=${fixedFilter.value}` : sql``
+  const inheritedScope = baseEntity.fields.some((field) => ['worker-employments', 'benefit-plans', 'benefit-enrollment-configuration'].includes(field.ref ?? ''))
+    ? setupEntitySubsidiaryFilter(entity, allowedSubsidiaryIds) : sql``
   const rowFilter = sql`where 1 = 1
+    ${inheritedScope}
+    ${fixedPredicate}
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
     ${parentScope ? sql`and ${parentScope.predicate}` : sql``}
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
@@ -265,7 +276,10 @@ export async function SetupEntitySection({
 
   const refLabels: Record<string, Map<string, string>> = {}
   for (const [source, opts] of Object.entries(refOptions)) {
-    refLabels[source] = new Map(opts.map((o) => [o.value, o.label]))
+    const scopeField = entity.fields.find((field) => field.ref === source && field.refScopeField)?.refScopeField
+    const boundScope = scopeField ? parentScope?.fixedValues[scopeField] ?? fixedFilter?.value : undefined
+    const scopedOptions = boundScope === undefined ? opts : opts.filter((option) => option.scopeValue == null || option.scopeValue === String(boundScope))
+    refLabels[source] = new Map(scopedOptions.map((option) => [option.value, option.label]))
   }
 
   const open = openRow
@@ -277,6 +291,8 @@ export async function SetupEntitySection({
              where ${sql.raw(idColumn)} = ${openRow}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              ${parentScope ? sql`and ${parentScope.predicate}` : sql``}
+             ${inheritedScope}
+             ${fixedPredicate}
              ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
              limit 1`)
           return selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
@@ -390,7 +406,7 @@ export async function SetupEntitySection({
         <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            {t(`entities.${entity.key}.title`)}
+            {t(entity.titleKey ?? `entities.${entity.key}.title`)}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {t(`entities.${entity.key}.description`)}
@@ -437,7 +453,7 @@ export async function SetupEntitySection({
           <TableHeader>
             <TableRow>
               {entity.columns.map((c) => (
-                <TableHead key={c.key}>{t(`fields.${c.key}`)}</TableHead>
+                <TableHead key={c.key}>{t(c.labelKey ?? `fields.${c.key}`)}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -514,7 +530,7 @@ export async function SetupEntitySection({
           members={[]}
           refOptions={refOptions}
           closeHref={closeHref}
-          fixedValues={parentScope?.fixedValues}
+          fixedValues={parentScope?.fixedValues ?? (fixedFilter ? { [fixedFilter.fieldKey]: fixedFilter.value } : undefined)}
           stacked={stacked}
           nestedTabs={childTabs}
           mutationBasePath={mutationBasePath}

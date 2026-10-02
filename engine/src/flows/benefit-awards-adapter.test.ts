@@ -1,3 +1,5 @@
+import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
+import { benefitEnrollmentsFlowAdapter, benefitEnrollmentSubjectProfile } from "./benefit-enrollments-adapter.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
@@ -70,4 +72,17 @@ test("Benefits scheduled candidates fail closed without organization context", a
 test("invalid record IDs return no workflow context without querying the database", async () => {
   assert.equal(await benefitAwardsFlowAdapter.loadContext("not-an-id"), null);
   assert.equal(await benefitAwardsFlowAdapter.getStatus("not-an-id"), null);
+});
+
+test("Enrollment decisions use scoped native gates with configurable human independence", async () => {
+  assert.equal(getFlowAdapter(BENEFIT_ENROLLMENT_SUBJECT_KIND), benefitEnrollmentsFlowAdapter);
+  assert.equal(listFlowSubjectProfiles().filter(p => p.subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND).length, 1);
+  assert.equal(benefitEnrollmentSubjectProfile.supportsUngatedSubmission, true);
+  assert.equal(benefitEnrollmentsFlowAdapter.selfApprovalPolicy, "configurable");
+  assert.equal(hasFlowApprovalReleaseHandler(BENEFIT_ENROLLMENT_SUBJECT_KIND), true);
+  assert.equal(benefitEnrollmentsFlowAdapter.scope.via, "employment");
+  await assert.rejects(benefitEnrollmentsFlowAdapter.changeStatus("election", "active", {orgId:"org"}), /submission and approval/);
+  await assert.rejects(benefitEnrollmentsFlowAdapter.setField("election", "electedRate", "5", {orgId:"org"}), /immutable/);
+  await assert.rejects(benefitEnrollmentsFlowAdapter.findCandidateIds!(10), /ambient organization/);
+  assert.equal(await benefitEnrollmentsFlowAdapter.loadContext("not-an-id"), null);
 });

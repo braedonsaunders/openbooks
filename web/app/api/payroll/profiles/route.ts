@@ -41,7 +41,8 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Employee payroll profiles (TD1/W-4 facts: schedule, jurisdiction, claims,
- * exemptions, vacation policy). One profile per employee — POST upserts on the
+ * exemptions). Vacation policy is configured through employment-effective
+ * vacation terms. One profile per employee — POST upserts on the
  * employee. Claim amounts and exemptions are confidential; the whole surface
  * is gated on payroll.manage.
  */
@@ -77,7 +78,6 @@ const profileBodySchema = z.strictObject({
   province: z.string().optional(),
   labourJurisdiction: z.string().nullable().optional(),
   payBasis: z.enum(['hourly', 'salary']).optional(),
-  vacationMethod: z.enum(['accrue', 'pay_each_period']).optional(),
   filingStatus: z.string().nullable().optional(),
   filingAccountId: profileUuid('filingAccountId'),
   stubDelivery: z.enum(STUB_DELIVERY_OPTIONS, { error: 'stubDelivery must be email, print, or both' }).optional(),
@@ -95,7 +95,6 @@ const profileBodySchema = z.strictObject({
   dependentCredits: optionalProfileMoney,
   otherIncomeAnnual: optionalProfileMoney,
   deductionsAnnual: optionalProfileMoney,
-  vacationPercent: optionalProfileMoney,
   federalClaimCode: optionalCount,
   provincialClaimCode: optionalCount,
   w4Allowances: optionalCount,
@@ -462,9 +461,9 @@ export const GET = defineRoute({
       const defaultCountry = subsidiaryCountry && subsidiaryCountry in PAYROLL_COUNTRY_PACKS
         ? subsidiaryCountry
         : installed.length === 1 ? installed[0]! : null
-      const [profileRes, schedulesRes] = (await Promise.all([
+      const [profileRes, schedulesRes, employmentsRes] = (await Promise.all([
         db.execute(sql`
-          select prof.id, prof.employee_party_id, p.display_name as employee_name,
+          select prof.id, prof.employee_party_id, prof.employment_id, p.display_name as employee_name,
                  prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
                  prof.labour_jurisdiction, prof.pay_basis,
                  prof.federal_claim_code, prof.federal_claim_amount,
@@ -480,7 +479,7 @@ export const GET = defineRoute({
                  prof.es_situacion_laboral, prof.es_contrato_temporal,
                  prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
                  prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
-                 prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3,
+                 prof.is_active, prof.sin_last3,
                  prof.filing_account_id, fa.account_number as filing_account_number,
                  prof.stub_delivery, prof.payment_method, prof.paid_on_commission,
                  prof.statutory_occupation_class
@@ -494,6 +493,9 @@ export const GET = defineRoute({
            where org_id = ${gate.user.orgId} and is_active
              ${payrollVisibleScheduleFilter(gate)}
            order by name`),
+        db.execute<{ id: string }>(sql`select id from worker_employments
+          where org_id=${gate.user.orgId} and worker_party_id=${employee}
+          ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, gate.allowedSubsidiaryIds)} order by id`),
       ]))
       const profileAccountDenied = await guardPayrollFilingAccounts(
         gate,
@@ -545,6 +547,11 @@ export const GET = defineRoute({
       }
       return NextResponse.json({
         profile: profileRes.rows[0] ?? null,
+        employmentId: (() => {
+          const linked = (profileRes.rows[0] as { employment_id?: string } | undefined)?.employment_id
+          if (linked) return employmentsRes.rows.some(row => row.id === linked) ? linked : null
+          return employmentsRes.rows.length === 1 ? employmentsRes.rows[0]!.id : null
+        })(),
         derivedProfileColumns,
         storedCertificates: storedRes.rows,
         schedules: schedulesRes.rows,
@@ -557,7 +564,7 @@ export const GET = defineRoute({
       })
     }
     const profiles = (await db.execute<Record<string, unknown>>(sql`
-      select prof.id, prof.employee_party_id, p.display_name as employee_name,
+      select prof.id, prof.employee_party_id, prof.employment_id, p.display_name as employee_name,
              prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
              prof.labour_jurisdiction, prof.pay_basis,
              prof.federal_claim_code, prof.federal_claim_amount,
@@ -573,7 +580,7 @@ export const GET = defineRoute({
              prof.es_situacion_laboral, prof.es_contrato_temporal,
              prof.jp_hyojun_hoshu, prof.jp_kaigo_dainigou,
              prof.br_dependentes, prof.br_pensao_mensal, prof.br_salario_familia_filhos,
-             prof.vacation_percent, prof.vacation_method, prof.is_active,
+             prof.is_active,
              prof.filing_account_id, fa.account_number as filing_account_number,
              prof.stub_delivery, prof.payment_method, prof.paid_on_commission,
              prof.statutory_occupation_class
@@ -707,7 +714,6 @@ export const POST = defineRoute({
       w4Allowances = n
     }
     const payBasis = body.payBasis === 'salary' ? 'salary' : 'hourly'
-    const vacationMethod = body.vacationMethod === 'pay_each_period' ? 'pay_each_period' : 'accrue'
     // Filing identity + stub delivery. A null filing account means "the country
     // pack's default account", which is how single-account employers stay.
     const filingAccountId = body.filingAccountId == null || body.filingAccountId === ''
@@ -850,31 +856,6 @@ export const POST = defineRoute({
       }
       money[key] = normalizeMoney(value)
     }
-    let vacationPercent: string | null = null
-    if (body.vacationPercent !== null && body.vacationPercent !== undefined && body.vacationPercent !== '') {
-      const vacationRaw = canonicalDecimal(body.vacationPercent, 4)
-      // vacation_percent is numeric(7,4): three whole digits for the same reason.
-      if (vacationRaw === null) {
-        return NextResponse.json(
-          { error: decimalNullRefusal('vacationPercent', 'a percentage', body.vacationPercent, 4) },
-          { status: 422 },
-        )
-      }
-      if (compareDecimal(vacationRaw, '0') < 0) {
-        return NextResponse.json(
-          { error: `vacationPercent cannot be negative — got ${vacationRaw}` },
-          { status: 422 },
-        )
-      }
-      if (wholeDigits(vacationRaw) > 3) {
-        return NextResponse.json(
-          { error: `vacationPercent is limited to 3 digits before the decimal point — got ${wholeDigits(vacationRaw)}` },
-          { status: 422 },
-        )
-      }
-      vacationPercent = normalizeMoney(vacationRaw)
-    }
-
     return withOrgTransaction(orgId, async () => {
       const refs = (await Promise.all([
         db.execute(sql`
@@ -1049,7 +1030,7 @@ export const POST = defineRoute({
            authorized_federal_credits, authorized_provincial_credits,
            filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
            w4_pre_2020, w4_allowances, fica_exempt, futa_exempt, sui_exempt,
-           cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
+           cpp_exempt, ei_exempt, tax_exempt, is_active,
            pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
            es_contrato_temporal,
            jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal, br_salario_familia_filhos,
@@ -1066,7 +1047,7 @@ export const POST = defineRoute({
                 ${body.w4Pre2020 === true}, ${w4Allowances},
                 ${body.ficaExempt === true}, ${body.futaExempt === true}, ${body.suiExempt === true},
                 ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
-                ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
+                ${body.isActive !== false},
                 ${factValues['pl_rok_urodzenia'] ?? null}, ${factValues['es_ano_nacimiento'] ?? null},
                 ${factValues['es_grupo_cotizacion'] ?? null}, ${factValues['es_situacion_laboral'] ?? null},
                 ${factValues['es_contrato_temporal'] ?? null},
@@ -1100,8 +1081,7 @@ export const POST = defineRoute({
                       fica_exempt = excluded.fica_exempt, futa_exempt = excluded.futa_exempt,
                       sui_exempt = excluded.sui_exempt,
                       cpp_exempt = excluded.cpp_exempt, ei_exempt = excluded.ei_exempt,
-                      tax_exempt = excluded.tax_exempt, vacation_percent = excluded.vacation_percent,
-                      vacation_method = excluded.vacation_method, is_active = excluded.is_active,
+                      tax_exempt = excluded.tax_exempt, is_active = excluded.is_active,
                       pl_rok_urodzenia = excluded.pl_rok_urodzenia,
                       es_ano_nacimiento = excluded.es_ano_nacimiento,
                       es_grupo_cotizacion = excluded.es_grupo_cotizacion,

@@ -7,7 +7,10 @@ import { PAYROLL_HOLIDAYS_ENTITY } from '../payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from '../hrm-leave'
 import { ACTION_REASONS_ENTITY } from '../hrm-action-reasons'
 import { DOCUMENT_CATEGORIES_ENTITY, DOCUMENT_TEMPLATES_ENTITY, RETENTION_SCHEDULES_ENTITY } from '../hrm-documents'
-import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from '../hrm-benefits'
+import { BENEFIT_PLANS_ENTITY } from '../hrm-benefits'
+import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
+import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
+import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
 import { BENEFIT_PROGRAMS_ENTITY, BENEFIT_PROGRAM_SCOPES_ENTITY, BENEFIT_PROGRAM_SOURCES_ENTITY, BENEFIT_PROGRAM_MEMBERS_ENTITY } from '../benefit-programs'
 import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from '../hrm-compensation'
 import { CONSTRUCTION_CLASSIFICATIONS_ENTITY, CONSTRUCTION_COMP_CLASSES_ENTITY, CONSTRUCTION_PER_DIEM_POLICIES_ENTITY, CONSTRUCTION_RATE_SCHEDULES_ENTITY, CONSTRUCTION_RATIO_RULES_ENTITY } from '../hrm-construction'
@@ -220,7 +223,9 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   // HRM benefit plans and ordered pricing tiers. Declared in
   // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
   BENEFIT_PLANS_ENTITY,
-  BENEFIT_PLAN_LEVELS_ENTITY,
+  ...BENEFIT_CONTRIBUTION_ENTITIES,
+  PAYROLL_SERVICE_CREDITS_ENTITY,
+  PAYROLL_VACATION_TERMS_ENTITY,
   BENEFIT_PROGRAMS_ENTITY,
   BENEFIT_PROGRAM_SCOPES_ENTITY,
   BENEFIT_PROGRAM_SOURCES_ENTITY,
@@ -547,7 +552,7 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'jobTitle', kind: 'text' },
       { key: 'tradeId', kind: 'ref', ref: 'trades' },
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
-      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', legalEmployer: true, labelKey: 'fields.legalEmployer' },
       { key: 'maxBalance', kind: 'decimal', helpTextKey: 'fieldHelp.entitlementMaxBalance' },
       { key: 'notifyBalance', kind: 'decimal', helpTextKey: 'fieldHelp.entitlementNotifyBalance' },
       { key: 'effectiveFrom', kind: 'date', required: true },
@@ -578,7 +583,11 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'afterMonths', kind: 'number' },
       { key: 'planId', kind: 'ref', ref: 'entitlement-plans' },
       { key: 'componentId', kind: 'ref', ref: 'pay-components' },
+      { key: 'employerSubsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'accrualValue', kind: 'number' },
+      { key: 'annualDays', kind: 'number' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
       { key: 'eligible', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
@@ -586,8 +595,12 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'afterMonths', kind: 'integer', required: true, helpTextKey: 'fieldHelp.entitlementAfterMonths' },
       { key: 'planId', kind: 'ref', ref: 'entitlement-plans', helpTextKey: 'fieldHelp.entitlementTierTarget' },
       { key: 'componentId', kind: 'ref', ref: 'pay-components' },
-      { key: 'accrualValue', kind: 'decimal' },
-      { key: 'eligible', kind: 'boolean' },
+      { key: 'employerSubsidiaryId', kind: 'ref', ref: 'subsidiaries', legalEmployer: true, labelKey: 'fields.legalEmployer', helpTextKey: 'serviceCredit.employerTierHint' },
+      { key: 'accrualValue', kind: 'decimal', decimalScale: 4, clearWhenHidden: true, showWhen: { field: 'planId', present: true } },
+      { key: 'annualDays', kind: 'decimal', decimalScale: 4, clearWhenHidden: true, showWhen: { field: 'planId', present: true }, helpTextKey: 'serviceCredit.annualDaysHint' },
+      { key: 'effectiveFrom', kind: 'date', required: true },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'eligible', kind: 'boolean', nullable: true, required: true, clearWhenHidden: true, showWhen: { field: 'componentId', present: true } },
       { key: 'isActive', kind: 'boolean' },
     ],
   },

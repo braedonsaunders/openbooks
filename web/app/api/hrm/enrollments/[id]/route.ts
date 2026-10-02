@@ -2,7 +2,6 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
-  approveEnrollment,
   cancelEnrollment,
   changeEnrollment,
   endEnrollment,
@@ -15,9 +14,9 @@ import { enrollmentPatchBody } from "../bodies";
 export const runtime = "nodejs";
 
 /**
- * One enrolment's lifecycle: approve, change (end plus open anew), end
- * with a reason, or cancel. All four need hrm.benefits.manage; the engine
- * rechecks the employment scope inside the transaction.
+ * Change, end or cancel coverage with hrm.benefits.manage and employment scope.
+ * A change submits a successor through the plan's native Flow setting;
+ * existing coverage remains active until the successor is approved.
  */
 export const PATCH = defineRoute({
   permission: "hrm.benefits.manage",
@@ -43,15 +42,13 @@ export const PATCH = defineRoute({
     };
     try {
       switch (body.action) {
-        case "approve": {
-          const enrollment = await approveEnrollment(base);
-          return NextResponse.json({ enrollment });
-        }
         case "change": {
           const enrollment = await changeEnrollment({
             ...base,
             changeDate: body.changeDate,
-            coverageLevelKey: body.coverageLevelKey ?? undefined,
+            classKey: body.classKey,
+            matchEligible: body.matchEligible,
+            contributionTerms: body.contributionTerms,
             reason: body.reason,
           });
           return NextResponse.json({ enrollment });

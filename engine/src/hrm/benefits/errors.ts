@@ -1,6 +1,6 @@
 /**
  * Shared benefits refusal. Lives in its own module so the write services
- * (plans/windows/enrollments/dependents/benefits-payroll) and the read
+ * (plans/windows/enrollments/dependents/contributions) and the read
  * service (benefits-read) share one refusal shape without a module cycle.
  *
  * Every refusal names the remedy, and the remedy exists — check the code it

@@ -105,6 +105,9 @@ test('a fixed award carries its denomination and one request identity survives a
   const value = document.getElementById('award-builder-value') as HTMLInputElement
   assert.equal(value.value, '25.0000')
   assert.equal(value.readOnly, true)
+  assert.equal(document.getElementById('award-builder-currency')?.tagName, 'DIV')
+  assert.equal(document.getElementById('award-builder-currency')?.textContent?.trim(), 'USD')
+  assert.equal(document.getElementById('award-builder-currency')?.getAttribute('role'), 'status')
   await fill('award-builder-recipient', 'employment')
   await fill('award-builder-from', '2026-01-01')
   await fill('award-builder-reason', 'Recognize excellent service')
@@ -176,9 +179,14 @@ for (const approvalMode of ['none', 'flows'] as const) {
       writes.push(JSON.parse(String(init?.body)))
       return Response.json({ error: 'Draft remains editable.' }, { status: 422 })
     }) as typeof fetch
-    const seed = { ...emptyProgramDraft('reward'), code: 'THANKS', name: 'Recognition', currency: 'USD', effectiveFrom: '2026-01-01', fixedAmount: '25.00', legalEntityId: 'entity', payComponentId: 'cash-component', sourceAccountIds: [], paymentDelayDays: 0 }
-    await mount(t, <MoneyProvider currency="USD"><ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} canConfigureApprovalPolicies payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} /></MoneyProvider>, fetcher)
-    for (let index = 0; index < 4; index++) await click('Next')
+    const seed = { ...emptyProgramDraft('reward'), code: 'THANKS', name: 'Recognition', currency: 'USD', effectiveFrom: '2026-01-01', fixedAmount: '25.00', capAmount: '12,34', legalEntityId: 'entity', payComponentId: 'cash-component', sourceAccountIds: [], paymentDelayDays: 0 }
+    await mount(t, <MoneyProvider currency="USD"><ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} currencyOptions={[{value: 'USD', label: 'USD · US Dollar', scopeValue: 'entity'}]} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} canConfigureApprovalPolicies payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} /></MoneyProvider>, fetcher)
+    for (let index = 0; index < 2; index++) await click('Next')
+    await click('Next')
+    assert.match(document.getElementById('program-builder-capAmount-error')?.textContent ?? '', /12\.34/)
+    assert.equal(writes.length, 0)
+    await fill('program-builder-cap', '12.34')
+    for (let index = 0; index < 2; index++) await click('Next')
     const selectControl = document.getElementById('program-builder-approvalMode')
     assert.ok(selectControl, document.body.textContent ?? '')
     const select = (selectControl.tagName === 'BUTTON' ? selectControl.closest('span')?.querySelector('select') : selectControl) as HTMLSelectElement
@@ -187,6 +195,7 @@ for (const approvalMode of ['none', 'flows'] as const) {
     assert.ok(document.body.textContent?.includes('No workflow configuration or approver is required.'))
     await fill('program-builder-approvalMode', approvalMode)
     assert.equal(Boolean(document.querySelector('a[href="/admin/flows"]')), approvalMode === 'flows')
+    assert.equal(document.querySelectorAll('[aria-label="Program family"]').length, 0)
     await click('Next')
     await click('Next')
     await fill('program-builder-reason', 'Update approval controls')

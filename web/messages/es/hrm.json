@@ -150,7 +150,7 @@
       "openWindows": "Abierta",
       "noOpenWindow": "Ninguna ventana de inscripción está abierta.",
       "pendingSub": "Aprobaciones pendientes",
-      "missingSub": "Inscripciones sin entradas"
+      "missingSub": "Inscripciones sin elecciones de aportación"
     }
   },
   "queue": {
@@ -1388,7 +1388,7 @@
   },
   "benefits": {
     "title": "Beneficios",
-    "description": "Planes, ventanas de inscripción, inscripciones y los importes mensuales para la nómina.",
+    "description": "Defina aquí las ofertas de beneficios y las aportaciones elegidas por los empleados. Nómina calcula los importes reales y controla el tratamiento fiscal, la contabilización y los saldos de derechos.",
     "windowsTitle": "Ventanas de inscripción",
     "enrolmentsTitle": "Inscripciones",
     "segmentsLabel": "Mostrar",
@@ -1704,7 +1704,7 @@
         "coverage": "Cobertura",
         "status": "Estado",
         "effective": "Vigencia",
-        "monthly": "Descuento / período",
+        "monthly": "Aportaciones del empleado",
         "window": "Ventana",
         "kind": "Tipo",
         "range": "Fechas",
@@ -1713,7 +1713,7 @@
       },
       "electionsEmpty": "Sin elecciones",
       "electionsEmptyDescription": "La cobertura que elijas aparece aquí.",
-      "monthlyHint": "El importe guardado que la nómina descuenta cada período — nunca se recalcula.",
+      "monthlyHint": "Las tasas elegidas conservan sus unidades declaradas; Nómina calcula las deducciones reales.",
       "windowsTitle": "Ventanas de inscripción abiertas",
       "windowsEmpty": "Ninguna ventana abierta",
       "windowsEmptyDescription": "Las ventanas de tu empleador aparecen aquí mientras estén abiertas.",
@@ -2665,7 +2665,7 @@
     "newProgram": "Nuevo programa",
     "newAward": "Nuevo premio",
     "programsEmptyTitle": "Aún no hay programas de beneficios",
-    "programsEmptyDescription": "Cree el primer programa del empleador para otorgar recompensas, asignaciones o incentivos.",
+    "programsEmptyDescription": "Cree un programa de cobertura, ahorro, recompensa, asignación, incentivo o personalizado.",
     "awardsEmptyTitle": "Aún no hay premios",
     "awardsEmptyDescription": "Los premios aparecen aquí cuando un programa los otorga.",
     "loadFailed": "No se pudo cargar el área de beneficios.",
@@ -2735,7 +2735,7 @@
       "allowance": "Asignación",
       "incentive": "Incentivo",
       "custom": "Personalizado",
-      "insured": "Plan asegurado"
+      "insured": "Plan de cobertura o ahorro"
     },
     "familyHints": {
       "reward": "Reconocimiento único: bonos, tarjetas de regalo, premios espontáneos.",
@@ -2795,7 +2795,7 @@
     },
     "columns": {
       "program": "Programa",
-      "family": "Familia",
+      "family": "Tipo",
       "value": "Valor",
       "effective": "Vigencia",
       "status": "Estado",
@@ -2923,7 +2923,11 @@
       "openPayrollSetup": "Abrir configuración de nómina",
       "accountsPrerequisite": "No hay cuentas de medición contabilizables visibles. Añada las cuentas necesarias o pida a finanzas que compruebe su acceso a la entidad jurídica y actualice las opciones.",
       "openAccounts": "Abrir plan contable",
-      "refreshOptions": "Actualizar opciones"
+      "refreshOptions": "Actualizar opciones",
+      "typeTitle": "Nuevoa: {type}",
+      "chooseCurrency": "Elegir moneda",
+      "currencyHint": "Las monedas dependen del empleador seleccionado y las funciones de la empresa. Nómina procesa las concesiones en la moneda del programa.",
+      "currencyUnavailable": "Elija una moneda habilitada para el empleador seleccionado."
     },
     "awardBuilderTitle": "Nueva recompensa",
     "awardFields": {
@@ -3029,6 +3033,24 @@
     "directProcessingHint": "Flows autorizó el procesamiento directo; esta recompensa está lista para nómina.",
     "rewardProgramPrerequisite": "Cree y active un programa de recompensas o asignaciones antes de registrar una recompensa.",
     "createRewardProgram": "Crear programa de recompensas",
-    "noApprovalSubmissionHint": "No se requieren aprobaciones. Se registró el envío autorizado; esta recompensa está lista para nómina."
+    "noApprovalSubmissionHint": "No se requieren aprobaciones. Se registró el envío autorizado; esta recompensa está lista para nómina.",
+    "awardCurrencyHint": "Heredada del programa seleccionado; nómina no convierte la moneda de las recompensas.",
+    "rewardCreateHint": "Conceda un beneficio usando el valor, la moneda y las reglas de un programa activo. Configure la oferta en Programas.",
+    "programPurpose": {
+      "reward": "Defina la política aquí y conceda recompensas en Recompensas. Las concesiones listas aparecen en Pagos.",
+      "allowance": "Defina una asignación fija y su calendario. Las concesiones siguen estas reglas; no se crea una cartera ni se reembolsan gastos.",
+      "incentive": "Defina cómo el rendimiento genera pagos. Simule y liquide en Incentivos; los resultados aprobados aparecen en Pagos.",
+      "custom": "Defina una concesión patronal con reglas explícitas. Regístrela en Recompensas y entréguela en Pagos."
+    },
+    "scopeHint": "Beneficios define ofertas y concesiones patronales. Nómina gestiona salario, impuestos, contribuciones legales y ciclos de pago.",
+    "views": {
+      "overview": "Beneficios y concesiones patronales conectados con nómina.",
+      "programs": "Defina cada oferta aquí. Los empleados se inscriben en planes; recompensas e incentivos siguen sus programas.",
+      "enrolments": "Inscriba empleados en planes de cobertura y ahorro. Gestione los periodos mediante ventanas de inscripción.",
+      "rewards": "Registre concesiones de programas activos. Configure ofertas reutilizables en Programas.",
+      "incentives": "Gestione programas de rendimiento. Abra un registro para simular, calcular y liquidar pagos.",
+      "payouts": "Envíe concesiones listas a nómina y siga su historial. Cree en Recompensas y liquide en Incentivos."
+    },
+    "configureApprovals": "Configurar aprobaciones"
   }
 }

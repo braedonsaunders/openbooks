@@ -5,8 +5,9 @@ import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { countRows, NOT_VISIBLE, refusal, refusesLikeUnknown, scopeMatrix, scopeRow, type ScopeWorld } from "../testing/hrm-scope-matrix.ts";
 import {
   enableConstruction, refusalMatches, refusalOf, refusesCode, seedComponent, seedEmployment, seedNamedWorker,
-  seedPerson, seedPlan, seedWindow, setFeatures, type Refusal,
+  seedPerson, seedPlan, seededContributionTerms, seedWindow, setFeatures, type Refusal,
 } from "../testing/hrm-harness.ts";
+import { seedApprovalFlow } from "../testing/fixtures.ts";
 import { UnrestrictedScopeError } from "../organization/subsidiary-scope.ts";
 import { listLeaveFilingEmploymentOptions } from "./leave-read.ts";
 import { employmentsOnLeave } from "./attendance.ts";
@@ -15,7 +16,7 @@ import {
   updateProcessTemplate, upsertProcessTemplateStep,
 } from "./processes.ts";
 import { electEnrollment } from "./benefits/enrollments.ts";
-import { generateBenefitPayrollInputs, voidBenefitPayrollInput } from "./benefits/benefits-payroll.ts";
+import { listEnrollmentContributionTerms } from "./benefits/contributions.ts";
 import { listEnrollmentWindows, listEnrollmentPlanOptions, listBenefitPlans } from "./benefits/benefits-read.ts";
 import { closeEnrollmentWindow, createEnrollmentWindow, getEnrollmentWindow, openEnrollmentWindow } from "./benefits/windows.ts";
 import { HrmConstructionError } from "./construction/errors.ts";
@@ -342,7 +343,7 @@ scopeMatrix([
     },
   }),
   scopeRow({
-    name: "benefit payroll inputs generate and void only inside the actor's lens",
+    name: "native benefit contribution elections stay inside the actor's legal entity",
     permissions: BENEFITS,
     actors: BENEFITS_WRITER,
     seed: async (w) => {
@@ -350,37 +351,22 @@ scopeMatrix([
       const empB = (await seedEmployment(w.orgId, w.subB, { displayName: "Benefits Worker" })).employmentId;
       const { planId } = await seedPlan(w.orgId);
       const windowId = await seedWindow(w.orgId);
-      const elect = (employmentId: string) =>
-        electEnrollment({ orgId: w.orgId, actorId: w.admin, employmentId, planId, windowId, effectiveFrom: "2026-01-01" });
+      const elect = async (employmentId: string) =>
+        electEnrollment({ orgId: w.orgId, actorId: w.admin, employmentId, planId, windowId, contributionTerms: await seededContributionTerms(w.orgId, planId), effectiveFrom: "2026-01-01" });
       return { empA, empB, electA: await elect(empA), electB: await elect(empB) };
     },
-    write: async (w, { empA, empB, electA, electB }) => {
-      const generate = (actorId: string, coverageMonth: string) => generateBenefitPayrollInputs({ orgId: w.orgId, actorId, coverageMonth });
-      const stored = (enrollmentId: string) => countRows(sql`
-        from hrm_benefit_payroll_inputs where org_id = ${w.orgId} and enrollment_id = ${enrollmentId} and coverage_from = '2026-04-01'::date`);
-      const full = await generate(w.admin, "2026-03");
-      assert.equal(full.length, 4, "the unrestricted admin materializes both employees' rows");
-      const scoped = await generate(w.scoped, "2026-04");
-      assert.equal(scoped.length, 2);
-      assert.ok(scoped.every((row) => row.employmentId === empA), "the scoped month returns only A's rows");
-      assert.equal(await stored(electB.id), 0, "no B row is materialized");
-      assert.equal(await stored(electA.id), 2);
-      const voidAs = (inputId: string, reason = "probe") => voidBenefitPayrollInput({ orgId: w.orgId, actorId: w.scoped, inputId, reason });
-      const hidden = await refusesLikeUnknown(() => voidAs(full.find((row) => row.employmentId === empB)!.id), () => voidAs(randomUUID()));
-      assert.deepEqual([hidden.name, hidden.code], ["BenefitsError", "NOT_FOUND"]);
-      assert.equal((await voidAs(scoped[0]!.id, "duplicate month")).status, "voided");
-      // Transfer is terminate plus rehire: the identity guard refuses an in-place rehome.
-      await assert.rejects(
-        db.execute(sql`update worker_employments set employer_subsidiary_id = ${w.subB} where org_id = ${w.orgId} and id = ${empA}`),
-        refusalMatches(/employer_subsidiary_id is immutable/),
-      );
+    write: async (w, { empA, electA, electB }) => {
+      const read = (enrollmentId: string) => listEnrollmentContributionTerms({ orgId: w.orgId, actorId: w.scoped, enrollmentId });
+      assert.ok(Array.isArray(await read(electA.id)));
+      await refusesLikeUnknown(() => read(electB.id), () => read(randomUUID()));
+      await assert.rejects(db.execute(sql`update worker_employments set employer_subsidiary_id=${w.subB} where org_id=${w.orgId} and id=${empA}`), refusalMatches(/employer_subsidiary_id is immutable/));
     },
   }),
   scopeRow({
-    name: "enrollment plan selectors fence legal entities and retain declared coverage levels",
+    name: "enrollment plan selectors fence legal entities and retain native contribution classes",
     permissions: BENEFITS,
     seed: async (w) => {
-      const a = await seedPlan(w.orgId, { employer_subsidiary_id: w.subA, levels: true });
+      const a = await seedPlan(w.orgId, { employer_subsidiary_id: w.subA, classes: true });
       const b = await seedPlan(w.orgId, { employer_subsidiary_id: w.subB });
       const shared = await seedPlan(w.orgId);
       const inactive = await seedPlan(w.orgId, { is_active: false });
@@ -391,25 +377,26 @@ scopeMatrix([
       assert.ok(full.some((plan) => plan.value === ids.b));
       const scoped = await listEnrollmentPlanOptions(db, w.orgId, w.scoped);
       assert.deepEqual(new Set(scoped.map((plan) => plan.value)), new Set([ids.a, ids.shared]));
-      assert.deepEqual(scoped.find((plan) => plan.value === ids.a)?.levels.map((level) => level.value), ['single', 'family']);
+      assert.deepEqual(scoped.find((plan) => plan.value === ids.a)?.classes.map((item) => item.value), ['family', 'single']);
       assert.ok(!scoped.some((plan) => plan.value === ids.inactive));
       const catalog = await listBenefitPlans(db, w.orgId, w.scoped);
       assert.deepEqual(new Set(catalog.map((plan) => plan.id)), new Set([ids.a, ids.shared, ids.inactive]));
       assert.equal(catalog.find((plan) => plan.id === ids.inactive)?.isActive, false);
-      assert.equal(catalog.find((plan) => plan.id === ids.a)?.employeeCost, '250.0000');
+      assert.equal('employeeCost' in catalog.find((plan) => plan.id === ids.a)!, false);
     },
   }),
   scopeRow({
     name: "enrollment-window reads fence B's windows and pending counts to the lens",
     permissions: BENEFITS,
     seed: async (w) => {
-      const { planId } = await seedPlan(w.orgId, { requires_approval: true });
+      const { planId } = await seedPlan(w.orgId, { approval_mode: "flows" });
+      await seedApprovalFlow(w.orgId,{subjectKind:"hrm_benefit_enrollment",assignees:[{type:"user",userId:w.admin}],mode:"any",preventSelfApproval:false});
       const windowIds: string[] = [];
       for (const [subsidiaryId, name] of [[w.subA, "A window"], [w.subB, "B window"]] as const) {
         const { id: windowId } = await enrollmentWindow(w.orgId, w.admin, subsidiaryId, name);
         await openEnrollmentWindow({ orgId: w.orgId, actorId: w.admin, windowId });
         const { employmentId } = await seedEmployment(w.orgId, subsidiaryId, { displayName: "Benefits Worker" });
-        await electEnrollment({ orgId: w.orgId, actorId: w.admin, employmentId, planId, windowId, effectiveFrom: "2026-02-01" });
+        await electEnrollment({ orgId: w.orgId, actorId: w.admin, employmentId, planId, windowId, contributionTerms: await seededContributionTerms(w.orgId, planId), effectiveFrom: "2026-02-01" });
         windowIds.push(windowId);
       }
       return { windowA: windowIds[0]!, windowB: windowIds[1]! };

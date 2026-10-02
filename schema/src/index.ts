@@ -83,3 +83,5 @@ export * from "./hrm-documents-surveys";
 export * from "./hrm-recruiting-depth";
 // HR-18 end
 
+
+export * from "./payroll-service-credit";

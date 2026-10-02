@@ -59,7 +59,6 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return { id: args.enrollmentId, status: fn }
       }
-      export async function approveEnrollment(args) { return record('approved', args) }
       export async function changeEnrollment(args) { return record('changed', args) }
       export async function endEnrollment(args) { return record('ended', args) }
       export async function cancelEnrollment(args) { return record('cancelled', args) }
@@ -113,20 +112,16 @@ function patchRequest(body: unknown): Request {
   });
 }
 
-test("PATCH approves through the real parser", async () => {
+test("PATCH refuses a manual approval action; human decisions use native Approvals", async () => {
   reset();
-  const res = await idRoute!.PATCH(patchRequest({ action: "approve" }), ctx);
-  assert.equal(res.status, 200);
-  assert.deepEqual(routeState.calls[0], {
-    fn: "approved",
-    args: { orgId: "org-1", actorId: "user-1", enrollmentId: ENROLLMENT_ID },
-  });
+  assert.equal((await idRoute!.PATCH(patchRequest({action:'approve'}),ctx)).status,400);
+  assert.equal(routeState.calls.length,0);
 });
 
-test("PATCH changes with date, tier, and reason", async () => {
+test("PATCH changes with date, contribution class, and reason", async () => {
   reset();
   const res = await idRoute!.PATCH(
-    patchRequest({ action: "change", changeDate: "2026-04-01", coverageLevelKey: "family", reason: "new child" }),
+    patchRequest({ action: "change", changeDate: "2026-04-01", classKey: "family", reason: "new child" }),
     ctx,
   );
   assert.equal(res.status, 200);
@@ -137,7 +132,9 @@ test("PATCH changes with date, tier, and reason", async () => {
       actorId: "user-1",
       enrollmentId: ENROLLMENT_ID,
       changeDate: "2026-04-01",
-      coverageLevelKey: "family",
+      classKey: "family",
+      matchEligible: undefined,
+      contributionTerms: undefined,
       reason: "new child",
     },
   });

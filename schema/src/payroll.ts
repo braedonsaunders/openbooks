@@ -360,11 +360,11 @@ export const employeePayrollProfiles = pgTable(
     ficaExempt: boolean("fica_exempt").notNull().default(false),
     futaExempt: boolean("futa_exempt").notNull().default(false),
     suiExempt: boolean("sui_exempt").notNull().default(false),
-    /** Vacation pay percent (4.00 = 4%) and whether it accrues or pays out. */
+    /** Historical vacation evidence; effective policy lives in payroll_vacation_terms. */
     vacationPercent: numeric("vacation_percent", { precision: 7, scale: 4 }),
     vacationMethod: text("vacation_method", {
       enum: ["accrue", "pay_each_period"],
-    }).notNull().default("accrue"),
+    }),
     /** Union membership: drives dues, fringes, and remittance reporting. */
     unionAgreementId: uuid("union_agreement_id"),
     unionClassificationId: uuid("union_classification_id"),

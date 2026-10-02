@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { FieldControl } from '../admin/setup/[entity]/SetupDrawer'
+import type { SetupField } from '../../../lib/setup/types'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
@@ -408,14 +411,38 @@ export function GoalProgressDialog({
   )
 }
 
+export interface BenefitElectionRule { value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }
+type ContributionChoice = { electionMode: string; electedRate: string; declaredPeriodsPerYear?: string }
+
+function BenefitContributionChoices({ rules, choices, onChange }: {
+  rules: BenefitElectionRule[]; choices: Record<string, ContributionChoice>;
+  onChange: (id: string, value: ContributionChoice) => void
+}) {
+  const t = useTranslations('admin.setup')
+  const fields: SetupField[] = [
+    { key: 'electionMode', kind: 'select', required: true, options: [{ value: 'fixed', labelKey: 'benefitContributions.options.election.fixed' }, { value: 'follows_policy', labelKey: 'benefitContributions.options.election.follows_policy' }], helpTextKey: 'benefitContributions.electionHint' },
+    { key: 'electedRate', kind: 'decimal', required: true, helpTextKey: 'benefitContributions.electedRateHint' },
+    { key: 'declaredPeriodsPerYear', kind: 'integer', min: 1, max: 366, helpTextKey: 'benefitContributions.annualizationHint' },
+  ]
+  return <div className="space-y-3">{rules.map((rule) => {
+    const value = choices[rule.value] ?? { electionMode: '', electedRate: '' }
+    return <fieldset key={rule.value} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+      <legend className="px-1 text-sm font-medium">{rule.label}</legend>
+      <p className="mb-3 text-xs text-slate-500">{t(`benefitContributions.options.basis.${rule.basis}`)} · {t('benefitContributions.planRate', { rate: rule.rate })}</p>
+      <div className="grid gap-4 sm:grid-cols-2">{fields.filter((field) => (field.key !== 'electedRate' || value.electionMode === 'fixed') && (field.key !== 'declaredPeriodsPerYear' || ['per_month', 'per_year'].includes(rule.basis))).map((field) =>
+        <FieldControl key={field.key} field={field} value={value[field.key as keyof ContributionChoice]} onChange={(next) => onChange(rule.value, { ...value, [field.key]: String(next ?? '') })} creating forceLocked={false} refOptions={[]} formValues={value} t={t} />
+      )}</div>
+    </fieldset>
+  })}</div>
+}
+
 export interface BenefitElectDialogStrings {
   title: string
   description: string
   employmentLabel: string
   employments: { value: string; label: string }[]
   planLabel: string
-  plans: { value: string; label: string; levels: { value: string; label: string }[] }[]
-  levelLabel: string
+  plans: { value: string; label: string; classes: { value: string; label: string }[]; contributionRules: BenefitElectionRule[] }[]
   windowLabel: string
   windows: { value: string; label: string }[]
   fromLabel: string
@@ -441,18 +468,24 @@ export function BenefitElectDialog({
   const router = useRouter()
   const [employmentId, setEmploymentId] = useState('')
   const [planId, setPlanId] = useState('')
-  const [levelKey, setLevelKey] = useState('')
+  const [classKey, setClassKey] = useState('')
+  const [matchEligible, setMatchEligible] = useState('')
+  const [contributions, setContributions] = useState<Record<string, ContributionChoice>>({})
+  const tSetup = useTranslations('admin.setup')
   const [windowId, setWindowId] = useState('')
   const [from, setFrom] = useState('')
   const [lifeEvent, setLifeEvent] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   if (!dialog) return null
-  const levels = dialog.plans.find((plan) => plan.value === planId)?.levels ?? []
+  const selectedPlan = dialog.plans.find((plan) => plan.value === planId)
+  const classes = selectedPlan?.classes ?? []
+  const rules = (selectedPlan?.contributionRules ?? []).filter((rule) => !from || (rule.effectiveFrom <= from && (rule.effectiveTo === null || rule.effectiveTo >= from)))
   const submit = async (): Promise<void> => {
+    if (rules.some(rule => rule.requiresMatchEligibility) && matchEligible === '') { setStatus(tSetup('validation.required', { field: tSetup('fields.matchEligible') })); return }
     const boundEmployment =
       employmentId || (dialog.employments.length === 1 ? (dialog.employments[0]?.value ?? '') : '')
-    if (!boundEmployment || !planId || from.trim() === '') {
+    if (!boundEmployment || !planId || from.trim() === '' || rules.some((rule) => !contributions[rule.value]?.electionMode || (contributions[rule.value]?.electionMode === 'fixed' && !contributions[rule.value]?.electedRate.trim()))) {
       setStatus(dialog.submitFailed)
       return
     }
@@ -467,7 +500,9 @@ export function BenefitElectDialog({
           employmentId: boundEmployment,
           planId,
           windowId: windowId === '' ? null : windowId,
-          coverageLevelKey: levelKey === '' ? null : levelKey,
+          classKey: classKey || null,
+          ...(matchEligible === '' ? {} : { matchEligible: matchEligible === 'true' }),
+          contributionTerms: rules.map((rule) => ({ ruleId: rule.value, electionMode: contributions[rule.value]!.electionMode, ...(contributions[rule.value]!.electionMode === 'fixed' ? { electedRate: contributions[rule.value]!.electedRate } : {}), ...(contributions[rule.value]!.declaredPeriodsPerYear ? { declaredPeriodsPerYear: Number(contributions[rule.value]!.declaredPeriodsPerYear) } : {}) })),
           effectiveFrom: from.trim(),
           lifeEventReason: lifeEvent.trim() === '' ? null : lifeEvent.trim(),
         }),
@@ -502,7 +537,7 @@ export function BenefitElectDialog({
         ) : null}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-elect-plan">{dialog.planLabel}</Label>
-          <Select id="me-elect-plan" value={planId} onChange={(event) => { setPlanId(event.target.value); setLevelKey('') }}>
+          <Select id="me-elect-plan" value={planId} onChange={(event) => { setPlanId(event.target.value); setClassKey(''); setMatchEligible(''); setContributions({}) }}>
             <option value="">{dialog.planLabel}</option>
             {dialog.plans.map((option) => (
               <option key={option.value} value={option.value}>
@@ -511,19 +546,25 @@ export function BenefitElectDialog({
             ))}
           </Select>
         </div>
-        {levels.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="me-elect-from">{dialog.fromLabel}</Label>
+          <Input id="me-elect-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+        </div>
+        {classes.length > 0 ? <>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="me-elect-level">{dialog.levelLabel}</Label>
-            <Select id="me-elect-level" value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
-              <option value="">{dialog.levelLabel}</option>
-              {levels.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+            <Label htmlFor="me-elect-class">{tSetup('fields.classKey')}</Label>
+            <Select id="me-elect-class" value={classKey} onChange={(event) => setClassKey(event.target.value)}>
+              <option value="">{tSetup('fields.classKey')}</option>
+              {classes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </Select>
           </div>
-        ) : null}
+        </> : null}
+        {rules.some(rule => rule.requiresMatchEligibility) ? <FieldControl
+          field={{ key: 'matchEligible', kind: 'boolean', nullable: true, required: true, helpTextKey: 'benefitContributions.matchHint' }}
+          value={matchEligible === '' ? null : matchEligible === 'true'} onChange={next => setMatchEligible(next == null ? '' : String(next))}
+          creating forceLocked={false} refOptions={[]} formValues={{}} t={tSetup}
+        /> : null}
+        <BenefitContributionChoices rules={rules} choices={contributions} onChange={(id, value) => setContributions((current) => ({ ...current, [id]: value }))} />
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-elect-window">{dialog.windowLabel}</Label>
           <Select id="me-elect-window" value={windowId} onChange={(event) => setWindowId(event.target.value)}>
@@ -534,10 +575,6 @@ export function BenefitElectDialog({
               </option>
             ))}
           </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="me-elect-from">{dialog.fromLabel}</Label>
-          <Input id="me-elect-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-elect-life-event">{dialog.lifeEventLabel}</Label>
@@ -557,13 +594,16 @@ export function BenefitElectDialog({
   )
 }
 
-interface BenefitChangeDialogStrings {
+export interface BenefitChangeDialogStrings {
   enrollmentId: string
   planName: string
   title: string
   description: string
-  levelLabel: string
-  levels: { value: string; label: string }[]
+  classKey: string | null
+  matchEligible: boolean | null
+  classes: { value: string; label: string }[]
+  contributionRules: BenefitElectionRule[]
+  contributionTerms: { ruleId: string; electionMode: 'fixed' | 'follows_policy'; electedRate: string | null; declaredPeriodsPerYear?: number | null }[]
   dateLabel: string
   reasonLabel: string
   reasonPlaceholder: string
@@ -578,32 +618,42 @@ interface BenefitChangeDialogStrings {
 export function BenefitChangeDialog({
   dialog,
   closeHref,
+  mode = 'self',
 }: {
   dialog: BenefitChangeDialogStrings | null
   closeHref: string
+  mode?: 'self' | 'manage'
 }) {
   const router = useRouter()
-  const [levelKey, setLevelKey] = useState('')
+  const [classKey, setClassKey] = useState(dialog?.classKey ?? '')
+  const [matchEligible, setMatchEligible] = useState(dialog?.matchEligible == null ? '' : String(dialog.matchEligible))
+  const [contributions, setContributions] = useState<Record<string, ContributionChoice>>(() => Object.fromEntries((dialog?.contributionTerms ?? []).map((term) => [term.ruleId, { electionMode: term.electionMode, electedRate: term.electedRate ?? '', declaredPeriodsPerYear: term.declaredPeriodsPerYear == null ? '' : String(term.declaredPeriodsPerYear) }])))
+  const tSetup = useTranslations('admin.setup')
   const [date, setDate] = useState('')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   if (!dialog) return null
+  const rules = dialog.contributionRules.filter((rule) => !date || (rule.effectiveFrom <= date && (rule.effectiveTo === null || rule.effectiveTo >= date)))
   const submit = async (): Promise<void> => {
-    if (date.trim() === '' || reason.trim() === '') {
+    if (rules.some(rule => rule.requiresMatchEligibility) && matchEligible === '') { setStatus(tSetup('validation.required', { field: tSetup('fields.matchEligible') })); return }
+    if (date.trim() === '' || reason.trim() === '' || rules.some((rule) => !contributions[rule.value]?.electionMode || (contributions[rule.value]?.electionMode === 'fixed' && !contributions[rule.value]?.electedRate.trim()))) {
       setStatus(dialog.submitFailed)
       return
     }
     setBusy(true)
     setStatus(null)
     try {
-      const res = await fetch('/api/hrm/me/benefits/change', {
-        method: 'POST',
+      const res = await fetch(mode === 'manage' ? `/api/hrm/enrollments/${dialog.enrollmentId}` : '/api/hrm/me/benefits/change', {
+        method: mode === 'manage' ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          enrollmentId: dialog.enrollmentId,
+          ...(mode === 'manage' ? { action: 'change' } : {}),
+          ...(mode === 'self' ? { enrollmentId: dialog.enrollmentId } : {}),
           changeDate: date.trim(),
-          coverageLevelKey: levelKey === '' ? null : levelKey,
+          classKey: classKey || null,
+          ...(matchEligible === '' ? {} : { matchEligible: matchEligible === 'true' }),
+          contributionTerms: rules.map((rule) => ({ ruleId: rule.value, electionMode: contributions[rule.value]!.electionMode, ...(contributions[rule.value]!.electionMode === 'fixed' ? { electedRate: contributions[rule.value]!.electedRate } : {}), ...(contributions[rule.value]!.declaredPeriodsPerYear ? { declaredPeriodsPerYear: Number(contributions[rule.value]!.declaredPeriodsPerYear) } : {}) })),
           reason: reason.trim(),
         }),
       })
@@ -622,23 +672,22 @@ export function BenefitChangeDialog({
   return (
     <UrlDrawer open closeHref={closeHref} title={dialog.title} description={`${dialog.planName} — ${dialog.description}`}>
       <div className="flex flex-col gap-4 p-4">
-        {dialog.levels.length > 0 ? (
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="me-change-level">{dialog.levelLabel}</Label>
-            <Select id="me-change-level" value={levelKey} onChange={(event) => setLevelKey(event.target.value)}>
-              <option value="">{dialog.levelLabel}</option>
-              {dialog.levels.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ) : null}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-change-date">{dialog.dateLabel}</Label>
           <Input id="me-change-date" value={date} placeholder="2026-04-01" onChange={(event) => setDate(event.target.value)} />
         </div>
+        {dialog.classes.length > 0 ? <>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="me-change-class">{tSetup('fields.classKey')}</Label>
+            <Select id="me-change-class" value={classKey} onChange={(event) => setClassKey(event.target.value)}><option value="">{tSetup('fields.classKey')}</option>{dialog.classes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>
+          </div>
+        </> : null}
+        {rules.some(rule => rule.requiresMatchEligibility) ? <FieldControl
+          field={{ key: 'matchEligible', kind: 'boolean', nullable: true, required: true, helpTextKey: 'benefitContributions.matchHint' }}
+          value={matchEligible === '' ? null : matchEligible === 'true'} onChange={next => setMatchEligible(next == null ? '' : String(next))}
+          creating forceLocked={false} refOptions={[]} formValues={{}} t={tSetup}
+        /> : null}
+        <BenefitContributionChoices rules={rules} choices={contributions} onChange={(id, value) => setContributions((current) => ({ ...current, [id]: value }))} />
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-change-reason">{dialog.reasonLabel}</Label>
           <Textarea id="me-change-reason" placeholder={dialog.reasonPlaceholder} value={reason} onChange={(event) => setReason(event.target.value)} />

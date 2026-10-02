@@ -1,3 +1,4 @@
+import { enrollmentContributionProjection, type EnrollmentContributionSummary } from "../benefits/benefits-read.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
@@ -18,6 +19,8 @@ import {
 } from "../performance/reviews.ts";
 import { updateGoalProgress } from "../performance/goals.ts";
 import { changeEnrollment, electEnrollment } from "../benefits/enrollments.ts";
+import type { EnrollmentContributionInput } from "../benefits/contributions.ts";
+import type { EnrollmentContributionRuleOption } from "../benefits/benefits-read.ts";
 import { inputGuards } from "../input-guards.ts";
 
 /**
@@ -37,8 +40,7 @@ import { inputGuards } from "../input-guards.ts";
  *   strip every calibration field: a person never sees calibration
  *   (calibrated ratings, reasons, or the cycle's calibration gap count),
  *   only their own overall rating once shared.
- * - Benefits reads query the actor's own elections (with the STORED
- *   per-period amounts payroll deducts — never a recomputed figure),
+ * - Benefits reads query the actor's own elections (with their effective contribution terms),
  *   the open windows covering their employer subsidiary, their own
  *   dependents, and the plans offered to their subsidiary.
  * - Reviews writes delegate to the existing review/goal services
@@ -375,16 +377,17 @@ export async function loadManagerOwedReviews(query: {
 export interface MyElectionRow {
   readonly id: string;
   readonly employmentId: string;
+  readonly planId: string;
   readonly planCode: string;
   readonly planName: string;
-  readonly coverageLevelKey: string | null;
+  readonly classKey: string | null;
+  readonly matchEligible: boolean | null;
+  readonly contributionTerms: EnrollmentContributionInput[];
   readonly coverageLabel: string | null;
   readonly status: string;
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
-  /** The STORED per-period amount payroll deducts — never recomputed here. */
-  readonly employeeAmountPerPeriod: string | null;
-  readonly employerAmountPerPeriod: string | null;
+  readonly contributions: readonly EnrollmentContributionSummary[];
   readonly currency: string;
 }
 
@@ -403,13 +406,6 @@ export interface MyDependentRow {
   readonly relationship: string;
 }
 
-export interface MyPlanLevelRow {
-  readonly levelKey: string;
-  readonly label: string;
-  readonly employeeCost: string | null;
-  readonly employerCost: string | null;
-}
-
 export interface MyPlanRow {
   readonly id: string;
   readonly code: string;
@@ -418,8 +414,9 @@ export interface MyPlanRow {
   readonly currency: string;
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
-  readonly requiresApproval: boolean;
-  readonly levels: MyPlanLevelRow[];
+  readonly approvalMode: "none" | "flows";
+  readonly contributionRules: EnrollmentContributionRuleOption[];
+  readonly classes: { value: string; label: string }[];
 }
 
 export interface MyBenefitsWorkspace {
@@ -465,8 +462,7 @@ function windowScope(appliesTo: unknown): WindowScope {
 }
 
 /**
- * The actor's benefits: current elections with the stored payroll
- * amounts, the open enrollment windows covering their employer
+ * The actor's benefits: effective contribution elections, the open enrollment windows covering their employer
  * subsidiary, dependents on file, and the plans their employer offers
  * for the elect dialog. Gated on hrm.self.read plus the structural own
  * scope — never the hrm.benefits.* grants plain employees do not hold.
@@ -488,19 +484,23 @@ export async function getMyBenefitsWorkspace(query: {
     for (const employment of own) {
       const rows = (await db.execute<Record<string, unknown>>(sql`
         select e.id, e.employment_id as "employmentId",
-               plan.code as "planCode", plan.name as "planName",
-               e.coverage_level_key as "coverageLevelKey",
-               lvl.label as "coverageLabel",
+               plan.id as "planId", plan.code as "planCode", plan.name as "planName",
+               e.class_key as "classKey", e.match_eligible as "matchEligible",
+               coalesce((select jsonb_agg(jsonb_build_object('ruleId',t.rule_id,'electionMode',t.election_mode,
+                 'electedRate',t.elected_rate::text,'declaredPeriodsPerYear',t.declared_periods_per_year) order by r.position,t.id)
+                 from hrm_benefit_enrollment_terms t join hrm_benefit_contribution_rules r on r.org_id=t.org_id and r.id=t.rule_id
+                 where t.org_id=e.org_id and t.enrollment_id=e.id and t.effective_from<=${today}::date
+                   and (t.effective_to is null or t.effective_to>=${today}::date)), '[]'::jsonb) as "contributionTerms",
+               cls.name as "coverageLabel",
                e.status,
                e.effective_from::text as "effectiveFrom",
                e.effective_to::text as "effectiveTo",
-               e.employee_amount_per_period::text as "employeeAmountPerPeriod",
-               e.employer_amount_per_period::text as "employerAmountPerPeriod",
+               ${enrollmentContributionProjection(today)} as contributions,
                e.currency
           from hrm_benefit_enrollments e
           join hrm_benefit_plans plan on plan.org_id = e.org_id and plan.id = e.plan_id
-          left join hrm_benefit_plan_levels lvl
-            on lvl.org_id = e.org_id and lvl.plan_id = e.plan_id and lvl.level_key = e.coverage_level_key
+          left join hrm_benefit_contribution_classes cls
+            on cls.org_id = e.org_id and cls.plan_id = e.plan_id and cls.class_key = e.class_key
          where e.org_id = ${orgId} and e.employment_id = ${employment.id}
          order by e.effective_from desc, plan.code
       `)).rows;
@@ -508,15 +508,17 @@ export async function getMyBenefitsWorkspace(query: {
         elections.push({
           id: String(row.id),
           employmentId: String(row.employmentId),
+          planId: String(row.planId),
           planCode: String(row.planCode),
+          classKey: row.classKey == null ? null : String(row.classKey),
+          matchEligible: row.matchEligible == null ? null : row.matchEligible === true,
+          contributionTerms: (row.contributionTerms ?? []) as EnrollmentContributionInput[],
           planName: String(row.planName),
-          coverageLevelKey: row.coverageLevelKey != null ? String(row.coverageLevelKey) : null,
           coverageLabel: row.coverageLabel != null ? String(row.coverageLabel) : null,
           status: String(row.status),
           effectiveFrom: String(row.effectiveFrom).slice(0, 10),
           effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
-          employeeAmountPerPeriod: row.employeeAmountPerPeriod != null ? String(row.employeeAmountPerPeriod) : null,
-          employerAmountPerPeriod: row.employerAmountPerPeriod != null ? String(row.employerAmountPerPeriod) : null,
+          contributions: row.contributions as EnrollmentContributionSummary[],
           currency: String(row.currency),
         });
       }
@@ -575,7 +577,7 @@ export async function getMyBenefitsWorkspace(query: {
         select id, code, name, kind, currency,
                effective_from::text as "effectiveFrom",
                effective_to::text as "effectiveTo",
-               requires_approval as "requiresApproval"
+               approval_mode as "approvalMode"
           from hrm_benefit_plans
          where org_id = ${orgId} and is_active
            and effective_from <= ${today}::date
@@ -584,13 +586,15 @@ export async function getMyBenefitsWorkspace(query: {
          order by code
       `)).rows;
       for (const row of planRows) {
-        const levels = (await db.execute<Record<string, unknown>>(sql`
-          select level_key as "levelKey", label,
-                 employee_cost::text as "employeeCost",
-                 employer_cost::text as "employerCost"
-            from hrm_benefit_plan_levels
-           where org_id = ${orgId} and plan_id = ${String(row.id)}
-           order by position
+        const contributionRules = (await db.execute<{ value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }>(sql`
+          select id::text as value,name as label,basis,rate::text,rate_formula as "rateFormula",requires_match_eligibility as "requiresMatchEligibility",effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo"
+            from hrm_benefit_contribution_rules
+           where org_id=${orgId} and plan_id=${String(row.id)} and is_active
+           order by position,id
+        `)).rows;
+        const classes = (await db.execute<{ value: string; label: string }>(sql`
+          select class_key as value,name as label from hrm_benefit_contribution_classes
+           where org_id=${orgId} and plan_id=${String(row.id)} order by class_key,id
         `)).rows;
         plans.push({
           id: String(row.id),
@@ -600,13 +604,9 @@ export async function getMyBenefitsWorkspace(query: {
           currency: String(row.currency),
           effectiveFrom: String(row.effectiveFrom).slice(0, 10),
           effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
-          requiresApproval: row.requiresApproval === true,
-          levels: levels.map((level) => ({
-            levelKey: String(level.levelKey),
-            label: String(level.label),
-            employeeCost: level.employeeCost != null ? String(level.employeeCost) : null,
-            employerCost: level.employerCost != null ? String(level.employerCost) : null,
-          })),
+          approvalMode: row.approvalMode === "flows" ? "flows" : "none",
+          contributionRules,
+          classes,
         });
       }
     }
@@ -621,7 +621,9 @@ export async function electMyBenefit(query: {
   readonly employmentId: string;
   readonly planId: string;
   readonly windowId?: string | null;
-  readonly coverageLevelKey?: string | null;
+  readonly classKey?: string | null;
+  readonly matchEligible?: boolean | null;
+  readonly contributionTerms?: readonly EnrollmentContributionInput[];
   readonly effectiveFrom: string;
   readonly effectiveTo?: string | null;
   readonly lifeEventReason?: string | null;
@@ -638,7 +640,9 @@ export async function electMyBenefit(query: {
       employmentId: query.employmentId,
       planId: query.planId,
       windowId: query.windowId,
-      coverageLevelKey: query.coverageLevelKey,
+      classKey: query.classKey,
+      matchEligible: query.matchEligible,
+      contributionTerms: query.contributionTerms,
       effectiveFrom: query.effectiveFrom,
       effectiveTo: query.effectiveTo,
       lifeEventReason: query.lifeEventReason,
@@ -660,7 +664,9 @@ export async function changeMyBenefit(query: {
   readonly actorId: string;
   readonly enrollmentId: string;
   readonly changeDate: string;
-  readonly coverageLevelKey?: string | null;
+  readonly classKey?: string | null;
+  readonly matchEligible?: boolean | null;
+  readonly contributionTerms?: readonly EnrollmentContributionInput[];
   readonly reason: string;
 }): Promise<{ id: string; status: string }> {
   const orgId = requireOrgId(query.orgId);
@@ -715,7 +721,9 @@ export async function changeMyBenefit(query: {
       actorId,
       enrollmentId: query.enrollmentId,
       changeDate,
-      coverageLevelKey: query.coverageLevelKey,
+      classKey: query.classKey,
+      matchEligible: query.matchEligible,
+      contributionTerms: query.contributionTerms,
       reason: query.reason,
       selfRequest: true,
     });

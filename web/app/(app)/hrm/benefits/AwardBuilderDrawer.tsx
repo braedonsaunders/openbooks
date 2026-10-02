@@ -44,12 +44,11 @@ export function AwardBuilderDrawer({
   closeHref,
   programOptions,
   employmentOptions,
-  defaultCurrency,
 }: {
   closeHref: string
   programOptions: (PortfolioOption & { currency: string; fixedAmount: string | null })[]
   employmentOptions: PortfolioOption[]
-  defaultCurrency: string
+  defaultCurrency?: string
 }) {
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
@@ -60,7 +59,7 @@ export function AwardBuilderDrawer({
     periodFrom: '',
     periodTo: '',
     value: '',
-    currency: defaultCurrency,
+    currency: '',
     reason: '',
     recipientNote: '',
     recordReference: '',
@@ -169,6 +168,7 @@ export function AwardBuilderDrawer({
   return (
     <Drawer open onClose={() => void closeGuard.close()} title={t('portfolio.awardBuilderTitle')} size="md">
       <div className="flex flex-col gap-4 p-4">
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.rewardCreateHint')}</p>
         <div>
           <Label htmlFor="award-builder-program">{t('portfolio.awardFields.program')}</Label>
           <Select
@@ -245,14 +245,11 @@ export function AwardBuilderDrawer({
             <FieldError id="award-builder-value-error" message={errors.value} />
           </div>
           <div>
-            <Label htmlFor="award-builder-currency">{t('portfolio.awardFields.currency')}</Label>
-            <Input
-              id="award-builder-currency" readOnly
-              value={draft.currency}
-              onChange={(e) => set('currency', e.target.value)}
-              placeholder="USD"
-              aria-invalid={errors.currency !== undefined}
-            />
+            <Label id="award-builder-currency-label">{t('portfolio.awardFields.currency')}</Label>
+            <div id="award-builder-currency" role="status" aria-labelledby="award-builder-currency-label" className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+              {draft.currency || '—'}
+            </div>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.awardCurrencyHint')}</p>
             <FieldError id="award-builder-currency-error" message={errors.currency} />
           </div>
         </div>

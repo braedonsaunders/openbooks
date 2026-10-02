@@ -16,6 +16,7 @@ import {
   mkReporting,
   mkReviewTemplate,
   seedPlan,
+  seededContributionTerms,
   seedWindow,
   setupHarness,
 } from "../../testing/hrm-harness.ts";
@@ -285,7 +286,7 @@ test("the manager owes pending reviews for direct reports in the open cycle", { 
   }
 });
 
-test("self-service elects inside an open window on the self keys alone, with stored amounts", { skip: !DB }, async () => {
+test("self-service elects inside an open window on the self keys alone, with fixed native contribution terms", { skip: !DB }, async () => {
   const h = await setupWorkspaceHarness();
   try {
     const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
@@ -296,17 +297,18 @@ test("self-service elects inside an open window on the self keys alone, with sto
       values (${h.org.orgId}, ${h.workerEmployment}, 'spouse', 'Alex Worker', true)`);
     const elected = await electMyBenefit({
       orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment,
-      planId, windowId, effectiveFrom: "2026-03-01",
+      planId, windowId, contributionTerms: await seededContributionTerms(h.org.orgId, planId), effectiveFrom: "2026-03-01",
     });
     assert.equal(elected.status, "active");
     const stored = (await db.execute<{ employee: string; employer: string; currency: string }>(sql`
       select employee_amount_per_period::text as employee,
              employer_amount_per_period::text as employer, currency
         from hrm_benefit_enrollments where id = ${elected.id}`)).rows[0]!;
-    assert.deepEqual([stored.employee, stored.employer, stored.currency], ["250.0000", "500.0000", "USD"]);
+    assert.deepEqual([stored.employee, stored.employer, stored.currency], [null, null, "USD"]);
     const workspace = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
     assert.ok(!(await listInbox({ orgId: h.org.orgId, actorId: h.workerId, asOf: new Date().toISOString() }, { kinds: ["hrm_benefit_enrollment_window"] })).some((item) => item.source.id === outOfScopeWindowId));
-    assert.deepEqual([workspace.elections.length, workspace.elections[0]!.employeeAmountPerPeriod], [1, "250.0000"]);
+    assert.equal(workspace.elections.length, 1);
+    assert.deepEqual(workspace.elections[0]!.contributionTerms.map(t => t.electedRate).sort(), ["250.0000000000","500.0000000000"]);
     assert.equal(workspace.openWindows.length, 1);
     assert.equal(workspace.dependents.length, 1);
     assert.equal(workspace.dependents[0]!.displayName, "Alex Worker");
@@ -355,7 +357,7 @@ test("a closed window refuses elect and change by name; another employment id re
     await assert.rejects(
       electMyBenefit({
         orgId: h.org.orgId, actorId: h.workerId, employmentId: h.outsiderEmployment,
-        planId, windowId: openId, effectiveFrom: "2026-03-01",
+        planId, contributionTerms: await seededContributionTerms(h.org.orgId, planId), windowId: openId, effectiveFrom: "2026-03-01",
       }),
       (e: unknown) => {
         assert.ok(e instanceof HrmAuthorizationError, `expected HrmAuthorizationError, got ${String(e)}`);
@@ -369,7 +371,7 @@ test("a closed window refuses elect and change by name; another employment id re
     // A live election changes inside the window and refuses outside it.
     const elected = await electMyBenefit({
       orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment,
-      planId, windowId: openId, effectiveFrom: "2026-03-01",
+      planId, contributionTerms: await seededContributionTerms(h.org.orgId, planId), windowId: openId, effectiveFrom: "2026-03-01",
     });
     await db.execute(sql`
       update hrm_enrollment_windows set status = 'closed' where id = ${openId}`);

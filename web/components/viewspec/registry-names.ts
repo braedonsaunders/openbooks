@@ -237,7 +237,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-explain-drawer',
   'hrm-ai-draft-drawer',
   'hrm-benefits-panel',
-  'hrm-enrollment-actions',
   'hrm-facts',
   'hrm-leave-balances',
   'hrm-leave-calendar',

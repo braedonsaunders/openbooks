@@ -1,3 +1,4 @@
+import { requireBenefitCurrency } from "./currency-options.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { cmp, fitsLedgerRange, normalizeMoney } from "../../money/money.ts";
@@ -800,6 +801,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
     await assertHrmEnabled(db, orgId);
     await requireLegalEntity(db, orgId, legalEntityId);
     await requireLegalEntityVisibleToActor(db, orgId, actorId, legalEntityId);
+    await requireBenefitCurrency(db, orgId, currency, legalEntityId);
     await requireProgramPayComponent(db, orgId, code, payComponentId, deliveryMethod);
     await requireProgramSourceAccounts(db, orgId, code, legalEntityId, metric, query.sourceAccountIds ?? [], payComponentId);
     let insertedRows: Record<string, unknown>[];
@@ -978,6 +980,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
     });
     await requireLegalEntity(db, orgId, next.legalEntityId);
     await requireLegalEntityVisibleToActor(db, orgId, actorId, next.legalEntityId);
+    await requireBenefitCurrency(db, orgId, next.currency, next.legalEntityId);
     await requireProgramPayComponent(db, orgId, before.code, next.payComponentId, next.deliveryMethod);
     await requireRoleMembershipWeights(db, orgId, programId, before.code, next.allocation);
     const previousSourceIds = (await db.execute<{ account_id: string }>(sql`
@@ -1090,6 +1093,7 @@ async function setProgramStatus(
         periodBasis: before.periodBasis,
         paymentDelayDays: before.paymentDelayDays,
       });
+      await requireBenefitCurrency(db, orgId, before.currency, before.legalEntityId);
       await requireProgramPayComponent(db, orgId, before.code, before.payComponentId, before.deliveryMethod);
       await requireRoleMembershipWeights(db, orgId, programId, before.code, before.allocation);
       const storedAccounts = (

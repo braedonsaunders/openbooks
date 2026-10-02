@@ -448,3 +448,20 @@ export function InspectorFooter({
     </>
   )
 }
+
+/** Shared progress navigation for native record builders. */
+export function FormSteps({ steps, current, onChange, label }: {
+  steps: { key: string; label: string }[]
+  current: number
+  onChange: (index: number) => void
+  label: string
+}) {
+  return <ol aria-label={label} className="flex flex-wrap gap-1.5">
+    {steps.map((step, index) => <li key={step.key}><button type="button" disabled={index > current}
+      onClick={() => onChange(index)} aria-current={index === current ? 'step' : undefined}
+      className={cn('rounded-full px-2.5 py-1 text-xs font-medium', index === current
+        ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+      {step.label}
+    </button></li>)}
+  </ol>
+}

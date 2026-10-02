@@ -1,3 +1,8 @@
+import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
+  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -12,7 +17,6 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedUsSuiAccount } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -43,15 +47,7 @@ interface UsHarness {
 async function seedTexasHarness(): Promise<UsHarness> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const account = async (number: string, name: string, type: string) => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                            reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true)`);
-    return id;
-  };
+  const account = seedPostingAccount.bind(null, org.orgId);
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current");
@@ -59,10 +55,7 @@ async function seedTexasHarness(): Promise<UsHarness> {
   const futaPayable = await account("2340", "FUTA payable", "liability_current");
   const sutaPayable = await account("2350", "SUI payable", "liability_current");
   const statePayable = await account("2360", "State income tax payable", "liability_current");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      features: { payroll: true },
-      payroll: {
+  await seedEnabledPayrollConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
@@ -73,8 +66,7 @@ async function seedTexasHarness(): Promise<UsHarness> {
         // figure is the TEST entering a number as an employer would, and no
         // expectation below asserts a FUTA amount.
         us: { futaRate: "0.006" },
-      },
-    })}::jsonb where id = ${org.orgId}`);
+      });
 
   await seedPayrollComponents(org.orgId, actorId, "US");
   await setPackSlotAccount(org.orgId, actorId, "US", "fit", irsPayable);
@@ -106,20 +98,17 @@ async function seedTexasHarness(): Promise<UsHarness> {
             'TX', true, ${actorId}, ${actorId})`);
 
   const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values (${employeeId}, ${org.orgId}, 'person', 'Tex Worker', ${usSubId}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
-                                  is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, 'USD', '45', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+  await seedPayrollPerson(org.orgId, employeeId, 'Tex Worker', {
+    subsidiaryId: usSubId,
+  });
+  await seedPayrollWage(org.orgId, employeeId, actorId, {
+    currency: 'USD', rate: '45', basis: 'hour', effectiveFrom: '2026-01-01',
+  });
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, subsidiary_id, is_active,
-                               created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3,
-            ${usSubId}, true, ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly US', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3, subsidiaryId: usSubId,
+  });
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, usSubId);
@@ -133,21 +122,17 @@ async function seedTexasHarness(): Promise<UsHarness> {
             '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
             ${actorId}, ${actorId})`);
   // Assigned to the EIN account — NOT to any state SUI account.
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                           country, province, pay_basis, filing_status,
-                                           filing_account_id, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'US', 'TX', 'hourly',
-            'single', ${einAccountId}, true, ${actorId}, ${actorId})`);
+  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+    country: 'US', province: 'TX', payBasis: 'hourly', filingStatus: 'single', filingAccountId: einAccountId,
+  });
   // 160 hours in the period: 160 × 45 = 7,200 gross, past the $7,000 FUTA base.
   for (const [workedOn, hours] of [
     ["2026-07-06", 40], ["2026-07-08", 40], ["2026-07-10", 40], ["2026-07-14", 40],
   ] as const) {
-    await db.execute(sql`
-      insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
-                                billing_status, costing_basis, created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${workedOn}, ${hours}, 'approved', false,
-              'unbilled', 'actual', ${actorId}, ${actorId})`);
+    await seedPayrollTime(org.orgId, employeeId, actorId, {
+      workedOn: workedOn, hours: hours, status: 'approved', isBillable: false, billingStatus: 'unbilled',
+      costingBasis: 'actual',
+    });
   }
   return {
     orgId: org.orgId, actorId, scheduleId, employeeId, einAccountId, txSuiAccountId, sutaPayable,
@@ -340,15 +325,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const account = async (number: string, name: string, type: string) => {
-        const id = randomUUID();
-        await db.execute(sql`
-          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                                reconcilable, required_dimensions, custom, subsidiary_include_children)
-          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-                  '[]'::jsonb, '{}'::jsonb, true)`);
-        return id;
-      };
+      const account = seedPostingAccount.bind(null, org.orgId);
       const wageExpense = await account("6000", "Wages expense", "expense");
       const burdenExpense = await account("6010", "Payroll burden", "expense");
       const netPayable = await account("2300", "Wages payable", "liability_current");
@@ -356,10 +333,7 @@ test(
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       const wcbPayable = await account("2330", "WSIB payable", "liability_current");
       const ehtPayable = await account("2340", "EHT payable", "liability_current");
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          features: { payroll: true },
-          payroll: {
+      await seedEnabledPayrollConfiguration(org.orgId, {
             wageExpenseAccountId: wageExpense,
             burdenExpenseAccountId: burdenExpense,
             netPayAccountId: netPayable,
@@ -369,8 +343,7 @@ test(
             vacationPayableAccountId: vacationPayable,
             wagesTo: "expense",
             countries: ["CA"],
-          },
-        })}::jsonb where id = ${org.orgId}`);
+          });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await seedOntarioEhtFixture(org.orgId, actorId);
@@ -379,35 +352,27 @@ test(
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
 
       const employeeId = randomUUID();
-      await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, is_active, custom)
-        values (${employeeId}, ${org.orgId}, 'person', 'Ontario Worker', true, '{}'::jsonb)`);
-      await db.execute(sql`
-        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
-                                      is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+      await seedPayrollPerson(org.orgId, employeeId, 'Ontario Worker');
+      await seedPayrollWage(org.orgId, employeeId, actorId, {
+        currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+      });
       const scheduleId = randomUUID();
-      await db.execute(sql`
-        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-                ${actorId}, ${actorId})`);
+      await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        payDateOffsetDays: 3,
+      });
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                               country, province, pay_basis, federal_claim_code,
-                                               provincial_claim_code, vacation_percent, vacation_method,
-                                               is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
-                '0', 'accrue', true, ${actorId}, ${actorId})`);
+      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+      }, { percentFloor: '0', method: 'accrue' });
+
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
-        await db.execute(sql`
-          insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
-                                    billing_status, costing_basis, created_by, updated_by)
-          values (${org.orgId}, ${employeeId}, ${workedOn}, 20, 'approved', false,
-                  'unbilled', 'actual', ${actorId}, ${actorId})`);
+        await seedPayrollTime(org.orgId, employeeId, actorId, {
+          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
+          costingBasis: 'actual',
+        });
       }
 
       // The explicit $1M exemption leaves this synthetic employer owing no EHT.

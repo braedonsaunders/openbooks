@@ -3042,6 +3042,46 @@
         "singularTitle": "Miembro del programa",
         "description": "Empleos vinculados al programa con fechas de vigencia, peso y rol para el reparto."
       },
+      "benefit-contribution-rules": {
+        "title": "Aportaciones",
+        "singular": "Aportaciones",
+        "description": "Defina cada deducción del empleado, aportación del empleador o beneficio imponible no monetario. Los componentes de nómina controlan los impuestos y la contabilización."
+      },
+      "benefit-contribution-classes": {
+        "title": "Clases de elegibilidad",
+        "singular": "Clases de elegibilidad",
+        "description": "Agrupe empleados cuando difieran los criterios de elegibilidad o los límites."
+      },
+      "benefit-contribution-tiers": {
+        "title": "Límites de aportación equivalente",
+        "singular": "Límites de aportación equivalente",
+        "description": "Los umbrales de antigüedad con fechas definen las ofertas máximas. Las elecciones fijas no aumentan automáticamente."
+      },
+      "benefit-enrollment-configuration": {
+        "title": "Elección del empleado",
+        "singular": "Elección del empleado",
+        "description": "Revise la clase y elegibilidad; gestione las aportaciones elegidas en Aportaciones."
+      },
+      "benefit-enrollment-terms": {
+        "title": "Elecciones de aportación",
+        "singular": "Elecciones de aportación",
+        "description": "Conserve la elección real separada de los límites. Añada nuevas condiciones con vigencia al cambiarla."
+      },
+      "payroll-service-credits": {
+        "title": "Antigüedad reconocida",
+        "singular": "Antigüedad reconocida",
+        "description": "Registre la antigüedad reconocida sin cambiar fechas de contratación. La misma base sirve para vacaciones y beneficios."
+      },
+      "payroll-vacation-terms": {
+        "title": "Condiciones de vacaciones",
+        "singular": "Condiciones de vacaciones",
+        "description": "Una política con vigencia controla el método de vacaciones y mínimos personales. La antigüedad puede aumentarlos."
+      },
+      "benefit-recovery-sources": {
+        "title": "Recuperación de primas",
+        "singular": "Origen de recuperación de primas",
+        "description": "Seleccione las primas del empleador adeudadas durante un período de cobertura sin sueldo. La cuenta y el calendario de recuperación se definen en la deducción."
+      },
       "dunning-policies": {
         "title": "Políticas",
         "description": "Cobre cuentas pendientes y gestione la facturación en un único espacio de trabajo."
@@ -3136,7 +3176,7 @@
       "postsGl": "Contabiliza en el libro mayor",
       "bookId": "Libro",
       "categoryId": "Categoría de activo",
-      "convention": "Convención",
+      "convention": "Convención de antigüedad",
       "lifeMonths": "Vida (meses)",
       "depreciationMethodId": "Método de depreciación",
       "departmentId": "Departamento",
@@ -3312,7 +3352,7 @@
       "payDateOffsetDays": "Desfase de fecha de pago (días)",
       "payoutComponentId": "Componente de pago",
       "pensionable": "Pensionable",
-      "periodsPerYear": "Períodos por año",
+      "periodsPerYear": "Períodos de cobro al año",
       "planId": "Plan",
       "programType": "Tipo de cuenta",
       "protectionBase": "Base de ingresos protegidos",
@@ -3494,7 +3534,39 @@
       "default_on": "Incluida por defecto",
       "applies_to": "Cobertura regional",
       "countries": "Países",
-      "timezone": "Zona horaria"
+      "timezone": "Zona horaria",
+      "ruleKey": "Código de aportación",
+      "rateFormula": "Método de tasa",
+      "hoursBasis": "Horas elegibles",
+      "payBasis": "Ingresos elegibles",
+      "monthsPerYear": "Meses de prima al año",
+      "proration": "Regla de período parcial",
+      "matchRuleId": "Aportación equivalente",
+      "requiresMatchEligibility": "Requiere elegibilidad",
+      "enforcePolicyCap": "Aplicar máximo de la política",
+      "classKey": "Clase de elegibilidad",
+      "minimumServiceYears": "Años mínimos de antigüedad",
+      "employerMaxPercent": "Máximo del empleador %",
+      "employeeMatchRatio": "Proporción empleado/empleador",
+      "matchEligible": "Elegible para aportación equivalente",
+      "enrollmentId": "Inscripción del empleado",
+      "ruleId": "Aportación",
+      "electionMode": "Método de elección",
+      "electedRate": "Tasa elegida",
+      "declaredPeriodsPerYear": "Períodos elegidos al año",
+      "runApplicability": "Nóminas",
+      "unpaidPeriodTreatment": "Tratamiento de períodos sin sueldo",
+      "arrearsPlanId": "Banco de recuperación",
+      "arrearsRecoveryPeriods": "Períodos de recuperación",
+      "asOfDate": "Observado el",
+      "creditedDays": "Días reconocidos",
+      "creditedMonths": "Meses reconocidos",
+      "annualDays": "Días anuales de vacaciones",
+      "percentFloor": "Mínimo personal %",
+      "annualDaysFloor": "Mínimo personal de días anuales",
+      "waitingPeriodMonths": "Espera (meses naturales)",
+      "approvalMode": "Política de aprobación",
+      "legalEmployer": "Empleador legal"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
@@ -5097,7 +5169,8 @@
       "benefitCosts": "Costos y prorrateo",
       "benefitComponents": "Componentes de nómina",
       "benefitDelivery": "Pago",
-      "benefitRules": "Reglas"
+      "benefitRules": "Reglas",
+      "benefitAdvanced": "Reglas avanzadas de aportación"
     },
     "segmentValues": {
       "builtinLink": "Abrir {name}",
@@ -5113,6 +5186,136 @@
       "row": "Fila {number}",
       "addRow": "Añadir fila",
       "removeRow": "Eliminar fila"
+    },
+    "benefitBuilder": {
+      "offer": "Programa",
+      "eligibility": "Elegibilidad y fechas",
+      "eligibilityHint": "Defina fechas, espera y aprobaciones. Después añada aportaciones y límites en el registro.",
+      "delivery": "Conexión con nómina",
+      "deliveryHint": "Vincule deducciones y aportaciones patronales. Nómina controla el tratamiento fiscal y procesa los importes elegidos.",
+      "review": "Revisar",
+      "coverageType": "Tipo de cobertura",
+      "health": {
+        "title": "Programa de salud y seguros",
+        "offer": "Nombre la cobertura, la aseguradora y el empleador responsable. Los empleados eligen cobertura en Inscripciones.",
+        "costs": "Primas y cobertura",
+        "costHint": "Defina las primas de cada parte y los meses parciales. Añada niveles individuales o familiares después de crear.",
+        "provider": "Aseguradora",
+        "employeeCost": "Prima del empleado",
+        "employerCost": "Prima del empleador",
+        "employeeCostBasis": "Frecuencia de prima del empleado",
+        "employerCostBasis": "Frecuencia de prima del empleador",
+        "contribution": "Primas de cobertura",
+        "classes": "Grupos de cobertura",
+        "rate": "Importe o tasa de prima",
+        "contributionSingular": "Prima de cobertura"
+      },
+      "retirement": {
+        "title": "Programa de jubilación y ahorro",
+        "offer": "Nombre el plan, el proveedor y el empleador responsable. Los empleados participan mediante Inscripciones.",
+        "costs": "Aportaciones al ahorro",
+        "costHint": "Elija aportaciones fijas o un porcentaje del salario por parte. Los porcentajes son tasas de aportación, no una fórmula de aportación equivalente.",
+        "provider": "Proveedor de pensiones o ahorro",
+        "employeeCost": "Aportación del empleado",
+        "employerCost": "Aportación del empleador",
+        "employeeCostBasis": "Base de aportación del empleado",
+        "employerCostBasis": "Base de aportación del empleador",
+        "contribution": "Aportaciones",
+        "rate": "Importe o tasa de aportación",
+        "contributionSingular": "Aportación"
+      }
+    },
+    "benefitContributions": {
+      "componentHint": "Beneficios define la aportación. Configure impuestos, remesas y cuentas en su componente de nómina.",
+      "formulaHint": "Elija un método compatible. La equivalencia vincula la aportación elegida de la contraparte.",
+      "rateHint": "Use la unidad seleccionada. Una elección fija puede sustituir la tasa del plan.",
+      "annualizationHint": "Indique los períodos de cobro anuales. Vacío usa el calendario del empleado.",
+      "capHint": "Los límites restringen ofertas; no cambian elecciones fijas.",
+      "ratioHint": "Aportación del empleado por unidad del empleador: 2 significa el doble.",
+      "classHint": "Seleccione una clase de este plan.",
+      "matchHint": "Indica si esta inscripción es elegible para la equivalencia.",
+      "electionHint": "La elección fija no aumenta con los límites. Seguir política usa la tasa y límites vigentes.",
+      "electedRateHint": "Introduzca la tasa realmente elegida, distinta de la oferta máxima.",
+      "arrearsHint": "Use un banco monetario de deuda, acumulación manual y esta deducción. Indique períodos de recuperación.",
+      "options": {
+        "kind": {
+          "employee_deduction": "Deducción del empleado",
+          "employer_contribution": "Aportación del empleador",
+          "taxable_non_cash": "Beneficio imponible no monetario"
+        },
+        "basis": {
+          "per_hour": "Por hora elegible",
+          "per_period": "Por período de nómina",
+          "per_month": "Importe mensual anualizado",
+          "per_year": "Importe anual",
+          "percent_of_eligible_pay": "% de ingresos elegibles"
+        },
+        "formula": {
+          "elected_rate": "Tasa del plan o elegida",
+          "hourly_wage_percent": "% del salario por hora",
+          "matching_election": "Igualar elección correspondiente"
+        },
+        "hours": {
+          "all_paid": "Todas las horas pagadas",
+          "regular_paid": "Horas regulares pagadas",
+          "scheduled_paid": "Horas programadas pagadas"
+        },
+        "pay": {
+          "all_cash_earnings": "Todos los ingresos monetarios",
+          "regular_cash_earnings": "Ingresos monetarios regulares"
+        },
+        "proration": {
+          "none": "Sin prorrateo",
+          "calendar_days": "Días naturales cubiertos"
+        },
+        "election": {
+          "fixed": "Elección fija",
+          "follows_policy": "Seguir política del plan"
+        },
+        "run": {
+          "regular_only": "Solo nóminas regulares",
+          "all_pay_runs": "Todas las nóminas"
+        },
+        "unpaid": {
+          "charge": "Cobrar el período",
+          "carry": "Acumular para recuperación"
+        }
+      },
+      "waitingMonthsHint": "Use meses o días, no ambos. Los meses siguen la fecha de contratación.",
+      "activationHint": "Guarde la oferta inactiva, configure Aportaciones y después actívela.",
+      "planRate": "Tasa del plan: {rate}",
+      "noApproval": "Sin aprobaciones",
+      "flowsApproval": "Usar política de Flows",
+      "approvalHint": "Sin aprobaciones activa elecciones válidas directamente. Flows aplica niveles configurados antes de activar.",
+      "fields": {
+        "kind": "Tipo de aportación",
+        "basis": "Base de cálculo",
+        "rate": "Tasa del plan",
+        "method": "Método de vacaciones",
+        "ruleId": "Aportación",
+        "ruleKey": "Código de aportación",
+        "payComponentId": "Componente de nómina",
+        "recoveryRuleId": "Deducción de recuperación",
+        "premiumRuleId": "Prima del empleador"
+      },
+      "recoverySourceHint": "Vincule esta prima a la deducción del empleado que acumula y recupera la cobertura sin sueldo. Cada prima solo puede pertenecer a una deducción de recuperación."
+    },
+    "serviceCredit": {
+      "calendarMonths": "Meses naturales",
+      "actual365": "Días reales / 365",
+      "conventionHint": "Los meses usan aniversarios. Real/365 usa días naturales y la base observada.",
+      "asOfHint": "Fecha observada; la antigüedad futura avanza desde esta base.",
+      "reasonHint": "Explique la política o ajuste. La nómina contabilizada se conserva; los cambios usan nuevas condiciones.",
+      "annualDaysHint": "Los días anuales son distintos del porcentaje; no se convierten en dinero.",
+      "employerTierHint": "Elija el empleador legal. Su escala sustituye la escala predeterminada de la organización."
+    },
+    "vacationTerms": {
+      "accrue": "Acumular pago de vacaciones",
+      "payEachPeriod": "Pagar en cada período",
+      "paidLeave": "Vacaciones pagadas en días",
+      "percentHint": "Se conserva el mínimo personal superior. Vacío sigue la antigüedad; el porcentaje no define los días.",
+      "daysHint": "El mínimo personal de días se conserva separado de la antigüedad y del porcentaje monetario.",
+      "method": "Método de vacaciones"
     },
     "collectionPolicy": "Política",
     "collectionPolicyFields": {
@@ -5131,7 +5334,8 @@
       "description": "Defina los criterios de cobro y la secuencia de recordatorios.",
       "reminderNumber": "Recordatorio {number}",
       "addReminder": "Añadir recordatorio"
-    }
+    },
+    "no": "No"
   },
   "flows": {
     "title": "Flujos",

@@ -567,7 +567,9 @@
       "title": "税务证明",
       "loading": "正在加载证明…",
       "loadFailed": "无法加载税务证明。"
-    }
+    },
+    "serviceCreditLink": "认可工龄",
+    "vacationTermsLink": "休假条款"
   },
   "setupWizard": {
     "cta": {
@@ -705,7 +707,9 @@
       "holidayCalendar": "假日日历",
       "payday": "发薪日",
       "rates": "法定税率",
-      "workSchedules": "工作时间表"
+      "workSchedules": "工作时间表",
+      "serviceCredits": "认可工龄",
+      "vacationTerms": "休假条款"
     },
     "packs": {
       "installed": "已安装",

@@ -1,3 +1,8 @@
+import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollProfile, seedPayrollWage,
+  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -20,7 +25,6 @@ import { isCanadianSin, renderRoeXml, type RoeRecordToFile } from "./canada/roex
 import { roeCandidates, t4Slips, type RoeRecord } from "./yearend.ts";
 import { employeeYtd } from "./canada/compute-statutory.ts";
 import { usEmployeeYtd } from "./us/compute-statutory.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Payroll control tests.
@@ -89,46 +93,35 @@ async function seedPayRun(options: {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, subsidiary_id, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${options.scheduleSubsidiaryId ?? null}, ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3, subsidiaryId: options.scheduleSubsidiaryId ?? null,
+  });
 
   const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
-    values (${employeeId}, ${org.orgId}, 'person', 'Terry Worker', true,
-            ${options.employeeSubsidiaryId ?? org.subsidiaryId}, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
-                               created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, '2024-01-01', ${options.terminatedOn ?? null}, true,
-            ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                  effective_from, effective_to, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, 'CAD', '30', ${options.rateBasis ?? "hour"}, 2080,
-            '2026-01-01', ${options.rateEffectiveTo ?? null}, true, ${actorId}, ${actorId})`);
+  await seedPayrollPerson(org.orgId, employeeId, 'Terry Worker', {
+    subsidiaryId: options.employeeSubsidiaryId ?? org.subsidiaryId,
+  });
+  await seedPayrollEmployeeRole(org.orgId, employeeId, { hiredOn: '2024-01-01', terminatedOn: options.terminatedOn ?? null, isActive: true, createdBy: actorId, updatedBy: actorId });
+  await seedPayrollWage(org.orgId, employeeId, actorId, {
+    currency: 'CAD', rate: '30', basis: options.rateBasis ?? "hour", annualHours: 2080,
+    effectiveFrom: '2026-01-01', effectiveTo: options.rateEffectiveTo ?? null,
+  });
   // Stubs carry a NOT NULL employment and stub calculation refuses employees
   // without an HRM employment, so the hire carries one throughout.
   const employmentId = await seedWorkerEmployment(
     org.orgId, employeeId, options.employeeSubsidiaryId ?? org.subsidiaryId);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                           province, pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'ON',
-            ${options.payBasis ?? "hourly"}, ${options.country ?? "CA"}, 1, 1, '4', 'accrue', true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+    province: 'ON', payBasis: options.payBasis ?? "hourly", country: options.country ?? "CA", federalClaimCode: 1,
+    provincialClaimCode: 1,
+  }, { percentFloor: '4', method: 'accrue' });
+
 
   const documentId = randomUUID();
-  await db.execute(sql`
-    insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                           currency, status, created_by, updated_by)
-    values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-            ${org.subsidiaryId}, '2026-07-21', 'CAD', 'draft', ${actorId}, ${actorId})`);
+  await seedPayrollDocument(org.orgId, documentId, {
+    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: org.subsidiaryId,
+    documentDate: '2026-07-21', currency: 'CAD', status: 'draft', createdBy: actorId, updatedBy: actorId,
+  });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                           tax_year, run_status, calculated_at, created_by, updated_by)
@@ -327,13 +320,11 @@ test(
 
 async function seedCommittedStub(run: PayRunFixture, gross: string): Promise<string> {
   const stubId = randomUUID();
-  await db.execute(sql`
-    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                           periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                           pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-    values (${stubId}, ${run.orgId}, ${run.documentId}, ${run.employeeId}, ${run.employmentId}, 'ON',
-            26, '2026-07-21', 2026, 'CAD', ${gross}, ${gross}, ${gross}, ${gross},
-            ${JSON.stringify({ C: "0", C2: "0", EI: "0" })}::jsonb, ${run.actorId}, ${run.actorId})`);
+  await seedPayrollStub(run.orgId, run.documentId, run.employeeId, run.employmentId, {
+    id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
+    gross: gross, netPay: gross, pensionableEarnings: gross, insurableEarnings: gross,
+    factors: { C: "0", C2: "0", EI: "0" }, createdBy: run.actorId, updatedBy: run.actorId,
+  });
   return stubId;
 }
 
@@ -350,30 +341,25 @@ test(
         gross: string,
       ) => {
         const documentId = randomUUID();
-        await db.execute(sql`
-          insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                                 currency, status, created_by, updated_by)
-          values (${current.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-                  ${current.subsidiaryId}, ${periodEnd}, 'CAD', 'approved',
-                  ${current.actorId}, ${current.actorId})`);
+        await seedPayrollDocument(current.orgId, documentId, {
+          kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: current.subsidiaryId,
+          documentDate: periodEnd, currency: 'CAD', status: 'approved', createdBy: current.actorId,
+          updatedBy: current.actorId,
+        });
         await db.execute(sql`
           insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                                 pay_date, tax_year, run_status, created_by, updated_by)
           values (${documentId}, ${current.orgId}, ${current.scheduleId}, ${periodStart}, ${periodEnd},
                   ${periodEnd}, 2026, ${runStatus}, ${current.actorId}, ${current.actorId})`);
-        await db.execute(sql`
-          insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
-                                 province, periods_per_year, pay_date, tax_year, currency_code, gross,
-                                 pensionable_earnings, insurable_earnings, net_pay, factors,
-                                 created_by, updated_by)
-          values (${randomUUID()}, ${current.orgId}, ${documentId}, ${current.employeeId},
-                  ${current.employmentId}, 'ON', 26, ${periodEnd}, 2026, 'CAD', ${gross}, ${gross},
-                  ${gross}, ${gross},
-                  ${JSON.stringify({
+        await seedPayrollStub(current.orgId, documentId, current.employeeId, current.employmentId, {
+          id: randomUUID(), province: 'ON', periodsPerYear: 26, payDate: periodEnd, taxYear: 2026, currency: 'CAD',
+          gross: gross, pensionableEarnings: gross, insurableEarnings: gross, netPay: gross,
+          factors: {
                     C: gross, C2: gross, EI: gross, QPIP: gross,
                     SS: gross, MED: gross, MED2: gross,
-                  })}::jsonb,
-                  ${current.actorId}, ${current.actorId})`);
+                  },
+          createdBy: current.actorId, updatedBy: current.actorId,
+        });
       };
 
       // A committed $1,000 period is real YTD. The later calculated $9,000
@@ -605,22 +591,19 @@ test(
       assert.deepEqual((await payRunStaleness(run.orgId, run.documentId)).reasons, []);
 
       const otherId = randomUUID();
-      await db.execute(sql`
-        insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                               currency, status, created_by, updated_by)
-        values (${run.orgId}, ${otherId}, 'pay_run', 'PAY-OFFCYCLE', ${run.subsidiaryId},
-                '2026-07-22', 'CAD', 'approved', ${run.actorId}, ${run.actorId})`);
+      await seedPayrollDocument(run.orgId, otherId, {
+        kind: 'pay_run', documentNumber: 'PAY-OFFCYCLE', subsidiaryId: run.subsidiaryId, documentDate: '2026-07-22',
+        currency: 'CAD', status: 'approved', createdBy: run.actorId, updatedBy: run.actorId,
+      });
       await db.execute(sql`
         insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                               pay_date, tax_year, run_type, run_status, created_by, updated_by)
         values (${otherId}, ${run.orgId}, ${run.scheduleId}, '2026-07-19', '2026-07-19',
                 '2026-07-22', 2026, 'bonus', 'committed', ${run.actorId}, ${run.actorId})`);
-      await db.execute(sql`
-        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                               periods_per_year, pay_date, tax_year, currency_code, gross,
-                               created_by, updated_by)
-        values (${run.orgId}, ${otherId}, ${run.employeeId}, ${run.employmentId}, 'ON', 26,
-                '2026-07-22', 2026, 'CAD', '5000', ${run.actorId}, ${run.actorId})`);
+      await seedPayrollStub(run.orgId, otherId, run.employeeId, run.employmentId, {
+        province: 'ON', periodsPerYear: 26, payDate: '2026-07-22', taxYear: 2026, currency: 'CAD', gross: '5000',
+        createdBy: run.actorId, updatedBy: run.actorId,
+      });
 
       assert.ok(
         (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("ytd"),

@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isUuid } from '../../lib/list-params'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { listSchedules } from '@openbooks/engine/src/hrm/construction/rates.ts'
 import { can, getAuthz } from '../../lib/authz'
@@ -53,6 +54,7 @@ export async function SetupSectionSlot({
       allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
       rowParam={rowParam}
       visibleRowIds={visibleRowIds}
+      fixedFilter={['payroll-service-credits', 'payroll-vacation-terms'].includes(entityKey) && typeof sp.employment === 'string' && isUuid(sp.employment) ? { fieldKey: 'employmentId', value: sp.employment } : undefined}
     />
   )
 }

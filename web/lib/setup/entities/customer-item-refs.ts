@@ -3,6 +3,10 @@ import { sql } from 'drizzle-orm'
 import { validateIdentifierUnit } from '@openbooks/engine/src/inventory/item-identifiers.ts'
 import { validateCustomerItemRef } from '@openbooks/engine/src/sales/customer-item-refs.ts'
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
+import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
+import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
+import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
+import { validateContributionWrite, validateServiceCredit, validateServiceTier, validateVacationTerm } from '../workforce-validation'
 
 type CurrentIdentifier = { item_id: string; unit: string | null }
 type CurrentCustomerItemRef = { customer_id: string; item_id: string }
@@ -32,6 +36,10 @@ const validateCustomerItemRefWrite: SetupEntityValidationHook = async ({ orgId, 
 }
 
 const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> = {
+  ...Object.fromEntries(BENEFIT_CONTRIBUTION_ENTITIES.map((entity) => [entity.key, validateContributionWrite])),
+  [PAYROLL_SERVICE_CREDITS_ENTITY.key]: validateServiceCredit,
+  [PAYROLL_VACATION_TERMS_ENTITY.key]: validateVacationTerm,
+  'entitlement-service-tiers': validateServiceTier,
   'item-identifiers': validateIdentifierWrite,
   'customer-item-refs': validateCustomerItemRefWrite,
 }

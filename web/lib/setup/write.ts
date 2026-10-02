@@ -1,4 +1,5 @@
 import 'server-only'
+import { setupReferenceSubsidiarySource } from './subsidiary-scope'
 import { randomUUID } from 'node:crypto'
 import { uuidId } from '../api/json-schema'
 import { claimSetupCreate, SetupCreateConflict } from '../api/idempotency'
@@ -85,7 +86,7 @@ const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(valu
  * bound parameter. The request body cannot introduce a column name. Callers
  * authorize their configuration surface before reaching here: generic
  * setup routes and tools require admin.setup.manage, while the Benefits
- * adapter requires hrm.benefits.manage and accepts only plans and tiers.
+ * adapter requires hrm.benefits.manage and accepts plan identity and its native contribution configuration.
  */
 
 /** The acting admin: org, user id (stamped on rows + audit), and permissions
@@ -225,15 +226,16 @@ async function setupWriteTransaction<T>(
         }
         const requested = body && body[field.key] !== undefined ? body[field.key] : current
         if (requested == null && !scopeField) {
-          throw new SetupWriteRefusal('Choose an equipment unit in your allowed subsidiary scope', 403)
+          throw new SetupWriteRefusal('Choose an owning record in your allowed employer scope', 403)
         }
         if (requested != null) {
+          const target = setupReferenceSubsidiarySource(field.ref!, 'scope_owner')
           const visible = await tx.execute<{ subsidiary_id: string | null }>(sql`
-            select subsidiary_id from equipment_units where id = ${String(requested)} and org_id = ${orgId}
-             for share
+            select ${target.subsidiary} as subsidiary_id from ${target.from}
+             where ${target.id}=${String(requested)} and ${target.org}=${orgId} for share
           `)
           if (!visible.rows[0] || !allowed.has(String(visible.rows[0].subsidiary_id ?? '').toLowerCase())) {
-            throw new SetupWriteRefusal('equipment unit is outside your allowed subsidiary scope', 403)
+            throw new SetupWriteRefusal('The owning record is outside your allowed employer scope', 403)
           }
         }
       }
@@ -462,10 +464,21 @@ export async function validateEntityIntegrity(
   // the org's sole subsidiary while the fence is closed.
   const submittedSubsidiaryScope = entity.key !== 'tax-registrations' && entity.key !== 'pay-schedules'
     && entity.fields
-      .filter((field) => field.ref === 'subsidiaries')
+      .filter((field) => field.ref === 'subsidiaries' && !field.legalEmployer)
       .some((field) => Boolean(body[field.key]))
   if (submittedSubsidiaryScope && !(await subsidiaryFeatureEnabled(orgId, executor))) {
     return 'Subsidiaries are not enabled for this organization'
+  }
+  // A legal employer identifies whose payroll obligation this is; it is
+  // not an optional multi-subsidiary management capability. Keep the same
+  // tenant and actor scope checks with either feature state.
+  for (const field of entity.fields.filter((field) => field.legalEmployer)) {
+    const employer = body[field.key]
+    if (employer == null || employer === '') continue
+    if (!isUuid(employer)) return 'Choose a valid legal employer from this organization'
+    const selected = await executor.execute(sql`select id from subsidiaries
+      where org_id=${orgId} and id=${String(employer)} and is_active and not is_elimination`)
+    if (selected.rows.length !== 1) return 'Choose an active legal employer from this organization'
   }
   if (entity.key === 'pay-derived-rules') {
     // Equipment attribution is a Features-gated write. Turning Equipment off
@@ -1220,74 +1233,35 @@ export async function validateEntityIntegrity(
       if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
     }
   }
-  // HRM benefit-plan component validation on plan save: a side with a cost
-  // and no component is refused by name, the employer component must be
-  // kind employer_contribution (so employer money can never reach net
-  // pay), the employee component kind deduction.
-  // prorationBasis carries no drawer default, so a missing rule is refused
-  // here with its remedy, never stored as a guess.
+  // Offer identity and contribution pricing have separate owners. The native
+  // contribution validator is shared by setup, enrollment and payroll.
   if (entity.key === 'benefit-plans') {
-    // Edits arrive partial: merge the stored row first so an edit that
-    // touches only the name is not refused for a rule it never changed
-    // (0193 steps precedent).
-    let values: Record<string, unknown> = body as Record<string, unknown>
+    let values = body
     if (rowId) {
-      const current = await executor.execute(sql`
-        select proration_basis as "prorationBasis",
-               employee_cost_basis as "employeeCostBasis", employer_cost_basis as "employerCostBasis",
-               currency, waiting_period_days as "waitingPeriodDays",
-               employee_pay_component_id as "employeePayComponentId",
-               employer_pay_component_id as "employerPayComponentId",
-               provider_party_id as "providerPartyId", employer_subsidiary_id as "employerSubsidiaryId"
-          from hrm_benefit_plans where id = ${rowId} and org_id = ${orgId}
-      `)
+      const current = await executor.execute(sql`select is_active as "isActive", effective_from::text as "effectiveFrom", currency, waiting_period_days as "waitingPeriodDays", waiting_period_months as "waitingPeriodMonths",
+        provider_party_id as "providerPartyId", employer_subsidiary_id as "employerSubsidiaryId"
+        from hrm_benefit_plans where id = ${rowId} and org_id = ${orgId}`)
       if (!current.rows[0]) return 'Benefit plan not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...values }
+      values = { ...current.rows[0], ...body }
     }
     const shape = benefitPlanShapeProblem(values)
     if (shape) return shape
-    const employeeComponent = (values.employeePayComponentId ?? null) as string | null
-    const employerComponent = (values.employerPayComponentId ?? null) as string | null
-    const provider = (values.providerPartyId ?? null) as string | null
-    const subsidiary = (values.employerSubsidiaryId ?? null) as string | null
-    const refs = await executor.execute(sql`
-      select
-        ${provider ? sql`exists(select 1 from parties where id = ${provider} and org_id = ${orgId})` : sql`true`} as provider_ok,
-        ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
-        ${employeeComponent ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${employeeComponent} and org_id = ${orgId})` : sql`null`} as employee_component,
-        ${employerComponent ? sql`(select json_build_object('kind', kind, 'active', is_active) from pay_components where id = ${employerComponent} and org_id = ${orgId})` : sql`null`} as employer_component
-    `)
-    if (!refs.rows[0]?.provider_ok) return 'The provider party is not visible in this organization'
-    if (!refs.rows[0]?.subsidiary_ok) return 'The employer subsidiary is not visible in this organization'
-    const employeeRow = refs.rows[0]?.employee_component as { kind?: string | null; active?: boolean } | null
-    if (employeeComponent && !employeeRow?.kind) return 'The employee pay component is not visible in this organization'
-    if (employeeComponent && employeeRow?.active !== true) return 'The employee pay component is inactive — reactivate it or link its replacement'
-    if (employeeComponent && employeeRow?.kind !== 'deduction') {
-      return 'The employee component must be kind deduction so a contribution can never inflate net pay'
+    const { requireBenefitCurrency, validateBenefitPlanActivation, BenefitsError } = await import('@openbooks/engine/hrm/benefits')
+    try {
+      await requireBenefitCurrency(executor, orgId, String(values.currency ?? ''), values.employerSubsidiaryId ? String(values.employerSubsidiaryId) : null)
+      if (values.isActive === true || values.isActive === 'true') {
+        if (!rowId) return 'Save the offer inactive, add Contributions, and then activate it'
+        await validateBenefitPlanActivation(executor, orgId, rowId, String(values.effectiveFrom ?? ''))
+      }
     }
-    const employerRow = refs.rows[0]?.employer_component as { kind?: string | null; active?: boolean } | null
-    if (employerComponent && !employerRow?.kind) return 'The employer pay component is not visible in this organization'
-    if (employerComponent && employerRow?.active !== true) return 'The employer pay component is inactive — reactivate it or link its replacement'
-    if (employerComponent && employerRow?.kind !== 'employer_contribution') {
-      return 'The employer component must be kind employer_contribution so employer money can never reach net pay'
-    }
-  }
-  // HRM benefit pricing tiers (0197): the parent plan must live in this
-  // org; keys and labels are non-blank; costs and position are explicit.
-  if (entity.key === 'benefit-plan-levels') {
-    let values = body
-    if (rowId) {
-      const current = await executor.execute(sql`
-        select plan_id as "planId" from hrm_benefit_plan_levels where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Benefit tier not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
-    }
-    const plan = (values.planId ?? null) as string | null
-    const planOk = plan
-      ? (await executor.execute(sql`select exists(select 1 from hrm_benefit_plans where id = ${plan} and org_id = ${orgId}) as ok`)).rows[0]?.ok
-      : false
-    if (!planOk) return 'The parent benefit plan is not visible in this organization'
+    catch (error) { if (error instanceof BenefitsError) return error.message; throw error }
+    const provider = values.providerPartyId ? String(values.providerPartyId) : null
+    const subsidiary = values.employerSubsidiaryId ? String(values.employerSubsidiaryId) : null
+    const refs = await executor.execute(sql`select
+      ${provider ? sql`exists(select 1 from parties where id=${provider} and org_id=${orgId})` : sql`true`} as provider_ok,
+      ${subsidiary ? sql`exists(select 1 from subsidiaries where id=${subsidiary} and org_id=${orgId})` : sql`true`} as subsidiary_ok`)
+    if (!refs.rows[0]?.provider_ok) return 'Choose a provider in this organization'
+    if (!refs.rows[0]?.subsidiary_ok) return 'Choose an employer in this organization'
   }
   // Employer-defined benefit programs: shape plus tenant references. The
   // service owns status moves; the registry edits draft configuration with

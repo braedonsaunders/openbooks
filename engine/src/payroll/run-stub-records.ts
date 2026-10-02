@@ -47,6 +47,9 @@ export function programApplicabilityFromExclusions(
 }
 
 export interface Line {
+  /** Exact recurring election allocation represented by this native line. */
+  benefitAllocationId?: string;
+  entitlementMovementKey?: string;
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   // Brand boundary: every stub amount is canonical ledger money by the time
@@ -320,7 +323,8 @@ export async function insertPayStubLineRows(
   tx: Pick<typeof db, "execute">,
   args: { orgId: string; stubId: string; actorId: string; country: string; payDate: string },
   lines: readonly Line[],
-): Promise<void> {
+): Promise<Map<string,string>> {
+  const entitlementLineIds=new Map<string,string>();
   for (const line of lines) {
     const reporting = line.statutoryReportingCode ?? resolvePayrollStatutoryReportingCode(
       args.country, line.statutoryReportingCategory, args.payDate,
@@ -330,7 +334,7 @@ export async function insertPayStubLineRows(
     // guard (migration 0180) only ever fires on a committed run's history.
     // Lines without a stamp keep source 'unknown' with null account/evidence
     // and post through the unchanged component-then-default fallback.
-    await tx.execute(sql`
+    const insertedLine = await tx.execute<{ id: string }>(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, rate,
                                   earned_from, earned_to,
                                   amount, project_id, department_id, time_type_id, item_id, sequence,
@@ -350,9 +354,18 @@ export async function insertPayStubLineRows(
                 code: reporting.code, label: reporting.label,
               }) : null}::jsonb,
               ${line.paymentKind ?? "cash"}, ${line.nonCashAccountId ?? null},
-              ${args.actorId}, ${args.actorId})
+              ${args.actorId}, ${args.actorId}) returning id
     `);
+    if (line.entitlementMovementKey && insertedLine.rows[0]) entitlementLineIds.set(line.entitlementMovementKey,insertedLine.rows[0].id);
+    if (line.benefitAllocationId) {
+      const persisted = insertedLine.rows[0];
+      if (!persisted) throw new PayrollError('The recurring benefit payroll line was not stored — retry calculation before committing');
+      const linked = (await tx.execute(sql`update pay_run_benefit_allocations set pay_stub_line_id=${persisted.id},amount=${line.amount},updated_by=${args.actorId},updated_at=now()
+        where org_id=${args.orgId} and id=${line.benefitAllocationId} and status='calculated' returning id`)).rows;
+      if (linked.length !== 1) throw new PayrollError('The recurring benefit allocation could not link to its native payroll line — retry calculation before committing');
+    }
   }
+  return entitlementLineIds;
 }
 
 /**
@@ -372,7 +385,7 @@ export async function persistEntitlementMovements(
   tx: Pick<typeof db, "execute">,
   args: {
     orgId: string; actorId: string; documentId: string;
-    employeePartyIds: [string]; simulate: boolean;
+    employeePartyIds: [string]; simulate: boolean; stubLineIds?: ReadonlyMap<string,string>;
     movements: Awaited<ReturnType<typeof planMovementsForStub>>["movements"];
   },
 ): Promise<void> {
@@ -380,7 +393,7 @@ export async function persistEntitlementMovements(
   await recordEntitlementMovements(tx, {
     orgId: args.orgId, actorId: args.actorId, payRunDocumentId: args.documentId,
     employeePartyIds: args.employeePartyIds,
-    movements: args.movements,
+    movements: args.movements, stubLineIds: args.stubLineIds,
   });
 }
 

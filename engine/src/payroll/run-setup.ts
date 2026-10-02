@@ -290,16 +290,16 @@ async function seedVacationEntitlementPlan(
   if (!declaresVacation) return;
 
   // The plan's BASE rate. Per-employee rates keep their one home on the
-  // payroll profile (employee_payroll_profiles.vacation_percent) and service
+  // effective-dated employee vacation terms and service
   // tiers raise them; this is only what an employee with neither falls back
   // to. Same derivation the migration script uses, so a migrated tenant and a
   // freshly seeded one land on the same number.
   const modal = (await db.execute<{ percent: string }>(sql`
-    select vacation_percent::text as percent
-      from employee_payroll_profiles
-     where org_id = ${orgId} and vacation_percent is not null and vacation_percent > 0
-     group by vacation_percent
-     order by count(*) desc, vacation_percent asc
+    select percent_floor::text as percent
+      from payroll_vacation_terms
+     where org_id = ${orgId} and percent_floor is not null and percent_floor > 0 and effective_to is null
+     group by percent_floor
+     order by count(*) desc, percent_floor asc
      limit 1
   `));
   const accrualValue = roundMoney(modal.rows[0]?.percent ?? "4", 4);

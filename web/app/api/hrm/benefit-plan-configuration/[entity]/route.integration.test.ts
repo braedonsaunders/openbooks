@@ -20,6 +20,7 @@ const authzSource = `
   export async function guardPermission(permission) {
     return state.authz?.permissions.has(permission) ? state.authz : state.forbidden
   }
+  export async function getAuthz() { return state.authz }
   export function guardSubsidiaryScope() { return null }
   export function guardUnrestrictedScope() { return null }
   export async function guardRootSubsidiaryScope() { return null }
@@ -44,10 +45,8 @@ const call = (entity = 'benefit-plans') => ({ params: Promise.resolve({ entity }
 const plan = (subsidiaryId: string) => ({
   code: 'HEALTH', name: 'Health coverage', kind: 'health', currency: 'CAD',
   employerSubsidiaryId: subsidiaryId,
-  employeeCostBasis: 'per_period', employeeCost: '25.00',
-  employerCostBasis: 'per_period', employerCost: '100.00',
-  waitingPeriodDays: 0,
-  prorationBasis: 'daily', effectiveFrom: '2026-01-01', isActive: true,
+  approvalMode: 'none', waitingPeriodDays: 0,
+  effectiveFrom: '2026-01-01', isActive: false,
 })
 function request(method: string, body?: unknown, requestId: string = randomUUID(), entity = 'benefit-plans', id?: string) {
   return new Request(`http://localhost/api/hrm/benefit-plan-configuration/${entity}${id ? `?id=${id}` : ''}`, {
@@ -59,7 +58,7 @@ async function fixture(fn: (org: Awaited<ReturnType<typeof createScratchOrg>>, a
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Benefits manager', 'benefits_manager'))
-    await withBypassContext(() => setFeatures(org.orgId, { hrm: true, payroll: true, multiSubsidiary: true }))
+    await withBypassContext(() => setFeatures(org.orgId, { hrm: true, payroll: true, multiSubsidiary: false }))
     state.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['hrm.benefits.manage']), allowedSubsidiaryIds: null }
     await fn(org, actorId)
   } finally {
@@ -68,7 +67,7 @@ async function fixture(fn: (org: Awaited<ReturnType<typeof createScratchOrg>>, a
   }
 }
 
-test('HR management creates and edits native plans and tiers with idempotent audit evidence', { skip: !DB }, async () => {
+test('HR management creates and edits native offers and eligibility classes with idempotent audit evidence', { skip: !DB }, async () => {
   await fixture(async (org, actorId) => {
     const { POST, PATCH } = await routeReady
     const requestId = randomUUID()
@@ -80,14 +79,17 @@ test('HR management creates and edits native plans and tiers with idempotent aud
     assert.deepEqual(await replayed.json(), await created.json())
     const changed = await POST(request('POST', { ...body, name: 'Different coverage' }, requestId), call())
     assert.equal(changed.status, 409)
-    const edited = await PATCH(request('PATCH', { ...body, id: requestId, name: 'Extended health coverage' }), call())
+    const edited = await PATCH(request('PATCH', { ...body, id: requestId, name: 'Extended health coverage', waitingPeriodMonths: '' }), call())
     assert.equal(edited.status, 200, await edited.clone().text())
     const tierId = randomUUID()
-    const tier = await POST(request('POST', { planId: requestId, levelKey: 'family', label: 'Family', employeeCost: '50.00', employerCost: '200.00', position: 0 }, tierId, 'benefit-plan-levels'), call('benefit-plan-levels'))
+    const tier = await POST(request('POST', { planId: requestId, classKey: 'family', name: 'Family coverage' }, tierId, 'benefit-contribution-classes'), call('benefit-contribution-classes'))
     assert.equal(tier.status, 200, await tier.clone().text())
+    const recovery = await POST(request('POST', { planId: requestId, ruleId: randomUUID(), premiumRuleId: randomUUID() }, randomUUID(), 'benefit-recovery-sources'), call('benefit-recovery-sources'))
+    assert.equal(recovery.status, 400)
+    assert.match((await recovery.json()).error, /Link an employee carry deduction.*same plan/)
     await withBypassContext(async () => {
-      const stored = (await db.execute<{ name: string; cost: string }>(sql`select name, employee_cost::text as cost from hrm_benefit_plans where org_id = ${org.orgId} and id = ${requestId}`)).rows[0]
-      assert.deepEqual(stored, { name: 'Extended health coverage', cost: '25.0000' })
+      const stored = (await db.execute<{ name: string; active: boolean }>(sql`select name, is_active as active from hrm_benefit_plans where org_id = ${org.orgId} and id = ${requestId}`)).rows[0]
+      assert.deepEqual(stored, { name: 'Extended health coverage', active: false })
       const audits = (await db.execute<{ action: string; actorId: string; changes: Record<string, unknown> }>(sql`select action, actor_id::text as "actorId", changes from audit_log where org_id = ${org.orgId} and table_name = 'hrm_benefit_plans' and row_id = ${requestId} order by at, id`)).rows
       assert.equal(audits.length, 2, 'the retry must not duplicate creation or audit')
       assert.deepEqual(audits.map(a => a.actorId), [actorId, actorId])
@@ -111,15 +113,15 @@ test('the Benefits configuration adapter refuses missing permission and unrelate
 test('plan writes preserve native validation and feature refusals', { skip: !DB }, async () => {
   await fixture(async (org) => {
     const { POST } = await routeReady
-    const invalid = await POST(request('POST', { ...plan(org.subsidiaryId), prorationBasis: '' }), call())
+    const invalid = await POST(request('POST', { ...plan(org.subsidiaryId), waitingPeriodDays: 30, waitingPeriodMonths: 3 }), call())
     assert.equal(invalid.status, 400)
-    assert.match((await invalid.json()).error, /partial months|proration/i)
+    assert.match((await invalid.json()).error, /months or days, not both/i)
     await withBypassContext(() => setFeatures(org.orgId, { hrm: false }))
     assert.equal((await POST(request('POST', plan(org.subsidiaryId)), call())).status, 404)
   })
 })
 
-test('plan and tier mutations cannot cross organization or legal-entity boundaries', { skip: !DB }, async () => {
+test('offer and class mutations cannot cross organization or legal-entity boundaries', { skip: !DB }, async () => {
   await fixture(async (org) => {
     const { POST, PATCH, DELETE } = await routeReady
     const foreign = await withBypassContext(() => createScratchOrg())
@@ -137,7 +139,7 @@ test('plan and tier mutations cannot cross organization or legal-entity boundari
       const deleted = await DELETE(request('DELETE', undefined, randomUUID(), 'benefit-plans', id), call())
       assert.equal(deleted.status, 403, await deleted.clone().text())
       assert.match((await deleted.json()).error, /outside your allowed scope/)
-      const tier = await POST(request('POST', { planId: id, levelKey: 'family', employeeCost: '25.00', employerCost: '100.00', position: 0 }, randomUUID(), 'benefit-plan-levels'), call('benefit-plan-levels'))
+      const tier = await POST(request('POST', { planId: id, classKey: 'family', name: 'Family coverage' }, randomUUID(), 'benefit-contribution-classes'), call('benefit-contribution-classes'))
       assert.ok(tier.status >= 400 && tier.status < 500, await tier.clone().text())
       await withBypassContext(async () => {
         assert.equal((await db.execute<{ name: string }>(sql`select name from hrm_benefit_plans where org_id = ${org.orgId} and id = ${id}`)).rows[0]?.name, body.name)

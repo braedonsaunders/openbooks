@@ -150,7 +150,7 @@
       "openWindows": "Aberta",
       "noOpenWindow": "Nenhuma janela de inscrição está aberta.",
       "pendingSub": "Aprovações pendentes",
-      "missingSub": "Inscrições sem entradas"
+      "missingSub": "Inscrições sem eleições de contribuição"
     }
   },
   "queue": {
@@ -1388,7 +1388,7 @@
   },
   "benefits": {
     "title": "Benefícios",
-    "description": "Planos, janelas de inscrição, inscrições e os valores mensais para a folha.",
+    "description": "Defina aqui os benefícios oferecidos e as contribuições escolhidas pelos empregados. A Folha calcula os valores reais e controla o tratamento tributário, os lançamentos e os saldos de direitos.",
     "windowsTitle": "Janelas de inscrição",
     "enrolmentsTitle": "Inscrições",
     "segmentsLabel": "Mostrar",
@@ -1704,7 +1704,7 @@
         "coverage": "Cobertura",
         "status": "Status",
         "effective": "Vigência",
-        "monthly": "Desconto / período",
+        "monthly": "Contribuições do empregado",
         "window": "Janela",
         "kind": "Tipo",
         "range": "Datas",
@@ -1713,7 +1713,7 @@
       },
       "electionsEmpty": "Sem adesões",
       "electionsEmptyDescription": "A cobertura escolhida aparece aqui.",
-      "monthlyHint": "O valor guardado que a folha desconta a cada período — nunca recalculado.",
+      "monthlyHint": "As taxas escolhidas preservam suas unidades declaradas; a Folha calcula as deduções reais.",
       "windowsTitle": "Janelas de inscrição abertas",
       "windowsEmpty": "Nenhuma janela aberta",
       "windowsEmptyDescription": "As janelas do seu empregador aparecem aqui enquanto abertas.",
@@ -2665,7 +2665,7 @@
     "newProgram": "Novo programa",
     "newAward": "Novo prêmio",
     "programsEmptyTitle": "Ainda não há programas de benefícios",
-    "programsEmptyDescription": "Crie o primeiro programa do empregador para conceder recompensas, auxílios ou incentivos.",
+    "programsEmptyDescription": "Crie um programa de cobertura, poupança, recompensa, auxílio, incentivo ou personalizado.",
     "awardsEmptyTitle": "Ainda não há prêmios",
     "awardsEmptyDescription": "Os prêmios aparecem aqui quando um programa os concede.",
     "loadFailed": "Não foi possível carregar a área de benefícios.",
@@ -2735,7 +2735,7 @@
       "allowance": "Auxílio",
       "incentive": "Incentivo",
       "custom": "Personalizado",
-      "insured": "Plano segurado"
+      "insured": "Plano de cobertura ou poupança"
     },
     "familyHints": {
       "reward": "Reconhecimento único: bônus, vales-presente, prêmios espontâneos.",
@@ -2795,7 +2795,7 @@
     },
     "columns": {
       "program": "Programa",
-      "family": "Família",
+      "family": "Tipo",
       "value": "Valor",
       "effective": "Vigência",
       "status": "Situação",
@@ -2923,7 +2923,11 @@
       "openPayrollSetup": "Abrir configuração da folha",
       "accountsPrerequisite": "Nenhuma conta de medição contabilizável está visível. Adicione as contas necessárias ou peça ao financeiro para verificar o acesso à entidade jurídica e atualize as opções.",
       "openAccounts": "Abrir plano de contas",
-      "refreshOptions": "Atualizar opções"
+      "refreshOptions": "Atualizar opções",
+      "typeTitle": "Novoa: {type}",
+      "chooseCurrency": "Escolher moeda",
+      "currencyHint": "As moedas seguem o empregador selecionado e os recursos da empresa. A folha processa concessões na moeda do programa.",
+      "currencyUnavailable": "Escolha uma moeda habilitada para o empregador selecionado."
     },
     "awardBuilderTitle": "Nova recompensa",
     "awardFields": {
@@ -3029,6 +3033,24 @@
     "directProcessingHint": "Flows autorizou o processamento direto; esta recompensa está pronta para a folha.",
     "rewardProgramPrerequisite": "Crie e ative um programa de recompensas ou auxílios antes de registrar uma recompensa.",
     "createRewardProgram": "Criar programa de recompensas",
-    "noApprovalSubmissionHint": "Não exige aprovações. O envio autorizado foi registrado; esta recompensa está pronta para a folha."
+    "noApprovalSubmissionHint": "Não exige aprovações. O envio autorizado foi registrado; esta recompensa está pronta para a folha.",
+    "awardCurrencyHint": "Herdada do programa selecionado; a folha não converte a moeda da recompensa.",
+    "rewardCreateHint": "Conceda um benefício usando valor, moeda e regras de um programa ativo. Configure a oferta em Programas.",
+    "programPurpose": {
+      "reward": "Defina a política aqui e conceda recompensas em Recompensas. Concessões prontas aparecem em Pagamentos.",
+      "allowance": "Defina um auxílio fixo e seu calendário. As concessões seguem estas regras; não é criada uma carteira nem um reembolso de despesas.",
+      "incentive": "Defina como o desempenho gera pagamentos. Simule e liquide em Incentivos; os resultados aprovados aparecem em Pagamentos.",
+      "custom": "Defina uma concessão patronal com regras explícitas. Registre-a em Recompensas e entregue-a em Pagamentos."
+    },
+    "scopeHint": "Benefícios define ofertas e concessões patronais. A folha gerencia salário, tributos, contribuições legais e processamento de pagamentos.",
+    "views": {
+      "overview": "Benefícios e concessões patronais conectados à folha.",
+      "programs": "Defina cada oferta aqui. Funcionários se inscrevem em planos; recompensas e incentivos seguem seus programas.",
+      "enrolments": "Inscreva funcionários em planos de cobertura e poupança. Gerencie os períodos pelas janelas de inscrição.",
+      "rewards": "Registre concessões de programas ativos. Configure ofertas reutilizáveis em Programas.",
+      "incentives": "Gerencie programas de desempenho. Abra um registro para simular, calcular e liquidar pagamentos.",
+      "payouts": "Envie concessões prontas à folha e acompanhe o histórico. Crie em Recompensas e liquide em Incentivos."
+    },
+    "configureApprovals": "Configurar aprovações"
   }
 }

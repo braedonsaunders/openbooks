@@ -3162,6 +3162,46 @@
         "singularTitle": "プログラム所属",
         "description": "適用期間・重み・役割付きで雇用をプログラムに結び付ける。"
       },
+      "benefit-contribution-rules": {
+        "title": "拠出",
+        "singular": "拠出",
+        "description": "従業員控除、雇用主拠出、課税対象の現物給付を定義します。税務処理と仕訳は給与項目で管理します。"
+      },
+      "benefit-contribution-classes": {
+        "title": "適格区分",
+        "singular": "適格区分",
+        "description": "適格条件やマッチング上限が異なる場合に従業員を区分します。"
+      },
+      "benefit-contribution-tiers": {
+        "title": "マッチング上限",
+        "singular": "マッチング上限",
+        "description": "適用期間付き勤続基準で上限を定めます。従業員の固定選択額は自動的に増額されません。"
+      },
+      "benefit-enrollment-configuration": {
+        "title": "従業員の選択",
+        "singular": "従業員の選択",
+        "description": "区分とマッチング適格性を確認し、拠出で実際の選択額を管理します。"
+      },
+      "benefit-enrollment-terms": {
+        "title": "拠出の選択",
+        "singular": "拠出の選択",
+        "description": "実際の選択を制度上限とは別に保持します。変更時は新しい適用条件を追加します。"
+      },
+      "payroll-service-credits": {
+        "title": "認定勤続期間",
+        "singular": "認定勤続期間",
+        "description": "入社日を変更せずに勤続実績を記録します。同じ基準を休暇と福利厚生の適格性に使用します。"
+      },
+      "payroll-vacation-terms": {
+        "title": "休暇条件",
+        "singular": "休暇条件",
+        "description": "一つの適用方針で休暇方式と個人の最低条件を管理します。勤続制度で最低条件が増える場合があります。"
+      },
+      "benefit-recovery-sources": {
+        "title": "保険料の回収",
+        "singular": "保険料回収の対象",
+        "description": "無給の保障期間に従業員の債務となる事業主負担保険料を選択します。回収残高と回収日程は控除設定で管理します。"
+      },
       "dunning-policies": {
         "title": "ポリシー",
         "description": "一つのワークスペースで債権回収と請求を管理します。"
@@ -3256,7 +3296,7 @@
       "postsGl": "GLに記帳",
       "bookId": "帳簿",
       "categoryId": "資産カテゴリ",
-      "convention": "計上規約",
+      "convention": "勤続計算方式",
       "lifeMonths": "耐用期間（月数）",
       "depreciationMethodId": "減価償却方法",
       "departmentId": "部門",
@@ -3393,7 +3433,7 @@
       "parentSubsidiaryId": "親子会社",
       "payDateOffsetDays": "支給日オフセット（日数）",
       "pensionable": "年金対象",
-      "periodsPerYear": "年間期間数",
+      "periodsPerYear": "年間徴収回数",
       "rateKind": "レート種別",
       "registrationNumber": "登録番号",
       "remittancePartyId": "納付先",
@@ -3614,7 +3654,39 @@
       "default_on": "初期設定で含める",
       "applies_to": "対象地域",
       "countries": "国",
-      "timezone": "タイムゾーン"
+      "timezone": "タイムゾーン",
+      "ruleKey": "拠出コード",
+      "rateFormula": "料率方式",
+      "hoursBasis": "対象時間",
+      "payBasis": "対象賃金",
+      "monthsPerYear": "年間保険料月数",
+      "proration": "途中期間の計算",
+      "matchRuleId": "対応拠出",
+      "requiresMatchEligibility": "マッチング適格性が必要",
+      "enforcePolicyCap": "制度上限を適用",
+      "classKey": "適格区分",
+      "minimumServiceYears": "最低勤続年数",
+      "employerMaxPercent": "雇用主上限 %",
+      "employeeMatchRatio": "従業員対雇用主比率",
+      "matchEligible": "雇用主マッチング対象",
+      "enrollmentId": "従業員登録",
+      "ruleId": "拠出",
+      "electionMode": "選択方式",
+      "electedRate": "選択料率",
+      "declaredPeriodsPerYear": "選択した年間徴収回数",
+      "runApplicability": "給与計算対象",
+      "unpaidPeriodTreatment": "無給期間の取扱い",
+      "arrearsPlanId": "回収残高口座",
+      "arrearsRecoveryPeriods": "回収期数",
+      "asOfDate": "確認日",
+      "creditedDays": "認定勤続日数",
+      "creditedMonths": "認定勤続月数",
+      "annualDays": "年間休暇日数",
+      "percentFloor": "個人の最低率 %",
+      "annualDaysFloor": "個人の最低年間日数",
+      "waitingPeriodMonths": "待機期間（暦月）",
+      "approvalMode": "承認方針",
+      "legalEmployer": "雇用主（法人）"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
@@ -5097,7 +5169,8 @@
       "benefitCosts": "費用と按分",
       "benefitComponents": "給与コンポーネント",
       "benefitDelivery": "支給",
-      "benefitRules": "ルール"
+      "benefitRules": "ルール",
+      "benefitAdvanced": "高度な拠出ルール"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -5113,6 +5186,136 @@
       "row": "行 {number}",
       "addRow": "行を追加",
       "removeRow": "行を削除"
+    },
+    "benefitBuilder": {
+      "offer": "プログラム",
+      "eligibility": "加入資格と期間",
+      "eligibilityHint": "適用日、待機期間、承認条件を設定します。作成後に拠出と上限をレコード内で追加します。",
+      "delivery": "給与との連携",
+      "deliveryHint": "従業員控除と事業主拠出を関連付けます。税務処理と選択された金額の給与計算は給与機能が担当します。",
+      "review": "確認",
+      "coverageType": "保障の種類",
+      "health": {
+        "title": "健康・保険プログラム",
+        "offer": "保障、保険会社、担当雇用主を指定します。従業員は加入画面で保障を選択します。",
+        "costs": "保険料と保障",
+        "costHint": "双方の保険料と月途中の計算方法を設定します。作成後に本人・家族などの保障区分を追加できます。",
+        "provider": "保険会社",
+        "employeeCost": "従業員保険料",
+        "employerCost": "事業主保険料",
+        "employeeCostBasis": "従業員保険料の周期",
+        "employerCostBasis": "事業主保険料の周期",
+        "contribution": "保険料",
+        "classes": "保障区分",
+        "rate": "保険料額または料率",
+        "contributionSingular": "保険料"
+      },
+      "retirement": {
+        "title": "退職・貯蓄プログラム",
+        "offer": "貯蓄プラン、年金・投資提供者、担当雇用主を指定します。従業員は加入画面から参加します。",
+        "costs": "貯蓄拠出",
+        "costHint": "双方の定額拠出または給与に対する割合を選びます。割合は拠出率であり、マッチング拠出の計算式ではありません。",
+        "provider": "年金・貯蓄提供者",
+        "employeeCost": "従業員拠出",
+        "employerCost": "事業主拠出",
+        "employeeCostBasis": "従業員拠出の基準",
+        "employerCostBasis": "事業主拠出の基準",
+        "contribution": "拠出",
+        "rate": "拠出額または料率",
+        "contributionSingular": "拠出"
+      }
+    },
+    "benefitContributions": {
+      "componentHint": "福利厚生で拠出を定義し、税務・送金・仕訳口座は給与項目で設定します。",
+      "formulaHint": "計算基準に対応する方式を選択します。マッチングは相手側の選択額に連動します。",
+      "rateHint": "選択した単位で入力します。従業員の固定選択は制度料率に優先できます。",
+      "annualizationHint": "年間徴収回数を指定します。空欄の場合は従業員の給与予定を使用します。",
+      "capHint": "制度上限は固定選択を変更しません。",
+      "ratioHint": "雇用主拠出1単位に必要な従業員拠出。2は2倍です。",
+      "classHint": "この制度で定義された区分を選択します。",
+      "matchHint": "この登録が制度のマッチング対象かを指定します。",
+      "electionHint": "固定選択は上限が増えても変わりません。制度方針を選ぶと有効な料率と上限を使用します。",
+      "electedRateHint": "実際の選択料率を入力します。最大提示額とは別です。",
+      "arrearsHint": "金額の負債残高口座を使用し、手動発生とこの控除項目を設定します。回収期数を指定します。",
+      "options": {
+        "kind": {
+          "employee_deduction": "従業員控除",
+          "employer_contribution": "雇用主拠出",
+          "taxable_non_cash": "課税対象現物給付"
+        },
+        "basis": {
+          "per_hour": "対象時間当たり",
+          "per_period": "給与期間当たり",
+          "per_month": "月額を年換算",
+          "per_year": "年額",
+          "percent_of_eligible_pay": "対象賃金の割合"
+        },
+        "formula": {
+          "elected_rate": "制度または選択料率",
+          "hourly_wage_percent": "時給の割合",
+          "matching_election": "対応選択額に連動"
+        },
+        "hours": {
+          "all_paid": "全有給時間",
+          "regular_paid": "通常有給時間",
+          "scheduled_paid": "予定有給時間"
+        },
+        "pay": {
+          "all_cash_earnings": "全現金賃金",
+          "regular_cash_earnings": "通常現金賃金"
+        },
+        "proration": {
+          "none": "日割りなし",
+          "calendar_days": "対象暦日数"
+        },
+        "election": {
+          "fixed": "固定選択",
+          "follows_policy": "制度方針に従う"
+        },
+        "run": {
+          "regular_only": "通常給与のみ",
+          "all_pay_runs": "全給与計算"
+        },
+        "unpaid": {
+          "charge": "当期徴収",
+          "carry": "後期回収に繰越"
+        }
+      },
+      "waitingMonthsHint": "暦月または日数の一方を指定します。暦月は入社日の応当日で計算します。",
+      "activationHint": "制度を無効で保存し、拠出を設定してから有効化します。",
+      "planRate": "制度料率：{rate}",
+      "noApproval": "承認なし",
+      "flowsApproval": "Flows承認方針を使用",
+      "approvalHint": "承認なしは有効な選択を直接有効化します。Flowsでは設定した承認段階を適用します。",
+      "fields": {
+        "kind": "拠出種別",
+        "basis": "計算基準",
+        "rate": "制度料率",
+        "method": "休暇方式",
+        "ruleId": "拠出",
+        "ruleKey": "拠出コード",
+        "payComponentId": "給与項目",
+        "recoveryRuleId": "回収用控除",
+        "premiumRuleId": "事業主負担保険料"
+      },
+      "recoverySourceHint": "無給期間の保障費用を繰り越して回収する従業員控除に、この保険料を関連付けます。保険料は一つの回収用控除にのみ関連付けられます。"
+    },
+    "serviceCredit": {
+      "calendarMonths": "暦月",
+      "actual365": "実日数 / 365",
+      "conventionHint": "暦月は応当日、実日数/365は暦日数と認定日数の基準を使用します。",
+      "asOfHint": "勤続実績の確認日です。以後の勤続はこの基準から加算します。",
+      "reasonHint": "方針や調整理由を記載します。確定給与の証跡を保持し、変更は新しい適用条件で行います。",
+      "annualDaysHint": "年間休暇日数と休暇手当率は別の権利です。日数を金額に変換しません。",
+      "employerTierHint": "法人雇用主を選択します。雇用主固有の制度は組織の既定制度に優先します。"
+    },
+    "vacationTerms": {
+      "accrue": "休暇手当を積立",
+      "payEachPeriod": "毎期休暇手当を支払",
+      "paidLeave": "日数による有給休暇",
+      "percentHint": "高い個人最低率を保持します。空欄は勤続制度に従います。この率は年間日数とは別です。",
+      "daysHint": "個人の高い年間最低日数を、勤続制度や現金手当率とは別に保持します。",
+      "method": "休暇方式"
     },
     "collectionPolicy": "ポリシー",
     "collectionPolicyFields": {
@@ -5131,7 +5334,8 @@
       "description": "回収条件とリマインダーの順序を設定します。",
       "reminderNumber": "リマインダー {number}",
       "addReminder": "リマインダーを追加"
-    }
+    },
+    "no": "いいえ"
   },
   "flows": {
     "title": "フロー",

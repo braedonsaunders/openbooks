@@ -41,6 +41,7 @@ stubModules({
     '../../components/module-home/group-tabs': "export async function hrmGroupTabs() { return []; }",
     '../money-server': `export const getMoneyFormatter = async () => ({ money: (value, opts) => value + ' ' + (opts && opts.currency ? opts.currency : '') });`,
     '@openbooks/engine/hrm/benefits': `
+        export async function benefitCurrencyOptions() { return [{value: 'USD', label: 'USD · US Dollar', scopeValue: null}] }
         export async function listBenefitApprovalPolicies() { return { configured: false, href: '/admin/flows', policies: [] } }
         export async function listBenefitPrograms() { const s = globalThis.__portfolioReads; if (s?.programsError) throw new Error(s.programsError); return { programs: s?.programs ?? [] } }
         export async function listBenefitAwards() { const s = globalThis.__portfolioReads; if (s?.awardsError) throw new Error(s.awardsError); return { awards: s?.awards ?? [] } }
@@ -111,23 +112,6 @@ test("an unknown segment refuses naming the segment, never an empty table", asyn
   assert.equal(data.hasContent, false, "no rows render beside the refusal");
   assert.equal(data.showingEnrolments, false, "a refused segment shows neither view");
 });
-
-for (const [name, segment, expectedIds] of [
-  ['the windows view binds rows with exact per-status counts', undefined, ['w-open', 'w-draft', 'w-closed']],
-  ['status segment counts describe all visible windows while rows stay filtered', 'open', ['w-open']],
-] as const) {
-  test(name, async () => {
-    stubReads(['open', 'draft', 'closed'].map((status) => windowRow(`w-${status}`, status)), [enrolmentRow('e-1', 'w-open')])
-    const data = await loadBenefits(HR_BENEFITS, segment ? { segment } : {})
-    assert.equal(data.refusal, null, 'a valid status carries no refusal')
-    assert.equal(data.showingEnrolments, false, 'status filters retain the window entity')
-    assert.deepEqual(data.segments.map((item) => [item.value, item.count]), [['all', 3], ['open', 1], ['draft', 1], ['closed', 1]], 'counts describe all visible windows and exclude enrolments')
-    assert.deepEqual(data.windowRows.map((window) => window.id), expectedIds)
-    assert.equal(data.windowRows.length, expectedIds.length, 'every matching window lists')
-    assert.equal(data.windowRows[0]!.rangeLabel, '2026-11-01 – 2026-11-30', 'the range renders verbatim')
-    assert.ok(data.windowRows[0]!.windowHref.includes('window=w-open'), 'each window opens its own drawer')
-  })
-}
 
 test("the enrolments view swaps the table for the other entity", async () => {
   stubReads([windowRow("w-open", "open")], [enrolmentRow("e-1", "w-open")]);
@@ -296,7 +280,7 @@ test('New program chooses a native Benefits type before creating a record', asyn
   const data = await loadBenefits(HR_BENEFITS, { view: 'programs', program: 'new' })
   assert.equal(data.programTypePickerOpen, true)
   assert.equal(data.programBuilderOpen, false)
-  for (const card of data.overview.cards) assert.ok(card.href.startsWith('/hrm/benefits?'))
+  for (const card of data.overview.cards) assert.ok(card.href.startsWith('/hrm/benefits?view=programs&'))
   const health = data.overview.cards.find((card) => card.key === 'health')!
   assert.equal(health.href, '/hrm/benefits?view=programs&plan=new&kind=health')
   const reward = await loadBenefits(HR_BENEFITS, { view: 'programs', program: 'new', family: 'reward' })

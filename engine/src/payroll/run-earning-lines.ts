@@ -20,6 +20,7 @@ import { divideMoney, allocateProportionally } from "./run-allocation.ts";
 import { type Line, programApplicabilityFromExclusions, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
 import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
+import { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";
 export async function appendPeriodicEarnings(
   tx: Pick<typeof db, "execute">,
   args: {
@@ -368,7 +369,7 @@ export async function appendStatutoryHolidayEarningLines(
 export async function applyAssignedComponentLines(
   tx: Pick<typeof db, "execute">,
   args: {
-    orgId: string; employeePartyId: string;
+    orgId: string; employeePartyId: string; employmentId: string;
     taxYear: number;
     documentId: string;
     assignedRows: Record<string, unknown>[];
@@ -380,9 +381,11 @@ export async function applyAssignedComponentLines(
   },
 ): Promise<void> {
   const {
-    orgId, employeePartyId, taxYear, documentId, assignedRows, oneOffRun, lines,
+    orgId, employeePartyId, employmentId, taxYear, documentId, assignedRows, oneOffRun, lines,
     periodStart, periodEnd,
   } = args;
+  await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: periodEnd,
+    componentIds: oneOffRun ? [] : assignedRows.map((row) => String(row.id)) });
 /**
  * Same component's amount already taken earlier in the tax year: committed
  * stub lines PLUS the mid-year opening carry-in
@@ -655,11 +658,14 @@ export async function applyEntitlementPlanMovements(
   tx: Pick<typeof db, "execute">,
   args: {
     orgId: string; documentId: string; employeePartyId: string;
+    employmentId?: string;
+    policyDate?: string;
     payDate: string;
     /** Employee display name, for the unvalued-hours refusal. */
     employeeName: string;
     vacationPercent: string | null;
     payVacationInCash: boolean;
+    excludeVacationAccrual?: boolean;
     vacationPlan: EntitlementPlan | null;
     plans: EntitlementPlan[];
     lines: Line[];
@@ -675,11 +681,11 @@ export async function applyEntitlementPlanMovements(
   let vacationAccrued = "0";
   // Everything that banks: one call, honouring scoped caps and service tiers.
   if (plans.length > 0) {
-    const bankablePlans = payVacationInCash && vacationPlan
+    const bankablePlans = (payVacationInCash || args.excludeVacationAccrual) && vacationPlan
       ? plans.filter((p) => p.id !== vacationPlan.id)
       : plans;
     const { movements, warnings } = await planMovementsForStub(tx, {
-      orgId, employeePartyId, movementDate: payDate,
+      orgId, employeePartyId, employmentId: args.employmentId, policyDate: args.policyDate, movementDate: payDate,
       payRunDocumentId: documentId,
       earnings: lines
         .filter((l) => l.kind === "earning" && !l.accrualOnly)
@@ -688,11 +694,9 @@ export async function applyEntitlementPlanMovements(
           hours: l.hours ?? null, bankable: l.vacationable ?? true,
         })),
       plans: bankablePlans,
-      // The Vacation plan's rate has ONE home: the employee's payroll profile.
-      // Its absence is an answer, not a gap — an employee with no
-      // vacation_percent accrues nothing, and must not silently inherit the
-      // plan's org-wide default the way a tenant-defined bank does. (A reached
-      // service rung still overrides: a ladder is deliberate org policy.)
+      // The caller supplies the effective employee election and service
+      // policy rate already used for cash payment. Both representations
+      // therefore preserve the same higher personal vacation floor.
       employeeAccrualValues: vacationPlan
         ? new Map([[vacationPlan.id, String(vacationPercent ?? "0")]])
         : undefined,

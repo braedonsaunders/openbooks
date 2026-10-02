@@ -279,12 +279,13 @@ export async function explainPay(
   const benefitInputs = (await exec.execute<{
     id: string; kind: string; amount: string; coverageFrom: string; coverageTo: string; status: string;
   }>(sql`
-    select id::text as id, kind, amount::text as amount,
-           coverage_from::text as "coverageFrom", coverage_to::text as "coverageTo", status
-      from hrm_benefit_payroll_inputs
-     where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
-       and consumed_by_run_document_id = ${stub.payRunDocumentId}::uuid
-     order by id`)).rows;
+    select a.id::text as id, r.kind, a.amount::text as amount,
+           a.period_from::text as "coverageFrom", a.period_to::text as "coverageTo", a.status
+      from pay_run_benefit_allocations a
+      join hrm_benefit_contribution_rules r on r.org_id = a.org_id and r.id = a.rule_id
+     where a.org_id = ${orgId}::uuid and a.employment_id = ${employmentId}::uuid
+       and a.pay_run_document_id = ${stub.payRunDocumentId}::uuid
+     order by a.id`)).rows;
 
   const leaveInputs = (await exec.execute<{
     id: string; kind: string; hours: string; absenceDate: string; status: string;

@@ -50,6 +50,7 @@ const commonCatalog = (await import('../../../../../messages/en/common.json', { 
   Record<string, string>
 >
 const { SetupDrawer } = await import('./SetupDrawer')
+const { benefitPlanPresentation } = await import('../../../../../lib/setup/hrm-benefits')
 const { SETUP_ENTITY_BY_KEY } = await import('../../../../../lib/setup/registry')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -73,8 +74,9 @@ async function mountDrawer(
   entityKey: string = ENTITY_KEY,
   initialValues?: Record<string, unknown>,
   mutationBasePath?: string,
+  presentation?: ReturnType<typeof benefitPlanPresentation>,
 ) {
-  const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
+  const entity = presentation ?? SETUP_ENTITY_BY_KEY.get(entityKey)
   assert.ok(entity, `the registry must declare ${entityKey}`)
   const pushes: string[] = []
   globalThis.__setupDrawerRouter = {
@@ -314,14 +316,17 @@ test('command-owned entities save through their setup command', async (t) => {
 })
 
 
-test('rehomed plan editor uses the authorized Benefits adapter and retains request identity across a refusal', async (t) => {
+for (const kind of ['health', 'retirement'] as const) {
+test(`${kind} guided creation uses the Benefits adapter and retains request identity across a refusal`, async (t) => {
   const { seen } = await mountDrawer(t, null,
     () => Response.json({ error: 'Choose a payroll component in this legal entity.' }, { status: 422 }),
     'benefit-plans', {
-      code: 'HEALTH', name: 'Health coverage', kind: 'health', currency: 'USD',
-      employeeCostBasis: 'per_month', employerCostBasis: 'per_month', prorationBasis: 'daily', effectiveFrom: '2026-01-01',
-    }, '/api/hrm/benefit-plan-configuration')
+      code: 'HEALTH', name: 'Health coverage', kind, currency: 'USD',
+      effectiveFrom: '2026-01-01',
+    }, '/api/hrm/benefit-plan-configuration', benefitPlanPresentation(kind))
   const shell = document.querySelector('[role="dialog"]')
+  assert.ok(!Array.from(document.querySelectorAll('button')).some((button) => button.textContent?.trim() === commonCatalog.actions!.create))
+  for (let step = 0; step < 2; step++) { await act(async () => clickButton(commonCatalog.actions!.next!).click()); assert.equal(document.querySelector('[role="dialog"]'), shell) }
   await clickSave(true)
   await clickSave(true)
   assert.equal(seen.length, 2)
@@ -330,8 +335,9 @@ test('rehomed plan editor uses the authorized Benefits adapter and retains reque
   assert.equal(seen[0]!.headers['idempotency-key'], seen[1]!.headers['idempotency-key'])
   assert.equal(alertText(), 'Choose a payroll component in this legal entity.')
   assert.equal(document.querySelector('[role="dialog"]'), shell)
-  assert.equal((seen[0]!.body as Record<string, unknown>).kind, 'health')
+  assert.equal((seen[0]!.body as Record<string, unknown>).kind, kind)
 })
+}
 
 test('availability rows use named inputs and preserve zoned instants while editing in one drawer', async (t) => {
   const windows = [{ startsAt: '2026-10-01T09:00:00-04:00', endsAt: '2026-10-01T10:00:00-04:00', timezone: 'America/Toronto', source: 'declared' }]
@@ -372,3 +378,19 @@ test('retention scope shows native region choices and country chips without a JS
   await clickSave(false)
   assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).regionScope, region)
 })
+
+for (const target of ['plan', 'component'] as const) {
+  test(`${target} service tier saves only the financial controls for its target`, async (t) => {
+    const initial = { afterMonths: '60', planId: target === 'plan' ? '11111111-1111-4111-8111-111111111111' : null,
+      componentId: target === 'component' ? '22222222-2222-4222-8222-222222222222' : null,
+      accrualValue: '0', annualDays: '20', eligible: false, effectiveFrom: '2026-01-01' }
+    const { seen } = await mountDrawer(t, null, () => Response.json({ id: 'tier' }), 'entitlement-service-tiers', initial)
+    assert.equal(Boolean(document.querySelector(`input[aria-label="${FIELD_LABEL.annualDays}"]`)), target === 'plan')
+    await clickSave(true)
+    assert.equal(seen.length, 1)
+    const payload = seen[0]!.body as Record<string, unknown>
+    assert.equal(payload.eligible, target === 'component' ? false : null)
+    assert.equal(payload.annualDays, target === 'plan' ? '20' : null)
+    assert.equal(payload.accrualValue, target === 'plan' ? '0' : null)
+  })
+}

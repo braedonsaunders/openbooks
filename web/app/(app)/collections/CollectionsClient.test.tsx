@@ -169,7 +169,7 @@ test('a plan save refusal retains its exact decimal draft and names the remedy',
   const price = dialog.querySelector('input[inputmode="decimal"]') as HTMLInputElement
   await fill(name, 'Annual support'); await fill(price, '1234.5600'); await click(findButton('Add plan')!)
   assert.equal(script.writes.length, 1)
-  assert.equal(script.writes[0].name, 'Annual support'); assert.equal(script.writes[0].amount, '1234.5600')
+  assert.ok(script.writes[0]); assert.equal(script.writes[0].name, 'Annual support'); assert.equal(script.writes[0].amount, '1234.5600')
   assert.match(dialog.querySelector('[role="alert"]')?.textContent ?? '', /Choose an active account/)
   assert.equal(document.querySelector('[role="dialog"]'), dialog)
   assert.equal(name.value, 'Annual support'); assert.equal(price.value, '1234.5600')
@@ -183,8 +183,8 @@ test('editing reminders preserves their identities and numbers additions after t
   await click([...dialog.querySelectorAll('button')].filter((button) => button.textContent?.includes('Remove row')).at(-1)!)
   await fill(dialog.querySelector('textarea') as HTMLTextAreaElement, 'Please contact Accounts Receivable.')
   await click(findButton('Save')!)
-  assert.equal(script.writes.length, 1); assert.equal(script.writes[0].expectedUpdatedAt, POLICY.updatedAt)
+  assert.equal(script.writes.length, 1); assert.ok(script.writes[0]); assert.equal(script.writes[0].expectedUpdatedAt, POLICY.updatedAt)
   const stages = script.writes[0].stages as typeof POLICY.stages
-  assert.equal(stages[0].id, 'stage-1'); assert.equal(stages[0].sequence, 4)
+  assert.ok(stages[0]); assert.equal(stages[0].id, 'stage-1'); assert.equal(stages[0].sequence, 4)
   assert.equal(stages[0].bodyTemplate, 'Please contact Accounts Receivable.')
 })

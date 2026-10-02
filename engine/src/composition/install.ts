@@ -1,5 +1,6 @@
 import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { releaseChecklistStepApproval } from "../hrm/processes.ts";
+import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { registerScriptJournalWriter } from "../scripting/journal-writer.ts";
 import { registerFlowApprovalReleaseHandler } from "../flows/approval-release-hook.ts";
@@ -30,6 +31,7 @@ import { form990ReturnInputProvider } from "../nonprofit/form990.ts";
 import { registerReturnInputProvider } from "../tax-returns/return.ts";
 import {
   releaseBenefitAwardFlowApproval,
+  releaseBenefitEnrollmentFlowApproval,
   releaseCompCycleApproval,
   releaseHrmChangeRequestApproval,
   releaseLeaveRequestApproval,
@@ -66,6 +68,7 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(FUND_RELEASE_SUBJECT_KIND, releaseFundReleaseFlowApproval);
   registerFlowApprovalReleaseHandler(CLOSE_RUN_SUBJECT_KIND, releaseCloseRunApproval);
   registerFlowApprovalReleaseHandler(BENEFIT_AWARD_SUBJECT_KIND, releaseBenefitAwardFlowApproval);
+  registerFlowApprovalReleaseHandler(BENEFIT_ENROLLMENT_SUBJECT_KIND, releaseBenefitEnrollmentFlowApproval);
   registerFlowApprovalReleaseHandler(HRM_COMP_CYCLE_SUBJECT_KIND, releaseCompCycleApproval);
   registerFlowApprovalReleaseHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, releaseHrmChangeRequestApproval);
   registerFlowApprovalReleaseHandler(HRM_LEAVE_REQUEST_SUBJECT_KIND, releaseLeaveRequestApproval);

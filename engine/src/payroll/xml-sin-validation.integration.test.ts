@@ -1,3 +1,10 @@
+import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedPayrollLine } from '../testing/fixtures.ts';
+import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollPerson, seedPayrollProfile, createScratchOrg, dropScratchOrgReporting, seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -6,7 +13,6 @@ import { db } from "../platform/db.ts";
 import { sealSecret } from "../platform/secrets.ts";
 import { buildT4Xml } from "./canada/t4xml.ts";
 import { buildRl1Xml } from "./canada/quebec/rl1xml.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -26,9 +32,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedSinYear(sin: string, province: "ON" | "QC"): Promise<{ orgId: string; actorId: string }> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(org.orgId, {
         t4Transmitter: {
           bn: "123456789", transmitterNumber: "MM123456", name: "SIN Test Employer",
           contactName: "Pat Payroll", contactEmail: "pat@example.com", contactPhone: "5555550100",
@@ -38,58 +42,47 @@ async function seedSinYear(sin: string, province: "ON" | "QC"): Promise<{ orgId:
           identificationNumber: "1234567890", fileSequence: 1, name: "SIN Test Employer",
           contactName: "Pat Payroll", contactEmail: "pat@example.com", contactPhone: "5555550100",
         },
-      },
-    })}::jsonb where id = ${org.orgId}`);
+      });
 
   const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
-    values (${employeeId}, ${org.orgId}, 'person', 'Sin Test', true, ${org.subsidiaryId}, '{}'::jsonb)`);
+  await seedPayrollPerson(org.orgId, employeeId, 'Sin Test', {
+    subsidiaryId: org.subsidiaryId,
+  });
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                           province, pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           sin_encrypted, sin_last3, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, ${province}, 'hourly', 'CA',
-            1, 1, '4', 'accrue', ${sealSecret(sin, { orgId: org.orgId, purpose: "payroll.employee.sin" })}, ${sin.slice(-3)}, true, ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
+  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+    province: province, payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+    sinEncrypted: sealSecret(sin, { orgId: org.orgId, purpose: "payroll.employee.sin" }), sinLast3: sin.slice(-3),
+  }, { percentFloor: '4', method: 'accrue' });
+
 
   const earningId = randomUUID();
   await db.execute(sql`
     insert into pay_components (id, org_id, code, name, kind, country, taxable, created_by, updated_by)
     values (${earningId}, ${org.orgId}, 'SAL', 'Salary', 'earning', 'CA', true, ${actorId}, ${actorId})`);
   const documentId = randomUUID();
-  await db.execute(sql`
-    insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                           currency, status, created_by, updated_by)
-    values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-            ${org.subsidiaryId}, '2026-07-21', 'CAD', 'draft', ${actorId}, ${actorId})`);
+  await seedPayrollDocument(org.orgId, documentId, {
+    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: org.subsidiaryId,
+    documentDate: '2026-07-21', currency: 'CAD', status: 'draft', createdBy: actorId, updatedBy: actorId,
+  });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                           tax_year, run_status, calculated_at, created_by, updated_by)
     values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18', '2026-07-21',
             2026, 'committed', now(), ${actorId}, ${actorId})`);
   const stubId = randomUUID();
-  await db.execute(sql`
-    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
-                           province, periods_per_year, pay_date, tax_year, currency_code, gross,
-                           net_pay, pensionable_earnings, insurable_earnings, factors, created_by,
-                           updated_by)
-    values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, ${province},
-            26, '2026-07-21', 2026, 'CAD', '52000.0000', '42000.0000', '52000.0000', '52000.0000',
-            ${JSON.stringify({ C: "3200.50", EI: "834.20" })}::jsonb,
-            ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
-                                created_by, updated_by)
-    values (${org.orgId}, ${stubId}, ${earningId}, 'earning', 'Salary', '52000.0000',
-            ${actorId}, ${actorId})`);
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+    id: stubId, province: province, periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
+    gross: '52000.0000', netPay: '42000.0000', pensionableEarnings: '52000.0000', insurableEarnings: '52000.0000',
+    factors: { C: "3200.50", EI: "834.20" }, createdBy: actorId, updatedBy: actorId,
+  });
+  await seedPayrollLine(org.orgId, stubId, earningId, {
+    kind: 'earning', description: 'Salary', amount: '52000.0000', createdBy: actorId, updatedBy: actorId,
+  });
   return { orgId: org.orgId, actorId };
 }
 

@@ -154,7 +154,7 @@ export async function legacyVacationBalances(orgId: string): Promise<Map<string,
  * byte-identical to what it was before.
  *
  * The plan's accrual value is the org's most common
- * employee_payroll_profiles.vacation_percent — the base rate. Per-employee
+ * payroll_vacation_terms.percent_floor — the base rate. Per-employee
  * rates keep their one home on the payroll profile; service tiers raise them.
  */
 async function ensureVacationPlan(orgId: string): Promise<string | null> {
@@ -178,11 +178,11 @@ async function ensureVacationPlan(orgId: string): Promise<string | null> {
   `));
 
   const modal = (await db.execute<{ percent: string; n: number }>(sql`
-    select vacation_percent::text as percent, count(*)::int as n
-      from employee_payroll_profiles
-     where org_id = ${orgId} and vacation_percent is not null and vacation_percent > 0
-     group by vacation_percent
-     order by n desc, vacation_percent asc
+    select percent_floor::text as percent, count(*)::int as n
+      from payroll_vacation_terms
+     where org_id = ${orgId} and percent_floor is not null and percent_floor > 0 and effective_to is null
+     group by percent_floor
+     order by n desc, percent_floor asc
      limit 1
   `));
   const accrualValue = modal.rows[0]?.percent ?? "4";

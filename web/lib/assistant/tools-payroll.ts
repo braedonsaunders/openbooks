@@ -248,15 +248,19 @@ const listPayrollEmployees: AssistantToolDef = {
     // Summary columns only — the confidential election facts (claim amounts,
     // exemptions, additional withholding) and the sealed government-id
     // columns on this table are deliberately not selected.
+    const asOf = await orgToday(authz.user.orgId);
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select prof.id, prof.employee_party_id, p.display_name as employee_name,
              prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
              prof.pay_basis, prof.is_active, prof.stub_delivery, prof.payment_method,
-             prof.vacation_method, fa.account_number as filing_account_number
+             vac.method as vacation_method, fa.account_number as filing_account_number
         from employee_payroll_profiles prof
         join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
         left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
-        left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
+        left join payroll_vacation_terms vac on vac.org_id = prof.org_id
+        and vac.employment_id = prof.employment_id and vac.effective_from <= ${asOf}::date
+        and (vac.effective_to is null or vac.effective_to >= ${asOf}::date)
+      left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
        where prof.org_id = ${authz.user.orgId}
          ${payrollVisiblePartyFilter(authz)}
          ${like ? sql` and p.display_name ilike ${like}` : sql``}

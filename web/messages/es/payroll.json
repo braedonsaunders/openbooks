@@ -567,7 +567,9 @@
       "title": "Certificados fiscales",
       "loading": "Cargando certificados…",
       "loadFailed": "No se pudieron cargar los certificados fiscales."
-    }
+    },
+    "serviceCreditLink": "Antigüedad reconocida",
+    "vacationTermsLink": "Condiciones de vacaciones"
   },
   "setupWizard": {
     "cta": {
@@ -705,7 +707,9 @@
       "holidayCalendar": "Calendario de festivos",
       "payday": "Día de pago",
       "rates": "Tasas legales",
-      "workSchedules": "Horarios de trabajo"
+      "workSchedules": "Horarios de trabajo",
+      "serviceCredits": "Antigüedad reconocida",
+      "vacationTerms": "Condiciones de vacaciones"
     },
     "packs": {
       "installed": "Instalado",

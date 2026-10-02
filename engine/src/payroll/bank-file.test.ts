@@ -1,3 +1,8 @@
+import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
+  seedPayrollProfile, seedPayrollWage, createScratchOrg, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -33,7 +38,6 @@ import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedUsSuiAccount } from "./filing-test-fixtures.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
-import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Payroll direct deposit.
@@ -559,13 +563,7 @@ interface Fixture {
 }
 
 const account = async (orgId: string, number: string, name: string, type: string) => {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                          reconcilable, required_dimensions, custom, subsidiary_include_children)
-    values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-            '[]'::jsonb, '{}'::jsonb, true)`);
-  return id;
+  return seedPostingAccount(orgId, number, name, type);
 };
 
 /**
@@ -706,9 +704,7 @@ async function payrollOrg(
     vacationPayable: await account(org.orgId, "2320", "Vacation payable", "liability_current"),
     bank: await account(org.orgId, "1090", "Payroll funding bank", "asset_bank"),
   };
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: accounts.wageExpense,
         burdenExpenseAccountId: accounts.burdenExpense,
         netPayAccountId: accounts.netPayable,
@@ -717,8 +713,7 @@ async function payrollOrg(
         taxPayableAccountId: accounts.craPayable,
         vacationPayableAccountId: accounts.vacationPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+      });
   await seedComponentsTolerantly(org.orgId, actorId, country);
   if (country === "CA") {
     await seedOntarioEhtFixture(org.orgId, actorId);
@@ -738,11 +733,10 @@ async function payrollOrg(
   }
 
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
 
   // The tenant's originator configuration — the ONLY place institution-assigned
   // values come from. Anything absent is a named refusal, never a default.
@@ -770,19 +764,17 @@ async function payrollOrg(
 }
 
 async function employee(fx: Fixture, name: string, opts: {
-  partyMethod?: string | null;
-  profileMethod?: string | null;
+  partyMethod?: "eft" | "cheque" | "card" | "cash" | "other" | null;
+  profileMethod?: "eft" | "cheque" | null;
   /** NACHA: { aba, accountType: "checking" | "savings" }. CPA-005: { institution, transit }. */
   bank?: Record<string, string> | null;
   employeeNumber?: string;
 } = {}): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, payment_method, custom)
-    values (${id}, ${fx.orgId}, 'person', ${name}, true, ${opts.partyMethod ?? null}, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (id, org_id, party_id, employee_number)
-    values (${randomUUID()}, ${fx.orgId}, ${id}, ${opts.employeeNumber ?? null})`);
+  await seedPayrollPerson(fx.orgId, id, name, {
+    paymentMethod: opts.partyMethod ?? null,
+  });
+  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), employeeNumber: opts.employeeNumber ?? null });
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
@@ -797,20 +789,15 @@ async function employee(fx: Fixture, name: string, opts: {
               '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
               ${fx.actorId}, ${fx.actorId})`);
   }
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                  effective_from, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${fx.currency}, '30', 'hour', '2080', '2026-01-01', true,
-            ${fx.actorId}, ${fx.actorId})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                           country, province, pay_basis, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           payment_method, filing_status, filing_account_id, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, ${fx.country}, ${fx.region},
-            'hourly', 1, 1, ${fx.country === "US" ? null : "4"}, 'accrue',
-            ${opts.profileMethod ?? null}, ${fx.country === "US" ? "single" : null}, ${fx.suiFilingAccountId}, true,
-            ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollWage(fx.orgId, id, fx.actorId, {
+    currency: fx.currency, rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
+  });
+  await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
+    country: fx.country, province: fx.region, payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+    paymentMethod: opts.profileMethod ?? null, filingStatus: fx.country === "US" ? "single" : null,
+    filingAccountId: fx.suiFilingAccountId,
+  }, { percentFloor: fx.country === "US" ? null : "4", method: 'accrue' });
+
   if (opts.bank) {
     const canadian = "institution" in opts.bank;
     await db.execute(sql`
@@ -826,11 +813,10 @@ async function employee(fx: Fixture, name: string, opts: {
 }
 
 const hours = async (fx: Fixture, employeeId: string, workedOn: string, qty: string) =>
-  await db.execute(sql`
-    insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
-                              is_billable, billing_status, costing_basis, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${workedOn}, ${qty}, 'approved',
-            false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollTime(fx.orgId, employeeId, fx.actorId, {
+    workedOn: workedOn, hours: qty, status: 'approved', isBillable: false, billingStatus: 'unbilled',
+    costingBasis: 'actual',
+  });
 
 /**
  * A calculated, USD, mixed-rail run. Three employees on purpose: one genuine

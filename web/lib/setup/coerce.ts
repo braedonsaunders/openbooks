@@ -70,13 +70,14 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
   // clears it on save, so the server must accept the same blank — the
   // merged-row integrity rule still refuses a blank that is actually in
   // force.
-  if (field.required && fieldVisible && !present && field.kind !== 'boolean' && !field.keepDefault) {
+  if (field.required && fieldVisible && !present && (field.kind !== 'boolean' || field.nullable) && !field.keepDefault) {
     return { error: `${field.key} is required` }
   }
   const column = toSnake(field.key)
 
   switch (field.kind) {
     case 'boolean': {
+      if (!present && field.nullable) return { column, value: null }
       if (present) {
         const valid = typeof raw === 'boolean'
           || (typeof raw === 'number' && (raw === 0 || raw === 1))
@@ -109,6 +110,8 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
         if (max !== null && compareDecimal(exact, max) > 0) return { error: `${field.key} must be at most ${field.max}` }
       }
       try {
+        // Observed service baselines can carry more precision than ledger money.
+        // The shared exact parser already validated their full decimal string.
         return { column, value: scale > 10 ? exact : normalizeDecimal(exact, scale) }
       } catch {
         return { error: `${field.key} must be a number` }
@@ -140,7 +143,7 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       // not a uuid — the picker offers it via loadEntityOptions, so the
       // writer must accept what the picker offered.
       const target = field.ref ? SETUP_ENTITY_BY_KEY.get(field.ref) : undefined
-      const naturalKeyed = field.ref === 'number-sequence-kinds'
+      const naturalKeyed = field.ref === 'number-sequence-kinds' || field.ref === 'benefit-currencies'
         || (target != null && (target.idColumn ?? 'id') !== 'id')
         || (target != null && target.refValue != null)
       if (!naturalKeyed && !isUuid(s)) return { error: `${field.key} must reference a valid record` }

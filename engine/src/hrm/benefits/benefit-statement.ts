@@ -3,7 +3,8 @@ import { fromUnits, toUnits } from "../../money/money.ts";
 import { loadOwnEmploymentIds, requireHrmBenefitsRead, requireOwnEmploymentSubject, requireHrmSelfRead } from "../authorization.ts";
 import { parseCivilDate } from "../temporal.ts";
 import { BenefitsError } from "./errors.ts";
-import type { EnrollmentSummary } from "./benefits-read.ts";
+import { enrollmentContributionProjection, type EnrollmentSummary, type EnrollmentContributionSummary } from "./benefits-read.ts";
+import { businessToday } from "../../platform/business-date.ts";
 import type { BenefitAward } from "./program-types.ts";
 import {
   assertHrmEnabled,
@@ -99,24 +100,24 @@ async function authorizeSubject(
 
 /** Own-subject enrollment rows: one employment, no aggregate list. */
 async function readOwnEnrollments(orgId: string, employmentId: string): Promise<EnrollmentSummary[]> {
+  const asOf = await businessToday(orgId);
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select e.id, e.employment_id as "employmentId", e.window_id as "windowId",
            p.display_name as "employeeName",
            plan.code as "planCode", plan.name as "planName",
-           e.coverage_level_key as "coverageLevelKey",
-           lvl.label as "coverageLabel",
+           e.class_key as "classKey",
+           cls.name as "coverageLabel",
            e.status,
            e.effective_from::text as "effectiveFrom",
            e.effective_to::text as "effectiveTo",
-           e.employee_amount_per_period::text as "employeeAmountPerPeriod",
-           e.employer_amount_per_period::text as "employerAmountPerPeriod",
+           ${enrollmentContributionProjection(asOf)} as contributions,
            e.currency, emp.employer_subsidiary_id as "subsidiaryId"
       from hrm_benefit_enrollments e
       join hrm_benefit_plans plan on plan.org_id = e.org_id and plan.id = e.plan_id
       join worker_employments emp on emp.org_id = e.org_id and emp.id = e.employment_id
       join parties p on p.org_id = e.org_id and p.id = emp.worker_party_id
-      left join hrm_benefit_plan_levels lvl
-        on lvl.org_id = e.org_id and lvl.plan_id = e.plan_id and lvl.level_key = e.coverage_level_key
+      left join hrm_benefit_contribution_classes cls
+        on cls.org_id = e.org_id and cls.plan_id = e.plan_id and cls.class_key = e.class_key
      where e.org_id = ${orgId} and e.employment_id = ${employmentId}
      order by e.effective_from desc
   `)).rows;
@@ -129,13 +130,12 @@ async function readOwnEnrollments(orgId: string, employmentId: string): Promise<
     employeeName: textOrNull(row.employeeName),
     planCode: String(row.planCode),
     planName: String(row.planName),
-    coverageLevelKey: textOrNull(row.coverageLevelKey),
+    classKey: textOrNull(row.classKey),
     coverageLabel: textOrNull(row.coverageLabel),
     status: String(row.status),
     effectiveFrom: String(row.effectiveFrom).slice(0, 10),
     effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
-    employeeAmountPerPeriod: textOrNull(row.employeeAmountPerPeriod),
-    employerAmountPerPeriod: textOrNull(row.employerAmountPerPeriod),
+    contributions: row.contributions as EnrollmentContributionSummary[],
     currency: String(row.currency),
   }));
 }

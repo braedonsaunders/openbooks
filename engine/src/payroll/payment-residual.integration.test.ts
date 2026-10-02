@@ -32,10 +32,13 @@ async function postedRun(mixed = false) {
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
         const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
         await db.execute(sql`insert into employee_payroll_profiles(org_id,employee_party_id,employment_id,pay_schedule_id,province,pay_basis,country,
-          federal_claim_code,provincial_claim_code,vacation_percent,vacation_method,is_active,payment_method,created_by,updated_by)
+          federal_claim_code,provincial_claim_code,is_active,payment_method,created_by,updated_by)
           select org_id,${employeeId},${employmentId},pay_schedule_id,province,pay_basis,country,federal_claim_code,provincial_claim_code,
-          vacation_percent,vacation_method,is_active,'cheque',created_by,updated_by from employee_payroll_profiles
+          is_active,'cheque',created_by,updated_by from employee_payroll_profiles
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+        await db.execute(sql`insert into payroll_vacation_terms(org_id,employment_id,method,percent_floor,annual_days_floor,effective_from,effective_to,reason,source_snapshot,created_by,updated_by)
+          select org_id,${employmentId},method,percent_floor,annual_days_floor,effective_from,effective_to,'Employee vacation election',source_snapshot,${fx.actorId},${fx.actorId}
+          from payroll_vacation_terms where org_id=${fx.orgId} and employment_id=${fx.employmentId}`);
         await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,status,is_billable,billing_status,costing_basis,created_by,updated_by)
           values(${fx.orgId},${employeeId},'2026-07-14',8,'approved',false,'unbilled','actual',${fx.actorId},${fx.actorId})`);
       }
@@ -93,7 +96,7 @@ async function ordinaryPayment(fx: Awaited<ReturnType<typeof postedRun>>, amount
     }, fx.actorId, fx.orgId);
     const submission = await submitAndReleaseIfUngated("vendor_payment", payment.id, fx.actorId);
     assert.equal(submission.autoApproved, true);
-    const posted = await postPaymentWithApplications(payment.id, undefined, fx.actorId, "ui", { deferEffects: true });
+    const posted = await postPaymentWithApplications(payment.id, undefined, fx.actorId, "ui");
     return { ...posted, documentId: payment.id };
   });
 }

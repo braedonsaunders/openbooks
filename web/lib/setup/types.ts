@@ -107,6 +107,10 @@ export interface SetupField {
   /** On addition only, initialize this integer field above the existing row numbers. */
   itemSequenceKey?: string
   addLabelKey?: string
+  /** A boolean can preserve NULL as distinct from false. */
+  nullable?: boolean
+  /** Inapplicable controls clear their value in the shared form payload. */
+  clearWhenHidden?: boolean
   /** Exact decimal scale declared by the native storage contract. */
   decimalScale?: number
   /** Inclusive resource/domain bounds for integer and percent fields. */
@@ -128,6 +132,8 @@ export interface SetupField {
   scopedOptions?: { scopeField: string; byValue: Record<string, SetupOption[]> }
   /** ref / multiref option source. */
   ref?: SetupRefSource
+  /** Filter native reference choices by the live owning entity. */
+  refScopeField?: string
   /** Natural keys / immutable columns: editable on create, read-only on edit. */
   lockedOnEdit?: boolean
   /** Column is NOT NULL with a DB default — when left blank, omit it (let the
@@ -143,6 +149,8 @@ export interface SetupField {
   labelKey?: string
   /** Optional explanatory copy rendered directly beneath the control. */
   helpTextKey?: string
+  /** Legal employment ownership remains available without multi-subsidiary management. */
+  legalEmployer?: boolean
   /** Heading the drawer groups this field under (message key). Consecutive
    *  fields sharing a section render beneath one subheading. */
   sectionKey?: string
@@ -151,13 +159,14 @@ export interface SetupField {
    *  protection on an earning) is noise, not a disabled control. The domain
    *  rule is still enforced by the table's CHECK constraints; this only keeps
    *  the form honest. */
-  showWhen?: { field: string; in: string[] }
+  showWhen?: { field: string; in: string[] } | { field: string; present: boolean }
 }
 
 /** Whether a conditional field applies to the values currently in the form. */
 export function setupFieldVisible(field: SetupField, values: Record<string, unknown>): boolean {
   if (field.hidden) return false
   if (!field.showWhen) return true
+  if ('present' in field.showWhen) return field.showWhen.present === (values[field.showWhen.field] != null && values[field.showWhen.field] !== '')
   return field.showWhen.in.includes(String(values[field.showWhen.field] ?? ''))
 }
 
@@ -192,6 +201,8 @@ export function setupFieldOptions(field: SetupField, values: Record<string, unkn
 
 export interface SetupColumn {
   key: string
+  /** Presentation label without changing the global field vocabulary. */
+  labelKey?: string
   kind: SetupColumnKind
   ref?: SetupRefSource
   /** Optional value labels for enum-like list columns. */
@@ -242,8 +253,18 @@ export interface SetupEntity {
   key: string
   /** DB table name. */
   table: string
+  /** Optional collection title for a rehomed native presentation. */
+  titleKey?: string
   /** Optional translation key for the singular record name used in drawers. */
   singularTitleKey?: string
+  /** Optional guided creation using the same fields, validation and writer. */
+  creationSteps?: { key: string; titleKey: string; descriptionKey: string; fields: string[] }[]
+  /** Authorized operational links shown by the shared record drawer. */
+  recordLinks?: { href: string; label: string }[]
+  /** Server-only presentation of native record-owned collections. */
+  recordChildren?: SetupEntity[]
+  /** Continue creation in the owning record when child configuration is required. */
+  createDestination?: { rowParam: string; tabKey?: string }
   /** Section this tab lives under (SETUP_GROUPS key). */
   groupKey: string
   /** lucide icon key (mapped in SetupNav). */
@@ -377,6 +398,7 @@ export type SetupEntityValidationHook = (context: SetupEntityValidationContext) 
 export function setupEntityClientDescriptor(entity: SetupEntity): Omit<SetupEntity, 'validateWrite'> {
   const descriptor = { ...entity }
   delete descriptor.validateWrite
+  delete descriptor.recordChildren
   return descriptor
 }
 
@@ -387,15 +409,16 @@ export function setupEntitySubsidiaryField(entity: SetupEntity): SetupField | un
 
 /** References whose target row carries the subsidiary ownership anchor. */
 export function setupEntitySubsidiaryReferenceFields(entity: SetupEntity): SetupField[] {
-  return entity.fields.filter((field) => field.ref === 'equipment-units')
+  const references = entity.fields.filter((field) => ['equipment-units', 'worker-employments', 'benefit-plans', 'benefit-enrollment-configuration'].includes(field.ref ?? ''))
+  return references.some((field) => field.ref === 'worker-employments') ? references.filter((field) => field.ref === 'worker-employments') : references
 }
 
 /**
  * Optional-module columns are not merely nullable database fields. Keep the
  * registry as the source of truth, then derive the UI/write descriptor so
  * every generic setup list, drawer, and CRUD write applies the same guard.
- * Turning a feature off hides the control and refuses a new write; existing
- * values stay on the row.
+ * Turning a feature off hides optional controls and refuses new writes;
+ * legal-employer ownership remains available and existing values stay on the row.
  */
 export function setupEntityForFeatureState(
   entity: SetupEntity,
@@ -417,7 +440,7 @@ export function setupEntityForFeatureState(
     return { ...control, options: control.options.filter((option) => option.value !== 'equipment_charge') }
   }
   const visible = (control: SetupField | SetupColumn) =>
-    (features.multiSubsidiary || entity.key === 'tax-registrations' || !isSubsidiaryControl(control))
+    (features.multiSubsidiary || entity.key === 'tax-registrations' || ('legalEmployer' in control && control.legalEmployer === true) || !isSubsidiaryControl(control))
     && (equipmentOn || !isEquipmentControl(control))
     && (fieldTicketsOn || !isFieldTicketControl(control))
   return {

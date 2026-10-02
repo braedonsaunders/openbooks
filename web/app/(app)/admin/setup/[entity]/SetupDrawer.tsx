@@ -1,6 +1,8 @@
 'use client'
 
-import { InspectorPanel } from '@/components/builder/builder-kit'
+import Link from 'next/link'
+import { FormSteps, InspectorPanel } from '@/components/builder/builder-kit'
+
 import { SwitchField } from '@/components/switch'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
@@ -31,7 +33,7 @@ import { coerceField, SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerc
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { countryOptions } from '../../../../../lib/countries'
 
-type RefOption = { value: string; label: string }
+type RefOption = { value: string; label: string; scopeValue?: string | null }
 
 /** Bound for one setup save before the drawer surfaces a timeout. */
 const SAVE_TIMEOUT_MS = 30_000
@@ -78,6 +80,7 @@ function initialValue(field: SetupField, row: Record<string, unknown> | null): u
   if (!row && field.defaultValue !== undefined) return field.defaultValue
   switch (field.kind) {
     case 'boolean':
+      if (field.nullable) return raw == null ? '' : Boolean(raw)
       // New records default to active/true for the common isActive flag.
       return row ? Boolean(raw) : field.key === 'isActive' || field.key === 'isBillableDefault'
     case 'date':
@@ -156,7 +159,14 @@ export function SetupDrawer({
     : t(`entities.${entity.key}.title`)
   const set = (key: string, value: unknown) => {
     setFieldError(null)
-    setForm((f) => ({ ...f, [key]: value }))
+    setForm((current) => {
+      const next = { ...current, [key]: value }
+      for (const field of entity.fields) {
+        if (field.refScopeField !== key || !field.ref) continue
+        if (!(refOptions[field.ref] ?? []).some((option) => option.value === next[field.key] && (option.scopeValue == null || option.scopeValue === String(value ?? '')))) next[field.key] = ''
+      }
+      return next
+    })
   }
   const recordTabs = nestedTab ? [nestedTab, ...nestedTabs] : nestedTabs
   const activeNestedTab = !creating ? recordTabs.find((tab) => searchParams.get('setupTab') === tab.key) : undefined
@@ -184,14 +194,25 @@ export function SetupDrawer({
   // component from a deduction to an earning drops its protection settings
   // from view (and from the required-field check) as the choice is made.
   const visibleFields = entity.fields.filter((field) => setupFieldVisible(field, form))
+  const steps = creating ? entity.creationSteps ?? [] : []
+  const [stepIndex, setStepIndex] = useState(0)
+  const currentStep = steps[stepIndex]
+  const reviewing = steps.length > 0 && stepIndex === steps.length
+  const displayedFields = currentStep ? visibleFields.filter((field) => currentStep.fields.includes(field.key)) : visibleFields
+  function nextStep() {
+    const error = validate(displayedFields)
+    if (error) { setFieldError(error); toast.error(error); return }
+    setFieldError(null)
+    setStepIndex((index) => index + 1)
+  }
 
-  function validate(): string | null {
-    for (const f of visibleFields) {
+  function validate(fields = visibleFields): string | null {
+    for (const f of fields) {
       if (f.kind === 'object' || f.kind === 'objectArray') {
         const result = coerceField(f, form[f.key])
         if ('error' in result) return result.error
       }
-      if (!f.required || f.kind === 'boolean' || f.kind === 'multiref') continue
+      if (!f.required || (f.kind === 'boolean' && !f.nullable) || f.kind === 'multiref') continue
       if (!creating && f.lockedOnEdit) continue
       const v = form[f.key]
       // keepDefault columns carry a DB default the server applies to blanks
@@ -231,6 +252,7 @@ export function SetupDrawer({
       // band min typed as ".5" posts as "0.5" instead of round-tripping raw.
       // Unparseable text posts untouched for the server to refuse by name.
       for (const field of entity.fields) {
+        if (field.clearWhenHidden && !setupFieldVisible(field, body)) body[field.key] = null
         if ((field.kind === 'decimal' || field.kind === 'percent') && typeof body[field.key] === 'string') {
           body[field.key] = canonicalDecimal(body[field.key], field.decimalScale ?? SETUP_DECIMAL_SCALE) ?? body[field.key]
         }
@@ -240,7 +262,7 @@ export function SetupDrawer({
       // settings back to their defaults, exactly as the CHECK constraint expects.
       for (const field of entity.fields) {
         if (field.showWhen && !setupFieldVisible(field, form)) {
-          body[field.key] = field.defaultValue ?? ''
+          body[field.key] = field.clearWhenHidden ? null : field.defaultValue ?? ''
         }
       }
       if (!creating) body.id = row![idColumn]
@@ -275,8 +297,17 @@ export function SetupDrawer({
         toast.error(errorMessage(data))
         return
       }
+      let destination = closeHref
+      if (creating && entity.createDestination) {
+        const saved = await res.json() as { id?: unknown }
+        if (typeof saved.id !== 'string' || !saved.id) throw new Error(tCommon('feedback.saveFailed'))
+        const target = new URL(closeHref, window.location.origin)
+        target.searchParams.set(entity.createDestination.rowParam, saved.id)
+        if (entity.createDestination.tabKey) target.searchParams.set('setupTab', entity.createDestination.tabKey)
+        destination = `${target.pathname}${target.search}`
+      }
       toast.success(creating ? t('created') : t('updated'))
-      router.push(closeHref)
+      router.push(destination)
       router.refresh()
     } catch (e) {
       // A rejected transport previously escaped with zero feedback:
@@ -374,13 +405,17 @@ export function SetupDrawer({
       subtabs={!creating && recordTabs.length > 0 ? (
         <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
       ) : undefined}
-      headerActions={
-        !nestedTabActive && !entity.readOnly ? <Button disabled={busy} onClick={save}>
+      headerActions={<>
+        {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
+        {!nestedTabActive && !entity.readOnly && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
-        </Button> : undefined
-      }
+        </Button> : null}
+      </>}
       footer={
-        nestedTabActive ? undefined : !entity.readOnly && !creating && !entity.hasActive && entity.allowDelete !== false ? (
+        steps.length ? <div className="flex w-full justify-between gap-2">
+          <Button variant="outline" disabled={busy || stepIndex === 0} onClick={() => { setFieldError(null); setStepIndex((index) => index - 1) }}>{tCommon('actions.back')}</Button>
+          {!reviewing ? <Button disabled={busy} onClick={nextStep}>{tCommon('actions.next')}</Button> : null}
+        </div> : nestedTabActive ? undefined : !entity.readOnly && !creating && !entity.hasActive && entity.allowDelete !== false ? (
           <button
             type="button"
             onClick={remove}
@@ -401,9 +436,13 @@ export function SetupDrawer({
           {fieldError}
         </p>
       ) : null}
+      {steps.length ? <div className="mb-5 space-y-3">
+        <FormSteps steps={[...steps.map((step) => ({ key: step.key, label: t(step.titleKey) })), { key: 'review', label: t('benefitBuilder.review') }]} current={stepIndex} onChange={setStepIndex} label={entityTitle} />
+        {currentStep ? <div><h2 className="text-base font-semibold">{t(currentStep.titleKey)}</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t(currentStep.descriptionKey)}</p></div> : null}
+      </div> : null}
       <div className={entity.formSections ? "space-y-5" : undefined}>
       {entity.formSections?.map((section) => {
-        const fields = visibleFields.filter((field) => section.fields.includes(field.key))
+        const fields = displayedFields.filter((field) => section.fields.includes(field.key))
         if (!fields.length) return null
         return <InspectorPanel key={section.titleKey} title={t(section.titleKey)} description={section.descriptionKey ? t(section.descriptionKey) : undefined}>
           <div className="grid gap-5 sm:grid-cols-2">
@@ -412,9 +451,9 @@ export function SetupDrawer({
         </InspectorPanel>
       })}
       <div className="grid gap-4 p-1 sm:grid-cols-2">
-        {visibleFields.filter((field) => !entity.formSections?.some((section) => section.fields.includes(field.key))).map((field, index) => (
+        {displayedFields.filter((field) => !entity.formSections?.some((section) => section.fields.includes(field.key))).map((field, index) => (
           <Fragment key={field.key}>
-            {field.sectionKey && field.sectionKey !== visibleFields[index - 1]?.sectionKey ? (
+            {field.sectionKey && field.sectionKey !== displayedFields[index - 1]?.sectionKey ? (
               <h3 className="border-t border-slate-200 pt-4 text-sm font-semibold text-slate-800 sm:col-span-2 dark:border-slate-800 dark:text-slate-100">
                 {t(field.sectionKey)}
               </h3>
@@ -424,7 +463,7 @@ export function SetupDrawer({
               value={form[field.key]}
               onChange={(v) => set(field.key, v)}
               creating={creating}
-              forceLocked={Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)}
+              forceLocked={reviewing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)}
               refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
               formValues={form}
               t={t}
@@ -499,7 +538,7 @@ export function SetupDrawer({
   )
 }
 
-function FieldControl({
+export function FieldControl({
   field,
   value,
   onChange,
@@ -528,10 +567,10 @@ function FieldControl({
   const help = field.helpTextKey ? t(field.helpTextKey) : undefined
   const locked = forceLocked || (!creating && field.lockedOnEdit)
   // Registry-required fields show a marker — exactly the set
-  // validate() enforces (booleans/multirefs/locked keys are never required,
+  // validate() enforces (checkboxes/multirefs/locked keys are never required,
   // and blank keepDefault fields are legal input), so the mark
   // cannot lie about what blocks saving.
-  const requiredMark = field.required && !locked && field.kind !== 'boolean' && field.kind !== 'multiref' && !field.keepDefault
+  const requiredMark = field.required && !locked && (field.kind !== 'boolean' || field.nullable) && field.kind !== 'multiref' && !field.keepDefault
     ? <span className="text-red-500" aria-hidden="true"> *</span>
     : null
   const full = field.fullWidth ||
@@ -583,6 +622,14 @@ function FieldControl({
         })}
         {array && !locked ? <Button type="button" variant="outline" size="sm" onClick={() => onChange([...entries, Object.fromEntries((field.fields ?? []).map((child) => [child.key, child.key === field.itemSequenceKey ? entries.reduce((highest, entry) => { const sequence = Number((entry as Record<string, unknown>)[child.key]); return Number.isSafeInteger(sequence) && sequence > highest ? sequence : highest }, 0) + 1 : child.defaultValue ?? (child.kind === 'boolean' ? false : child.kind === 'stringArray' ? [] : '')]))])}><Plus size={14} />{t(field.addLabelKey ?? 'structuredFields.addRow')}</Button> : null}
       </div>
+    </div>
+  }
+
+  if (field.kind === 'boolean' && field.nullable) {
+    return <div className={wrap}><Label help={help}>{label}{requiredMark}</Label>
+      <Select disabled={Boolean(locked)} aria-label={label} value={value === true ? 'true' : value === false ? 'false' : ''} onChange={(event) => onChange(event.target.value === '' ? null : event.target.value === 'true')}>
+        <option value="">{t('selectPlaceholder')}</option><option value="true">{t('yes')}</option><option value="false">{t('no')}</option>
+      </Select>
     </div>
   }
 
@@ -662,7 +709,7 @@ function FieldControl({
   }
 
   if (field.kind === 'ref') {
-    const options: SelectOption[] = refOptions.map((o) => ({ value: o.value, label: o.label }))
+    const options: SelectOption[] = refOptions.filter((option) => !field.refScopeField || option.scopeValue == null || option.scopeValue === String(formValues[field.refScopeField] ?? '')).map((o) => ({ value: o.value, label: o.label }))
     return (
       <div className={wrap}>
         <Label help={help}>{label}{requiredMark}</Label>

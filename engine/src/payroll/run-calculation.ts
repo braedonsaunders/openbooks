@@ -1,3 +1,4 @@
+import { recurringBenefitsRunSource } from './benefit-plan-inputs.ts';
 import { reresolveRunToSubsidiary } from "./run-lifecycle.ts";
 import { statutoryHolidayPayEnabled, ensureStatutoryHolidayComponents, ensureComponents, statutoryComponents } from "./run-setup.ts";
 /**
@@ -432,6 +433,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       employees.rows.map((e) => employeeTaxYearFenceKey(orgId, e.party_id, runContext.taxYear)),
     );
 
+    if (input.simulate) await tx.execute(sql`set constraints pay_run_benefit_allocations_line_tenant_fkey deferred`);
+    if (!input.simulate) await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     // Movements are deleted with the stubs that produced them, on the same
     // key, so an employee who has dropped OFF the run (excluded, terminated,
@@ -628,6 +631,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     );
     if (!calculationSource) throw new PayrollError("pay run not found");
     const calculationSourceDigest = payRunCalculationSourceDigest(calculationSource);
+    const benefitSource = await recurringBenefitsRunSource(tx, orgId, documentId);
 
     // The refusal record is REPLACED wholesale on every calculate — never
     // appended, never merged — so a recalculation that fixes two of three
@@ -642,6 +646,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
              employer_cost_total = ${employerTotal}, employee_count = ${count},
              calculation_source_snapshot = ${JSON.stringify(calculationSource)}::jsonb,
              calculation_source_digest = ${calculationSourceDigest},
+             benefit_source_snapshot = ${JSON.stringify(benefitSource)}::jsonb,
              calculation_errors = ${JSON.stringify(errors)}::jsonb,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}

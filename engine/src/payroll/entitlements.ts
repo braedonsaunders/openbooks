@@ -13,7 +13,8 @@
  * - Limits resolve exactly like labor_cost_rates wages (employee > job title >
  *   trade > department > subsidiary > plan default, latest effective_from
  *   wins) — one scoping mechanism in this product, not two.
- * - All arithmetic goes through money.ts. No floats, ever.
+ * - Monetary arithmetic goes through money.ts; credited service retains its
+ *   declared decimal precision through bigint ratios. No floating-point amounts.
  *
  * Shape: the decision kernels (`pickPlanLimit`, `monthsOfService`,
  * `pickServiceTier`, `computePlanMovement`) are PURE and unit-tested without a
@@ -104,3 +105,9 @@ export {
   milestonesReachedInPeriod,
   type ServiceMilestone,
 } from "./entitlements-reports.ts";
+
+export { computeEmploymentServiceCredit, resolveEmploymentServiceCredit, validateServiceCreditConfiguration, meetsServiceYears, serviceCreditMilestoneDate, lockPayrollServiceConfiguration, type EmploymentServiceCredit, type ServiceCreditBaseline } from "./service-credit.ts";
+
+export { resolveVacationTerms, validateVacationTermConfiguration, type VacationTerms, type VacationMethod } from "./vacation-terms.ts";
+export { validateEntitlementServiceTierConfiguration } from "./entitlement-service-config.ts";
+export { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";
