@@ -1,24 +1,8 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { db } from "../../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../../testing/fixtures.ts";
-import {
-  enableHrm,
-  grant,
-  linkPerson,
-  mkEmployment,
-  mkReporting,
-  mkReviewTemplate,
-  perfError,
-} from "../../testing/hrm-harness.ts";
-import { createCycle, openCycle } from "./review-cycles.ts";
-import { submitReview } from "./reviews.ts";
+import { perfError, setupPerformanceHarness, withHarness } from "../../testing/hrm-harness.ts";
 import {
   calibrationPotentialOptions,
   createCalibrationSession,
@@ -27,50 +11,11 @@ import {
   setCalibratedRating,
   setPotential,
 } from "./calibration.ts";
+import { createCycle, openCycle } from "./review-cycles.ts";
+import { submitReview } from "./reviews.ts";
 
-/**
- * Calibration scale validation over the real 0228 tables — DB-owned, one
- * file at a time. No skip guards: the integration partition guarantees a
- * database.
- *
- * Close writes decided ratings and potential keys into the review, so
- * off-scale values are refused at decision time against the cycle's
- * declared scales — never stored first and validated later. Every refusal
- * asserts its code AND its message.
- */
-
-type Harness = {
-  org: ScratchOrg;
-  hrId: string;
-  managerUser: string;
-  workerEmployment: string;
-  cycleId: string;
-};
-
-async function setupScalesHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId, "hrmPerformance");
-  const hrId = await createScratchUser(org.orgId, "Scale HR", "scale_hr");
-  await grant(org.orgId, hrId, ["hrm.performance.manage"]);
-  const managerUser = await createScratchUser(org.orgId, "Scale Manager", "scale_manager");
-  const managerParty = await linkPerson(org.orgId, managerUser);
-  const managerEmployment = await mkEmployment(org.orgId, managerParty, org.subsidiaryId, {});
-  const workerUser = await createScratchUser(org.orgId, "Scale Worker", "scale_worker");
-  const workerParty = await linkPerson(org.orgId, workerUser);
-  const workerEmployment = await mkEmployment(org.orgId, workerParty, org.subsidiaryId, {});
-  await mkReporting(org.orgId, workerEmployment, managerEmployment);
-  const templateId = await mkReviewTemplate(org.orgId, hrId);
-  const cycle = await createCycle({
-    orgId: org.orgId,
-    actorId: hrId,
-    templateId,
-    name: "FY26",
-    periodStartOn: "2026-01-01",
-    periodEndOn: "2026-12-31",
-  });
-  await openCycle({ orgId: org.orgId, actorId: hrId, cycleId: cycle.id });
-  return { org, hrId, managerUser, workerEmployment, cycleId: cycle.id };
-}
+const setupScalesHarness = () => setupPerformanceHarness({ prefix: "Scale", permissions: ["hrm.performance.manage"], periodEndOn: "2026-12-31", version: {} });
+type Harness = Awaited<ReturnType<typeof setupScalesHarness>>;
 
 async function openEntryId(h: Harness): Promise<string> {
   const reviewId = (await db.execute<{ id: string }>(sql`
@@ -99,8 +44,7 @@ async function openEntryId(h: Harness): Promise<string> {
 }
 
 test("decided ratings and potential keys validate against the cycle scales", async () => {
-  const h = await setupScalesHarness();
-  try {
+  await withHarness(() => setupScalesHarness(), async (h) => {
     const entryId = await openEntryId(h);
     // Off-scale and non-numeric ratings name the scale.
     for (const bad of ["9", "0", "abc"]) {
@@ -150,16 +94,11 @@ test("decided ratings and potential keys validate against the cycle scales", asy
        where org_id = ${h.org.orgId} and id = ${entryId}`)).rows[0]!.sessionId;
     const session = await getCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId });
     assert.equal(session.entries[0]!.potentialKey, "high");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("the calibration editor offers the cycle scale labels and saves one", async () => {
-  // F3-34: the editor's options come from the same template labels
-  // setPotential enforces, so an offered option always saves.
-  const h = await setupScalesHarness();
-  try {
+  await withHarness(() => setupScalesHarness(), async (h) => {
     const entryId = await openEntryId(h);
     const sessionId = (await db.execute<{ sessionId: string }>(sql`
       select session_id as "sessionId" from hrm_calibration_entries
@@ -171,16 +110,11 @@ test("the calibration editor offers the cycle scale labels and saves one", async
     await setPotential({ orgId: h.org.orgId, actorId: h.hrId, entryId, potentialKey: "high" });
     const session = await getCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId });
     assert.equal(session.entries[0]!.potentialKey, "high");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("a template with no scale labels offers no potential options", async () => {
-  // F3-34: the missing arm degrades openly — the editor offers nothing
-  // instead of inventing options the server would refuse.
-  const h = await setupScalesHarness();
-  try {
+  await withHarness(() => setupScalesHarness(), async (h) => {
     const templateId = (await db.execute<{ id: string }>(sql`
       insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
       values (${h.org.orgId}, 'Labelless', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
@@ -217,7 +151,5 @@ test("a template with no scale labels offers no potential options", async () => 
       await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId: session.id }),
       [],
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });

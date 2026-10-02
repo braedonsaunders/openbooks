@@ -1,29 +1,17 @@
-import { test } from "node:test";
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { test } from "node:test";
 import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
-import {
-  DB,
-  setupHarness,
-} from "../testing/hrm-harness.ts";
+import { DB, seedPerson, setupHarness, withHarness } from "../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { HrmOrgChartError } from "./documents/errors.ts";
 import { loadDirectory, loadOrgChart } from "./org-chart.ts";
-
-/**
- * HR-19 org-chart DB coverage (integration partition): the tree over
- * line relationships as of a date with span and layers, a vacancy node
- * for a funded-but-empty position, a future-dated manager change reading
- * differently on either side of its effective date, the directory, and
- * the read gate. Proofs are read back from the service shape.
- */
-
 
 const ORG_CHART_SPEC = {
   features: ["hrm"],
@@ -66,20 +54,7 @@ async function seedEmployment(
   name: string,
   title: string,
 ): Promise<{ partyId: string; employmentId: string }> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, email, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${name}, ${`${name.replaceAll(" ", ".").toLowerCase()}@scratch.test`}, true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
+  const { partyId, employmentId } = await seedPerson(orgId, subsidiaryId, name);
   const assignmentId = randomUUID();
   await db.execute(sql`
     insert into employment_assignments (id, org_id, employment_id, assignment_key)
@@ -111,8 +86,7 @@ async function seedReport(
 }
 
 test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async () => {
-  const h = await setupOrgChartHarness();
-  try {
+  await withHarness(() => setupOrgChartHarness(), async (h) => {
     const before = await loadOrgChart({ orgId: h.org.orgId, actorId: h.readerId, asOf: "2026-09-21" });
     assert.equal(before.headcount, 3);
     assert.equal(before.vacancies, 1);
@@ -157,14 +131,11 @@ test("tree, vacancy, as-of manager change, and directory", { skip: !DB }, async 
       loadOrgChart({ orgId: h.org.orgId, actorId: outsider, asOf: "2026-09-21" }),
       (e: unknown) => e instanceof HrmAuthorizationError,
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("directory pages continue past 200 rows and report the scoped total", { skip: !DB }, async () => {
-  const h = await setupOrgChartHarness();
-  try {
+  await withHarness(() => setupOrgChartHarness(), async (h) => {
     await db.execute(sql`
       with new_parties as (
         insert into parties (id, org_id, kind, display_name, email, is_active, custom)
@@ -195,9 +166,7 @@ test("directory pages continue past 200 rows and report the scoped total", { ski
     assert.deepEqual([first.entries.length, second.entries.length, third.entries.length], [100, 100, 8]);
     assert.equal(new Set(allEntries.map((entry) => entry.employmentId)).size, 208);
     assert.equal(allEntries.filter((entry) => entry.name.startsWith("Directory Page ")).length, 205);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("chart and directory are fenced by employer scope and the self-service team", { skip: !DB }, async () => {

@@ -1,25 +1,17 @@
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
+  createScratchUser
 } from "../../testing/fixtures.ts";
 import {
-  enableHrm,
-  grant,
   linkPerson,
   mkEmployment,
-  mkParty,
-  mkReporting,
-  mkReviewTemplate,
-  mkVersion,
+  mkParty, mkVersion, performanceRefusal, setupPerformanceHarness, withHarness
 } from "../../testing/hrm-harness.ts";
-import { HrmPerformanceError } from "./errors.ts";
-import { createCycle, openCycle } from "./review-cycles.ts";
+import { listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
+import { createGoal, setGoalStatus, updateGoalProgress } from "./goals.ts";
 import {
   acknowledgeReview,
   calibrateReview,
@@ -27,67 +19,10 @@ import {
   shareReview,
   submitReview,
 } from "./reviews.ts";
-import { createGoal, setGoalStatus, updateGoalProgress } from "./goals.ts";
-import { listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
-
-/**
- * HR-7 review transitions, goals and exits over the real 0196 tables —
- * DB-owned (they skip without OPENBOOKS_DB_URL, one file at a time).
- *
- * Proofs are read back from storage, and every refusal asserts its code
- * AND its message: the message is the entire product of a failing check.
- */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-// Shared HRM seeding helpers (grants, employments, versions, reporting
-// lines, review templates) live in engine/src/testing/hrm-harness.ts; only
-// file-specific seeders and assertion shapers stay here.
-
-type Harness = {
-  org: ScratchOrg;
-  hrId: string;
-  managerUserId: string;
-  managerPartyId: string;
-  managerEmploymentId: string;
-  workerUserId: string;
-  workerPartyId: string;
-  workerEmploymentId: string;
-  cycleId: string;
-};
-
-async function setupReviewsHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const hrId = await createScratchUser(org.orgId, "HRM Review HR", "hrm_review_hr");
-  await grant(org.orgId, hrId, ["hrm.performance.read", "hrm.performance.manage", "hrm.retention.read"]);
-  await linkPerson(org.orgId, hrId);
-  const managerUserId = await createScratchUser(org.orgId, "Review Manager", "review_manager");
-  const managerPartyId = await linkPerson(org.orgId, managerUserId);
-  const managerEmploymentId = await mkEmployment(org.orgId, managerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, managerEmploymentId, { from: "2020-01-01" });
-  const workerUserId = await createScratchUser(org.orgId, "Review Worker", "review_worker");
-  const workerPartyId = await linkPerson(org.orgId, workerUserId);
-  const workerEmploymentId = await mkEmployment(org.orgId, workerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, workerEmploymentId, { from: "2020-01-01" });
-  await mkReporting(org.orgId, workerEmploymentId, managerEmploymentId);
-  const templateId = await mkReviewTemplate(org.orgId, hrId, {
-    name: "Annual", scaleLabels: [], extraTextQuestion: true,
-  });
-  const cycle = await createCycle({
-    orgId: org.orgId,
-    actorId: hrId,
-    templateId,
-    name: "FY26",
-    periodStartOn: "2026-01-01",
-    periodEndOn: "2026-06-30",
-  });
-  await openCycle({ orgId: org.orgId, actorId: hrId, cycleId: cycle.id });
-  return {
-    org, hrId, managerUserId, managerPartyId, managerEmploymentId,
-    workerUserId, workerPartyId, workerEmploymentId, cycleId: cycle.id,
-  };
-}
+const setupReviewsHarness = () => setupPerformanceHarness({ prefix: "Review", permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.retention.read"], template: { name: "Annual", scaleLabels: [], extraTextQuestion: true }, version: { from: "2020-01-01" } });
 
 async function reviewId(
   orgId: string,
@@ -108,8 +43,7 @@ async function answerIds(orgId: string, reviewId: string): Promise<{ id: string;
 }
 
 test("submit refuses a missing required answer and an out-of-scale rating by question", { skip: !DB }, async () => {
-  const h = await setupReviewsHarness();
-  try {
+  await withHarness(() => setupReviewsHarness(), async (h) => {
     const selfId = await reviewId(h.org.orgId, h.cycleId, h.workerEmploymentId, "self");
     const answers = await answerIds(h.org.orgId, selfId);
     const impact = answers.find((a) => a.prompt === "Customer impact")!.id;
@@ -121,12 +55,7 @@ test("submit refuses a missing required answer and an out-of-scale rating by que
         reviewId: selfId,
         answers: [{ answerId: impact, text: "great work" }],
       }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /"Customer impact" needs a rating/);
-        return true;
-      },
+      performanceRefusal("REFUSED", /"Customer impact" needs a rating/),
     );
     // Rating outside the template scale names the question and the scale.
     await assert.rejects(
@@ -136,12 +65,7 @@ test("submit refuses a missing required answer and an out-of-scale rating by que
         reviewId: selfId,
         answers: [{ answerId: impact, rating: "9", text: "great work" }],
       }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /"Customer impact".*outside the template scale 1 to 5/);
-        return true;
-      },
+      performanceRefusal("REFUSED", /"Customer impact".*outside the template scale 1 to 5/),
     );
     // A peer cannot submit another's review.
     const peerUser = await createScratchUser(h.org.orgId, "Peer", "review_peer");
@@ -153,11 +77,7 @@ test("submit refuses a missing required answer and an out-of-scale rating by que
         reviewId: selfId,
         answers: [{ answerId: impact, rating: "4", text: "fine" }],
       }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "FORBIDDEN");
-        return true;
-      },
+      performanceRefusal("FORBIDDEN"),
     );
     // The valid submit lands submitted with its event, read back from storage.
     const submitted = await submitReview({
@@ -172,14 +92,11 @@ test("submit refuses a missing required answer and an out-of-scale rating by que
     const stored = (await db.execute<{ status: string }>(sql`
       select status from hrm_reviews where org_id = ${h.org.orgId} and id = ${selfId}`)).rows[0]!.status;
     assert.equal(stored, "submitted");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("calibrate keeps the original rating, share refuses while calibrating, acknowledge is subject-only", { skip: !DB }, async () => {
-  const h = await setupReviewsHarness();
-  try {
+  await withHarness(() => setupReviewsHarness(), async (h) => {
     const managerId = await reviewId(h.org.orgId, h.cycleId, h.workerEmploymentId, "manager");
     const answers = await answerIds(h.org.orgId, managerId);
     await submitReview({
@@ -210,12 +127,7 @@ test("calibrate keeps the original rating, share refuses while calibrating, ackn
     });
     await assert.rejects(
       shareReview({ orgId: h.org.orgId, actorId: h.workerUserId, reviewId: selfId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /already the subject's/);
-        return true;
-      },
+      performanceRefusal("REFUSED", /already the subject's/),
     );
     // Sharing while the cycle calibrates is refused; after close it shares.
     const { moveToCalibrating, closeCycle } = await import("./review-cycles.ts");
@@ -228,12 +140,7 @@ test("calibrate keeps the original rating, share refuses while calibrating, ackn
     });
     await assert.rejects(
       shareReview({ orgId: h.org.orgId, actorId: h.managerUserId, reviewId: managerId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /finish calibration \(close the cycle\) before sharing/);
-        return true;
-      },
+      performanceRefusal("REFUSED", /finish calibration \(close the cycle\) before sharing/),
     );
     await closeCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: h.cycleId });
     const shared = await shareReview({ orgId: h.org.orgId, actorId: h.managerUserId, reviewId: managerId });
@@ -241,32 +148,20 @@ test("calibrate keeps the original rating, share refuses while calibrating, ackn
     // Anyone but the subject cannot acknowledge.
     await assert.rejects(
       acknowledgeReview({ orgId: h.org.orgId, actorId: h.managerUserId, reviewId: managerId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "FORBIDDEN");
-        return true;
-      },
+      performanceRefusal("FORBIDDEN"),
     );
     const acked = await acknowledgeReview({ orgId: h.org.orgId, actorId: h.workerUserId, reviewId: managerId });
     assert.equal(acked.status, "acknowledged");
     // A shared-then-acknowledged review never reopens.
     await assert.rejects(
       reopenReview({ orgId: h.org.orgId, actorId: h.hrId, reviewId: managerId, reason: "typo" }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "BAD_STATE");
-        assert.match(e.message, /a shared review stays shared/);
-        return true;
-      },
+      performanceRefusal("BAD_STATE", /a shared review stays shared/),
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("goals progress, achieve, miss and cancel with terminal evidence", { skip: !DB }, async () => {
-  const h = await setupReviewsHarness();
-  try {
+  await withHarness(() => setupReviewsHarness(), async (h) => {
     const goal = await createGoal({
       orgId: h.org.orgId,
       actorId: h.workerUserId,
@@ -287,12 +182,7 @@ test("goals progress, achieve, miss and cancel with terminal evidence", { skip: 
     // Missing without a note is refused.
     await assert.rejects(
       setGoalStatus({ orgId: h.org.orgId, actorId: h.workerUserId, goalId: goal.id, status: "missed" }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /without a note/);
-        return true;
-      },
+      performanceRefusal("REFUSED", /without a note/),
     );
     const done = await setGoalStatus({
       orgId: h.org.orgId,
@@ -305,23 +195,16 @@ test("goals progress, achieve, miss and cancel with terminal evidence", { skip: 
     // A terminal goal takes no more progress.
     await assert.rejects(
       updateGoalProgress({ orgId: h.org.orgId, actorId: h.workerUserId, goalId: goal.id, progressPercent: 100 }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "BAD_STATE");
-        return true;
-      },
+      performanceRefusal("BAD_STATE"),
     );
     const updates = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_goal_updates where org_id = ${h.org.orgId} and goal_id = ${goal.id}`)).rows[0]!.n;
     assert.equal(updates, "3", "set, halfway, achieved");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("exits refuse unterminated employments, duplicates, and unpaired interviews", { skip: !DB }, async () => {
-  const h = await setupReviewsHarness();
-  try {
+  await withHarness(() => setupReviewsHarness(), async (h) => {
     // Unterminated employment: refused by name.
     await assert.rejects(
       recordExit({
@@ -331,12 +214,7 @@ test("exits refuse unterminated employments, duplicates, and unpaired interviews
         reasonKind: "resignation",
         isVoluntary: true,
       }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /is active as of .* not terminated/);
-        return true;
-      },
+      performanceRefusal("REFUSED", /is active as of .* not terminated/),
     );
     // A second employment whose first version is terminated: versions are
     // append-only evidence, so tests never update them either.
@@ -353,12 +231,7 @@ test("exits refuse unterminated employments, duplicates, and unpaired interviews
         isVoluntary: true,
         interviewHeldOn: "2026-07-01",
       }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /both the held date and the interviewer/);
-        return true;
-      },
+      performanceRefusal("REFUSED", /both the held date and the interviewer/),
     );
     const exit = await recordExit({
       orgId: h.org.orgId,
@@ -393,12 +266,7 @@ test("exits refuse unterminated employments, duplicates, and unpaired interviews
         reasonKind: "resignation",
         isVoluntary: true,
       }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "DUPLICATE");
-        assert.match(e.message, /correct it with an update/);
-        return true;
-      },
+      performanceRefusal("DUPLICATE", /correct it with an update/),
     );
     const corrected = await updateExitRecord({
       orgId: h.org.orgId,
@@ -409,7 +277,5 @@ test("exits refuse unterminated employments, duplicates, and unpaired interviews
     });
     assert.equal(corrected.wouldRehire, true);
     assert.equal(corrected.reasonKind, "resignation");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });

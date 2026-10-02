@@ -1,39 +1,29 @@
-import { test } from "node:test";
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { test } from "node:test";
 import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
+  type ScratchOrg
 } from "../../testing/fixtures.ts";
 import {
   enableFeatures,
   grant,
   linkPerson,
   mkEmployment,
-  recruitingError,
+  recruitingError, withHarness
 } from "../../testing/hrm-harness.ts";
+import { createApplication } from "./applications.ts";
+import { createCandidate } from "./candidates.ts";
+import { cancelInterview, scheduleInterview } from "./interviews.ts";
 import {
   createRequisition,
   openRequisition,
 } from "./requisitions.ts";
-import { createCandidate } from "./candidates.ts";
-import { createApplication } from "./applications.ts";
-import { cancelInterview, scheduleInterview } from "./interviews.ts";
 import { bookSlot, proposeSlots, readBookingLink } from "./scheduling.ts";
 import { hashRecruitingToken } from "./tokens.ts";
-
-/**
- * Interview cancel vs self-booking over the real 0229 tables — DB-owned,
- * one file at a time. No skip guards: the integration partition
- * guarantees a database.
- *
- * Proofs are read back from storage, and every refusal asserts its code
- * AND its message: the message is the entire product of a failing check.
- */
 
 const priorSecret = process.env.SESSION_SECRET;
 process.env.SESSION_SECRET = priorSecret ?? "openbooks-test-only-scheduling-secret";
@@ -100,8 +90,7 @@ async function seedProposed(h: Harness): Promise<{ interviewId: string; token: s
 }
 
 test("cancelling an interview kills the outstanding booking link", async () => {
-  const h = await setupSchedulingHarness();
-  try {
+  await withHarness(() => setupSchedulingHarness(), async (h) => {
     const { interviewId, token, slotId } = await seedProposed(h);
     const orgId = h.org.orgId;
     await cancelInterview({ orgId, actorId: h.recruiterId, interviewId });
@@ -120,7 +109,7 @@ test("cancelling an interview kills the outstanding booking link", async () => {
       bookingToken: token,
       slotId,
       candidateName: "Slot Candidate",
-      enqueueEmail: async () => {},
+      enqueueEmail: async () => { },
     }).then(
       () => null,
       (e: unknown) => e,
@@ -133,14 +122,11 @@ test("cancelling an interview kills the outstanding booking link", async () => {
     ));
     assert.equal(readError.code, "REFUSED");
     assert.match(readError.message, /no open slots/);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("booking a cancelled interview is refused by name even when the link resolves", async () => {
-  const h = await setupSchedulingHarness();
-  try {
+  await withHarness(() => setupSchedulingHarness(), async (h) => {
     const { interviewId, token, slotId } = await seedProposed(h);
     const orgId = h.org.orgId;
     await cancelInterview({ orgId, actorId: h.recruiterId, interviewId });
@@ -156,7 +142,7 @@ test("booking a cancelled interview is refused by name even when the link resolv
       bookingToken: token,
       slotId,
       candidateName: "Slot Candidate",
-      enqueueEmail: async () => {},
+      enqueueEmail: async () => { },
     }).then(
       () => null,
       (e: unknown) => e,
@@ -169,13 +155,10 @@ test("booking a cancelled interview is refused by name even when the link resolv
        where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
     `)).rows[0]!.n;
     assert.equal(booked, "0");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 test("public booking tokens refuse after Recruiting is disabled", async () => {
-  const h = await setupSchedulingHarness();
-  try {
+  await withHarness(() => setupSchedulingHarness(), async (h) => {
     const { token, slotId } = await seedProposed(h);
     await db.execute(sql`
       update orgs
@@ -188,21 +171,18 @@ test("public booking tokens refuse after Recruiting is disabled", async () => {
         bookingToken: token,
         slotId,
         candidateName: "Slot Candidate",
-        enqueueEmail: async () => {},
+        enqueueEmail: async () => { },
       }).then(() => null, (error: unknown) => error),
     ]) {
       const error = recruitingError(result);
       assert.equal(error.code, "REFUSED");
       assert.match(error.message, /Recruiting is off/);
     }
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("concurrent bookings across different slots still book only one sitting", async () => {
-  const h = await setupSchedulingHarness();
-  try {
+  await withHarness(() => setupSchedulingHarness(), async (h) => {
     const { interviewId } = await seedProposed(h);
     const proposed = await proposeSlots({
       orgId: h.org.orgId,
@@ -217,7 +197,7 @@ test("concurrent bookings across different slots still book only one sitting", a
       bookingToken: proposed.bookingToken,
       slotId: slot.id,
       candidateName: "Slot Candidate",
-      enqueueEmail: async () => {},
+      enqueueEmail: async () => { },
     })));
     assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
     const booked = (await db.execute<{ count: string }>(sql`
@@ -225,14 +205,11 @@ test("concurrent bookings across different slots still book only one sitting", a
        where org_id = ${h.org.orgId} and interview_id = ${interviewId} and kind = 'booked'
     `)).rows[0]!.count;
     assert.equal(booked, "1");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("concurrent proposals leave only the final booking link live", async () => {
-  const h = await setupSchedulingHarness();
-  try {
+  await withHarness(() => setupSchedulingHarness(), async (h) => {
     const { interviewId } = await seedProposed(h);
     const batches = await Promise.all([0, 1].map((day) => proposeSlots({
       orgId: h.org.orgId,
@@ -251,7 +228,5 @@ test("concurrent proposals leave only the final booking link live", async () => 
     assert.equal(live.length, 1, "one serialized proposal batch owns the live link");
     const hashes = new Set(batches.map((batch) => hashRecruitingToken(batch.bookingToken)));
     assert.ok(hashes.has(live[0]!.tokenHash!));
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });

@@ -1,17 +1,16 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
+  type ScratchOrg
 } from "../../testing/fixtures.ts";
 import {
   enableHrm,
   grant,
-  perfError,
+  perfError, withHarness
 } from "../../testing/hrm-harness.ts";
 import { createPosition } from "../positions.ts";
 import {
@@ -20,17 +19,6 @@ import {
   removeSuccessionCandidate,
   setSuccessionPlanStatus,
 } from "./talent.ts";
-
-/**
- * Succession candidate removal status gate (fnd_muddrro5) over the real
- * 0228 tables — DB-owned, one file at a time. No skip guards: the
- * integration partition guarantees a database.
- *
- * An active or archived plan is evidence: removing a candidate would erase
- * history, so only draft plans shed candidates. Every refusal asserts its
- * code AND its message, and the candidate row's survival is proved from
- * storage.
- */
 
 type Harness = {
   org: ScratchOrg;
@@ -79,8 +67,7 @@ async function candidateCount(orgId: string, planId: string): Promise<string> {
 }
 
 test("removing a candidate from an active or archived plan is refused", async () => {
-  const h = await setupSuccessionRemoveHarness();
-  try {
+  await withHarness(() => setupSuccessionRemoveHarness(), async (h) => {
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrId, id: h.planId, status: "active" });
     for (const status of ["active", "archived"] as const) {
       if (status === "archived") {
@@ -108,7 +95,5 @@ test("removing a candidate from an active or archived plan is refused", async ()
       candidateId: h.candidateId,
     });
     assert.equal(await candidateCount(h.org.orgId, h.planId), "0");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });

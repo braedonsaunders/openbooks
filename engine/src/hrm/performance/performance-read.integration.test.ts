@@ -1,27 +1,18 @@
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
+  dropScratchOrg
 } from "../../testing/fixtures.ts";
 import {
   addLiveVersion,
   enableHrm,
-  grant,
-  linkPerson,
-  mkEmployment,
-  mkParty,
-  mkReporting,
-  mkReviewTemplate,
-  mkVersion,
+  grant, mkEmployment,
+  mkParty, mkVersion, performanceRefusal, setupPerformanceHarness, withHarness
 } from "../../testing/hrm-harness.ts";
-import { HrmPerformanceError } from "./errors.ts";
-import { createCycle, openCycle } from "./review-cycles.ts";
-import { acknowledgeReview, shareReview, submitReview } from "./reviews.ts";
 import { recordExit } from "./exits.ts";
 import {
   getCycleDetail,
@@ -32,88 +23,11 @@ import {
   listGoals,
   listMyReviews,
 } from "./performance-read.ts";
-
-/**
- * HR-7 privacy model and retention reads over the real 0196 tables —
- * DB-owned (they skip without OPENBOOKS_DB_URL, one file at a time).
- *
- * The privacy matrix: the subject reads only shared reviews, a peer reads
- * nothing, a manager reads only the reviews they author (never a report's
- * self review), HR reads everything, and a second org sees nothing. Every
- * unreadable id answers NOT_FOUND — never a refusal that confirms the row
- * exists. Turnover is proved on a fixed headcount series with leavers of
- * known tenure.
- */
+import { acknowledgeReview, shareReview, submitReview } from "./reviews.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-// Shared HRM seeding helpers (scratch org setup, grants, employments,
-// versions, reporting lines, review templates) live in
-// engine/src/testing/hrm-harness.ts; only file-specific seeders stay here.
-
-type Harness = {
-  org: ScratchOrg;
-  hrId: string;
-  managerUserId: string;
-  managerEmploymentId: string;
-  workerUserId: string;
-  workerPartyId: string;
-  workerEmploymentId: string;
-  peerUserId: string;
-  cycleId: string;
-  selfReviewId: string;
-  managerReviewId: string;
-};
-
-async function setupReadHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId);
-  const hrId = await createScratchUser(org.orgId, "HRM Read HR", "hrm_read_hr");
-  await grant(org.orgId, hrId, [
-    "hrm.performance.read",
-    "hrm.performance.manage",
-    "hrm.retention.read",
-    "hrm.employment.read",
-  ]);
-  await linkPerson(org.orgId, hrId);
-  const managerUserId = await createScratchUser(org.orgId, "Read Manager", "read_manager");
-  const managerPartyId = await linkPerson(org.orgId, managerUserId);
-  const managerEmploymentId = await mkEmployment(org.orgId, managerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, managerEmploymentId, {
-    versionNo: 1, from: "2020-01-01", status: "active", recordedAt: "2020-01-01T09:00:00Z",
-  });
-  const workerUserId = await createScratchUser(org.orgId, "Read Worker", "read_worker");
-  const workerPartyId = await linkPerson(org.orgId, workerUserId);
-  const workerEmploymentId = await mkEmployment(org.orgId, workerPartyId, org.subsidiaryId);
-  await mkVersion(org.orgId, workerEmploymentId, {
-    versionNo: 1, from: "2020-01-01", status: "active", recordedAt: "2020-01-01T09:00:00Z",
-  });
-  await mkReporting(org.orgId, workerEmploymentId, managerEmploymentId);
-  const peerUserId = await createScratchUser(org.orgId, "Read Peer", "read_peer");
-  await linkPerson(org.orgId, peerUserId);
-  const templateId = await mkReviewTemplate(org.orgId, hrId, { name: "Annual", scaleLabels: [] });
-  const cycle = await createCycle({
-    orgId: org.orgId,
-    actorId: hrId,
-    templateId,
-    name: "FY26",
-    periodStartOn: "2026-01-01",
-    periodEndOn: "2026-06-30",
-  });
-  await openCycle({ orgId: org.orgId, actorId: hrId, cycleId: cycle.id });
-  const selfReviewId = (await db.execute<{ id: string }>(sql`
-    select id from hrm_reviews
-     where org_id = ${org.orgId} and cycle_id = ${cycle.id}
-       and employment_id = ${workerEmploymentId} and kind = 'self'`)).rows[0]!.id;
-  const managerReviewId = (await db.execute<{ id: string }>(sql`
-    select id from hrm_reviews
-     where org_id = ${org.orgId} and cycle_id = ${cycle.id}
-       and employment_id = ${workerEmploymentId} and kind = 'manager'`)).rows[0]!.id;
-  return {
-    org, hrId, managerUserId, managerEmploymentId, workerUserId, workerPartyId,
-    workerEmploymentId, peerUserId, cycleId: cycle.id, selfReviewId, managerReviewId,
-  };
-}
+const setupReadHarness = () => setupPerformanceHarness({ prefix: "Read", hrRole: "hrm_read_hr", permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.retention.read", "hrm.employment.read"], peer: true, template: { name: "Annual", scaleLabels: [] }, version: { versionNo: 1, from: "2020-01-01", status: "active", recordedAt: "2020-01-01T09:00:00Z" } });
 
 async function answerId(orgId: string, reviewId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
@@ -121,25 +35,16 @@ async function answerId(orgId: string, reviewId: string): Promise<string> {
 }
 
 test("the subject reads only shared reviews, a peer reads nothing", { skip: !DB }, async () => {
-  const h = await setupReadHarness();
-  try {
+  await withHarness(() => setupReadHarness(), async (h) => {
     // Before sharing: the subject's own self review is submittable but the
     // manager review is invisible — NOT_FOUND, not forbidden.
     await assert.rejects(
       getReviewDetail({ orgId: h.org.orgId, actorId: h.workerUserId, reviewId: h.managerReviewId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "NOT_FOUND");
-        return true;
-      },
+      performanceRefusal("NOT_FOUND"),
     );
     await assert.rejects(
       getReviewDetail({ orgId: h.org.orgId, actorId: h.peerUserId, reviewId: h.managerReviewId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "NOT_FOUND");
-        return true;
-      },
+      performanceRefusal("NOT_FOUND"),
     );
     // Submit + share the manager review, then the subject reads it.
     await submitReview({
@@ -156,23 +61,16 @@ test("the subject reads only shared reviews, a peer reads nothing", { skip: !DB 
     // The peer still reads nothing after sharing.
     await assert.rejects(
       getReviewDetail({ orgId: h.org.orgId, actorId: h.peerUserId, reviewId: h.managerReviewId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "NOT_FOUND");
-        return true;
-      },
+      performanceRefusal("NOT_FOUND"),
     );
     // HR reads everything, shared or not.
     const hrRead = await getReviewDetail({ orgId: h.org.orgId, actorId: h.hrId, reviewId: h.selfReviewId });
     assert.equal(hrRead.review.kind, "self");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("a manager reads only the reviews they author, never a report's self review", { skip: !DB }, async () => {
-  const h = await setupReadHarness();
-  try {
+  await withHarness(() => setupReadHarness(), async (h) => {
     await submitReview({
       orgId: h.org.orgId,
       actorId: h.workerUserId,
@@ -183,11 +81,7 @@ test("a manager reads only the reviews they author, never a report's self review
     // invisible, even though it is their report's.
     await assert.rejects(
       getReviewDetail({ orgId: h.org.orgId, actorId: h.managerUserId, reviewId: h.selfReviewId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "NOT_FOUND");
-        return true;
-      },
+      performanceRefusal("NOT_FOUND"),
     );
     // Their own authored manager review reads fine while pending.
     const authored = await getReviewDetail({
@@ -207,14 +101,11 @@ test("a manager reads only the reviews they author, never a report's self review
     // A second manager of nobody sees no cycles at all.
     const cyclesPeer = await listCycleProgress({ orgId: h.org.orgId, actorId: h.peerUserId });
     assert.deepEqual(cyclesPeer, []);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("my reviews splits subject and reviewer inboxes", { skip: !DB }, async () => {
-  const h = await setupReadHarness();
-  try {
+  await withHarness(() => setupReadHarness(), async (h) => {
     await submitReview({
       orgId: h.org.orgId,
       actorId: h.managerUserId,
@@ -242,14 +133,11 @@ test("my reviews splits subject and reviewer inboxes", { skip: !DB }, async () =
     assert.equal(managed.length, 1);
     const peerGoals = await listGoals({ orgId: h.org.orgId, actorId: h.peerUserId });
     assert.deepEqual(peerGoals, []);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("an HR reader with an empty subsidiary scope sees no cycle reviews", { skip: !DB }, async () => {
-  const h = await setupReadHarness();
-  try {
+  await withHarness(() => setupReadHarness(), async (h) => {
     await db.execute(sql`
       update app_roles
          set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb
@@ -261,14 +149,11 @@ test("an HR reader with an empty subsidiary scope sees no cycle reviews", { skip
     assert.equal(detail.submittedSelf, 0);
     assert.equal(detail.totalManager, 0);
     assert.equal(detail.submittedManager, 0);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("turnover divides terminations by average headcount per period", { skip: !DB }, async () => {
-  const h = await setupReadHarness();
-  try {
+  await withHarness(() => setupReadHarness(), async (h) => {
     // Fixed series: manager + worker in service from 2020; a leaver
     // terminated 2026-03-15 with service from 2024-03-15 (tenure 730 days:
     // two non-leap spans), voluntary + regrettable resignation with an
@@ -348,9 +233,7 @@ test("turnover divides terminations by average headcount per period", { skip: !D
       terminatedFrom: "2026-04-01",
     }]);
     assert.deepEqual(overview.exitRecordsWithoutInterview.map((r) => r.employmentId), [leaverEmployment]);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("reads are invisible from a second organization", { skip: !DB }, async () => {
@@ -362,19 +245,11 @@ test("reads are invisible from a second organization", { skip: !DB }, async () =
     await grant(other.orgId, otherHr, ["hrm.performance.read", "hrm.retention.read", "hrm.employment.read"]);
     await assert.rejects(
       getReviewDetail({ orgId: other.orgId, actorId: otherHr, reviewId: h.managerReviewId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "NOT_FOUND");
-        return true;
-      },
+      performanceRefusal("NOT_FOUND"),
     );
     await assert.rejects(
       getCycleDetail({ orgId: other.orgId, actorId: otherHr, cycleId: h.cycleId }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "NOT_FOUND");
-        return true;
-      },
+      performanceRefusal("NOT_FOUND"),
     );
   } finally {
     await dropScratchOrg(h.org.orgId);

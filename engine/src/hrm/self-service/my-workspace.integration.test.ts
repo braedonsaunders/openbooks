@@ -1,9 +1,9 @@
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
 import { listInbox } from "../../inbox/index.ts";
+import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -14,19 +14,16 @@ import {
   linkPerson,
   mkEmployment,
   mkReporting,
-  mkReviewTemplate,
-  seedPlan,
-  seededContributionTerms,
-  seedWindow,
-  setupHarness,
+  mkReviewTemplate, seededContributionTerms, seedPlan, seedWindow,
+  setupHarness, withHarness
 } from "../../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
-import { SelfServiceError } from "./actor.ts";
-import { HrmPerformanceError } from "../performance/errors.ts";
 import { BenefitsError } from "../benefits/errors.ts";
+import { HrmPerformanceError } from "../performance/errors.ts";
+import { createGoal } from "../performance/goals.ts";
 import { createCycle, openCycle } from "../performance/review-cycles.ts";
 import { calibrateReview, shareReview } from "../performance/reviews.ts";
-import { createGoal } from "../performance/goals.ts";
+import { SelfServiceError } from "./actor.ts";
 import {
   acknowledgeMyReview,
   changeMyBenefit,
@@ -38,22 +35,6 @@ import {
   submitMySelfAssessment,
   updateMyGoalProgress,
 } from "./my-work.ts";
-
-/**
- * HR-10 Me-workspace reviews and benefits DB coverage (integration
- * partition): the NO_LINK named refusal on every entry (never an empty
- * list), the reviews privacy scope (an unshared manager review is
- * invisible; calibration never reaches the subject even after sharing),
- * self writes through the existing services (submit, acknowledge, goal
- * progress), the benefits selfRequest election path under hrm.self.*
- * only (no hrm.benefits.* grant), the closed-window refusals on elect
- * and change, the hostile-employment-id refusals on every write, and the
- * manager's owed reviews in the open cycle.
- *
- * Proofs are read back from storage, never from the service's own return
- * values alone.
- */
-
 
 const MY_WORKSPACE_SPEC = {
   users: [
@@ -99,8 +80,7 @@ async function answerIds(reviewId: string): Promise<string[]> {
 }
 
 test("an unlinked login gets the named NO_LINK refusal on every entry, never an empty list", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     for (const fn of [
       () => getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.noLinkId }),
       () => getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.noLinkId }),
@@ -118,14 +98,11 @@ test("an unlinked login gets the named NO_LINK refusal on every entry, never an 
         return true;
       });
     }
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("the workspace shows the owed self-assessment but never an unshared manager review", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
     assert.equal(workspace.cycles.length, 1);
     const group = workspace.cycles[0]!;
@@ -145,14 +122,11 @@ test("the workspace shows the owed self-assessment but never an unshared manager
       outsider.cycles[0]!.mySelf!.id !== group.mySelf!.id,
       "slices never cross subjects",
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("a shared manager review reaches the subject with calibration stripped", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const rows = await reviewRows(h.org.orgId, h.cycleId);
     const managerReview = rows.find((r) => r.kind === "manager" && r.subject === h.workerParty)!;
     const managerAnswers = await answerIds(managerReview.id);
@@ -175,14 +149,11 @@ test("a shared manager review reaches the subject with calibration stripped", { 
     assert.ok(!("calibratedRating" in shared[0]!), "calibration never reaches the subject");
     assert.ok(!("calibrationReason" in shared[0]!), "calibration reasons never reach the subject");
     assert.ok(!("managerGapCount" in workspace.cycles[0]!), "the calibration gap count never reaches the subject");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("submit and acknowledge ride the existing services with storage proof", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const rows = await reviewRows(h.org.orgId, h.cycleId);
     const selfReview = rows.find((r) => r.kind === "self" && r.subject === h.workerParty)!;
     const ids = await answerIds(selfReview.id);
@@ -234,14 +205,11 @@ test("submit and acknowledge ride the existing services with storage proof", { s
         return true;
       },
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("goal progress rides the existing service; another person's goal refuses", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const goal = await createGoal({ orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment, title: "Ship the migration" });
     const moved = await updateMyGoalProgress({ orgId: h.org.orgId, actorId: h.workerId, goalId: goal.id, progressPercent: 50, note: "halfway" });
     assert.equal(moved.progressPercent, 50);
@@ -264,14 +232,11 @@ test("goal progress rides the existing service; another person's goal refuses", 
     const untouched = (await db.execute<{ progress: number }>(sql`
       select progress_percent as progress from hrm_goals where id = ${outsiderGoal.id}`)).rows[0]!;
     assert.equal(untouched.progress, 0, "the refused write moved nothing");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("the manager owes pending reviews for direct reports in the open cycle", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const owed = await loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.managerId });
     assert.equal(owed.length, 1);
     assert.equal(owed[0]!.employmentId, h.workerEmployment);
@@ -281,14 +246,11 @@ test("the manager owes pending reviews for direct reports in the open cycle", { 
     assert.match(owed[0]!.drawerHref, /\/hrm\/performance\?cycle=.*&review=/);
     // A report-less caller owes nothing: empty is a fact, never a refusal.
     assert.deepEqual(await loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.workerId }), []);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("self-service elects inside an open window on the self keys alone, with fixed native contribution terms", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
     const windowId = await seedWindow(h.org.orgId, { status: "open", opensOn: "2020-01-01", closesOn: "2030-12-31" });
     const outOfScopeWindowId = await seedWindow(h.org.orgId, { status: "open", appliesTo: { employer_subsidiary_id: randomUUID() }, opensOn: "2020-01-01", closesOn: "2030-12-31" });
@@ -308,7 +270,7 @@ test("self-service elects inside an open window on the self keys alone, with fix
     const workspace = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
     assert.ok(!(await listInbox({ orgId: h.org.orgId, actorId: h.workerId, asOf: new Date().toISOString() }, { kinds: ["hrm_benefit_enrollment_window"] })).some((item) => item.source.id === outOfScopeWindowId));
     assert.equal(workspace.elections.length, 1);
-    assert.deepEqual(workspace.elections[0]!.contributionTerms.map(t => t.electedRate).sort(), ["250.0000000000","500.0000000000"]);
+    assert.deepEqual(workspace.elections[0]!.contributionTerms.map(t => t.electedRate).sort(), ["250.0000000000", "500.0000000000"]);
     assert.equal(workspace.openWindows.length, 1);
     assert.equal(workspace.dependents.length, 1);
     assert.equal(workspace.dependents[0]!.displayName, "Alex Worker");
@@ -317,14 +279,11 @@ test("self-service elects inside an open window on the self keys alone, with fix
     const outsider = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.outsiderId });
     assert.equal(outsider.elections.length, 0);
     assert.equal(outsider.dependents.length, 0);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("a closed window refuses elect and change by name; another employment id refuses", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
     const closedId = await seedWindow(h.org.orgId, { status: "closed", opensOn: "2020-01-01", closesOn: "2030-12-31" });
     // Electing against a closed window: the entry gate refuses by name.
@@ -401,14 +360,11 @@ test("a closed window refuses elect and change by name; another employment id re
         return true;
       },
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("tab capabilities read facts: cycles and plans present here, absent on a fresh org", { skip: !DB }, async () => {
-  const h = await setupWorkspaceHarness();
-  try {
+  await withHarness(() => setupWorkspaceHarness(), async (h) => {
     const caps = await selfWorkspaceCapabilities(h.org.orgId);
     assert.equal(caps.hasReviewCycles, true);
     assert.equal(caps.hasBenefitPlans, false);
@@ -419,7 +375,5 @@ test("tab capabilities read facts: cycles and plans present here, absent on a fr
     } finally {
       await dropScratchOrg(fresh.orgId);
     }
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });

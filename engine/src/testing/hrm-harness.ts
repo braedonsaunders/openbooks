@@ -1238,3 +1238,119 @@ export async function withHarness<T extends { org: ScratchOrg }>(
     }
   }
 }
+
+/** Match the domain error, refusal code and operator remedy together. */
+export function performanceRefusal(
+  code: HrmPerformanceError["code"],
+  message?: RegExp,
+): (error: unknown) => boolean {
+  return (error) => {
+    const refusal = perfError(error);
+    assert.equal(refusal.code, code);
+    if (message) assert.match(refusal.message, message);
+    return true;
+  };
+}
+
+/** Shared people, template and launch setup for performance integration suites. */
+export async function setupPerformanceHarness(
+  options: {
+    prefix?: string;
+    hrRole?: string;
+    permissions?: readonly string[];
+    users?: boolean;
+    peer?: boolean;
+    template?: ReviewTemplateSeed;
+    launch?: boolean;
+    periodEndOn?: string;
+    version?: EmploymentVersionSeed;
+  } = {},
+) {
+  const org = await createScratchOrg();
+  await enableHrm(org.orgId, "hrmPerformance");
+  const prefix = options.prefix ?? "Review";
+  const hrId = await createScratchUser(
+    org.orgId,
+    `${prefix} HR`,
+    options.hrRole ?? `${prefix.toLowerCase()}_hr`,
+  );
+  await grant(
+    org.orgId,
+    hrId,
+    options.permissions ?? ["hrm.performance.read", "hrm.performance.manage"],
+  );
+  await linkPerson(org.orgId, hrId);
+  const managerUserId =
+    options.users === false
+      ? ""
+      : await createScratchUser(org.orgId, `${prefix} Manager`, `${prefix.toLowerCase()}_manager`);
+  const managerPartyId = managerUserId
+    ? await linkPerson(org.orgId, managerUserId)
+    : await mkParty(org.orgId, `${prefix} Manager`);
+  const version = options.version ?? { versionNo: 1, from: "2020-01-01", to: null };
+  const managerEmploymentId = await mkEmployment(
+    org.orgId,
+    managerPartyId,
+    org.subsidiaryId,
+    version,
+  );
+  const workerUserId =
+    options.users === false
+      ? ""
+      : await createScratchUser(org.orgId, `${prefix} Worker`, `${prefix.toLowerCase()}_worker`);
+  const workerPartyId = workerUserId
+    ? await linkPerson(org.orgId, workerUserId)
+    : await mkParty(org.orgId, `${prefix} Worker`);
+  const workerEmploymentId = await mkEmployment(
+    org.orgId,
+    workerPartyId,
+    org.subsidiaryId,
+    version,
+  );
+  await mkReporting(org.orgId, workerEmploymentId, managerEmploymentId);
+  const peerUserId = options.peer
+    ? await createScratchUser(org.orgId, `${prefix} Peer`, `${prefix.toLowerCase()}_peer`)
+    : "";
+  if (peerUserId) await linkPerson(org.orgId, peerUserId);
+  const templateId = await mkReviewTemplate(org.orgId, hrId, options.template);
+  let cycleId = "",
+    selfReviewId = "",
+    managerReviewId = "";
+  if (options.launch !== false) {
+    const { createCycle, openCycle } = await import("../hrm/performance/review-cycles.ts");
+    const cycle = await createCycle({
+      orgId: org.orgId,
+      actorId: hrId,
+      templateId,
+      name: "FY26",
+      periodStartOn: "2026-01-01",
+      periodEndOn: options.periodEndOn ?? "2026-06-30",
+    });
+    await openCycle({ orgId: org.orgId, actorId: hrId, cycleId: cycle.id });
+    cycleId = cycle.id;
+    const reviews = (
+      await db.execute<{ id: string; kind: string }>(
+        sql`select id,kind from hrm_reviews where org_id=${org.orgId} and cycle_id=${cycleId} and employment_id=${workerEmploymentId}`,
+      )
+    ).rows;
+    selfReviewId = reviews.find((r) => r.kind === "self")!.id;
+    managerReviewId = reviews.find((r) => r.kind === "manager")!.id;
+  }
+  return {
+    org,
+    hrId,
+    managerUserId,
+    managerPartyId,
+    managerEmploymentId,
+    workerUserId,
+    workerPartyId,
+    workerEmploymentId,
+    peerUserId,
+    templateId,
+    cycleId,
+    selfReviewId,
+    managerReviewId,
+    managerUser: managerUserId,
+    workerEmployment: workerEmploymentId,
+  };
+}

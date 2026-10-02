@@ -1,60 +1,40 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { test } from "node:test";
 import { db } from "../../platform/db.ts";
 import {
-  createScratchOrg,
   createScratchUser,
-  dropScratchOrg,
+  dropScratchOrg
 } from "../../testing/fixtures.ts";
 import {
-  enableHrm,
-  grant,
   linkPerson,
-  mkEmployment,
-  mkVersion,
-  mkReviewTemplate,
+  mkEmployment, mkReviewTemplate, mkVersion, setupHarness, withHarness
 } from "../../testing/hrm-harness.ts";
+import { getCycleDetail, getReviewDetail, listReviewWorklist } from "./performance-read.ts";
 import {
-  saveTemplateDocument,
-  listTemplateDocuments,
-} from "./template-designer.ts";
-import {
-  createCycle,
-  openCycle,
-  getCycleManagement,
-  updateCycleManagement,
   closeCycle,
+  createCycle,
+  getCycleManagement,
+  openCycle,
+  updateCycleManagement,
 } from "./review-cycles.ts";
 import { saveReviewDraft, submitReview } from "./reviews.ts";
-import { getCycleDetail, getReviewDetail, listReviewWorklist } from "./performance-read.ts";
+import {
+  listTemplateDocuments,
+  saveTemplateDocument,
+} from "./template-designer.ts";
 import type { ReviewTemplateDocument } from "./template-document.ts";
 
 async function fixture() {
-  const org = await createScratchOrg();
-  await enableHrm(org.orgId, "hrmPerformance");
-  const hr = await createScratchUser(
-    org.orgId,
-    "Review administrator",
-    "talent_hr",
-  );
-  await grant(org.orgId, hr, [
-    "hrm.performance.read",
-    "hrm.performance.manage",
-  ]);
-  const worker = await createScratchUser(
-    org.orgId,
-    "Review subject",
-    "talent_worker",
-  );
-  const party = await linkPerson(org.orgId, worker, "Review subject");
-  const employment = await mkEmployment(org.orgId, party, org.subsidiaryId);
-  await mkVersion(org.orgId, employment, {
-    versionNo: 1,
-    from: "2020-01-01",
-    to: null,
+  const { org, hr, worker, party } = await setupHarness({
+    features: ["hrm", "hrmPerformance"],
+    users: [
+      { key: "hr", name: "Review administrator", handle: "talent_hr", permissions: ["hrm.performance.read", "hrm.performance.manage"] },
+      { key: "worker", name: "Review subject", handle: "talent_worker", link: "Review subject", partyKey: "party" },
+    ],
   });
+  const employment = await mkEmployment(org.orgId, party, org.subsidiaryId, { versionNo: 1, from: "2020-01-01", to: null });
   const document: ReviewTemplateDocument = {
     name: "Quarterly review",
     instructions: "Answer with examples.",
@@ -92,8 +72,7 @@ const cycleInput = (templateId: string) => ({
 });
 
 test("draft publication is separate, stale writes refuse, and launches retain the published questions and scale", async () => {
-  const h = await fixture();
-  try {
+  await withHarness(() => fixture(), async (h) => {
     const draft = await saveTemplateDocument({
       ...h.base,
       document: h.document,
@@ -198,14 +177,11 @@ test("draft publication is separate, stale writes refuse, and launches retain th
       )
     ).rows[0]!;
     assert.equal(stored.status, "submitted");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("incomplete drafts persist, stale revisions and required submission failures leave stored answers intact", async () => {
-  const h = await fixture();
-  try {
+  await withHarness(() => fixture(), async (h) => {
     const template = await saveTemplateDocument({
       ...h.base,
       document: h.document,
@@ -270,14 +246,11 @@ test("incomplete drafts persist, stale revisions and required submission failure
       }),
       /not open.*check its status/,
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("required manager gaps refuse an atomic launch and a scoped reviewer assignment resolves the gap", async () => {
-  const h = await fixture();
-  try {
+  await withHarness(() => fixture(), async (h) => {
     const reviewer = await createScratchUser(
       h.org.orgId,
       "Manager reviewer",
@@ -364,9 +337,7 @@ test("required manager gaps refuse an atomic launch and a scoped reviewer assign
     assert.ok(
       launched.history.some((event) => event.event === "cycle_launched"),
     );
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("template and worklist reads do not expose another tenant and a disabled performance feature refuses writes", async () => {
@@ -398,8 +369,7 @@ test("template and worklist reads do not expose another tenant and a disabled pe
 });
 
 test("publication preserves native section metadata and refuses identifiers belonging to another template atomically", async () => {
-  const h = await fixture();
-  try {
+  await withHarness(() => fixture(), async (h) => {
     h.document.sections[0]!.weight = "1.2500";
     const first = await saveTemplateDocument({
       ...h.base,
@@ -421,14 +391,11 @@ test("publication preserves native section metadata and refuses identifiers belo
     ).rows[0]!;
     assert.equal(row.weight, "1.2500");
     assert.equal(row.name, h.document.name);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("legacy templates open as editable exact-decimal documents and publish through the native configuration", async () => {
-  const h = await fixture();
-  try {
+  await withHarness(() => fixture(), async (h) => {
     const id = await mkReviewTemplate(h.org.orgId, h.hr, {
       name: "Existing review",
     });
@@ -445,7 +412,5 @@ test("legacy templates open as editable exact-decimal documents and publish thro
       publish: true,
     });
     assert.equal(saved.publishedVersion, 1);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });

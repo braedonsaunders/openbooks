@@ -1,59 +1,40 @@
-import { test } from "node:test";
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { test } from "node:test";
 import { Client } from "pg";
-import { db, withOrgTransaction } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
+  dropScratchOrg
 } from "../testing/fixtures.ts";
-import {
-  enableFeatures,
-  grantPermissions,
-  linkPerson,
-  recruitingError,
-  seedFlow,
-  withHarness as runWithHarness,
-} from "../testing/hrm-harness.ts";
+import { enableFeatures, mkEmployment, mkParty, recruitingError, withHarness as runWithHarness, seedFlow, setupHarness } from "../testing/hrm-harness.ts";
 import { createPosition, writePositionFunding } from "./positions.ts";
-import {
-  createPipelineTemplate,
-  ensureDefaultPipelineTemplate,
-} from "./recruiting/pipeline.ts";
-import {
-  cancelRequisition,
-  createRequisition,
-  holdRequisition,
-  openRequisition,
-  resumeRequisition,
-} from "./recruiting/requisitions.ts";
-import { DuplicateProspectError, createCandidate } from "./recruiting/candidates.ts";
 import {
   createApplication,
   moveApplicationStage,
   rejectApplication,
   withdrawApplication,
 } from "./recruiting/applications.ts";
+import { DuplicateProspectError, createCandidate } from "./recruiting/candidates.ts";
+import { acceptOfferAsHire } from "./recruiting/hire.ts";
 import {
   cancelInterview,
   completeInterview,
   scheduleInterview,
 } from "./recruiting/interviews.ts";
+import { createOfferTemplate, renderOfferVersion } from "./recruiting/offers-signing.ts";
 import {
   createOffer,
   declineOffer,
   sendOffer,
   withdrawOffer,
 } from "./recruiting/offers.ts";
-import { acceptOfferAsHire } from "./recruiting/hire.ts";
-import { createOfferTemplate, renderOfferVersion } from "./recruiting/offers-signing.ts";
-import { proposeSlots, bookSlot, listInterviewerPools } from "./recruiting/scheduling.ts";
-import { evaluateRetentionRule } from "./recruiting/retention.ts";
+import {
+  createPipelineTemplate,
+  ensureDefaultPipelineTemplate,
+} from "./recruiting/pipeline.ts";
 import {
   applyViaPosting,
   createFeedToken,
@@ -67,84 +48,43 @@ import {
   listRequisitions,
   loadRecruitingOverview,
 } from "./recruiting/recruiting-read.ts";
-
-/**
- * HR-6 DB coverage (integration partition): migration 0195 bootstraps with
- * org isolation on all nine tables; the full funnel (requisition → candidate
- * → application → interview → offer → hire) over real rows with storage
- * proofs; every named refusal produced by the real code path; the hire
- * transaction rolling back WHOLE when the change-request service refuses;
- * RLS cross-org invisibility through raw constrained sessions; the
- * hiring-manager scope; PII redaction for managers and interviewers; and
- * the append-only event ledger refused at storage.
- *
- * Proofs are read back from storage, never from the service's own return
- * values alone: event kinds in order, filled_count bumps, revision moves,
- * and every refusal asserts the writes that must NOT exist.
- */
+import {
+  cancelRequisition,
+  createRequisition,
+  holdRequisition,
+  openRequisition,
+  resumeRequisition,
+} from "./recruiting/requisitions.ts";
+import { evaluateRetentionRule } from "./recruiting/retention.ts";
+import { bookSlot, listInterviewerPools, proposeSlots } from "./recruiting/scheduling.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type Harness = {
-  org: ScratchOrg;
-  recruiterId: string;
-  approverId: string;
-  managerId: string;
-  managerPartyId: string;
-  interviewerId: string;
-  interviewerPartyId: string;
-};
+type Harness = Awaited<ReturnType<typeof setupRecruitingHarness>>;
 
-/** Recruiting rides the HRM parent: both go on together. */
 const RECRUITING_FEATURE_KEYS = ["hrm", "hrmRecruiting"];
 
-async function setupRecruitingHarness(): Promise<Harness> {
-  const org = await createScratchOrg();
-  await enableRecruiting(org.orgId);
-  const recruiterId = await createScratchUser(org.orgId, "HRM Recruiter", "hrm_recruiter");
-  const approverId = await createScratchUser(org.orgId, "HRM Approver", "hrm_approver");
-  const managerId = await createScratchUser(org.orgId, "Hiring Manager", "hiring_manager");
-  const interviewerId = await createScratchUser(org.orgId, "Interviewer", "interviewer");
-  await grantPermissions(org.orgId, recruiterId, [
-    "hrm.recruiting.read",
-    "hrm.recruiting.manage",
-    "hrm.position.read",
-    "hrm.position.manage",
-    "hrm.employment.read",
-    "hrm.employment.manage",
-  ]);
-  await grantPermissions(org.orgId, approverId, ["hrm.employment.read", "hrm.employment.approve"]);
-  await linkPerson(org.orgId, recruiterId, "Recruiter Person");
-  await linkPerson(org.orgId, approverId, "Approver Person");
-  const managerPartyId = await linkPerson(org.orgId, managerId, "Hiring Manager Person");
-  const interviewerPartyId = await linkPerson(org.orgId, interviewerId, "Interviewer Person");
-  return { org, recruiterId, approverId, managerId, managerPartyId, interviewerId, interviewerPartyId };
-}
+const setupRecruitingHarness = () => setupHarness({
+  features: RECRUITING_FEATURE_KEYS,
+  users: [
+    { key: "recruiterId", name: "HRM Recruiter", handle: "hrm_recruiter", permissions: ["hrm.recruiting.read", "hrm.recruiting.manage", "hrm.position.read", "hrm.position.manage", "hrm.employment.read", "hrm.employment.manage"], link: "Recruiter Person" },
+    { key: "approverId", name: "HRM Approver", handle: "hrm_approver", permissions: ["hrm.employment.read", "hrm.employment.approve"], link: "Approver Person" },
+    { key: "managerId", name: "Hiring Manager", handle: "hiring_manager", link: "Hiring Manager Person", partyKey: "managerPartyId" },
+    { key: "interviewerId", name: "Interviewer", handle: "interviewer", link: "Interviewer Person", partyKey: "interviewerPartyId" },
+  ],
+});
 
 function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
   return runWithHarness(setupRecruitingHarness, fn);
 }
 
-/** A live employee holding a position slot (test-only direct writer). */
 async function seedHolder(
   orgId: string,
   subsidiaryId: string,
   positionId: string,
 ): Promise<{ employmentId: string; workerPartyId: string }> {
-  const workerPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${workerPartyId}, ${orgId}, 'person', 'Position Holder', true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from)
-    values (${orgId}, ${employmentId}, 1, 'active', '2026-07-01'::date)
-  `);
+  const workerPartyId = await mkParty(orgId, "Position Holder");
+  const employmentId = await mkEmployment(orgId, workerPartyId, subsidiaryId, { from: "2026-07-01" });
   const slotId = (await db.execute<{ id: string }>(sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
     values (${orgId}, ${employmentId}, 'primary') returning id`)).rows[0]!.id;
@@ -156,22 +96,8 @@ async function seedHolder(
   return { employmentId, workerPartyId };
 }
 
-/** A live employment for an EXISTING party (panel members, managers with jobs). */
-async function seedEmploymentForParty(
-  orgId: string,
-  subsidiaryId: string,
-  workerPartyId: string,
-): Promise<string> {
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from)
-    values (${orgId}, ${employmentId}, 1, 'active', '2026-07-01'::date)
-  `);
-  return employmentId;
+function seedEmploymentForParty(orgId: string, subsidiaryId: string, workerPartyId: string): Promise<string> {
+  return mkEmployment(orgId, workerPartyId, subsidiaryId, { from: "2026-07-01" });
 }
 
 async function eventKinds(orgId: string, applicationId: string): Promise<string[]> {
@@ -181,12 +107,6 @@ async function eventKinds(orgId: string, applicationId: string): Promise<string[
   return rows.map((row) => row.kind);
 }
 
-/**
- * Storage-guard assertions see through Drizzle's wrapper: the pg message
- * (RAISE text, constraint name) rides error.cause, while the top-level
- * message is only "Failed query". Matching the top level would pass on
- * ANY query failure — the cause is the actual refusal.
- */
 async function assertStorageRefused(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
   const error = await promise.then(
     () => null,
@@ -1154,8 +1074,8 @@ test("scheduling proposes from a pool's declared windows and books first-wins", 
     // in tests): inject the noop like the retention tests do — the race
     // under test is slot contention, not delivery.
     const [first, second] = await Promise.allSettled([
-      bookSlot({ bookingToken: proposed.bookingToken, slotId, candidateName: "Depth Candidate", enqueueEmail: async () => {} }),
-      bookSlot({ bookingToken: proposed.bookingToken, slotId, candidateName: "Depth Candidate", enqueueEmail: async () => {} }),
+      bookSlot({ bookingToken: proposed.bookingToken, slotId, candidateName: "Depth Candidate", enqueueEmail: async () => { } }),
+      bookSlot({ bookingToken: proposed.bookingToken, slotId, candidateName: "Depth Candidate", enqueueEmail: async () => { } }),
     ]);
     assert.equal(
       [first.status, second.status].filter((status) => status === "fulfilled").length,
@@ -1171,15 +1091,6 @@ test("scheduling proposes from a pool's declared windows and books first-wins", 
   });
 });
 
-/**
- * Test-only direct writer for AGED funnel history. Funnel events are
- * append-only evidence — the ledger trigger refuses any UPDATE, so history
- * that must read old is INSERTED old (explicit recorded_at, which the
- * trigger permits) instead of seeded young and backdated. Position,
- * requisition, opening and candidate still go through the services; only
- * the application row and its events are written directly, with the clock
- * faked at insert. Live history always goes through the services.
- */
 async function seedAgedApplication(
   h: Harness,
   status: "active" | "rejected",
@@ -1258,7 +1169,7 @@ test("retention anonymizes an expired prospect and keeps the analytics", { skip:
     const { candidateId, applicationId } = await seedAgedApplication(h, "rejected");
     const run = await evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => {}, enqueueEmail: async () => {} },
+      { removeFile: async () => { }, enqueueEmail: async () => { } },
     );
     assert.equal(run.candidatesAnonymized, 1, "the expired prospect is anonymized");
     const candidate = (await db.execute<{ display_name: string; email: string | null; phone: string | null }>(sql`
@@ -1290,7 +1201,7 @@ test("country-scoped retention matches the candidate's requisition legal-entity 
     const { candidateId } = await seedAgedApplication(h, "rejected");
     const run = await evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => {}, enqueueEmail: async () => {} },
+      { removeFile: async () => { }, enqueueEmail: async () => { } },
     );
     assert.equal(run.candidatesAnonymized, 1, "the legal entity's country is supplied to the matcher");
     const candidate = (await db.execute<{ display_name: string }>(sql`
@@ -1332,7 +1243,7 @@ test("retention never touches a candidate with an open application", { skip: !DB
     const { candidateId } = await seedAgedApplication(h, "active");
     const run = await evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => {}, enqueueEmail: async () => {} },
+      { removeFile: async () => { }, enqueueEmail: async () => { } },
     );
     assert.equal(run.candidatesAnonymized, 0, "nothing is anonymized");
     assert.equal(run.candidatesDeleted, 0, "nothing is deleted");
@@ -1374,7 +1285,7 @@ test("retention rechecks open applications after locking against a concurrent at
     await appRowLocked;
     const retention = evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => {}, enqueueEmail: async () => {} },
+      { removeFile: async () => { }, enqueueEmail: async () => { } },
     );
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
     unlockAppTransaction();
@@ -1408,13 +1319,13 @@ test("consent extension emails go once per grant, then lapse into the action", {
     const sent: string[] = [];
     const first = await evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => {}, enqueueEmail: async (message) => { sent.push(message.to); } },
+      { removeFile: async () => { }, enqueueEmail: async (message) => { sent.push(message.to); } },
     );
     assert.equal(first.extensionsRequested, 1, "the first eligible run requests the extension");
     assert.deepEqual(sent, ["depth@example.test"], "the extension goes to the candidate's email");
     const second = await evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => {}, enqueueEmail: async (message) => { sent.push(message.to); } },
+      { removeFile: async () => { }, enqueueEmail: async (message) => { sent.push(message.to); } },
     );
     assert.equal(second.extensionsRequested, 0, "the second run sends nothing — asked once per grant");
     assert.equal(sent.length, 1, "exactly one email leaves");
