@@ -2670,8 +2670,8 @@
     "newAward": "New award",
     "programsEmptyTitle": "No benefit programs yet",
     "programsEmptyDescription": "Create a coverage, savings, reward, allowance, incentive or custom program.",
-    "awardsEmptyTitle": "No awards yet",
-    "awardsEmptyDescription": "Awards appear here once a program grants them.",
+    "awardsEmptyTitle": "No delivery records yet",
+    "awardsEmptyDescription": "Ready grants and recorded payroll activity appear here.",
     "loadFailed": "The benefits workspace could not be loaded.",
     "loadFailedTitle": "Benefits unavailable",
     "awardsTruncated": "showing the first 500",
@@ -3088,14 +3088,14 @@
     },
     "scopeHint": "Benefits defines employer-sponsored offers and employee grants. Payroll manages salary, tax, statutory contributions and pay-run processing.",
     "views": {
-      "overview": "Employer programs, employee participation and controlled delivery.",
+      "overview": "Benefits manages employer programs and employee choices. Payroll manages pay, taxes and statutory deductions.",
       "programs": "Open a program to manage its rules, participants, activity and payroll connection.",
       "enrolments": "Enroll employees in coverage and savings plans. Manage enrollment periods through Enrollment windows.",
       "rewards": "Record employee recognition and benefit grants against an active program. Configure reusable offers in Programs.",
       "incentives": "Manage performance-based programs. Open a record to simulate, calculate and settle employee payouts.",
       "payouts": "Release ready grants to payroll and follow their delivery history. Create rewards in Rewards and settle measured programs in Incentives.",
       "employees": "View employee programs, coverage, elections and effective terms. Payroll applies the program rules.",
-      "delivery": "Release ready rewards and settled incentives. Follow payroll processing and external fulfillment separately."
+      "delivery": "Review ready grants, benefit contributions and entitlement movements. Payroll processing and external fulfillment retain separate evidence."
     },
     "configureApprovals": "Configure approvals"
   },

@@ -43,9 +43,6 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
           ...(!showingDelivery ? [widget('link-button', {
             href: f('newProgramHref'), label: f('newProgramButton'), iconKey: 'plus',
           }, f('canManage'))] : []),
-          ...(showingOverview ? [widget('link-button', {
-            href: f('newAwardHref'), label: f('newAwardButton'), variant: 'outline',
-          }, f('canManage'))] : []),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),

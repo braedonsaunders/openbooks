@@ -2670,8 +2670,8 @@
     "newAward": "Nouvelle prime",
     "programsEmptyTitle": "Aucun programme d'avantages",
     "programsEmptyDescription": "Créez un régime de couverture, d’épargne, de récompense, d’allocation, d’incitation ou personnalisé.",
-    "awardsEmptyTitle": "Aucune prime",
-    "awardsEmptyDescription": "Les primes apparaissent ici dès qu'un programme les accorde.",
+    "awardsEmptyTitle": "Aucun enregistrement de versement",
+    "awardsEmptyDescription": "Les attributions prêtes et les activités de paie enregistrées apparaissent ici.",
     "loadFailed": "L'espace avantages n'a pas pu être chargé.",
     "loadFailedTitle": "Avantages indisponibles",
     "awardsTruncated": "les 500 premiers sont affichés",
@@ -3088,14 +3088,14 @@
     },
     "scopeHint": "Avantages définit les offres et attributions patronales. La paie gère salaire, impôt, cotisations légales et cycles de paie.",
     "views": {
-      "overview": "Programmes employeur, participation des employés et exécution contrôlée.",
+      "overview": "Avantages gère les programmes employeur et les choix des employés. La paie gère les salaires, les impôts et les retenues légales.",
       "programs": "Ouvrez un programme pour gérer ses règles, participants, activité et lien avec la paie.",
       "enrolments": "Inscrivez les employés aux régimes de couverture et d’épargne. Gérez les périodes via les fenêtres d’inscription.",
       "rewards": "Enregistrez les attributions dans un programme actif. Configurez les offres réutilisables dans Programmes.",
       "incentives": "Gérez les programmes de performance. Ouvrez un dossier pour simuler, calculer et liquider les versements.",
       "payouts": "Envoyez les attributions prêtes à la paie et suivez leur livraison. Créez dans Récompenses et liquidez dans Incitations.",
       "employees": "Consultez les programmes, couvertures, choix et conditions applicables aux employés. La paie applique les règles du programme.",
-      "delivery": "Exécutez les récompenses et intéressements prêts. Suivez séparément le traitement en paie et la remise externe."
+      "delivery": "Consultez les attributions prêtes, cotisations et mouvements de droits. La paie et la réalisation externe conservent des preuves distinctes."
     },
     "configureApprovals": "Configurer les approbations"
   },

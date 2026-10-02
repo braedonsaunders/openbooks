@@ -113,8 +113,8 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
             `${row.effectiveFrom} – ${row.effectiveTo ?? '…'}`, <Badge key="status" variant={row.status === 'active' ? 'success' : 'outline'}>{row.statusLabel}</Badge>,
             <Link key="open" href={row.assignmentHref as never} className="text-teal-700 hover:underline dark:text-teal-300">{t('openAssignment')}</Link>],
         }))} columns={[{ key: 'employee', header: t('employee') }, { key: 'program', header: t('program') }, { key: 'type', header: t('type') }, { key: 'effective', header: t('effective') }, { key: 'status', header: t('status') }, { key: 'open', header: '' }]}
-          toolbarAfter={<ListFilterSelect basePath="/hrm/benefits" currentParams={currentParams} paramKey="benefitProgram" label={t('program')} allLabel={hrm('benefits.allLabel')} options={programs} />}
-          empty={<div><p className="text-sm font-medium">{t('emptyTitle')}</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('emptyDescription')}</p></div>} />
+          toolbarAfter={<ListFilterSelect key="program-filter" basePath="/hrm/benefits" currentParams={currentParams} paramKey="benefitProgram" label={t('program')} allLabel={hrm('benefits.allLabel')} options={programs} />}
+          empty={<div key="empty-assignments"><p className="text-sm font-medium">{t('emptyTitle')}</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('emptyDescription')}</p></div>} />
       </ListPageLayout>
       {loadedEnrollment ? <EnrollmentDrawer record={loadedEnrollment.record} canManage={canManage} canChange={loadedEnrollment.canChange} closeHref={closeHref} /> : null}
       {vacation || creatingVacation ? <SetupDrawer entity={{ ...PAYROLL_VACATION_TERMS_ENTITY, readOnly: !canManage }} row={vacation ?? null} members={[]} closeHref={closeHref}

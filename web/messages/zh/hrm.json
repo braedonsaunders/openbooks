@@ -2670,8 +2670,8 @@
     "newAward": "新建奖励",
     "programsEmptyTitle": "尚无福利计划",
     "programsEmptyDescription": "创建保障、储蓄、奖励、津贴、激励或自定义计划。",
-    "awardsEmptyTitle": "尚无奖励",
-    "awardsEmptyDescription": "计划发放奖励后将在此显示。",
+    "awardsEmptyTitle": "尚无交付记录",
+    "awardsEmptyDescription": "可发放的授予和已记录的薪资活动显示在此处。",
     "loadFailed": "无法加载福利工作区。",
     "loadFailedTitle": "福利不可用",
     "awardsTruncated": "仅显示前500条",
@@ -3088,14 +3088,14 @@
     },
     "scopeHint": "福利定义雇主提供的方案和员工授予。薪资管理工资、税款、法定缴款和工资核算。",
     "views": {
-      "overview": "雇主计划、员工参与及受控履行。",
+      "overview": "福利管理雇主计划和员工选择。薪资管理工资、税款和法定扣款。",
       "programs": "打开计划以管理规则、参与员工、活动和薪资关联。",
       "enrolments": "为员工加入保障与储蓄计划。通过参保窗口管理开放期间。",
       "rewards": "按有效计划记录员工表彰和福利授予。在计划中配置可重复使用的方案。",
       "incentives": "管理绩效计划。打开记录以模拟、计算并结算员工发放。",
       "payouts": "将可发放项目送入薪资并跟踪交付历史。在奖励中创建，在激励中结算。",
       "employees": "查看员工计划、保障、选择及有效条件。薪资处理按计划规则执行。",
-      "delivery": "处理已就绪奖励和已结算激励。分别跟踪薪资处理与外部履行。"
+      "delivery": "查看可发放的授予、福利缴款和权益变动。薪资处理与外部履约分别保留凭证。"
     },
     "configureApprovals": "配置审批"
   },
