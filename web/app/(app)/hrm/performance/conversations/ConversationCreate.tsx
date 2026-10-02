@@ -1,12 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Select } from '@openbooks/ui'
-import {
-  DirtyUrlDrawer,
-  useDirtyUrlDrawer,
-} from '../../../../../components/dirty-url-drawer'
+import { Button, Input, Label, SearchSelect } from '@openbooks/ui'
+import { DirtyUrlDrawer, useDirtyUrlDrawer } from '../../../../../components/dirty-url-drawer'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 type Employee = { value: string; label: string }
 export function ConversationCreate({
@@ -19,24 +16,19 @@ export function ConversationCreate({
   const t = useTranslations('hrm.talentWorkspace')
   return (
     <DirtyUrlDrawer open closeHref={closeHref} title={t('newConversation')}>
-      <ScheduleForm employees={employees} />
+      <ScheduleForm employees={employees} closeHref={closeHref} />
     </DirtyUrlDrawer>
   )
 }
-function ScheduleForm({ employees }: { employees: Employee[] }) {
+function ScheduleForm({ employees, closeHref }: { employees: Employee[]; closeHref: string }) {
   const t = useTranslations('hrm.talentWorkspace'),
     router = useRouter(),
-    [manager, setManager] = useState(employees[0]?.value ?? ''),
-    [report, setReport] = useState(employees[1]?.value ?? ''),
+    [manager, setManager] = useState(''),
+    [report, setReport] = useState(''),
     [when, setWhen] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null)
-  const close = useDirtyUrlDrawer(
-    when !== '' ||
-      manager !== employees[0]?.value ||
-      report !== employees[1]?.value,
-    busy,
-  )
+  const close = useDirtyUrlDrawer(when !== '' || manager !== '' || report !== '', busy)
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
   async function submit() {
     setBusy(true)
@@ -60,7 +52,9 @@ function ScheduleForm({ employees }: { employees: Employee[] }) {
         setError(t('saveFailed'))
         return
       }
-      router.push('/hrm/performance/conversations?one=' + payload.oneOnOne.id)
+      const destination = new URL(closeHref, window.location.origin)
+      destination.searchParams.set('one', payload.oneOnOne.id)
+      router.push(destination.pathname + destination.search)
       router.refresh()
     } catch {
       setError(t('saveFailed'))
@@ -79,47 +73,30 @@ function ScheduleForm({ employees }: { employees: Employee[] }) {
       <fieldset disabled={busy} className="space-y-4">
         <div>
           <Label htmlFor="conversation-manager">{t('manager')}</Label>
-          <Select
+          <EmployeePicker
             id="conversation-manager"
+            label={t('manager')}
             value={manager}
-            required
-            onChange={(event) => {
-              setManager(event.target.value)
-              if (report === event.target.value)
-                setReport(
-                  employees.find((e) => e.value !== event.target.value)
-                    ?.value ?? '',
-                )
+            initialOptions={employees}
+            onChange={(value) => {
+              setManager(value)
+              if (report === value) setReport('')
             }}
-          >
-            {employees.map((employee) => (
-              <option key={employee.value} value={employee.value}>
-                {employee.label}
-              </option>
-            ))}
-          </Select>
+          />
         </div>
         <div>
           <Label htmlFor="conversation-report">{t('employee')}</Label>
-          <Select
+          <EmployeePicker
             id="conversation-report"
+            label={t('employee')}
             value={report}
-            required
-            onChange={(event) => setReport(event.target.value)}
-          >
-            {employees
-              .filter((e) => e.value !== manager)
-              .map((employee) => (
-                <option key={employee.value} value={employee.value}>
-                  {employee.label}
-                </option>
-              ))}
-          </Select>
+            initialOptions={employees}
+            exclude={manager}
+            onChange={setReport}
+          />
         </div>
         <div>
-          <Label htmlFor="conversation-when">
-            {t('conversationWhen', { zone })}
-          </Label>
+          <Label htmlFor="conversation-when">{t('conversationWhen', { zone })}</Label>
           <Input
             id="conversation-when"
             type="datetime-local"
@@ -128,7 +105,7 @@ function ScheduleForm({ employees }: { employees: Employee[] }) {
             onChange={(event) => setWhen(event.target.value)}
           />
         </div>
-        <Button type="submit" disabled={manager === report}>
+        <Button type="submit" disabled={!manager || !report || manager === report || !when}>
           {t('scheduleConversation')}
         </Button>
         <Button type="button" variant="ghost" onClick={() => void close()}>
@@ -141,5 +118,80 @@ function ScheduleForm({ employees }: { employees: Employee[] }) {
         </p>
       )}
     </form>
+  )
+}
+
+function EmployeePicker({
+  id,
+  label,
+  value,
+  onChange,
+  initialOptions,
+  exclude,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  initialOptions: Employee[]
+  exclude?: string
+}) {
+  const t = useTranslations('hrm.talentWorkspace')
+  const [query, setQuery] = useState('')
+  const [options, setOptions] = useState(initialOptions)
+  const [selected, setSelected] = useState<Employee | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const response = await fetch(
+          '/api/hrm/one-on-ones?directory=1&q=' + encodeURIComponent(query),
+          { signal: controller.signal },
+        )
+        if (!response.ok)
+          throw new Error(await readApiErrorMessage(response, t('employeeLoadFailed')))
+        const payload = (await response.json()) as { employees?: Employee[] }
+        if (!Array.isArray(payload.employees)) throw new Error(t('employeeLoadFailed'))
+        if (!controller.signal.aborted) setOptions(payload.employees)
+      } catch (cause) {
+        if (!controller.signal.aborted)
+          setError(cause instanceof Error ? cause.message : t('employeeLoadFailed'))
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }, 200)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [query, t])
+  const choices = (
+    selected && !options.some((option) => option.value === selected.value)
+      ? [selected, ...options]
+      : options
+  ).filter((option) => option.value !== exclude)
+  return (
+    <SearchSelect
+      id={id}
+      ariaLabel={label}
+      value={value}
+      options={choices}
+      onChange={(next) => {
+        setSelected(choices.find((option) => option.value === next) ?? null)
+        onChange(next)
+      }}
+      searchable
+      remote
+      loading={loading}
+      onSearchChange={setQuery}
+      placeholder={t('searchEmployees')}
+      searchPlaceholder={t('searchEmployees')}
+      statusMessage={error ?? undefined}
+      statusTone={error ? 'error' : 'muted'}
+    />
   )
 }

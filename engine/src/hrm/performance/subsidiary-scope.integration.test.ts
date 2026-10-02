@@ -18,7 +18,7 @@ import { fulfillRequest, listFeedback, listOpenRequestsForParty, retractFeedback
 import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listCycleProgress, listMyReviews } from "./performance-read.ts";
 import { getExitRecord, listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
 import {
-  cancelOneOnOne, getOneOnOne, holdOneOnOne, listOneOnOneDirectory, listOneOnOnes, scheduleOneOnOne, skipOneOnOne,
+  cancelOneOnOne, getOneOnOne, holdOneOnOne, listConversationPage, listOneOnOneDirectory, listOneOnOnes, scheduleOneOnOne, skipOneOnOne,
 } from "./one-on-ones.ts";
 import {
   addSuccessionCandidate, createSuccessionPlan, listSuccessionPlans, listTalentDirectory, listTalentReviews,
@@ -154,7 +154,7 @@ async function oneOnOnes(w: World) {
   return { ...people, oneA, oneB: (await schedule(people.b, "2026-03-01T11:00:00Z")).id };
 }
 
-const ONE_ON_ONE = { features: PERF_FEATURES, permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.self.read"], actors: HR };
+const ONE_ON_ONE = { features: PERF_FEATURES, permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.self.read"], actors: { ...HR, hrRead: { scope: "A", permissions: ["hrm.performance.read"], link: true } } } as const;
 
 /** Talent world: an A and a B employment, an org-wide cycle, and an HR whose role covers no entity. */
 async function talentWorld(w: World) {
@@ -528,6 +528,18 @@ scopeMatrix([
       const ids = async (actorId: string, employmentId?: string) => (await listOneOnOnes({ orgId, actorId, employmentId })).map((one) => one.id).sort();
       assert.deepEqual(await ids(w.hrA), [oneA]);
       assert.deepEqual(await ids(w.hrFull), [oneA, oneB].sort());
+      for (const actorId of [w.hrA, a.userId, w.hrFull]) {
+        const page = await listConversationPage({ orgId, actorId, perPage: 5 });
+        assert.deepEqual(page.rows.map(row => row.id).sort(), actorId === w.hrFull ? [oneA, oneB].sort() : [oneA]);
+        assert.equal(page.total, page.rows.length);
+        assert.ok(page.rows.every(row => !("items" in row)), "the worklist does not load private agendas");
+      }
+      assert.equal((await listConversationPage({ orgId, actorId: w.hrA, status: "held" })).total, 0);
+      assert.equal((await listConversationPage({ orgId, actorId: w.hrA, q: "unmatched employee" })).total, 0);
+      assert.equal((await listOneOnOneDirectory({ orgId, actorId: w.hrA, limit: 1 })).employments.length, 1);
+      assert.equal((await listOneOnOneDirectory({ orgId, actorId: w.hrA, q: "unmatched employee", limit: 25 })).employments.length, 0);
+      assert.equal((await getOneOnOne({ orgId, actorId: w.hrRead, id: oneA })).canWrite, false);
+      await refused(holdOneOnOne({ orgId, actorId: w.hrRead, id: oneA }), "FORBIDDEN");
       // A cross-scope single read answers as missing; the pair itself reads its own 1:1 without the grant.
       await refused(getOneOnOne({ orgId, actorId: w.hrA, id: oneB }), "NOT_FOUND");
       for (const actorId of [w.hrA, a.userId]) assert.equal((await getOneOnOne({ orgId, actorId, id: oneA })).id, oneA);

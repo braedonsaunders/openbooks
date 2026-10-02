@@ -144,6 +144,7 @@ export interface PerformancePageData {
   reviewFilters:{paramKey:string;label:string;allLabel:string;options:{value:string;label:string}[]}[]
   reviewsTab: boolean
   reviewRows: {id:string;employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string;href:string}[]
+  templatesLabel: string
   reviewColumns: {employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string}
   canManage: boolean
   showCreate: boolean
@@ -336,6 +337,7 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
             { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
             f('showCreate'),
           ),
+          ...(data.cyclesTab && data.canManage ? [widget('link-button', { href: '/hrm/performance/templates', label: data.templatesLabel, variant: 'outline' })] : []),
           ...(data.continuous.talent &&
           ((data.continuous.talent.cycleId && !data.continuous.talent.scaleNote) ||
             data.continuous.talent.view === 'succession')
@@ -563,7 +565,7 @@ export async function loadPerformancePage(
   const continuous = await loadContinuousTab(authz, sp, canManage, canRetain)
   const reviewsTab=sp.tab==='reviews'||(!sp.tab&&!sp.cycle)
   const cyclesTab = continuous.tab === 'cycles'&&!reviewsTab
-  const worklist=continuous.tab==='cycles'?await listReviewWorklist({orgId:authz.user.orgId,actorId:authz.user.id}):[]
+  const worklist=reviewsTab?await listReviewWorklist({orgId:authz.user.orgId,actorId:authz.user.id}):[]
   // Drawer hrefs preserve the segment and the continuous tab — a
   // drawer opened from Retention closes back onto Retention, not Cycles.
   const preservedParams = {
@@ -1062,7 +1064,8 @@ export async function loadPerformancePage(
     reviewFilters:[{paramKey:'reviewStatus',label:tw('status'),allLabel:tw('allStatuses'),options:['pending','submitted','calibrated','shared','acknowledged'].map(value=>({value,label:reviewStatusLabel(t,value)}))},{paramKey:'reviewScope',label:tw('view'),allLabel:tw('allVisible'),options:[{value:'mine',label:tw('myReviews')},{value:'received',label:tw('receivedReviews')}]},{paramKey:'reviewCycle',label:tw('cycle'),allLabel:tw('allCycles'),options:Array.from(new Map(worklist.map(r=>[r.cycleId,{value:r.cycleId,label:r.cycle}])).values())}],
     reviewRows:worklist.filter(r=>(!sp.reviewStatus||r.status===sp.reviewStatus)&&(!sp.reviewCycle||r.cycleId===sp.reviewCycle)&&(!sp.reviewScope||(sp.reviewScope==='mine'?r.isReviewer:r.isSubject))).map(r=>({...r,kind:t('performance.kind'+r.kind[0]!.toUpperCase()+r.kind.slice(1)),status:reviewStatusLabel(t,r.status),due:r.due??'—',href:performanceHref(preservedParams,{review:r.id})})),
     reviewColumns:{employee:tw('employee'),reviewer:tw('reviewer'),cycle:tw('cycle'),kind:tw('reviewType'),status:tw('status'),due:tw('due')},
-    title: reviewsTab?tw('reviews'):cyclesTab?tw('cycles'):t('performance.title'),
+    templatesLabel: tw('templates'),
+    title: reviewsTab?tw('reviews'):cyclesTab?tw('manageReviews'):t('performance.title'),
     description:
       continuous.calibration?.description ??
       continuous.talent?.description ??

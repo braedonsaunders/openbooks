@@ -9,6 +9,7 @@
  */
 export type ModuleHomeTab = {
   href: string;
+  secondary?: boolean;
   label: string;
   active?: boolean;
   count?: number | null;

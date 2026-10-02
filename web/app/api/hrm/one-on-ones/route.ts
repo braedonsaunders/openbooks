@@ -3,6 +3,7 @@ import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   listOneOnOnes,
+  listOneOnOneDirectory,
   scheduleOneOnOne,
 } from "@openbooks/engine/src/hrm/performance/one-on-ones.ts";
 
@@ -51,6 +52,10 @@ export const GET = defineRoute({
       );
     }
     try {
+      if (params.get("directory") === "1") {
+        const directory = await listOneOnOneDirectory({ orgId: authz.user.orgId, actorId: authz.user.id, q: params.get("q") ?? "", limit: 25 });
+        return NextResponse.json({ employees: directory.employments.map(employee => ({ value: employee.id, label: employee.name })) });
+      }
       const ones = await listOneOnOnes({
         orgId: authz.user.orgId,
         actorId: authz.user.id,

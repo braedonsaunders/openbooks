@@ -3242,6 +3242,16 @@
     "scheduleConversation": "Programar conversación",
     "conversationWhen": "Fecha y hora ({zone})",
     "manager": "Responsable",
-    "reviewType": "Tipo de evaluación"
+    "reviewType": "Tipo de evaluación",
+    "manageReviews": "Gestionar evaluaciones",
+    "conversationWorkspaceDescription": "Encuentre reuniones, prepare la agenda y haga seguimiento con los empleados.",
+    "conversationDate": "Fecha y hora",
+    "noConversations": "Ninguna conversación coincide con estos filtros.",
+    "searchConversations": "Buscar empleado o responsable",
+    "myConversations": "Mis conversaciones",
+    "searchEmployees": "Buscar empleados",
+    "employeeLoadFailed": "No se pudieron cargar los empleados. Inténtelo de nuevo.",
+    "upgradeRequired": "Se requiere actualizar Desempeño",
+    "upgradeDescription": "Un administrador debe aplicar la actualización de la base de datos de Talento antes de abrir las plantillas de evaluación."
   }
 }

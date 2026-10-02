@@ -3242,6 +3242,16 @@
     "scheduleConversation": "Agendar conversa",
     "conversationWhen": "Data e hora ({zone})",
     "manager": "Gestor",
-    "reviewType": "Tipo de avaliação"
+    "reviewType": "Tipo de avaliação",
+    "manageReviews": "Gerenciar avaliações",
+    "conversationWorkspaceDescription": "Encontre reuniões, prepare a pauta e acompanhe os funcionários.",
+    "conversationDate": "Data e hora",
+    "noConversations": "Nenhuma conversa corresponde a estes filtros.",
+    "searchConversations": "Pesquisar funcionário ou gestor",
+    "myConversations": "Minhas conversas",
+    "searchEmployees": "Pesquisar funcionários",
+    "employeeLoadFailed": "Não foi possível carregar os funcionários. Tente novamente.",
+    "upgradeRequired": "Atualização de Desempenho necessária",
+    "upgradeDescription": "Um administrador deve aplicar a atualização do banco de dados de Talentos antes de abrir os modelos de avaliação."
   }
 }
