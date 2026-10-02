@@ -272,14 +272,16 @@ export function InspectorPanel({
   icon,
   eyebrow,
   title,
+  description,
   actions,
   error,
   footer,
   children,
 }: {
-  icon: ReactNode
-  eyebrow: string
+  icon?: ReactNode
+  eyebrow?: string
   title: string
+  description?: ReactNode
   actions?: ReactNode
   error?: string | null
   footer?: ReactNode
@@ -289,12 +291,13 @@ export function InspectorPanel({
     <Card>
       <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-300">
+          {icon ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-300">
             {icon}
-          </span>
+          </span> : null}
           <div className="min-w-0">
-            <p className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{eyebrow}</p>
+            {eyebrow ? <p className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{eyebrow}</p> : null}
             <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+            {description ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
           </div>
         </div>
         {actions}

@@ -1,5 +1,15 @@
 import type { ReactNode } from 'react'
-import { cn } from '@openbooks/ui'
+import { Label, cn } from '@openbooks/ui'
+
+/** A record-level boolean uses the same switch and label as Setup controls. */
+export function SwitchField({ label, description, on, disabled = false, onToggle }: {
+  label: string; description?: string; on: boolean; disabled?: boolean; onToggle: () => void;
+}) {
+  return <div className="flex items-center justify-between gap-4">
+    <div className="min-w-0"><Label>{label}</Label>{description ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}</div>
+    <Switch on={on} disabled={disabled} onToggle={onToggle} label={label} />
+  </div>
+}
 
 /**
  * Accessible on/off switch (role=switch), teal when on — the Features

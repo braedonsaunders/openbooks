@@ -7,6 +7,7 @@ type NamedControlProps = {
   id?: string
   'aria-labelledby'?: string
   ariaLabelledBy?: string
+  'aria-required'?: boolean
 }
 
 function elementName(type: unknown): string {
@@ -39,6 +40,7 @@ function isNativeLabelTarget(type: unknown): boolean {
 
 export interface FieldProps {
   label: React.ReactNode
+  required?: boolean
   children: React.ReactNode
   className?: string
   labelClassName?: string
@@ -88,7 +90,7 @@ export function FieldControlAssociations({ controlId, labelId, children }: Field
 }
 
 /** A visible label and its control, associated for native and button-based fields. */
-export function Field({ label, children, className, labelClassName, aside }: FieldProps) {
+export function Field({ label, required, children, className, labelClassName, aside }: FieldProps) {
   const controlId = React.useId()
   const labelId = `${controlId}-label`
   const validControl = React.isValidElement(children) && (
@@ -101,6 +103,7 @@ export function Field({ label, children, className, labelClassName, aside }: Fie
     ? React.cloneElement(children as React.ReactElement<NamedControlProps>, {
         id: controlId,
         'aria-labelledby': labelId,
+        ...(required ? { 'aria-required': true } : {}),
         ...(elementName(children.type) === 'SearchSelect' ? { ariaLabelledBy: labelId } : {}),
       })
     : children
@@ -108,7 +111,7 @@ export function Field({ label, children, className, labelClassName, aside }: Fie
   return (
     <div className={className ?? 'space-y-1.5'}>
       <div className={aside ? 'flex items-center justify-between gap-2' : undefined}>
-        <Label id={labelId} htmlFor={nativeLabelTarget ? controlId : undefined} className={labelClassName}>{label}</Label>
+        <Label id={labelId} htmlFor={nativeLabelTarget ? controlId : undefined} className={labelClassName}>{label}{required ? <span className="text-red-500" aria-hidden="true"> *</span> : null}</Label>
         {aside}
       </div>
       {control}
