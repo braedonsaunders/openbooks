@@ -297,7 +297,7 @@ export function ReviewAcknowledgeButton({
   reviewId,
   label,
   canAcknowledge,
-  failedLabel: _failedLabel,
+  failedLabel,
 }: {
   reviewId: string
   label: string
