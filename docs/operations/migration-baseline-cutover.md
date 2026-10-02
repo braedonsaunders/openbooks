@@ -120,3 +120,18 @@ verification and audited adoption steps above before ordinary deployment.
 The release rehearsal exercises this path on the oldest and latest supported
 releases with populated multi-entity accounting data, then verifies a backup,
 adopts the baseline and checks ordinary bootstrap idempotence.
+
+### Restore verification with legacy validation functions
+
+Some historical SQL validators call other functions without a schema qualifier.
+`pg_restore` clears the session search path, so a direct restoration can refuse
+valid bank matching rules even though the same validators accept them in the
+application. Do not bypass the checks or change tenant rows to complete a restore.
+
+On an isolated restoration target, restore pre-data first. Capture the original
+function definitions and settings. Temporarily set `search_path=public,pg_catalog`
+on application functions that have no explicit search path, restore data and
+post-data, then restore those original function settings before any application
+connects. Preserve existing explicit search paths, especially security-definer
+functions. Verify the restored catalog and financial fingerprints against the
+source snapshot. Keep the restoration target isolated until verification passes.

@@ -21,7 +21,7 @@ import { readApiErrorMessage } from '../../../lib/api-error'
 export function StepCompleteButton({
   stepId,
   label,
-  failedLabel,
+  failedLabel: _failedLabel,
 }: {
   stepId: string
   label: string
@@ -297,7 +297,7 @@ export function ReviewAcknowledgeButton({
   reviewId,
   label,
   canAcknowledge,
-  failedLabel,
+  failedLabel: _failedLabel,
 }: {
   reviewId: string
   label: string

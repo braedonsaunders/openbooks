@@ -135,3 +135,9 @@ test("generic query projections ignore physical column order while preserving is
   assert.throws(() => assertBaselineCatalogsEqual({ relations: [row], openbooks_query_catalog_relations: registry }, { relations: [{ ...reversed, view: reversed.view.replace("org_id = openbooks_query_org_id()", "true") }], openbooks_query_catalog_relations: registry }), /differs in relations/);
   assert.throws(() => assertBaselineCatalogsEqual({ relations: [row] }, { relations: [reversed] }), /differs in relations/);
 });
+
+test("catalog ACL comparison is independent of database collation", () => {
+  const grants = [{ grantee: "PUBLIC", privilege_type: "USAGE" }, { grantee: "openbooks_read", privilege_type: "USAGE" }];
+  assert.doesNotThrow(() => assertBaselineCatalogsEqual({ schema_acl: grants }, { schema_acl: grants.toReversed() }));
+  assert.throws(() => assertBaselineCatalogsEqual({ schema_acl: grants }, { schema_acl: grants.slice(1) }), /differs in schema_acl/);
+});
