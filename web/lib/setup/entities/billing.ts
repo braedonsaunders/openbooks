@@ -12,8 +12,8 @@ export const BILLING_ENTITIES: SetupEntity[] = [
       { titleKey: 'collectionPolicyFields.criteria', fields: ['gracePeriodDays', 'minBalance', 'replyTo'] },
     ],
     columns: [
-      { key: 'name', kind: 'text' }, { key: 'gracePeriodDays', kind: 'number' },
-      { key: 'minBalance', kind: 'number' }, { key: 'isActive', kind: 'badge-active' },
+      { key: 'name', kind: 'text' }, { key: 'gracePeriodDays', labelKey: 'collectionPolicyFields.gracePeriodDays', kind: 'number' },
+      { key: 'minBalance', labelKey: 'collectionPolicyFields.minBalance', kind: 'number' }, { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'name', kind: 'text', required: true, fullWidth: true },
