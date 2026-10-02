@@ -1,5 +1,7 @@
 import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { checklistStepsFlowAdapter, checklistStepSubjectProfile } from "./checklist-steps-adapter.ts";
+import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
+import { benefitEnrollmentsFlowAdapter, benefitEnrollmentSubjectProfile } from "./benefit-enrollments-adapter.ts";
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
 import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import { FINANCIAL_CHANGE_SUBJECT_KIND, financialChangeSubjectProfile, financialChangesFlowAdapter } from "./financial-changes-adapter.ts";
@@ -98,7 +100,8 @@ import { db } from "../platform/db.ts";
 const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
-  if (subjectKind === CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
+  if(subjectKind===CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
+  if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND) return benefitEnrollmentsFlowAdapter;
   if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
   if (subjectKind === FINANCIAL_CHANGE_SUBJECT_KIND) return financialChangesFlowAdapter;
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
@@ -152,6 +155,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     checklistStepSubjectProfile,
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
     benefitAwardSubjectProfile,
+    benefitEnrollmentSubjectProfile,
     financialChangeSubjectProfile,
     bankAccountSubjectProfile,
     budgetScenarioSubjectProfile,

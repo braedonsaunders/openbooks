@@ -24,11 +24,11 @@ test('benefits reports are native definitions with a tenant and legal-entity bou
   }
 })
 
-test('coverage amounts retain currency and consuming-run evidence without claiming cash payment', () => {
+test('coverage amounts retain currency and native payroll-run evidence without claiming cash payment', () => {
   const entity = REPORT_ENTITY_MAP.hrm_benefit_payroll_inputs!
   assert.equal(entity.currencyColumn, 'currency')
   assert.equal(entity.columns.find((column) => column.key === 'amount')?.txnCurrency, true)
-  assert.equal(entity.columns.find((column) => column.key === 'payroll_run_id')?.expr, 'i.consumed_by_run_document_id')
+  assert.equal(entity.columns.find((column) => column.key === 'payroll_run_id')?.expr, 'i.pay_run_document_id')
   assert.equal(entity.defaultPeriodField, 'coverage_from')
   assert.match(entity.from, /p\.org_id = e\.org_id/)
   assert.match(entity.from, /worker\.org_id = emp\.org_id/)

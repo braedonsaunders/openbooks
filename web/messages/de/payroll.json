@@ -567,7 +567,9 @@
       "title": "Steuerbescheinigungen",
       "loading": "Zertifikate werden geladen…",
       "loadFailed": "Steuerbescheinigungen konnten nicht geladen werden."
-    }
+    },
+    "serviceCreditLink": "Angerechnete Dienstzeit",
+    "vacationTermsLink": "Urlaubsbedingungen"
   },
   "setupWizard": {
     "cta": {
@@ -705,7 +707,9 @@
       "holidayCalendar": "Feiertagskalender",
       "payday": "Zahltag",
       "rates": "Gesetzliche Sätze",
-      "workSchedules": "Arbeitszeitpläne"
+      "workSchedules": "Arbeitszeitpläne",
+      "serviceCredits": "Angerechnete Dienstzeit",
+      "vacationTerms": "Urlaubsbedingungen"
     },
     "packs": {
       "installed": "Installiert",

@@ -3162,6 +3162,46 @@
         "singularTitle": "Programmitglied",
         "description": "Beschäftigungen mit Gültigkeitsdaten, Gewichtung und Rolle für die Verteilung."
       },
+      "benefit-contribution-rules": {
+        "title": "Beiträge",
+        "singular": "Beiträge",
+        "description": "Legen Sie Mitarbeiterabzüge, Arbeitgeberbeiträge und steuerpflichtige Sachleistungen fest. Lohnarten steuern Steuern und Buchungen."
+      },
+      "benefit-contribution-classes": {
+        "title": "Berechtigungsgruppen",
+        "singular": "Berechtigungsgruppen",
+        "description": "Gruppieren Sie Mitarbeitende nach abweichender Berechtigung oder Matching-Grenze."
+      },
+      "benefit-contribution-tiers": {
+        "title": "Matching-Grenzen",
+        "singular": "Matching-Grenzen",
+        "description": "Datierte Dienstzeitschwellen bestimmen Höchstangebote. Feste Mitarbeiterwahlen steigen nicht automatisch."
+      },
+      "benefit-enrollment-configuration": {
+        "title": "Mitarbeiterwahl",
+        "singular": "Mitarbeiterwahl",
+        "description": "Prüfen Sie Gruppe und Matching-Berechtigung; verwalten Sie gewählte Beiträge unter Beiträge."
+      },
+      "benefit-enrollment-terms": {
+        "title": "Beitragswahlen",
+        "singular": "Beitragswahlen",
+        "description": "Speichern Sie die tatsächliche Wahl getrennt von Grenzen. Bei Änderungen gelten neue datierte Bedingungen."
+      },
+      "payroll-service-credits": {
+        "title": "Angerechnete Dienstzeit",
+        "singular": "Angerechnete Dienstzeit",
+        "description": "Erfassen Sie anerkannte Dienstzeit ohne Änderung des Eintrittsdatums. Dieselbe Grundlage steuert Urlaub und Berechtigung."
+      },
+      "payroll-vacation-terms": {
+        "title": "Urlaubsbedingungen",
+        "singular": "Urlaubsbedingungen",
+        "description": "Eine gültige Richtlinie steuert Urlaubsart und persönliche Mindestwerte. Dienstzeitstaffeln können diese erhöhen."
+      },
+      "benefit-recovery-sources": {
+        "title": "Prämienrückzahlung",
+        "singular": "Quelle der Prämienrückzahlung",
+        "description": "Wählen Sie Arbeitgeberprämien, die während einer unbezahlten Versicherungszeit geschuldet sind. Rückzahlungskonto und Zeitplan werden weiterhin durch den Abzug bestimmt."
+      },
       "dunning-policies": {
         "title": "Richtlinien",
         "description": "Forderungen einziehen und Abrechnung in einem Arbeitsbereich verwalten."
@@ -3256,7 +3296,7 @@
       "postsGl": "Bucht ins Hauptbuch",
       "bookId": "Buch",
       "categoryId": "Anlagekategorie",
-      "convention": "Konvention",
+      "convention": "Dienstzeitkonvention",
       "lifeMonths": "Nutzungsdauer (Monate)",
       "depreciationMethodId": "Abschreibungsmethode",
       "departmentId": "Abteilung",
@@ -3393,7 +3433,7 @@
       "parentSubsidiaryId": "Mutter-Tochtergesellschaft",
       "payDateOffsetDays": "Zahltagsversatz (Tage)",
       "pensionable": "Rentenversicherungspflichtig",
-      "periodsPerYear": "Perioden pro Jahr",
+      "periodsPerYear": "Einzugsperioden pro Jahr",
       "rateKind": "Satzart",
       "registrationNumber": "Registrierungsnummer",
       "remittancePartyId": "Abführungslieferant",
@@ -3614,7 +3654,39 @@
       "default_on": "Standardmäßig enthalten",
       "applies_to": "Regionsabdeckung",
       "countries": "Länder",
-      "timezone": "Zeitzone"
+      "timezone": "Zeitzone",
+      "ruleKey": "Beitragscode",
+      "rateFormula": "Satzmethode",
+      "hoursBasis": "Anrechenbare Stunden",
+      "payBasis": "Anrechenbares Entgelt",
+      "monthsPerYear": "Beitragsmonate pro Jahr",
+      "proration": "Teilperiodenregel",
+      "matchRuleId": "Matching-Gegenbeitrag",
+      "requiresMatchEligibility": "Matching-Berechtigung erforderlich",
+      "enforcePolicyCap": "Richtlinienmaximum einhalten",
+      "classKey": "Berechtigungsgruppe",
+      "minimumServiceYears": "Mindestdienstjahre",
+      "employerMaxPercent": "Arbeitgebermaximum %",
+      "employeeMatchRatio": "Mitarbeiter-/Arbeitgeberverhältnis",
+      "matchEligible": "Für Arbeitgeber-Matching berechtigt",
+      "enrollmentId": "Mitarbeiteranmeldung",
+      "ruleId": "Beitrag",
+      "electionMode": "Wahlmethode",
+      "electedRate": "Gewählter Satz",
+      "declaredPeriodsPerYear": "Gewählte Jahresperioden",
+      "runApplicability": "Lohnläufe",
+      "unpaidPeriodTreatment": "Behandlung unbezahlter Perioden",
+      "arrearsPlanId": "Rückforderungsbank",
+      "arrearsRecoveryPeriods": "Rückforderungsperioden",
+      "asOfDate": "Beobachtet am",
+      "creditedDays": "Angerechnete Diensttage",
+      "creditedMonths": "Angerechnete Dienstmonate",
+      "annualDays": "Jährliche Urlaubstage",
+      "percentFloor": "Persönliches Minimum %",
+      "annualDaysFloor": "Persönliche Mindestjahrestage",
+      "waitingPeriodMonths": "Wartezeit (Kalendermonate)",
+      "approvalMode": "Genehmigungsrichtlinie",
+      "legalEmployer": "Rechtlicher Arbeitgeber"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count zählt die unterschiedlichen Werte des Distinct Keys jedes Datensatzes.",
@@ -5097,7 +5169,8 @@
       "benefitCosts": "Kosten und Anteilberechnung",
       "benefitComponents": "Abrechnungskomponenten",
       "benefitDelivery": "Auszahlung",
-      "benefitRules": "Regeln"
+      "benefitRules": "Regeln",
+      "benefitAdvanced": "Erweiterte Beitragsregeln"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",
@@ -5113,6 +5186,136 @@
       "row": "Zeile {number}",
       "addRow": "Zeile hinzufügen",
       "removeRow": "Zeile entfernen"
+    },
+    "benefitBuilder": {
+      "offer": "Programm",
+      "eligibility": "Berechtigung und Zeitraum",
+      "eligibilityHint": "Legen Sie Zeitraum, Wartezeit und Genehmigungen fest. Beiträge und Grenzen ergänzen Sie anschließend im Datensatz.",
+      "delivery": "Verbindung zur Abrechnung",
+      "deliveryHint": "Verknüpfen Sie Arbeitnehmerabzüge und Arbeitgeberbeiträge. Die Abrechnung bestimmt die steuerliche Behandlung und verarbeitet gewählte Beträge.",
+      "review": "Prüfen",
+      "coverageType": "Deckungsart",
+      "health": {
+        "title": "Gesundheits- und Versicherungsprogramm",
+        "offer": "Benennen Sie Versicherung, Anbieter und zuständigen Arbeitgeber. Beschäftigte wählen ihren Schutz unter Anmeldungen.",
+        "costs": "Prämien und Deckung",
+        "costHint": "Legen Sie Prämien beider Seiten und anteilige Monate fest. Deckungsstufen für Einzelpersonen oder Familien folgen nach der Erstellung.",
+        "provider": "Versicherungsanbieter",
+        "employeeCost": "Arbeitnehmerprämie",
+        "employerCost": "Arbeitgeberprämie",
+        "employeeCostBasis": "Häufigkeit der Arbeitnehmerprämie",
+        "employerCostBasis": "Häufigkeit der Arbeitgeberprämie",
+        "contribution": "Versicherungsbeiträge",
+        "classes": "Versicherungsgruppen",
+        "rate": "Beitragsbetrag oder Satz",
+        "contributionSingular": "Versicherungsbeitrag"
+      },
+      "retirement": {
+        "title": "Altersvorsorge- und Sparprogramm",
+        "offer": "Benennen Sie Plan, Vorsorgeanbieter und zuständigen Arbeitgeber. Die Teilnahme erfolgt unter Anmeldungen.",
+        "costs": "Sparbeiträge",
+        "costHint": "Wählen Sie feste Beiträge oder einen Gehaltsanteil je Seite. Prozentsätze sind Beitragssätze, keine Zuschussformel.",
+        "provider": "Vorsorge- oder Sparanbieter",
+        "employeeCost": "Arbeitnehmerbeitrag",
+        "employerCost": "Arbeitgeberbeitrag",
+        "employeeCostBasis": "Basis des Arbeitnehmerbeitrags",
+        "employerCostBasis": "Basis des Arbeitgeberbeitrags",
+        "contribution": "Beiträge",
+        "rate": "Beitragsbetrag oder Satz",
+        "contributionSingular": "Beitrag"
+      }
+    },
+    "benefitContributions": {
+      "componentHint": "Benefits legt den Beitrag fest. Steuern, Empfänger und Konten werden an der Lohnart eingerichtet.",
+      "formulaHint": "Wählen Sie eine passende Satzmethode. Matching verknüpft die gegenüberliegende Beitragswahl.",
+      "rateHint": "Verwenden Sie die gewählte Einheit. Eine feste Mitarbeiterwahl kann den Plansatz ersetzen.",
+      "annualizationHint": "Geben Sie die jährlichen Einzugsperioden an. Leer bedeutet Lohnplan des Mitarbeiters.",
+      "capHint": "Grenzen beschränken Angebote; sie ändern keine feste Wahl.",
+      "ratioHint": "Mitarbeiterbeitrag je Arbeitgebereinheit: 2 bedeutet den doppelten Betrag.",
+      "classHint": "Wählen Sie eine Gruppe dieses Plans.",
+      "matchHint": "Gibt an, ob diese Anmeldung zum Matching berechtigt ist.",
+      "electionHint": "Eine feste Wahl bleibt bei steigenden Grenzen fest. Richtlinienfolge nutzt den gültigen Satz und die Grenzen.",
+      "electedRateHint": "Geben Sie den tatsächlich gewählten Satz ein, getrennt vom Höchstangebot.",
+      "arrearsHint": "Nutzen Sie eine Geldbank mit Richtung Schuld, manueller Ansammlung und diesem Abzug. Geben Sie Rückforderungsperioden an.",
+      "options": {
+        "kind": {
+          "employee_deduction": "Mitarbeiterabzug",
+          "employer_contribution": "Arbeitgeberbeitrag",
+          "taxable_non_cash": "Steuerpflichtige Sachleistung"
+        },
+        "basis": {
+          "per_hour": "Pro anrechenbarer Stunde",
+          "per_period": "Pro Lohnperiode",
+          "per_month": "Monatsbetrag, annualisiert",
+          "per_year": "Jahresbetrag",
+          "percent_of_eligible_pay": "% des anrechenbaren Entgelts"
+        },
+        "formula": {
+          "elected_rate": "Plan- oder gewählter Satz",
+          "hourly_wage_percent": "% des Stundenlohns",
+          "matching_election": "Gegenwahl abgleichen"
+        },
+        "hours": {
+          "all_paid": "Alle bezahlten Stunden",
+          "regular_paid": "Reguläre bezahlte Stunden",
+          "scheduled_paid": "Geplante bezahlte Stunden"
+        },
+        "pay": {
+          "all_cash_earnings": "Alle Geldbezüge",
+          "regular_cash_earnings": "Reguläre Geldbezüge"
+        },
+        "proration": {
+          "none": "Keine Aufteilung",
+          "calendar_days": "Abgedeckte Kalendertage"
+        },
+        "election": {
+          "fixed": "Feste Wahl",
+          "follows_policy": "Planrichtlinie folgen"
+        },
+        "run": {
+          "regular_only": "Nur reguläre Lohnläufe",
+          "all_pay_runs": "Alle Lohnläufe"
+        },
+        "unpaid": {
+          "charge": "Periode berechnen",
+          "carry": "Zur Rückforderung vortragen"
+        }
+      },
+      "waitingMonthsHint": "Verwenden Sie Monate oder Tage, nicht beides. Monate folgen dem Eintrittsdatum.",
+      "activationHint": "Speichern Sie den Plan inaktiv, richten Sie Beiträge ein und aktivieren Sie ihn danach.",
+      "planRate": "Plansatz: {rate}",
+      "noApproval": "Keine Genehmigung",
+      "flowsApproval": "Flows-Genehmigungsrichtlinie verwenden",
+      "approvalHint": "Ohne Genehmigung werden gültige Wahlen direkt aktiviert. Flows nutzt konfigurierte Stufen vor Aktivierung.",
+      "fields": {
+        "kind": "Beitragsart",
+        "basis": "Berechnungsbasis",
+        "rate": "Plansatz",
+        "method": "Urlaubsart",
+        "ruleId": "Beitrag",
+        "ruleKey": "Beitragscode",
+        "payComponentId": "Lohnart",
+        "recoveryRuleId": "Rückzahlungsabzug",
+        "premiumRuleId": "Arbeitgeberprämie"
+      },
+      "recoverySourceHint": "Verknüpfen Sie die Prämie mit dem Arbeitnehmerabzug für unbezahlte Versicherungszeiten. Eine Prämie kann nur einem Rückzahlungsabzug zugeordnet sein."
+    },
+    "serviceCredit": {
+      "calendarMonths": "Kalendermonate",
+      "actual365": "Tatsächliche Tage / 365",
+      "conventionHint": "Kalendermonate nutzen Jahrestage. ACT/365 nutzt tatsächliche Tage und die erfasste Grundlage.",
+      "asOfHint": "Beobachtungsdatum; weitere Dienstzeit wird ab dieser Grundlage berechnet.",
+      "reasonHint": "Erklären Sie Richtlinie oder Anpassung. Gebuchte Nachweise bleiben erhalten; Änderungen gelten mit neuen Bedingungen.",
+      "annualDaysHint": "Jahrestage sind vom Urlaubsgeldprozentsatz getrennt; keine Umrechnung in Geld.",
+      "employerTierHint": "Wählen Sie den rechtlichen Arbeitgeber. Seine Staffel ersetzt die Organisationsstaffel für diesen Anspruch."
+    },
+    "vacationTerms": {
+      "accrue": "Urlaubsgeld ansammeln",
+      "payEachPeriod": "Urlaubsgeld je Periode auszahlen",
+      "paidLeave": "Bezahlter Urlaub in Tagen",
+      "percentHint": "Ein höheres persönliches Minimum bleibt erhalten. Leer nutzt die Dienstzeitstaffel; der Prozentsatz definiert keine Tage.",
+      "daysHint": "Ein höheres persönliches Tagesminimum bleibt getrennt von Dienstzeitstaffel und Geldprozentsatz erhalten.",
+      "method": "Urlaubsart"
     },
     "collectionPolicy": "Richtlinie",
     "collectionPolicyFields": {
@@ -5131,7 +5334,8 @@
       "description": "Legen Sie die Inkassokriterien und die Erinnerungsfolge fest.",
       "reminderNumber": "Erinnerung {number}",
       "addReminder": "Erinnerung hinzufügen"
-    }
+    },
+    "no": "Nein"
   },
   "flows": {
     "title": "Flows",

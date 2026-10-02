@@ -40,6 +40,7 @@ const mockSources = new Map<string, string>([
         return state.gate
       }
       export async function getAuthz() { return state.gate && !('status' in state.gate) ? state.gate : null }
+      export async function guardFeaturePermission(permission,feature) { const gate=await guardPermission(permission); const Response=globalThis.openbooksHrmMeWorkRouteNextResponse; if (gate instanceof Response) return gate; return state.featureOn ? gate : Response.json({error:'not found'},{status:404}) }
       export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
@@ -76,6 +77,7 @@ const mockSources = new Map<string, string>([
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmMeWorkRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
+  ["@/lib/feature-gates", "mock:authz"],
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:features"],
@@ -152,7 +154,7 @@ test("a missing feature flag 404s before any service runs", async () => {
     assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 404);
     assert.equal((await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [] }))).status, 404);
     assert.equal((await progressRoute!.POST(post({ goalId: GOAL_ID, progressPercent: 10 }))).status, 404);
-    assert.equal((await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, effectiveFrom: "2026-03-01" }))).status, 404);
+    assert.equal((await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "2026-03-01" }))).status, 404);
     assert.equal((await changeRoute!.POST(post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }))).status, 404);
     assert.deepEqual(routeState.calls, []);
   });
@@ -187,11 +189,11 @@ test("a missing feature flag 404s before any service runs", async () => {
     assert.equal((await acknowledgeRoute!.POST(post({ reviewId: "nope" }))).status, 400);
     assert.equal((await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [{ answerId: "nope" }] }))).status, 400);
     assert.equal((await progressRoute!.POST(post({ goalId: GOAL_ID }))).status, 400);
-    assert.equal((await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, effectiveFrom: "March" }))).status, 400);
+    assert.equal((await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "March" }))).status, 400);
     assert.equal((await changeRoute!.POST(post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "  " }))).status, 400);
     assert.deepEqual(routeState.calls, []);
     const good = await electRoute!.POST(
-      post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, windowId: WINDOW_ID, effectiveFrom: "2026-03-01" }),
+      post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], windowId: WINDOW_ID, effectiveFrom: "2026-03-01" }),
     );
     assert.equal(good.status, 201);
     assert.deepEqual(routeState.calls, [
@@ -201,9 +203,10 @@ test("a missing feature flag 404s before any service runs", async () => {
           orgId: "org-1",
           actorId: "user-1",
           employmentId: EMPLOYMENT_ID,
-          planId: PLAN_ID,
+          planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}],
           windowId: WINDOW_ID,
-          coverageLevelKey: undefined,
+          classKey: undefined,
+          matchEligible: undefined,
           effectiveFrom: "2026-03-01",
           effectiveTo: undefined,
           lifeEventReason: undefined,
@@ -225,7 +228,7 @@ test("a missing feature flag 404s before any service runs", async () => {
     const reviews = await reviewsRoute!.GET(readRequest());
     assert.equal(reviews.status, 403);
     assert.match((await reviews.json()).error as string, /Admin → Users → Link person/);
-    const elect = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, effectiveFrom: "2026-03-01" }));
+    const elect = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "2026-03-01" }));
     assert.equal(elect.status, 403);
   });
 
@@ -254,7 +257,7 @@ test("a missing feature flag 404s before any service runs", async () => {
       "REFUSED",
       "enrollment window is closed — elect inside an open window, or record a life event with a reason",
     );
-    const response = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, windowId: WINDOW_ID, effectiveFrom: "2026-03-01" }));
+    const response = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], windowId: WINDOW_ID, effectiveFrom: "2026-03-01" }));
     assert.equal(response.status, 400);
     assert.match((await response.json()).error as string, /elect inside an open window/);
     routeState.serviceThrow = new BenefitsError("BAD_STATE", "enrolment is ended — only an active enrolment is changed");
@@ -267,7 +270,7 @@ test("a missing feature flag 404s before any service runs", async () => {
     routeState.serviceThrow = new HrmAuthorizationError(
       "Benefit elections from the Me workspace elect only against your own employment — ask a manager holding hrm.benefits.manage to act on your behalf.",
     );
-    const response = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, effectiveFrom: "2026-03-01" }));
+    const response = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "2026-03-01" }));
     assert.equal(response.status, 403);
     assert.match((await response.json()).error as string, /only against your own employment/);
   });

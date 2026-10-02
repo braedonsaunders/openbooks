@@ -46,14 +46,17 @@ export async function planMovementsForStub(
   input: {
     orgId: string;
     employeePartyId: string;
-    /** Pay date; the movement date and the date every rule resolves on. */
+    employmentId?: string;
+    /** Earnings policy date; native payroll supplies the period end. */
+    policyDate?: string;
+    /** Pay date; ledger balances and limits resolve on this movement date. */
     movementDate: string;
     /** Run whose prior movements must not be double-counted on recalculation. */
     payRunDocumentId: string | null;
     earnings: readonly StubEarningLine[];
     /** Plans to consider; loaded from the org when omitted. */
     plans?: readonly EntitlementPlan[];
-    /** planId → per-employee rate the caller owns (vacation_percent, …). */
+    /** planId → resolved effective employee rate for the plan. */
     employeeAccrualValues?: ReadonlyMap<string, string>;
   },
 ): Promise<StubMovementPlan> {
@@ -67,9 +70,9 @@ export async function planMovementsForStub(
     input.earnings.filter((line) => line.hours != null).map((line) => String(line.hours)),
   );
 
-  const tiers = await resolveServiceTier(executor, orgId, employeePartyId, movementDate);
+  const tiers = await resolveServiceTier(executor, orgId, employeePartyId, input.policyDate ?? movementDate, input.employmentId);
   // One scope lookup serves every plan's limit resolution for this employee.
-  const scope = await employeeScope(executor, orgId, employeePartyId);
+  const scope = await employeeScope(executor, orgId, employeePartyId, { onDate: input.policyDate ?? movementDate, employmentId: input.employmentId });
   const movements: EntitlementMovement[] = [];
   const warnings: EntitlementWarning[] = [];
   for (const plan of plans) {

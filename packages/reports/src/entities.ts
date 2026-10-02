@@ -1098,19 +1098,24 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     label: 'Entitlement balances',
     category: 'payroll',
     description:
-      'One row per employee per pay bank — banked time, vacation, benefit recoup — with the resolved limit for that person and over/near-limit flags. The balance is SUM(entitlement_ledger); nothing else is ever the balance. Wage data: requires the payroll permission.',
+      'One row per employment per pay bank — banked time, vacation, benefit recoup — with the resolved limit for that person and over/near-limit flags. The balance is SUM(entitlement_ledger); nothing else is ever the balance. Wage data: requires the payroll permission.',
     // The balance is the ledger sum. The limit is resolved per employee with
     // the SAME most-specific-wins precedence the wage resolver uses
     // (employee > job title > trade > department > subsidiary > plan default,
     // latest effective_from within a scope) — see engine/src/payroll/entitlements.ts.
-    from: `(select l.org_id, l.plan_id, l.employee_party_id,
+    from: `(select l.org_id, l.plan_id, l.employee_party_id, coalesce(l.employment_id, s.employment_id) as employment_id,
                    sum(l.amount) as balance,
                    max(l.movement_date) as last_movement_date,
                    count(*) as movement_count
               from entitlement_ledger l
-             group by l.org_id, l.plan_id, l.employee_party_id) bal
+              left join pay_stubs s on s.org_id=l.org_id and s.pay_run_document_id=l.pay_run_document_id
+                and s.employee_party_id=l.employee_party_id
+             where l.movement_date <= ${REPORT_AS_OF}
+             group by l.org_id, l.plan_id, l.employee_party_id, coalesce(l.employment_id, s.employment_id)) bal
       JOIN entitlement_plans pln ON pln.id = bal.plan_id AND pln.org_id = bal.org_id
       JOIN parties p ON p.id = bal.employee_party_id AND p.org_id = bal.org_id
+      LEFT JOIN worker_employments e ON e.org_id=bal.org_id AND e.id=bal.employment_id AND e.worker_party_id=bal.employee_party_id
+      LEFT JOIN subsidiaries employer ON employer.org_id=e.org_id AND employer.id=e.employer_subsidiary_id
       LEFT JOIN employee_roles er ON er.party_id = p.id AND er.org_id = p.org_id
       LEFT JOIN trades trd ON trd.id = er.trade_id AND trd.org_id = er.org_id
       LEFT JOIN departments dep ON dep.id = er.department_id AND dep.org_id = er.org_id
@@ -1131,7 +1136,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
                 OR (lim.job_title IS NOT NULL AND lower(lim.job_title) = lower(er.job_title))
                 OR (lim.trade_id IS NOT NULL AND lim.trade_id = er.trade_id)
                 OR (lim.department_id IS NOT NULL AND lim.department_id = er.department_id)
-                OR (lim.subsidiary_id IS NOT NULL AND lim.subsidiary_id = p.subsidiary_id)
+                OR (lim.subsidiary_id IS NOT NULL AND lim.subsidiary_id = e.employer_subsidiary_id)
                 OR num_nonnulls(lim.employee_party_id, lim.job_title, lim.trade_id,
                                 lim.department_id, lim.subsidiary_id) = 0)
          ORDER BY CASE WHEN lim.employee_party_id IS NOT NULL THEN 0
@@ -1143,11 +1148,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
          LIMIT 1
       ) lim ON TRUE`,
     orgColumn: 'bal.org_id',
-    subsidiaryScope: { column: 'p.subsidiary_id' },
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     columns: [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
+      { key: 'employer', label: 'Legal employer', kind: 'text', expr: 'employer.name' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'bal.employment_id' },
       { key: 'plan', label: 'Plan', kind: 'text', expr: 'pln.name' },
       { key: 'plan_code', label: 'Plan code', kind: 'text', expr: 'pln.code' },
       {
@@ -1195,16 +1202,45 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'payroll',
     description:
       'Every service anniversary an entitlement tier acts on — benefits at 3 months, RRSP at a year, the vacation ladder at 5/10/15 years — with the date each employee reaches it. The source for the milestone letters. Requires the payroll permission.',
-    // The anniversary is computed in PostgreSQL so the report and
-    // milestonesReachedInPeriod can never disagree about a month-end hire.
+    // Observed service credits and employer-specific effective ladders determine
+    // the same civil-date milestone used by payroll; original service dates remain evidence.
     from: `entitlement_service_tiers t
-      JOIN employee_roles er ON er.org_id = t.org_id AND er.hired_on IS NOT NULL AND er.is_active
-      JOIN parties p ON p.id = er.party_id AND p.org_id = er.org_id
-      LEFT JOIN entitlement_plans pln ON pln.id = t.plan_id AND pln.org_id = t.org_id
-      LEFT JOIN pay_components c ON c.id = t.component_id AND c.org_id = t.org_id
-      LEFT JOIN departments dep ON dep.id = er.department_id AND dep.org_id = er.org_id`,
+      JOIN worker_employments e ON e.org_id=t.org_id
+        AND (t.employer_subsidiary_id IS NULL OR t.employer_subsidiary_id=e.employer_subsidiary_id)
+      JOIN parties p ON p.id=e.worker_party_id AND p.org_id=e.org_id
+      LEFT JOIN employee_roles er ON er.party_id=e.worker_party_id AND er.org_id=e.org_id
+      JOIN LATERAL (
+        SELECT sc.id,sc.convention,sc.as_of_date,sc.credited_days,sc.credited_months,sc.effective_from,sc.effective_to
+          FROM payroll_service_credits sc WHERE sc.org_id=e.org_id AND sc.employment_id=e.id
+        UNION ALL SELECT NULL::uuid,'calendar_months',e.service_start,NULL::numeric,0,DATE '0001-01-01',NULL::date
+          WHERE e.service_start IS NOT NULL
+      ) credit ON true
+      JOIN LATERAL (
+        SELECT CASE WHEN credit.convention='actual_365'
+          THEN credit.as_of_date + ceil((t.after_months::numeric*365-credit.credited_days*12)/12)::integer
+          ELSE (credit.as_of_date+make_interval(months=>t.after_months-credit.credited_months))::date END AS milestone_date
+      ) milestone ON milestone.milestone_date>=credit.effective_from
+        AND (credit.effective_to IS NULL OR milestone.milestone_date<=credit.effective_to)
+        AND milestone.milestone_date>=t.effective_from
+        AND (t.effective_to IS NULL OR milestone.milestone_date<=t.effective_to)
+        AND (credit.id IS NOT NULL OR NOT EXISTS (
+          SELECT 1 FROM payroll_service_credits assigned WHERE assigned.org_id=e.org_id AND assigned.employment_id=e.id
+            AND assigned.effective_from<=milestone.milestone_date AND (assigned.effective_to IS NULL OR assigned.effective_to>=milestone.milestone_date)
+        ))
+        AND (t.employer_subsidiary_id IS NOT NULL OR NOT EXISTS (
+          SELECT 1 FROM entitlement_service_tiers scoped WHERE scoped.org_id=t.org_id AND scoped.employer_subsidiary_id=e.employer_subsidiary_id
+            AND scoped.plan_id IS NOT DISTINCT FROM t.plan_id AND scoped.component_id IS NOT DISTINCT FROM t.component_id AND scoped.is_active
+            AND scoped.effective_from<=milestone.milestone_date AND (scoped.effective_to IS NULL OR scoped.effective_to>=milestone.milestone_date)
+        ))
+        AND (EXISTS (SELECT 1 FROM payroll_vacation_terms vt WHERE vt.org_id=e.org_id AND vt.employment_id=e.id
+          AND vt.effective_from<=milestone.milestone_date AND (vt.effective_to IS NULL OR vt.effective_to>=milestone.milestone_date))
+          OR EXISTS (SELECT 1 FROM employee_payroll_profiles prof WHERE prof.org_id=e.org_id AND prof.employment_id=e.id AND prof.is_active))
+      LEFT JOIN entitlement_plans pln ON pln.id=t.plan_id AND pln.org_id=t.org_id
+      LEFT JOIN pay_components c ON c.id=t.component_id AND c.org_id=t.org_id
+      LEFT JOIN departments dep ON dep.id=er.department_id AND dep.org_id=er.org_id`,
     orgColumn: 't.org_id',
-    subsidiaryScope: { column: 'p.subsidiary_id' },
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    defaultPeriodField: 'milestone_date',
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
     baseFilter: {
@@ -1215,9 +1251,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
       {
         key: 'milestone_date', label: 'Milestone date', kind: 'date',
-        expr: '(er.hired_on + make_interval(months => t.after_months))::date',
+        expr: 'milestone.milestone_date',
       },
-      { key: 'hired_on', label: 'Hired on', kind: 'date', expr: 'er.hired_on' },
+      { key: 'hired_on', label: 'Hired on', kind: 'date', expr: 'e.service_start' },
       { key: 'after_months', label: 'Service (months)', kind: 'number', expr: 't.after_months' },
       {
         key: 'after_years', label: 'Service (years)', kind: 'number',
@@ -1238,7 +1274,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 'er.terminated_on' },
       { key: 'tier_active', label: 'Tier active', kind: 'boolean', expr: 't.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'er.party_id' },
+      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'e.worker_party_id' },
       { key: 'plan_id', label: 'Plan (id)', kind: 'uuid', expr: 't.plan_id' },
       { key: 'component_id', label: 'Component (id)', kind: 'uuid', expr: 't.component_id' },
     ],

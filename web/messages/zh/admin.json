@@ -3087,6 +3087,46 @@
         "singularTitle": "项目成员",
         "description": "按有效期、权重和角色将雇佣关系绑定到项目。"
       },
+      "benefit-contribution-rules": {
+        "title": "缴款",
+        "singular": "缴款",
+        "description": "定义每项员工扣款、雇主缴款或应税非现金福利。税务处理和记账由薪资项目管理。"
+      },
+      "benefit-contribution-classes": {
+        "title": "资格类别",
+        "singular": "资格类别",
+        "description": "仅在资格条件或配比上限不同时对员工分类。"
+      },
+      "benefit-contribution-tiers": {
+        "title": "配比缴款上限",
+        "singular": "配比缴款上限",
+        "description": "按生效日期的工龄门槛定义最高额度。员工固定选择不会自动增加。"
+      },
+      "benefit-enrollment-configuration": {
+        "title": "员工选择",
+        "singular": "员工选择",
+        "description": "查看员工类别与配比资格，并在缴款中管理实际选择。"
+      },
+      "benefit-enrollment-terms": {
+        "title": "缴款选择",
+        "singular": "缴款选择",
+        "description": "将实际选择与政策上限分别保留。选择变更时添加新的生效条款。"
+      },
+      "payroll-service-credits": {
+        "title": "认可工龄",
+        "singular": "认可工龄",
+        "description": "记录认可工龄而不更改入职日期。同一生效基准用于休假和福利资格。"
+      },
+      "payroll-vacation-terms": {
+        "title": "休假条款",
+        "singular": "休假条款",
+        "description": "单一生效政策管理员工休假方式和个人最低条件。工龄政策可提高这些最低条件。"
+      },
+      "benefit-recovery-sources": {
+        "title": "保费追回",
+        "singular": "保费追回来源",
+        "description": "选择在无薪保障期间应由员工偿还的雇主保费。追回余额账户和时间安排仍由扣款规则决定。"
+      },
       "dunning-policies": {
         "title": "政策",
         "description": "在同一工作区管理应收催收与计费。"
@@ -3184,7 +3224,7 @@
       "isBillableDefault": "默认可计费",
       "showOnFieldTicket": "在现场工单上显示",
       "frequency": "频率",
-      "periodsPerYear": "年周期数",
+      "periodsPerYear": "年度收取期数",
       "anchorPeriodEnd": "锚定周期截止",
       "payDateOffsetDays": "发薪日偏移（天）",
       "value": "值",
@@ -3209,7 +3249,7 @@
       "postsGl": "过账至总账",
       "bookId": "账簿",
       "categoryId": "资产类别",
-      "convention": "惯例",
+      "convention": "工龄计算方式",
       "lifeMonths": "使用寿命（月）",
       "depreciationMethodId": "折旧方法",
       "departmentId": "部门",
@@ -3539,7 +3579,39 @@
       "default_on": "默认包含",
       "applies_to": "区域覆盖范围",
       "countries": "国家",
-      "timezone": "时区"
+      "timezone": "时区",
+      "ruleKey": "缴款代码",
+      "rateFormula": "费率方式",
+      "hoursBasis": "适用工时",
+      "payBasis": "适用工资",
+      "monthsPerYear": "年度保费月数",
+      "proration": "部分期间规则",
+      "matchRuleId": "配比对应项",
+      "requiresMatchEligibility": "要求配比资格",
+      "enforcePolicyCap": "执行政策上限",
+      "classKey": "资格类别",
+      "minimumServiceYears": "最低工龄年数",
+      "employerMaxPercent": "雇主上限 %",
+      "employeeMatchRatio": "员工与雇主比例",
+      "matchEligible": "符合雇主配比资格",
+      "enrollmentId": "员工登记",
+      "ruleId": "缴款",
+      "electionMode": "选择方式",
+      "electedRate": "选择费率",
+      "declaredPeriodsPerYear": "选择的年度收取期数",
+      "runApplicability": "工资计算范围",
+      "unpaidPeriodTreatment": "无薪期间处理",
+      "arrearsPlanId": "补收余额账户",
+      "arrearsRecoveryPeriods": "补收期数",
+      "asOfDate": "观察日期",
+      "creditedDays": "认可工龄天数",
+      "creditedMonths": "认可工龄月数",
+      "annualDays": "年度休假天数",
+      "percentFloor": "个人最低百分比",
+      "annualDaysFloor": "个人最低年度天数",
+      "waitingPeriodMonths": "等待期（日历月）",
+      "approvalMode": "审批政策",
+      "legalEmployer": "法定雇主"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
@@ -5025,7 +5097,8 @@
       "benefitCosts": "费用与分摊",
       "benefitComponents": "工资组成部分",
       "benefitDelivery": "发放",
-      "benefitRules": "规则"
+      "benefitRules": "规则",
+      "benefitAdvanced": "高级缴款规则"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"
@@ -5114,6 +5187,136 @@
       "addRow": "添加行",
       "removeRow": "删除行"
     },
+    "benefitBuilder": {
+      "offer": "计划",
+      "eligibility": "资格与日期",
+      "eligibilityHint": "设置覆盖日期、等待期及审批要求。创建后在记录中添加缴款和配比上限。",
+      "delivery": "连接薪资",
+      "deliveryHint": "关联员工扣款和雇主缴款。薪资负责税务处理，并在每次工资核算中处理已选择的金额。",
+      "review": "核对",
+      "coverageType": "保障类型",
+      "health": {
+        "title": "健康与保险计划",
+        "offer": "填写保障名称、保险机构和负责的雇主。员工通过参保选择保障。",
+        "costs": "保费与保障",
+        "costHint": "设置双方保费及不足整月的计价方式。创建后可添加个人或家庭保障档次。",
+        "provider": "保险机构",
+        "employeeCost": "员工保费",
+        "employerCost": "雇主保费",
+        "employeeCostBasis": "员工保费周期",
+        "employerCostBasis": "雇主保费周期",
+        "contribution": "保障保费",
+        "classes": "保障分组",
+        "rate": "保费金额或费率",
+        "contributionSingular": "保障保费"
+      },
+      "retirement": {
+        "title": "退休与储蓄计划",
+        "offer": "填写储蓄计划、养老金或投资机构以及负责的雇主。员工通过参保加入。",
+        "costs": "储蓄缴款",
+        "costHint": "分别选择员工和雇主的固定缴款或工资百分比。百分比为缴款比例，并非匹配缴款公式。",
+        "provider": "养老金或储蓄机构",
+        "employeeCost": "员工缴款",
+        "employerCost": "雇主缴款",
+        "employeeCostBasis": "员工缴款基准",
+        "employerCostBasis": "雇主缴款基准",
+        "contribution": "缴款",
+        "rate": "缴款金额或费率",
+        "contributionSingular": "缴款"
+      }
+    },
+    "benefitContributions": {
+      "componentHint": "福利中定义缴款；税务、供应商汇款和记账账户在薪资项目中配置。",
+      "formulaHint": "选择与计算基础匹配的费率方式。配比关联对方选择的缴款。",
+      "rateHint": "按所选单位输入。员工固定选择可替代计划费率。",
+      "annualizationHint": "声明年度保费的正常收取期数。留空使用员工工资计划。",
+      "capHint": "政策上限限制额度，不会改变固定选择。",
+      "ratioHint": "每单位雇主缴款所需员工缴款。2表示两倍。",
+      "classHint": "选择此计划定义的类别。",
+      "matchHint": "此登记是否符合计划配比资格。",
+      "electionHint": "固定选择不会随工龄上限提高而改变。遵循政策会使用生效费率和工龄上限。",
+      "electedRateHint": "按缴款单位输入实际选择的费率，与最高额度分开。",
+      "arrearsHint": "使用原生金额欠款余额、手动累计，并以此员工扣款作为支付项目。明确补收期数。",
+      "options": {
+        "kind": {
+          "employee_deduction": "员工扣款",
+          "employer_contribution": "雇主缴款",
+          "taxable_non_cash": "应税非现金福利"
+        },
+        "basis": {
+          "per_hour": "每适用工时",
+          "per_period": "每工资期",
+          "per_month": "月额按年折算",
+          "per_year": "年度金额",
+          "percent_of_eligible_pay": "适用工资百分比"
+        },
+        "formula": {
+          "elected_rate": "计划或选择费率",
+          "hourly_wage_percent": "时薪百分比",
+          "matching_election": "匹配对应选择"
+        },
+        "hours": {
+          "all_paid": "全部付薪工时",
+          "regular_paid": "正常付薪工时",
+          "scheduled_paid": "排定付薪工时"
+        },
+        "pay": {
+          "all_cash_earnings": "全部现金工资",
+          "regular_cash_earnings": "正常现金工资"
+        },
+        "proration": {
+          "none": "不按比例",
+          "calendar_days": "覆盖日历天数"
+        },
+        "election": {
+          "fixed": "固定选择",
+          "follows_policy": "遵循计划政策"
+        },
+        "run": {
+          "regular_only": "仅正常工资计算",
+          "all_pay_runs": "全部工资计算"
+        },
+        "unpaid": {
+          "charge": "当期收取",
+          "carry": "结转待补收"
+        }
+      },
+      "waitingMonthsHint": "选择日历月或天数，不能同时使用。日历月按入职日期周年计算。",
+      "activationHint": "先保存为未启用，配置缴款后再启用。",
+      "planRate": "计划费率：{rate}",
+      "noApproval": "无需审批",
+      "flowsApproval": "使用 Flows 审批政策",
+      "approvalHint": "无需审批会直接启用有效选择。Flows 在启用前应用组织配置的审批层级。",
+      "fields": {
+        "kind": "缴款类型",
+        "basis": "计算基础",
+        "rate": "计划费率",
+        "method": "休假方式",
+        "ruleId": "缴款",
+        "ruleKey": "缴款代码",
+        "payComponentId": "薪资项目",
+        "recoveryRuleId": "追回扣款",
+        "premiumRuleId": "雇主保费"
+      },
+      "recoverySourceHint": "将此保费关联到负责结转和追回无薪期间保障费用的员工扣款规则。每项保费只能关联一项追回扣款规则。"
+    },
+    "serviceCredit": {
+      "calendarMonths": "日历月",
+      "actual365": "实际天数 / 365",
+      "conventionHint": "日历月按周年计算，实际/365按经过的日历天数和认可工龄基准计算。",
+      "asOfHint": "认可工龄的观察日期，之后工龄从此基准增加。",
+      "reasonHint": "说明政策或调整理由。保留已提交工资证据，变更使用新的生效条款。",
+      "annualDaysHint": "年度时间权益与休假工资百分比分开，不将天数换算为金额。",
+      "employerTierHint": "选择法人雇主。雇主专属阶梯替代组织默认阶梯。"
+    },
+    "vacationTerms": {
+      "accrue": "累计休假工资",
+      "payEachPeriod": "每期支付休假工资",
+      "paidLeave": "按天数的带薪休假",
+      "percentHint": "保留较高个人最低百分比。留空遵循生效工龄政策，百分比不定义年度天数。",
+      "daysHint": "较高个人年度最低天数与工龄政策和现金休假百分比分别保留。",
+      "method": "休假方式"
+    },
     "collectionPolicy": "政策",
     "collectionPolicyFields": {
       "policy": "政策",
@@ -5131,7 +5334,8 @@
       "description": "设置催收条件并编排提醒顺序。",
       "reminderNumber": "提醒 {number}",
       "addReminder": "添加提醒"
-    }
+    },
+    "no": "否"
   },
   "flows": {
     "title": "流程",

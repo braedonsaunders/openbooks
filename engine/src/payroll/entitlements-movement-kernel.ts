@@ -66,10 +66,14 @@ export interface PlanMovementInput {
   serviceAccrualValue?: string | null;
   /**
    * Per-employee rate the caller already owns elsewhere — for the migrated
-   * Vacation plan this is employee_payroll_profiles.vacation_percent, which
-   * keeps its one home on the payroll profile rather than being copied here.
+   * Vacation plan this is the effective employee vacation election, which
+   * keeps its one home in the effective employee vacation terms.
    */
   employeeAccrualValue?: string | null;
+  /** Current unpaid coverage owed by the employee, sourced from a recurring Benefits election. */
+  unpaidCoverageValue?: string | null;
+  /** Repayment amount authorized by the effective recurring Benefits recovery policy. */
+  scheduledRepaymentValue?: string | null;
 }
 
 /**
@@ -94,15 +98,25 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
   const movements: EntitlementMovement[] = [];
   const warnings: EntitlementWarning[] = [];
 
-  // Rate precedence: a reached service rung is org POLICY and wins; below it
-  // the per-employee rate wins over the plan's base. Configure a ladder and
-  // you mean it — that is the whole point of a schedule.
-  const accrualValue = input.serviceAccrualValue
+  // Service policy governs ordinary banks. Vacation preserves a separately
+  // granted higher personal rate while still advancing lower rates by service.
+  const personalVacationRate = plan.systemKey === "vacation" && input.employeeAccrualValue != null
+    && (input.serviceAccrualValue == null || cmp(input.employeeAccrualValue, input.serviceAccrualValue) > 0);
+  const accrualValue = personalVacationRate ? input.employeeAccrualValue : input.serviceAccrualValue
     ?? input.employeeAccrualValue
     ?? plan.accrualValue;
-  const earned = accrualValue == null ? "0" : earnedAmount(plan, accrualValue, input);
+  const earned = input.scheduledRepaymentValue != null
+    ? roundMoney(input.scheduledRepaymentValue, 2)
+    : accrualValue == null ? "0" : earnedAmount(plan, accrualValue, input);
 
   if (plan.direction === "owe") {
+    if (input.unpaidCoverageValue != null && cmp(input.unpaidCoverageValue, '0') > 0) {
+      if (plan.unit !== 'money') throw new PayrollError('Carried benefit coverage requires a money-denominated owe plan; select the native benefit recovery bank.');
+      const debt = neg(roundMoney(input.unpaidCoverageValue, 2));
+      movements.push({ planId: plan.id, employeePartyId, movementDate, amount: debt, hours: null,
+        kind: 'bank_in', componentId: null, note: 'Employee benefit coverage carried during an unpaid period' });
+      return { movements, warnings, closingBalance: add(openingBalance, debt) };
+    }
     // The balance is negative; recoup toward zero and stop there.
     const outstanding = cmp(openingBalance, "0") < 0 ? neg(openingBalance) : "0";
     const repayment = cmp(earned, outstanding) > 0 ? outstanding : earned;

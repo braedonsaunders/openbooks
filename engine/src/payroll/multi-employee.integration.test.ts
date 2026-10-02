@@ -1,3 +1,9 @@
+import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { validateBenefitContributionConfiguration } from "../hrm/benefits/contributions.ts";
+import {
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
+  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -11,20 +17,163 @@ import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { upsertUnionFringe } from "./union.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { requestDocumentVoid } from '../ledger/document-void.ts';
+import { postDocument } from '../ledger/posting-document.ts';
 
-/**
- * Pay runs that pay MORE THAN ONE PERSON, and the money rules that only a
- * second employee, a second currency, or a second job can expose.
- *
- * Every payroll integration test in this repository paid exactly one employee,
- * which is precisely why a bug that deleted every employee's entitlement
- * ledger rows except the last one's was invisible: with a roster of one, "keep
- * only the last employee's movements" and "keep every employee's movements"
- * are the same sentence.
- */
+/** Native payroll preserves each employee's movements, currencies and job allocations independently. */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test('native recurring elections produce taxable non-cash, employer cost and employee deductions once, with immutable run linkage', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    const worker = await employee(fx, 'Recurring Benefit Employee');
+    const employmentId = (await db.execute<{ employment_id: string }>(sql`select employment_id from employee_payroll_profiles where org_id=${fx.orgId} and employee_party_id=${worker}`)).rows[0]!.employment_id;
+    await hours(fx,worker,'2026-07-14','50');
+    const clearing = await account(fx.orgId,'1460','Benefit provider clearing','asset_current_other');
+    const planId = randomUUID(), enrollmentId = randomUUID();
+    await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
+      values(${planId},${fx.orgId},'RECURRING','Recurring coverage','health','CAD',${fx.subsidiaryId},'2026-01-01')`);
+    await db.execute(sql`insert into hrm_benefit_enrollments(id,org_id,employment_id,plan_id,status,effective_from,currency)
+      values(${enrollmentId},${fx.orgId},${employmentId},${planId},'elected','2026-01-01','CAD')`);
+    const declarations = [
+      ['RRSP_EE','employee_deduction','per_hour','2','pension_f'],
+      ['RRSP_ER','taxable_non_cash','per_hour','1','none'],
+      ['RRSP_TOPUP','employee_deduction','per_period','5','pension_f'],
+      ['MDM_TAX','taxable_non_cash','per_month','56.3333333333','none'],
+      ['MDM_ER','employer_contribution','per_month','108.3333333333','none'],
+      ['MDM_EE','employee_deduction','per_month','43.3333333333','none'],
+      ['TRUST_EE','employee_deduction','per_period','2','none'],
+    ] as const;
+    const rules = new Map<string,string>();
+    for (const [code,role,basis,rate,treatment] of declarations) {
+      const componentId=randomUUID(),ruleId=randomUUID(),termId=randomUUID();
+      const nonCash=role==='taxable_non_cash';
+      await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,
+        tax_treatment,payment_kind,non_cash_account_id,expense_account_id,liability_account_id,basis_cap_hours_per_period)
+        values(${componentId},${fx.orgId},${code},${code},${role==='employee_deduction'?'deduction':nonCash?'earning':'employer_contribution'},'CA',
+        ${nonCash},${nonCash},false,${code==='MDM_TAX'},${treatment},${nonCash?'non_cash':'cash'},${nonCash?clearing:null},${fx.accounts.burdenExpense},${fx.accounts.otherPayable},${basis==='per_hour'?'40':null})`);
+      await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,hours_basis,
+        months_per_year,periods_per_year,proration,effective_from,run_applicability)
+        values(${ruleId},${fx.orgId},${planId},${code},${code},${role},${componentId},${basis},0,'elected_rate',${basis==='per_hour'?'all_paid':null},
+        ${basis==='per_month'?12:null},${basis==='per_month'?52:null},'none','2026-01-01',${code.startsWith('MDM')?'regular_only':'all_pay_runs'})`);
+      await db.execute(sql`insert into hrm_benefit_enrollment_terms(id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,source_decimal,provenance)
+        values(${termId},${fx.orgId},${enrollmentId},${ruleId},'fixed',${rate},'2026-01-01',${rate},'{"source":"approved payroll election"}'::jsonb)`);
+      rules.set(code,ruleId);
+    }
+    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
+      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
+      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
+      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    const run=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,periodStart:'2026-07-12',periodEnd:'2026-07-18'});
+    const calculate=()=>calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId});
+    assert.deepEqual((await calculate()).errors,[]);
+    const read=async()=> (await db.execute<{code:string;amount:string;payment_kind:string;kind:string}>(sql`select c.code,l.amount::text,l.payment_kind,l.kind
+      from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId}`)).rows;
+    const rows=await read(), amounts=new Map(rows.map(l=>[l.code,l.amount]));
+    assert.deepEqual(declarations.map(([code])=>[code,amounts.get(code)]),[
+      ['RRSP_EE','80.0000'],['RRSP_ER','40.0000'],['RRSP_TOPUP','5.0000'],['MDM_TAX','13.0000'],['MDM_ER','25.0000'],['MDM_EE','10.0000'],['TRUST_EE','2.0000']]);
+    assert.ok(rows.filter(l=>['RRSP_ER','MDM_TAX'].includes(l.code)).every(l=>l.kind==='earning'&&l.payment_kind==='non_cash'));
+    const stub=(await db.execute<{gross:string;net_pay:string;pensionable:string;insurable:string;vacation_accrued:string}>(sql`select gross::text,net_pay::text,vacation_accrued::text,pensionable_earnings::text as pensionable,insurable_earnings::text as insurable from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
+    assert.equal(stub.gross,'1553.0000'); assert.equal(stub.pensionable,'1553.0000'); assert.equal(stub.insurable,'1500.0000');
+    assert.equal(stub.vacation_accrued,'60.5200','vacation includes the declared vacationable premium exactly once');
+    const cyclicRule=(await db.execute<Record<string,unknown>>(sql`select * from hrm_benefit_contribution_rules where org_id=${fx.orgId} and id=${rules.get('MDM_TAX')}`)).rows[0]!;
+    await assert.rejects(()=>validateBenefitContributionConfiguration(db,fx.orgId,'benefit-contribution-rules',{
+      ...Object.fromEntries(Object.entries(cyclicRule).map(([key,value])=>[key.replace(/_([a-z])/g,(_,letter:string)=>letter.toUpperCase()),value])),
+      basis:'percent_of_eligible_pay',payBasis:'all_cash_earnings',
+    }),/circular vacation-pay basis.*regular cash earnings/);
+
+    assert.equal(sum([stub.net_pay,...rows.filter(l=>l.kind==='deduction').map(l=>l.amount)]),'1500.0000','non-cash taxable value is never additional cash pay');
+    const allocations=async()=> (await db.execute<{status:string;amount:string;pay_stub_line_id:string|null}>(sql`select status,amount::text,pay_stub_line_id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+    assert.equal((await allocations()).length,7); assert.ok((await allocations()).every(a=>a.pay_stub_line_id!==null));
+    assert.deepEqual((await calculate()).errors,[]); assert.equal((await allocations()).length,7,'recalculation replaces, rather than duplicates, period allocations');
+    await db.execute(sql`update hrm_benefit_contribution_rules set rate=3 where org_id=${fx.orgId} and id=${rules.get('RRSP_EE')}`);
+    await assert.rejects(commitPayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId}),/Benefit contribution.*changed after calculation.*recalculate/);
+    assert.deepEqual((await calculate()).errors,[]);
+    await commitPayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId});
+    assert.ok((await allocations()).every(a=>a.status==='committed'));
+    await assert.rejects(db.execute(sql`update hrm_benefit_contribution_rules set rate=4 where org_id=${fx.orgId} and id=${rules.get('RRSP_EE')}`),(error: unknown) => {
+      const cause=(error as {cause?:{code?:string;message?:string}}).cause;
+      assert.equal(cause?.code,'23514'); assert.match(cause?.message ?? '',/committed payroll evidence/); return true;
+    });
+    await db.execute(sql`update documents set status='approved' where org_id=${fx.orgId} and id=${run.documentId}`);
+    const journalId=await postDocument(run.documentId,{control:fx.controlAccounts});
+    const posted=(await db.execute<{total:string}>(sql`select sum(amount)::text as total from journal_lines where org_id=${fx.orgId} and entry_id=${journalId}`)).rows[0]!;
+    assert.equal(posted.total,'0.0000','native payroll posting balances with non-cash and contribution offsets');
+    const simulated=await calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId,simulate:true});
+    assert.deepEqual(simulated.errors,[]); assert.ok((await allocations()).every(a=>a.status==='committed'&&a.pay_stub_line_id!==null));
+    await requestDocumentVoid({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId,reason:'Reverse the payroll test period',reversalDate:'2026-07-31'});
+    assert.ok((await allocations()).every(a=>a.status==='voided'));
+    assert.equal((await db.execute<{balance:string}>(sql`select sum(l.amount)::text as balance from entitlement_ledger l join entitlement_plans p on p.org_id=l.org_id and p.id=l.plan_id
+      where l.org_id=${fx.orgId} and l.employee_party_id=${worker} and p.system_key='vacation'`)).rows[0]!.balance,'0.0000','controlled reversal restores the complete vacation bank');
+
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('unpaid employer coverage enters the native owe bank and recovers two actual periods when the employee contribution is zero', {skip:!DB}, async()=>{
+  const fx=await payrollOrg();
+  try {
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    const worker=await employee(fx,'Employer-paid coverage employee');
+    const employmentId=(await db.execute<{employment_id:string}>(sql`select employment_id from employee_payroll_profiles where org_id=${fx.orgId} and employee_party_id=${worker}`)).rows[0]!.employment_id;
+    const clearing=await account(fx.orgId,'1460','Insurance provider clearing','asset_current_other');
+    const plan=randomUUID(),enrollment=randomUUID(),bank=randomUUID(),deduction=randomUUID(),recovery=randomUUID();
+    await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,liability_account_id)
+      values(${deduction},${fx.orgId},'INS_RECOVERY','Insurance recovery','deduction','CA',false,false,false,false,${fx.accounts.otherPayable})`);
+    await db.execute(sql`insert into entitlement_plans(id,org_id,code,name,unit,direction,accrual_method,payout_component_id,created_by,updated_by)
+      values(${bank},${fx.orgId},'INS_OWED','Unpaid insurance coverage','money','owe','manual',${deduction},${fx.actorId},${fx.actorId})`);
+    await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
+      values(${plan},${fx.orgId},'INSURANCE','Insurance','health','CAD',${fx.subsidiaryId},'2026-01-01')`);
+    await db.execute(sql`insert into hrm_benefit_enrollments(id,org_id,employment_id,plan_id,status,effective_from,currency)
+      values(${enrollment},${fx.orgId},${employmentId},${plan},'elected','2026-01-01','CAD')`);
+    const declarations=[['RECOVERY','employee_deduction','0'],['TAX_PREMIUM','taxable_non_cash','13'],['EMPLOYER_PREMIUM','employer_contribution','25']] as const;
+    for (const [code,kind,rate] of declarations) {
+      const component=kind==='employee_deduction'?deduction:randomUUID(),rule=kind==='employee_deduction'?recovery:randomUUID();
+      if (kind!=='employee_deduction') await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,payment_kind,non_cash_account_id,expense_account_id,liability_account_id)
+        values(${component},${fx.orgId},${code},${code},${kind==='taxable_non_cash'?'earning':'employer_contribution'},'CA',${kind==='taxable_non_cash'},false,false,false,${kind==='taxable_non_cash'?'non_cash':'cash'},${kind==='taxable_non_cash'?clearing:null},${fx.accounts.burdenExpense},${fx.accounts.otherPayable})`);
+      await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,proration,effective_from,run_applicability,unpaid_period_treatment,arrears_plan_id,arrears_recovery_periods)
+        values(${rule},${fx.orgId},${plan},${code},${code},${kind},${component},'per_period',0,'elected_rate','none','2026-01-01','regular_only','carry',${kind==='employee_deduction'?bank:null},${kind==='employee_deduction'?2:null})`);
+      await db.execute(sql`insert into hrm_benefit_enrollment_terms(org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from)
+        values(${fx.orgId},${enrollment},${rule},'fixed',${rate},'2026-01-01')`);
+      if (kind!=='employee_deduction') await db.execute(sql`insert into hrm_benefit_recovery_sources(org_id,plan_id,rule_id,premium_rule_id) values(${fx.orgId},${plan},${recovery},${rule})`);
+    }
+    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),
+      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active',updated_by=${fx.actorId} where org_id=${fx.orgId} and id=${enrollment}`);
+    const calculate=async(start:string,end:string)=>{
+      const run=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,periodStart:start,periodEnd:end,employeePartyIds:[worker]});
+      assert.deepEqual((await calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId})).errors,[]);
+      await commitPayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId}); return run.documentId;
+    };
+    for (const [start,end] of [['2026-07-05','2026-07-11'],['2026-07-12','2026-07-18'],['2026-07-19','2026-07-25']]) await calculate(start!,end!);
+    const balance=async()=> (await db.execute<{amount:string}>(sql`select sum(amount)::text as amount from entitlement_ledger where org_id=${fx.orgId} and plan_id=${bank} and employee_party_id=${worker}`)).rows[0]!.amount;
+    assert.equal(await balance(),'-114.0000','employer-paid premiums are carried despite the zero employee election');
+    const successorRule=randomUUID(),successorEnrollment=randomUUID();
+    await db.execute(sql`update hrm_benefit_contribution_rules set effective_to='2026-07-25' where org_id=${fx.orgId} and id=${recovery}`);
+    await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,proration,effective_from,run_applicability,unpaid_period_treatment,arrears_plan_id,arrears_recovery_periods)
+      select ${successorRule},org_id,plan_id,'RECOVERY_FUTURE',name,kind,pay_component_id,basis,rate,rate_formula,proration,'2026-07-26',run_applicability,unpaid_period_treatment,arrears_plan_id,arrears_recovery_periods
+      from hrm_benefit_contribution_rules where org_id=${fx.orgId} and id=${recovery}`);
+    await db.execute(sql`insert into hrm_benefit_recovery_sources(org_id,plan_id,rule_id,premium_rule_id)
+      select org_id,plan_id,${successorRule},premium_rule_id from hrm_benefit_recovery_sources where org_id=${fx.orgId} and rule_id=${recovery}`);
+    await db.execute(sql`update hrm_benefit_enrollments set status='ended',effective_to='2026-07-25',ended_reason='Future coverage election' where org_id=${fx.orgId} and id=${enrollment}`);
+    await db.execute(sql`insert into hrm_benefit_enrollments(id,org_id,employment_id,plan_id,status,effective_from,currency)
+      values(${successorEnrollment},${fx.orgId},${employmentId},${plan},'elected','2026-07-26','CAD')`);
+    await db.execute(sql`insert into hrm_benefit_enrollment_terms(org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from)
+      select org_id,${successorEnrollment},case when rule_id=${recovery} then ${successorRule}::uuid else rule_id end,election_mode,elected_rate,'2026-07-26'
+      from hrm_benefit_enrollment_terms where org_id=${fx.orgId} and enrollment_id=${enrollment}`);
+    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),
+      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active',updated_by=${fx.actorId} where org_id=${fx.orgId} and id=${successorEnrollment}`);
+    assert.equal(await balance(),'-114.0000','an effective-dated successor inherits the native bank without changing prior debt');
+    await hours(fx,worker,'2026-07-28','40');
+    const returned=await calculate('2026-07-26','2026-08-01');
+    const amounts=(await db.execute<{code:string;amount:string}>(sql`select c.code,l.amount::text from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id join pay_components c on c.org_id=l.org_id and c.id=l.component_id where s.org_id=${fx.orgId} and s.pay_run_document_id=${returned} and c.id in (${deduction})`)).rows;
+    assert.deepEqual(amounts,[{code:'INS_RECOVERY',amount:'76.0000'}],'recover two prior insured periods without adding current employer premiums to the deduction');
+    assert.equal(await balance(),'-38.0000');
+    const receipt=(await db.execute<{stub_line_id:string|null}>(sql`select stub_line_id from entitlement_ledger where org_id=${fx.orgId} and plan_id=${bank} and pay_run_document_id=${returned} and kind='repayment'`)).rows[0]!;
+    assert.ok(receipt.stub_line_id,'native repayment links to the real payroll deduction');
+  } finally {await dropScratchOrgReporting(fx.orgId);}
+});
 
 interface Fixture {
   orgId: string;
@@ -32,18 +181,13 @@ interface Fixture {
   actorId: string;
   scheduleId: string;
   accounts: Record<string, string>;
+  controlAccounts: {ar:string;ap:string;bank:string};
 }
 
 const account = async (
   orgId: string, number: string, name: string, type: string,
 ): Promise<string> => {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                          reconcilable, required_dimensions, custom, subsidiary_include_children)
-    values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-            '[]'::jsonb, '{}'::jsonb, true)`);
-  return id;
+  return seedPostingAccount(orgId, number, name, type);
 };
 
 /** A CA org with payroll accounts wired and one biweekly schedule. */
@@ -58,9 +202,7 @@ async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string 
     vacationPayable: await account(org.orgId, "2320", "Vacation payable", "liability_current"),
     otherPayable: await account(org.orgId, "2330", "Other payable", "liability_current"),
   };
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: accounts.wageExpense,
         burdenExpenseAccountId: accounts.burdenExpense,
         netPayAccountId: accounts.netPayable,
@@ -69,19 +211,17 @@ async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string 
         taxPayableAccountId: accounts.craPayable,
         vacationPayableAccountId: accounts.vacationPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+      });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   await seedOntarioEhtFixture(org.orgId, actorId, opts.eht?.annualExemption);
 
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
   return {
-    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts,
+    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts, controlAccounts:org.accounts,
   };
 }
 
@@ -99,41 +239,29 @@ interface EmployeeOptions {
 
 async function employee(fx: Fixture, name: string, opts: EmployeeOptions = {}): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${fx.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (id, org_id, party_id, worker_comp_group_id, terminated_on)
-    values (${randomUUID()}, ${fx.orgId}, ${id}, ${opts.workerCompGroupId ?? null},
-            ${opts.terminatedOn ?? null})`);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                  effective_from, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${opts.currency ?? "CAD"}, ${opts.rate ?? "30"},
-            ${opts.basis ?? "hour"}, ${opts.annualHours ?? "2080"}, '2026-01-01', true,
-            ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollPerson(fx.orgId, id, name);
+  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), workerCompGroupId: opts.workerCompGroupId ?? null, terminatedOn: opts.terminatedOn ?? null });
+  await seedPayrollWage(fx.orgId, id, fx.actorId, {
+    currency: opts.currency ?? "CAD", rate: opts.rate ?? "30", basis: opts.basis ?? "hour",
+    annualHours: opts.annualHours ?? "2080", effectiveFrom: '2026-01-01',
+  });
   // Hires carry an HRM employment or stub calculation refuses them.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                           country, province, pay_basis, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${employmentId}, ${opts.scheduleId ?? fx.scheduleId}, 'CA', 'ON',
-            ${opts.payBasis ?? "hourly"}, 1, 1,
-            ${opts.vacationPercent === undefined ? "4" : opts.vacationPercent}, 'accrue', true,
-            ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollProfile(fx.orgId, id, employmentId, opts.scheduleId ?? fx.scheduleId, fx.actorId, {
+    country: 'CA', province: 'ON', payBasis: opts.payBasis ?? "hourly", federalClaimCode: 1,
+    provincialClaimCode: 1,
+  }, { percentFloor: opts.vacationPercent === undefined ? "4" : opts.vacationPercent, method: 'accrue' });
+
   return id;
 }
 
 async function hours(
   fx: Fixture, employeeId: string, workedOn: string, qty: string, projectId?: string,
 ): Promise<void> {
-  await db.execute(sql`
-    insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
-                              is_billable, billing_status, costing_basis, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${workedOn}, ${qty}, ${projectId ?? null}, 'approved',
-            false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollTime(fx.orgId, employeeId, fx.actorId, {
+    workedOn: workedOn, hours: qty, projectId: projectId ?? null, status: 'approved', isBillable: false,
+    billingStatus: 'unbilled', costingBasis: 'actual',
+  });
 }
 
 const ledgerRows = async (orgId: string) => ((await db.execute<{ employee_party_id: string; kind: string; amount: string; pay_run_document_id: string | null }>(sql`
@@ -390,11 +518,10 @@ test(
       const ehtPayable = await account(fx.orgId, "2340", "EHT payable", "liability_current");
       await setPackSlotAccount(fx.orgId, fx.actorId, "CA", "eht", ehtPayable);
       const secondSchedule = randomUUID();
-      await db.execute(sql`
-        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${secondSchedule}, ${fx.orgId}, 'Biweekly two', 'biweekly', 26, '2026-07-18', 3,
-                true, ${fx.actorId}, ${fx.actorId})`);
+      await seedPayrollSchedule(fx.orgId, secondSchedule, fx.actorId, {
+        name: 'Biweekly two', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        payDateOffsetDays: 3,
+      });
       const first = await employee(fx, "Ada First");
       const second = await employee(fx, "Bo Second", { scheduleId: secondSchedule });
       for (const id of [first, second]) {

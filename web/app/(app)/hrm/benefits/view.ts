@@ -14,7 +14,6 @@ import {
   text,
   widget,
   widgetBlock,
-  widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
@@ -123,27 +122,17 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
                   rowKey: item('id'),
                   columns: [
                     column(f('enrollmentColumns.employee'), link(item('employeeLabel'), item('employeeHref'))),
-                    column(f('enrollmentColumns.plan'), text(item('planCode'))),
+                    column(f('enrollmentColumns.plan'), link(item('planCode'), item('configurationHref'))),
                     column(f('enrollmentColumns.coverage'), text(item('coverageLabel'))),
-                    column(f('enrollmentColumns.employeeAmount'), text(item('employeeAmountPerPeriod')), {
+                    column(f('enrollmentColumns.employeeAmount'), text(item('employeeContributionLabel')), {
                       align: 'right',
                       className: 'tabular-nums',
                     }),
-                    column(f('enrollmentColumns.employerAmount'), text(item('employerAmountPerPeriod')), {
+                    column(f('enrollmentColumns.employerAmount'), text(item('employerContributionLabel')), {
                       align: 'right',
                       className: 'tabular-nums',
                     }),
                     column(f('enrollmentColumns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-                    column(
-                      '',
-                      widgetCell('hrm-enrollment-actions', {
-                        enrollmentId: item('id'),
-                        enrollmentStatus: item('status'),
-                        approveLabel: f('approveLabel'),
-                        failedLabel: f('actionFailed'),
-                        canManage: f('canManage'),
-                      }),
-                    ),
                   ],
                   empty: { title: f('emptyTitle'), description: f('emptyDescription') },
                 }),
@@ -184,6 +173,7 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
               projectOptions: f('scopeProjects'),
               payComponentOptions: f('payComponentOptions'),
               accountOptions: f('accountOptions'),
+              currencyOptions: f('currencyOptions'),
               employmentsTruncated: f('employmentsTruncated'),
             },
             f('programBuilderOpen'),
@@ -200,6 +190,7 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
               projectOptions: f('scopeProjects'),
               payComponentOptions: f('payComponentOptions'),
               accountOptions: f('accountOptions'),
+              currencyOptions: f('currencyOptions'),
               employmentsTruncated: f('employmentsTruncated'),
             },
             f('programEditOpen'),

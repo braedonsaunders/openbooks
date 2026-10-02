@@ -1,3 +1,10 @@
+import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedPayrollLine, seedPayrollParty, seedPayrollVendorRole } from '../testing/fixtures.ts';
+import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollPerson, seedPostingAccount, seedPayrollProfile, seedPayrollWage, createScratchOrg,
+  dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -21,7 +28,6 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -73,21 +79,15 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
          '{payroll,craRemittancePartyId}', to_jsonb(${org.vendorId}::text))
      where id = ${org.orgId} returning id`);
   assert.equal(destination.rows.length, 1, "remittance fixture must assign its CRA destination before billing");
-  await db.execute(sql`
-    insert into pay_components
-      (id, org_id, code, name, kind, system_key, liability_account_id,
-       remittance_party_id, sequence, country, created_by, updated_by)
-    values
-      (${componentId}, ${org.orgId}, ${`TESTTAX-${componentId.slice(0, 6)}`},
-       'Test withholding', 'deduction', 'income_tax', ${liabilityAccountId},
-       ${org.vendorId}, 10, 'CA', ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into pay_schedules
-      (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-       pay_date_offset_days, is_active, created_by, updated_by)
-    values
-      (${scheduleId}, ${org.orgId}, 'Remittance race schedule', 'monthly', 12,
-       '2026-01-31', 0, true, ${actorId}, ${actorId})`);
+  await seedPayrollComponent(org.orgId, componentId, {
+    code: `TESTTAX-${componentId.slice(0, 6)}`, name: 'Test withholding', kind: 'deduction',
+    systemKey: 'income_tax', liabilityAccountId: liabilityAccountId, remittancePartyId: org.vendorId, sequence: 10,
+    country: 'CA', createdBy: actorId, updatedBy: actorId,
+  });
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Remittance race schedule', frequency: 'monthly', periodsPerYear: 12, anchorPeriodEnd: '2026-01-31',
+    payDateOffsetDays: 0,
+  });
   return { org, actorId, componentId, liabilityAccountId, scheduleId, filingAccountId };
 }
 
@@ -114,20 +114,14 @@ async function addCommittedRemittanceAccrual(
   const documentId = randomUUID();
   const stubId = randomUUID();
   const lineId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, subsidiary_id,
-                         is_active, custom, created_by, updated_by)
-    values (${employeeId}, ${org.orgId}, 'person', ${`Accrual ${employeeId.slice(0, 6)}`},
-            ${org.subsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into documents
-      (id, org_id, kind, document_number, subsidiary_id, document_date,
-       posting_date, posting_period_id, currency, status, memo, created_by,
-       updated_by)
-    values
-      (${documentId}, ${org.orgId}, 'pay_run', ${`REM-${documentId.slice(0, 8)}`},
-       ${runSubsidiaryId}, ${input.payDate}, ${input.payDate}, ${org.periodId},
-       'CAD', 'draft', 'Remittance race source', ${actorId}, ${actorId})`);
+  await seedPayrollPerson(org.orgId, employeeId, `Accrual ${employeeId.slice(0, 6)}`, {
+    subsidiaryId: org.subsidiaryId, createdBy: actorId, updatedBy: actorId,
+  });
+  await seedPayrollDocument(org.orgId, documentId, {
+    kind: 'pay_run', documentNumber: `REM-${documentId.slice(0, 8)}`, subsidiaryId: runSubsidiaryId,
+    documentDate: input.payDate, postingDate: input.payDate, postingPeriodId: org.periodId, currency: 'CAD',
+    status: 'draft', memo: 'Remittance race source', createdBy: actorId, updatedBy: actorId,
+  });
   await db.execute(sql`
     insert into pay_runs
       (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
@@ -138,26 +132,17 @@ async function addCommittedRemittanceAccrual(
   // pay_stubs.employment_id is NOT NULL: the stub carries the employee's own
   // HRM employment.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-  await db.execute(sql`
-    insert into pay_stubs
-      (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
-       periods_per_year, pay_date, tax_year, currency_code, gross,
-       pensionable_earnings, insurable_earnings, net_pay, employer_cost,
-       vacation_accrued, factors, filing_account_id, filing_account_source, created_by, updated_by)
-    values
-      (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 12,
-       ${input.payDate}, 2026, 'CAD', ${input.amount}, ${input.amount},
-       ${input.amount}, ${input.amount}, ${input.amount}, '0', '{}'::jsonb,
-       ${filingAccountId}, 'calculation',
-       ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into pay_stub_lines
-      (id, org_id, stub_id, component_id, kind, description, amount, sequence,
-       liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
-    values
-      (${lineId}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction',
-       'Test withholding', ${input.amount}, 10, ${liabilityAccountId}, 'commit',
-       ${input.snapshotPartyId ?? org.vendorId}, ${actorId}, ${actorId})`);
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+    id: stubId, province: 'ON', periodsPerYear: 12, payDate: input.payDate, taxYear: 2026, currency: 'CAD',
+    gross: input.amount, pensionableEarnings: input.amount, insurableEarnings: input.amount, netPay: input.amount,
+    employerCost: input.amount, vacationAccrued: '0', factors: {}, filingAccountId: filingAccountId,
+    filingAccountSource: 'calculation', createdBy: actorId, updatedBy: actorId,
+  });
+  await seedPayrollLine(org.orgId, stubId, componentId, {
+    id: lineId, kind: 'deduction', description: 'Test withholding', amount: input.amount, sequence: 10,
+    liabilityAccountId: liabilityAccountId, liabilityAccountSource: 'commit',
+    remittancePartyId: input.snapshotPartyId ?? org.vendorId, createdBy: actorId, updatedBy: actorId,
+  });
   return { runDocumentId: documentId };
 }
 
@@ -559,15 +544,7 @@ test(
           'CRA remittance account', 'regular', true)
         returning id`);
       assert.equal(filingAccount.rows.length, 1, "CRA remittance must have a filing account before payroll calculation");
-      const account = async (number: string, name: string, type: string) => {
-        const id = randomUUID();
-        await db.execute(sql`
-          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                                reconcilable, required_dimensions, custom, subsidiary_include_children)
-          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-                  '[]'::jsonb, '{}'::jsonb, true)`);
-        return id;
-      };
+      const account = seedPostingAccount.bind(null, org.orgId);
       const wageExpense = await account("6000", "Wages expense", "expense");
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const craPayable = await account("2310", "CRA payable", "liability_current");
@@ -578,43 +555,33 @@ test(
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
         returning party_id`);
       assert.equal(vendorRole.rows.length, 1, "end-to-end CRA fixture must establish its payee role");
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
+      await seedPayrollAccountingConfiguration(org.orgId, {
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
             netPayAccountId: netPayable, cppPayableAccountId: craPayable,
             eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
             vacationPayableAccountId: vacationPayable, wagesTo: "expense",
             craRemittancePartyId: org.vendorId,
-          },
-        })}::jsonb where id = ${org.orgId}`);
+          });
       await seedPayrollComponents(org.orgId, actorId);
 
       const employeeId = randomUUID();
-      await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, is_active, custom)
-        values (${employeeId}, ${org.orgId}, 'person', 'Remi Trent', true, '{}'::jsonb)`);
+      await seedPayrollPerson(org.orgId, employeeId, 'Remi Trent');
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
       const remiEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await db.execute(sql`
-        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                      effective_from, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, 'CAD', '104000', 'year', '2080', '2026-01-01', true,
-                ${actorId}, ${actorId})`);
+      await seedPayrollWage(org.orgId, employeeId, actorId, {
+        currency: 'CAD', rate: '104000', basis: 'year', annualHours: '2080', effectiveFrom: '2026-01-01',
+      });
       const scheduleId = randomUUID();
-      await db.execute(sql`
-        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-                ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                               country, province, pay_basis, federal_claim_code,
-                                               provincial_claim_code, vacation_percent, vacation_method,
-                                               filing_account_id, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${remiEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
-                '4', 'accrue', ${filingAccountId}, true, ${actorId}, ${actorId})`);
+      await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        payDateOffsetDays: 3,
+      });
+      await seedPayrollProfile(org.orgId, employeeId, remiEmploymentId, scheduleId, actorId, {
+        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
+        filingAccountId: filingAccountId,
+      }, { percentFloor: '4', method: 'accrue' });
+
 
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -795,22 +762,15 @@ test(
            ${org.subsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId}),
           (${childEmployeeId}, ${org.orgId}, 'person', 'Child Employee',
            ${childSubsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into pay_schedules
-          (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-           pay_date_offset_days, is_active, created_by, updated_by)
-        values
-          (${scheduleId}, ${org.orgId}, 'Mixed Co Schedule', 'monthly', 12,
-           '2026-07-31', 0, true, ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, subsidiary_id, document_date,
-           posting_date, posting_period_id, currency, status, memo, created_by,
-           updated_by)
-        values
-          (${documentId}, ${org.orgId}, 'pay_run', 'PAY-MIXED-001',
-           ${org.subsidiaryId}, '2026-07-15', '2026-07-15', ${org.periodId},
-           'CAD', 'draft', 'Mixed subsidiary payment fixture', ${actorId}, ${actorId})`);
+      await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+        name: 'Mixed Co Schedule', frequency: 'monthly', periodsPerYear: 12, anchorPeriodEnd: '2026-07-31',
+        payDateOffsetDays: 0,
+      });
+      await seedPayrollDocument(org.orgId, documentId, {
+        kind: 'pay_run', documentNumber: 'PAY-MIXED-001', subsidiaryId: org.subsidiaryId, documentDate: '2026-07-15',
+        postingDate: '2026-07-15', postingPeriodId: org.periodId, currency: 'CAD', status: 'draft',
+        memo: 'Mixed subsidiary payment fixture', createdBy: actorId, updatedBy: actorId,
+      });
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -1429,15 +1389,11 @@ test(
       // The component's vendor changes in August: July's accrual must keep
       // payee A, while runs committed after the change remit to B.
       const vendorB = randomUUID();
-      await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, subsidiary_id,
-                             is_active, custom, created_by, updated_by)
-        values (${vendorB}, ${fixture.org.orgId}, 'company', 'Local B',
-                ${fixture.org.subsidiaryId}, true, '{}'::jsonb,
-                ${fixture.actorId}, ${fixture.actorId})`);
-      await db.execute(sql`
-        insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
-        values (${fixture.org.orgId}, ${vendorB}, true, ${fixture.actorId}, ${fixture.actorId})`);
+      await seedPayrollParty(fixture.org.orgId, vendorB, {
+        kind: 'company', displayName: 'Local B', subsidiaryId: fixture.org.subsidiaryId, isActive: true, custom: {},
+        createdBy: fixture.actorId, updatedBy: fixture.actorId,
+      });
+      await seedPayrollVendorRole(fixture.org.orgId, vendorB, fixture.actorId);
       await db.execute(sql`
         update pay_components set remittance_party_id = ${vendorB}
          where org_id = ${fixture.org.orgId} and id = ${fixture.componentId}`);
@@ -1502,15 +1458,11 @@ test(
       });
 
       const vendorB = randomUUID();
-      await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, subsidiary_id,
-                             is_active, custom, created_by, updated_by)
-        values (${vendorB}, ${fixture.org.orgId}, 'company', 'Local B',
-                ${fixture.org.subsidiaryId}, true, '{}'::jsonb,
-                ${fixture.actorId}, ${fixture.actorId})`);
-      await db.execute(sql`
-        insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
-        values (${fixture.org.orgId}, ${vendorB}, true, ${fixture.actorId}, ${fixture.actorId})`);
+      await seedPayrollParty(fixture.org.orgId, vendorB, {
+        kind: 'company', displayName: 'Local B', subsidiaryId: fixture.org.subsidiaryId, isActive: true, custom: {},
+        createdBy: fixture.actorId, updatedBy: fixture.actorId,
+      });
+      await seedPayrollVendorRole(fixture.org.orgId, vendorB, fixture.actorId);
       await db.execute(sql`
         update pay_components set remittance_party_id = ${vendorB}
          where org_id = ${fixture.org.orgId} and id = ${fixture.componentId}`);
@@ -1540,15 +1492,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const account = async (number: string, name: string, type: string) => {
-        const id = randomUUID();
-        await db.execute(sql`
-          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                                reconcilable, required_dimensions, custom, subsidiary_include_children)
-          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-                  '[]'::jsonb, '{}'::jsonb, true)`);
-        return id;
-      };
+      const account = seedPostingAccount.bind(null, org.orgId);
       const wageExpense = await account("6000", "Wages expense", "expense");
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const craPayable = await account("2310", "CRA payable", "liability_current");
@@ -1558,15 +1502,12 @@ test(
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
         returning party_id`);
       assert.equal(vendorRole.rows.length, 1, "snapshot-payee fixture must establish its vendor role");
-      await db.execute(sql`
-        update orgs set settings = settings || ${JSON.stringify({
-          payroll: {
+      await seedPayrollAccountingConfiguration(org.orgId, {
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
             netPayAccountId: netPayable, cppPayableAccountId: craPayable,
             eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
             vacationPayableAccountId: vacationPayable, wagesTo: "expense",
-          },
-        })}::jsonb where id = ${org.orgId}`);
+          });
       await seedPayrollComponents(org.orgId, actorId);
       // The vendor assigned BEFORE commit is the one history must keep.
       await db.execute(sql`
@@ -1575,30 +1516,22 @@ test(
            and kind in ('deduction', 'employer_contribution')`);
 
       const employeeId = randomUUID();
-      await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, is_active, custom)
-        values (${employeeId}, ${org.orgId}, 'person', 'Dues Dora', true, '{}'::jsonb)`);
+      await seedPayrollPerson(org.orgId, employeeId, 'Dues Dora');
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
       const duesEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await db.execute(sql`
-        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                      effective_from, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, 'CAD', '104000', 'year', '2080', '2026-01-01', true,
-                ${actorId}, ${actorId})`);
+      await seedPayrollWage(org.orgId, employeeId, actorId, {
+        currency: 'CAD', rate: '104000', basis: 'year', annualHours: '2080', effectiveFrom: '2026-01-01',
+      });
       const scheduleId = randomUUID();
-      await db.execute(sql`
-        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-                ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                               country, province, pay_basis, federal_claim_code,
-                                               provincial_claim_code, vacation_percent, vacation_method,
-                                               is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${duesEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
-                '4', 'accrue', true, ${actorId}, ${actorId})`);
+      await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        payDateOffsetDays: 3,
+      });
+      await seedPayrollProfile(org.orgId, employeeId, duesEmploymentId, scheduleId, actorId, {
+        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
+      }, { percentFloor: '4', method: 'accrue' });
+
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
@@ -1650,15 +1583,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const account = async (number: string, name: string, type: string) => {
-        const id = randomUUID();
-        await db.execute(sql`
-          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                                reconcilable, required_dimensions, custom, subsidiary_include_children)
-          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-                  '[]'::jsonb, '{}'::jsonb, true)`);
-        return id;
-      };
+      const account = seedPostingAccount.bind(null, org.orgId);
       const wageExpense = await account("6000", "Wages expense", "expense");
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const liabilityA = await account("2310", "CRA payable (old)", "liability_current");
@@ -1706,30 +1631,23 @@ test(
       await stampSetup(liabilityA);
 
       const employeeId = randomUUID();
-      await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, is_active, custom)
-        values (${employeeId}, ${org.orgId}, 'person', 'Liability Larry', true, '{}'::jsonb)`);
+      await seedPayrollPerson(org.orgId, employeeId, 'Liability Larry');
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
       const liabilityEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await db.execute(sql`
-        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                      effective_from, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, 'CAD', '104000', 'year', '2080', '2026-01-01', true,
-                ${actorId}, ${actorId})`);
+      await seedPayrollWage(org.orgId, employeeId, actorId, {
+        currency: 'CAD', rate: '104000', basis: 'year', annualHours: '2080', effectiveFrom: '2026-01-01',
+      });
       const scheduleId = randomUUID();
-      await db.execute(sql`
-        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-                ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                               country, province, pay_basis, federal_claim_code,
-                                               provincial_claim_code, vacation_percent, vacation_method,
-                                               filing_account_id, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${liabilityEmploymentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
-                '4', 'accrue', ${filingAccountId}, true, ${actorId}, ${actorId})`);
+      await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        payDateOffsetDays: 3,
+      });
+      await seedPayrollProfile(org.orgId, employeeId, liabilityEmploymentId, scheduleId, actorId, {
+        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
+        filingAccountId: filingAccountId,
+      }, { percentFloor: '4', method: 'accrue' });
+
       const postRun = async (periodStart: string, periodEnd: string) => {
         const run = await createPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart, periodEnd,

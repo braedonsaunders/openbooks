@@ -117,3 +117,10 @@ export function divideDecimal(dividend: string, divisor: string, scale: number):
   const padded = digits.padStart(scale + 1, "0");
   return `${sign}${padded.slice(0, -scale)}.${padded.slice(-scale)}`;
 }
+
+/** Exact rate multiplication, rounded only at the caller's declared decimal scale. */
+export function multiplyDecimal(left: string, right: string, scale: number): string {
+  const a=toScaled(left),b=toScaled(right);
+  if (!a || !b) throw new Error(`not exact decimal factors: ${JSON.stringify(left)}, ${JSON.stringify(right)}`);
+  return divideDecimal((a.unscaled*b.unscaled).toString(),(10n ** BigInt(a.scale+b.scale)).toString(),scale);
+}

@@ -1442,7 +1442,14 @@ export async function payRunStaleness(
             or exists (select 1 from entitlement_plan_limits el
                         where el.org_id = r.org_id and el.updated_at > r.calculated_at)
             or exists (select 1 from entitlement_service_tiers et
-                        where et.org_id = r.org_id and et.updated_at > r.calculated_at))
+                        where et.org_id = r.org_id and et.updated_at > r.calculated_at)
+            or exists (select 1 from payroll_vacation_terms vt
+                        where vt.org_id = r.org_id and vt.updated_at > r.calculated_at)
+            or exists (select 1 from payroll_service_credits sc
+                        where sc.org_id = r.org_id and sc.updated_at > r.calculated_at)
+            or exists (select 1 from audit_log al
+                        where al.org_id = r.org_id and al.table_name in ('payroll_service_credits','payroll_vacation_terms','entitlement_service_tiers')
+                          and al.at > r.calculated_at))
              as entitlements_changed,
            -- WCB/WSIB class rates and assessable maximums. calculatePayRun
            -- multiplies assessable earnings by worker_comp_groups.rate_percent

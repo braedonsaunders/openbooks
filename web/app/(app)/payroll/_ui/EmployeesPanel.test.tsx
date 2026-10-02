@@ -132,8 +132,6 @@ function render(
           br_dependentes: null,
           br_pensao_mensal: null,
           br_salario_familia_filhos: null,
-          vacation_percent: null,
-          vacation_method: 'accrue',
           filing_account_id: null,
           stub_delivery: 'email',
           payment_method: null,

@@ -21,7 +21,9 @@ export const POST = defineRoute({
         actorId: gate.user.id,
         enrollmentId: body.enrollmentId,
         changeDate: body.changeDate,
-        coverageLevelKey: body.coverageLevelKey,
+        classKey: body.classKey,
+        matchEligible: body.matchEligible,
+        contributionTerms: body.contributionTerms,
         reason: body.reason,
       });
       return NextResponse.json({ enrollment });

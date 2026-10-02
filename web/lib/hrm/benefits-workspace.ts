@@ -5,6 +5,8 @@ import { db } from '@openbooks/engine/platform/database'
 import { getMoneyFormatter } from '../money-server'
 
 import {
+  benefitCurrencyOptions,
+  type BenefitCurrencyOption,
   listBenefitApprovalPolicies,
   listBenefitAwards,
   listBenefitPrograms,
@@ -188,6 +190,7 @@ export interface PortfolioData {
   programCloseHref: string
   awardDrawer: AwardDetailDrawer | null
   awardCloseHref: string
+  currencyOptions: BenefitCurrencyOption[]
   accountOptions: BuilderOption[]
   payComponentOptions: BenefitPayComponentOption[]
   departmentOptions: BuilderOption[]
@@ -406,7 +409,7 @@ export async function loadBenefitsPortfolio(
       message: error instanceof Error ? error.message : t('portfolio.loadFailed'),
     }
   }
-  const [accounts, departments, projects, payComponents, employments, subsidiaries] = await Promise.all([
+  const [accounts, departments, projects, payComponents, employments, subsidiaries, currencies] = await Promise.all([
     lookup(() => listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true })),
     lookup(() => listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)),
     projectsEnabled
@@ -443,6 +446,7 @@ export async function loadBenefitsPortfolio(
         `)
         .then((result) => result.rows),
     ),
+    lookup(() => benefitCurrencyOptions(db, orgId, actorId)),
   ])
   const lookupFailures = [
     accounts.failure,
@@ -451,6 +455,7 @@ export async function loadBenefitsPortfolio(
     payComponents.failure,
     employments.failure,
     subsidiaries.failure,
+    currencies.failure,
   ].filter((failure): failure is string => failure !== null)
   const optionsRefusal: PortfolioData['optionsRefusal'] =
     lookupFailures.length > 0
@@ -657,6 +662,7 @@ export async function loadBenefitsPortfolio(
     programCloseHref: portfolioHref(basePath, sp.view, {}),
     awardDrawer,
     awardCloseHref: portfolioHref(basePath, sp.view, {}),
+    currencyOptions: currencies.rows,
     accountOptions: accounts.rows.map((a) => ({
       value: a.id,
       label: `${a.number ?? ''} ${a.name}`.trim(),

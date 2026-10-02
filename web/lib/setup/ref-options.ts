@@ -5,7 +5,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
-export type RefOption = { value: string; label: string }
+export type RefOption = { value: string; label: string; scopeValue?: string | null }
 
 /** Distinct ref sources declared anywhere in this entity's columns or fields. */
 export function refSources(entity: SetupEntity): SetupRefSource[] {
@@ -53,6 +53,45 @@ export async function loadEntityOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<RefOption[]> {
+  if (source === 'subsidiaries') {
+    const employers = await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
+      where org_id=${orgId} and is_active and not is_elimination
+      ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name,id`)
+    return employers.rows
+  }
+  if (source === 'benefit-currencies') {
+    const { getAuthz } = await import('../authz')
+    const { benefitCurrencyOptions } = await import('@openbooks/engine/hrm/benefits')
+    const authz = await getAuthz()
+    if (!authz || authz.user.orgId !== orgId) throw new Error('Benefit currency organization does not match the current session')
+    return benefitCurrencyOptions(db, orgId, authz.user.id)
+  }
+  if (source === 'worker-employments') {
+    const rows = await db.execute<RefOption>(sql`select e.id::text as value,
+      p.display_name || ' · ' || s.name as label from worker_employments e
+      join parties p on p.org_id=e.org_id and p.id=e.worker_party_id
+      join subsidiaries s on s.org_id=e.org_id and s.id=e.employer_subsidiary_id
+      where e.org_id=${orgId} ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowedSubsidiaryIds)}
+      order by p.display_name,e.id`)
+    return rows.rows
+  }
+  if (source === 'benefit-contribution-rules' || source === 'benefit-contribution-classes' || source === 'benefit-enrollment-rules' || source === 'benefit-recovery-deduction-rules' || source === 'benefit-recovery-premium-rules') {
+    const classes = source === 'benefit-contribution-classes'
+    const enrollmentScoped = source === 'benefit-enrollment-rules'
+    const recoveryFilter = source === 'benefit-recovery-deduction-rules'
+      ? sql`and c.kind='employee_deduction' and c.arrears_plan_id is not null`
+      : source === 'benefit-recovery-premium-rules'
+        ? sql`and c.kind in ('employer_contribution','taxable_non_cash') and c.basis in ('per_period','per_month','per_year') and c.rate_formula='elected_rate'` : sql``
+    const rows = await db.execute<RefOption>(sql`select
+      ${classes ? sql`c.class_key` : sql`c.id::text`} as value, c.name as label,
+      ${enrollmentScoped ? sql`e.id::text` : sql`c.plan_id::text`} as "scopeValue"
+      from ${sql.raw(classes ? 'hrm_benefit_contribution_classes' : 'hrm_benefit_contribution_rules')} c
+      join hrm_benefit_plans p on p.org_id=c.org_id and p.id=c.plan_id
+      ${enrollmentScoped ? sql`join hrm_benefit_enrollments e on e.org_id=c.org_id and e.plan_id=c.plan_id` : sql``}
+      where c.org_id=${orgId} ${recoveryFilter} ${subsidiaryVisibleFilter(sql`p.employer_subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+      order by c.name,c.id`)
+    return rows.rows
+  }
   if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
   // `vendors` names the parties+vendor_roles picker, not a registry entity:
   // without this branch the generic lookup below finds no entry and every

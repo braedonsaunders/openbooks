@@ -18,7 +18,7 @@ export async function settleTerminationBankPayouts(
   tx: Pick<typeof db, "execute">,
   args: {
     orgId: string; documentId: string; payDate: string;
-    employeePartyId: string;
+    employeePartyId: string; employmentId?: string;
     /** Employee display name, for the unvalued-hours refusal. */
     employeeName: string;
     terminationRun: boolean;
@@ -41,7 +41,7 @@ export async function settleTerminationBankPayouts(
   // cheque — leaving the liability on the books with nobody to pay it to.
   if (terminationRun && plans.length > 0) {
     const balances = await entitlementBalances(orgId, employeePartyId, payDate, {
-      executor: tx, excludeRunDocumentId: documentId, plans,
+      executor: tx, employmentId: args.employmentId, excludeRunDocumentId: documentId, plans,
     });
     for (const balance of balances) {
       if (cmp(balance.balance, "0") <= 0) continue;

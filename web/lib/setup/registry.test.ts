@@ -44,7 +44,11 @@ test('record-owned setup collections leave the rail and declare their parent bin
   assert.ok(!visibleTaxKeys?.includes('tax-report-lines'))
   const owners: Record<string, string[]> = {
     'tax-registrations': ['tax-jurisdictions'],
-    'benefit-plan-levels': ['benefit-plans'],
+    'benefit-contribution-rules': ['benefit-plans'],
+    'benefit-contribution-classes': ['benefit-plans'],
+    'benefit-contribution-tiers': ['benefit-plans'],
+    'benefit-recovery-sources': ['benefit-plans'],
+    'benefit-enrollment-terms': ['benefit-enrollment-configuration'],
     'leave-policies': ['leave-types'],
     'hrm-competencies': ['hrm-competency-frameworks'],
     'customer-price-level-assignments': ['price-levels'],
@@ -70,6 +74,11 @@ test('record-owned setup collections leave the rail and declare their parent bin
   assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('item-identifiers')!), '/items?itemSetup=item-identifiers')
   assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('tax-pool-classes')!), '/admin/setup/tax-depreciation?tab=regimes&setupTab=tax-pool-classes')
   assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('entitlement-plan-limits')!), '/admin/setup/payroll?tab=entitlements&setupTab=entitlement-plan-limits')
+  const tierFields = SETUP_ENTITY_BY_KEY.get('entitlement-service-tiers')!.fields
+  for (const target of [{ planId: 'saved-plan', componentId: null }, { planId: null, componentId: 'saved-component' }]) {
+    assert.equal(setupFieldVisible(tierFields.find(field => field.key === 'eligible')!, target), Boolean(target.componentId))
+    for (const key of ['accrualValue', 'annualDays']) assert.equal(setupFieldVisible(tierFields.find(field => field.key === key)!, target), Boolean(target.planId))
+  }
 })
 
 test('re-homed entities stay in the CRUD registry but leave the setup rail', () => {
@@ -154,6 +163,15 @@ test('generic setup subsidiary controls follow the feature flag everywhere', () 
     const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: false, equipment: true })
     assert.ok(!disabled.fields.some((field) => field.ref === 'subsidiaries' || field.key === 'subsidiaryIncludeChildren'))
     assert.ok(!disabled.columns.some((column) => column.ref === 'subsidiaries'))
+  }
+})
+
+test('legal-employer payroll and benefit ownership remains writable without multi-subsidiary management', () => {
+  for (const key of ['benefit-plans', 'entitlement-plan-limits', 'entitlement-service-tiers']) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)!
+    const field = entity.fields.find((item) => item.legalEmployer)!
+    assert.equal(field.ref, 'subsidiaries')
+    assert.ok(setupEntityForFeatureState(entity, { multiSubsidiary: false }).fields.some((item) => item.key === field.key))
   }
 })
 
@@ -319,20 +337,15 @@ test('every static setup option labelKey resolves under admin.setup', () => {
   assert.deepEqual(missing, [])
 })
 
-test('every setup column, field and filter key has an English label under admin.setup.fields', () => {
-  // The generic setup list/drawer renders headers and labels through
-  // t(`fields.${key}`), so a registry key with no English source entry is
-  // invisible to every locale pin (they compare against English) and renders
-  // raw on the surface (F-coord-008).
-  const catalog = JSON.parse(
-    readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8'),
-  ) as Record<string, unknown>
-  const fields = ((catalog.setup ?? {}) as Record<string, unknown>).fields as Record<string, unknown>
+test('every setup column, field and filter resolves its rendered English label', () => {
+  const catalog = JSON.parse(readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8')) as Record<string, unknown>
+  const setup = catalog.setup as Record<string, unknown>
   const missing: string[] = []
   for (const entity of SETUP_ENTITIES) {
     const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])]
     for (const carrier of carriers) {
-      const label = fields?.[carrier.key]
+      const path = 'labelKey' in carrier && typeof carrier.labelKey === 'string' ? carrier.labelKey : `fields.${carrier.key}`
+      const label = path.split('.').reduce<unknown>((node, key) => (node as Record<string, unknown> | null)?.[key], setup)
       if (typeof label !== 'string' || label.length === 0) missing.push(`${entity.key}: ${carrier.key}`)
     }
   }

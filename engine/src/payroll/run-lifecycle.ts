@@ -482,6 +482,7 @@ export async function discardPayRun(input: {
         `pay run ${number} is linked to other documents and cannot be discarded`,
       );
     }
+    await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     // Explicit deletes first: the ledger nulls its run link when the document
     // goes (ON DELETE SET NULL) and bank files restrict it — neither may
     // survive a discarded run. Deleting the document then cascades to the run,
@@ -518,13 +519,14 @@ export async function invalidateCalculatedRun(
   input: { orgId: string; actorId: string; documentId: string },
 ): Promise<void> {
   const { orgId, actorId, documentId } = input;
+  await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
   await tx.execute(sql`
     delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
   await tx.execute(sql`
     update pay_runs
        set run_status = 'draft', gross_total = 0, net_total = 0,
            employer_cost_total = 0, employee_count = 0, calculated_at = null,
-           calculation_errors = '[]'::jsonb, refusal_acknowledgement = null,
+           calculation_errors = '[]'::jsonb, refusal_acknowledgement = null, benefit_source_snapshot = null,
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and document_id = ${documentId}`);
 }

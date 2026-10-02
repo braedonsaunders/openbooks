@@ -72,6 +72,7 @@ export function setupEntityHref(entity: SetupEntity): string {
   const parentHomes: Record<string, string> = {
     items: '/items',
     'benefit-plans': '/hrm/benefits?view=programs',
+    'benefit-enrollment-configuration': '/hrm/benefits?view=enrolments',
     'benefit-programs': '/hrm/benefits?view=programs',
     'tax-regimes': '/admin/setup/tax-depreciation?tab=regimes',
     'entitlement-plans': '/admin/setup/payroll?tab=entitlements',

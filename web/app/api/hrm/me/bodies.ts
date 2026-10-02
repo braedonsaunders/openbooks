@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contributionTermBody } from "../enrollments/bodies";
 import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
@@ -45,7 +46,9 @@ export const electBenefitBody = z.object({
   employmentId: uuid,
   planId: uuid,
   windowId: uuid.nullish(),
-  coverageLevelKey: z.string().trim().min(1).nullish(),
+  classKey: z.string().trim().min(1).max(120).nullish(),
+  matchEligible: z.boolean().nullish(),
+  contributionTerms: z.array(contributionTermBody).min(1),
   effectiveFrom: civilDate,
   effectiveTo: civilDate.nullish(),
   lifeEventReason: z.string().trim().min(1).max(500).nullish(),
@@ -54,6 +57,8 @@ export const electBenefitBody = z.object({
 export const changeBenefitBody = z.object({
   enrollmentId: uuid,
   changeDate: civilDate,
-  coverageLevelKey: z.string().trim().min(1).nullish(),
+  classKey: z.string().trim().min(1).max(120).nullish(),
+  matchEligible: z.boolean().nullish(),
+  contributionTerms: z.array(contributionTermBody).min(1).optional(),
   reason: z.string().trim().min(1, "reason required").max(500),
 });

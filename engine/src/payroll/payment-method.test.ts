@@ -1,3 +1,8 @@
+import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
+  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -18,7 +23,6 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * How an employee gets paid, end to end.
@@ -174,14 +178,7 @@ const account = async (
   type: string,
   subsidiaryId: string | null = null,
 ) => {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                          reconcilable, required_dimensions, custom, subsidiary_id,
-                          subsidiary_include_children)
-    values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-            '[]'::jsonb, '{}'::jsonb, ${subsidiaryId}, true)`);
-  return id;
+  return seedPostingAccount(orgId, number, name, type, subsidiaryId);
 };
 
 async function payrollOrg(): Promise<Fixture> {
@@ -194,9 +191,7 @@ async function payrollOrg(): Promise<Fixture> {
     craPayable: await account(org.orgId, "2310", "CRA payable", "liability_current"),
     vacationPayable: await account(org.orgId, "2320", "Vacation payable", "liability_current"),
   };
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: accounts.wageExpense,
         burdenExpenseAccountId: accounts.burdenExpense,
         netPayAccountId: accounts.netPayable,
@@ -205,44 +200,37 @@ async function payrollOrg(): Promise<Fixture> {
         taxPayableAccountId: accounts.craPayable,
         vacationPayableAccountId: accounts.vacationPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+      });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   // The ON hires calculate, so the EHT leg resolves (never asserted here).
   await seedOntarioEhtFixture(org.orgId, actorId);
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
   return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts };
 }
 
 async function employee(fx: Fixture, name: string, opts: {
-  partyMethod?: string | null;
-  profileMethod?: string | null;
+  partyMethod?: "eft" | "cheque" | "card" | "cash" | "other" | null;
+  profileMethod?: "eft" | "cheque" | null;
   approvedBank?: boolean;
 } = {}): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, payment_method, custom)
-    values (${id}, ${fx.orgId}, 'person', ${name}, true, ${opts.partyMethod ?? null}, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${fx.orgId}, ${id})`);
+  await seedPayrollPerson(fx.orgId, id, name, {
+    paymentMethod: opts.partyMethod ?? null,
+  });
+  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID() });
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
-                                  effective_from, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, 'CAD', '30', 'hour', '2080', '2026-01-01', true,
-            ${fx.actorId}, ${fx.actorId})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
-                                           pay_basis, federal_claim_code, provincial_claim_code,
-                                           vacation_percent, vacation_method, payment_method,
-                                           is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'CA', 'ON', 'hourly', 1, 1, '4', 'accrue',
-            ${opts.profileMethod ?? null}, true, ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollWage(fx.orgId, id, fx.actorId, {
+    currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
+  });
+  await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
+    country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+    paymentMethod: opts.profileMethod ?? null,
+  }, { percentFloor: '4', method: 'accrue' });
+
   if (opts.approvedBank) {
     await db.execute(sql`
       insert into party_bank_accounts (org_id, party_id, bank_name, country, currency,
@@ -255,11 +243,10 @@ async function employee(fx: Fixture, name: string, opts: {
 }
 
 const hours = async (fx: Fixture, employeeId: string, workedOn: string, qty: string) =>
-  await db.execute(sql`
-    insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
-                              is_billable, billing_status, costing_basis, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${workedOn}, ${qty}, 'approved',
-            false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollTime(fx.orgId, employeeId, fx.actorId, {
+    workedOn: workedOn, hours: qty, status: 'approved', isBillable: false, billingStatus: 'unbilled',
+    costingBasis: 'actual',
+  });
 
 test(
   "a mixed run puts EFT employees on the bank file and cheque employees on paper — never both",

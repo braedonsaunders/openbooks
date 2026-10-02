@@ -1,10 +1,13 @@
+import {
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPayrollProfile, seedPayrollWage,
+  createScratchUser, dropScratchOrgReporting, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
-import { createScratchUser, dropScratchOrgReporting, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -42,43 +45,34 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${entityB}, ${fx.orgId}, ${fx.subsidiaryId}, 'Entity B', 'CAD', 'CA')`);
   const scheduleB = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, subsidiary_id, is_active, created_by, updated_by)
-    values (${scheduleB}, ${fx.orgId}, 'B schedule', 'biweekly', 26, '2026-07-18', 3,
-            ${entityB}, true, ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollSchedule(fx.orgId, scheduleB, fx.actorId, {
+    name: 'B schedule', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3, subsidiaryId: entityB,
+  });
   const employeeB = randomUUID();
   // Brenda belongs to entity B: a pinned schedule only rosters employees
   // whose party subsidiary matches.
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values (${employeeB}, ${fx.orgId}, 'person', 'Brenda Worker', ${entityB}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeB}, '2020-01-06', true, ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollPerson(fx.orgId, employeeB, 'Brenda Worker', {
+    subsidiaryId: entityB,
+  });
+  await seedPayrollEmployeeRole(fx.orgId, employeeB, { hiredOn: '2020-01-06', isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId });
   const employmentB = await seedWorkerEmployment(fx.orgId, employeeB, entityB);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
-                                  is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeB}, 'CAD', '30', 'hour', '2020-01-01', true,
-            ${fx.actorId}, ${fx.actorId})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeB}, ${employmentB}, ${scheduleB}, 'ON', 'hourly', 'CA', 1, 1,
-            '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollWage(fx.orgId, employeeB, fx.actorId, {
+    currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2020-01-01',
+  });
+  await seedPayrollProfile(fx.orgId, employeeB, employmentB, scheduleB, fx.actorId, {
+    province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+  }, { percentFloor: '4', method: 'accrue' });
+
 
   // Entity A's run through the shared adoption helper, entity B's on its own
   // pinned schedule (a different schedule, so the same period may repeat).
   const { input: runA } = await calculatedRun(fx);
   await commitPayRun(runA);
-  await db.execute(sql`
-    insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
-                              is_billable, billing_status, costing_basis, created_by, updated_by)
-    values (${fx.orgId}, ${employeeB}, '2026-07-15', 8, 'approved', false,
-            'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollTime(fx.orgId, employeeB, fx.actorId, {
+    workedOn: '2026-07-15', hours: 8, status: 'approved', isBillable: false, billingStatus: 'unbilled',
+    costingBasis: 'actual',
+  });
   const runB = await createPayRun({
     orgId: fx.orgId,
     actorId: fx.actorId,

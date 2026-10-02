@@ -5,17 +5,18 @@ import type { ReportEntity } from './entities'
 export const BENEFITS_REPORT_ENTITIES: ReportEntity[] = [
   {
     key: 'hrm_benefit_payroll_inputs',
-    label: 'Benefit payroll inputs',
-    description: 'Monthly coverage amounts, employee deductions, employer contributions and consuming payroll runs.',
+    label: 'Benefit payroll contributions',
+    description: 'Calculated benefit contributions, employee deductions and non-cash benefits with their payroll-run history.',
     category: 'hrm',
-    from: `hrm_benefit_payroll_inputs i
+    from: `pay_run_benefit_allocations i
       JOIN hrm_benefit_enrollments e ON e.org_id = i.org_id AND e.id = i.enrollment_id
       JOIN hrm_benefit_plans p ON p.org_id = e.org_id AND p.id = e.plan_id
       JOIN worker_employments emp ON emp.org_id = i.org_id AND emp.id = i.employment_id
       JOIN parties worker ON worker.org_id = emp.org_id AND worker.id = emp.worker_party_id
       JOIN subsidiaries employer ON employer.org_id = emp.org_id AND employer.id = emp.employer_subsidiary_id
-      JOIN pay_components component ON component.org_id = i.org_id AND component.id = i.pay_component_id
-      LEFT JOIN documents run ON run.org_id = i.org_id AND run.id = i.consumed_by_run_document_id`,
+      JOIN hrm_benefit_contribution_rules rule ON rule.org_id = i.org_id AND rule.id = i.rule_id
+      JOIN pay_components component ON component.org_id = rule.org_id AND component.id = rule.pay_component_id
+      LEFT JOIN documents run ON run.org_id = i.org_id AND run.id = i.pay_run_document_id`,
     orgColumn: 'i.org_id',
     subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
     currencyColumn: 'currency',
@@ -24,18 +25,18 @@ export const BENEFITS_REPORT_ENTITIES: ReportEntity[] = [
     defaultPeriodField: 'coverage_from',
     pagination: { defaultPageSize: 50, maxPageSize: 250 },
     columns: [
-      { key: 'coverage_from', label: 'Coverage from', kind: 'date', expr: 'i.coverage_from' },
-      { key: 'coverage_to', label: 'Coverage to', kind: 'date', expr: 'i.coverage_to' },
+      { key: 'coverage_from', label: 'Coverage from', kind: 'date', expr: 'i.period_from' },
+      { key: 'coverage_to', label: 'Coverage to', kind: 'date', expr: 'i.period_to' },
       { key: 'person', label: 'Employee', kind: 'text', expr: 'worker.display_name' },
       { key: 'employer', label: 'Legal entity', kind: 'text', expr: 'employer.name' },
       { key: 'plan', label: 'Benefit plan', kind: 'text', expr: 'p.name' },
-      { key: 'kind', label: 'Input type', kind: 'enum', expr: 'i.kind', options: ['benefit_deduction', 'employer_contribution'] },
+      { key: 'kind', label: 'Contribution type', kind: 'enum', expr: 'rule.kind', options: ['employee_deduction', 'employer_contribution', 'taxable_non_cash'] },
       { key: 'component', label: 'Pay component', kind: 'text', expr: 'component.name' },
-      { key: 'amount', label: 'Coverage amount', kind: 'money', expr: 'i.amount', txnCurrency: true },
+      { key: 'amount', label: 'Contribution amount', kind: 'money', expr: 'i.amount', txnCurrency: true },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'i.currency' },
-      { key: 'status', label: 'Input status', kind: 'enum', expr: 'i.status', options: ['pending', 'consumed', 'voided'] },
-      { key: 'payroll_run_id', label: 'Consuming payroll run', kind: 'uuid', expr: 'i.consumed_by_run_document_id' },
-      { key: 'id', label: 'Input ID', kind: 'uuid', expr: 'i.id' },
+      { key: 'status', label: 'Payroll status', kind: 'enum', expr: 'i.status', options: ['calculated', 'committed', 'voided'] },
+      { key: 'payroll_run_id', label: 'Payroll run', kind: 'uuid', expr: 'i.pay_run_document_id' },
+      { key: 'id', label: 'Contribution ID', kind: 'uuid', expr: 'i.id' },
     ],
     defaultSort: { column: 'coverage_from', direction: 'desc' },
   },

@@ -567,7 +567,9 @@
       "title": "Tax certificates",
       "loading": "Loading certificates…",
       "loadFailed": "Could not load tax certificates."
-    }
+    },
+    "serviceCreditLink": "Credited service",
+    "vacationTermsLink": "Vacation terms"
   },
   "setupWizard": {
     "cta": {
@@ -705,7 +707,9 @@
       "holidayCalendar": "Holiday calendar",
       "payday": "Payday",
       "rates": "Statutory Rates",
-      "workSchedules": "Work schedules"
+      "workSchedules": "Work schedules",
+      "serviceCredits": "Credited service",
+      "vacationTerms": "Vacation terms"
     },
     "packs": {
       "installed": "Installed",

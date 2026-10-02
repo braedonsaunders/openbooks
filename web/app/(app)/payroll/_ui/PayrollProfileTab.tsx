@@ -54,6 +54,7 @@ export function PayrollProfileTab({
   const [state, setState] = useState<{
     status: 'loading' | 'ready' | 'error'
     profile: ProfileRow | null
+    employmentId: string | null
     schedules: ScheduleOption[]
     filingAccounts: FilingAccountOption[]
     labourJurisdictions: Record<string, LabourJurisdictionOption[]>
@@ -64,7 +65,7 @@ export function PayrollProfileTab({
     derivedColumns: Record<string, string>
     defaultCountry: ProfileRow['country']
   }>({
-    status: 'loading', profile: null, schedules: [], filingAccounts: [],
+    status: 'loading', profile: null, employmentId: null, schedules: [], filingAccounts: [],
     labourJurisdictions: {}, statutoryOccupationClasses: {}, countries: [], packProfiles: {}, storedCertificates: [],
     derivedColumns: {},
     defaultCountry: '',
@@ -98,6 +99,7 @@ export function PayrollProfileTab({
           setState({
             status: 'ready',
             profile: j.profile,
+            employmentId: typeof j.employmentId === 'string' ? j.employmentId : null,
             schedules: j.schedules ?? [],
             filingAccounts: j.filingAccounts ?? [],
             // The packs' declared labour jurisdictions, per country pack.
@@ -197,8 +199,6 @@ export function PayrollProfileTab({
     br_dependentes: null,
     br_pensao_mensal: null,
     br_salario_familia_filhos: null,
-    vacation_percent: null,
-    vacation_method: 'accrue',
     filing_account_id: null,
     stub_delivery: 'email',
     payment_method: null,
@@ -216,6 +216,8 @@ export function PayrollProfileTab({
   return (
     <>
       <div hidden={section === 'banks' || section === 'accounts'}>
+        {section === 'general' && state.employmentId ? <Link className="mb-3 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/admin/setup/payroll?tab=serviceCredits&employment=${encodeURIComponent(state.employmentId)}`}>{t('serviceCreditLink')}</Link> : null}
+        {section === 'general' && state.employmentId ? <Link className="mb-3 ml-4 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/admin/setup/payroll?tab=vacationTerms&employment=${encodeURIComponent(state.employmentId)}`}>{t('vacationTermsLink')}</Link> : null}
         <ProfileEditor
           inline
           readOnly={readOnly}

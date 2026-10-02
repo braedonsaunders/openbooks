@@ -3042,6 +3042,46 @@
         "singularTitle": "Membre programme",
         "description": "Emplois rattachés au programme sur des dates d’effet, avec poids et rôle pour la répartition."
       },
+      "benefit-contribution-rules": {
+        "title": "Cotisations",
+        "singular": "Cotisations",
+        "description": "Définissez chaque retenue salariale, cotisation patronale ou avantage imposable non monétaire. Les composants de paie contrôlent le traitement fiscal et la comptabilisation."
+      },
+      "benefit-contribution-classes": {
+        "title": "Catégories d’admissibilité",
+        "singular": "Catégories d’admissibilité",
+        "description": "Regroupez les salariés seulement lorsque l’admissibilité ou les plafonds diffèrent."
+      },
+      "benefit-contribution-tiers": {
+        "title": "Plafonds de contrepartie",
+        "singular": "Plafonds de contrepartie",
+        "description": "Les seuils de service datés définissent les offres maximales. Les choix fixes des salariés n’augmentent pas automatiquement."
+      },
+      "benefit-enrollment-configuration": {
+        "title": "Choix du salarié",
+        "singular": "Choix du salarié",
+        "description": "Vérifiez la catégorie et l’admissibilité à la contrepartie; gérez les cotisations choisies dans Cotisations."
+      },
+      "benefit-enrollment-terms": {
+        "title": "Choix de cotisation",
+        "singular": "Choix de cotisation",
+        "description": "Conservez le choix réel séparément des plafonds. Ajoutez de nouvelles conditions datées lors d’un changement."
+      },
+      "payroll-service-credits": {
+        "title": "Service reconnu",
+        "singular": "Service reconnu",
+        "description": "Enregistrez le service reconnu sans changer les dates d’embauche. La même base sert aux vacances et à l’admissibilité."
+      },
+      "payroll-vacation-terms": {
+        "title": "Conditions de vacances",
+        "singular": "Conditions de vacances",
+        "description": "Une politique datée définit le mode de vacances et les minimums individuels. Les barèmes de service peuvent les augmenter."
+      },
+      "benefit-recovery-sources": {
+        "title": "Recouvrement des primes",
+        "singular": "Source de recouvrement des primes",
+        "description": "Choisissez les primes patronales dues pendant une période de couverture non rémunérée. Le compte de recouvrement et son calendrier restent définis par la retenue."
+      },
       "dunning-policies": {
         "title": "Politiques",
         "description": "Recouvrez les créances et gérez la facturation dans un espace de travail unique."
@@ -3136,7 +3176,7 @@
       "postsGl": "Comptabilise au grand livre",
       "bookId": "Livre",
       "categoryId": "Catégorie d’immobilisation",
-      "convention": "Convention",
+      "convention": "Convention de service",
       "lifeMonths": "Durée (mois)",
       "depreciationMethodId": "Méthode d'amortissement",
       "departmentId": "Département",
@@ -3312,7 +3352,7 @@
       "payDateOffsetDays": "Décalage de la date de paie (jours)",
       "payoutComponentId": "Composant de versement",
       "pensionable": "Pensionnable",
-      "periodsPerYear": "Périodes par an",
+      "periodsPerYear": "Périodes de prélèvement par an",
       "planId": "Régime",
       "programType": "Type de compte",
       "protectionBase": "Assiette des gains protégés",
@@ -3494,7 +3534,39 @@
       "default_on": "Incluse par défaut",
       "applies_to": "Couverture régionale",
       "countries": "Pays",
-      "timezone": "Fuseau horaire"
+      "timezone": "Fuseau horaire",
+      "ruleKey": "Code de cotisation",
+      "rateFormula": "Méthode du taux",
+      "hoursBasis": "Heures admissibles",
+      "payBasis": "Gains admissibles",
+      "monthsPerYear": "Mois de prime par an",
+      "proration": "Règle de période partielle",
+      "matchRuleId": "Cotisation correspondante",
+      "requiresMatchEligibility": "Admissibilité requise",
+      "enforcePolicyCap": "Appliquer le plafond",
+      "classKey": "Catégorie d’admissibilité",
+      "minimumServiceYears": "Années de service minimales",
+      "employerMaxPercent": "Maximum patronal %",
+      "employeeMatchRatio": "Ratio salarié/employeur",
+      "matchEligible": "Admissible à la contrepartie",
+      "enrollmentId": "Inscription du salarié",
+      "ruleId": "Cotisation",
+      "electionMode": "Mode de choix",
+      "electedRate": "Taux choisi",
+      "declaredPeriodsPerYear": "Périodes choisies par an",
+      "runApplicability": "Cycles de paie",
+      "unpaidPeriodTreatment": "Traitement sans paie",
+      "arrearsPlanId": "Compte de récupération",
+      "arrearsRecoveryPeriods": "Périodes de récupération",
+      "asOfDate": "Observé le",
+      "creditedDays": "Jours de service reconnus",
+      "creditedMonths": "Mois de service reconnus",
+      "annualDays": "Jours de vacances annuels",
+      "percentFloor": "Minimum individuel %",
+      "annualDaysFloor": "Minimum individuel de jours annuels",
+      "waitingPeriodMonths": "Délai (mois civils)",
+      "approvalMode": "Politique d’approbation",
+      "legalEmployer": "Employeur légal"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
@@ -5097,7 +5169,8 @@
       "benefitCosts": "Coûts et prorata",
       "benefitComponents": "Composantes de paie",
       "benefitDelivery": "Versement",
-      "benefitRules": "Règles"
+      "benefitRules": "Règles",
+      "benefitAdvanced": "Règles de cotisation avancées"
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
@@ -5113,6 +5186,136 @@
       "row": "Ligne {number}",
       "addRow": "Ajouter une ligne",
       "removeRow": "Supprimer la ligne"
+    },
+    "benefitBuilder": {
+      "offer": "Programme",
+      "eligibility": "Admissibilité et dates",
+      "eligibilityHint": "Définissez les dates, le délai et les approbations. Après création, ajoutez cotisations et plafonds dans le régime.",
+      "delivery": "Lien avec la paie",
+      "deliveryHint": "Associez les retenues salariales et cotisations patronales. La paie gère le traitement fiscal et les montants choisis à chaque cycle.",
+      "review": "Vérifier",
+      "coverageType": "Type de couverture",
+      "health": {
+        "title": "Programme de santé et d’assurance",
+        "offer": "Nommez la couverture, l’assureur et l’employeur responsable. Les employés choisissent leur couverture dans les inscriptions.",
+        "costs": "Primes et couverture",
+        "costHint": "Définissez les primes de chaque partie et le calcul des mois partiels. Ajoutez les niveaux individuel ou familial après création.",
+        "provider": "Assureur",
+        "employeeCost": "Prime du salarié",
+        "employerCost": "Prime de l’employeur",
+        "employeeCostBasis": "Fréquence de la prime salariale",
+        "employerCostBasis": "Fréquence de la prime patronale",
+        "contribution": "Primes de couverture",
+        "classes": "Groupes de couverture",
+        "rate": "Montant ou taux de prime",
+        "contributionSingular": "Prime de couverture"
+      },
+      "retirement": {
+        "title": "Programme de retraite et d’épargne",
+        "offer": "Nommez le régime, le fournisseur et l’employeur responsable. Les employés participent via les inscriptions.",
+        "costs": "Cotisations d’épargne",
+        "costHint": "Choisissez des cotisations fixes ou un pourcentage du salaire pour chaque partie. Les pourcentages sont des taux de cotisation, pas une formule de contrepartie.",
+        "provider": "Fournisseur de retraite ou d’épargne",
+        "employeeCost": "Cotisation du salarié",
+        "employerCost": "Cotisation de l’employeur",
+        "employeeCostBasis": "Base de cotisation salariale",
+        "employerCostBasis": "Base de cotisation patronale",
+        "contribution": "Cotisations",
+        "rate": "Montant ou taux de cotisation",
+        "contributionSingular": "Cotisation"
+      }
+    },
+    "benefitContributions": {
+      "componentHint": "Benefits définit la cotisation. Configurez les impôts, les remises et les comptes sur le composant de paie.",
+      "formulaHint": "Choisissez une méthode compatible. La contrepartie lie la cotisation choisie de l’autre côté.",
+      "rateHint": "Utilisez l’unité choisie : montant horaire, par période, mensuel, annuel ou pourcentage. Un choix fixe peut remplacer ce taux.",
+      "annualizationHint": "Déclarez les périodes partageant la prime annuelle. Vide : calendrier de paie du salarié.",
+      "capHint": "Les plafonds limitent les offres; ils ne changent pas un choix fixe.",
+      "ratioHint": "Cotisation salariale par unité patronale : 2 signifie le double.",
+      "classHint": "Choisissez une catégorie de ce régime.",
+      "matchHint": "Indique si cette inscription ouvre droit à la contrepartie.",
+      "electionHint": "Un choix fixe reste fixe lorsque les plafonds augmentent. Suivre le régime applique le taux et les plafonds effectifs.",
+      "electedRateHint": "Saisissez le taux réellement choisi, distinct de l’offre maximale.",
+      "arrearsHint": "Utilisez un compte monétaire À devoir, acquisition manuelle et cette retenue comme paiement. Précisez les périodes de récupération.",
+      "options": {
+        "kind": {
+          "employee_deduction": "Retenue salariale",
+          "employer_contribution": "Cotisation patronale",
+          "taxable_non_cash": "Avantage imposable non monétaire"
+        },
+        "basis": {
+          "per_hour": "Par heure admissible",
+          "per_period": "Par période de paie",
+          "per_month": "Montant mensuel annualisé",
+          "per_year": "Montant annuel",
+          "percent_of_eligible_pay": "% des gains admissibles"
+        },
+        "formula": {
+          "elected_rate": "Taux du régime ou choisi",
+          "hourly_wage_percent": "% du taux horaire",
+          "matching_election": "Contrepartie du choix"
+        },
+        "hours": {
+          "all_paid": "Toutes les heures payées",
+          "regular_paid": "Heures régulières payées",
+          "scheduled_paid": "Heures prévues payées"
+        },
+        "pay": {
+          "all_cash_earnings": "Tous les gains monétaires",
+          "regular_cash_earnings": "Gains réguliers monétaires"
+        },
+        "proration": {
+          "none": "Sans prorata",
+          "calendar_days": "Jours civils couverts"
+        },
+        "election": {
+          "fixed": "Choix fixe",
+          "follows_policy": "Suivre le régime"
+        },
+        "run": {
+          "regular_only": "Paies régulières seulement",
+          "all_pay_runs": "Tous les cycles"
+        },
+        "unpaid": {
+          "charge": "Facturer la période",
+          "carry": "Reporter pour récupération"
+        }
+      },
+      "waitingMonthsHint": "Utilisez les mois civils ou les jours, pas les deux. Les mois suivent la date d’embauche.",
+      "activationHint": "Enregistrez le régime inactif, configurez Cotisations, puis activez-le.",
+      "planRate": "Taux du régime : {rate}",
+      "noApproval": "Sans approbation",
+      "flowsApproval": "Utiliser la politique Flows",
+      "approvalHint": "Sans approbation active directement les choix valides. Flows applique les niveaux configurés avant activation.",
+      "fields": {
+        "kind": "Type de cotisation",
+        "basis": "Base de calcul",
+        "rate": "Taux du régime",
+        "method": "Mode de vacances",
+        "ruleId": "Cotisation",
+        "ruleKey": "Code de cotisation",
+        "payComponentId": "Composant de paie",
+        "recoveryRuleId": "Retenue de recouvrement",
+        "premiumRuleId": "Prime patronale"
+      },
+      "recoverySourceHint": "Associez cette prime à la retenue salariale qui reporte et recouvre la couverture non rémunérée. Une prime ne peut être liée qu’à une seule retenue."
+    },
+    "serviceCredit": {
+      "calendarMonths": "Mois civils",
+      "actual365": "Jours réels / 365",
+      "conventionHint": "Les mois civils utilisent les anniversaires. Réel/365 utilise les jours civils et la base observée.",
+      "asOfHint": "Date d’observation du service; le service futur progresse depuis cette base.",
+      "reasonHint": "Expliquez la politique ou l’ajustement. La paie comptabilisée est préservée; utilisez de nouvelles conditions datées.",
+      "annualDaysHint": "Les jours annuels sont distincts du pourcentage de paie; aucune conversion en argent.",
+      "employerTierHint": "Choisissez l’employeur légal pour son barème. Son barème remplace le barème par défaut de l’organisation."
+    },
+    "vacationTerms": {
+      "accrue": "Accumuler la paie de vacances",
+      "payEachPeriod": "Payer à chaque période",
+      "paidLeave": "Congés payés en jours",
+      "percentHint": "Un minimum individuel supérieur est préservé. Vide : barème de service; ce pourcentage ne définit pas les jours.",
+      "daysHint": "Un minimum individuel de jours supérieur est conservé séparément du barème et du pourcentage monétaire.",
+      "method": "Mode de vacances"
     },
     "collectionPolicy": "Politique",
     "collectionPolicyFields": {
@@ -5131,7 +5334,8 @@
       "description": "Définissez les critères de recouvrement et la séquence de rappels.",
       "reminderNumber": "Rappel {number}",
       "addReminder": "Ajouter un rappel"
-    }
+    },
+    "no": "Non"
   },
   "flows": {
     "title": "Flux",

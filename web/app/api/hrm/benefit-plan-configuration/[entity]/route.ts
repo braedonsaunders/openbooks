@@ -8,9 +8,9 @@ import { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupR
 export const runtime = 'nodejs'
 
 // Rehomed Benefits forms share the native registry's validation, scope,
-// idempotency and audit commands. HR management authorizes only these two
+// idempotency and audit commands. HR management authorizes only these Benefits
 // entities; it does not grant access to the general configuration API.
-const params = z.object({ entity: z.enum(['benefit-plans', 'benefit-plan-levels']) })
+const params = z.object({ entity: z.enum(['benefit-plans', 'benefit-contribution-rules', 'benefit-contribution-classes', 'benefit-contribution-tiers', 'benefit-recovery-sources', 'benefit-enrollment-configuration', 'benefit-enrollment-terms']) })
 const requestBody = z.record(z.string(), z.json())
 const response = (result: SetupWriteResult) => NextResponse.json(result.body, { status: result.status })
 

@@ -224,9 +224,9 @@ async function ruleTerminatedWithPay(
        group by employment_id
       union all
       select employment_id, count(*) as n
-        from hrm_benefit_payroll_inputs
-       where org_id = ${orgId}::uuid and status = 'pending'
-         and coverage_from <= ${to}::date and coverage_to >= ${from}::date
+        from pay_run_benefit_allocations
+       where org_id = ${orgId}::uuid and status = 'calculated'
+         and period_from <= ${to}::date and period_to >= ${from}::date
        group by employment_id
     )
     select t.employment_id::text as "employmentId",
@@ -311,12 +311,12 @@ async function ruleOrphans(
   }>(sql`
     select i.id::text as id, i.employment_id::text as "employmentId",
            i.amount::text as amount, i.enrollment_id::text as "enrollmentId", e.status
-      from hrm_benefit_payroll_inputs i
+      from pay_run_benefit_allocations i
       join hrm_benefit_enrollments e
         on e.org_id = i.org_id and e.id = i.enrollment_id
-     where i.org_id = ${orgId}::uuid and i.status = 'pending'
-       and i.coverage_from <= ${to}::date and i.coverage_to >= ${from}::date
-       and e.status in ('ended', 'cancelled')`)).rows;
+     where i.org_id = ${orgId}::uuid and i.status = 'calculated'
+       and i.period_from <= ${to}::date and i.period_to >= ${from}::date
+       and (e.status = 'cancelled' or (e.status = 'ended' and e.effective_to < i.period_to))`)).rows;
   for (const r of benefit) {
     out.push({
       kind: "benefit_input_orphan",

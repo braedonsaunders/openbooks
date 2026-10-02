@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { Button, Select, Badge, Input } from "@openbooks/ui";
 import * as maplibregl from "maplibre-gl";
 import { type GeoJSONSource } from "maplibre-gl";
+import type { Feature } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   TerraDraw,
@@ -423,7 +424,7 @@ export function TerritoryMap({
           id: r.id,
           geography: r.geography ?? EMPTY_TERRITORY_GEOGRAPHY,
         }));
-    const features: GeoJSON.Feature<AreaGeometry>[] = [];
+    const features: Feature<AreaGeometry>[] = [];
     for (const entry of entries) {
       for (const b of [
         ...entry.geography.includes,

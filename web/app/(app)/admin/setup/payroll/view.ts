@@ -62,6 +62,8 @@ const ENTITY_BY_TAB = {
   // Entitlement plans own their scoped caps and service schedules. Pay
   // components own their eligibility schedules in their record drawers.
   entitlements: 'entitlement-plans',
+  serviceCredits: 'payroll-service-credits',
+  vacationTerms: 'payroll-vacation-terms',
 } as const
 
 const TABS = [
@@ -74,7 +76,7 @@ const TABS = [
   // employment attribute (engine/src/payroll/work-schedules.ts) that several
   // jurisdictions' statutory holiday pay is computed FROM.
   'workSchedules',
-  'entitlements', 'derived', 'derivedPreview',
+  'entitlements', 'vacationTerms', 'serviceCredits', 'derived', 'derivedPreview',
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
   'holidays', 'holidayCalendar',
@@ -90,7 +92,7 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
   { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
   { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
-  { key: 'entitlements', tabs: ['entitlements'] },
+  { key: 'entitlements', tabs: ['entitlements', 'vacationTerms', 'serviceCredits'] },
   { key: 'payday', tabs: ['payday'] },
 ]
 

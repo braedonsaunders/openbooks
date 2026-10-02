@@ -2,22 +2,26 @@ import { z } from "zod";
 import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
-/**
- * Typed request bodies for /api/hrm/enrollments/*. The engine enrollment
- * service owns the full contract (in-service employment, plan scope,
- * waiting period, tier validity, overlap, component links); the boundary
- * pins the shape it can pin. Amounts are never caller-supplied — the
- * service copies them from the plan basis at election.
- */
+/** Native contribution elections are atomic with coverage; the engine validates rates and subject scope. */
 const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = civilDateInput();
 const reason = z.string().trim().min(1, "reason required").max(2000);
+
+export const contributionTermBody = z.discriminatedUnion('electionMode', [
+  z.object({ruleId: uuid,electionMode: z.literal('fixed'),electedRate: z.string().trim().min(1),declaredPeriodsPerYear: z.number().int().min(1).max(366).nullish()}),
+  z.object({ruleId: uuid,electionMode: z.literal('follows_policy'),electedRate: z.null().optional(),declaredPeriodsPerYear: z.number().int().min(1).max(366).nullish()}),
+]);
+const contributionSelection = {
+  classKey: z.string().trim().min(1).max(120).nullish(),
+  matchEligible: z.boolean().nullish(),
+  contributionTerms: z.array(contributionTermBody).min(1),
+};
 
 const electBase = z.object({
   employmentId: uuid,
   planId: uuid,
   windowId: uuid.nullish(),
-  coverageLevelKey: z.string().trim().min(1).max(120).nullish(),
+  ...contributionSelection,
   effectiveFrom: civilDate,
   effectiveTo: civilDate.nullish(),
   selfService: z.boolean().optional(),
@@ -36,12 +40,12 @@ export const enrollmentPostBody = z.discriminatedUnion("action", [electEnrollmen
 
 const enrollmentId = z.object({ enrollmentId: uuid });
 
-export const approveEnrollmentBody = z.object({ action: z.literal("approve") });
 
 export const changeEnrollmentBody = z.object({
   action: z.literal("change"),
   changeDate: civilDate,
-  coverageLevelKey: z.string().trim().min(1).max(120).nullish(),
+  ...contributionSelection,
+  contributionTerms: z.array(contributionTermBody).min(1).optional(),
   reason,
 });
 
@@ -54,7 +58,6 @@ export const endEnrollmentBody = z.object({
 export const cancelEnrollmentBody = z.object({ action: z.literal("cancel"), reason });
 
 export const enrollmentPatchBody = z.discriminatedUnion("action", [
-  approveEnrollmentBody,
   changeEnrollmentBody,
   endEnrollmentBody,
   cancelEnrollmentBody,

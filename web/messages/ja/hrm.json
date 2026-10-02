@@ -150,7 +150,7 @@
       "openWindows": "受付中",
       "noOpenWindow": "受付中の加入期間はありません。",
       "pendingSub": "承認待ち",
-      "missingSub": "入力のない加入"
+      "missingSub": "拠出選択のない登録"
     }
   },
   "queue": {
@@ -1388,7 +1388,7 @@
   },
   "benefits": {
     "title": "福利厚生",
-    "description": "プラン、加入期間、加入、および給与への月額金額。",
+    "description": "ここで福利厚生の提供条件と従業員が選択した拠出条件を定義します。給与計算が実際の金額を計算し、税務処理、仕訳、権利残高を管理します。",
     "windowsTitle": "加入期間",
     "enrolmentsTitle": "加入",
     "segmentsLabel": "表示",
@@ -1704,7 +1704,7 @@
         "coverage": "保障内容",
         "status": "状態",
         "effective": "適用期間",
-        "monthly": "控除 / 期間",
+        "monthly": "従業員の拠出",
         "window": "ウィンドウ",
         "kind": "種類",
         "range": "期間",
@@ -1713,7 +1713,7 @@
       },
       "electionsEmpty": "加入はありません",
       "electionsEmptyDescription": "選択した保障がここに表示されます。",
-      "monthlyHint": "給与から控除される保存済み金額 — 再計算されません。",
+      "monthlyHint": "選択した料率は指定の単位を保持します。給与計算が実際の控除額を計算します。",
       "windowsTitle": "登録受付中のウィンドウ",
       "windowsEmpty": "受付中のウィンドウはありません",
       "windowsEmptyDescription": "雇用主のウィンドウは受付中にここに表示されます。",
@@ -2665,7 +2665,7 @@
     "newProgram": "新規プログラム",
     "newAward": "新規褒賞",
     "programsEmptyTitle": "福利厚生プログラムがありません",
-    "programsEmptyDescription": "報奨・手当・インセンティブを付与する最初の雇用主プログラムを作成してください。",
+    "programsEmptyDescription": "保障、貯蓄、報奨、手当、インセンティブ、独自制度を作成します。",
     "awardsEmptyTitle": "褒賞がありません",
     "awardsEmptyDescription": "プログラムが付与すると褒賞がここに表示されます。",
     "loadFailed": "福利厚生ワークスペースを読み込めませんでした。",
@@ -2735,7 +2735,7 @@
       "allowance": "手当",
       "incentive": "インセンティブ",
       "custom": "カスタム",
-      "insured": "保険給付プラン"
+      "insured": "保障・貯蓄制度"
     },
     "familyHints": {
       "reward": "単発の表彰:賞与、ギフトカード、スポット表彰。",
@@ -2795,7 +2795,7 @@
     },
     "columns": {
       "program": "プログラム",
-      "family": "種別",
+      "family": "種類",
       "value": "金額",
       "effective": "有効期間",
       "status": "状態",
@@ -2923,7 +2923,11 @@
       "openPayrollSetup": "給与設定を開く",
       "accountsPrerequisite": "記帳可能な測定勘定科目が表示されていません。必要な科目を追加するか、財務担当者に責任法人へのアクセスを確認してもらい、選択肢を更新してください。",
       "openAccounts": "勘定科目表を開く",
-      "refreshOptions": "選択肢を更新"
+      "refreshOptions": "選択肢を更新",
+      "typeTitle": "新規{type}プログラム",
+      "chooseCurrency": "通貨を選択",
+      "currencyHint": "通貨は選択した雇用主と会社機能設定に従います。給与はプログラム通貨で処理します。",
+      "currencyUnavailable": "選択した雇用主で利用可能な通貨を選んでください。"
     },
     "awardBuilderTitle": "新規報酬",
     "awardFields": {
@@ -3029,6 +3033,24 @@
     "directProcessingHint": "Flowsが直接処理を承認しました。この報奨は給与計算に追加できます。",
     "rewardProgramPrerequisite": "報奨を記録する前に、報奨または手当のプログラムを作成して有効にしてください。",
     "createRewardProgram": "報奨プログラムを作成",
-    "noApprovalSubmissionHint": "承認は不要です。権限に基づく提出が記録され、この報酬は給与処理の準備が整っています。"
+    "noApprovalSubmissionHint": "承認は不要です。権限に基づく提出が記録され、この報酬は給与処理の準備が整っています。",
+    "awardCurrencyHint": "選択したプログラムから継承します。給与で報奨通貨の換算は行いません。",
+    "rewardCreateHint": "有効なプログラムの金額、通貨、交付ルールに従って従業員に付与します。制度はプログラムで設定します。",
+    "programPurpose": {
+      "reward": "ここで表彰方針を設定し、報奨画面で従業員に付与します。交付可能なものは支給画面に表示されます。",
+      "allowance": "定額手当と付与周期を設定します。付与はこのルールに従います。支出ウォレットや経費精算は作成されません。",
+      "incentive": "実績から支給額を計算するルールを設定します。インセンティブで試算・確定し、承認済み結果は支給画面に表示されます。",
+      "custom": "金額と交付ルールが明確な雇用主負担の制度を設定します。報奨画面で記録し、支給画面で交付します。"
+    },
+    "scopeHint": "福利厚生は雇用主の制度と従業員への付与を管理します。給与は賃金、税金、法定拠出と給与計算を管理します。",
+    "views": {
+      "overview": "給与と連携する雇用主の福利厚生と付与。",
+      "programs": "すべての制度をここで定義します。従業員は保障プランに加入し、報奨とインセンティブは各プログラムのルールに従います。",
+      "enrolments": "従業員を保障・貯蓄プランに加入させます。加入受付期間は加入ウィンドウで管理します。",
+      "rewards": "有効なプログラムに基づき従業員への付与を記録します。繰り返し使う制度はプログラムで設定します。",
+      "incentives": "実績連動プログラムを管理します。記録を開いて試算、計算、支給確定を行います。",
+      "payouts": "交付可能な付与を給与へ送り、履歴を追跡します。報奨で作成し、インセンティブで確定します。"
+    },
+    "configureApprovals": "承認を設定"
   }
 }

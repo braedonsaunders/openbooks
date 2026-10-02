@@ -150,7 +150,7 @@
       "openWindows": "Open",
       "noOpenWindow": "No enrollment window is open.",
       "pendingSub": "Pending approvals",
-      "missingSub": "Elections missing inputs"
+      "missingSub": "Enrollments missing contribution elections"
     }
   },
   "queue": {
@@ -1388,7 +1388,7 @@
   },
   "benefits": {
     "title": "Benefits",
-    "description": "Plans, enrollment windows, elections, and the monthly amounts that cross into payroll.",
+    "description": "Define benefit offers and employee contribution elections here. Payroll calculates the actual amounts and controls tax treatment, posting and pay banks.",
     "windowsTitle": "Enrollment windows",
     "enrolmentsTitle": "Enrollments",
     "segmentsLabel": "Show",
@@ -1704,7 +1704,7 @@
         "coverage": "Coverage",
         "status": "Status",
         "effective": "Effective",
-        "monthly": "Deduction / period",
+        "monthly": "Employee contributions",
         "window": "Window",
         "kind": "Kind",
         "range": "Dates",
@@ -1713,7 +1713,7 @@
       },
       "electionsEmpty": "No elections",
       "electionsEmptyDescription": "Coverage you elect lists here.",
-      "monthlyHint": "The stored amount payroll deducts each period — never recomputed here.",
+      "monthlyHint": "Elected rates retain their declared units; Payroll calculates the actual deductions.",
       "windowsTitle": "Open enrollment windows",
       "windowsEmpty": "No open window",
       "windowsEmptyDescription": "Windows covering your employer list here while open.",
@@ -2665,7 +2665,7 @@
     "newProgram": "New program",
     "newAward": "New award",
     "programsEmptyTitle": "No benefit programs yet",
-    "programsEmptyDescription": "Create the first employer-defined program to grant rewards, allowances, or incentives.",
+    "programsEmptyDescription": "Create a coverage, savings, reward, allowance, incentive or custom program.",
     "awardsEmptyTitle": "No awards yet",
     "awardsEmptyDescription": "Awards appear here once a program grants them.",
     "loadFailed": "The benefits workspace could not be loaded.",
@@ -2735,7 +2735,7 @@
       "allowance": "Allowance",
       "incentive": "Incentive",
       "custom": "Custom",
-      "insured": "Insured plan"
+      "insured": "Coverage or savings plan"
     },
     "familyHints": {
       "reward": "One-off recognition: bonuses, gift cards, spot awards.",
@@ -2795,7 +2795,7 @@
     },
     "columns": {
       "program": "Program",
-      "family": "Family",
+      "family": "Type",
       "value": "Value",
       "effective": "Effective",
       "status": "Status",
@@ -2923,7 +2923,11 @@
       "openPayrollSetup": "Open Payroll Setup",
       "accountsPrerequisite": "No postable measurement accounts are visible. Add the required accounts in the chart of accounts or ask finance to check legal-entity access, then refresh options.",
       "openAccounts": "Open chart of accounts",
-      "refreshOptions": "Refresh options"
+      "refreshOptions": "Refresh options",
+      "typeTitle": "New {type}",
+      "chooseCurrency": "Choose currency",
+      "currencyHint": "Currencies follow the selected employer and Company Features policy. Payroll processes grants in the program currency.",
+      "currencyUnavailable": "Choose a currency enabled for the selected employer."
     },
     "awardBuilderTitle": "New reward",
     "awardFields": {
@@ -3029,6 +3033,24 @@
     "directProcessingHint": "Flows authorized direct processing; this reward is ready for payroll.",
     "rewardProgramPrerequisite": "Create and activate a reward or allowance program before recording a reward.",
     "createRewardProgram": "Create reward program",
-    "noApprovalSubmissionHint": "No approvals required. The authorized submission was recorded; this reward is ready for payroll."
+    "noApprovalSubmissionHint": "No approvals required. The authorized submission was recorded; this reward is ready for payroll.",
+    "awardCurrencyHint": "Inherited from the selected program; payroll does not convert reward currency.",
+    "rewardCreateHint": "Grant a benefit to an employee using an active program’s value, currency and delivery rules. Configure the offer in Programs.",
+    "programPurpose": {
+      "reward": "Define your recognition policy here, then issue employee rewards in Rewards. Ready grants appear in Payouts.",
+      "allowance": "Define a fixed allowance and its grant schedule. Employee grants use this program’s rules; it does not create a spending wallet or reimburse expenses.",
+      "incentive": "Define how measured performance becomes employee payouts. Simulate and settle the program in Incentives; approved results appear in Payouts.",
+      "custom": "Define an employer-funded grant with explicit value and delivery rules. Use Rewards to record employee grants and Payouts to deliver them."
+    },
+    "scopeHint": "Benefits defines employer-sponsored offers and employee grants. Payroll manages salary, tax, statutory contributions and pay-run processing.",
+    "views": {
+      "overview": "Employer-sponsored benefits and grants, connected to payroll.",
+      "programs": "Define every benefit offer here. Employees enroll in coverage plans; rewards and incentive results follow the rules of their programs.",
+      "enrolments": "Enroll employees in coverage and savings plans. Manage enrollment periods through Enrollment windows.",
+      "rewards": "Record employee recognition and benefit grants against an active program. Configure reusable offers in Programs.",
+      "incentives": "Manage performance-based programs. Open a record to simulate, calculate and settle employee payouts.",
+      "payouts": "Release ready grants to payroll and follow their delivery history. Create rewards in Rewards and settle measured programs in Incentives."
+    },
+    "configureApprovals": "Configure approvals"
   }
 }

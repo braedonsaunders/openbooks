@@ -78,7 +78,7 @@ export const entitlementPlans = pgTable(
      * Null for every tenant-defined plan (banked overtime, sick banks, benefit
      * recoup): those have no engine behaviour beyond the generic plan engine.
      * 'vacation' is the one plan the pay run itself reasons about, because
-     * employee_payroll_profiles.vacation_percent / vacation_method decide
+     * effective payroll_vacation_terms decide
      * between banking it and paying it in cash.
      */
     systemKey: text("system_key", { enum: ["vacation", "stat_holiday_alternate"] }),

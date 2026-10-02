@@ -11,7 +11,7 @@ import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
-import { add, cmp, mulRatio, neg, sum } from "../money/money.ts";
+import { add, cmp, div, mulRatio, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
 import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
@@ -21,7 +21,7 @@ import { assertSettlementFactorsMergeable, settleAnnualSettlement } from "./annu
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./statutory-context.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { payRateIsUsable } from "./rate.ts";
-import { alternateDayPlanOf, entitlementPlans, planMovementsForStub, vacationPlanOf, type EntitlementWarning } from "./entitlements.ts";
+import { alternateDayPlanOf, assertComponentServiceEligibility, entitlementPlans, planMovementsForStub, resolveVacationTerms, resolveServiceTier, vacationPlanOf, type EntitlementWarning } from "./entitlements.ts";
 import { grantRemembranceAlternateDay } from "./remembrance-grants.ts";
 import { resolvePayrollPaymentMethod } from "./payment-method.ts";
 import { assertEarningsAssessedStable, dropIncomeAssessedLines, type EarningsAssessedLine } from "./limits.ts";
@@ -35,6 +35,7 @@ import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
 import { applyEarningPaymentKinds, cashGrossEarnings, nonCashEarnings } from "./non-cash-earnings.ts";
+import { appendRecurringBenefitLines } from './benefit-plan-inputs.ts';
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
   ctx: {
@@ -304,7 +305,7 @@ export async function calculateStub(
   });
 
   await applyAssignedComponentLines(tx, {
-    orgId, employeePartyId, taxYear, documentId,
+    orgId, employeePartyId, employmentId, taxYear, documentId,
     assignedRows: assigned.rows, oneOffRun, lines,
     periodStart: run.period_start!, periodEnd: run.period_end!,
   });
@@ -317,6 +318,8 @@ export async function calculateStub(
     orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines,
   });
 
+
+
   // Union fringes and dues (collective agreement).
   await appendUnionFringeLines(tx, { orgId, emp, country, lines });
 
@@ -324,26 +327,59 @@ export async function calculateStub(
   // time, sick banks, benefit recoup) through ONE engine; see
   // engine/src/payroll/entitlements.ts.
   //
-  // The employee's vacation_percent stays on the payroll profile, its one
-  // home; it is handed to the Vacation plan as that employee's rate. A reached
-  // service tier (5 years → 6%) overrides it. `pay_each_period` and a final pay
-  // still settle in cash rather than banking, so the accrue-vs-pay decision is
-  // unchanged from the operator's point of view.
-  const vacationPercent = emp.vacation_percent!;
+  // Employee elections are effective-dated independently of tax setup.
+  // One resolved rate applies to both banking and cash payment; annual days
+  // remain a separate paid-leave entitlement.
+  let vacationPercent: string | null = null;
   let vacationAccrued = "0";
   const terminationRun = runType === "termination";
   const plans = await entitlementPlans(orgId, tx);
   // Resolved on the plan's ENGINE BINDING, never on its operator-typed code.
   const vacationPlan = vacationPlanOf(plans);
-  assertVacationPlanResolved(emp, vacationPlan, terminationRun);
+  const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, run.period_end!) : null;
+  if (vacationPlan && !vacationElection) throw new PayrollError(`${emp.display_name ?? employeePartyId} has no effective vacation terms; configure their vacation method and entitlement in Payroll before calculating payroll.`);
+  vacationPercent = vacationElection?.percentFloor ?? vacationPlan?.accrualValue ?? null;
+  const vacationMethod = vacationElection?.method ?? null;
+  assertVacationPlanResolved({ ...emp, vacation_percent: vacationPercent, vacation_method: vacationMethod }, vacationPlan, terminationRun);
+  const vacationTerms = vacationPlan ? await resolveServiceTier(tx, orgId, employeePartyId, run.period_end!, emp.employment_id ?? undefined) : null;
+  const vacationTier = vacationPlan ? vacationTerms?.planAccrualValues.get(vacationPlan.id) : null;
+  const paidLeave = vacationMethod === "paid_leave";
+  const personalDays = vacationElection?.annualDaysFloor;
+  const policyDays = vacationPlan ? vacationTerms?.planAnnualDays.get(vacationPlan.id) : null;
+  const annualDays = personalDays != null && (policyDays == null || cmp(personalDays, policyDays) > 0) ? personalDays : policyDays;
+  if (paidLeave && (annualDays == null || cmp(annualDays, "0") <= 0)) throw new PayrollError(`${emp.display_name ?? employeePartyId} has paid leave without an annual day allowance; enter their annual vacation days or configure the reached service tier.`);
+  // Personal vacation terms are a floor: progression must never erase a
+  // separately granted higher employee rate. Paid leave keeps salary running
+  // and never creates a second percentage payment or money-bank accrual.
+  if (paidLeave) vacationPercent = null;
+  else if (vacationTier != null && (vacationPercent == null || cmp(vacationTier, vacationPercent) > 0)) vacationPercent = vacationTier;
+
+  // Ordinary cash is snapshotted before derived vacation and bank payouts.
+  // Vacationable non-cash premiums then enter the native entitlement basis;
+  // deductions and employer contributions price final cash earnings afterward.
+  await applyEarningPaymentKinds(tx, {
+    orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null,
+    currency: run.doc_currency!, components: ctx.components, lines,
+    wageExpenseAccountId: ctx.wageExpenseAccountId,
+  });
+  const regularCashLines = lines.slice();
+  const recurringBenefitInput: Omit<Parameters<typeof appendRecurringBenefitLines>[1], "stage"> = {
+    orgId, actorId, documentId, employmentId, employeePartyId, regularCashLines,
+    subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!, country,
+    periodStart: run.period_start!, periodEnd: run.period_end!, periodsPerYear: P,
+    hourlyWage: payRate ? payRate.basis === 'hour' ? payRate.rate : div(payRate.rate, payRate.annualHours) : null,
+    payBasis: emp.pay_basis!, payDate: run.pay_date!, taxYear,
+    oneOffRun, simulate: ctx.simulate, lines, entitlementMovements,
+  };
+  await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "vacationable_earnings" });
 
   await settleTerminationBankPayouts(tx, {
-    orgId, documentId, payDate: run.pay_date!, employeePartyId,
+    orgId, documentId, payDate: run.pay_date!, employeePartyId, employmentId,
     employeeName: emp.display_name ?? employeePartyId,
     terminationRun, plans, lines, entitlementMovements,
   });
 
-  const payVacationInCash = emp.vacation_method === "pay_each_period" || terminationRun;
+  const payVacationInCash = vacationMethod === "pay_each_period" || terminationRun;
   await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines });
 
   // Work-triggered alternate-day grants: a statutory day off
@@ -375,7 +411,7 @@ export async function calculateStub(
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
     orgId, documentId, employeePartyId, payDate: run.pay_date!,
     employeeName: emp.display_name ?? employeePartyId,
-    vacationPercent, payVacationInCash, vacationPlan, plans,
+    employmentId: emp.employment_id ?? undefined, policyDate: run.period_end!, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
   });
 
@@ -384,6 +420,16 @@ export async function calculateStub(
     currency: run.doc_currency!, components: ctx.components, lines,
     wageExpenseAccountId: ctx.wageExpenseAccountId,
   });
+
+  await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "remaining" });
+
+  await applyEarningPaymentKinds(tx, {
+    orgId, subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!,
+    components: ctx.components, lines, wageExpenseAccountId: ctx.wageExpenseAccountId,
+  });
+
+  await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: run.period_end!,
+    componentIds: lines.filter((line) => cmp(line.amount, "0") !== 0).map((line) => line.componentId).filter((id): id is string => id !== null) });
 
   // ---- Statutory lines: one helper, one declared recomputation class -------
   //
@@ -699,14 +745,14 @@ export async function calculateStub(
     currency: run.doc_currency!, gross, pensionable, insurable, net,
     employerCost, vacationAccrued, factors, paymentMethod,
   });
-  await insertPayStubLineRows(tx, {
+  const entitlementLineIds=await insertPayStubLineRows(tx, {
     orgId, stubId, actorId, country, payDate: run.pay_date!,
   }, lines);
 
   await persistEntitlementMovements(tx, {
     orgId, actorId, documentId,
     employeePartyIds: [employeePartyId],
-    simulate: ctx.simulate, movements: entitlementMovements,
+    simulate: ctx.simulate, movements: entitlementMovements, stubLineIds: entitlementLineIds,
   });
 
   return {

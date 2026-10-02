@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
+import { benefitContributionLabels } from './benefit-contribution-labels'
 import { actorHasTeam, findTeamEmploymentIdsForParty } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
 import { getMyProfile,
   getMyRequests,
@@ -1257,7 +1258,8 @@ export interface MeDependentRow {
 export interface MeBenefitPlanOption {
   value: string
   label: string
-  levels: { value: string; label: string }[]
+  classes: { value: string; label: string }[]
+  contributionRules: { value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }[]
 }
 
 export interface MeBenefitsData {
@@ -1292,7 +1294,6 @@ export interface MeBenefitsData {
     employments: { value: string; label: string }[]
     planLabel: string
     plans: MeBenefitPlanOption[]
-    levelLabel: string
     windowLabel: string
     windows: { value: string; label: string }[]
     fromLabel: string
@@ -1308,8 +1309,11 @@ export interface MeBenefitsData {
     planName: string
     title: string
     description: string
-    levelLabel: string
-    levels: { value: string; label: string }[]
+    classKey: string | null
+    matchEligible: boolean | null
+    classes: { value: string; label: string }[]
+    contributionRules: { value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }[]
+    contributionTerms: { ruleId: string; electionMode: 'fixed' | 'follows_policy'; electedRate: string | null; declaredPeriodsPerYear?: number | null }[]
     dateLabel: string
     reasonLabel: string
     reasonPlaceholder: string
@@ -1320,15 +1324,16 @@ export interface MeBenefitsData {
 }
 
 /** The person's benefits: current elections with the stored payroll
- * amounts, the open windows covering their employer, dependents on file,
- * and the elect/change dialogs. Amounts render the stored per-period
- * figures — never a recomputed number. */
+ * contribution elections, the open windows covering their employer, dependents on file,
+ * and the elect/change dialogs. Contribution rates retain their declared units;
+ * the native pay run owns calculated and delivered amounts. */
 export async function loadMeBenefits(
   authz: Authz,
   sp: Record<string, string | undefined> = {},
 ): Promise<MeBenefitsData> {
   const orgId = authz.user.orgId
   const t = (await getTranslations('hrm')) as unknown as Catalog
+  const contributionText = await getTranslations('admin')
   const base = {
     title: t('me.benefits.title'),
     description: t('me.benefits.description'),
@@ -1387,7 +1392,7 @@ export async function loadMeBenefits(
         statusVariant: statusVariant(row.status),
         effectiveLabel: row.effectiveTo ? `${row.effectiveFrom} → ${row.effectiveTo}` : `${row.effectiveFrom} → …`,
         employeeAmount:
-          row.employeeAmountPerPeriod != null ? `${row.employeeAmountPerPeriod} ${row.currency}` : null,
+          benefitContributionLabels(row.contributions, row.currency, contributionText, 'employee') || null,
         changeHref: row.status === 'active' ? `/me/benefits?change=${encodeURIComponent(row.id)}` : null,
         changeLabel: t('me.benefits.change'),
       })),
@@ -1411,10 +1416,10 @@ export async function loadMeBenefits(
             planLabel: t('me.benefits.columns.plan'),
             plans: workspace.plans.map((plan) => ({
               value: plan.id,
-              label: `${plan.code} — ${plan.name}`,
-              levels: plan.levels.map((level) => ({ value: level.levelKey, label: level.label })),
+              label: `${plan.code} — ${plan.name} (${plan.currency})`,
+              classes: plan.classes,
+              contributionRules: plan.contributionRules,
             })),
-            levelLabel: t('me.benefits.columns.coverage'),
             windowLabel: t('me.benefits.columns.window'),
             windows: workspace.openWindows.map((window) => ({
               value: window.id,
@@ -1436,10 +1441,11 @@ export async function loadMeBenefits(
               planName: `${changeTarget.planCode} — ${changeTarget.planName}`,
               title: t('me.benefits.changeTitle'),
               description: t('me.benefits.changeDescription'),
-              levelLabel: t('me.benefits.columns.coverage'),
-              levels: (
-                workspace.plans.find((plan) => plan.code === changeTarget.planCode)?.levels ?? []
-              ).map((level) => ({ value: level.levelKey, label: level.label })),
+              classKey: changeTarget.classKey,
+              matchEligible: changeTarget.matchEligible,
+              classes: workspace.plans.find((plan) => plan.id === changeTarget.planId)?.classes ?? [],
+              contributionRules: workspace.plans.find((plan) => plan.id === changeTarget.planId)?.contributionRules ?? [],
+              contributionTerms: changeTarget.contributionTerms.map(term => ({ ...term, electedRate: term.electedRate ?? null })),
               dateLabel: t('me.benefits.fromLabel'),
               reasonLabel: t('me.profile.reason'),
               reasonPlaceholder: t('me.benefits.changeReasonPlaceholder'),

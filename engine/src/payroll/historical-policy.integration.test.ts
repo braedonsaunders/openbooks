@@ -1,3 +1,8 @@
+import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPostingAccount, seedPayrollProfile,
+  seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -11,7 +16,6 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 interface AdoptionFixture {
   orgId: string;
@@ -27,26 +31,16 @@ async function seedEmployee(
   options: { name: string; hiredOn?: string } = { name: "Terry Worker" },
 ): Promise<string> {
   const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${employeeId}, ${fx.orgId}, 'person', ${options.name}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${options.hiredOn ?? "2020-01-06"}, true,
-            ${fx.actorId}, ${fx.actorId})`);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
-                                  is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2020-01-01', true,
-            ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollPerson(fx.orgId, employeeId, options.name);
+  await seedPayrollEmployeeRole(fx.orgId, employeeId, { hiredOn: options.hiredOn ?? "2020-01-06", isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId });
+  await seedPayrollWage(fx.orgId, employeeId, fx.actorId, {
+    currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2020-01-01',
+  });
   // Stub calculation refuses employees without an HRM employment (NOT NULL since 0374), so the hire carries one.
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                           province, pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId)}, ${fx.scheduleId},
-            'ON', 'hourly', 'CA', 1, 1, '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollProfile(fx.orgId, employeeId, await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId), fx.scheduleId, fx.actorId, {
+    province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+  }, { percentFloor: '4', method: 'accrue' });
+
   return employeeId;
 }
 
@@ -55,23 +49,13 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
 
-  const account = async (number: string, name: string, type: string) => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                            reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true)`);
-    return id;
-  };
+  const account = seedPostingAccount.bind(null, org.orgId);
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current_other");
   const craPayable = await account("2310", "CRA remittances payable", "liability_current_other");
   const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
@@ -80,8 +64,7 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
         taxPayableAccountId: craPayable,
         vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+      });
   await seedPayrollComponents(org.orgId, actorId);
   // Québec legs need their classifications (HSF sector, CNT exemption class,
   // CNT liability slot): an unclassified Québec employer refuses by name.
@@ -98,11 +81,10 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
      where org_id = ${org.orgId} and system_key = 'hsf'`);
 
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
 
   const employeeName = "Terry Worker";
   const employeeId = await seedEmployee(

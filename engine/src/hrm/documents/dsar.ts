@@ -1147,6 +1147,16 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       `)).rows;
       const benefitSubjectEmployments = sql`select id from worker_employments
         where org_id = ${orgId} and worker_party_id = ${partyId}`;
+      payload.benefitContributionElections = (await db.execute<Record<string, unknown>>(sql`
+        select t.id, t.enrollment_id, t.rule_id, t.election_mode,
+               t.elected_rate::text as elected_rate, t.declared_periods_per_year,
+               t.effective_from::text as effective_from, t.effective_to::text as effective_to,
+               t.source_decimal, t.provenance
+          from hrm_benefit_enrollment_terms t
+          join hrm_benefit_enrollments e on e.org_id = t.org_id and e.id = t.enrollment_id
+         where t.org_id = ${orgId} and e.employment_id in (${benefitSubjectEmployments})
+         order by t.effective_from, t.id
+      `)).rows;
       payload.benefitProgramMemberships = (await db.execute<Record<string, unknown>>(sql`
         select id, program_id, employment_id, effective_from::text as effective_from,
                effective_to::text as effective_to, weight::text as weight, role
@@ -1350,6 +1360,30 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
           from hrm_benefit_payroll_inputs
          where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
          order by coverage_from
+      `)).rows;
+      payload.benefitPayrollContributions = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, enrollment_id, rule_id, term_id, pay_run_document_id,
+               pay_stub_line_id, period_from::text as period_from, period_to::text as period_to,
+               amount::text as amount, currency, status
+          from pay_run_benefit_allocations
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by period_from, id
+      `)).rows;
+      payload.serviceCredits = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, convention, as_of_date::text as as_of_date,
+               credited_days::text as credited_days, credited_months,
+               effective_from::text as effective_from, effective_to::text as effective_to, reason
+          from payroll_service_credits
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by effective_from, id
+      `)).rows;
+      payload.vacationTerms = (await db.execute<Record<string, unknown>>(sql`
+        select id, employment_id, method, percent_floor::text as percent_floor,
+               annual_days_floor::text as annual_days_floor,
+               effective_from::text as effective_from, effective_to::text as effective_to, reason
+          from payroll_vacation_terms
+         where org_id = ${orgId} and employment_id in (${subjectPartyEmployments})
+         order by effective_from, id
       `)).rows;
       payload.payrollInputs = (await db.execute<Record<string, unknown>>(sql`
         select id, employment_id, kind, absence_date::text as absence_date,

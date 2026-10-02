@@ -150,7 +150,7 @@
       "openWindows": "Ouverte",
       "noOpenWindow": "Aucune fenêtre d'adhésion n'est ouverte.",
       "pendingSub": "Approbations en attente",
-      "missingSub": "Adhésions sans entrées"
+      "missingSub": "Inscriptions sans choix de cotisation"
     }
   },
   "queue": {
@@ -1388,7 +1388,7 @@
   },
   "benefits": {
     "title": "Avantages",
-    "description": "Régimes, fenêtres d'adhésion, adhésions et montants mensuels pour la paie.",
+    "description": "Définissez ici les offres d’avantages et les cotisations choisies par les salariés. La paie calcule les montants réels et gère le traitement fiscal, les écritures et les soldes de droits.",
     "windowsTitle": "Fenêtres d'adhésion",
     "enrolmentsTitle": "Adhésions",
     "segmentsLabel": "Afficher",
@@ -1704,7 +1704,7 @@
         "coverage": "Couverture",
         "status": "Statut",
         "effective": "Effet",
-        "monthly": "Retenue / période",
+        "monthly": "Cotisations salariales",
         "window": "Fenêtre",
         "kind": "Type",
         "range": "Dates",
@@ -1713,7 +1713,7 @@
       },
       "electionsEmpty": "Aucun choix",
       "electionsEmptyDescription": "La couverture choisie figure ici.",
-      "monthlyHint": "Le montant enregistré que la paie retient chaque période — jamais recalculé.",
+      "monthlyHint": "Les taux choisis conservent leurs unités déclarées ; la paie calcule les retenues réelles.",
       "windowsTitle": "Fenêtres d'inscription ouvertes",
       "windowsEmpty": "Aucune fenêtre ouverte",
       "windowsEmptyDescription": "Les fenêtres de votre employeur figurent ici tant qu'elles sont ouvertes.",
@@ -2665,7 +2665,7 @@
     "newProgram": "Nouveau programme",
     "newAward": "Nouvelle prime",
     "programsEmptyTitle": "Aucun programme d'avantages",
-    "programsEmptyDescription": "Créez le premier programme de l'employeur pour accorder récompenses, allocations ou intéressement.",
+    "programsEmptyDescription": "Créez un régime de couverture, d’épargne, de récompense, d’allocation, d’incitation ou personnalisé.",
     "awardsEmptyTitle": "Aucune prime",
     "awardsEmptyDescription": "Les primes apparaissent ici dès qu'un programme les accorde.",
     "loadFailed": "L'espace avantages n'a pas pu être chargé.",
@@ -2735,7 +2735,7 @@
       "allowance": "Allocation",
       "incentive": "Intéressement",
       "custom": "Sur mesure",
-      "insured": "Régime assuré"
+      "insured": "Régime de couverture ou d’épargne"
     },
     "familyHints": {
       "reward": "Reconnaissance ponctuelle : bonus, cartes cadeaux, primes spontanées.",
@@ -2795,7 +2795,7 @@
     },
     "columns": {
       "program": "Programme",
-      "family": "Famille",
+      "family": "Type",
       "value": "Valeur",
       "effective": "Effet",
       "status": "Statut",
@@ -2923,7 +2923,11 @@
       "openPayrollSetup": "Ouvrir la configuration de paie",
       "accountsPrerequisite": "Aucun compte de mesure imputable n’est visible. Ajoutez les comptes nécessaires au plan comptable ou faites vérifier votre accès à l’entité juridique par les finances, puis actualisez les options.",
       "openAccounts": "Ouvrir le plan comptable",
-      "refreshOptions": "Actualiser les options"
+      "refreshOptions": "Actualiser les options",
+      "typeTitle": "Nouveaume : {type}",
+      "chooseCurrency": "Choisir une devise",
+      "currencyHint": "Les devises suivent l’employeur sélectionné et les fonctionnalités de l’entreprise. La paie traite les attributions dans la devise du programme.",
+      "currencyUnavailable": "Choisissez une devise disponible pour l’employeur sélectionné."
     },
     "awardBuilderTitle": "Nouvelle récompense",
     "awardFields": {
@@ -3029,6 +3033,24 @@
     "directProcessingHint": "Flows a autorisé le traitement direct ; cette récompense est prête pour la paie.",
     "rewardProgramPrerequisite": "Créez et activez un programme de récompense ou d’indemnité avant d’enregistrer une récompense.",
     "createRewardProgram": "Créer un programme de récompense",
-    "noApprovalSubmissionHint": "Aucune approbation requise. La soumission autorisée a été enregistrée ; cette récompense est prête pour la paie."
+    "noApprovalSubmissionHint": "Aucune approbation requise. La soumission autorisée a été enregistrée ; cette récompense est prête pour la paie.",
+    "awardCurrencyHint": "Héritée du programme ; la paie ne convertit pas la devise de la récompense.",
+    "rewardCreateHint": "Attribuez un avantage selon la valeur, la devise et les règles d’un programme actif. Configurez l’offre dans Programmes.",
+    "programPurpose": {
+      "reward": "Définissez la reconnaissance ici, puis attribuez les récompenses aux employés dans Récompenses. Les attributions prêtes apparaissent dans Versements.",
+      "allowance": "Définissez une allocation fixe et son calendrier. Les attributions suivent ce programme ; il ne crée ni portefeuille ni remboursement de frais.",
+      "incentive": "Définissez comment la performance mesurée produit des versements. Simulez et liquidez dans Incitations ; les résultats approuvés apparaissent dans Versements.",
+      "custom": "Définissez une attribution financée par l’employeur avec des règles explicites. Enregistrez-la dans Récompenses et livrez-la dans Versements."
+    },
+    "scopeHint": "Avantages définit les offres et attributions patronales. La paie gère salaire, impôt, cotisations légales et cycles de paie.",
+    "views": {
+      "overview": "Avantages et attributions patronales liés à la paie.",
+      "programs": "Définissez chaque offre ici. Les employés s’inscrivent aux régimes ; récompenses et incitations suivent leurs programmes.",
+      "enrolments": "Inscrivez les employés aux régimes de couverture et d’épargne. Gérez les périodes via les fenêtres d’inscription.",
+      "rewards": "Enregistrez les attributions dans un programme actif. Configurez les offres réutilisables dans Programmes.",
+      "incentives": "Gérez les programmes de performance. Ouvrez un dossier pour simuler, calculer et liquider les versements.",
+      "payouts": "Envoyez les attributions prêtes à la paie et suivez leur livraison. Créez dans Récompenses et liquidez dans Incitations."
+    },
+    "configureApprovals": "Configurer les approbations"
   }
 }

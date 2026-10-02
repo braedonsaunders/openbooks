@@ -26,9 +26,8 @@ import { hrmFeatureOn } from "./services.ts";
  * bitemporal close+supersede primitive, dates validated through
  * temporal.ts parseCivilDate). It refuses when a later change depends on
  * the target (naming the dependency's revision and kind) and when payroll
- * has consumed the period (the hrm_payroll_inputs /
- * hrm_benefit_payroll_inputs seam rows exist with consumed_by — naming the
- * run). Permission: hrm.employment.approve. Reason required.
+ * has consumed the period (leave inputs or committed native benefit
+ * allocations identify the payroll run). Permission: hrm.employment.approve. Reason required.
  *
  * Correct edits a completed change without re-approval only when the org
  * setting correct_requires_reapproval is false AND the actor holds
@@ -126,17 +125,17 @@ async function refuseWhenPayrollConsumed(
     );
   }
   const benefits = await exec.execute<{ runId: string }>(sql`
-    select i.consumed_by_run_document_id as "runId"
-      from hrm_benefit_payroll_inputs i
+    select i.pay_run_document_id as "runId"
+      from pay_run_benefit_allocations i
       join hrm_benefit_enrollments e on e.org_id = i.org_id and e.id = i.enrollment_id
      where i.org_id = ${orgId} and e.employment_id = ${employmentId}
-       and i.status = 'consumed' and i.coverage_to >= ${effectiveFrom}::date
+       and i.status in ('committed', 'voided') and i.period_to >= ${effectiveFrom}::date
      limit 1
   `);
   const benefitConsumed = benefits.rows[0];
   if (benefitConsumed) {
     throw new EventVerbError(
-      `payroll has consumed this period (benefits run ${benefitConsumed.runId}) — history under a consumed run is frozen; reverse it in payroll first`,
+      `payroll has consumed this period (benefits run ${benefitConsumed.runId}) — benefit history is frozen; record a new employment change after the payroll period`,
     );
   }
 }

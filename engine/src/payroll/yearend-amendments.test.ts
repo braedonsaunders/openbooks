@@ -1,3 +1,9 @@
+import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import { recurringBenefitsRunSource } from "./benefit-plan-inputs.ts";
+import {
+  seedPayrollSchedule, seedPayrollPerson, seedPayrollProfile, createScratchOrg, dropScratchOrgReporting, seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -22,7 +28,6 @@ import {
   filingSubmissions,
   recordFilingIssue,
 } from "./yearend-amendments.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -758,47 +763,40 @@ async function seedT4Year(): Promise<T4Fixture> {
     })}::jsonb where id = ${org.orgId}`);
 
   const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
-    values (${employeeId}, ${org.orgId}, 'person', 'Grace Hopper', true, ${org.subsidiaryId}, '{}'::jsonb)`);
+  await seedPayrollPerson(org.orgId, employeeId, 'Grace Hopper', {
+    subsidiaryId: org.subsidiaryId,
+  });
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
-                                           province, pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           sin_encrypted, sin_last3, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, '4', 'accrue',
-            ${sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" })}, '286', true, ${actorId}, ${actorId})`);
+  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+    province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+    sinEncrypted: sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" }), sinLast3: '286',
+  }, { percentFloor: '4', method: 'accrue' });
+
 
   const documentId = randomUUID();
-  await db.execute(sql`
-    insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                           currency, status, created_by, updated_by)
-    values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-            ${org.subsidiaryId}, '2026-07-21', 'CAD', 'draft', ${actorId}, ${actorId})`);
+  await seedPayrollDocument(org.orgId, documentId, {
+    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: org.subsidiaryId,
+    documentDate: '2026-07-21', currency: 'CAD', status: 'draft', createdBy: actorId, updatedBy: actorId,
+  });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                           tax_year, run_status, calculated_at, created_by, updated_by)
     values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18', '2026-07-21',
-            2026, 'committed', now(), ${actorId}, ${actorId})`);
+            2026, 'calculated', now(), ${actorId}, ${actorId})`);
 
   const stubId = randomUUID();
-  await db.execute(sql`
-    insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                           periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                           pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-    values (${stubId}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON', 26, '2026-07-21',
-            2026, 'CAD', '52000.0000', '42000.0000', '52000.0000', '52000.0000',
-            ${JSON.stringify({ C: "3200.50", C2: "188.00", EI: "834.20" })}::jsonb,
-            ${actorId}, ${actorId})`);
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+    id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD',
+    gross: '52000.0000', netPay: '42000.0000', pensionableEarnings: '52000.0000', insurableEarnings: '52000.0000',
+    factors: { C: "3200.50", C2: "188.00", EI: "834.20" }, createdBy: actorId, updatedBy: actorId,
+  });
 
   const earningComponentId = randomUUID();
   await db.execute(sql`
@@ -807,11 +805,10 @@ async function seedT4Year(): Promise<T4Fixture> {
             ${actorId}, ${actorId})`);
   const taxComponentId = randomUUID();
   const employerCppId = randomUUID();
-  await db.execute(sql`
-    insert into pay_components (id, org_id, code, name, kind, system_key, country, taxable,
-                                created_by, updated_by)
-    values (${taxComponentId}, ${org.orgId}, 'FIT', 'Income tax', 'deduction', 'income_tax', 'CA',
-            false, ${actorId}, ${actorId})`);
+  await seedPayrollComponent(org.orgId, taxComponentId, {
+    code: 'FIT', name: 'Income tax', kind: 'deduction', systemKey: 'income_tax', country: 'CA', taxable: false,
+    createdBy: actorId, updatedBy: actorId,
+  });
   await db.execute(sql`
     insert into pay_components (id, org_id, code, name, kind, system_key, country, taxable,
                                 created_by, updated_by)
@@ -824,6 +821,9 @@ async function seedT4Year(): Promise<T4Fixture> {
            (${org.orgId}, ${stubId}, ${taxComponentId}, 'deduction', 'Income tax', '9100.7500',
             ${actorId}, ${actorId}),
            (${org.orgId}, ${stubId}, ${employerCppId}, 'employer_contribution', 'Employer CPP', '3200.5000', ${actorId}, ${actorId})`);
+
+  await db.execute(sql`update pay_runs set benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db,org.orgId,documentId))}::jsonb,
+    run_status='committed' where org_id=${org.orgId} and document_id=${documentId}`);
 
   return {
     orgId: org.orgId,
@@ -1584,7 +1584,7 @@ test(
       // Put the run back: the slip the employer withdrew is produced again,
       // and the disagreement is NAMED rather than quietly re-filed.
       await db.execute(sql`
-        update pay_runs set run_status = 'committed'
+        update pay_runs set run_status = 'committed', benefit_source_snapshot=${JSON.stringify(await recurringBenefitsRunSource(db,fx.orgId,fx.documentId))}::jsonb
          where org_id = ${fx.orgId} and document_id = ${fx.documentId}`);
       lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(lifecycle.rows[0]!.status, "resurrected");

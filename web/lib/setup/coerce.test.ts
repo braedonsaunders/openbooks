@@ -68,6 +68,7 @@ test('setup decimal and percent fields canonicalize without crossing IEEE-754', 
   const money: SetupField = { key: 'acquisitionCost', kind: 'decimal', required: true }
   assert.deepEqual(coerceField(rate, '13.2500'), { column: 'rate_percent', value: '13.2500000000' })
   assert.match((coerceField(rate, 13.25) as { error: string }).error, /decimal string, not a JSON number.*re-enter/)
+  assert.deepEqual(coerceField({ key: 'creditedDays', kind: 'decimal', decimalScale: 16 }, '365.1234567890123456'), { column: 'credited_days', value: '365.1234567890123456' })
   assert.deepEqual(coerceField(money, '00100.1000'), { column: 'acquisition_cost', value: '100.1000000000' })
   assert.deepEqual(coerceField({ key: 'acquisitionRate', kind: 'decimal', required: true }, '1.25'), {
     column: 'acquisition_rate',
@@ -198,6 +199,10 @@ test('setup booleans accept documented scalar spellings and reject malformed con
   for (const value of [true, 1, 'true', ' YES ', 'y', '1', 't']) assert.deepEqual(coerceField(field, value), { column: 'taxable', value: true })
   for (const value of [false, 0, 'false', ' NO ', 'n', '0', 'f', '', ' ', null, undefined]) assert.deepEqual(coerceField(field, value), { column: 'taxable', value: false })
   for (const value of ['false-ish', 'truthy', 2, -1, 0.5, NaN, Infinity, [], ['yes'], { enabled: true }]) assert.deepEqual(coerceField(field, value), { error: 'taxable must be a boolean' })
+  const eligibility: SetupField = { key: 'eligible', kind: 'boolean', nullable: true, required: true }
+  assert.deepEqual(coerceField(eligibility, '', false), { column: 'eligible', value: null })
+  assert.deepEqual(coerceField(eligibility, ''), { error: 'eligible is required' })
+  assert.deepEqual(coerceField(eligibility, false), { column: 'eligible', value: false })
 })
 
 test('worker-comp group rates refuse negatives through the declared field (B-PRJ-09)', () => {
@@ -222,6 +227,7 @@ test('refs to natural-key entities carry the key, never a UUID (hrm-document-cat
   // write path's declared-category refusal.
   const field: SetupField = { key: 'categoryKey', kind: 'ref', ref: 'hrm-document-categories' }
   assert.deepEqual(coerceField(field, 'offer-letter'), { column: 'category_key', value: 'offer-letter' })
+  assert.deepEqual(coerceField({ key: 'currency', kind: 'ref', ref: 'benefit-currencies' }, 'CAD'), { column: 'currency', value: 'CAD' })
   // UUID-shaped refs to ordinary entities still validate as UUIDs.
   const uuidField: SetupField = { key: 'levelId', kind: 'ref', ref: 'hrm-job-levels' }
   assert.deepEqual(coerceField(uuidField, 'not-a-uuid'), { error: 'levelId must reference a valid record' })

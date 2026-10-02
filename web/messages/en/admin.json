@@ -3087,6 +3087,46 @@
         "singularTitle": "Program member",
         "description": "Employments bound to a program over effective dates, with weight and role for allocation."
       },
+      "benefit-contribution-rules": {
+        "title": "Contributions",
+        "singular": "Contributions",
+        "description": "Define each employee deduction, employer contribution or taxable non-cash benefit. Payroll components control tax treatment and posting."
+      },
+      "benefit-contribution-classes": {
+        "title": "Eligibility classes",
+        "singular": "Eligibility classes",
+        "description": "Group employees only where plan eligibility or matching limits differ."
+      },
+      "benefit-contribution-tiers": {
+        "title": "Matching limits",
+        "singular": "Matching limits",
+        "description": "Effective-dated service thresholds define maximum offers. Fixed employee elections do not increase automatically."
+      },
+      "benefit-enrollment-configuration": {
+        "title": "Employee election",
+        "singular": "Employee election",
+        "description": "Review the employee’s class and matching eligibility; manage actual contribution elections in Contributions."
+      },
+      "benefit-enrollment-terms": {
+        "title": "Contribution elections",
+        "singular": "Contribution elections",
+        "description": "Preserve the employee’s actual election separately from policy limits. Add new effective terms when an election changes."
+      },
+      "payroll-service-credits": {
+        "title": "Credited service",
+        "singular": "Credited service",
+        "description": "Record observed service without changing hire dates. The same effective baseline supports vacation and benefit eligibility."
+      },
+      "payroll-vacation-terms": {
+        "title": "Vacation terms",
+        "singular": "Vacation terms",
+        "description": "One effective policy controls each employment’s vacation method and personal minimums. Service schedules can increase these minimums."
+      },
+      "benefit-recovery-sources": {
+        "title": "Premium recovery",
+        "singular": "Premium recovery source",
+        "description": "Choose which employer-paid premiums become owed during an unpaid coverage period. The deduction’s recovery bank and schedule remain authoritative."
+      },
       "dunning-policies": {
         "title": "Policies",
         "description": "Collect receivables and manage billing in one workspace."
@@ -3184,7 +3224,7 @@
       "isBillableDefault": "Billable by default",
       "showOnFieldTicket": "Show on field tickets",
       "frequency": "Frequency",
-      "periodsPerYear": "Periods per year",
+      "periodsPerYear": "Collection periods per year",
       "anchorPeriodEnd": "Anchor period end",
       "payDateOffsetDays": "Pay date offset (days)",
       "value": "Value",
@@ -3209,7 +3249,7 @@
       "postsGl": "Posts to GL",
       "bookId": "Book",
       "categoryId": "Asset category",
-      "convention": "Convention",
+      "convention": "Service convention",
       "lifeMonths": "Life (months)",
       "depreciationMethodId": "Depreciation method",
       "departmentId": "Department",
@@ -3539,7 +3579,39 @@
       "default_on": "Included by default",
       "applies_to": "Region coverage",
       "countries": "Countries",
-      "timezone": "Time zone"
+      "timezone": "Time zone",
+      "ruleKey": "Contribution code",
+      "rateFormula": "Rate method",
+      "hoursBasis": "Eligible hours",
+      "payBasis": "Eligible earnings",
+      "monthsPerYear": "Premium months per year",
+      "proration": "Partial-period rule",
+      "matchRuleId": "Matching counterpart",
+      "requiresMatchEligibility": "Requires matching eligibility",
+      "enforcePolicyCap": "Enforce policy maximum",
+      "classKey": "Eligibility class",
+      "minimumServiceYears": "Minimum service years",
+      "employerMaxPercent": "Employer maximum %",
+      "employeeMatchRatio": "Employee-to-employer ratio",
+      "matchEligible": "Eligible for employer matching",
+      "enrollmentId": "Employee enrollment",
+      "ruleId": "Contribution",
+      "electionMode": "Election method",
+      "electedRate": "Elected rate",
+      "declaredPeriodsPerYear": "Elected collection periods per year",
+      "runApplicability": "Pay runs",
+      "unpaidPeriodTreatment": "Unpaid-period treatment",
+      "arrearsPlanId": "Recovery bank",
+      "arrearsRecoveryPeriods": "Recovery periods",
+      "asOfDate": "Observed on",
+      "creditedDays": "Credited service days",
+      "creditedMonths": "Credited service months",
+      "annualDays": "Annual vacation days",
+      "percentFloor": "Personal minimum %",
+      "annualDaysFloor": "Personal minimum annual days",
+      "waitingPeriodMonths": "Waiting period (calendar months)",
+      "approvalMode": "Approval policy",
+      "legalEmployer": "Legal employer"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
@@ -5025,7 +5097,8 @@
       "benefitCosts": "Costs and proration",
       "benefitComponents": "Pay components",
       "benefitDelivery": "Delivery",
-      "benefitRules": "Rules"
+      "benefitRules": "Rules",
+      "benefitAdvanced": "Advanced contribution rules"
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"
@@ -5114,6 +5187,136 @@
       "addRow": "Add row",
       "removeRow": "Remove row"
     },
+    "benefitBuilder": {
+      "offer": "Program",
+      "eligibility": "Eligibility and dates",
+      "eligibilityHint": "Set coverage dates, waiting time and approval requirements. After creating the offer, add its contributions and matching limits in the record.",
+      "delivery": "Payroll connection",
+      "deliveryHint": "Link employee deductions and employer contributions. Payroll owns tax treatment and processes the elected amounts on each pay run.",
+      "review": "Review",
+      "coverageType": "Coverage type",
+      "health": {
+        "title": "Health and insurance program",
+        "offer": "Name the coverage, insurance provider and responsible employer. Employees choose their coverage through Enrollments.",
+        "costs": "Premiums and coverage",
+        "costHint": "Set each side of the premium and how partial months are priced. Add employee-only or family coverage tiers after creation.",
+        "provider": "Insurance provider",
+        "employeeCost": "Employee premium",
+        "employerCost": "Employer premium",
+        "employeeCostBasis": "Employee premium frequency",
+        "employerCostBasis": "Employer premium frequency",
+        "contribution": "Coverage premiums",
+        "classes": "Coverage groups",
+        "rate": "Premium amount or rate",
+        "contributionSingular": "Coverage premium"
+      },
+      "retirement": {
+        "title": "Retirement and savings program",
+        "offer": "Name the savings plan, pension or investment provider and responsible employer. Employees participate through Enrollments.",
+        "costs": "Savings contributions",
+        "costHint": "Choose fixed contributions or a percentage of pay for the employee and employer. Percentages are contribution rates, not a matching formula.",
+        "provider": "Pension or savings provider",
+        "employeeCost": "Employee contribution",
+        "employerCost": "Employer contribution",
+        "employeeCostBasis": "Employee contribution basis",
+        "employerCostBasis": "Employer contribution basis",
+        "contribution": "Contributions",
+        "rate": "Contribution amount or rate",
+        "contributionSingular": "Contribution"
+      }
+    },
+    "benefitContributions": {
+      "componentHint": "Benefits defines the contribution. Configure statutory tax treatment, provider remittance and posting accounts on its Payroll component.",
+      "formulaHint": "Choose a rate method supported by this calculation basis. Matching links the opposite-side elected contribution.",
+      "rateHint": "Use the unit selected above: amount per hour or period, monthly or annual amount, or percentage. Employee fixed elections can replace this plan rate.",
+      "annualizationHint": "Declare how many regular collection periods share the annual premium. Leave empty to use the employee’s declared pay schedule.",
+      "capHint": "Policy limits constrain offers; they do not change a fixed employee election.",
+      "ratioHint": "Employee contribution required for each employer unit: 2 means the employee contributes twice the employer amount.",
+      "classHint": "Select the class defined by this plan, where eligibility or matching limits differ.",
+      "matchHint": "Whether this enrollment qualifies for matching under the plan’s policy.",
+      "electionHint": "A fixed election stays fixed when service limits increase. Follow policy explicitly uses the effective plan rate and service limits.",
+      "electedRateHint": "Enter the employee’s actual elected rate in the contribution’s unit. This is distinct from the maximum available offer.",
+      "arrearsHint": "Use a native money bank with direction Owe, manual accrual and this employee deduction as its payout component. Declare the recovery periods explicitly.",
+      "options": {
+        "kind": {
+          "employee_deduction": "Employee deduction",
+          "employer_contribution": "Employer contribution",
+          "taxable_non_cash": "Taxable non-cash benefit"
+        },
+        "basis": {
+          "per_hour": "Per eligible hour",
+          "per_period": "Per pay period",
+          "per_month": "Monthly amount, annualized",
+          "per_year": "Annual amount",
+          "percent_of_eligible_pay": "% of eligible earnings"
+        },
+        "formula": {
+          "elected_rate": "Plan or elected rate",
+          "hourly_wage_percent": "% of hourly wage",
+          "matching_election": "Match counterpart election"
+        },
+        "hours": {
+          "all_paid": "All paid hours",
+          "regular_paid": "Regular paid hours",
+          "scheduled_paid": "Scheduled paid hours"
+        },
+        "pay": {
+          "all_cash_earnings": "All cash earnings",
+          "regular_cash_earnings": "Regular cash earnings"
+        },
+        "proration": {
+          "none": "No proration",
+          "calendar_days": "Covered calendar days"
+        },
+        "election": {
+          "fixed": "Fixed election",
+          "follows_policy": "Follow plan policy"
+        },
+        "run": {
+          "regular_only": "Regular pay runs only",
+          "all_pay_runs": "All pay runs"
+        },
+        "unpaid": {
+          "charge": "Charge the period",
+          "carry": "Carry for recovery"
+        }
+      },
+      "waitingMonthsHint": "Use calendar months or days, not both. Calendar months follow the employee’s hire-date anniversary.",
+      "activationHint": "Save the offer inactive, configure Contributions, then activate it when its payroll rules are ready.",
+      "planRate": "Plan rate: {rate}",
+      "noApproval": "No approvals",
+      "flowsApproval": "Use Flows approval policy",
+      "approvalHint": "No approvals activates valid elections directly. Flows applies the organization’s configured approval levels before activation.",
+      "fields": {
+        "kind": "Contribution type",
+        "basis": "Calculation basis",
+        "rate": "Plan rate",
+        "method": "Vacation method",
+        "ruleId": "Contribution",
+        "ruleKey": "Contribution code",
+        "payComponentId": "Payroll component",
+        "recoveryRuleId": "Recovery deduction",
+        "premiumRuleId": "Employer premium"
+      },
+      "recoverySourceHint": "Link this premium to the employee deduction that carries and recovers unpaid coverage. A premium can belong to only one recovery deduction."
+    },
+    "serviceCredit": {
+      "calendarMonths": "Calendar months",
+      "actual365": "Actual days / 365",
+      "conventionHint": "Calendar months use anniversaries. Actual/365 uses elapsed civil days and the observed credited-day baseline.",
+      "asOfHint": "The date on which the credited service was observed; future service advances from this baseline.",
+      "reasonHint": "Explain the policy or adjustment. Committed payroll evidence is preserved; changes use new effective terms.",
+      "annualDaysHint": "Annual time entitlement is separate from vacation pay percentage. It never converts days into cash.",
+      "employerTierHint": "Choose the legal employer for its own ladder. An employer-specific ladder replaces the organization-default ladder for that entitlement."
+    },
+    "vacationTerms": {
+      "accrue": "Bank vacation pay",
+      "payEachPeriod": "Pay vacation each period",
+      "paidLeave": "Paid leave in days",
+      "percentHint": "A higher personal minimum is preserved. Leave empty to follow the effective service schedule; this percentage does not define annual days.",
+      "daysHint": "A higher personal annual-day minimum is preserved separately from the service schedule and any cash vacation percentage.",
+      "method": "Vacation method"
+    },
     "collectionPolicy": "Policy",
     "collectionPolicyFields": {
       "policy": "Policy",
@@ -5131,7 +5334,8 @@
       "description": "Set collection criteria and compose the reminder sequence.",
       "reminderNumber": "Reminder {number}",
       "addReminder": "Add reminder"
-    }
+    },
+    "no": "No"
   },
   "flows": {
     "title": "Flows",

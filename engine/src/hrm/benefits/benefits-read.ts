@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "../../platform/business-date.ts";
 import {
   loadOwnEmploymentIds,
   requireAggregateBenefitsRead,
@@ -28,10 +29,6 @@ export interface BenefitPlanSummary {
 
 export interface BenefitPlanCatalogRow extends BenefitPlanSummary, Record<string, unknown> {
   readonly employerSubsidiaryId: string | null;
-  readonly employeeCostBasis: string;
-  readonly employeeCost: string | null;
-  readonly employerCostBasis: string;
-  readonly employerCost: string | null;
 }
 
 /** The Benefits catalog includes inactive plans without widening its entity fence. */
@@ -45,19 +42,28 @@ export async function listBenefitPlans(
   return (await exec.execute<BenefitPlanCatalogRow>(sql`
     select p.id::text as id, p.code, p.name, p.kind, p.currency, p.is_active as "isActive",
            p.effective_from::text as "effectiveFrom", p.effective_to::text as "effectiveTo",
-           p.employer_subsidiary_id::text as "employerSubsidiaryId",
-           p.employee_cost_basis as "employeeCostBasis", p.employee_cost::text as "employeeCost",
-           p.employer_cost_basis as "employerCostBasis", p.employer_cost::text as "employerCost"
+           p.employer_subsidiary_id::text as "employerSubsidiaryId"
       from hrm_benefit_plans p
      where p.org_id = ${orgId}::uuid and ${entityFence}
      order by p.code, p.id
   `)).rows;
 }
 
+export interface EnrollmentContributionRuleOption {
+  readonly value: string;
+  readonly label: string;
+  readonly basis: string;
+  readonly rate: string;
+  readonly rateFormula: string;
+  readonly requiresMatchEligibility: boolean;
+  readonly effectiveFrom: string;
+  readonly effectiveTo: string | null;
+}
 export interface EnrollmentPlanOption {
   readonly value: string;
   readonly label: string;
-  readonly levels: { value: string; label: string }[];
+  readonly contributionRules: EnrollmentContributionRuleOption[];
+  readonly classes: { value: string; label: string }[];
 }
 
 /** Active plan selectors share the aggregate reader's legal-entity fence. */
@@ -68,23 +74,17 @@ export async function listEnrollmentPlanOptions(
 ): Promise<EnrollmentPlanOption[]> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   const entityFence = scope === null ? sql`true` : sql`(p.employer_subsidiary_id is null or p.employer_subsidiary_id = any (${`{${[...scope].join(",")}}`}::uuid[]))`;
-  const rows = (await exec.execute<{ id: string; code: string; name: string; levelKey: string | null; levelLabel: string | null }>(sql`
-    select p.id::text as id, p.code, p.name, l.level_key as "levelKey", l.label as "levelLabel"
+  return (await exec.execute<{ value: string; label: string; contributionRules: EnrollmentContributionRuleOption[]; classes: { value: string; label: string }[] }>(sql`
+    select p.id::text as value, p.code || ' — ' || p.name || ' (' || p.currency || ')' as label,
+      coalesce((select jsonb_agg(jsonb_build_object('value',r.id,'label',r.name,'basis',r.basis,
+        'rate',r.rate::text,'rateFormula',r.rate_formula,'requiresMatchEligibility',r.requires_match_eligibility,'effectiveFrom',r.effective_from::text,'effectiveTo',r.effective_to::text) order by r.position,r.id)
+        from hrm_benefit_contribution_rules r where r.org_id=p.org_id and r.plan_id=p.id and r.is_active), '[]'::jsonb) as "contributionRules",
+      coalesce((select jsonb_agg(jsonb_build_object('value',c.class_key,'label',c.name) order by c.class_key,c.id)
+        from hrm_benefit_contribution_classes c where c.org_id=p.org_id and c.plan_id=p.id), '[]'::jsonb) as classes
       from hrm_benefit_plans p
-      left join hrm_benefit_plan_levels l on l.org_id = p.org_id and l.plan_id = p.id
      where p.org_id = ${orgId}::uuid and p.is_active and ${entityFence}
-     order by p.code, p.id, l.position, l.id
+     order by p.code, p.id
   `)).rows;
-  const plans = new Map<string, EnrollmentPlanOption>();
-  for (const row of rows) {
-    let plan = plans.get(row.id);
-    if (!plan) {
-      plan = { value: row.id, label: `${row.code} — ${row.name}`, levels: [] };
-      plans.set(row.id, plan);
-    }
-    if (row.levelKey !== null) plan.levels.push({ value: row.levelKey, label: row.levelLabel ?? row.levelKey });
-  }
-  return [...plans.values()];
 }
 
 export interface EnrollmentWindowSummary {
@@ -182,6 +182,34 @@ export async function listEnrollmentWindows(
     }));
 }
 
+export type EnrollmentContributionSummary = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly basis: string;
+  readonly electionMode: "fixed" | "follows_policy";
+  readonly electedRate: string | null;
+  readonly policyRate: string;
+  readonly rateFormula: string;
+  readonly effectiveFrom: string;
+  readonly effectiveTo: string | null;
+};
+
+/** Employee-safe effective terms; pricing inputs and other employees' elections are excluded. */
+export function enrollmentContributionProjection(onDate: string) {
+  return sql`coalesce((select jsonb_agg(jsonb_build_object(
+    'ruleId',r.id,'name',r.name,'kind',r.kind,'basis',r.basis,
+    'electionMode',t.election_mode,'electedRate',t.elected_rate::text,
+    'policyRate',r.rate::text,'rateFormula',r.rate_formula,
+    'effectiveFrom',t.effective_from::text,'effectiveTo',t.effective_to::text)
+    order by r.position,r.id)
+    from hrm_benefit_enrollment_terms t
+    join hrm_benefit_contribution_rules r on r.org_id=t.org_id and r.id=t.rule_id
+    where t.org_id=e.org_id and t.enrollment_id=e.id
+      and t.effective_from<=greatest(e.effective_from,least(coalesce(e.effective_to,${onDate}::date),${onDate}::date))
+      and (t.effective_to is null or t.effective_to>=greatest(e.effective_from,least(coalesce(e.effective_to,${onDate}::date),${onDate}::date)))), '[]'::jsonb)`;
+}
+
 export interface EnrollmentSummary {
   readonly id: string;
   readonly employmentId: string;
@@ -189,13 +217,12 @@ export interface EnrollmentSummary {
   readonly employeeName: string | null;
   readonly planCode: string;
   readonly planName: string;
-  readonly coverageLevelKey: string | null;
+  readonly classKey: string | null;
   readonly coverageLabel: string | null;
   readonly status: string;
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
-  readonly employeeAmountPerPeriod: string | null;
-  readonly employerAmountPerPeriod: string | null;
+  readonly contributions: readonly EnrollmentContributionSummary[];
   readonly currency: string;
 }
 
@@ -209,25 +236,25 @@ export async function listEnrollments(
   if (filter?.employmentId !== undefined) {
     await requireHrmBenefitsRead(exec, orgId, actorId, filter.employmentId);
   }
+  const asOf = await businessToday(orgId);
   const rows = (
     await exec.execute<Record<string, unknown>>(sql`
       select e.id, e.employment_id as "employmentId", e.window_id as "windowId",
              p.display_name as "employeeName",
              plan.code as "planCode", plan.name as "planName",
-             e.coverage_level_key as "coverageLevelKey",
-             lvl.label as "coverageLabel",
+             e.class_key as "classKey",
+             cls.name as "coverageLabel",
              e.status,
              e.effective_from::text as "effectiveFrom",
              e.effective_to::text as "effectiveTo",
-             e.employee_amount_per_period::text as "employeeAmountPerPeriod",
-             e.employer_amount_per_period::text as "employerAmountPerPeriod",
+             ${enrollmentContributionProjection(asOf)} as contributions,
              e.currency, emp.employer_subsidiary_id as "subsidiaryId"
         from hrm_benefit_enrollments e
         join hrm_benefit_plans plan on plan.org_id = e.org_id and plan.id = e.plan_id
         join worker_employments emp on emp.org_id = e.org_id and emp.id = e.employment_id
         join parties p on p.org_id = e.org_id and p.id = emp.worker_party_id
-        left join hrm_benefit_plan_levels lvl
-          on lvl.org_id = e.org_id and lvl.plan_id = e.plan_id and lvl.level_key = e.coverage_level_key
+        left join hrm_benefit_contribution_classes cls
+          on cls.org_id = e.org_id and cls.plan_id = e.plan_id and cls.class_key = e.class_key
        where e.org_id = ${orgId}
          ${filter?.windowId !== undefined ? sql`and e.window_id = ${filter.windowId}` : sql``}
          ${filter?.status !== undefined ? sql`and e.status = ${filter.status}` : sql``}
@@ -244,15 +271,12 @@ export async function listEnrollments(
       employeeName: row.employeeName != null ? String(row.employeeName) : null,
       planCode: String(row.planCode),
       planName: String(row.planName),
-      coverageLevelKey: row.coverageLevelKey != null ? String(row.coverageLevelKey) : null,
+      classKey: row.classKey != null ? String(row.classKey) : null,
       coverageLabel: row.coverageLabel != null ? String(row.coverageLabel) : null,
       status: String(row.status),
       effectiveFrom: String(row.effectiveFrom).slice(0, 10),
       effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
-      employeeAmountPerPeriod:
-        row.employeeAmountPerPeriod != null ? String(row.employeeAmountPerPeriod) : null,
-      employerAmountPerPeriod:
-        row.employerAmountPerPeriod != null ? String(row.employerAmountPerPeriod) : null,
+      contributions: row.contributions as EnrollmentContributionSummary[],
       currency: String(row.currency),
     }));
 }
@@ -324,10 +348,10 @@ export interface BenefitsCockpit {
   readonly openWindows: EnrollmentWindowSummary[];
   readonly pendingApprovals: PendingApproval[];
   /** Active elections with no payroll input for the month (follow-up list). */
-  readonly missingInputs: ReadonlyArray<{ readonly enrollmentId: string; readonly planCode: string }>;
+  readonly missingElections: ReadonlyArray<{ readonly enrollmentId: string; readonly planCode: string }>;
 }
 
-/** Cockpit panel data: open windows, pending approvals, months missing inputs. */
+/** Cockpit panel data: open windows, pending approvals, enrollments missing contribution elections. */
 export async function benefitsCockpit(
   exec: SqlExecutor,
   orgId: string,
@@ -347,9 +371,10 @@ export async function benefitsCockpit(
          and e.effective_from <= (date_trunc('month', ${monthStart}::date) + interval '1 month' - interval '1 day')::date
          and (e.effective_to is null or e.effective_to >= date_trunc('month', ${monthStart}::date)::date)
          and not exists (
-           select 1 from hrm_benefit_payroll_inputs i
+           select 1 from hrm_benefit_enrollment_terms i
             where i.org_id = e.org_id and i.enrollment_id = e.id
-              and i.coverage_from = date_trunc('month', ${monthStart}::date)::date
+              and i.effective_from <= (date_trunc('month', ${monthStart}::date) + interval '1 month' - interval '1 day')::date
+              and (i.effective_to is null or i.effective_to >= date_trunc('month', ${monthStart}::date)::date)
          )
        order by plan.code
        limit 50
@@ -359,7 +384,7 @@ export async function benefitsCockpit(
   return {
     openWindows,
     pendingApprovals,
-    missingInputs: rows
+    missingElections: rows
       .filter((row) => scope === null || scope.has(String(row.subsidiaryId)))
       .map((row) => ({ enrollmentId: String(row.id), planCode: String(row.planCode) })),
   };

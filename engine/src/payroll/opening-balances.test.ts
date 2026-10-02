@@ -1,3 +1,10 @@
+import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedPayrollLine } from '../testing/fixtures.ts';
+import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import {
+  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
+  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -29,7 +36,6 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedCntSubjectEmployerFixture, seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
  * Mid-year adoption controls.
@@ -187,26 +193,16 @@ async function seedEmployee(
   options: { name: string; hiredOn?: string } = { name: "Terry Worker" },
 ): Promise<{ employeeId: string; employmentId: string }> {
   const employeeId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${employeeId}, ${fx.orgId}, 'person', ${options.name}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${options.hiredOn ?? "2020-01-06"}, true,
-            ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollPerson(fx.orgId, employeeId, options.name);
+  await seedPayrollEmployeeRole(fx.orgId, employeeId, { hiredOn: options.hiredOn ?? "2020-01-06", isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId });
   const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
-  await db.execute(sql`
-    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
-                                  is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2020-01-01', true,
-            ${fx.actorId}, ${fx.actorId})`);
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, province,
-                                           pay_basis, country, federal_claim_code,
-                                           provincial_claim_code, vacation_percent, vacation_method,
-                                           is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
-            '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollWage(fx.orgId, employeeId, fx.actorId, {
+    currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2020-01-01',
+  });
+  await seedPayrollProfile(fx.orgId, employeeId, employmentId, fx.scheduleId, fx.actorId, {
+    province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+  }, { percentFloor: '4', method: 'accrue' });
+
   return { employeeId, employmentId };
 }
 
@@ -215,23 +211,13 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
 
-  const account = async (number: string, name: string, type: string) => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-                            reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true)`);
-    return id;
-  };
+  const account = seedPostingAccount.bind(null, org.orgId);
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current_other");
   const craPayable = await account("2310", "CRA remittances payable", "liability_current_other");
   const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
-  await db.execute(sql`
-    update orgs set settings = settings || ${JSON.stringify({
-      payroll: {
+  await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
@@ -240,8 +226,7 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
         taxPayableAccountId: craPayable,
         vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
-      },
-    })}::jsonb where id = ${org.orgId}`);
+      });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   // The ON hire calculates, so its EHT leg resolves (never asserted here).
   await seedOntarioEhtFixture(org.orgId, actorId);
@@ -260,11 +245,10 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, craPayable);
 
   const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                               pay_date_offset_days, is_active, created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-            ${actorId}, ${actorId})`);
+  await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    payDateOffsetDays: 3,
+  });
 
   const employeeName = "Terry Worker";
   const { employeeId, employmentId } = await seedEmployee(
@@ -289,11 +273,10 @@ async function seedRun(
   const periodStart = options.periodStart ?? "2026-07-05";
   const periodEnd = options.periodEnd ?? "2026-07-18";
   const payDate = options.payDate ?? "2026-07-21";
-  await db.execute(sql`
-    insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                           currency, status, created_by, updated_by)
-    values (${fx.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-            ${fx.subsidiaryId}, ${payDate}, 'CAD', 'draft', ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollDocument(fx.orgId, documentId, {
+    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: fx.subsidiaryId,
+    documentDate: payDate, currency: 'CAD', status: 'draft', createdBy: fx.actorId, updatedBy: fx.actorId,
+  });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                           tax_year, run_status, calculated_at, created_by, updated_by)
@@ -336,11 +319,10 @@ test(
       });
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
-        await db.execute(sql`
-          insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
-                                    billing_status, costing_basis, created_by, updated_by)
-          values (${fx.orgId}, ${fx.employeeId}, ${workedOn}, 20, 'approved', false,
-                  'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+        await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
+          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
+          costingBasis: 'actual',
+        });
       }
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
@@ -472,12 +454,10 @@ test(
       assert.equal(ytd.qpip_employer, "620.0600");
 
       for (const day of ["2026-07-06", "2026-07-13"]) {
-        await db.execute(sql`
-          insert into time_entries (org_id, employee_party_id, worked_on, hours,
-                                    status, is_billable, billing_status, costing_basis,
-                                    created_by, updated_by)
-          values (${fx.orgId}, ${fx.employeeId}, ${day}, '40', 'approved',
-                  false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+        await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
+          workedOn: day, hours: '40', status: 'approved', isBillable: false, billingStatus: 'unbilled',
+          costingBasis: 'actual',
+        });
       }
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
@@ -513,13 +493,11 @@ async function seedCappedComponent(
   options: { code?: string; capPerYear?: string; percent?: string; assign?: boolean } = {},
 ): Promise<string> {
   const componentId = randomUUID();
-  await db.execute(sql`
-    insert into pay_components (id, org_id, code, name, kind, basis, value,
-                                basis_cap_amount_per_year, tax_treatment, is_active,
-                                created_by, updated_by)
-    values (${componentId}, ${fx.orgId}, ${options.code ?? "RRSP"}, 'RRSP employee contribution',
-            'deduction', 'percent_of_gross', ${options.percent ?? "5"},
-            ${options.capPerYear ?? "23500"}, 'pension_f', true, ${fx.actorId}, ${fx.actorId})`);
+  await seedPayrollComponent(fx.orgId, componentId, {
+    code: options.code ?? "RRSP", name: 'RRSP employee contribution', kind: 'deduction', basis: 'percent_of_gross',
+    value: options.percent ?? "5", basisCapAmountPerYear: options.capPerYear ?? "23500", taxTreatment: 'pension_f',
+    isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId,
+  });
   if (options.assign !== false) {
     await db.execute(sql`
       insert into employee_pay_components (org_id, employee_party_id, component_id, value,
@@ -582,17 +560,13 @@ test(
         runStatus: "committed",
       });
       const stubId = randomUUID();
-      await db.execute(sql`
-        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                               factors, created_by, updated_by)
-        values (${stubId}, ${fx.orgId}, ${documentId}, ${fx.employeeId}, ${fx.employmentId}, 'ON', 26, '2026-08-18',
-                2026, 'CAD', '2400', '1900', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
-      await db.execute(sql`
-        insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
-                                    created_by, updated_by)
-        values (${fx.orgId}, ${stubId}, ${componentId}, 'deduction', 'RRSP', '120',
-                ${fx.actorId}, ${fx.actorId})`);
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-08-18', taxYear: 2026, currency: 'CAD',
+        gross: '2400', netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
+      });
+      await seedPayrollLine(fx.orgId, stubId, componentId, {
+        kind: 'deduction', description: 'RRSP', amount: '120', createdBy: fx.actorId, updatedBy: fx.actorId,
+      });
       assert.equal(
         await componentYearToDate(db, {
           orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
@@ -717,12 +691,10 @@ test(
       });
 
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await db.execute(sql`
-        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                               factors, created_by, updated_by)
-        values (${fx.orgId}, ${documentId}, ${fx.employeeId}, ${fx.employmentId}, 'ON', 26, '2026-07-21', 2026, 'CAD',
-                '2400', '1900', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
+        netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
+      });
 
       await assert.rejects(
         saveOpeningBalances({
@@ -844,12 +816,11 @@ test(
 
       // A committed run consumes the carry-in.
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await db.execute(sql`
-        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                               pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-        values (${fx.orgId}, ${documentId}, ${fx.employeeId}, ${fx.employmentId}, 'ON', 26, '2026-07-21', 2026, 'CAD',
-                '2400', '1900', '2400', '2400', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
+        netPay: '1900', pensionableEarnings: '2400', insurableEarnings: '2400', factors: {}, createdBy: fx.actorId,
+        updatedBy: fx.actorId,
+      });
 
       const locked = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(locked.rows[0]!.locked, true);
@@ -908,12 +879,11 @@ test(
 
       // A committed run consumes only the first employee's carry-in.
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await db.execute(sql`
-        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, province,
-                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
-                               pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
-        values (${fx.orgId}, ${documentId}, ${fx.employeeId}, ${fx.employmentId}, 'ON', 26, '2026-07-21', 2026, 'CAD',
-                '2400', '1900', '2400', '2400', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
+        netPay: '1900', pensionableEarnings: '2400', insurableEarnings: '2400', factors: {}, createdBy: fx.actorId,
+        updatedBy: fx.actorId,
+      });
 
       const result = await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, strictLocks: false,
@@ -1248,11 +1218,10 @@ test(
       });
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
-        await db.execute(sql`
-          insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
-                                    billing_status, costing_basis, created_by, updated_by)
-          values (${fx.orgId}, ${fx.employeeId}, ${workedOn}, 20, 'approved', false,
-                  'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+        await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
+          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
+          costingBasis: 'actual',
+        });
       }
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,

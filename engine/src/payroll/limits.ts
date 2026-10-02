@@ -1,4 +1,5 @@
 import { PayrollError } from "./error.ts";
+import { normalizeDecimal } from '../money/money.ts';
 import {
   add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits,
 } from "../money/money.ts";
@@ -223,11 +224,13 @@ export interface BasisCapContext {
  * amount = basis × numerator / denominator.
  */
 function unitRate(component: BasisCapComponent): { numerator: bigint; denominator: bigint } {
+  const rateScale = 10_000_000_000n;
+  const rateUnits = (): bigint => BigInt(normalizeDecimal(component.value ?? '0', 10).replace('.', ''));
   if (component.basis === "percent_of_gross") {
-    return { numerator: toUnits(component.value ?? "0"), denominator: 100n * SCALE };
+    return { numerator: rateUnits(), denominator: 100n * rateScale };
   }
   if (component.basis === "per_hour") {
-    return { numerator: toUnits(component.value ?? "0"), denominator: SCALE };
+    return { numerator: rateUnits(), denominator: rateScale };
   }
   // A fixed amount IS its own basis: rate 1.
   return { numerator: SCALE, denominator: SCALE };
