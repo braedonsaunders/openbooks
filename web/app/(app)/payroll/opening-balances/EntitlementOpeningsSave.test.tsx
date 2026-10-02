@@ -117,7 +117,15 @@ function findSave(): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined
 }
 
+async function openEmployee(): Promise<void> {
+  if (document.querySelector('[role="dialog"]')) return
+  const row = document.querySelector('tr[aria-label="Ada"]') as HTMLElement | null
+  assert.ok(row, 'the shared employee list must render Ada')
+  await act(async () => { row.click(); await tick(); await tick() })
+}
+
 async function editCell(value: string): Promise<void> {
+  await openEmployee()
   const input = document.querySelector('input[aria-label="Ada — Vacation"]') as HTMLInputElement | null
   assert.ok(input, 'the bank carry-in cell must render')
   await act(async () => {

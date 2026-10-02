@@ -266,6 +266,9 @@ const SOURCES = {
   },
   // Group identity is the composite (destination, filing account), which no
   // single field holds; the client table keys rows with that pair instead.
+  payroll_opening_employees: { route: '/payroll/opening-balances', rowsField: 'balances.initial.rows', rowKeyField: 'employeePartyId', mode: 'loaded' },
+  payroll_opening_banks: { route: '/payroll/opening-balances', rowsField: 'banks.initial.rows', rowKeyField: 'employeePartyId', mode: 'loaded' },
+  payroll_opening_levies: { route: '/payroll/opening-balances', rowsField: 'employerLevies.levies', mode: 'loaded' },
   payroll_remittance_groups: {
     route: '/payroll/remittances',
     rowsField: 'groups',

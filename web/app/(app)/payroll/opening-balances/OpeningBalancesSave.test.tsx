@@ -122,7 +122,15 @@ function findSave(): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined
 }
 
+async function openEmployee(): Promise<void> {
+  if (document.querySelector('[role="dialog"]')) return
+  const row = document.querySelector('tr[aria-label="Ada"]') as HTMLElement | null
+  assert.ok(row, 'the shared employee list must render Ada')
+  await act(async () => { row.click(); await tick(); await tick() })
+}
+
 async function editCell(value: string): Promise<void> {
+  await openEmployee()
   const input = document.querySelector('input[aria-label="Ada — Gross"]') as HTMLInputElement | null
   assert.ok(input, 'the carry-in cell must render')
   await act(async () => {
@@ -155,7 +163,7 @@ test('a named 422 refusal lands in the error panel with its per-row reasons', as
     ),
     props.initial,
   )
-  await editCell('100.00'); await changeYear(2027); assert.equal((document.querySelector('input[aria-label="Ada — Gross"]') as HTMLInputElement).value, '', 'a year change discards the prior year draft'); await changeYear(2026); await editCell('100.00')
+  await editCell('100.00'); await changeYear(2027); await openEmployee(); assert.equal((document.querySelector('input[aria-label="Ada — Gross"]') as HTMLInputElement).value, '', 'a year change discards the prior year draft'); await changeYear(2026); await editCell('100.00')
   const save = findSave()
   assert.ok(save && !save.disabled, 'Save must enable once a cell is edited')
   await click(save)
@@ -173,6 +181,7 @@ test('an orphaned employee keeps pack-specific carry-in inputs available', async
     { key: 'grossYtd', label: 'Canadian income', help: 'Canada', packs: ['CA'] },
     { key: 'federalYtd', label: 'US federal income', help: 'United States', packs: ['US'] },
   ])
+  await openEmployee()
   // These columns are read by different statutory packs. With no surviving
   // employee profile, the screen still lets an operator enter both amounts.
   assert.ok(document.querySelector('input[aria-label="Ada — Canadian income"]'))

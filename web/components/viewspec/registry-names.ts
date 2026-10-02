@@ -380,6 +380,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'notifications-mark-all-read',
   'open-chart-of-accounts',
   'opening-balances-grid',
+  'opening-balances-workspace',
   'opportunity-drawer',
   'opportunity-kanban-board',
   'opportunity-view-switcher',

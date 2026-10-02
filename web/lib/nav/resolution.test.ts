@@ -196,3 +196,19 @@ test('Enrollment windows are accessible within Enrollments without a separate me
   groups = await resolveNav('company-one', () => true, [], translate, has)
   assert.ok(!groups.flatMap((group) => group.items).some((item) => item.href.startsWith('/hrm/benefits')), 'shortcuts cannot bypass the HR feature')
 })
+
+
+test('Work locations is discoverable from the HRM menu and payroll tabs after reconciling an older saved menu', async () => {
+  reset()
+  for (const group of config.groups) group.items = group.items.filter((item) => item.kind !== 'module' || item.moduleKey !== 'payroll-work-locations')
+  const translate = (key: string) => translator(`nav.${key}` as never)
+  const has = (key: string) => translator.has(`nav.${key}` as never)
+  const groups = await resolveNav('company-one', () => true, [], translate, has)
+  const entry = groups.find((group) => group.id === 'hrm')?.items.find((item) => item.href === '/payroll/work-locations')
+  assert.ok(entry, 'the reconciled main menu must offer Work locations')
+  assert.equal(entry.subgroup, 'Payroll Controls')
+  const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['payroll.manage', 'payroll.read']) } as Parameters<typeof resolveLocalNavigation>[0])
+  assert.ok(local.groups.flat().some((tab) => tab.href === '/payroll/work-locations'))
+  const restricted = await resolveNav('company-one', (key) => !key || key === 'payroll.read', [], translate, has)
+  assert.ok(!restricted.flatMap((group) => group.items).some((item) => item.href === '/payroll/work-locations'), 'the menu cannot bypass payroll.manage')
+})

@@ -214,13 +214,13 @@ test('a server window ignores client search retained from a previous collection'
   const root = createRoot(host)
   t.after(async () => { await act(async () => root.unmount()); host.remove() })
   const rows = Array.from({ length: 25 }, (_, index) => ({ id: String(index), name: `Window row ${index}` }))
-  const render = async (source: 'data_import_history' | 'inbox_approvals') => {
+  const render = async (source: 'payroll_opening_employees' | 'inbox_approvals') => {
     await act(async () => { root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
       <PagedTable source={source} rows={rows} searchable rowKey={(row) => row.id} empty="Empty"
         columns={[{ key: 'name', header: 'Name', cell: (row) => row.name, search: (row) => row.name }]} />
     </NextIntlClientProvider>); await tick() })
   }
-  await render('data_import_history')
+  await render('payroll_opening_employees')
   const input = host.querySelector<HTMLInputElement>('input')!
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'Window row 24')

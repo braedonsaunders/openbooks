@@ -1,14 +1,25 @@
 'use client'
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, Download, Lock, Upload } from 'lucide-react'
-import { Badge, Button, FieldHelp, Select, cn } from '@openbooks/ui'
-import { canonicalDecimal, isZeroDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import {
+  AlertTriangle,
+  Download,
+  Lock,
+  Upload,
+  ChevronRight,
+} from 'lucide-react'
+import { Badge, Button, Drawer, FieldHelp, Label, Select } from '@openbooks/ui'
+import {
+  canonicalDecimal,
+  isZeroDecimal,
+} from '@openbooks/engine/src/money/exact-decimal.ts'
+import { apiJson, ApiResponseError } from '../../../../lib/api-error'
+import { PagedTable } from '../../../../components/paged-table'
+import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import type {
   OpeningBalanceRow,
@@ -36,11 +47,9 @@ interface SuiStateDescriptor {
   packs: string[]
 }
 
-/**
- * Engine 0403 adds suiStateAmounts to OpeningBalanceRow; it reads optional
- * here so this grid links both before and after the engine lands.
- */
-type SuiCarryRow = OpeningBalanceRow & { suiStateAmounts?: Record<string, string> }
+type SuiCarryRow = OpeningBalanceRow & {
+  suiStateAmounts?: Record<string, string>
+}
 
 interface AccountProgramDescriptor {
   key: string
@@ -67,25 +76,7 @@ interface SaveError {
   message: string
 }
 
-/**
- * The adoption grid: every employee on one screen, one Save.
- *
- * Single-record editing is the wrong shape for this data. An employer adopting
- * mid-year holds ONE year-to-date report and needs the whole workforce carried
- * in together — a drawer opened three hundred times is how a row gets skipped,
- * and a skipped row costs that employee a second annual CPP/EI maximum. Files
- * go through the shared import wizard (/data/import, resource "Payroll opening
- * balances"); this screen is for entering, checking and correcting them.
- *
- * Rows a committed run has already consumed are read-only here and refused by
- * the API — the amounts are inside withholding that has left the bank.
- *
- * The grid carries BOTH dimensions of a year's carry-in: the statutory columns,
- * then one column per annually-capped pay component. They belong on the same row
- * because they are the same fact about the same employee and the same year, and
- * are frozen by the same committed run — a second screen would be a second place
- * to forget.
- */
+/** Employee carry-ins share one draft and bulk save across searched pages and drawers. */
 type OpeningBalancesViewProps = {
   year: number
   /** Organization business year — not the UTC calendar year. */
@@ -100,6 +91,8 @@ type OpeningBalancesViewProps = {
   accountPrograms?: AccountProgramDescriptor[]
   components: ComponentDescriptor[]
   canManage: boolean
+  hideYearPicker?: boolean
+  onDirtyChange?: (count: number) => void
 }
 
 export function OpeningBalancesView(props: OpeningBalancesViewProps) {
@@ -116,27 +109,40 @@ function OpeningBalancesYearView({
   accountPrograms = [],
   components,
   canManage,
+  hideYearPicker = false,
+  onDirtyChange,
 }: OpeningBalancesViewProps) {
   const t = useTranslations('payroll')
   const router = useRouter()
   const text = (key: string, fallback: string) =>
-    t.has(`openingBalances.${key}` as never) ? t(`openingBalances.${key}` as never) : fallback
+    t.has(`openingBalances.${key}` as never)
+      ? t(`openingBalances.${key}` as never)
+      : fallback
 
   const [draft, setDraft] = useState<Record<string, Record<string, string>>>({})
   // Component openings are kept in their own draft rather than sharing the
   // statutory one: they are written to a different table, and one map keyed by
   // two unrelated key spaces is how a component id starts being read as a field.
-  const [componentDraft, setComponentDraft] = useState<Record<string, Record<string, string>>>({})
+  const [componentDraft, setComponentDraft] = useState<
+    Record<string, Record<string, string>>
+  >({})
   // Program carry-ins get the same treatment: a third table, a third key
   // space (pack-declared program keys), a third draft.
-  const [programDraft, setProgramDraft] = useState<Record<string, Record<string, string>>>({})
+  const [programDraft, setProgramDraft] = useState<
+    Record<string, Record<string, string>>
+  >({})
   // State SUI carry-ins get the same treatment again: a fourth table keyed
   // by US state code, so a state code can never be read as a program key.
-  const [suiDraft, setSuiDraft] = useState<Record<string, Record<string, string>>>({})
+  const [suiDraft, setSuiDraft] = useState<
+    Record<string, Record<string, string>>
+  >({})
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<SaveError[]>([])
   const [skipped, setSkipped] = useState<SaveError[]>([])
   const [onlyMissing, setOnlyMissing] = useState(false)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [section, setSection] = useState<'ytd' | 'bases' | 'caps'>('ytd')
+  const workspace = useTranslations('payroll.openingBalances.workspace')
 
   const years = useMemo(() => {
     const span = new Set<number>(initial.years)
@@ -158,7 +164,9 @@ function OpeningBalancesYearView({
     const present = new Set<string>()
     for (const row of initial.rows) {
       if (row.country) present.add(row.country)
-      else for (const field of fields) for (const pack of field.packs) present.add(pack)
+      else
+        for (const field of fields)
+          for (const pack of field.packs) present.add(pack)
     }
     return present
   }, [initial.rows, fields])
@@ -192,7 +200,9 @@ function OpeningBalancesYearView({
     // A decimal-string comparison, never Number(): floats cannot read money.
     // Non-canonical text (which the server would never have written) still
     // displays raw rather than throwing out of the render.
-    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+    return stored !== '' &&
+      canonicalDecimal(stored, 4) !== null &&
+      isZeroDecimal(stored)
       ? ''
       : trimZeros(stored)
   }
@@ -204,45 +214,75 @@ function OpeningBalancesYearView({
     }))
   }
 
-  const componentValueOf = (row: OpeningBalanceRow, componentId: string): string => {
+  const componentValueOf = (
+    row: OpeningBalanceRow,
+    componentId: string,
+  ): string => {
     const edited = componentDraft[row.employeePartyId]?.[componentId]
     if (edited !== undefined) return edited
     const stored = row.componentAmounts?.[componentId]
     if (stored === undefined) return ''
-    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+    return stored !== '' &&
+      canonicalDecimal(stored, 4) !== null &&
+      isZeroDecimal(stored)
       ? ''
       : trimZeros(stored)
   }
 
-  const setComponentValue = (employeePartyId: string, componentId: string, value: string) => {
+  const setComponentValue = (
+    employeePartyId: string,
+    componentId: string,
+    value: string,
+  ) => {
     setComponentDraft((current) => ({
       ...current,
-      [employeePartyId]: { ...(current[employeePartyId] ?? {}), [componentId]: value },
+      [employeePartyId]: {
+        ...(current[employeePartyId] ?? {}),
+        [componentId]: value,
+      },
     }))
   }
 
-  const programValueOf = (row: OpeningBalanceRow, program: ProgramDescriptor): string => {
+  const programValueOf = (
+    row: OpeningBalanceRow,
+    program: ProgramDescriptor,
+  ): string => {
     const edited = programDraft[row.employeePartyId]?.[program.key]
     if (edited !== undefined) return edited
     const stored = row.programAmounts?.[program.key]
     if (stored === undefined) return ''
-    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+    return stored !== '' &&
+      canonicalDecimal(stored, 4) !== null &&
+      isZeroDecimal(stored)
       ? ''
       : trimZeros(stored)
   }
 
-  const accountProgramValueOf = (row: OpeningBalanceRow, program: AccountProgramDescriptor): string => {
+  const accountProgramValueOf = (
+    row: OpeningBalanceRow,
+    program: AccountProgramDescriptor,
+  ): string => {
     const edited = programDraft[row.employeePartyId]?.[`account:${program.key}`]
     if (edited !== undefined) return edited
-    const stored = row.accountBases.find((base) => base.programKey === program.programKey
-      && base.filingAccountId === program.filingAccountId && base.region === program.region)?.insurableYtd
+    const stored = row.accountBases.find(
+      (base) =>
+        base.programKey === program.programKey &&
+        base.filingAccountId === program.filingAccountId &&
+        base.region === program.region,
+    )?.insurableYtd
     if (stored === undefined) return ''
-    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+    return stored !== '' &&
+      canonicalDecimal(stored, 4) !== null &&
+      isZeroDecimal(stored)
       ? ''
       : trimZeros(stored)
   }
 
-  const setProgramValue = (employeePartyId: string, key: string, value: string) => {
+  const setProgramValue = (
+    employeePartyId: string,
+    key: string,
+    value: string,
+  ) => {
     setProgramDraft((current) => ({
       ...current,
       [employeePartyId]: { ...(current[employeePartyId] ?? {}), [key]: value },
@@ -254,7 +294,9 @@ function OpeningBalancesYearView({
     if (edited !== undefined) return edited
     const stored = row.suiStateAmounts?.[key]
     if (stored === undefined) return ''
-    return stored !== '' && canonicalDecimal(stored, 4) !== null && isZeroDecimal(stored)
+    return stored !== '' &&
+      canonicalDecimal(stored, 4) !== null &&
+      isZeroDecimal(stored)
       ? ''
       : trimZeros(stored)
   }
@@ -266,11 +308,24 @@ function OpeningBalancesYearView({
     }))
   }
 
-  const dirtyIds = [...new Set([...Object.keys(draft), ...Object.keys(componentDraft), ...Object.keys(programDraft), ...Object.keys(suiDraft)])]
+  const dirtyIds = [
+    ...new Set([
+      ...Object.keys(draft),
+      ...Object.keys(componentDraft),
+      ...Object.keys(programDraft),
+      ...Object.keys(suiDraft),
+    ]),
+  ]
   const rows = onlyMissing
     ? initial.rows.filter((r) => r.amounts === null && !r.locked)
     : initial.rows
-  const missingCount = initial.rows.filter((r) => r.amounts === null && !r.locked).length
+  const activeRow = initial.rows.find((row) => row.employeePartyId === activeId)
+  useEffect(() => {
+    onDirtyChange?.(dirtyIds.length)
+  }, [dirtyIds.length, onDirtyChange])
+  const missingCount = initial.rows.filter(
+    (r) => r.amounts === null && !r.locked,
+  ).length
   const lockedCount = initial.rows.filter((r) => r.locked).length
 
   const save = async () => {
@@ -281,7 +336,9 @@ function OpeningBalancesYearView({
     setSkipped([])
     try {
       const payload = dirtyIds.map((employeePartyId) => {
-        const row: SuiCarryRow | undefined = initial.rows.find((r) => r.employeePartyId === employeePartyId)
+        const row: SuiCarryRow | undefined = initial.rows.find(
+          (r) => r.employeePartyId === employeePartyId,
+        )
         const amounts: Record<string, string> = {}
         for (const field of fields) {
           const edited = draft[employeePartyId]?.[field.key]
@@ -291,9 +348,10 @@ function OpeningBalancesYearView({
           // assessed-saldo columns a conjured zero would silence the
           // installment channel's refusal. Generic amounts normalize blank
           // to zero identically, so statutory behavior is unchanged.
-          amounts[field.key] = edited !== undefined
-            ? edited.trim()
-            : (row?.amounts?.[field.key] ?? '')
+          amounts[field.key] =
+            edited !== undefined
+              ? edited.trim()
+              : (row?.amounts?.[field.key] ?? '')
         }
         // Every EDITABLE component is sent, edited or not: the service replaces
         // the set, so an omitted one would silently survive a clear. Components
@@ -302,10 +360,12 @@ function OpeningBalancesYearView({
         const componentAmounts: Record<string, string> = {}
         for (const component of components) {
           if (!component.capped) continue
-          const edited = componentDraft[employeePartyId]?.[component.componentId]
-          componentAmounts[component.componentId] = edited !== undefined
-            ? edited.trim()
-            : (row?.componentAmounts?.[component.componentId] ?? '0')
+          const edited =
+            componentDraft[employeePartyId]?.[component.componentId]
+          componentAmounts[component.componentId] =
+            edited !== undefined
+              ? edited.trim()
+              : (row?.componentAmounts?.[component.componentId] ?? '0')
         }
         // Only VISIBLE programs are sent, edited or not (same replace-the-set
         // rule as components). A program hidden by the pack filter is omitted
@@ -316,9 +376,10 @@ function OpeningBalancesYearView({
           programAmounts = {}
           for (const program of visiblePrograms) {
             const edited = programDraft[employeePartyId]?.[program.key]
-            programAmounts[program.key] = edited !== undefined
-              ? edited.trim()
-              : (row?.programAmounts?.[program.key] ?? '0')
+            programAmounts[program.key] =
+              edited !== undefined
+                ? edited.trim()
+                : (row?.programAmounts?.[program.key] ?? '0')
           }
         }
         // Only VISIBLE states are sent, edited or not (same replace-the-set
@@ -329,14 +390,22 @@ function OpeningBalancesYearView({
           suiStateAmounts = {}
           for (const sui of visibleSuiStates) {
             const edited = suiDraft[employeePartyId]?.[sui.key]
-            suiStateAmounts[sui.key] = edited !== undefined
-              ? edited.trim()
-              : (row?.suiStateAmounts?.[sui.key] ?? '0')
+            suiStateAmounts[sui.key] =
+              edited !== undefined
+                ? edited.trim()
+                : (row?.suiStateAmounts?.[sui.key] ?? '0')
           }
         }
         const accountBases = (row?.accountBases ?? [])
-          .filter((base) => !visibleAccountPrograms.some((program) => program.programKey === base.programKey
-            && program.filingAccountId === base.filingAccountId && program.region === base.region))
+          .filter(
+            (base) =>
+              !visibleAccountPrograms.some(
+                (program) =>
+                  program.programKey === base.programKey &&
+                  program.filingAccountId === base.filingAccountId &&
+                  program.region === base.region,
+              ),
+          )
           .map((base) => ({ ...base }))
         for (const program of visibleAccountPrograms) {
           const draftKey = `account:${program.key}`
@@ -345,10 +414,15 @@ function OpeningBalancesYearView({
             programKey: program.programKey,
             filingAccountId: program.filingAccountId,
             region: program.region,
-            insurableYtd: edited !== undefined
-              ? edited.trim()
-              : (row?.accountBases.find((base) => base.programKey === program.programKey
-                && base.filingAccountId === program.filingAccountId && base.region === program.region)?.insurableYtd ?? '0'),
+            insurableYtd:
+              edited !== undefined
+                ? edited.trim()
+                : (row?.accountBases.find(
+                    (base) =>
+                      base.programKey === program.programKey &&
+                      base.filingAccountId === program.filingAccountId &&
+                      base.region === program.region,
+                  )?.insurableYtd ?? '0'),
           })
         }
         // The row's loader-served version: a carry-in someone else saved
@@ -371,46 +445,95 @@ function OpeningBalancesYearView({
       // already accepted when they were written.
       const clientErrors: SaveError[] = []
       for (const employeePartyId of dirtyIds) {
-        const row = initial.rows.find((r) => r.employeePartyId === employeePartyId)
+        const row = initial.rows.find(
+          (r) => r.employeePartyId === employeePartyId,
+        )
         for (const field of fields) {
           const edited = draft[employeePartyId]?.[field.key]
           if (edited === undefined || edited.trim() === '') continue
-          const refusal = moneyFieldError(field.label, 'a money amount', edited, 4)
+          const refusal = moneyFieldError(
+            field.label,
+            'a money amount',
+            edited,
+            4,
+          )
           if (refusal !== null) {
-            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+            clientErrors.push({
+              employeePartyId,
+              employeeName: row?.employeeName,
+              message: refusal,
+            })
           }
         }
         for (const component of components) {
           if (!component.capped) continue
-          const edited = componentDraft[employeePartyId]?.[component.componentId]
+          const edited =
+            componentDraft[employeePartyId]?.[component.componentId]
           if (edited === undefined || edited.trim() === '') continue
-          const refusal = moneyFieldError(component.name, 'a money amount', edited, 4)
+          const refusal = moneyFieldError(
+            component.name,
+            'a money amount',
+            edited,
+            4,
+          )
           if (refusal !== null) {
-            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+            clientErrors.push({
+              employeePartyId,
+              employeeName: row?.employeeName,
+              message: refusal,
+            })
           }
         }
         for (const program of visiblePrograms) {
           const edited = programDraft[employeePartyId]?.[program.key]
           if (edited === undefined || edited.trim() === '') continue
-          const refusal = moneyFieldError(program.label, 'a money amount', edited, 4)
+          const refusal = moneyFieldError(
+            program.label,
+            'a money amount',
+            edited,
+            4,
+          )
           if (refusal !== null) {
-            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+            clientErrors.push({
+              employeePartyId,
+              employeeName: row?.employeeName,
+              message: refusal,
+            })
           }
         }
         for (const sui of visibleSuiStates) {
           const edited = suiDraft[employeePartyId]?.[sui.key]
           if (edited === undefined || edited.trim() === '') continue
-          const refusal = moneyFieldError(sui.label, 'a money amount', edited, 4)
+          const refusal = moneyFieldError(
+            sui.label,
+            'a money amount',
+            edited,
+            4,
+          )
           if (refusal !== null) {
-            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+            clientErrors.push({
+              employeePartyId,
+              employeeName: row?.employeeName,
+              message: refusal,
+            })
           }
         }
         for (const program of visibleAccountPrograms) {
-          const edited = programDraft[employeePartyId]?.[`account:${program.key}`]
+          const edited =
+            programDraft[employeePartyId]?.[`account:${program.key}`]
           if (edited === undefined || edited.trim() === '') continue
-          const refusal = moneyFieldError(program.label, 'a money amount', edited, 4)
+          const refusal = moneyFieldError(
+            program.label,
+            'a money amount',
+            edited,
+            4,
+          )
           if (refusal !== null) {
-            clientErrors.push({ employeePartyId, employeeName: row?.employeeName, message: refusal })
+            clientErrors.push({
+              employeePartyId,
+              employeeName: row?.employeeName,
+              message: refusal,
+            })
           }
         }
       }
@@ -419,48 +542,20 @@ function OpeningBalancesYearView({
         toast.error(fallback)
         return
       }
-      const response = await fetch('/api/payroll/opening-balances', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ taxYear: year, rows: payload }),
-      })
-      // The body is parsed defensively and the status decides: a non-JSON
-      // error body (a proxy page, an empty 502) must surface the fallback
-      // with the status, never a SyntaxError from `response.json()` — the
-      // same status-first contract as readApiErrorMessage, keeping the
-      // server's per-row reasons when the refusal is JSON.
-      let body: {
-        error?: string
-        errors?: SaveError[]
-        skipped?: SaveError[]
+      const body = await apiJson<{
         created?: number
         updated?: number
         deleted?: number
-      } | null = null
-      try {
-        body = (await response.json()) as {
-          error?: string
-          errors?: SaveError[]
-          created?: number
-          updated?: number
-          deleted?: number
-        }
-      } catch {
-        body = null
-      }
-      const named = typeof body?.error === 'string' && body.error.trim() !== '' ? body.error : null
-      if (!response.ok) {
-        const message = named ?? `${fallback} (status ${response.status})`
-        setErrors(body?.errors ?? [{ employeePartyId: '', message }])
-        toast.error(message)
-        return
-      }
-      if (!body) {
-        const message = `${fallback} (status ${response.status})`
-        setErrors([{ employeePartyId: '', message }])
-        toast.error(message)
-        return
-      }
+        skipped?: SaveError[]
+      }>(
+        '/api/payroll/opening-balances',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ taxYear: year, rows: payload }),
+        },
+        fallback,
+      )
       setDraft({})
       setComponentDraft({})
       setProgramDraft({})
@@ -484,7 +579,11 @@ function OpeningBalancesYearView({
       // failure with a toast, never an unhandled rejection that leaves the
       // grid showing stale edits as saved.
       const message = e instanceof Error ? e.message : fallback
-      setErrors([{ employeePartyId: '', message }])
+      const reasons =
+        e instanceof ApiResponseError
+          ? (e.body as { errors?: SaveError[] } | null)?.errors
+          : undefined
+      setErrors(reasons?.length ? reasons : [{ employeePartyId: '', message }])
       toast.error(message)
     } finally {
       setSaving(false)
@@ -494,18 +593,24 @@ function OpeningBalancesYearView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Select
-          aria-label={text('yearLabel', 'Tax year')}
-          value={String(year)}
-          onChange={(event) =>
-            router.push(`/payroll/opening-balances?year=${event.target.value}` as never)
-          }
-          className="w-32"
-        >
-          {years.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </Select>
+        {!hideYearPicker && (
+          <Select
+            aria-label={text('yearLabel', 'Tax year')}
+            value={String(year)}
+            onChange={(event) =>
+              router.push(
+                `/payroll/opening-balances?year=${event.target.value}` as never,
+              )
+            }
+            className="w-32"
+          >
+            {years.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </Select>
+        )}
         <FieldHelp
           help={text(
             'hint',
@@ -517,7 +622,8 @@ function OpeningBalancesYearView({
           size="sm"
           onClick={() => setOnlyMissing((current) => !current)}
         >
-          {text('onlyMissing', 'Only employees with no carry-in')} ({missingCount})
+          {text('onlyMissing', 'Only employees with no carry-in')} (
+          {missingCount})
         </Button>
         <Button variant="outline" size="sm" asChild>
           <Link href={'/data/import' as never}>
@@ -533,11 +639,18 @@ function OpeningBalancesYearView({
         </Button>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {text('entered', 'Carried in')}: {initial.entered} / {initial.rows.length}
-            {lockedCount > 0 ? ` · ${lockedCount} ${text('lockedShort', 'locked')}` : ''}
+            {text('entered', 'Carried in')}: {initial.entered} /{' '}
+            {initial.rows.length}
+            {lockedCount > 0
+              ? ` · ${lockedCount} ${text('lockedShort', 'locked')}`
+              : ''}
           </span>
           {canManage && (
-            <Button size="sm" disabled={saving || dirtyIds.length === 0} onClick={save}>
+            <Button
+              size="sm"
+              disabled={saving || dirtyIds.length === 0}
+              onClick={save}
+            >
               {saving
                 ? text('saving', 'Saving…')
                 : `${text('save', 'Save')}${dirtyIds.length ? ` (${dirtyIds.length})` : ''}`}
@@ -583,264 +696,344 @@ function OpeningBalancesYearView({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-        <SharedTable className="w-full min-w-max text-sm">
-          <SharedTableHeader className="bg-slate-50 text-left dark:bg-slate-900">
-            <SharedTableRow>
-              <SharedTableHead className="sticky left-0 z-10 bg-slate-50 px-3 py-2 font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                {text('employee', 'Employee')}
-              </SharedTableHead>
-              {visibleFields.map((field) => (
-                <SharedTableHead
-                  key={field.key}
-                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {t.has(`openingBalances.fields.${field.key}` as never)
-                      ? t(`openingBalances.fields.${field.key}` as never)
-                      : field.label}
-                    <FieldHelp help={field.help} />
-                  </span>
-                </SharedTableHead>
-              ))}
-              {visiblePrograms.map((program) => (
-                <SharedTableHead
-                  key={program.key}
-                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {program.label}
-                    <FieldHelp help={program.help} />
-                  </span>
-                </SharedTableHead>
-              ))}
-              {visibleSuiStates.map((sui) => (
-                <SharedTableHead
-                  key={sui.key}
-                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {sui.label}
-                    <FieldHelp help={sui.help} />
-                  </span>
-                </SharedTableHead>
-              ))}
-              {visibleAccountPrograms.map((program) => (
-                <SharedTableHead
-                  key={`account:${program.key}`}
-                  className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {program.label}
-                    <FieldHelp help={program.help} />
-                  </span>
-                </SharedTableHead>
-              ))}
-              {components.map((component, index) => (
-                <SharedTableHead
-                  key={component.componentId}
-                  className={cn(
-                    'px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300',
-                    index === 0 && 'border-l border-slate-200 dark:border-slate-800',
-                  )}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {component.name}
-                    <FieldHelp
-                      help={
-                        component.capped
-                          ? text(
-                              'componentHelp',
-                              'How much of this component’s annual cap the employee has already used this year, at your previous payroll system. Without it the cap restarts at zero and the employee can contribute a second full annual limit.',
-                            ) + ` (${text('componentCap', 'Annual cap')}: ${component.basisCapAmountPerYear ?? '—'})`
-                          : text(
-                              'componentInertHelp',
-                              'This component no longer has an annual cap, so the amount below changes nothing and cannot be edited. It is kept because somebody entered it and a cap may be set again.',
-                            )
-                      }
-                    />
-                  </span>
-                </SharedTableHead>
-              ))}
-            </SharedTableRow>
-          </SharedTableHeader>
-          <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {rows.length === 0 && (
-              <SharedTableRow>
-                <SharedTableCell
-                  colSpan={visibleFields.length + visiblePrograms.length + visibleSuiStates.length + visibleAccountPrograms.length + components.length + 1}
-                  className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
-                >
-                  {text('empty', 'No employees have an active payroll profile yet.')}
-                </SharedTableCell>
-              </SharedTableRow>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {workspace('employeeHint')}
+      </p>
+      <PagedTable
+        source="payroll_opening_employees"
+        rows={rows}
+        searchable
+        pageSize={25}
+        rowKey={(row) => row.employeePartyId}
+        rowLabel={(row) => row.employeeName}
+        onRowClick={(row) => {
+          setActiveId(row.employeePartyId)
+          setSection('ytd')
+        }}
+        empty={text(
+          'empty',
+          'No employees have an active payroll profile yet.',
+        )}
+        columns={[
+          {
+            key: 'employee',
+            header: text('employee', 'Employee'),
+            search: (row) => `${row.employeeName} ${row.employeeNumber ?? ''}`,
+            cell: (row) => (
+              <div>
+                <span className="font-medium">{row.employeeName}</span>
+                <p className="text-xs text-slate-400">
+                  {row.employeeNumber ?? '—'}
+                </p>
+              </div>
+            ),
+          },
+          {
+            key: 'jurisdiction',
+            header: workspace('jurisdiction'),
+            search: (row) => `${row.country ?? ''} ${row.province ?? ''}`,
+            cell: (row) =>
+              [row.country, row.province].filter(Boolean).join(' · ') || '—',
+          },
+          {
+            key: 'status',
+            header: workspace('status'),
+            cell: (row) => (
+              <Badge variant="outline">
+                {row.locked ? (
+                  <>
+                    <Lock size={11} aria-hidden />
+                    {text('locked', 'Locked')}
+                  </>
+                ) : dirtyIds.includes(row.employeePartyId) ? (
+                  workspace('unsaved')
+                ) : row.amounts !== null ? (
+                  workspace('recorded')
+                ) : (
+                  workspace('noCarryIn')
+                )}
+              </Badge>
+            ),
+          },
+          {
+            key: 'gross',
+            header: workspace('grossYtd'),
+            align: 'right',
+            cell: (row) => (
+              <span className="tabular-nums">
+                {valueOf(row, 'grossYtd') || '—'}
+              </span>
+            ),
+          },
+          {
+            key: 'open',
+            header: <span className="sr-only">{workspace('review')}</span>,
+            align: 'right',
+            cell: () => (
+              <ChevronRight
+                size={16}
+                className="ml-auto text-slate-400"
+                aria-hidden
+              />
+            ),
+          },
+        ]}
+      />
+      <Drawer
+        open={!!activeRow}
+        onClose={() => {
+          if (!saving) setActiveId(null)
+        }}
+        title={activeRow?.employeeName ?? workspace('employees')}
+        description={`${year} · ${[activeRow?.employeeNumber, activeRow?.country, activeRow?.province].filter(Boolean).join(' · ')}`}
+        size="lg"
+        subtabs={
+          <RecordTabs
+            label={workspace('balanceSections')}
+            active={section}
+            onChange={setSection}
+            tabs={[
+              { key: 'ytd', label: workspace('ytd') },
+              {
+                key: 'bases',
+                label: workspace('bases'),
+                count:
+                  visiblePrograms.length +
+                  visibleSuiStates.length +
+                  visibleAccountPrograms.length,
+              },
+              {
+                key: 'caps',
+                label: workspace('caps'),
+                count: components.length,
+              },
+            ]}
+          />
+        }
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">{workspace('draftHint')}</p>
+            <Button
+              variant="outline"
+              disabled={saving}
+              onClick={() => setActiveId(null)}
+            >
+              {workspace('done')}
+            </Button>
+            {canManage && (
+              <Button disabled={saving || dirtyIds.length === 0} onClick={save}>
+                {saving
+                  ? text('saving', 'Saving…')
+                  : `${workspace('saveAll')} (${dirtyIds.length})`}
+              </Button>
             )}
-            {rows.map((row) => (
-              <SharedTableRow
-                key={row.employeePartyId}
-                className={cn(row.locked && 'bg-slate-50/60 dark:bg-slate-900/40')}
+          </div>
+        }
+      >
+        {activeRow && (
+          <div className="space-y-5">
+            {activeRow.locked && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
+                <Lock size={14} className="mr-2 inline" aria-hidden />
+                {text('lockedBy', 'Committed pay run')}{' '}
+                {activeRow.lockedBy?.documentNumber} ·{' '}
+                {activeRow.lockedBy?.payDate}
+              </div>
+            )}
+            {errors.length > 0 && (
+              <div
+                role="alert"
+                className="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300"
               >
-                <SharedTableCell className="sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap dark:bg-slate-950">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-slate-800 dark:text-slate-100">
-                      {row.employeeName}
-                    </span>
-                    {row.employeeNumber && (
-                      <span className="text-xs text-slate-400">{row.employeeNumber}</span>
-                    )}
-                    {row.locked && (
-                      <Badge
-                        variant="default"
-                        title={
-                          row.lockedBy
-                            ? `${text('lockedBy', 'Committed pay run')} ${row.lockedBy.documentNumber ?? ''} · ${row.lockedBy.payDate}`
-                            : undefined
-                        }
-                      >
-                        <Lock size={11} aria-hidden />
-                        {text('locked', 'Locked')}
-                      </Badge>
-                    )}
-                    {!row.locked && row.amounts === null && (
-                      <span className="text-xs text-amber-600 dark:text-amber-400">
-                        {text('none', 'none')}
-                      </span>
-                    )}
-                  </div>
-                </SharedTableCell>
-                {visibleFields.map((field) => {
-                  // Unknown country applies to every pack's columns (see the
-                  // packs set above): the row's pack is gone with its profile,
-                  // and refusing its amounts a column would hide carried-in
-                  // money the engine still reads.
-                  const applies = row.country == null || field.packs.includes(row.country)
-                  return (
-                    <SharedTableCell key={field.key} className="px-2 py-1.5 text-right">
-                      {applies ? (
-                        <MoneyInput
-                          ariaLabel={`${row.employeeName} — ${field.label}`}
-                          value={valueOf(row, field.key)}
-                          onChange={(value) =>
-                            setValue(row.employeePartyId, field.key, value)
-                          }
-                          field={field.label}
-                          noun="a money amount"
-                          maxScale={4}
-                          placeholder="0.00"
-                          disabled={row.locked || !canManage || saving}
-                          className="w-32 text-right tabular-nums"
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
-                      )}
-                    </SharedTableCell>
-                  )
-                })}
-                {visiblePrograms.map((program) => {
-                  // Same pack rule as the statutory columns (see above): an
-                  // orphan row keeps every program's column rather than
-                  // defaulting to any country's.
-                  const applies = row.country == null || program.packs.includes(row.country)
-                  return (
-                    <SharedTableCell key={program.key} className="px-2 py-1.5 text-right">
-                      {applies ? (
-                        <MoneyInput
-                          ariaLabel={`${row.employeeName} — ${program.label}`}
-                          value={programValueOf(row, program)}
-                          onChange={(value) =>
-                            setProgramValue(row.employeePartyId, program.key, value)
-                          }
-                          field={program.label}
-                          noun="a money amount"
-                          maxScale={4}
-                          placeholder="0.00"
-                          disabled={row.locked || !canManage || saving}
-                          className="w-32 text-right tabular-nums"
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
-                      )}
-                    </SharedTableCell>
-                  )
-                })}
-                {visibleSuiStates.map((sui) => {
-                  // Same pack rule as the statutory and program columns (see
-                  // above): an orphan row keeps every state's column rather
-                  // than defaulting to any country's.
-                  const applies = row.country == null || sui.packs.includes(row.country)
-                  return (
-                    <SharedTableCell key={sui.key} className="px-2 py-1.5 text-right">
-                      {applies ? (
-                        <MoneyInput
-                          ariaLabel={`${row.employeeName} — ${sui.label}`}
-                          value={suiValueOf(row, sui.key)}
-                          onChange={(value) =>
-                            setSuiValue(row.employeePartyId, sui.key, value)
-                          }
-                          field={sui.label}
-                          noun="a money amount"
-                          maxScale={4}
-                          placeholder="0.00"
-                          disabled={row.locked || !canManage || saving}
-                          className="w-32 text-right tabular-nums"
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
-                      )}
-                    </SharedTableCell>
-                  )
-                })}
-                {visibleAccountPrograms.map((program) => {
-                  const applies = (row.country == null || row.country === program.country)
-                  const key = `account:${program.key}`
-                  return (
-                    <SharedTableCell key={key} className="px-2 py-1.5 text-right">
-                      {applies ? (
-                        <MoneyInput
-                          ariaLabel={`${row.employeeName} — ${program.label}`}
-                          value={accountProgramValueOf(row, program)}
-                          onChange={(value) => setProgramValue(row.employeePartyId, key, value)}
-                          field={program.label}
-                          noun="a money amount"
-                          maxScale={4}
-                          placeholder="0.00"
-                          disabled={row.locked || !canManage || saving}
-                          className="w-32 text-right tabular-nums"
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-300 dark:text-slate-700">—</span>
-                      )}
-                    </SharedTableCell>
-                  )
-                })}
-                {components.map((component, index) => (
-                  <SharedTableCell
-                    key={component.componentId}
-                    className={cn(
-                      'px-2 py-1.5 text-right',
-                      index === 0 && 'border-l border-slate-200 dark:border-slate-800',
-                    )}
-                  >
+                {errors.map((error, index) => (
+                  <p key={index}>
+                    {error.employeeName ? `${error.employeeName}: ` : ''}
+                    {error.message}
+                  </p>
+                ))}
+              </div>
+            )}
+            <div
+              hidden={section !== 'ytd'}
+              className="grid gap-4 sm:grid-cols-2"
+            >
+              {visibleFields
+                .filter(
+                  (field) =>
+                    activeRow.country == null ||
+                    field.packs.includes(activeRow.country),
+                )
+                .map((field) => (
+                  <div key={field.key} className="space-y-1.5">
+                    <Label help={field.help}>
+                      {t.has(`openingBalances.fields.${field.key}` as never)
+                        ? t(`openingBalances.fields.${field.key}` as never)
+                        : field.label}
+                    </Label>
                     <MoneyInput
-                      ariaLabel={`${row.employeeName} — ${component.name}`}
-                      value={componentValueOf(row, component.componentId)}
+                      ariaLabel={`${activeRow.employeeName} — ${field.label}`}
+                      value={valueOf(activeRow, field.key)}
                       onChange={(value) =>
-                        setComponentValue(row.employeePartyId, component.componentId, value)
+                        setValue(activeRow.employeePartyId, field.key, value)
                       }
-                      field={component.name}
+                      field={field.label}
                       noun="a money amount"
                       maxScale={4}
                       placeholder="0.00"
-                      disabled={row.locked || !canManage || !component.capped || saving}
-                      className="w-32 text-right tabular-nums"
+                      disabled={activeRow.locked || !canManage || saving}
+                      className="text-right tabular-nums"
                     />
-                  </SharedTableCell>
+                  </div>
                 ))}
-              </SharedTableRow>
-            ))}
-          </SharedTableBody>
-        </SharedTable>
-      </div>
+            </div>
+            <div hidden={section !== 'bases'} className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {visiblePrograms
+                  .filter(
+                    (program) =>
+                      activeRow.country == null ||
+                      program.packs.includes(activeRow.country),
+                  )
+                  .map((program) => (
+                    <div key={program.key} className="space-y-1.5">
+                      <Label help={program.help}>{program.label}</Label>
+                      <MoneyInput
+                        ariaLabel={`${activeRow.employeeName} — ${program.label}`}
+                        value={programValueOf(activeRow, program)}
+                        onChange={(value) =>
+                          setProgramValue(
+                            activeRow.employeePartyId,
+                            program.key,
+                            value,
+                          )
+                        }
+                        field={program.label}
+                        noun="a money amount"
+                        maxScale={4}
+                        placeholder="0.00"
+                        disabled={activeRow.locked || !canManage || saving}
+                        className="text-right tabular-nums"
+                      />
+                    </div>
+                  ))}
+                {visibleAccountPrograms
+                  .filter(
+                    (program) =>
+                      activeRow.country == null ||
+                      activeRow.country === program.country,
+                  )
+                  .map((program) => (
+                    <div key={program.key} className="space-y-1.5">
+                      <Label help={program.help}>{program.label}</Label>
+                      <MoneyInput
+                        ariaLabel={`${activeRow.employeeName} — ${program.label}`}
+                        value={accountProgramValueOf(activeRow, program)}
+                        onChange={(value) =>
+                          setProgramValue(
+                            activeRow.employeePartyId,
+                            `account:${program.key}`,
+                            value,
+                          )
+                        }
+                        field={program.label}
+                        noun="a money amount"
+                        maxScale={4}
+                        placeholder="0.00"
+                        disabled={activeRow.locked || !canManage || saving}
+                        className="text-right tabular-nums"
+                      />
+                    </div>
+                  ))}
+              </div>
+              {visibleSuiStates.length > 0 &&
+                (activeRow.country == null || activeRow.country === 'US') && (
+                  <details className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      {workspace('stateWages')}
+                    </summary>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                      {visibleSuiStates.map((state) => (
+                        <div key={state.key} className="space-y-1.5">
+                          <Label help={state.help}>{state.label}</Label>
+                          <MoneyInput
+                            ariaLabel={`${activeRow.employeeName} — ${state.label}`}
+                            value={suiValueOf(activeRow, state.key)}
+                            onChange={(value) =>
+                              setSuiValue(
+                                activeRow.employeePartyId,
+                                state.key,
+                                value,
+                              )
+                            }
+                            field={state.label}
+                            noun="a money amount"
+                            maxScale={4}
+                            placeholder="0.00"
+                            disabled={activeRow.locked || !canManage || saving}
+                            className="text-right tabular-nums"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+            </div>
+            <div
+              hidden={section !== 'caps'}
+              className="grid gap-4 sm:grid-cols-2"
+            >
+              {components.length === 0 && (
+                <p className="text-sm text-slate-500">{workspace('noCaps')}</p>
+              )}
+              {components.map((component) => (
+                <div key={component.componentId} className="space-y-1.5">
+                  <Label
+                    help={
+                      component.capped
+                        ? text(
+                            'componentHelp',
+                            'The annual cap already used at your previous payroll system.',
+                          )
+                        : text(
+                            'componentInertHelp',
+                            'This component no longer has an annual cap and cannot be edited.',
+                          )
+                    }
+                  >
+                    {component.name}
+                  </Label>
+                  <p className="text-xs text-slate-500">
+                    {text('componentCap', 'Annual cap')}:{' '}
+                    {component.basisCapAmountPerYear ?? '—'}
+                  </p>
+                  <MoneyInput
+                    ariaLabel={`${activeRow.employeeName} — ${component.name}`}
+                    value={componentValueOf(activeRow, component.componentId)}
+                    onChange={(value) =>
+                      setComponentValue(
+                        activeRow.employeePartyId,
+                        component.componentId,
+                        value,
+                      )
+                    }
+                    field={component.name}
+                    noun="a money amount"
+                    maxScale={4}
+                    placeholder="0.00"
+                    disabled={
+                      activeRow.locked ||
+                      !canManage ||
+                      !component.capped ||
+                      saving
+                    }
+                    className="text-right tabular-nums"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Drawer>
     </div>
   )
 }

@@ -4,9 +4,23 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, History, Search } from 'lucide-react'
-import { Badge, Button, Drawer, Label, Select, cn } from '@openbooks/ui'
-import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
+import { AlertTriangle, History, Plus, Search } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Drawer,
+  EmptyState,
+  FieldHelp,
+  Input,
+  Label,
+  Select,
+  cn,
+} from '@openbooks/ui'
+import { RecordTabs } from '../../../../components/module-home/record-tabs'
+import {
+  PagedTable,
+  type PagedColumn,
+} from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
 import { compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
@@ -60,7 +74,13 @@ interface RetroPeriod {
 interface RetroProposal {
   taxYear: number
   periods: RetroPeriod[]
-  employees: { employeePartyId: string; employeeName: string; periods: number; payable: string; overpaid: string }[]
+  employees: {
+    employeePartyId: string
+    employeeName: string
+    periods: number
+    payable: string
+    overpaid: string
+  }[]
   payableTotal: string
   overpaidTotal: string
   unavailable: number
@@ -69,15 +89,17 @@ interface RetroProposal {
 export type RetroSchedule = {
   id: string
   name: string
-};
+}
 
 export function retroProposalMatchesScope(
   proposalScope: { scheduleId: string; payDate: string } | null,
   currentScope: { scheduleId: string; payDate: string },
 ): boolean {
-  return proposalScope !== null
-    && proposalScope.scheduleId === currentScope.scheduleId
-    && proposalScope.payDate === currentScope.payDate
+  return (
+    proposalScope !== null &&
+    proposalScope.scheduleId === currentScope.scheduleId &&
+    proposalScope.payDate === currentScope.payDate
+  )
 }
 
 /**
@@ -94,10 +116,10 @@ export async function postRetroAction(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, ...body }),
   })
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the retro request failed'))
+  if (!res.ok)
+    throw new Error(await readApiErrorMessage(res, 'the retro request failed'))
   return (await res.json()) as Record<string, unknown>
 }
-
 
 /**
  * Retroactive pay — detect, quantify, review, pay.
@@ -121,18 +143,25 @@ export function RetroWorkspace({
   canRun: boolean
 }) {
   const t = useTranslations('payroll')
-  const tCommon = useTranslations('common')
   const router = useRouter()
   const { money } = useMoney()
   const today = useBusinessToday()
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
 
+  const [scopeOpen, setScopeOpen] = useState(false)
+  const [review, setReview] = useState<'payable' | 'attention' | 'all'>(
+    'payable',
+  )
+  const [failure, setFailure] = useState<string | null>(null)
   const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
   const [payDate, setPayDate] = useState(today)
   const [busy, setBusy] = useState(false)
   const [proposal, setProposal] = useState<RetroProposal | null>(null)
-  const [proposalScope, setProposalScope] = useState<{ scheduleId: string; payDate: string } | null>(null)
+  const [proposalScope, setProposalScope] = useState<{
+    scheduleId: string
+    payDate: string
+  } | null>(null)
   const [excluded, setExcluded] = useState<string[]>([])
   const [open, setOpen] = useState<RetroPeriod | null>(null)
   const proposalRequest = useRef(0)
@@ -154,15 +183,29 @@ export function RetroWorkspace({
     const scope = { scheduleId, payDate }
     const request = ++proposalRequest.current
     setBusy(true)
+    setFailure(null)
     try {
-      const result = (await call('propose', scope, [])) as unknown as RetroProposal
+      const result = (await call(
+        'propose',
+        scope,
+        [],
+      )) as unknown as RetroProposal
       if (request === proposalRequest.current) {
         setProposal(result)
         setProposalScope(scope)
         setExcluded([])
+        setScopeOpen(false)
+        setReview(
+          result.periods.some((period) => period.outcome === 'payable')
+            ? 'payable'
+            : 'all',
+        )
       }
     } catch (error) {
-      if (request === proposalRequest.current) toast.error((error as Error).message)
+      if (request === proposalRequest.current) {
+        setFailure((error as Error).message)
+        toast.error((error as Error).message)
+      }
     } finally {
       if (request === proposalRequest.current) setBusy(false)
     }
@@ -193,7 +236,8 @@ export function RetroWorkspace({
     setPayDate(scope.payDate)
   }
 
-  const payable = proposal?.periods.filter((period) => period.outcome === 'payable') ?? []
+  const payable =
+    proposal?.periods.filter((period) => period.outcome === 'payable') ?? []
   const selected = payable.filter(
     (period) => !excluded.includes(period.candidate.sourcePayRunDocumentId),
   )
@@ -204,20 +248,35 @@ export function RetroWorkspace({
     unavailable: 'text-red-700 dark:text-red-400',
   }
   const outcomeLabel = (outcome: RetroPeriod['outcome']) =>
-    text(`retro.outcome.${outcome}`, {
-      payable: 'Owed',
-      none: 'Nothing owed',
-      overpaid: 'Overpaid — not payable here',
-      unavailable: 'Could not be recalculated',
-    }[outcome])
+    text(
+      `retro.outcome.${outcome}`,
+      {
+        payable: 'Owed',
+        none: 'Nothing owed',
+        overpaid: 'Overpaid — not payable here',
+        unavailable: 'Could not be recalculated',
+      }[outcome],
+    )
 
   const reasonLabel = (source: RetroReason['source']) =>
-    text(`retro.reason.${source}`, {
-      wage_rate: 'Backdated wage',
-      pay_component: 'Backdated pay component',
-      unclaimed_time: 'Hours never paid',
-      omitted_from_run: 'Never paid for this period',
-    }[source])
+    text(
+      `retro.reason.${source}`,
+      {
+        wage_rate: 'Backdated wage',
+        pay_component: 'Backdated pay component',
+        unclaimed_time: 'Hours never paid',
+        omitted_from_run: 'Never paid for this period',
+      }[source],
+    )
+
+  const reviewRows =
+    proposal?.periods.filter(
+      (period) =>
+        review === 'all' ||
+        (review === 'payable'
+          ? period.outcome === 'payable'
+          : period.outcome === 'overpaid' || period.outcome === 'unavailable'),
+    ) ?? []
 
   const columns: PagedColumn<RetroPeriod>[] = [
     {
@@ -233,7 +292,9 @@ export function RetroWorkspace({
             onChange={(event) =>
               setExcluded((current) =>
                 event.target.checked
-                  ? current.filter((id) => id !== row.candidate.sourcePayRunDocumentId)
+                  ? current.filter(
+                      (id) => id !== row.candidate.sourcePayRunDocumentId,
+                    )
                   : [...current, row.candidate.sourcePayRunDocumentId],
               )
             }
@@ -254,7 +315,8 @@ export function RetroWorkspace({
           {row.candidate.periodStart} – {row.candidate.periodEnd}
         </span>
       ),
-      search: (row) => `${row.candidate.periodStart} ${row.candidate.periodEnd}`,
+      search: (row) =>
+        `${row.candidate.periodStart} ${row.candidate.periodEnd}`,
     },
     {
       key: 'run',
@@ -263,29 +325,13 @@ export function RetroWorkspace({
       search: (row) => row.candidate.sourceDocumentNumber,
     },
     {
-      key: 'old',
-      header: text('retro.columns.paid', 'Paid'),
-      align: 'right',
-      cell: (row) => (row.difference ? money(row.difference.originalEarnings) : '—'),
-    },
-    {
-      key: 'new',
-      header: text('retro.columns.shouldHavePaid', 'Should have paid'),
-      align: 'right',
-      cell: (row) => (row.difference ? money(row.difference.recomputedEarnings) : '—'),
-    },
-    {
-      key: 'settled',
-      header: text('retro.columns.alreadySettled', 'Already settled'),
-      align: 'right',
-      cell: (row) => (row.difference ? money(row.difference.previouslySettled) : '—'),
-    },
-    {
       key: 'delta',
       header: text('retro.columns.difference', 'Difference'),
       align: 'right',
       cell: (row) => (
-        <span className={cn('font-medium tabular-nums', outcomeTone[row.outcome])}>
+        <span
+          className={cn('font-medium tabular-nums', outcomeTone[row.outcome])}
+        >
           {row.difference ? money(row.difference.delta) : '—'}
         </span>
       ),
@@ -314,76 +360,141 @@ export function RetroWorkspace({
 
   return (
     <div className="space-y-6">
-      {/* Controls */}
-      <section className="grid items-end gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] dark:border-slate-800">
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="retro-schedule"
-            help={text(
-              'retro.scheduleHelp',
-              'Retroactive pay is quantified against the committed runs of one pay schedule at a time, because a schedule is what defines the periods that were paid.',
-            )}
-          >
-            {text('columns.schedule', 'Pay schedule')}
-          </Label>
-          <Select
-            id="retro-schedule"
-            value={scheduleId}
-            onChange={(e) => changeScope({ scheduleId: e.target.value, payDate })}
-          >
-            {schedules.map((schedule) => (
-              <option key={schedule.id} value={schedule.id}>{schedule.name}</option>
-            ))}
-          </Select>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-slate-500 dark:text-slate-400">
+          {proposal
+            ? `${schedules.find((schedule) => schedule.id === scheduleId)?.name ?? ''} · ${payDate} · ${proposal.taxYear}`
+            : text(
+                'retro.workspace.context',
+                'Review backdated changes before creating a pay run.',
+              )}
         </div>
-        <div className="space-y-1.5">
-          <Label
-            htmlFor="retro-paydate"
-            help={text(
-              'retro.payDateHelp',
-              'Retro is paid in the current period for work in past ones. This date decides the statutory year in scope and the accounting period the money posts to — that period must be open.',
-            )}
-          >
-            {text('columns.payDate', 'Pay date')}
-          </Label>
-          <input
-            id="retro-paydate"
-            type="date"
-            value={payDate}
-            onChange={(e) => changeScope({ scheduleId, payDate: e.target.value })}
-            className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-          />
-        </div>
-        <Button onClick={find} disabled={busy || !scheduleId}>
-          <Search size={14} aria-hidden />
-          {busy ? tCommon('actions.saving') : text('retro.find', 'Find retroactive pay')}
+        <Button
+          onClick={() => setScopeOpen(true)}
+          disabled={busy || schedules.length === 0}
+        >
+          <Plus size={14} aria-hidden />
+          {text('retro.workspace.newReview', 'New review')}
         </Button>
-      </section>
+      </div>
+      <Drawer
+        open={scopeOpen}
+        onClose={() => {
+          if (!busy) setScopeOpen(false)
+        }}
+        title={text('retro.workspace.newReview', 'New review')}
+        description={text(
+          'retro.workspace.scopeHint',
+          'Choose the schedule and the date you intend to pay the adjustment.',
+        )}
+        size="sm"
+        footer={
+          <Button onClick={find} disabled={busy || !scheduleId || !payDate}>
+            <Search size={14} aria-hidden />
+            {busy
+              ? text('retro.workspace.finding', 'Reviewing…')
+              : text('retro.find', 'Find retroactive pay')}
+          </Button>
+        }
+      >
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="retro-schedule"
+              help={text(
+                'retro.scheduleHelp',
+                'Retroactive pay is quantified against the committed runs of one pay schedule at a time, because a schedule is what defines the periods that were paid.',
+              )}
+            >
+              {text('columns.schedule', 'Pay schedule')}
+            </Label>
+            <Select
+              id="retro-schedule"
+              value={scheduleId}
+              disabled={busy}
+              onChange={(e) =>
+                changeScope({ scheduleId: e.target.value, payDate })
+              }
+            >
+              {schedules.map((schedule) => (
+                <option key={schedule.id} value={schedule.id}>
+                  {schedule.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="retro-paydate"
+              help={text(
+                'retro.payDateHelp',
+                'Retro is paid in the current period for work in past ones. This date decides the statutory year in scope and the accounting period the money posts to — that period must be open.',
+              )}
+            >
+              {text('columns.payDate', 'Pay date')}
+            </Label>
+            <Input
+              id="retro-paydate"
+              type="date"
+              value={payDate}
+              disabled={busy}
+              onChange={(e) =>
+                changeScope({ scheduleId, payDate: e.target.value })
+              }
+            />
+          </div>
+        </div>
+        {failure && (
+          <p
+            role="alert"
+            className="mt-4 text-sm text-red-700 dark:text-red-300"
+          >
+            {failure}
+          </p>
+        )}
+      </Drawer>
 
       {proposal === null ? (
-        <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {text(
-            'retro.idle',
-            'Pick a schedule and a pay date, then look for periods whose pay has changed since they were paid — a wage backdated over them, a pay component effective before them, or approved hours no run ever paid.',
-          )}
-        </p>
+        <EmptyState
+          icon={<History />}
+          title={text('retro.workspace.emptyTitle', 'Make backdated pay clear')}
+          description={
+            schedules.length
+              ? text(
+                  'retro.idle',
+                  'Choose a schedule and pay date to review changed periods.',
+                )
+              : text(
+                  'retro.workspace.noSchedules',
+                  'Set up a pay schedule before reviewing retroactive pay.',
+                )
+          }
+        />
       ) : (
         <>
           {/* Summary */}
-          <section className="grid gap-3 sm:grid-cols-4">
+          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Tile
               label={text('retro.summary.payable', 'Owed')}
               value={money(proposal.payableTotal)}
-              hint={text('retro.summary.payableHint', 'Sum of every positive difference found.')}
+              hint={text(
+                'retro.summary.payableHint',
+                'Sum of every positive difference found.',
+              )}
             />
             <Tile
               label={text('retro.summary.employees', 'Employees')}
-              value={String(new Set(payable.map((p) => p.candidate.employeePartyId)).size)}
+              value={String(
+                new Set(payable.map((p) => p.candidate.employeePartyId)).size,
+              )}
             />
             <Tile
               label={text('retro.summary.periods', 'Periods')}
               value={`${selected.length} / ${payable.length}`}
-              hint={text('retro.summary.periodsHint', 'Selected periods out of those with money owed.')}
+              hint={text(
+                'retro.summary.periodsHint',
+                'Selected periods out of those with money owed.',
+              )}
             />
             <Tile
               label={text('retro.summary.taxYear', 'Statutory year')}
@@ -395,7 +506,8 @@ export function RetroWorkspace({
             />
           </section>
 
-          {(proposal.unavailable > 0 || compareDecimal(proposal.overpaidTotal, '0') < 0) && (
+          {(proposal.unavailable > 0 ||
+            compareDecimal(proposal.overpaidTotal, '0') < 0) && (
             <section className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/40">
               <p className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
                 <AlertTriangle size={14} aria-hidden />
@@ -407,49 +519,91 @@ export function RetroWorkspace({
                     'retro.overpaidNote',
                     'A backdated decrease is an overpayment recovery, not retro pay. It has its own consent and notice rules and is never netted into a retro cheque.',
                   )}{' '}
-                  <span className="font-medium tabular-nums">{money(proposal.overpaidTotal)}</span>
+                  <span className="font-medium tabular-nums">
+                    {money(proposal.overpaidTotal)}
+                  </span>
                 </p>
               )}
-              {proposal.periods
-                .filter((period) => period.outcome === 'unavailable')
-                .map((period) => (
-                  <p key={`${period.candidate.employeePartyId}:${period.candidate.sourcePayRunDocumentId}`}
-                     className="text-amber-900 dark:text-amber-200">
-                    {period.candidate.employeeName}: {period.blockedReason}
-                  </p>
-                ))}
+              {proposal.unavailable > 0 && (
+                <p>
+                  {text(
+                    'retro.workspace.unavailable',
+                    'Some periods could not be recalculated. Open Needs review to see each refusal and its reason.',
+                  )}
+                </p>
+              )}
             </section>
           )}
 
           {/* Review */}
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              {text('retro.reviewTitle', 'Per employee, per period')}
-            </h2>
+            <RecordTabs
+              label={text('retro.workspace.reviewViews', 'Review findings')}
+              active={review}
+              onChange={setReview}
+              tabs={[
+                {
+                  key: 'payable',
+                  label: text('retro.workspace.payable', 'Payable'),
+                  count: payable.length,
+                },
+                {
+                  key: 'attention',
+                  label: text('retro.workspace.attention', 'Needs review'),
+                  count: proposal.periods.filter(
+                    (period) =>
+                      period.outcome === 'overpaid' ||
+                      period.outcome === 'unavailable',
+                  ).length,
+                },
+                {
+                  key: 'all',
+                  label: text('retro.workspace.all', 'All periods'),
+                  count: proposal.periods.length,
+                },
+              ]}
+            />
             <PagedTable
               source="payroll_retro_periods"
-              rows={proposal.periods}
+              rows={reviewRows}
               columns={columns}
-              rowKey={(row) => `${row.candidate.employeePartyId}:${row.candidate.sourcePayRunDocumentId}`}
+              rowKey={(row) =>
+                `${row.candidate.employeePartyId}:${row.candidate.sourcePayRunDocumentId}`
+              }
               searchable
-              pageSize={15}
+              pageSize={25}
+              rowLabel={(row) =>
+                `${row.candidate.employeeName} · ${row.candidate.sourceDocumentNumber}`
+              }
               onRowClick={(row) => setOpen(row)}
               empty={
                 <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  {text('retro.none', 'Nothing has changed for any period this schedule has already paid.')}
+                  {text(
+                    'retro.workspace.noFindings',
+                    'No periods in this view. Choose another view to see the remaining findings.',
+                  )}
                 </p>
               }
             />
           </section>
 
           {canRun && selected.length > 0 && (
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {text('retro.createHint', 'Creates a draft retroactive pay run you still calculate, approve and commit.')}
+                {text(
+                  'retro.createHint',
+                  'Creates a draft retroactive pay run you still calculate, approve and commit.',
+                )}
               </p>
               <Button
                 onClick={create}
-                disabled={busy || !retroProposalMatchesScope(proposalScope, { scheduleId, payDate })}
+                disabled={
+                  busy ||
+                  !retroProposalMatchesScope(proposalScope, {
+                    scheduleId,
+                    payDate,
+                  })
+                }
               >
                 <History size={14} aria-hidden />
                 {text('retro.create', 'Create retro pay run')}
@@ -464,7 +618,40 @@ export function RetroWorkspace({
         open={open !== null}
         onClose={() => setOpen(null)}
         size="2xl"
-        title={open ? `${open.candidate.employeeName} · ${open.candidate.sourceDocumentNumber}` : ''}
+        title={
+          open
+            ? `${open.candidate.employeeName} · ${open.candidate.sourceDocumentNumber}`
+            : ''
+        }
+        footer={
+          open?.outcome === 'payable' ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-slate-500">
+                {text(
+                  'retro.workspace.selectionScope',
+                  'Selection applies to all payable employees from this source pay run.',
+                )}
+              </p>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  setExcluded((current) =>
+                    current.includes(open.candidate.sourcePayRunDocumentId)
+                      ? current.filter(
+                          (id) => id !== open.candidate.sourcePayRunDocumentId,
+                        )
+                      : [...current, open.candidate.sourcePayRunDocumentId],
+                  )
+                }
+              >
+                {excluded.includes(open.candidate.sourcePayRunDocumentId)
+                  ? text('retro.workspace.include', 'Include source run')
+                  : text('retro.workspace.exclude', 'Exclude source run')}
+              </Button>
+            </div>
+          ) : undefined
+        }
         description={
           open
             ? `${open.candidate.periodStart} – ${open.candidate.periodEnd} · ${text('retro.paidOn', 'paid')} ${open.candidate.payDate}`
@@ -473,6 +660,43 @@ export function RetroWorkspace({
       >
         {open && (
           <div className="space-y-5">
+            <Badge
+              variant={
+                open.outcome === 'payable'
+                  ? 'success'
+                  : open.outcome === 'none'
+                    ? 'secondary'
+                    : 'warning'
+              }
+            >
+              {outcomeLabel(open.outcome)}
+            </Badge>
+            {open.difference && (
+              <div className="grid grid-cols-2 gap-3">
+                <Tile
+                  label={text('retro.columns.paid', 'Paid')}
+                  value={money(open.difference.originalEarnings)}
+                />
+                <Tile
+                  label={text(
+                    'retro.columns.shouldHavePaid',
+                    'Should have paid',
+                  )}
+                  value={money(open.difference.recomputedEarnings)}
+                />
+                <Tile
+                  label={text(
+                    'retro.columns.alreadySettled',
+                    'Already settled',
+                  )}
+                  value={money(open.difference.previouslySettled)}
+                />
+                <Tile
+                  label={text('retro.columns.difference', 'Difference')}
+                  value={money(open.difference.delta)}
+                />
+              </div>
+            )}
             <section className="space-y-1">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 {text('retro.whyTitle', 'Why this period was looked at')}
@@ -480,8 +704,12 @@ export function RetroWorkspace({
               <ul className="space-y-1 text-sm">
                 {open.candidate.reasons.map((reason, index) => (
                   <li key={index} className="flex gap-2">
-                    <Badge variant="secondary">{reasonLabel(reason.source)}</Badge>
-                    <span className="text-slate-600 dark:text-slate-300">{reason.detail}</span>
+                    <Badge variant="secondary">
+                      {reasonLabel(reason.source)}
+                    </Badge>
+                    <span className="text-slate-600 dark:text-slate-300">
+                      {reason.detail}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -520,13 +748,19 @@ export function RetroWorkspace({
                     },
                     {
                       key: 'now',
-                      header: text('retro.columns.shouldHavePaid', 'Should have paid'),
+                      header: text(
+                        'retro.columns.shouldHavePaid',
+                        'Should have paid',
+                      ),
                       align: 'right',
                       cell: (row: RetroBucket) => money(row.recomputedAmount),
                     },
                     {
                       key: 'settled',
-                      header: text('retro.columns.alreadySettled', 'Already settled'),
+                      header: text(
+                        'retro.columns.alreadySettled',
+                        'Already settled',
+                      ),
                       align: 'right',
                       cell: (row: RetroBucket) => money(row.previouslySettled),
                     },
@@ -535,11 +769,15 @@ export function RetroWorkspace({
                       header: text('retro.columns.difference', 'Difference'),
                       align: 'right',
                       cell: (row: RetroBucket) => (
-                        <span className="font-medium tabular-nums">{money(row.amount)}</span>
+                        <span className="font-medium tabular-nums">
+                          {money(row.amount)}
+                        </span>
                       ),
                     },
                   ]}
-                  rowKey={(row, index) => `${row.componentId ?? ''}|${row.projectId ?? ''}|${index}`}
+                  rowKey={(row, index) =>
+                    `${row.componentId ?? ''}|${row.projectId ?? ''}|${index}`
+                  }
                   pageSize={10}
                   empty={
                     <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -562,14 +800,24 @@ export function RetroWorkspace({
   )
 }
 
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Tile({
+  label,
+  value,
+  hint,
+}: {
+  label: string
+  value: string
+  hint?: string
+}) {
   return (
     <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
         {label}
+        {hint && <FieldHelp help={hint} />}
+      </div>
+      <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-50">
+        {value}
       </p>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{hint}</p> : null}
     </div>
   )
 }

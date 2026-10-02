@@ -1,3 +1,4 @@
+import { OpeningBalancesWorkspace } from '../../app/(app)/payroll/opening-balances/OpeningBalancesWorkspace'
 import { type ComponentProps } from 'react'
 import { RetroWorkspace } from '../../app/(app)/payroll/retro/RetroWorkspace'
 import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remittances/sections'
@@ -70,6 +71,13 @@ export const PAYROLL_WIDGETS = {
   /* --- payroll opening balances ----------------------------------------------------- */
   /** Money stays canonical text: the grid trims zeros for display over raw
    *  store strings, client-side. */
+  'opening-balances-workspace': (props) => (
+    <OpeningBalancesWorkspace
+      balances={props.balances as ComponentProps<typeof OpeningBalancesWorkspace>['balances']}
+      banks={props.banks as ComponentProps<typeof OpeningBalancesWorkspace>['banks']}
+      employerLevies={props.employerLevies as ComponentProps<typeof OpeningBalancesWorkspace>['employerLevies']}
+    />
+  ),
   'opening-balances-grid': (props) => (
     <OpeningBalancesView
       year={num(props, 'year') ?? new Date().getFullYear()}

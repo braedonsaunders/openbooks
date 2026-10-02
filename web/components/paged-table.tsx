@@ -42,6 +42,7 @@ export function PagedTable<T>({
   rowKey,
   rowClassName,
   toolbarAfter,
+  toolbarAlign,
   onRowClick,
   footer,
   emptyAsRow,
@@ -61,6 +62,8 @@ export function PagedTable<T>({
   rowClassName?: (row: T) => string | undefined
   /** Controls rendered immediately after the search box on the same toolbar row. */
   toolbarAfter?: ReactNode
+  /** Bottom-align search with labelled filter fields in the same row. */
+  toolbarAlign?: 'end'
   /** Makes rows interactive (cursor + click), e.g. to open a detail drawer. */
   onRowClick?: (row: T) => void
   /** Extra TableRow(s) rendered after the page's rows (e.g. a totals row).
@@ -128,7 +131,7 @@ export function PagedTable<T>({
 
   const toolbar = searchable ? (
     toolbarAfter ? (
-      <div className="flex flex-wrap gap-2">
+      <div className={`flex flex-wrap gap-2${toolbarAlign === 'end' ? ' items-end' : ''}`}>
         <div className="relative min-w-56 flex-1">
           <Search
             className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
