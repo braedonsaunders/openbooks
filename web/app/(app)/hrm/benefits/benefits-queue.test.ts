@@ -5,15 +5,9 @@ import { stubModules } from "../../../../testing/stub-modules";
 import test, { beforeEach, afterEach } from "node:test";
 import { createTranslator } from "next-intl";
 
-// Behaviour contract for the benefits desk (/hrm/benefits). These tests
-// CALL the benefits loader with hand-built service rows and assert on
-// what the page observes: refusal data for an unknown segment, exact
-// per-status counts on the windows view, and the enrolments view swap
-// (a different entity, not a status). Seams stub I/O only (group and
-// rewards tabs, the engine benefits reads, the departments lookup,
-// translations backed by the REAL en catalog). Authz stubbing is the
-// sanctioned seam, with permission logic proven by the existing scope DB
-// tests, not doubled here.
+// Exercise the Benefits loader and rendered lists with service read fixtures.
+// Translations use the real catalog; authorization and database access are
+// isolated here, with tenant isolation covered by native database tests.
 const translate = createTranslator({ locale: 'en', messages: hrmCatalog, onError: error => { throw error } });
 const portfolioCatalog: PortfolioCatalog = Object.assign(
   (key: string, params?: Record<string, string | number>) => translate(key as Parameters<typeof translate>[0], params),
@@ -102,7 +96,7 @@ function windowRow(id: string, status: string): Record<string, unknown> {
 }
 
 function enrolmentRow(id: string, windowId: string): Record<string, unknown> {
-  return { id, windowId, employmentId: "emp-1", employeeName: "Ada", status: "elected" };
+  return { id, windowId, employmentId: "emp-1", employeeName: "Ada", status: "elected", currency: "CAD", contributions: [] };
 }
 
 test("an unknown segment refuses naming the segment, never an empty table", async () => {
@@ -263,7 +257,7 @@ test('Programs combines insured plans and employer programs in one filterable po
   gap.__portfolioReads = { programs: [{ id: 'reward', code: 'RECOG', name: 'Recognition', family: 'reward', currency: 'USD', status: 'active', valuation: 'fixed', fixedAmount: '25.0000', effectiveFrom: '2026-01-01', effectiveTo: null }], awards: [] }
   const data = await loadBenefits(HR_BENEFITS, { view: 'programs' })
   assert.deepEqual(data.unifiedProgramRows.map((row) => row.id), ['plan:health', 'reward', 'plan:retired'])
-  assert.equal(data.unifiedProgramRows[2]?.statusLabel, 'Closed')
+  assert.equal(data.unifiedProgramRows[2]?.statusLabel, 'Inactive')
   assert.equal(data.unifiedProgramRows[0]?.programHref, '/hrm/benefits?view=programs&plan=health')
   const filtered = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'insured' })
   assert.equal(filtered.unifiedProgramRows.length, 2)
@@ -272,6 +266,10 @@ test('Programs combines insured plans and employer programs in one filterable po
   assert.equal((body.match(/"widget":"hrm-program-table"/g) ?? []).length, 1)
   assert.ok(body.includes('typeFilter'))
   assert.ok(!body.includes('setup-entity-section'))
+  const overview = await loadBenefits(HR_BENEFITS, {})
+  assert.equal(overview.tiles.activePrograms, '2')
+  const overviewBody = JSON.stringify(benefitsSpec(overview).body)
+  for (const name of ['Health coverage', 'Recognition', 'Retired plan']) assert.ok(overviewBody.includes(name))
   const unknown = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'typo' })
   assert.match(unknown.programsRefusal?.message ?? '', /typo.*filter/)
 })

@@ -2,7 +2,7 @@ import { grid, panel, ref, statTile, widgetBlock } from '@braedonsaunders/appkit
 import type { BenefitsData } from '../../../../lib/hrm/benefits'
 
 type OverviewData = Pick<BenefitsData,
-  'overview' | 'tiles' | 'programRows' | 'programTableText' | 'programsTitle' |
+  'overview' | 'tiles' | 'unifiedProgramRows' | 'programTableText' | 'programsTitle' |
   'programsRefusal' | 'awardsRefusal' | 'reportsRefusal' | 'deliveredRows' |
   'awaitingRows' | 'deliveredTitle' | 'awaitingTitle'
 >
@@ -41,9 +41,9 @@ export function benefitsOverviewBlocks(data: OverviewData) {
         blocks: data.programsRefusal
           ? [widgetBlock('empty-state', { title: data.programsRefusal.title, description: data.programsRefusal.message })]
           : [widgetBlock('hrm-program-table', {
-              rows: data.programRows,
+              rows: data.unifiedProgramRows,
               text: data.programTableText,
-              total: data.programRows.length,
+              total: data.unifiedProgramRows.length,
               truncated: false,
             })],
       }),

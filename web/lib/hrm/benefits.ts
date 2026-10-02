@@ -428,8 +428,11 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     portfolioFields.unifiedProgramRows = [...insuredRows, ...portfolio.programs]
       .filter((row) => !type || row.family === type)
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    portfolioFields.overview.vitals.activePrograms += plans.filter((plan) => plan.isActive).length
+    portfolioFields.tiles.activePrograms = portfolioFields.programsRefusal ? '—' : String(portfolioFields.overview.vitals.activePrograms)
   } catch (error) {
     portfolioFields.programsRefusal = { title: t('portfolio.readFailedTitle'), message: error instanceof Error ? error.message : t('benefits.actionFailed') }
+    portfolioFields.tiles.activePrograms = '—'
   }
 
   let enrollmentDialog: BenefitElectDialogStrings | null = null
