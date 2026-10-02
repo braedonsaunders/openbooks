@@ -111,7 +111,7 @@ test('header overflow preserves order, names the active destination and returns 
   const original = HTMLElement.prototype.getBoundingClientRect
   for (const available of [160, 1000]) {
   HTMLElement.prototype.getBoundingClientRect = function () {
-    const width = this.hasAttribute('data-subtabs') ? available : this.hasAttribute('data-tab-measure') ? 110 : 0
+    const width = (this.hasAttribute('data-subtabs-track') || this.hasAttribute('data-subtabs')) ? available : this.hasAttribute('data-tab-measure') ? 110 : 0
     return new window.DOMRect(0, 0, width, 40)
   }
   const screen = await mount(<ModuleHomeTabs tabs={[{href:'/one',label:'One'}, {href:'/two',label:'Two'}, {href:'/three',label:'Three',active:true}].map(tab => ({...tab, secondary: available === 1000}))} />)

@@ -485,6 +485,6 @@
    Scoped to the rail: the same strip used as a view switch anywhere else
    keeps its document position. An unscoped `order-last` sent it to the
    bottom of every flex-column page body it sat in. */
-[data-page-actions] [data-subtabs] {
+[data-page-actions] [data-subtabs-track] {
   order: 9999;
 }
