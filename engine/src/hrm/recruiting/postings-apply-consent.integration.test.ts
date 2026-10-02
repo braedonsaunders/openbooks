@@ -1,33 +1,21 @@
-import { test } from "node:test";
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { test } from "node:test";
 import { db } from "../../platform/db.ts";
 import {
-  dropScratchOrg,
-  type ScratchOrg,
+  type ScratchOrg
 } from "../../testing/fixtures.ts";
-import { setupHarness } from "../../testing/hrm-harness.ts";
-import {
-  createRequisition,
-  openRequisition,
-} from "./requisitions.ts";
+import { setupHarness, withHarness } from "../../testing/hrm-harness.ts";
 import { createCandidate } from "./candidates.ts";
 import {
   applyViaPosting,
   publishPosting,
 } from "./postings.ts";
-
-/**
- * Anonymous apply vs existing-candidate consent over the real 0229 tables
- * — DB-owned, one file at a time. No skip guards: the integration
- * partition guarantees a database.
- *
- * An email typed into an anonymous form proves nothing about identity, so
- * a match must never write consent: the consent upsert clears
- * withdrawn_at, and anyone could otherwise reinstate another candidate's
- * withdrawn consent. Proofs are read back from storage.
- */
+import {
+  createRequisition,
+  openRequisition,
+} from "./requisitions.ts";
 
 const POSTINGS_APPLY_CONSENT_SPEC = {
   features: ["hrm", "hrmRecruiting"],
@@ -65,8 +53,7 @@ async function consentRows(orgId: string, candidateId: string): Promise<{ purpos
 }
 
 test("anonymous apply never reinstates a withdrawn consent", async () => {
-  const h = await setupHarness(POSTINGS_APPLY_CONSENT_SPEC);
-  try {
+  await withHarness(() => setupHarness(POSTINGS_APPLY_CONSENT_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const email = `known-${randomUUID()}@example.test`;
     const { candidate } = await createCandidate({
@@ -99,14 +86,11 @@ test("anonymous apply never reinstates a withdrawn consent", async () => {
     assert.equal(future.withdrawnAt !== null, true, "the withdrawal stands — a stranger cannot reinstate it");
     assert.equal(future.grantedAt, before.grantedAt, "the grant timestamp is untouched");
     assert.ok(!after.some((row) => row.purpose === "this_application"), "no application consent is granted either");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("anonymous apply writes no consent for a matched candidate without prior consent", async () => {
-  const h = await setupHarness(POSTINGS_APPLY_CONSENT_SPEC);
-  try {
+  await withHarness(() => setupHarness(POSTINGS_APPLY_CONSENT_SPEC), async (h) => {
     const orgId = h.org.orgId;
     const email = `known-${randomUUID()}@example.test`;
     const { candidate } = await createCandidate({
@@ -126,14 +110,11 @@ test("anonymous apply writes no consent for a matched candidate without prior co
     });
     assert.equal(applied.duplicate, false);
     assert.deepEqual(await consentRows(orgId, candidate.id), [], "no consent row is written for a matched candidate");
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });
 
 test("concurrent public applications with the same email reuse one candidate row", async () => {
-  const h = await setupHarness(POSTINGS_APPLY_CONSENT_SPEC);
-  try {
+  await withHarness(() => setupHarness(POSTINGS_APPLY_CONSENT_SPEC), async (h) => {
     const email = `concurrent-${randomUUID()}@example.test`;
     const firstPosting = await seedPublishedPosting(h.org, h.recruiterId, "Backend engineer");
     const secondPosting = await seedPublishedPosting(h.org, h.recruiterId, "Platform engineer");
@@ -147,7 +128,5 @@ test("concurrent public applications with the same email reuse one candidate row
        where org_id = ${h.org.orgId} and lower(email) = lower(${email})
     `);
     assert.equal(candidates.rows[0]?.count, 1);
-  } finally {
-    await dropScratchOrg(h.org.orgId);
-  }
+  });
 });

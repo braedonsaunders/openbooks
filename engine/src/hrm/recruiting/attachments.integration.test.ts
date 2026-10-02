@@ -1,53 +1,29 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { db } from "../../platform/db.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-  type ScratchOrg,
+  dropScratchOrg
 } from "../../testing/fixtures.ts";
+import { setupHarness } from "../../testing/hrm-harness.ts";
 import { createPosition } from "../positions.ts";
-import { RecruitingError } from "./errors.ts";
+import { attachCandidate } from "./applications.ts";
 import {
   DuplicateProspectError,
   findCandidateByEmail,
 } from "./candidates.ts";
-import { attachCandidate } from "./applications.ts";
+import { RecruitingError } from "./errors.ts";
 import {
   cancelRequisition,
   createRequisition,
   openRequisition,
 } from "./requisitions.ts";
 
-/**
- * F3-62 DB coverage (integration partition): attaching a prospect to a
- * requisition is ONE transaction. The old two-POST island stored the
- * candidate first and the application second, so a failed second POST
- * orphaned the prospect; attachCandidate commits both rows together and
- * a failed attach stores nothing — proven by reading storage back, never
- * from the service's own return values alone.
- */
-
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function setupOrg(): Promise<{ org: ScratchOrg; recruiterId: string }> {
-  const org = await createScratchOrg();
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
-     where id = ${org.orgId}`);
-  const recruiterId = await createScratchUser(org.orgId, "HRM Recruiter", "hrm_recruiter");
-  for (const permission of ["hrm.recruiting.read", "hrm.recruiting.manage", "hrm.position.read", "hrm.position.manage"]) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${org.orgId}, ${recruiterId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-  return { org, recruiterId };
-}
+const setupOrg = () => setupHarness({
+  users: [{ key: "recruiterId", name: "HRM Recruiter", handle: "hrm_recruiter", permissions: ["hrm.recruiting.read", "hrm.recruiting.manage", "hrm.position.read", "hrm.position.manage"] }],
+});
 
 let requisitionSequence = 0;
 async function openHiringRequisition(orgId: string, recruiterId: string, subsidiaryId: string): Promise<string> {

@@ -148,7 +148,9 @@ export function Drawer({
       if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
       const panel = panelRef.current
       if (!panel) return
-      const first = panel.querySelector<HTMLElement>(focusablesSelector)
+      const first = Array.from(panel.querySelectorAll<HTMLElement>(focusablesSelector)).find(
+        (el) => el.offsetParent !== null,
+      )
       ;(first ?? panel).focus()
     }, 0)
 
@@ -173,7 +175,7 @@ export function Drawer({
           e.preventDefault()
           lastEl.focus()
         }
-      } else if (activeEl === lastEl) {
+      } else if (activeEl === lastEl || !panel.contains(activeEl)) {
         e.preventDefault()
         firstEl.focus()
       }
