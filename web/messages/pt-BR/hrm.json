@@ -1468,7 +1468,7 @@
         "rewards": "Recompensas",
         "incentives": "Incentivos",
         "payouts": "Pagamentos",
-        "employees": "Benefícios dos funcionários",
+        "employees": "Benefícios",
         "delivery": "Entrega"
       }
     },
@@ -3361,7 +3361,7 @@
     "assignEmployee": "Atribuir funcionário",
     "assignment": "Atribuição",
     "openAssignment": "Abrir atribuição",
-    "moreParticipants": "Há mais participantes. Pesquise a lista completa em Benefícios dos funcionários.",
+    "moreParticipants": "Há mais participantes. Abra Benefícios para pesquisar a lista completa de atribuições.",
     "moreActivity": "Há mais atividade. Consulte os relatórios para o histórico completo.",
     "processedPayroll": "Processado na folha",
     "openPayRun": "Abrir ciclo da folha",
@@ -3394,7 +3394,7 @@
     "createGrant": "Registrar concessão"
   },
   "employeeBenefits": {
-    "title": "Benefícios dos funcionários",
+    "title": "Benefícios",
     "employee": "Funcionário",
     "program": "Programa",
     "type": "Tipo",

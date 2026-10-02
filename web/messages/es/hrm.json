@@ -1468,7 +1468,7 @@
         "rewards": "Recompensas",
         "incentives": "Incentivos",
         "payouts": "Pagos",
-        "employees": "Beneficios de empleados",
+        "employees": "Beneficios",
         "delivery": "Entrega"
       }
     },
@@ -3361,7 +3361,7 @@
     "assignEmployee": "Asignar empleado",
     "assignment": "Asignación",
     "openAssignment": "Abrir asignación",
-    "moreParticipants": "Hay más participantes. Busque la lista completa en Beneficios de empleados.",
+    "moreParticipants": "Hay más participantes. Abra Beneficios para buscar en la lista completa de asignaciones.",
     "moreActivity": "Hay más actividad. Consulte los informes para ver el historial completo.",
     "processedPayroll": "Procesado en nómina",
     "openPayRun": "Abrir ciclo de nómina",
@@ -3394,7 +3394,7 @@
     "createGrant": "Registrar concesión"
   },
   "employeeBenefits": {
-    "title": "Beneficios de empleados",
+    "title": "Beneficios",
     "employee": "Empleado",
     "program": "Programa",
     "type": "Tipo",

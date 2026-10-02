@@ -1468,7 +1468,7 @@
         "rewards": "奖励",
         "incentives": "激励",
         "payouts": "发放",
-        "employees": "员工福利",
+        "employees": "福利",
         "delivery": "履行"
       }
     },
@@ -3361,7 +3361,7 @@
     "assignEmployee": "分配员工",
     "assignment": "分配记录",
     "openAssignment": "打开分配记录",
-    "moreParticipants": "还有更多参与员工。请在员工福利中搜索完整分配列表。",
+    "moreParticipants": "还有更多参与者。打开福利以搜索完整的分配列表。",
     "moreActivity": "还有更多活动。请在福利报表查看完整历史。",
     "processedPayroll": "已在薪资处理",
     "openPayRun": "打开薪资批次",
@@ -3394,7 +3394,7 @@
     "createGrant": "记录授予"
   },
   "employeeBenefits": {
-    "title": "员工福利",
+    "title": "福利",
     "employee": "员工",
     "program": "计划",
     "type": "类型",

@@ -998,7 +998,7 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
   "/hrm/compensation/equity": "Pay equity",
   "/hrm/benefits": "Overview",
   "/hrm/benefits?view=programs": "Programs",
-  "/hrm/benefits?view=employees": "Employee benefits",
+  "/hrm/benefits?view=employees": "Benefits",
   "/hrm/benefits?view=delivery": "Delivery",
   "/payroll": "Payroll",
   "/payroll/runs": "Pay runs",

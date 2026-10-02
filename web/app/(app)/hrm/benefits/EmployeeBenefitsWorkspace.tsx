@@ -37,6 +37,10 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
   const [t, hrm, admin] = await Promise.all([getTranslations('hrm.employeeBenefits'), getTranslations('hrm'), getTranslations('admin')])
   const canManage = can(authz, 'hrm.benefits.manage')
   return withOrgTransaction(authz.user.orgId, async () => {
+    const employments = (await db.execute<{ value: string; label: string; employeePartyId: string }>(sql`select w.id as value,p.display_name as label,p.id::text as "employeePartyId" from worker_employments w join parties p on p.org_id=w.org_id and p.id=w.worker_party_id
+      where w.org_id=${authz.user.orgId} ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)} order by p.display_name,p.id,w.id`)).rows
+    const employeeOptions = [...new Map(employments.map(row => [row.employeePartyId, { value: row.employeePartyId, label: row.label }])).values()]
+    if (sp.employee && !employeeOptions.some(option => option.value === sp.employee)) notFound()
     const { assignments, programs } = await loadEmployeeBenefitAssignments(authz, sp.employee)
     if (sp.benefitProgram && !programs.some(program => program.value === sp.benefitProgram)) notFound()
     const filtered = sp.benefitProgram ? assignments.filter(row => row.programId === sp.benefitProgram) : assignments
@@ -89,9 +93,7 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
       subsidiaryOptions = subsidiaries.map(row => ({ value: row.id, label: row.name }))
       departmentOptions = (await listScopedDepartmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds)).map(row => ({ value: row.id, label: row.name }))
     }
-    let employmentOptions: { value: string; label: string }[] = []
-    if (creatingVacation || sp.enrollment === 'new') employmentOptions = (await db.execute<{ value: string; label: string }>(sql`select w.id as value,p.display_name as label from worker_employments w join parties p on p.org_id=w.org_id and p.id=w.worker_party_id
-      where w.org_id=${authz.user.orgId} ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)} order by p.display_name,w.id`)).rows
+    const employmentOptions = employments.map(({ value, label }) => ({ value, label }))
     if (sp.enrollment === 'new') {
       const plans = await listEnrollmentPlanOptions(db, authz.user.orgId, authz.user.id)
       enrollmentDialog = { title: hrm('benefits.newEnrollment'), description: hrm('me.benefits.electDescription'),
@@ -113,7 +115,10 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
             `${row.effectiveFrom} – ${row.effectiveTo ?? '…'}`, <Badge key="status" variant={row.status === 'active' ? 'success' : 'outline'}>{row.statusLabel}</Badge>,
             <Link key="open" href={row.assignmentHref as never} className="text-teal-700 hover:underline dark:text-teal-300">{t('openAssignment')}</Link>],
         }))} columns={[{ key: 'employee', header: t('employee') }, { key: 'program', header: t('program') }, { key: 'type', header: t('type') }, { key: 'effective', header: t('effective') }, { key: 'status', header: t('status') }, { key: 'open', header: '' }]}
-          toolbarAfter={<ListFilterSelect key="program-filter" basePath="/hrm/benefits" currentParams={currentParams} paramKey="benefitProgram" label={t('program')} allLabel={hrm('benefits.allLabel')} options={programs} />}
+          toolbarAfter={<div key="benefits-filters" className="flex flex-wrap items-center gap-2">
+            <ListFilterSelect basePath="/hrm/benefits" currentParams={currentParams} paramKey="employee" label={t('employee')} allLabel={hrm('benefits.allLabel')} options={employeeOptions} />
+            <ListFilterSelect basePath="/hrm/benefits" currentParams={currentParams} paramKey="benefitProgram" label={t('program')} allLabel={hrm('benefits.allLabel')} options={programs} />
+          </div>}
           empty={<div key="empty-assignments"><p className="text-sm font-medium">{t('emptyTitle')}</p><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('emptyDescription')}</p></div>} />
       </ListPageLayout>
       {loadedEnrollment ? <EnrollmentDrawer record={loadedEnrollment.record} canManage={canManage} canChange={loadedEnrollment.canChange} closeHref={closeHref} /> : null}
