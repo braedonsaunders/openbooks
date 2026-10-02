@@ -1,64 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { stubModules } from '../testing/stub-modules.ts'
+import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-// LineGrid reorder/delete must never land one line's uncommitted edit on
-// another line: DecimalCell/TaxCell keep a focus draft and commit on blur,
-// while Alt+Up/Down and Ctrl+Backspace reorder the rows underneath the
-// still-focused input. Real component coverage (only i18n is real data):
-// mount the grid, type into a line, reorder/remove, blur, and read back
-// which line received the commit.
-
-// jsdom first: the grid reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/ap/bills",
-  // @types/jsdom lags the runtime here: pretendToBeVisual enables rAF.
-  pretendToBeVisual: true,
-} as unknown as { url: string });
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "KeyboardEvent", "FocusEvent", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
-if (typeof globalThis.requestAnimationFrame !== "function") {
-  globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 0)) as unknown as typeof requestAnimationFrame;
-}
-
-const { registerHooks } = await import("node:module");
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
-
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/link") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return p.children}",
-      };
-    }
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(){},error(){},warning(){}};export function Toaster(){return null}",
-      };
-    }
-    return next(specifier, context);
+// Structural edits must keep uncommitted quantities and tax overrides on
+// their own lines. Render the real grid and shared menus with real messages.
+await bootJsdomEnvironment({ url: 'http://localhost:4800/ap/bills', matchMediaMatches: false });
+stubModules({
+  navigation: { pathname: '/ap/bills' },
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
+    sonner: 'export const toast={success(){},error(){},warning(){}};export function Toaster(){return null}',
   },
 });
 
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { useState } = React;
@@ -81,7 +36,7 @@ interface TestRow extends Record<string, unknown> {
   stockLocationId?: string;
 }
 
-const store: { rows: TestRow[] } = { rows: [] };
+const store: { rows: TestRow[]; splitIndex: number | null } = { rows: [], splitIndex: null };
 
 test("editable cells are named by their column header and line number", async (t) => {
   const { host, done } = await mount([line("a", "1"), line("b", "2")]);
@@ -103,7 +58,7 @@ test("editable cells are named by their column header and line number", async (t
   }
 });
 
-function Probe({ initial, compact = false }: { initial: TestRow[]; compact?: boolean }) {
+function Probe({ initial, compact = false, readOnly = false, withDistribution = false }: { initial: TestRow[]; compact?: boolean; readOnly?: boolean; withDistribution?: boolean }) {
   const [rows, setRows] = useState(initial);
   const apply = (next: TestRow[]) => {
     store.rows = next;
@@ -138,6 +93,15 @@ function Probe({ initial, compact = false }: { initial: TestRow[]; compact?: boo
       <LineGrid<TestRow>
         columns={columns}
         rows={rows}
+        readOnly={readOnly}
+        getRowKey={(row) => row.clientKey}
+        cloneRow={(row) => ({ ...row, clientKey: `copy-${row.clientKey}` })}
+        distribution={withDistribution ? {
+          groups: [], groupedIndexes: new Set(), chipOf: () => ({ kind: 'split' }),
+          menuKeysOf: () => ['split'], groupKeyOf: () => null,
+          onSplit: (index) => { store.splitIndex = index; },
+          onUnsplit: () => {}, onToggleLock: () => {}, onApplySuggestion: () => {}, onEditGroupTotal: () => {},
+        } : undefined}
         onRowsChange={(next) => apply(next)}
         emptyRow={() => ({ clientKey: `new-${Date.now()}`, description: "", quantity: "", taxAmount: "", taxOverridden: false })}
       />
@@ -145,13 +109,14 @@ function Probe({ initial, compact = false }: { initial: TestRow[]; compact?: boo
   );
 }
 
-async function mount(initial: TestRow[], compact = false) {
+async function mount(initial: TestRow[], compact = false, readOnly = false, withDistribution = false) {
   store.rows = initial;
+  store.splitIndex = null;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(<Probe initial={initial} compact={compact} />);
+    root.render(<Probe initial={initial} compact={compact} readOnly={readOnly} withDistribution={withDistribution} />);
     await tick();
   });
   await tick();
@@ -185,20 +150,17 @@ async function typeInto(input: HTMLInputElement, value: string) {
   await tick();
 }
 
-async function keydown(el: Element, init: KeyboardEventInit) {
-  await act(async () => {
-    el.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
-    await tick();
-  });
+async function interact(action: () => void) {
+  await act(async () => { action(); await tick(); });
   await tick();
 }
 
+async function keydown(el: Element, init: KeyboardEventInit) {
+  await interact(() => { el.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init })); });
+}
+
 async function blur(el: HTMLInputElement) {
-  await act(async () => {
-    el.blur();
-    await tick();
-  });
-  await tick();
+  await interact(() => el.blur());
 }
 
 const line = (key: string, quantity: string): TestRow => ({
@@ -207,6 +169,86 @@ const line = (key: string, quantity: string): TestRow => ({
   quantity,
   taxAmount: "",
   taxOverridden: false,
+});
+
+function menuAction(label: string): HTMLButtonElement {
+  const action = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    .find((button) => button.textContent?.trim() === label);
+  assert.ok(action, `the shared context menu exposes ${label}`);
+  return action;
+}
+
+test('the visible line action button removes the selected line and preserves its neighbours', async (t) => {
+  const { host, done } = await mount([line('a', '1'), line('b', '2'), line('c', '3')]);
+  t.after(done);
+  const input = cellInput(host, 1, 0);
+  await typeInto(input, '7');
+  const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="Line 2 actions"]')!;
+  assert.equal(trigger.getAttribute('aria-haspopup'), 'menu');
+  await act(async () => { trigger.click(); await tick(); });
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+  await act(async () => { menuAction('Remove line').click(); await tick(); });
+  await blur(input);
+  assert.deepEqual(store.rows.map((row) => [row.clientKey, row.quantity]), [['a', '1'], ['c', '3']]);
+});
+
+test('right-click opens line actions on an editable cell and the last line can be cleared', async (t) => {
+  const { host, done } = await mount([line('a', '1')]);
+  t.after(done);
+  const input = cellInput(host, 0, 0);
+  let nativeMenuAllowed = true;
+  await act(async () => {
+    nativeMenuAllowed = input.dispatchEvent(new window.MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, clientX: 100, clientY: 100,
+    }));
+    await tick();
+  });
+  assert.equal(nativeMenuAllowed, false, 'the row opens the shared menu instead of the browser menu');
+  assert.equal(menuAction('Insert above').disabled, false);
+  assert.equal(menuAction('Duplicate').disabled, false);
+  await act(async () => { menuAction('Clear line').click(); await tick(); });
+  assert.equal(store.rows.length, 1, 'the minimum row remains');
+  assert.equal(store.rows[0]!.description, '');
+  assert.equal(store.rows[0]!.quantity, '');
+});
+
+test('a keyboard context menu keeps its target when the line is reordered', async (t) => {
+  const { host, done } = await mount([line('a', '1'), line('b', '2'), line('c', '3')]);
+  t.after(done);
+  const input = cellInput(host, 1, 0);
+  await keydown(input, { key: 'F10', shiftKey: true });
+  assert.ok(menuAction('Remove line'));
+  await keydown(input, { key: 'ArrowDown', altKey: true });
+  await act(async () => { menuAction('Remove line').click(); await tick(); });
+  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'c'], 'actions follow the line identity');
+});
+
+test('read-only lines expose no editing actions or custom right-click menu', async (t) => {
+  const { host, done } = await mount([line('a', '1')], false, true);
+  t.after(done);
+  assert.equal(host.querySelector('button[aria-haspopup="menu"]'), null);
+  const row = host.querySelectorAll('[role="row"]')[1]!;
+  let nativeMenuAllowed = false;
+  await act(async () => {
+    nativeMenuAllowed = row.dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await tick();
+  });
+  assert.equal(nativeMenuAllowed, true);
+  assert.equal(document.querySelector('[role="menu"]'), null);
+  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a']);
+});
+
+test('distribution actions and line removal share one context menu', async (t) => {
+  const { host, done } = await mount([line('a', '1'), line('b', '2')], false, false, true);
+  t.after(done);
+  const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')]
+    .filter((button) => button.textContent?.includes('Split…'))[1]!;
+  await act(async () => { trigger.click(); await tick(); });
+  assert.equal(document.querySelectorAll('[role="menu"]').length, 1);
+  assert.ok(menuAction('Remove line'));
+  await act(async () => { menuAction('Split…').click(); await tick(); });
+  assert.equal(store.splitIndex, 1, 'splitting addresses the selected line');
+  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'b']);
 });
 
 test('optional columns expand on demand and populated values remain visible when collapsed', async (t) => {

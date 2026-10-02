@@ -1,5 +1,8 @@
 # Migrations: table-driven module registries
 
+Release baseline preparation, verification and existing-installation adoption
+are described in [Migration baseline cutover](../operations/migration-baseline-cutover.md).
+
 Module-owned lists live in registry tables, never in function bodies: `openbooks_query_catalog_relations` (relation, added_in) is the single source of truth for the governed query set consumed by `openbooks_refresh_query_catalog()`, and `openbooks_document_close_modules` (kind, close_module, added_in) is the storage mirror of `DOCUMENT_CLOSE_MODULES` read by `document_close_module()`. A schema pack that adds a governed relation or a document kind registers a row and refreshes, and never redefines either function — redefinitions replay in ordinal order, so the last one would silently drop every earlier module's rows. The close-module vocabulary is ar/ap/banking/assets/tax/gl.
 
 ```sql

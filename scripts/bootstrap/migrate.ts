@@ -11,6 +11,7 @@ import { sql } from "drizzle-orm"
 import { db, env, pool } from "../../engine/src/platform/db.ts"
 import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigrationAttempt, executeMigrationBody, isLockNotAvailable, migrationLockConfig, migrationRetryDelayMs, migrationRunsWithoutTransaction, releaseMigrationClient, sanitizeMigrationContent } from "../bootstrap-migration-client.ts"
 import { PREFLIGHT_MIN_ORDINAL, earlierPendingCreatesObject, evaluatePreflight, formatFinding, ordinalOf as preflightOrdinalOf, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, type PreflightFinding } from "../migration-preflight.ts"
+import { assertBaselineHistory, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
 
 async function executeTrackedMigration(
   filename: string,
@@ -167,19 +168,20 @@ async function readAppliedMigrationFilenames(): Promise<Set<string>> {
 }
 
 function pendingMigrationItems(
-  generated: readonly string[],
+  filenames: readonly string[],
   applied: ReadonlySet<string>,
 ): PendingMigrationItem[] {
   const pending: PendingMigrationItem[] = [];
-  for (const f of generated) {
-    const filename = `generated/${f}`;
+  for (const filename of filenames) {
+    const f = filename.split("/").at(-1)!;
     if (applied.has(filename)) continue;
+    if (!filename.startsWith("generated/")) continue;
     if ((preflightOrdinalOf(f) ?? -1) < PREFLIGHT_MIN_ORDINAL) continue;
     pending.push({
       file: f,
       filename,
       ordinal: f.slice(0, 4),
-      content: readFileSync(join(migrationsDir, "generated", f), "utf8"),
+      content: readFileSync(join(migrationsDir, filename), "utf8"),
     });
   }
   return pending;
@@ -193,14 +195,13 @@ function pendingMigrationItems(
  * column an old HR migration adds for a newer guard's preflight.
  */
 function readUnappliedContents(
-  generated: readonly string[],
+  filenames: readonly string[],
   applied: ReadonlySet<string>,
 ): Map<string, string> {
   const out = new Map<string, string>();
-  for (const f of generated) {
-    const filename = `generated/${f}`;
+  for (const filename of filenames) {
     if (!applied.has(filename)) {
-      out.set(filename, readFileSync(join(migrationsDir, "generated", f), "utf8"));
+      out.set(filename, readFileSync(join(migrationsDir, filename), "utf8"));
     }
   }
   return out;
@@ -408,7 +409,7 @@ async function runDeferredPreflight(
  *
  * Usage: node --import tsx scripts/bootstrap.ts --check [--json]
  */
-export async function runUpgradeCheckMain(json: boolean): Promise<number> {
+export async function runUpgradeCheckMain(json: boolean, historicalMigrations = false): Promise<number> {
   // Fail closed before touching the database: without a valid data key no
   // sealed credential can open, so an upgrade check must not report healthy.
   try {
@@ -418,7 +419,16 @@ export async function runUpgradeCheckMain(json: boolean): Promise<number> {
   }
   const generated = generatedMigrationFiles();
   assertMigrationFilenameTransitionTargets(generated);
+  const activePlan = releaseMigrationPlan(migrationsDir, generated);
   const ledgerPreexisted = await appliedMigrationsTableExists();
+  if (historicalMigrations) {
+    if (!ledgerPreexisted) throw new Error("--historical-migrations requires an existing migration ledger; use ordinary bootstrap for a fresh install");
+    if (activePlan.baseline && (await readAppliedMigrationFilenames()).has(activePlan.baseline.filename)) throw new Error("this database already uses the release baseline; run ordinary bootstrap without --historical-migrations");
+  }
+  const plan = historicalMigrations
+    ? { baseline: null, filenames: generated.map((name) => `generated/${name}`) }
+    : activePlan;
+  await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
   const result = {
     freshInstall: !ledgerPreexisted,
     pending: [] as string[],
@@ -464,7 +474,7 @@ export async function runUpgradeCheckMain(json: boolean): Promise<number> {
     return 0;
   }
   const applied = await readAppliedMigrationFilenames();
-  const pending = pendingMigrationItems(generated, applied);
+  const pending = pendingMigrationItems(plan.filenames, applied);
   result.pending = pending.map((item) => item.filename);
   if (pending.length === 0) {
     emit();
@@ -473,7 +483,7 @@ export async function runUpgradeCheckMain(json: boolean): Promise<number> {
   const report = await evaluatePendingMigrations(
     pending,
     { leastPrivilegeRole: "openbooks_read" },
-    readUnappliedContents(generated, applied),
+    readUnappliedContents(plan.filenames, applied),
   );
   result.noPreflight = report.noPreflight;
   result.missingDecisions = report.missingDecisions;
@@ -500,10 +510,21 @@ export async function runUpgradeCheckMain(json: boolean): Promise<number> {
   return 0;
 }
 
-export async function migrate(): Promise<void> {
+export async function migrate(historicalMigrations = false): Promise<void> {
   const generated = generatedMigrationFiles();
   assertMigrationFilenameTransitionTargets(generated);
+  const activePlan = releaseMigrationPlan(migrationsDir, generated);
   const ledgerPreexisted = await appliedMigrationsTableExists();
+  if (historicalMigrations) {
+    if (!ledgerPreexisted) throw new Error("--historical-migrations requires an existing migration ledger; use ordinary bootstrap for a fresh install");
+    if (activePlan.baseline && (await readAppliedMigrationFilenames()).has(activePlan.baseline.filename)) throw new Error("this database already uses the release baseline; run ordinary bootstrap without --historical-migrations");
+  }
+  const plan = historicalMigrations
+    ? { baseline: null, filenames: generated.map((name) => `generated/${name}`) }
+    : activePlan;
+  // A legacy database must prove adoption before role refresh, preflights or
+  // schema writes can reinterpret its installation history.
+  await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
   await db.execute(sql`
     create table if not exists public._applied_migrations (
       filename text primary key,
@@ -514,23 +535,22 @@ export async function migrate(): Promise<void> {
   await convergeMigrationFilenames();
 
   const applied = await readAppliedMigrationFilenames();
-  const pending = pendingMigrationItems(generated, applied);
+  const pending = pendingMigrationItems(plan.filenames, applied);
   let deferred: DeferredPreflight[] = [];
   if (!ledgerPreexisted) {
     console.log("[bootstrap] fresh install: no _applied_migrations table, nothing to preflight");
   } else {
-    deferred = await runPreflightGate(pending, readUnappliedContents(generated, applied));
+    deferred = await runPreflightGate(pending, readUnappliedContents(plan.filenames, applied));
   }
 
   const appliedThisRun: string[] = [];
-  for (const f of generated) {
-    const filename = `generated/${f}`;
-    const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
+  for (const filename of plan.filenames) {
+    const content = readFileSync(join(migrationsDir, filename), "utf8");
     const deferredPreflight = deferred.find((candidate) => candidate.filename === filename);
     if (deferredPreflight) await runDeferredPreflight(deferredPreflight, appliedThisRun);
     if (await applyTracked("migration", filename, content)) appliedThisRun.push(filename);
   }
-  if (await isPaymentLinkSealApplicable()) {
+  if (await isPaymentLinkSealApplicable(plan.baseline)) {
     await sealLegacyPaymentLinkTokens();
   } else {
     console.log(
@@ -540,9 +560,22 @@ export async function migrate(): Promise<void> {
   await applyRowLevelSecurity();
 }
 
+async function assertReleaseBaselineReady(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"], ledgerExists: boolean): Promise<void> {
+  if (!baseline) return;
+  const recorded = ledgerExists
+    ? (await pool.query("select filename, sha256 from public._applied_migrations")).rows
+    : [];
+  const tables = await pool.query<{ present: boolean }>(`select exists (
+    select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relkind in ('r','p')
+      and c.relname <> '_applied_migrations') as present`);
+  assertBaselineHistory(baseline, recorded, tables.rows[0]!.present);
+}
+
 /**
  * The at-rest seal is the second half of 0251: it must run only where 0251
- * ran. The ledger is checked first as a matter of principle — but the ledger
+ * ran or is covered by an adopted release baseline. The effective ledger is
+ * checked first as a matter of principle — but the ledger
  * alone can lie, because migration-replay fixtures fake _applied_migrations
  * on historical schemas (the 0064 suite holds a pre-0064 catalog with the
  * full tail marked applied). The column check is the structural guard that
@@ -550,11 +583,12 @@ export async function migrate(): Promise<void> {
  */
 const PAYMENT_LINK_SEAL_MIGRATION = "generated/0251_payment_link_token_at_rest.sql";
 
-async function isPaymentLinkSealApplicable(): Promise<boolean> {
-  const ledger = await pool.query("select 1 from _applied_migrations where filename = $1", [
+async function isPaymentLinkSealApplicable(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"]): Promise<boolean> {
+  const ledger = await pool.query("select filename,sha256 from _applied_migrations where filename in ($1,$2)", [
     PAYMENT_LINK_SEAL_MIGRATION,
+    baseline?.filename ?? PAYMENT_LINK_SEAL_MIGRATION,
   ]);
-  if (ledger.rows.length === 0) return false;
+  if (!migrationIdentityIsApplied(PAYMENT_LINK_SEAL_MIGRATION, ledger.rows, baseline)) return false;
   const columns = await pool.query<{ n: number }>(
     `select count(*)::int as n from information_schema.columns
       where table_schema = 'public' and table_name = 'payment_links'

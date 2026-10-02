@@ -49,12 +49,13 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readF
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { releaseMigrationPlan } from "../migration-baseline-plan.mjs";
 import { ORACLE_CANDIDATE_LOCATION, loadConfig, validateConfig } from "./plan.mjs";
 import { candidateHarnessOrgIds, compareSnapshots, fingerprintColumnsOf, snapshotLedger } from "./ledger.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CANDIDATE = resolve(HERE, "..", "..");
-const APPLYING = /^\[bootstrap\] applying migration: (generated\/\S+\.sql)\s*$/;
+const APPLYING = /^\[bootstrap\] applying migration: ((?:generated|baselines)\/\S+\.sql)\s*$/;
 
 function arg(name) {
   const index = process.argv.indexOf(`--${name}`);
@@ -429,7 +430,7 @@ export async function harness(phase, treeDir, orgIds, tolerated = new Set(), env
   return toleratedRuns;
 }
 
-async function timedBootstrap(phase, env = {}) {
+async function timedBootstrap(phase, env = {}, extraArgs = []) {
   const migrations = [];
   let open = null;
   const started = performance.now();
@@ -437,7 +438,7 @@ async function timedBootstrap(phase, env = {}) {
     if (open) migrations.push({ filename: open.filename, seconds: Number(((at - open.at) / 1000).toFixed(3)) });
     open = null;
   };
-  await run(phase, "npx", ["tsx", "scripts/bootstrap.ts"], {
+  await run(phase, "npx", ["tsx", "scripts/bootstrap.ts", ...extraArgs], {
     cwd: CANDIDATE,
     env,
     onLine(line, at) {
@@ -455,11 +456,18 @@ async function timedBootstrap(phase, env = {}) {
   return { migrations, seconds: Number(((performance.now() - started) / 1000).toFixed(3)) };
 }
 
+function candidateMigrationPlan() {
+  const directory = join(CANDIDATE, "schema", "migrations");
+  const generated = readdirSync(join(directory, "generated")).filter((file) => file.endsWith(".sql")).sort();
+  return releaseMigrationPlan(directory, generated);
+}
+
 function candidateMigrationFilenames() {
-  return readdirSync(join(CANDIDATE, "schema", "migrations", "generated"))
-    .filter((file) => file.endsWith(".sql"))
-    .sort()
-    .map((file) => `generated/${file}`);
+  return candidateMigrationPlan().filenames;
+}
+
+function historicalUpgradeArgs() {
+  return candidateMigrationPlan().baseline ? ["--historical-migrations"] : [];
 }
 
 function refuseFindings(result) {
@@ -508,7 +516,7 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedg
   const checkJson = async (reportName) => {
     let stdout;
     try {
-      stdout = await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", "--check", "--json"], {
+      stdout = await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", "--check", "--json", ...historicalUpgradeArgs()], {
         cwd: CANDIDATE,
       });
     } catch (error) {
@@ -550,7 +558,7 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedg
 
   let refused = false;
   try {
-    await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: CANDIDATE });
+    await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", ...historicalUpgradeArgs()], { cwd: CANDIDATE });
   } catch (error) {
     if (!(error instanceof PhaseRefusal)) throw error;
     const stdout = error.details?.stdout ?? "";
@@ -745,9 +753,26 @@ async function main() {
         harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource));
     }
 
-    report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));
+    report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade", {}, historicalUpgradeArgs()));
     report.upgrade.pending = candidateMigrationFilenames().filter((file) => !sourceLedger.includes(file));
     report.upgrade.migrations.sort((left, right) => right.seconds - left.seconds);
+
+    if (candidateMigrationPlan().baseline) {
+      await phase("baseline-backup", async () => {
+        const file = join(reportDir, "before-baseline-adoption.dump");
+        await run("baseline-backup", "pg_dump", ["-Fc", dbUrl, "-f", file]);
+        if (statSync(file).size === 0) throw new PhaseRefusal("baseline-backup", "the baseline backup is empty");
+        const list = await run("baseline-backup", "pg_restore", ["--list", file]);
+        if (!list.split("\n").some((line) => line.trim() && !line.startsWith(";"))) throw new PhaseRefusal("baseline-backup", "the baseline backup contains no archive entries");
+      });
+      await phase("baseline-adoption", async () => {
+        const database = decodeURIComponent(new URL(dbUrl).pathname.slice(1));
+        const args = ["--import", "tsx", "scripts/adopt-migration-baseline.mts", "--database", database];
+        const env = { OPENBOOKS_BASELINE_TARGET_URL: dbUrl };
+        await run("baseline-adoption", "node", [...args, "--check"], { cwd: CANDIDATE, env });
+        await run("baseline-adoption", "node", [...args, "--apply", "--actor", "release-verification", "--reason", "Verified historical upgrade and baseline cutover", "--backup", join(reportDir, "before-baseline-adoption.dump")], { cwd: CANDIDATE, env });
+      });
+    }
 
     await phase("ledger-complete", async () => {
       const applied = await withClient(dbUrl, async (client) =>

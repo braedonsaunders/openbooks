@@ -21,9 +21,12 @@ const script = resolve("scripts/testdb.sh");
 // and `new` reaches the copy instead of refusing. Deriving it rather than
 // hardcoding keeps this test from going stale on every new migration.
 async function schemaFingerprint() {
+  const source = await readFile(script, "utf8");
+  const implementation = source.match(/^schema_fingerprint\(\) \{[\s\S]*?^\}/m)?.[0];
+  assert.ok(implementation, "the test database fingerprint implementation must exist");
   const { stdout } = await execFileAsync("bash", [
     "-c",
-    'cd schema/migrations/generated && ls -1 *.sql | sort | while read -r f; do printf "%s:%s\\n" "$f" "$(shasum -a 256 "$f" | cut -d" " -f1)"; done | shasum -a 256 | cut -d" " -f1',
+    implementation + "\nschema_fingerprint",
   ]);
   return stdout.trim();
 }
