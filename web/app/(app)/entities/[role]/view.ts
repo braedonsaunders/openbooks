@@ -137,7 +137,7 @@ export async function loadEntityRole(
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
-  const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
+  const partyTab: PartyTab = requestedPartyTab === 'benefits' || requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
     || requestedPartyTab === 'payroll' || requestedPartyTab === 'employment' || requestedPartyTab === 'compliance'
     || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship'
@@ -287,6 +287,7 @@ export async function loadEntityRole(
           canManageCrmAccounts,
           lifecycleStage: openLifecycleStage,
           canManageWages: can(authz, 'admin.setup.manage'),
+          canReadBenefits: hrmEnabled && can(authz, 'hrm.benefits.read'),
           canManagePayroll: payrollEnabled && can(authz, 'payroll.manage'),
           payrollEnabled,
           multiCurrency,

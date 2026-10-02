@@ -24,11 +24,11 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
  * editor inline.
  *
  * The drawer splits the tab into sub-tabs (General / Tax and withholding /
- * Pay banks / Bank accounts) but mounts this panel ONCE: the editor stays
+ * Bank accounts) but mounts this panel ONCE: the editor stays
  * mounted (hidden) across sub-tab switches so unsaved edits survive, and the
  * `section` prop decides which half the single editor instance shows.
  */
-export type PayrollSubTab = 'general' | 'tax' | 'banks' | 'accounts'
+export type PayrollSubTab = 'general' | 'tax' | 'accounts'
 
 export function PayrollProfileTab({
   partyId,
@@ -215,9 +215,9 @@ export function PayrollProfileTab({
   const editorSection = section === 'tax' ? 'tax' : 'general'
   return (
     <>
-      <div hidden={section === 'banks' || section === 'accounts'}>
-        {section === 'general' && state.employmentId ? <Link className="mb-3 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/admin/setup/payroll?tab=serviceCredits&employment=${encodeURIComponent(state.employmentId)}`}>{t('serviceCreditLink')}</Link> : null}
-        {section === 'general' && state.employmentId ? <Link className="mb-3 ml-4 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/admin/setup/payroll?tab=vacationTerms&employment=${encodeURIComponent(state.employmentId)}`}>{t('vacationTermsLink')}</Link> : null}
+      <div hidden={section === 'accounts'}>
+        {section === 'general' && state.employmentId ? <Link className="mb-3 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/hrm/benefits?view=policies&policy=service&employment=${encodeURIComponent(state.employmentId)}`}>{t('serviceCreditLink')}</Link> : null}
+        {section === 'general' && state.employmentId ? <Link className="mb-3 ml-4 inline-flex text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/hrm/benefits?view=policies&policy=vacation&employment=${encodeURIComponent(state.employmentId)}`}>{t('vacationTermsLink')}</Link> : null}
         <ProfileEditor
           inline
           readOnly={readOnly}

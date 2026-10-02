@@ -3,36 +3,36 @@ import { stubModules } from '../../../../testing/stub-modules'
 import test from 'node:test'
 import { NextRequest } from 'next/server'
 
-// H-AUDITREC: GET /api/audit/record is the permission-before-existence
-// class — it used to look the record up, 404 a missing id, and only then
-// 403 a caller without the kind permission, so the 403/404 difference told
-// an unauthorized caller whether the id exists. Now a caller holding none
-// of the table family's permissions gets the same uniform 404 as a missing
-// id, and a caller with the wrong kind permission gets that 404 too.
+// Record permissions are checked before existence, preventing identifier disclosure.
 interface AuditState {
   recordExists: boolean
   permissions: string[]
+  featureOn: boolean
+  hiddenEmployer: boolean
+  reads: number
 }
 
 const stateKey = Symbol.for('openbooks.audit-record-route-test')
-const auditState: AuditState = { recordExists: true, permissions: [] }
+const auditState: AuditState = { recordExists: true, permissions: [], featureOn: true, hiddenEmployer: false, reads: 0 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = auditState
 
 const EXISTING_ID = '00000000-0000-4000-8000-00000000a001'
 const MISSING_ID = '00000000-0000-4000-8000-00000000a002'
 
+const authzDouble = `const state=globalThis[Symbol.for('openbooks.audit-record-route-test')];export async function getAuthz(){return {user:{orgId:'org-1',id:'user-1'},allowedSubsidiaryIds:null,permissions:new Set(state.permissions)}}export function can(authz,perm){return authz.permissions.has('*')||authz.permissions.has(perm)}export function guardSubsidiaryScope(){return state.hiddenEmployer ? Response.json({error:'not_found'},{status:404}) : null}`
 stubModules({
   navigation: false,
   intl: false,
   authz: false,
-  features: false,
+  features: `const s=globalThis[Symbol.for('openbooks.audit-record-route-test')];export async function isFeatureEnabled(){return s.featureOn}`,
   extra: {
+    "server-only": "",
     "@openbooks/engine/src/platform/db.ts": `
       export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export const db = {
         async execute(query) {
-          const chunks = query?.queryChunks
+          state.reads++; const chunks = query?.queryChunks
           const text = Array.isArray(chunks)
             ? chunks.map((chunk) => Array.isArray(chunk?.value) ? chunk.value.map(String).join('') : '').join('')
             : ''
@@ -42,34 +42,14 @@ stubModules({
                            updated_at: new Date(), updated_by: null, subsidiaryId: null }] }
               : { rows: [] }
           }
+          if (text.includes('from hrm_benefit_enrollments')) return state.recordExists ? { rows: [{ kind: 'benefit_enrollment', created_at: new Date(), created_by: null, subsidiaryId: 'employer-1' }] } : { rows: [] }
           if (text.includes('count(*)')) return { rows: [{ n: 0 }] }
           return { rows: [] }
         },
       }
     `,
-    "../../../../lib/authz": `
-      const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
-      export async function getAuthz() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: new Set(state.permissions) }
-      }
-      // Authorization-check double over the test's real permission sets.
-      export function can(authz, perm) {
-        return authz.permissions.has('*') || authz.permissions.has(perm)
-      }
-      export function guardSubsidiaryScope() {
-        return null
-      }
-    `,
-    "@/lib/authz": `
-      const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
-      export async function getAuthz() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: new Set(state.permissions) }
-      }
-      export function can(authz, perm) {
-        return authz.permissions.has('*') || authz.permissions.has(perm)
-      }
-      export function guardSubsidiaryScope() { return null }
-    `,
+    "../../../../lib/authz": authzDouble,
+    "@/lib/authz": authzDouble,
   },
 })
 
@@ -112,3 +92,13 @@ test('a caller with the kind permission still reads the record', async () => {
   const body = (await response.json()) as { recordType?: unknown }
   assert.equal(body.recordType, 'vendor_bill')
 })
+
+test('benefit audit refuses permission and disabled features before disclosing existence', async () => {
+  for (const [permissions, featureOn] of [[[], true], [['hrm.benefits.read'], false]] as const) {
+    Object.assign(auditState, { permissions: [...permissions], featureOn, reads: 0 }); assert.equal((await get('hrm_benefit_enrollments', EXISTING_ID)).status, 404); assert.equal(auditState.reads, 0);
+  }
+});
+test('benefit audit fences the legal employer and permits scoped lifecycle evidence', async () => {
+  Object.assign(auditState, { permissions: ['hrm.benefits.read'], featureOn: true, recordExists: true, hiddenEmployer: true, reads: 0 }); assert.equal((await get('hrm_benefit_enrollments', EXISTING_ID)).status, 404); assert.equal(auditState.reads, 1);
+  auditState.hiddenEmployer = false; const response = await get('hrm_benefit_enrollments', EXISTING_ID); assert.equal(response.status, 200); assert.equal((await response.json()).recordType, 'benefit_enrollment');
+});

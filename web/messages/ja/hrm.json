@@ -3253,5 +3253,35 @@
     "employeeLoadFailed": "従業員を読み込めませんでした。もう一度お試しください。",
     "upgradeRequired": "評価機能の更新が必要です",
     "upgradeDescription": "評価テンプレートを開くには、管理者がタレントデータベースの更新を適用する必要があります。"
+  },
+  "enrollmentRecord": {
+    "contributions": "拠出の選択",
+    "changeHint": "保存すると適用日付きの後継登録が作成されます。必要な承認が完了するまで現在の保障は継続します。",
+    "failed": "登録操作を保存できませんでした。",
+    "dateReasonRequired": "適用日と理由を入力してください。",
+    "laterDateRequired": "{date} より後の変更日を選択してください。",
+    "termsRequired": "少なくとも1つの拠出を選択し、各拠出率を入力してください。",
+    "rulesNotEffective": "選択した拠出ルールはこの日付に適用されません。有効なルールまたは別の日付を選択してください。",
+    "addContribution": "拠出を追加",
+    "chooseContribution": "拠出を選択",
+    "end": "登録を終了",
+    "cancel": "登録を取り消す",
+    "approvals": "承認を表示",
+    "effectiveDate": "適用日",
+    "reason": "理由",
+    "plan": "プラン",
+    "currency": "通貨",
+    "from": "適用開始日",
+    "to": "適用終了日"
+  },
+  "benefitPolicies": {
+    "title": "方針",
+    "entitlements": "給付権利プラン",
+    "vacation": "従業員の休暇条件",
+    "service": "認定勤続期間",
+    "description": "権利方針と従業員の条件をここで設定します。給与計算では適用日付きの記録が使用されます。",
+    "coverage": "保障と貯蓄",
+    "balances": "残高",
+    "empty": "従業員の方針が登録されていません。"
   }
 }

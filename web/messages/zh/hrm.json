@@ -3253,5 +3253,35 @@
     "employeeLoadFailed": "无法加载员工，请重试。",
     "upgradeRequired": "绩效功能需要升级",
     "upgradeDescription": "管理员必须先应用人才数据库升级，才能打开评估模板。"
+  },
+  "enrollmentRecord": {
+    "contributions": "缴费选择",
+    "changeHint": "保存将创建有生效日期的后续登记。在所需审批完成之前，当前保障保持有效。",
+    "failed": "无法保存登记操作。",
+    "dateReasonRequired": "请输入生效日期和原因。",
+    "laterDateRequired": "请选择晚于 {date} 的变更日期。",
+    "termsRequired": "请至少选择一项缴费，并输入每项选定费率。",
+    "rulesNotEffective": "所选缴费规则不适用于此日期。请选择有效规则或其他日期。",
+    "addContribution": "添加缴费",
+    "chooseContribution": "选择缴费",
+    "end": "结束登记",
+    "cancel": "取消登记",
+    "approvals": "查看审批",
+    "effectiveDate": "生效日期",
+    "reason": "原因",
+    "plan": "计划",
+    "currency": "货币",
+    "from": "生效起始日",
+    "to": "生效截止日"
+  },
+  "benefitPolicies": {
+    "title": "政策",
+    "entitlements": "权益计划",
+    "vacation": "员工休假条款",
+    "service": "认可工龄",
+    "description": "在此定义权益政策和员工条款。工资计算将根据生效日期应用这些记录。",
+    "coverage": "保障与储蓄",
+    "balances": "余额",
+    "empty": "尚未记录员工政策。"
   }
 }

@@ -4,6 +4,7 @@ import { type Opt, type AddressApiRecord, type ContactApiRecord, type PartyPaylo
 import { PartyReadOnlyField, PartySummary, SublistHeading, SublistEmpty, ReadOnlyLineSublist } from './PartySummary'
 import { ContactForm, AddressForm } from './PartyContactForms'
 import { BankAccountsPanel } from './PartyBankAccountsPanel'
+import { EmployeeBenefitsPanel } from './EmployeeBenefitsPanel'
 import { ActivitySublist } from './PartyActivitySublist'
 import { TransactionSublist } from './PartyTransactionSublist'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
@@ -27,7 +28,6 @@ import type { LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { SendButton } from '../../../components/send-button'
 import { EmployeeWageRates } from './EmployeeWageRates'
-import { EmployeeEntitlementBalances } from './EmployeeEntitlementBalances'
 import { PayrollProfileTab, type PayrollSubTab } from '../payroll/_ui/PayrollProfileTab'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { EmploymentTab } from '../hrm/EmploymentTab'
@@ -59,6 +59,7 @@ export function PartyDrawer({
   lifecycleStage = null,
   canManageWages = false,
   canManagePayroll = false,
+  canReadBenefits = false,
   payrollEnabled = false,
   multiCurrency = false,
   complianceEnabled = false,
@@ -106,6 +107,8 @@ export function PartyDrawer({
   lifecycleStage?: 'lead' | 'prospect' | 'customer' | null
   /** admin.setup.manage — wage data is confidential; gates the Wages tab. */
   canManageWages?: boolean
+  /** hrm.benefits.read + the HR feature — employee Benefits record access. */
+  canReadBenefits?: boolean
   /** payroll.manage + the payroll feature enabled — shows the Payroll tab. */
   canManagePayroll?: boolean
   /** Company Settings → Features. Worker-comp group is Payroll
@@ -170,6 +173,7 @@ export function PartyDrawer({
   // same predicate gates the tab button and the deep-link like Compliance.
   const showEmploymentTab = hrm !== null && payload.employee != null
   const showWagesTab = role === 'employee' && canManageWages && payload.employee != null
+  const showBenefitsTab = role === 'employee' && canReadBenefits && payload.employee != null
   const showPayrollTab = role === 'employee' && canManagePayroll && payload.employee != null
   // The relationship (CRM) profile is an account-side concern: it rides the
   // customer role, and it is what a lead or prospect has INSTEAD of one.
@@ -196,6 +200,7 @@ export function PartyDrawer({
     ? 'overview'
     : (initialTab === 'wages' && !showWagesTab) ||
     (initialTab === 'payroll' && !showPayrollTab) ||
+    (initialTab === 'benefits' && !showBenefitsTab) ||
     (initialTab === 'activities' && !canReadActivities) ||
     (initialTab === 'relationship' && !showRelationshipTab) ||
     (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
@@ -932,6 +937,7 @@ export function PartyDrawer({
     ...(!effectiveLayout || !role || role === 'vendor' ? [{ key: 'accounting' as const, label: role === 'vendor' && effectiveLayout ? t('bankAccountsHeading') : t('tabs.accounting') }] : []),
     ...(showComplianceTab ? [{ key: 'compliance' as const, label: t('tabs.compliance') }] : []),
     ...(showWagesTab ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
+    ...(showBenefitsTab ? [{ key: 'benefits' as const, label: th('benefits.title') }] : []),
     ...(showPayrollTab ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
     ...(showEmploymentTab ? [{ key: 'employment' as const, label: t('tabs.employment') }] : []),
     // Attachments and Audit trail close the rail. They are the shared shell's
@@ -1749,6 +1755,7 @@ export function PartyDrawer({
           <EmployeeWageRates partyId={String(p.id)} />
         </div>
       ) : null}
+      {showBenefitsTab && keptTabs.has('benefits') ? <div hidden={tab !== 'benefits'} className="space-y-4 p-1"><EmployeeBenefitsPanel partyId={String(p.id)} /></div> : null}
       {role === 'employee' && canManagePayroll && keptTabs.has('payroll') ? (
         <div hidden={tab !== 'payroll'} className="space-y-6 p-1">
           {/* The Payroll tab splits into sub-tabs on the shared drawer strip
@@ -1759,7 +1766,6 @@ export function PartyDrawer({
             tabs={[
               { key: 'general', label: t('payrollTabs.general') },
               { key: 'tax', label: t('payrollTabs.tax') },
-              { key: 'banks', label: t('payrollTabs.banks') },
               { key: 'accounts', label: t('payrollTabs.accounts') },
             ]}
             activeKey={payrollSubTab}
@@ -1773,11 +1779,6 @@ export function PartyDrawer({
             section={payrollSubTab}
             onDirtyChange={setPayrollDirty}
           />
-          {/* Pay banks (banked time, vacation, benefit recoup) belong beside
-              the payroll profile — one home for this person's compensation. */}
-          <div hidden={payrollSubTab !== 'banks'}>
-            <EmployeeEntitlementBalances partyId={String(p.id)} readOnly={!editable} />
-          </div>
           {/* Direct deposit: the same approval-gated bank accounts the AP
               side uses — the pay-run bank file only pays approved accounts. */}
           <div hidden={payrollSubTab !== 'accounts'}>

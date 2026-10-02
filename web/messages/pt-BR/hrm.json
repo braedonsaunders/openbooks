@@ -3253,5 +3253,35 @@
     "employeeLoadFailed": "Não foi possível carregar os funcionários. Tente novamente.",
     "upgradeRequired": "Atualização de Desempenho necessária",
     "upgradeDescription": "Um administrador deve aplicar a atualização do banco de dados de Talentos antes de abrir os modelos de avaliação."
+  },
+  "enrollmentRecord": {
+    "contributions": "Contribuições escolhidas",
+    "changeHint": "Salvar cria uma substituição com data de vigência. A cobertura atual permanece até a conclusão das aprovações necessárias.",
+    "failed": "Não foi possível salvar a ação de inscrição.",
+    "dateReasonRequired": "Informe uma data de vigência e um motivo.",
+    "laterDateRequired": "Escolha uma data de alteração após {date}.",
+    "termsRequired": "Escolha pelo menos uma contribuição e informe cada taxa escolhida.",
+    "rulesNotEffective": "Uma regra selecionada não cobre esta data. Escolha uma regra vigente ou outra data.",
+    "addContribution": "Adicionar contribuição",
+    "chooseContribution": "Escolher uma contribuição",
+    "end": "Encerrar inscrição",
+    "cancel": "Cancelar inscrição",
+    "approvals": "Ver aprovações",
+    "effectiveDate": "Data de vigência",
+    "reason": "Motivo",
+    "plan": "Plano",
+    "currency": "Moeda",
+    "from": "Vigente desde",
+    "to": "Vigente até"
+  },
+  "benefitPolicies": {
+    "title": "Políticas",
+    "entitlements": "Planos de direitos",
+    "vacation": "Condições de férias dos funcionários",
+    "service": "Tempo de serviço reconhecido",
+    "description": "Defina aqui as políticas e condições dos funcionários. A folha aplica esses registros conforme sua data de vigência.",
+    "coverage": "Cobertura e poupança",
+    "balances": "Saldos",
+    "empty": "Nenhuma política de funcionário registrada."
   }
 }

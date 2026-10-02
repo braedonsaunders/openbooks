@@ -109,6 +109,7 @@ export async function resolveNav(
         if (mod.homeOnly && g.id === mod.group && item.placement !== 'custom') continue
         if (featureHiddenModules.has(mod.key)) continue
         if (mod.featureKey && !featureEnabled(featureState, mod.featureKey)) continue
+        if (mod.requiredFeatures?.some(feature => !featureEnabled(featureState, feature))) continue
         // The collapsed Administration entry has no single permission — it
         // opens the /admin hub, which is reachable by anyone holding any
         // admin-ish permission (each card there is re-gated individually).

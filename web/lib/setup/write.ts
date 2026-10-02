@@ -86,7 +86,8 @@ const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(valu
  * bound parameter. The request body cannot introduce a column name. Callers
  * authorize their configuration surface before reaching here: generic
  * setup routes and tools require admin.setup.manage, while the Benefits
- * adapter requires hrm.benefits.manage and accepts plan identity and its native contribution configuration.
+ * adapter requires hrm.benefits.manage for benefit plans, contribution rules,
+ * entitlement plans and effective employee policies.
  */
 
 /** The acting admin: org, user id (stamped on rows + audit), and permissions

@@ -412,13 +412,15 @@ export function GoalProgressDialog({
 }
 
 export interface BenefitElectionRule { value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }
-type ContributionChoice = { electionMode: string; electedRate: string; declaredPeriodsPerYear?: string }
+export type ContributionChoice = { electionMode: string; electedRate: string; declaredPeriodsPerYear?: string }
 
-function BenefitContributionChoices({ rules, choices, onChange }: {
-  rules: BenefitElectionRule[]; choices: Record<string, ContributionChoice>;
+export function BenefitContributionChoices({ rules, choices, onChange, readOnly = false, onRemove }: {
+  rules: BenefitElectionRule[]; choices: Record<string, ContributionChoice>; readOnly?: boolean;
   onChange: (id: string, value: ContributionChoice) => void
+  onRemove?: (id: string) => void
 }) {
   const t = useTranslations('admin.setup')
+  const common = useTranslations('common')
   const fields: SetupField[] = [
     { key: 'electionMode', kind: 'select', required: true, options: [{ value: 'fixed', labelKey: 'benefitContributions.options.election.fixed' }, { value: 'follows_policy', labelKey: 'benefitContributions.options.election.follows_policy' }], helpTextKey: 'benefitContributions.electionHint' },
     { key: 'electedRate', kind: 'decimal', required: true, helpTextKey: 'benefitContributions.electedRateHint' },
@@ -428,9 +430,10 @@ function BenefitContributionChoices({ rules, choices, onChange }: {
     const value = choices[rule.value] ?? { electionMode: '', electedRate: '' }
     return <fieldset key={rule.value} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
       <legend className="px-1 text-sm font-medium">{rule.label}</legend>
-      <p className="mb-3 text-xs text-slate-500">{t(`benefitContributions.options.basis.${rule.basis}`)} · {t('benefitContributions.planRate', { rate: rule.rate })}</p>
+      {onRemove && !readOnly ? <Button variant="ghost" size="sm" onClick={() => onRemove(rule.value)}>{common('actions.remove')}</Button> : null}
+      <p className="mb-3 text-xs text-slate-500">{t(`benefitContributions.options.basis.${rule.basis}`)}{rule.rateFormula !== 'elected_rate' ? ` · ${t('benefitContributions.planRate', { rate: rule.rate })}` : ''}</p>
       <div className="grid gap-4 sm:grid-cols-2">{fields.filter((field) => (field.key !== 'electedRate' || value.electionMode === 'fixed') && (field.key !== 'declaredPeriodsPerYear' || ['per_month', 'per_year'].includes(rule.basis))).map((field) =>
-        <FieldControl key={field.key} field={field} value={value[field.key as keyof ContributionChoice]} onChange={(next) => onChange(rule.value, { ...value, [field.key]: String(next ?? '') })} creating forceLocked={false} refOptions={[]} formValues={value} t={t} />
+        <FieldControl key={field.key} field={field} value={value[field.key as keyof ContributionChoice]} onChange={(next) => onChange(rule.value, { ...value, [field.key]: String(next ?? '') })} creating forceLocked={readOnly} refOptions={[]} formValues={value} t={t} />
       )}</div>
     </fieldset>
   })}</div>

@@ -141,7 +141,8 @@
     "hrm-benefits-incentives": "Incentives",
     "hrm-benefits-payouts": "Payouts",
     "hrm-performance-succession": "Succession plans",
-    "hrm-performance-templates": "Review forms"
+    "hrm-performance-templates": "Review forms",
+    "hrm-benefits-policies": "Policies"
   },
   "modulesShort": {
     "ap": "Payables",

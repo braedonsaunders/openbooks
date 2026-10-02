@@ -21,6 +21,8 @@ export interface NavModule {
   requiredPermissionsAny?: readonly string[]
   /** Optional-feature gate — hidden while the org has the feature off. */
   featureKey?: string
+  /** Every listed feature must also be enabled for this destination. */
+  requiredFeatures?: readonly string[]
   /** HR-15: when set, the shell renders a live count badge on this entry,
    *  polled from this route (which must self-scope to the actor). */
   badgeCountHref?: string
@@ -999,6 +1001,7 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
   "/hrm/benefits?view=enrolments": "Enrollments",
   "/hrm/benefits?view=rewards": "Rewards",
   "/hrm/benefits?view=incentives": "Incentives",
+  "/hrm/benefits?view=policies": "Policies",
   "/hrm/benefits?view=payouts": "Payouts",
   "/payroll": "Payroll",
   "/payroll/runs": "Pay runs",
@@ -1061,7 +1064,7 @@ for (const workspace of LOCAL_NAVIGATION) {
       key: moduleKey, href: tab.href, label: tab.label ?? LOCAL_DESTINATION_LABELS[tab.href]!,
       iconKey: tab.iconKey ?? 'list-checks', group,
       subgroup: workspace.id === 'hrm-people' ? 'workforce' : workspace.id === 'hrm-hiring' ? 'hrm-talent' : workspace.id.startsWith('hrm-') ? workspace.id : workspace.id === 'payroll' ? 'payroll-work' : workspace.id,
-      requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, featureKey: tab.feature ?? workspace.feature,
+      requiredPermission: tab.permission, requiredPermissionsAny: tab.permissionsAny, featureKey: tab.feature ?? workspace.feature, requiredFeatures: tab.requiredFeatures,
       exact: true,
       ...(tab.menuParent ? { menuParent: tab.menuParent } : {}),
     })

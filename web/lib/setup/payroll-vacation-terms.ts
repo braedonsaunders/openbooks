@@ -4,7 +4,7 @@ import type { SetupEntity } from './types'
 export const PAYROLL_VACATION_TERMS_ENTITY: SetupEntity = {
   key: 'payroll-vacation-terms', table: 'payroll_vacation_terms', groupKey: 'workforce', featureKey: 'payroll',
   rehomed: true, iconKey: 'calendar', orgScoped: true, actorCols: true, hasActive: false, orderBy: 'effective_from',
-  writePermission: 'payroll.manage',
+  writePermission: 'hrm.benefits.manage',
   columns: [{ key: 'employmentId', kind: 'ref', ref: 'worker-employments' }, { key: 'method', labelKey: 'vacationTerms.method', kind: 'badge', options: [{ value: 'accrue', labelKey: 'vacationTerms.accrue' }, { value: 'pay_each_period', labelKey: 'vacationTerms.payEachPeriod' }, { value: 'paid_leave', labelKey: 'vacationTerms.paidLeave' }] }, { key: 'percentFloor', kind: 'percent' }, { key: 'annualDaysFloor', kind: 'number' }, { key: 'effectiveFrom', kind: 'date' }, { key: 'effectiveTo', kind: 'date' }],
   fields: [{ key: 'employmentId', kind: 'ref', ref: 'worker-employments', required: true, lockedOnEdit: true },
     { key: 'method', labelKey: 'vacationTerms.method', kind: 'select', required: true, options: [{ value: 'accrue', labelKey: 'vacationTerms.accrue' }, { value: 'pay_each_period', labelKey: 'vacationTerms.payEachPeriod' }, { value: 'paid_leave', labelKey: 'vacationTerms.paidLeave' }] },

@@ -34,6 +34,7 @@ interface DrawerPayload {
   currentFormId: string | null
   recordType: 'customer' | 'vendor' | 'employee'
   canCustomize: boolean
+  canReadBenefits?: boolean
   payrollEnabled?: boolean
   multiCurrency?: boolean
   complianceEnabled?: boolean
@@ -46,7 +47,7 @@ function isRole(value: string | null): value is RelatedPartyRole {
 }
 
 function isPartyTab(value: string | null): value is PartyTab {
-  return value === 'overview' || value === 'transactions' || value === 'activities' || value === 'contacts'
+  return value === 'benefits' || value === 'overview' || value === 'transactions' || value === 'activities' || value === 'contacts'
     || value === 'addresses' || value === 'accounting' || value === 'wages' || value === 'compliance'
 }
 
@@ -131,6 +132,7 @@ export function GlobalPartyDrawerHost({
         canManage={canManage}
         canReadActivities={canReadActivities}
         canManageWages={canManageWages}
+        canReadBenefits={data.canReadBenefits === true}
         payrollEnabled={data.payrollEnabled === true}
         multiCurrency={data.multiCurrency === true}
         complianceEnabled={data.complianceEnabled === true}
