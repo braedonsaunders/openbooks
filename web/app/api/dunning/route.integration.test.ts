@@ -138,6 +138,9 @@ test('policy editing retains reminder identity and refuses stale or foreign stag
     const listed = await read(json('GET'))
     const revision = (await listed.json()).policies.find((policy: { id: string }) => policy.id === id).updatedAt
     assert.match(revision, /\.\d{6}Z$/, 'the conflict token must retain database precision')
+    const empty = await patch(json('PATCH', { expectedUpdatedAt: revision }), params(id))
+    assert.equal(empty.status, 400, 'a conflict token alone is not an edit')
+    assert.match(JSON.stringify(await empty.json()), /At least one field must be provided/)
     const edited = await patch(json('PATCH', { name: 'Revised', expectedUpdatedAt: revision, stages: [{ ...ladderStage(), id: before.id, subjectTemplate: 'Revised subject' }] }), params(id))
     assert.equal(edited.status, 200)
     const after = (await readStages()).rows[0]!
