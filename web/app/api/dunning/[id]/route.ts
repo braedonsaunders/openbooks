@@ -23,7 +23,9 @@ const PATCHBodySchema1 = z.object({
   gracePeriodDays: gracePeriodDaysSchema.optional(), isActive: z.boolean().optional(),
   minBalance: z.string().nullable().optional(), name: z.string().trim().min(1).optional(),
   replyTo: z.string().email().nullable().optional(), stages: z.array(stageSchema).optional(),
-}).refine((body) => Object.keys(body).some((key) => key !== 'expectedUpdatedAt'), { message: "At least one field must be provided." });
+}).refine((body) => body.name !== undefined || body.appliesToKind !== undefined ||
+  body.gracePeriodDays !== undefined || body.isActive !== undefined || body.minBalance !== undefined ||
+  body.replyTo !== undefined || body.stages !== undefined, { message: "At least one field must be provided." });
 
 
 
