@@ -11,3 +11,8 @@ export {getGoal} from './performance/goals.ts';
 export type {GoalDTO} from './performance/goals.ts';
 export {listOneOnOneDirectory} from './performance/one-on-ones.ts';
 export {getGoalWorkspace} from './performance/goal-workspace.ts';
+export { listConversationPage, getOneOnOne } from './performance/one-on-ones.ts';
+
+export { PerformanceUpgradeRequiredError } from "./performance/authoring-schema.ts";
+
+export { HrmPerformanceError } from "./performance/errors.ts";

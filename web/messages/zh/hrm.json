@@ -3242,6 +3242,16 @@
     "scheduleConversation": "安排谈话",
     "conversationWhen": "日期和时间（{zone}）",
     "manager": "主管",
-    "reviewType": "评估类型"
+    "reviewType": "评估类型",
+    "manageReviews": "管理评估",
+    "conversationWorkspaceDescription": "查找会议、准备议程并跟进员工。",
+    "conversationDate": "日期和时间",
+    "noConversations": "没有符合这些筛选条件的会谈。",
+    "searchConversations": "搜索员工或经理",
+    "myConversations": "我的会谈",
+    "searchEmployees": "搜索员工",
+    "employeeLoadFailed": "无法加载员工，请重试。",
+    "upgradeRequired": "绩效功能需要升级",
+    "upgradeDescription": "管理员必须先应用人才数据库升级，才能打开评估模板。"
   }
 }

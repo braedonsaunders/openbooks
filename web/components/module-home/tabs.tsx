@@ -68,11 +68,14 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
   const shell = useTranslations('shell');
   const locale = useLocale();
   const t = useTranslations("shell.topNav");
+  const primary = tabs.filter((tab) => !tab.secondary);
+  const secondary = tabs.filter((tab) => tab.secondary);
   const activeTab = tabs.find((tab) => tab.active);
   const moreLabel = t("more");
   const trackRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState(tabs.length);
+  const [preferredWidth, setPreferredWidth] = useState<number>();
   const [open, setOpen] = useState(false);
   const openerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -113,14 +116,22 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
       const padding =
         (Number.parseFloat(style.paddingLeft) || 0) +
         (Number.parseFloat(style.paddingRight) || 0);
-      const next = visibleTopNavGroupCount({
-        availableWidth:
-          track.getBoundingClientRect().width - padding + SUBPIXEL_SLACK,
-        groupWidths: widths,
+      const plainMoreWidth = measure.querySelector<HTMLElement>('[data-tab-measure="plain-more"]')?.getBoundingClientRect().width ?? moreWidth;
+      const fullWidth = widths.reduce((total, width) => total + width, 0) +
+        gap * Math.max(0, widths.length - 1) +
+        (secondary.length ? (activeTab?.secondary ? moreWidth : plainMoreWidth) + (widths.length ? gap : 0) : 0) + padding;
+      // Keep the intrinsic strip width independent of its visible prefix;
+      // otherwise each overflow decision shrinks the next measurement again.
+      setPreferredWidth((current) => current === fullWidth ? current : fullWidth);
+      const availableWidth = track.getBoundingClientRect().width - padding + SUBPIXEL_SLACK;
+      const next = fullWidth - padding <= availableWidth ? widths.length : visibleTopNavGroupCount({
+        availableWidth,
+        groupWidths: secondary.length ? [...widths, moreWidth] : widths,
         moreWidth,
         gap,
       });
-      setVisibleCount((current) => (current === next ? current : next));
+      const visible = Math.min(primary.length, next);
+      setVisibleCount((current) => (current === visible ? current : visible));
     }
 
     recompute();
@@ -136,11 +147,11 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
       window.removeEventListener("resize", recompute);
       observer.disconnect();
     };
-  }, [tabs, moreLabel, suppressed]);
+  }, [tabs, moreLabel, suppressed, primary.length, secondary.length, activeTab?.secondary]);
 
   if (tabs.length < 2 || suppressed) return null;
-  const visible = tabs.slice(0, visibleCount);
-  const overflow = tabs.slice(visibleCount);
+  const visible = primary.slice(0, visibleCount);
+  const overflow = [...primary.slice(visibleCount), ...secondary];
   const activeOverflow = overflow.find((tab) => tab === activeTab);
 
   return (
@@ -149,6 +160,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
       role="navigation"
       aria-label={ariaLabel ?? shell("localNavigation")}
       data-subtabs
+      style={tabs.length < 8 && preferredWidth ? { width: preferredWidth } : undefined}
       className={cn(
         "relative flex h-[calc(var(--page-control-height)+0.25rem)] min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800",
         // A large route group is navigation, not the whole header. Cap it at
@@ -165,7 +177,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
         aria-hidden
         className="pointer-events-none invisible absolute flex w-max items-center gap-1"
       >
-        {tabs.map((tab) => (
+        {primary.map((tab) => (
           <span
             key={tab.href}
             data-tab-measure="tab"
@@ -177,6 +189,9 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel }: {
             ) : null}
           </span>
         ))}
+        <span data-tab-measure="plain-more" className={cn(PILL, PILL_IDLE)}>
+          {moreLabel}<ChevronDown size={14} />
+        </span>
         <span data-tab-measure="more" className={cn(PILL, PILL_IDLE)}>
           {activeTab ? `${moreLabel}: ${activeTab.label}` : moreLabel}
           <ChevronDown size={14} />

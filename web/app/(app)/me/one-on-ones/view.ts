@@ -196,6 +196,7 @@ export async function meOneOnOnesTitle(): Promise<string> {
 
 export async function loadMeOneOnOnesPage(
   sp: Record<string, string | undefined>,
+  options: { detailOnly?: boolean } = {},
 ): Promise<MeOneOnOnesData> {
   const authz = await getAuthz()
   if (!authz) notFound()
@@ -205,12 +206,12 @@ export async function loadMeOneOnOnesPage(
   const tabs = await meTabs(authz, '/me/one-on-ones')
 
   const reportFilter = typeof sp.report === 'string' && sp.report.length > 0 ? sp.report : null
-  const ones = await listOneOnOnes({
+  const ones = options.detailOnly ? [] : await listOneOnOnes({
     orgId: authz.user.orgId,
     actorId: authz.user.id,
     ...(reportFilter ? { employmentId: reportFilter } : {}),
   })
-  const directory = await listOneOnOneDirectory({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null)
+  const directory = options.detailOnly ? null : await listOneOnOneDirectory({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null)
   const names = new Map((directory?.employments ?? []).map((e) => [e.id, e.name]))
   const otherName = (one: { managerEmploymentId: string; reportEmploymentId: string; managerName: string; reportName: string }): string => {
     const mineFirst = directory?.employments.find((e) => e.mine)
@@ -237,7 +238,7 @@ export async function loadMeOneOnOnesPage(
 
   let requests: MeOneOnOnesData['requests'] = []
   try {
-    const open = await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id })
+    const open = options.detailOnly ? [] : await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id })
     requests = open.map((r) => ({
       id: r.id,
       body: r.body.length > 80 ? `${r.body.slice(0, 80)}…` : r.body,
@@ -272,11 +273,11 @@ export async function loadMeOneOnOnesPage(
         .catch(() => null)
       detail = {
         id: one.id,
-        title: `${otherName(one)} · ${when}`,
+        title: otherName(one),
         when,
         with: otherName(one),
         status: one.status,
-        canWrite: one.status === 'scheduled',
+        canWrite: one.canWrite,
         items: one.items.map((i) => ({
           id: i.id,
           kind: i.kind,
@@ -312,7 +313,8 @@ export async function loadMeOneOnOnesPage(
         failed: t('me.oneOnOnes.actionFailed'),
         closeHref: '/me/one-on-ones',
       }
-    } catch {
+    } catch (error) {
+      if (options.detailOnly) throw error
       detail = null
     }
   }
@@ -321,7 +323,7 @@ export async function loadMeOneOnOnesPage(
   let requestDetail: MeOneOnOnesData['requestDetail'] = null
   if (requestId) {
     try {
-      const open = await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id })
+      const open = options.detailOnly ? [] : await listOpenRequestsForParty({ orgId: authz.user.orgId, actorId: authz.user.id })
       const req = open.find((r) => r.id === requestId)
       if (req) {
         requestDetail = {

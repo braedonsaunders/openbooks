@@ -1,3 +1,4 @@
+import { requireReviewAuthoringSchema } from "./authoring-schema.ts";
 import { parseRatingScale } from "./performance-math.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
@@ -35,6 +36,7 @@ async function authorize(orgId: string, actorId: string, write: boolean) {
     throw new HrmAuthorizationError(
       "Review templates require Performance access or Setup management. Ask an administrator to grant the appropriate access.",
     );
+  await requireReviewAuthoringSchema(db);
   if (write && (await actorAllowedSubsidiaryIds(db, orgId, actorId)) !== null)
     throw new HrmAuthorizationError(
       "Review templates are organization-wide configuration. Ask an unrestricted administrator to save or publish this template.",

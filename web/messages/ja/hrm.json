@@ -3242,6 +3242,16 @@
     "scheduleConversation": "対話を予定する",
     "conversationWhen": "日時（{zone}）",
     "manager": "上司",
-    "reviewType": "評価の種類"
+    "reviewType": "評価の種類",
+    "manageReviews": "評価を管理",
+    "conversationWorkspaceDescription": "面談を検索し、議題を準備して従業員をフォローアップします。",
+    "conversationDate": "日時",
+    "noConversations": "この条件に一致する面談はありません。",
+    "searchConversations": "従業員またはマネージャーを検索",
+    "myConversations": "自分の面談",
+    "searchEmployees": "従業員を検索",
+    "employeeLoadFailed": "従業員を読み込めませんでした。もう一度お試しください。",
+    "upgradeRequired": "評価機能の更新が必要です",
+    "upgradeDescription": "評価テンプレートを開くには、管理者がタレントデータベースの更新を適用する必要があります。"
   }
 }

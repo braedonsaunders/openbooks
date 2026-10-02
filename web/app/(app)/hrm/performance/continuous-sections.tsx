@@ -276,7 +276,7 @@ export function OneOnOneDrawer({
       open
       closeHref={detail.closeHref}
       title={detail.title}
-      description={`${detail.with} · ${detail.when}`}
+      description={detail.when}
     >
       <OneOnOneAgenda
         oneOnOneId={detail.id}

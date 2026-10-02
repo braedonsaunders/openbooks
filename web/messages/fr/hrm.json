@@ -3242,6 +3242,16 @@
     "scheduleConversation": "Planifier l’entretien",
     "conversationWhen": "Date et heure ({zone})",
     "manager": "Responsable",
-    "reviewType": "Type d’évaluation"
+    "reviewType": "Type d’évaluation",
+    "manageReviews": "Gérer les évaluations",
+    "conversationWorkspaceDescription": "Retrouvez les réunions, préparez l’ordre du jour et assurez le suivi des employés.",
+    "conversationDate": "Date et heure",
+    "noConversations": "Aucun entretien ne correspond à ces filtres.",
+    "searchConversations": "Rechercher un employé ou un responsable",
+    "myConversations": "Mes entretiens",
+    "searchEmployees": "Rechercher des employés",
+    "employeeLoadFailed": "Impossible de charger les employés. Réessayez.",
+    "upgradeRequired": "Mise à jour de Performance requise",
+    "upgradeDescription": "Un administrateur doit appliquer la mise à jour de la base de données Talent avant d’ouvrir les modèles d’évaluation."
   }
 }

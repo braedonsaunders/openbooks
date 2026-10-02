@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import {
   businessTimeZone,
@@ -92,8 +94,9 @@ async function performanceReadScope(
 ): Promise<Set<string> | null | undefined> {
   try {
     return await requireAggregatePerformanceRead(db, orgId, actorId);
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof HrmAuthorizationError) return undefined;
+    throw error;
   }
 }
 
@@ -104,8 +107,9 @@ async function performanceManageScope(
 ): Promise<Set<string> | null | undefined> {
   try {
     return await requireAggregatePerformanceManage(db, orgId, actorId);
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof HrmAuthorizationError) return undefined;
+    throw error;
   }
 }
 
@@ -199,6 +203,10 @@ async function canSeeOneOnOne(
       (one.report_employer_subsidiary_id !== null && scope.has(one.report_employer_subsidiary_id))
     );
   }
+  return canParticipateInOneOnOne(db, orgId, actorId, one);
+}
+
+async function canParticipateInOneOnOne(db: SqlExecutor, orgId: string, actorId: string, one: StoredOneOnOne): Promise<boolean> {
   const person = await loadApprovalPerson(db, orgId, actorId);
   if (!person.partyId) return false;
   if (person.partyId === one.manager_party_id || person.partyId === one.report_party_id) return true;
@@ -232,7 +240,7 @@ async function requireWriteAuthority(
       "this 1:1 belongs to a report outside your allowed subsidiaries — only the pair, their HR administrator, or the report's line manager may change it",
     );
   }
-  if (await canSeeOneOnOne(db, orgId, actorId, one)) return;
+  if (await canParticipateInOneOnOne(db, orgId, actorId, one)) return;
   throw new HrmPerformanceError(
     "FORBIDDEN",
     "this 1:1 belongs to another manager and report — only the pair, their HR administrator, or the report's line manager may change it",
@@ -728,12 +736,23 @@ export async function setOneOnOneItemDone(args: {
 export async function listOneOnOneDirectory(args: {
   orgId: string;
   actorId: string;
+  q?: string;
+  limit?: number;
 }): Promise<{ employments: readonly { id: string; name: string; mine: boolean }[] }> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
+  if (args.limit !== undefined && (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 50))
+    throw new HrmPerformanceError("INVALID_INPUT", "Choose between 1 and 50 employee matches.");
+  if (args.q !== undefined && args.q.length > 200)
+    throw new HrmPerformanceError("INVALID_INPUT", "Search for an employee using 200 characters or fewer.");
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     const readScope = await performanceReadScope(db, orgId, actorId);
+    const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    const search = args.q?.trim();
+    const searchFilter = search ? sql`and p.display_name ilike ${"%" + search + "%"}` : sql``;
+    const limit = args.limit === undefined ? sql`` : sql`limit ${args.limit}`;
+    const actorScope = subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
     if (readScope !== undefined) {
       // HR's schedule-form directory covers only their allowed
       // subsidiaries — never the whole org. An empty scope reads
@@ -748,8 +767,8 @@ export async function listOneOnOneDirectory(args: {
           from worker_employments e
           left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
          where e.org_id = ${orgId}
-         ${scopeFilter}
-         order by name
+         ${scopeFilter} ${actorScope} ${searchFilter}
+         order by name, e.id ${limit}
       `)).rows;
       const scoped = await lockEmploymentsForScope(
         db,
@@ -776,7 +795,8 @@ export async function listOneOnOneDirectory(args: {
         from worker_employments e
         left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
        where e.org_id = ${orgId} and e.id in (${sql.join(params, sql`, `)})
-       order by name
+       ${actorScope} ${searchFilter}
+       order by name, e.id ${limit}
     `)).rows;
     const scoped = await lockEmploymentsForScope(
       db,
@@ -789,7 +809,7 @@ export async function listOneOnOneDirectory(args: {
   });
 }
 
-export async function getOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO> {
+export async function getOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO & { canWrite: boolean }> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   const id = requireUuid(args.id, "id");
@@ -803,7 +823,16 @@ export async function getOneOnOne(args: { orgId: string; actorId: string; id: st
       throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
     }
     const person = await loadApprovalPerson(db, orgId, actorId);
-    return toDTO(one, await loadItems(db, orgId, id, person.partyId));
+    let canWrite = false;
+    if (one.status === "scheduled") {
+      try {
+        await requireWriteAuthority(db, orgId, actorId, one);
+        canWrite = true;
+      } catch (error) {
+        if (!(error instanceof HrmPerformanceError && error.code === "FORBIDDEN")) throw error;
+      }
+    }
+    return { ...toDTO(one, await loadItems(db, orgId, id, person.partyId)), canWrite };
   });
 }
 
@@ -869,3 +898,102 @@ export async function listOneOnOnes(args: {
   });
 }
 
+
+/** One bounded organization worklist. Agenda contents are read only for a selected meeting. */
+export async function listConversationPage(args: {
+  orgId: string;
+  actorId: string;
+  page?: number;
+  perPage?: number;
+  q?: string;
+  status?: OneOnOneStatus;
+  mine?: boolean;
+  sort?: "when" | "manager" | "employee";
+  dir?: "asc" | "desc";
+}) {
+  const orgId = requireUuid(args.orgId, "orgId"),
+    actorId = requireUuid(args.actorId, "actorId");
+  const page = args.page ?? 1,
+    perPage = args.perPage ?? 25;
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(perPage) || perPage < 5 || perPage > 100)
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "Choose a positive page and between 5 and 100 conversations per page.",
+    );
+  if (args.status && !["scheduled", "held", "skipped", "cancelled"].includes(args.status))
+    throw new HrmPerformanceError("INVALID_INPUT", "Choose an available conversation status.");
+  if (args.sort && !["when", "manager", "employee"].includes(args.sort))
+    throw new HrmPerformanceError("INVALID_INPUT", "Sort conversations by date, manager or employee.");
+  if (args.dir && !["asc", "desc"].includes(args.dir))
+    throw new HrmPerformanceError("INVALID_INPUT", "Choose ascending or descending conversation order.");
+  return withOrgTransaction(orgId, async () => {
+    await assertOneOnOnesFeature(db, orgId);
+    const readScope = await performanceReadScope(db, orgId, actorId);
+    const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    const person = await loadApprovalPerson(db, orgId, actorId);
+    const own = await loadOwnEmploymentIds(db, orgId, actorId);
+    const selfRead = await actorHasPermission(db, orgId, actorId, "hrm.self.read");
+    const team = selfRead ? await loadManagedEmploymentIds(db, orgId, actorId, await businessToday(orgId)) : [];
+    const personal = sql`(
+      ${person.partyId ? sql`m.worker_party_id=${person.partyId} or r.worker_party_id=${person.partyId}` : sql`false`}
+      or ${
+        own.length && team.length
+          ? sql`(m.id in (${sql.join(
+              own.map((id) => sql`${id}::uuid`),
+              sql`,`,
+            )}) and r.id in (${sql.join(
+              team.map((id) => sql`${id}::uuid`),
+              sql`,`,
+            )}))`
+          : sql`false`
+      }
+    )`;
+    const hr =
+      readScope === undefined
+        ? sql`false`
+        : sql`true ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, readScope)}`;
+    const scope = args.mine
+      ? sql`(${personal}) and (${readScope === undefined ? sql`true` : hr})`
+      : readScope === undefined
+        ? personal
+        : hr;
+    const search = args.q?.trim();
+    const from = sql`from hrm_one_on_ones o
+      join worker_employments m on m.org_id=o.org_id and m.id=o.manager_employment_id
+      join worker_employments r on r.org_id=o.org_id and r.id=o.report_employment_id
+      join parties mp on mp.org_id=m.org_id and mp.id=m.worker_party_id
+      join parties rp on rp.org_id=r.org_id and rp.id=r.worker_party_id
+      where o.org_id=${orgId} and ${scope} ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)}
+      ${args.status ? sql`and o.status=${args.status}` : sql``}
+      ${search ? sql`and (mp.display_name ilike ${"%" + search + "%"} or rp.display_name ilike ${"%" + search + "%"})` : sql``}`;
+    const total = (await db.execute<{ total: number }>(sql`select count(*)::int as total ${from}`)).rows[0]!.total;
+    const currentPage = Math.min(page, Math.max(1, Math.ceil(total / perPage)));
+    const sort =
+      args.sort === "manager"
+        ? sql`mp.display_name`
+        : args.sort === "employee"
+          ? sql`rp.display_name`
+          : sql`o.scheduled_at`;
+    const dir = args.dir === "desc" ? sql`desc` : sql`asc`;
+    const rows = (
+      await db.execute<{
+        id: string;
+        manager: string;
+        employee: string;
+        scheduledAt: string;
+        status: OneOnOneStatus;
+      }>(sql`
+      select o.id,mp.display_name as manager,rp.display_name as employee,o.scheduled_at::text as "scheduledAt",o.status
+      ${from} order by ${sort} ${dir},o.id ${dir} limit ${perPage} offset ${(currentPage - 1) * perPage}
+    `)
+    ).rows;
+    return {
+      rows,
+      total,
+      currentPage,
+      perPage,
+      canSchedule:
+        (await actorHasPermission(db, orgId, actorId, "hrm.performance.manage")) || (own.length > 0 && team.length > 0),
+    };
+  });
+}

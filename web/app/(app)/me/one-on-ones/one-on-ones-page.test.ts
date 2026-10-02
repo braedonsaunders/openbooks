@@ -80,9 +80,8 @@ const mockSources = new Map<string, string>([
       }
       export async function getOneOnOne() {
         return {
-          id: '${ONE_ID}',
-          scheduledAt,
-          status: 'scheduled',
+          ...(await listOneOnOnes())[0],
+          canWrite: true,
           items: [
             { id: 'item-1', kind: 'note', authorPartyId: 'party-1', body: 'Mine.', visibility: 'private', status: 'open' },
             { id: 'item-2', kind: 'note', authorPartyId: 'party-2', body: 'Theirs.', visibility: 'shared', status: 'open' },
@@ -145,7 +144,7 @@ test('the drawer names the org-zone wall time, never the raw ISO instant', async
   assert.ok(data.detail, 'the drawer detail resolves')
   assert.equal(data.detail.when, '2026-01-15 04:00')
   assert.match(data.detail.when, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, 'no T, zone suffix, or millis')
-  assert.ok(data.detail.title.includes('04:00'), 'the drawer title agrees with the description')
+  assert.equal(data.detail.title, 'Rae Report', 'the heading identifies the person; the description carries the time')
 })
 
 test('authorMine derives from the delivered author, never a constant', async () => {

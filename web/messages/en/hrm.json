@@ -3242,6 +3242,16 @@
     "scheduleConversation": "Schedule conversation",
     "conversationWhen": "Date and time ({zone})",
     "manager": "Manager",
-    "reviewType": "Review type"
+    "reviewType": "Review type",
+    "manageReviews": "Manage reviews",
+    "conversationWorkspaceDescription": "Find meetings, prepare the agenda, and follow up with employees.",
+    "conversationDate": "Date and time",
+    "noConversations": "No conversations match these filters.",
+    "searchConversations": "Search employee or manager",
+    "myConversations": "My conversations",
+    "searchEmployees": "Search employees",
+    "employeeLoadFailed": "Employees could not be loaded. Try again.",
+    "upgradeRequired": "Performance upgrade required",
+    "upgradeDescription": "An administrator must apply the Talent database upgrade before review templates can be opened."
   }
 }

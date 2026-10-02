@@ -32,6 +32,7 @@ export async function resolveLocalNavigation(authz: Authz): Promise<{ groups: Vi
       const renamed = menu?.item.label && menu.item.label !== menu.module.label ? menu.item.label : undefined
       return {
         href: tab.href, label: renamed ?? t(tab.key as never),
+        secondary: tab.secondary,
         ...(tab.prefix ? { prefix: true } : {}),
         // The legal-entity and accounting-book lenses are shared between
         // sibling routes. Task-specific filters travel only on the same route.

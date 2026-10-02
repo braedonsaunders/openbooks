@@ -109,11 +109,12 @@ test('Employees, Org chart, checklists and templates share one route switch insi
 test('header overflow preserves order, names the active destination and returns keyboard focus', async () => {
   const { ModuleHomeTabs } = await import('./tabs')
   const original = HTMLElement.prototype.getBoundingClientRect
+  for (const available of [160, 1000]) {
   HTMLElement.prototype.getBoundingClientRect = function () {
-    const width = this.hasAttribute('data-subtabs') ? 160 : this.hasAttribute('data-tab-measure') ? 110 : 0
+    const width = this.hasAttribute('data-subtabs') ? available : this.hasAttribute('data-tab-measure') ? 110 : 0
     return new window.DOMRect(0, 0, width, 40)
   }
-  const screen = await mount(<ModuleHomeTabs tabs={[{href:'/one',label:'One'}, {href:'/two',label:'Two'}, {href:'/three',label:'Three',active:true}]} />)
+  const screen = await mount(<ModuleHomeTabs tabs={[{href:'/one',label:'One'}, {href:'/two',label:'Two'}, {href:'/three',label:'Three',active:true}].map(tab => ({...tab, secondary: available === 1000}))} />)
   try {
     const opener = screen.host.querySelector<HTMLButtonElement>('button[aria-haspopup=menu]')!
     assert.match(opener.textContent!, /More: Three/)
@@ -126,4 +127,5 @@ test('header overflow preserves order, names the active destination and returns 
     assert.equal(entries[2]!.getAttribute('aria-current'), 'page')
     await press(entries[2]!, 'Escape'); assert.equal(opener.getAttribute('aria-expanded'), 'false'); assert.equal(document.activeElement, opener)
   } finally { await screen.close(); HTMLElement.prototype.getBoundingClientRect = original }
+  }
 })

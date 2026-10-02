@@ -23,6 +23,7 @@ export interface PreparedListSource {
  * owns the collection contract and pagination mode consumed by shared tables.
  * A server window must never be filtered or paginated again in the browser. */
 const SOURCES = {
+  hrm_conversation_worklist: { route: "/hrm/performance/conversations", rowsField: "rows", rowKeyField: "id", mode: "server", clientSearch: false, paging: { totalField: "total", pageField: "currentPage", perPageField: "perPage" } },
   collections_worklist: { route: '/collections', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
   collections_recurring: { route: '/collections?view=recurring', rowsField: 'schedules', rowKeyField: 'id', mode: 'loaded' },
   collections_policies: { route: '/collections?view=policies', rowsField: 'policies', rowKeyField: 'id', mode: 'loaded' },

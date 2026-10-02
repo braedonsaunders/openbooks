@@ -11,6 +11,7 @@ import type { ModuleHomeTab } from './tab-types'
  */
 export type ViewTab = {
   href: string
+  secondary?: boolean
   label: string
   prefix?: boolean
   carry?: string[]
@@ -93,6 +94,7 @@ export function resolveViewTabs(
   return group.map((tab, i) => ({
     href: withCarry(tab, pathname, search),
     label: tab.label,
+    secondary: tab.secondary,
     active: i === index,
   }))
 }

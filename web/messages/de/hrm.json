@@ -3242,6 +3242,16 @@
     "scheduleConversation": "Gespräch planen",
     "conversationWhen": "Datum und Uhrzeit ({zone})",
     "manager": "Führungskraft",
-    "reviewType": "Beurteilungsart"
+    "reviewType": "Beurteilungsart",
+    "manageReviews": "Beurteilungen verwalten",
+    "conversationWorkspaceDescription": "Gespräche finden, die Agenda vorbereiten und Mitarbeiter begleiten.",
+    "conversationDate": "Datum und Uhrzeit",
+    "noConversations": "Keine Gespräche entsprechen diesen Filtern.",
+    "searchConversations": "Mitarbeiter oder Führungskraft suchen",
+    "myConversations": "Meine Gespräche",
+    "searchEmployees": "Mitarbeiter suchen",
+    "employeeLoadFailed": "Mitarbeiter konnten nicht geladen werden. Versuchen Sie es erneut.",
+    "upgradeRequired": "Performance-Upgrade erforderlich",
+    "upgradeDescription": "Ein Administrator muss das Talent-Datenbankupgrade anwenden, bevor Beurteilungsvorlagen geöffnet werden können."
   }
 }
