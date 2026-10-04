@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { menuColumns } from './menu-columns'
-import { defaultNavConfig, MODULE_BY_KEY } from '@openbooks/engine/navigation'
+import { defaultNavConfig, MODULE_BY_KEY, isDefaultLocalNavigationItem } from '@openbooks/engine/navigation'
 import { toBlocks } from '../../components/sidebar-nav'
 
 test('Customers places Sales Overview beneath Pipeline in the left column', () => {
@@ -22,21 +22,20 @@ test('Customers places Sales Overview beneath Pipeline in the left column', () =
   assert.equal(sales.items[0]!.label, 'Overview')
 })
 
-test('uneven People sections form compact independent columns in reading order', () => {
-  const blocks = [
-    { label: 'Workforce', items: 4 }, { label: 'Hiring', items: 2 },
-    { label: 'Time Off', items: 1 }, { label: 'Talent', items: 1 },
-    { label: 'Rewards', items: 1 }, { label: 'Payroll', items: 6 },
-    { label: 'Payroll Controls', items: 4 },
-  ]
-  const columns = menuColumns(blocks, (block) => block.items + 1.5)
+test('People defaults place Benefits, Payroll and Payroll controls in the right column', () => {
+  const people = defaultNavConfig().groups.find(group => group.id === 'hrm')!
+  const blocks = toBlocks(people.items.filter(item => !isDefaultLocalNavigationItem(people.id, item)).flatMap(item => {
+    const module = item.kind === 'module' ? MODULE_BY_KEY.get(item.moduleKey) : undefined
+    return module ? [{ href: module.href, label: module.label, iconKey: module.iconKey, subgroup: module.subgroup }] : []
+  }))
+  const columns = menuColumns(blocks, block => block.kind === 'subgroup' ? block.items.length + 1.5 : 1)
   assert.equal(columns.length, 2)
   assert.deepEqual(columns.flat(), blocks, 'column reading order preserves the saved menu order')
-  assert.deepEqual(columns.map((column) => column.map((block) => block.label)), [
-    ['Workforce', 'Hiring', 'Time Off', 'Talent'], ['Rewards', 'Payroll', 'Payroll Controls'],
+  assert.deepEqual(columns.map((column) => column.map((block) => block.kind === 'subgroup' ? block.label : block.item.label)), [
+    ['workforce', 'hrm-talent', 'hrm-timeOff', 'hrm-compensation'], ['hrm-benefits', 'payroll-work', 'payroll-controls'],
   ])
-  const weights = columns.map((column) => column.reduce((sum, block) => sum + block.items + 1.5, 0))
-  assert.equal(Math.max(...weights), 15.5)
+  const weights = columns.map((column) => column.reduce((sum, block) => sum + (block.kind === 'subgroup' ? block.items.length + 1.5 : 1), 0))
+  assert.equal(Math.max(...weights), 22)
 })
 
 test('a single section never leaves an empty second column', () => {
