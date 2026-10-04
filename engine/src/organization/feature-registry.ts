@@ -149,6 +149,9 @@ export const FEATURES: FeatureDef[] = [
   { key: 'returnAuthorizations', defaultEnabled: false, category: 'operations', navModules: ['returns'], requiresAll: ['fulfillment'] },
   { key: 'customerPartNumbers', defaultEnabled: false, category: 'sales', requiresAll: ['orders'] },
   { key: 'barcodeScanning', defaultEnabled: false, category: 'operations', requiresAll: ['inventory'] },
+  // Item variants: product families with ordered options whose combinations
+  // become ordinary variant items. Needs the item catalog's stocked kinds.
+  { key: 'itemVariants', defaultEnabled: false, category: 'operations', requiresAll: ['inventory'] },
   // Manufacturing: building finished goods from inventory components.
   { key: 'manufacturing', defaultEnabled: false, category: 'operations', navModules: ['manufacturing'], requiresAll: ['inventory'] },
   { key: 'manufacturingMrp', defaultEnabled: false, category: 'operations', parentKey: 'manufacturing', recommends: ['orders'] },

@@ -5690,6 +5690,10 @@
       "title": "条码扫描",
       "description": "扫描商品和库位条码，以识别产品并记录仓库作业。"
     },
+    "itemVariants": {
+      "title": "商品变体",
+      "description": "按尺码、颜色等选项销售商品，每个组合都是独立的物料，用于库存、定价和销售。"
+    },
     "manufacturing": {
       "title": "生产制造",
       "description": "物料清单、工艺路线和生产工单，将组件制造为成品。"

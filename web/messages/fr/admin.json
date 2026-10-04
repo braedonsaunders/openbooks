@@ -5682,6 +5682,10 @@
       "title": "Lecture de codes-barres",
       "description": "Scanner les codes des articles et des emplacements pour identifier les produits et enregistrer les mouvements de stock."
     },
+    "itemVariants": {
+      "title": "Déclinaisons d'articles",
+      "description": "Vendez des produits avec des options telles que la taille et la couleur, chaque combinaison étant un article à part entière pour le stock, les prix et les ventes."
+    },
     "manufacturing": {
       "title": "Fabrication",
       "description": "Nomenclatures, gammes et ordres de fabrication qui produisent des produits finis à partir de composants."

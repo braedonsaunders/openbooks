@@ -5682,6 +5682,10 @@
       "title": "Escaneo de códigos de barras",
       "description": "Escanea códigos de productos y ubicaciones para identificar artículos y registrar movimientos de almacén."
     },
+    "itemVariants": {
+      "title": "Variantes de artículo",
+      "description": "Vende productos con opciones como talla y color, donde cada combinación es un artículo propio para stock, precios y ventas."
+    },
     "manufacturing": {
       "title": "Fabricación",
       "description": "Listas de materiales, rutas y órdenes de trabajo que fabrican productos terminados a partir de componentes."

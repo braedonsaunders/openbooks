@@ -5822,6 +5822,10 @@
       "title": "Barcode-Erfassung",
       "description": "Produkt- und Lagerplatz-Barcodes scannen, um Artikel zu identifizieren und Lagerbewegungen zu erfassen."
     },
+    "itemVariants": {
+      "title": "Artikelvarianten",
+      "description": "Produkte in Optionen wie Größe und Farbe verkaufen, wobei jede Kombination ein eigener Artikel für Bestand, Preise und Verkäufe ist."
+    },
     "manufacturing": {
       "title": "Fertigung",
       "description": "Stücklisten, Arbeitspläne und Fertigungsaufträge, die Fertigerzeugnisse aus Komponenten herstellen."

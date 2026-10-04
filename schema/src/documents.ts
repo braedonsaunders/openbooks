@@ -680,6 +680,10 @@ export const items = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
+    /** Variant membership: both set or both null (items_family_option_values_check). */
+    familyId: uuid("family_id"),
+    /** Chosen option per family option name, e.g. {"Size": "M"}. */
+    optionValues: jsonb("option_values"),
   },
   (t) => [
     uniqueIndex("items_org_id_id_unique").on(t.orgId, t.id),
