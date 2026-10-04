@@ -78,6 +78,11 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   deferredTaxAsset: ["asset_current_other", "asset_other"],
   deferredTaxLiability: ["liability_current_other", "liability_long_term"],
   valuationAllowance: ["asset_current_other", "asset_other"],
+  // Gift card and store credit balances customers have paid for but not yet
+  // redeemed. A current liability by nature: it settles in goods, services
+  // or refunds, never in cash beyond escheat. Gift card money parked in
+  // revenue or payables misstates both, so only liability types qualify.
+  storedValueLiability: ["liability_payable", "liability_current_other"],
 } as const;
 
 export type ControlAccountRole = keyof typeof CONTROL_ACCOUNT_TYPE_POLICY;

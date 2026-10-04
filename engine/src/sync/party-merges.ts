@@ -116,6 +116,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["subcontract_payment_controls", "joint_payee_party_id"],
   ["subcontracts", "vendor_id"],
   ["subscription_usage_links", "customer_id"],
+  ["stored_value_accounts", "customer_party_id"],
   ["time_entries", "employee_party_id"],
   ["union_agreements", "remittance_party_id"],
   ["usage_prepaid_grants", "customer_id"],

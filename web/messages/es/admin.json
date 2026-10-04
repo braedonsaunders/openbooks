@@ -955,6 +955,7 @@
       "close": "Períodos y cierre",
       "ap": "Cuentas por pagar",
       "ar": "Cuentas por cobrar",
+      "stored_value": "Tarjetas regalo y crédito",
       "usage": "Facturación por uso",
       "autopay": "Cobro automático",
       "reports": "Informes",
@@ -1002,6 +1003,9 @@
     "ar_approve": "Aprobar o rechazar facturas",
     "ar_post": "Contabilizar facturas en el libro mayor",
     "ar_pay": "Registrar pagos de clientes",
+    "stored_value_read": "Ver tarjetas regalo y crédito",
+    "stored_value_manage": "Emitir y canjear tarjetas regalo y crédito",
+    "stored_value_adjust": "Ajustar saldos fuera de los documentos",
     "usage_read": "Ver el uso medido",
     "usage_manage": "Gestionar medidores, planes de tarifas y registros de uso importados",
     "usage_bill": "Tarifar el uso y facturar cargos de suscripción",
@@ -5857,6 +5861,10 @@
     "autopay": {
       "title": "Cobro automático",
       "description": "Métodos de pago guardados, cobro automático de facturas vencidas con reintentos y suspensión ante el fallo definitivo. Requiere Pagos en línea."
+    },
+    "storedValue": {
+      "title": "Tarjetas regalo y crédito",
+      "description": "Tarjetas regalo y crédito en tienda registrados como pasivo, con emisión, canje, caducidad y deterioro."
     },
     "subcontractorCompliance": {
       "title": "Cumplimiento de subcontratistas",

@@ -36,6 +36,12 @@ export const PERMISSION_CATALOGUE = [
   "ar.approve",
   "ar.post",
   "ar.pay",
+  // Stored value (gift cards and store credit): reading balances is widely
+  // shared, issuing and redeeming move liability money, and adjusting a
+  // balance outside a document is its own duty.
+  "stored_value.read",
+  "stored_value.manage",
+  "stored_value.adjust",
   // Usage billing: see metered usage and the charges rated from it.
   "usage.read",
   "usage.manage",
@@ -409,6 +415,15 @@ export const PERMISSION_GROUPS: {
       { key: "payment_methods.read", labelKey: permissionLabelKey("payment_methods.read") },
       { key: "payment_methods.manage", labelKey: permissionLabelKey("payment_methods.manage") },
       { key: "autopay.manage", labelKey: permissionLabelKey("autopay.manage") },
+    ],
+  },
+  {
+    key: "stored_value",
+    labelKey: "permissions.groups.stored_value",
+    permissions: [
+      { key: "stored_value.read", labelKey: permissionLabelKey("stored_value.read") },
+      { key: "stored_value.manage", labelKey: permissionLabelKey("stored_value.manage") },
+      { key: "stored_value.adjust", labelKey: permissionLabelKey("stored_value.adjust") },
     ],
   },
   {
@@ -807,6 +822,9 @@ export const BUILT_IN_ROLES: Record<
       "ar.approve",
       "ar.post",
       "ar.pay",
+      "stored_value.read",
+      "stored_value.manage",
+      "stored_value.adjust",
       "usage.read",
       "usage.manage",
       "usage.bill",
@@ -932,6 +950,8 @@ export const BUILT_IN_ROLES: Record<
       "ar.create",
       "ar.post",
       "ar.pay",
+      "stored_value.read",
+      "stored_value.manage",
       "usage.read",
       "usage.manage",
       "usage.bill",
@@ -1055,7 +1075,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "stored_value.manage", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
@@ -1072,7 +1092,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "stored_value.read", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",

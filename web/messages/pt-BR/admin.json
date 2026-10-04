@@ -955,6 +955,7 @@
       "close": "Períodos e fechamento",
       "ap": "Contas a pagar",
       "ar": "Contas a receber",
+      "stored_value": "Vales e créditos",
       "usage": "Faturamento por uso",
       "autopay": "Cobrança automática",
       "reports": "Relatórios",
@@ -1002,6 +1003,9 @@
     "ar_approve": "Aprovar ou rejeitar faturas",
     "ar_post": "Lançar faturas no razão",
     "ar_pay": "Registrar recebimentos de clientes",
+    "stored_value_read": "Ver cartões-presente e créditos",
+    "stored_value_manage": "Emitir e resgatar cartões-presente e créditos",
+    "stored_value_adjust": "Ajustar saldos fora de documentos",
     "usage_read": "Ver o uso medido",
     "usage_manage": "Gerenciar medidores, planos de tarifas e registros de uso importados",
     "usage_bill": "Tarifar o uso e faturar cobranças de assinatura",
@@ -5929,6 +5933,10 @@
     "autopay": {
       "title": "Cobrança automática",
       "description": "Métodos de pagamento salvos, cobrança automática de faturas vencidas com tentativas e suspensão em caso de falha definitiva. Requer Pagamentos online."
+    },
+    "storedValue": {
+      "title": "Vales e créditos",
+      "description": "Cartões-presente e créditos em loja registrados no passivo, com emissão, resgate, expiração e breakage."
     },
     "subcontractorCompliance": {
       "title": "Conformidade de subcontratados",
