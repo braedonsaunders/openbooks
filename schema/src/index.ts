@@ -7,6 +7,7 @@ export * from "./coa";
 export * from "./parties";
 export * from "./ledger";
 export * from "./documents";
+export * from "./promotions";
 export * from "./backorders";
 export * from "./fulfillment";
 export * from "./tax";

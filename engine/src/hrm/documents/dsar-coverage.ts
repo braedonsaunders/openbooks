@@ -145,6 +145,14 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason: "customer product codes and item mappings are business reference data, not personal records.",
   },
   {
+    table: "promotions",
+    reason: "merchant-authored discount offers are commercial configuration, not personal records.",
+  },
+  {
+    table: "restocking_fee_policies",
+    reason: "merchant-authored return fee rules are commercial configuration, not personal records.",
+  },
+  {
     table: "worker_clock_pins",
     reason:
       "salted one-way PIN credential hashes: authentication material, unusable " +

@@ -1205,6 +1205,17 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "item_inventory_profiles.unit_conversions",
   "customer_item_refs.customer_sku",
   "customer_item_refs.description",
+  // Merchant-authored discount codes and fee rules: offer codes, names and
+  // mechanic enums identify nobody.
+  "promotions.code",
+  "promotions.name",
+  "promotions.description",
+  "promotions.kind",
+  "promotions.status",
+  "promotions.currency",
+  "restocking_fee_policies.item_category",
+  "restocking_fee_policies.kind",
+  "restocking_fee_policies.currency",
   "item_identifiers.kind",
   "item_identifiers.value",
   "item_identifiers.unit",

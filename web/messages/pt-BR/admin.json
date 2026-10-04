@@ -1032,6 +1032,7 @@
     "manufacturing_read": "Visualizar registros de manufatura",
     "manufacturing_manage": "Gerenciar cadastros e ordens de manufatura",
     "orders_fulfill": "Separar, embalar e expedir pedidos",
+    "returns_waive_fee": "Isentar taxas de reestocagem em devoluções",
     "projects_read": "Ver projetos e apropriação de custos",
     "projects_manage": "Criar e editar projetos",
     "resourcing_read": "Ver alocações e solicitações de recursos",
@@ -1973,6 +1974,7 @@
       "taxes": "Impostos",
       "dimensions": "Dimensões",
       "billing": "Faturamento e numeração",
+      "sales": "Vendas",
       "workforce": "Força de trabalho",
       "assets": "Ativos",
       "currency": "Moeda",
@@ -3130,16 +3132,32 @@
       "dunning-policies": {
         "title": "Políticas",
         "description": "Receba valores pendentes e gerencie o faturamento em um único espaço de trabalho."
+      },
+      "promotions": {
+        "title": "Promoções",
+        "singular": "Promoção",
+        "description": "Códigos de desconto e campanhas aplicados às linhas de venda."
+      },
+      "restocking-fee-policies": {
+        "title": "Taxas de reestocagem",
+        "singular": "Taxa de reestocagem",
+        "description": "Regras de taxas aplicadas a devoluções inspecionadas, por item, categoria ou padrão."
       }
     },
     "fields": {
       "aggregation": "Agregação",
       "addressLine1": "Endereço, linha 1",
       "addressLine2": "Endereço, linha 2",
+      "buyQuantity": "Quantidade comprada",
       "city": "Cidade",
+      "discountAccountId": "Conta de descontos",
+      "getQuantity": "Quantidade gratuita",
+      "incomeAccountId": "Conta de receitas",
       "postalCode": "CEP",
       "stockLocationId": "Local de estoque",
       "status": "Situação",
+      "usageLimit": "Limite de usos",
+      "waivable": "Isentável",
       "warehouseId": "Armazém",
       "strategy": "Estratégia",
       "targetLocationId": "Local de destino",
@@ -5637,6 +5655,10 @@
     "orders": {
       "title": "Orçamentos e pedidos",
       "description": "Orçamentos, pedidos de venda e de compra com conversão em faturas."
+    },
+    "promotions": {
+      "title": "Promoções",
+      "description": "Códigos de desconto e campanhas aplicados aos documentos de venda, com relatório de desempenho."
     },
     "revenueRecognition": {
       "title": "Reconhecimento de receita",

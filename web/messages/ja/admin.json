@@ -1021,6 +1021,7 @@
     "manufacturing_read": "製造データを表示",
     "manufacturing_manage": "製造マスターと製造オーダーを管理",
     "orders_fulfill": "受注のピッキング・梱包・出荷",
+    "returns_waive_fee": "返品の再入庫手数料を免除する",
     "projects_read": "プロジェクトと原価計算を表示",
     "projects_manage": "プロジェクトを作成および編集",
     "resourcing_read": "リソース割り当てと依頼を表示",
@@ -2252,6 +2253,7 @@
       "taxes": "税",
       "dimensions": "ディメンション",
       "billing": "請求と採番",
+      "sales": "販売",
       "workforce": "労働力",
       "assets": "資産",
       "currency": "通貨",
@@ -3205,16 +3207,32 @@
       "dunning-policies": {
         "title": "ポリシー",
         "description": "一つのワークスペースで債権回収と請求を管理します。"
+      },
+      "promotions": {
+        "title": "プロモーション",
+        "singular": "プロモーション",
+        "description": "売上伝票の明細に適用する割引コードとキャンペーンです。"
+      },
+      "restocking-fee-policies": {
+        "title": "再入庫手数料",
+        "singular": "再入庫手数料",
+        "description": "検品済み返品に適用する手数料ルール。商品・カテゴリ・標準の順で適用します。"
       }
     },
     "fields": {
       "aggregation": "集計方法",
       "addressLine1": "住所 1",
       "addressLine2": "住所 2",
+      "buyQuantity": "購入数量",
       "city": "市区町村",
+      "discountAccountId": "値引勘定",
+      "getQuantity": "無料数量",
+      "incomeAccountId": "収益勘定",
       "postalCode": "郵便番号",
       "stockLocationId": "在庫ロケーション",
       "status": "状態",
+      "usageLimit": "利用上限回数",
+      "waivable": "免除可",
       "warehouseId": "倉庫",
       "strategy": "方式",
       "targetLocationId": "格納先",
@@ -5837,6 +5855,10 @@
     "orders": {
       "description": "請求書・仕入請求書への転換付きの見積・受注・発注です。",
       "title": "見積・受発注"
+    },
+    "promotions": {
+      "title": "プロモーション",
+      "description": "売上伝票に適用する割引コードとキャンペーン。実績レポート付き。"
     },
     "projects": {
       "description": "予算・原価・請求・収益性とともに案件を管理します。",

@@ -1,0 +1,3 @@
+Adds the promotions master, the promotion link on sales document lines, and
+effective-dated restocking fee policies. All objects are new and the line
+column is nullable, so no existing tenant row is read, rewritten, or deleted.

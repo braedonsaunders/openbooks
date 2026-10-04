@@ -107,6 +107,9 @@ export const PERMISSION_CATALOGUE = [
   // Order fulfillment: pick, pack, and ship sales orders. Shipping moves
   // stock, so it is granted where order entry and items.post already meet.
   "orders.fulfill",
+  // Waiving a restocking fee forgives money the return policy says is owed,
+  // so it is its own grant — inspecting a return must never imply it.
+  "returns.waive_fee",
   // Projects & job costing
   "projects.read",
   "projects.manage",
@@ -487,7 +490,10 @@ export const PERMISSION_GROUPS: {
   {
     key: "orders",
     labelKey: "permissions.groups.orders",
-    permissions: [{ key: "orders.fulfill", labelKey: permissionLabelKey("orders.fulfill") }],
+    permissions: [
+      { key: "orders.fulfill", labelKey: permissionLabelKey("orders.fulfill") },
+      { key: "returns.waive_fee", labelKey: permissionLabelKey("returns.waive_fee") },
+    ],
   },
   {
     key: "projects",
@@ -825,6 +831,7 @@ export const BUILT_IN_ROLES: Record<
       "manufacturing.read",
       "manufacturing.manage",
       "orders.fulfill",
+      "returns.waive_fee",
       "projects.read",
       "projects.manage",
       "resourcing.read",
@@ -924,6 +931,7 @@ export const BUILT_IN_ROLES: Record<
       "items.post",
       "items.warehouses",
       "orders.fulfill",
+      "returns.waive_fee",
       "projects.read",
       "projects.manage",
       "resourcing.read",
