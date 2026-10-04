@@ -1,0 +1,1 @@
+Widens two CHECK constraints on scheduler_outbox to admit new periodic scan kinds. Every existing row satisfies the wider constraints, so no tenant data is read, rewritten or deleted.
