@@ -5,8 +5,10 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
+  timestamp,
   unique,
   uniqueIndex,
   uuid
@@ -127,6 +129,17 @@ export const documentLineTaxComponents = pgTable(
       .notNull()
       .default(false),
     roundingScale: integer("rounding_scale").notNull().default(2),
+    /**
+     * Who collects this component's tax: the merchant (posts the liability)
+     * or a marketplace facilitator (posts the facilitator clearing account,
+     * kept for reporting and nexus but never the merchant's liability).
+     * Inherited from the document line at calculation time.
+     */
+    collectedBy: text("collected_by", { enum: ["merchant", "marketplace"] })
+      .notNull()
+      .default("merchant"),
+    /** Facilitator name (in marketplace_facilitators) when collected_by is marketplace. */
+    facilitatorName: text("facilitator_name"),
     collectedAccountId: uuid("collected_account_id"),
     paidAccountId: uuid("paid_account_id"),
     withholdingAccountId: uuid("withholding_account_id"),
@@ -148,4 +161,100 @@ export const documentLineTaxComponents = pgTable(
       sql`${t.roundingScale} between 0 and 4`,
     ),
   ],
+);
+
+/**
+ * Provider commit tracking for posted sales documents. The posting
+ * transaction enqueues one row per provider and direction; the periodic
+ * tax_provider_commit scan performs the provider call with retries and
+ * records the outcome, including any provider/posted tax difference.
+ */
+export const taxProviderTransactions = pgTable(
+  "tax_provider_transactions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    documentId: uuid("document_id").notNull(),
+    provider: text("provider", {
+      enum: ["avalara", "taxjar", "custom_http"],
+    }).notNull(),
+    /** Document code sent to the provider (document number + org discriminator). */
+    providerCode: text("provider_code").notNull(),
+    kind: text("kind", { enum: ["sale", "return"] }).notNull(),
+    status: text("status", {
+      enum: ["pending", "committed", "voided", "failed", "skipped"],
+    })
+      .notNull()
+      .default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastError: text("last_error"),
+    /** Set by the document void path; the scan voids the committed provider transaction. */
+    voidRequestedAt: timestamp("void_requested_at", { withTimezone: true }),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
+    /** Bounded provider response evidence: totals, document code, mismatch. */
+    providerResponseExcerpt: jsonb("provider_response_excerpt"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_provider_transactions_org_id_id_unique").on(t.orgId, t.id),
+    unique("tax_provider_transactions_document_unique").on(
+      t.documentId,
+      t.provider,
+      t.kind,
+    ),
+    index("tax_provider_transactions_scan").on(t.status, t.nextAttemptAt),
+  ],
+);
+
+/**
+ * Marketplace facilitators collecting tax the merchant reports but never
+ * owes. Their tax posts to the clearing account (settled through the
+ * marketplace payout), never to the merchant's tax liability.
+ */
+export const marketplaceFacilitators = pgTable(
+  "marketplace_facilitators",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(),
+    clearingAccountId: uuid("clearing_account_id").notNull(),
+    /**
+     * gross = the document total includes the marketplace tax and posting
+     * credits the clearing account; net = the document is net of tax and
+     * posting emits no leg for marketplace components.
+     */
+    collectionMode: text("collection_mode", { enum: ["gross", "net"] })
+      .notNull()
+      .default("gross"),
+    /** State codes where this facilitator collects. */
+    states: text("states").array().notNull().default([]),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("marketplace_facilitators_org_id_id_unique").on(t.orgId, t.id),
+    unique("marketplace_facilitators_org_name_unique").on(t.orgId, t.name),
+  ],
+);
+
+/**
+ * Whether a state's economic-nexus threshold counts marketplace-facilitated
+ * sales. Global reference data: seeded only where the rule is cited; a state
+ * with no row defaults to included pending review.
+ */
+export const marketplaceNexusStateRules = pgTable(
+  "marketplace_nexus_state_rules",
+  {
+    state: text("state").primaryKey(),
+    includeInThreshold: boolean("include_in_threshold")
+      .notNull()
+      .default(true),
+    needsReview: boolean("needs_review").notNull().default(true),
+    /** The cited source of a verified rule (publication or statute). */
+    source: text("source").notNull().default(""),
+  },
+  () => [],
 );

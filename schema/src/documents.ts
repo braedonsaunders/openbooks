@@ -334,6 +334,14 @@ export const documentLines = pgTable(
      * uses tax_amount as-is. Kept transparent so an override is auditable.
      */
     taxOverridden: boolean("tax_overridden").notNull().default(false),
+    /**
+     * Marketplace facilitator collecting this line's tax (its name in
+     * marketplace_facilitators), or NULL when the merchant collects. The
+     * per-line toggle writes here; recalculation rebuilds component rows
+     * from it, so the flag survives line edits. Posting routes the tax to
+     * the facilitator's clearing account instead of the tax liability.
+     */
+    marketplaceFacilitator: text("marketplace_facilitator"),
 
     /**
      * Who fronted the money for this line (0171). Only expense_report lines
