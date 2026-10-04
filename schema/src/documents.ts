@@ -148,6 +148,15 @@ export const documents = pgTable(
     billingMethod: text("billing_method", { enum: ["time_and_materials", "fixed_price"] }),
     isFinalInvoice: boolean("is_final_invoice").notNull().default(false),
     referenceNumber: text("reference_number"), // vendor's invoice no., cheque no.
+    /**
+     * The originating external system's own identity for the document
+     * (their order, invoice, or payment id) and which system minted it.
+     * Dedupe key for storefront and integrator writes, unique per org and
+     * source where present; null on every native document. Opaque
+     * provider-assigned tokens, never contact data.
+     */
+    externalRef: text("external_ref"),
+    externalSource: text("external_source"),
     internalNotes: text("internal_notes"),
     paymentHoldReason: text("payment_hold_reason"), // non-null = on hold
     expectedPayDate: date("expected_pay_date"),
@@ -178,6 +187,11 @@ export const documents = pgTable(
     uniqueIndex("documents_org_idempotency_key")
       .on(t.orgId, t.idempotencyKey)
       .where(sql`${t.idempotencyKey} is not null`),
+    // External-reference dedupe (migration 0500): partial, so the NULL
+    // reference on every native document is unconstrained.
+    uniqueIndex("documents_org_external_ref")
+      .on(t.orgId, t.externalSource, t.externalRef)
+      .where(sql`${t.externalRef} is not null`),
     index("documents_org_kind_status").on(t.orgId, t.kind, t.status),
     index("documents_party").on(t.partyId),
     /**
@@ -248,6 +262,20 @@ export const documents = pgTable(
     check(
       "documents_no_field_ticket_custom",
       sql`not (${t.custom} ? 'fieldTicket')`,
+    ),
+    // External-reference dedupe (migration 0500): the pair is all or
+    // nothing, and neither half may be blank.
+    check(
+      "documents_external_ref_source_pair",
+      sql`(${t.externalRef} is null) = (${t.externalSource} is null)`,
+    ),
+    check(
+      "documents_external_ref_nonblank",
+      sql`${t.externalRef} is null or length(btrim(${t.externalRef})) > 0`,
+    ),
+    check(
+      "documents_external_source_nonblank",
+      sql`${t.externalSource} is null or length(btrim(${t.externalSource})) > 0`,
     ),
   ],
 );

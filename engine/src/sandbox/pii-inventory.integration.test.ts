@@ -567,6 +567,8 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "documents.billing_method",
   "documents.currency",
   "documents.document_number",
+  "documents.external_ref",
+  "documents.external_source",
   "documents.extra_dims",
   "documents.idempotency_key",
   "documents.internal_notes",

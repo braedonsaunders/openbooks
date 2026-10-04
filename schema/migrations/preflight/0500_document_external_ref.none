@@ -1,0 +1,1 @@
+Adds two nullable columns with no backfill and a partial unique index over them. No existing tenant row is read, rewritten, or deleted, and the unconstrained NULL reference on every existing document cannot collide, so there is nothing a preflight probe could refuse on.
