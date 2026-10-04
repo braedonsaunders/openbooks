@@ -1,0 +1,1 @@
+No preflight is required. This migration creates two new tenant-owned tables and adds two nullable columns to items with no default; existing rows keep both new columns null, which satisfies the new pairing check, and no tenant data is read, rewritten, or deleted.

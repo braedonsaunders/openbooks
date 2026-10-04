@@ -360,6 +360,8 @@ export const TENANT_TABLE_POLICIES = {
   "inventory_writedowns": "clone:catalog-uuid-rebase",
   "invoice_backups": "clone:catalog-uuid-rebase",
   "item_inventory_profiles": "clone:catalog-uuid-rebase",
+  "item_families": "clone:catalog-uuid-rebase",
+  "item_family_options": "clone:catalog-uuid-rebase",
   "item_price_breaks": "clone:catalog-uuid-rebase",
   "item_price_schedules": "clone:catalog-uuid-rebase",
   "item_identifiers": "clone:catalog-uuid-rebase",

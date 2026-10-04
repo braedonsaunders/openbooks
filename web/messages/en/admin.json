@@ -5690,6 +5690,10 @@
       "title": "Barcode scanning",
       "description": "Scan item and location barcodes to identify products and record warehouse activity."
     },
+    "itemVariants": {
+      "title": "Item variants",
+      "description": "Sell products in options such as size and color, with each combination as its own item for stock, pricing, and sales."
+    },
     "manufacturing": {
       "title": "Manufacturing",
       "description": "Bills of materials, routings, and work orders that build finished goods from components."

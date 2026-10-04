@@ -5690,6 +5690,10 @@
       "title": "Leitura de códigos de barras",
       "description": "Leia códigos de produtos e locais para identificar itens e registrar operações de armazém."
     },
+    "itemVariants": {
+      "title": "Variações de item",
+      "description": "Venda produtos com opções como tamanho e cor, com cada combinação como um item próprio para estoque, preços e vendas."
+    },
     "manufacturing": {
       "title": "Manufatura",
       "description": "Listas de materiais, roteiros e ordens de produção que fabricam produtos acabados a partir de componentes."
