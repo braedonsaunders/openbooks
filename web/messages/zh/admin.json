@@ -956,6 +956,7 @@
       "ap": "应付账款",
       "ar": "应收账款",
       "usage": "按用量计费",
+      "autopay": "自动扣款",
       "reports": "报表",
       "budgets": "预算与预测",
       "allocations": "分摊",
@@ -1004,6 +1005,9 @@
     "usage_read": "查看计量用量",
     "usage_manage": "管理用量计量器、费率计划和导入的用量记录",
     "usage_bill": "为用量定价并开具订阅费用账单",
+    "payment_methods_read": "查看保存的付款方式",
+    "payment_methods_manage": "添加、设为默认和删除保存的付款方式",
+    "autopay_manage": "管理自动扣款注册、重试和暂停",
     "reports_read": "查看报表",
     "reports_create": "创建并保存报表",
     "reports_schedule": "安排报表发送",
@@ -5864,6 +5868,10 @@
     "onlinePayments": {
       "title": "在线支付",
       "description": "发票上的托管支付链接（Stripe / Adyen / GoCardless 银行扣款）、附加费规则以及自动核销收款的 Webhook。"
+    },
+    "autopay": {
+      "title": "自动扣款",
+      "description": "保存的付款方式、对到期发票的自动托收与重试，以及最终失败时的暂停。需要在线支付。"
     },
     "subcontractorCompliance": {
       "title": "分包商合规",

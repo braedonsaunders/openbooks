@@ -956,6 +956,7 @@
       "ap": "Kreditorenbuchhaltung",
       "ar": "Debitorenbuchhaltung",
       "usage": "Nutzungsabrechnung",
+      "autopay": "Automatische Abbuchung",
       "reports": "Berichte",
       "budgets": "Budgets & Prognosen",
       "insights": "Insights",
@@ -1004,6 +1005,9 @@
     "usage_read": "Gemessene Nutzung anzeigen",
     "usage_manage": "Nutzungsmesser, Tarifpläne und importierte Nutzungsdatensätze verwalten",
     "usage_bill": "Nutzung tarifieren und Abonnementgebühren abrechnen",
+    "payment_methods_read": "Gespeicherte Zahlungsmethoden ansehen",
+    "payment_methods_manage": "Gespeicherte Zahlungsmethoden hinzufügen, als Standard festlegen und entfernen",
+    "autopay_manage": "Automatische Abbuchung, Wiederholungen und Sperrung verwalten",
     "reports_read": "Berichte anzeigen",
     "reports_create": "Berichte erstellen und speichern",
     "reports_schedule": "Berichtszustellung planen",
@@ -5692,6 +5696,10 @@
     "onlinePayments": {
       "title": "Online-Zahlungen",
       "description": "Gehostete Zahlungslinks auf Rechnungen (Stripe / Adyen / GoCardless-Lastschrift), Entgeltregeln und Webhooks, die Zahlungseingänge automatisch zuordnen."
+    },
+    "autopay": {
+      "title": "Automatische Abbuchung",
+      "description": "Gespeicherte Zahlungsmethoden, automatischer Einzug fälliger Rechnungen mit Wiederholungen und Sperrung bei endgültigem Fehlschlagen. Erfordert Online-Zahlungen."
     },
     "advancedClose": {
       "title": "Erweiterte Abschlusssteuerung",

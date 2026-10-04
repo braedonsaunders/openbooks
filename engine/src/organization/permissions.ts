@@ -40,6 +40,13 @@ export const PERMISSION_CATALOGUE = [
   "usage.read",
   "usage.manage",
   "usage.bill",
+  // Automatic collection: stored payment methods and autopay enrollment.
+  // Reading a method shows only brand, last four and expiry — full
+  // credentials never leave the provider — while managing methods,
+  // enrollments and retries moves money and needs its own authority.
+  "payment_methods.read",
+  "payment_methods.manage",
+  "autopay.manage",
   // Customer relationship management
   "crm.accounts.read",
   "crm.accounts.create",
@@ -388,6 +395,15 @@ export const PERMISSION_GROUPS: {
       { key: "ar.approve", labelKey: permissionLabelKey("ar.approve") },
       { key: "ar.post", labelKey: permissionLabelKey("ar.post") },
       { key: "ar.pay", labelKey: permissionLabelKey("ar.pay") },
+    ],
+  },
+  {
+    key: "autopay",
+    labelKey: "permissions.groups.autopay",
+    permissions: [
+      { key: "payment_methods.read", labelKey: permissionLabelKey("payment_methods.read") },
+      { key: "payment_methods.manage", labelKey: permissionLabelKey("payment_methods.manage") },
+      { key: "autopay.manage", labelKey: permissionLabelKey("autopay.manage") },
     ],
   },
   {
@@ -787,6 +803,9 @@ export const BUILT_IN_ROLES: Record<
       "usage.read",
       "usage.manage",
       "usage.bill",
+      "payment_methods.read",
+      "payment_methods.manage",
+      "autopay.manage",
       "crm.accounts.read",
       "crm.accounts.create",
       "crm.accounts.manage",
@@ -909,6 +928,9 @@ export const BUILT_IN_ROLES: Record<
       "usage.read",
       "usage.manage",
       "usage.bill",
+      "payment_methods.read",
+      "payment_methods.manage",
+      "autopay.manage",
       "reports.read",
       "reports.create",
       "budgets.read",
@@ -981,6 +1003,7 @@ export const BUILT_IN_ROLES: Record<
       "ar.read",
       "ar.approve",
       "usage.read",
+      "payment_methods.read",
       "resourcing.read",
       "flows.approve",
       "reports.read",
@@ -1015,7 +1038,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "payment_methods.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -1025,7 +1048,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
@@ -1042,7 +1065,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
