@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   uniqueIndex,
@@ -114,4 +115,77 @@ export const fairValuePrices = pgTable(
     ...auditColumns,
   },
   (t) => [index("fair_value_item").on(t.itemId, t.currency, t.effectiveFrom)],
+);
+
+/**
+ * What a revenue contract covers. Invoice scope is one contract per invoice
+ * (the historical shape); order and subscription scopes accumulate every
+ * billing of one sales order or subscription into a single contract, with
+ * the contract asset/liability position netted across all of them.
+ */
+export const REVENUE_CONTRACT_SCOPES = ["invoice", "order", "subscription"] as const;
+
+/**
+ * A revenue contract (ASC 606 / IFRS 15): the commercial agreement behind
+ * one or more billings. Scoped contracts accumulate billed consideration in
+ * totalConsideration and record each billing in revenueContractBillings, so
+ * recognized revenue can be presented net of billings per contract.
+ */
+export const revenueContracts = pgTable(
+  "revenue_contracts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    customerId: uuid("customer_id").notNull(),
+    contractNumber: text("contract_number").notNull(),
+    status: text("status").notNull().default("draft"),
+    startsOn: date("starts_on"),
+    endsOn: date("ends_on"),
+    totalTransactionPrice: money("total_transaction_price").notNull().default("0"),
+    memo: text("memo"),
+    currency: text("currency"),
+    projectId: uuid("project_id"),
+    pricing: jsonb("pricing").notNull().default({}),
+    subsidiaryId: uuid("subsidiary_id"),
+    revision: integer("revision").notNull().default(1),
+    lastChangeId: uuid("last_change_id"),
+    parentContractId: uuid("parent_contract_id"),
+    idempotencyKey: text("idempotency_key"),
+    scope: text("scope", { enum: REVENUE_CONTRACT_SCOPES }).notNull().default("invoice"),
+    sourceDocumentId: uuid("source_document_id"),
+    subscriptionId: uuid("subscription_id"),
+    /** Billed consideration accumulated across every billing of this contract. */
+    totalConsideration: money("total_consideration").notNull().default("0"),
+    /** Count of billings after the one that created the contract. */
+    modificationSeq: integer("modification_seq").notNull().default(0),
+    ...auditColumns,
+  },
+  (t) => [
+    index("revenue_contracts_org_scope").on(t.orgId, t.scope),
+    index("revenue_contracts_source_document").on(t.orgId, t.sourceDocumentId),
+    index("revenue_contracts_subscription").on(t.orgId, t.subscriptionId),
+  ],
+);
+
+/**
+ * The billed leg of a revenue contract: one row per billing document posted
+ * against the contract. Recognized revenue in excess of these billings is a
+ * contract asset; billings in excess of recognized revenue are a contract
+ * liability, netted per contract at period end.
+ */
+export const revenueContractBillings = pgTable(
+  "revenue_contract_billings",
+  {
+    id: id(),
+    orgId: orgRef(),
+    contractId: uuid("contract_id").notNull(),
+    documentId: uuid("document_id").notNull(),
+    amount: money("amount").notNull(),
+    billedOn: date("billed_on").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    index("revenue_contract_billings_contract").on(t.orgId, t.contractId),
+    uniqueIndex("revenue_contract_billings_document_unique").on(t.orgId, t.documentId),
+  ],
 );
