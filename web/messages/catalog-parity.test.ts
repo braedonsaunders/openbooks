@@ -547,6 +547,8 @@ const COGNATES = new Set<string>([
   'de:data.nav.group|Import & Export',
   'de:data.nav.import|Import',
   'fr:admin.setup.entities.classes.title|Classes',
+  'fr:admin.setup.entities.promotions.singular|Promotion',
+  'fr:admin.setup.entities.promotions.title|Promotions',
   'fr:admin.setup.entities.segment-definitions.title|Segments',
   'fr:admin.setup.groups.agents|Agents',
   'fr:admin.setup.groups.dimensions|Dimensions',

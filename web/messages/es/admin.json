@@ -1021,6 +1021,7 @@
     "manufacturing_read": "Ver registros de fabricación",
     "manufacturing_manage": "Administrar datos maestros y órdenes de fabricación",
     "orders_fulfill": "Preparar, empaquetar y enviar pedidos",
+    "returns_waive_fee": "Eximir cargos por reposición en devoluciones",
     "projects_read": "Ver proyectos y costeo de trabajos",
     "projects_manage": "Crear y editar proyectos",
     "resourcing_read": "Ver asignaciones y solicitudes de recursos",
@@ -1928,6 +1929,7 @@
       "taxes": "Impuestos",
       "dimensions": "Dimensiones",
       "billing": "Facturación y numeración",
+      "sales": "Ventas",
       "workforce": "Personal",
       "assets": "Activos",
       "currency": "Moneda",
@@ -3085,16 +3087,32 @@
       "dunning-policies": {
         "title": "Políticas",
         "description": "Cobre cuentas pendientes y gestione la facturación en un único espacio de trabajo."
+      },
+      "promotions": {
+        "title": "Promociones",
+        "singular": "Promoción",
+        "description": "Códigos de descuento y campañas para las líneas de venta."
+      },
+      "restocking-fee-policies": {
+        "title": "Cargos por reposición",
+        "singular": "Cargo por reposición",
+        "description": "Reglas de cargos aplicadas a devoluciones inspeccionadas, por artículo, categoría o valor general."
       }
     },
     "fields": {
       "aggregation": "Agregación",
       "addressLine1": "Dirección, línea 1",
       "addressLine2": "Dirección, línea 2",
+      "buyQuantity": "Cantidad de compra",
       "city": "Ciudad",
+      "discountAccountId": "Cuenta de descuentos",
+      "getQuantity": "Cantidad gratuita",
+      "incomeAccountId": "Cuenta de ingresos",
       "postalCode": "Código postal",
       "stockLocationId": "Ubicación de existencias",
       "status": "Estado",
+      "usageLimit": "Límite de usos",
+      "waivable": "Eximible",
       "warehouseId": "Almacén",
       "strategy": "Estrategia",
       "targetLocationId": "Ubicación de destino",
@@ -5637,6 +5655,10 @@
     "orders": {
       "title": "Cotizaciones y pedidos",
       "description": "Presupuestos, pedidos de venta y órdenes de compra con conversión a facturas."
+    },
+    "promotions": {
+      "title": "Promociones",
+      "description": "Códigos de descuento y campañas aplicados a los documentos de venta, con informe de rendimiento."
     },
     "revenueRecognition": {
       "title": "Reconocimiento de ingresos",

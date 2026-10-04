@@ -1021,6 +1021,7 @@
     "manufacturing_read": "Consulter les données de fabrication",
     "manufacturing_manage": "Gérer les référentiels et les ordres de fabrication",
     "orders_fulfill": "Préparer, emballer et expédier les commandes",
+    "returns_waive_fee": "Exonérer les frais de restockage sur les retours",
     "projects_read": "Consulter les projets et le coût de revient",
     "projects_manage": "Créer et modifier des projets",
     "resourcing_read": "Consulter les affectations et demandes de ressources",
@@ -1928,6 +1929,7 @@
       "taxes": "Taxes",
       "dimensions": "Dimensions",
       "billing": "Facturation et numérotation",
+      "sales": "Ventes",
       "workforce": "Main-d'œuvre",
       "assets": "Actifs",
       "currency": "Devise",
@@ -3085,16 +3087,32 @@
       "dunning-policies": {
         "title": "Politiques",
         "description": "Recouvrez les créances et gérez la facturation dans un espace de travail unique."
+      },
+      "promotions": {
+        "title": "Promotions",
+        "singular": "Promotion",
+        "description": "Codes de réduction et campagnes appliqués aux lignes de vente."
+      },
+      "restocking-fee-policies": {
+        "title": "Frais de restockage",
+        "singular": "Frais de restockage",
+        "description": "Règles de frais appliquées aux retours inspectés, par article, catégorie ou défaut."
       }
     },
     "fields": {
       "aggregation": "Agrégation",
       "addressLine1": "Adresse, ligne 1",
       "addressLine2": "Adresse, ligne 2",
+      "buyQuantity": "Quantité achetée",
       "city": "Ville",
+      "discountAccountId": "Compte de réductions",
+      "getQuantity": "Quantité offerte",
+      "incomeAccountId": "Compte de produits",
       "postalCode": "Code postal",
       "stockLocationId": "Emplacement de stock",
       "status": "Statut",
+      "usageLimit": "Limite d'utilisation",
+      "waivable": "Exonérable",
       "warehouseId": "Entrepôt",
       "strategy": "Stratégie",
       "targetLocationId": "Emplacement cible",
@@ -5637,6 +5655,10 @@
     "orders": {
       "title": "Devis et commandes",
       "description": "Devis, commandes client et bons de commande convertibles en factures."
+    },
+    "promotions": {
+      "title": "Promotions",
+      "description": "Codes de réduction et campagnes appliqués aux documents de vente, avec rapport de performance."
     },
     "revenueRecognition": {
       "title": "Reconnaissance des revenus",

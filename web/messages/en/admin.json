@@ -1021,6 +1021,7 @@
     "manufacturing_read": "View manufacturing records",
     "manufacturing_manage": "Manage manufacturing masters and work orders",
     "orders_fulfill": "Pick, pack, and ship orders",
+    "returns_waive_fee": "Waive restocking fees on returns",
     "projects_read": "View projects and job costing",
     "projects_manage": "Create and edit projects",
     "resourcing_read": "View resource assignments and requests",
@@ -1973,6 +1974,7 @@
       "taxes": "Taxes",
       "dimensions": "Dimensions",
       "billing": "Billing & numbering",
+      "sales": "Sales",
       "workforce": "Workforce",
       "assets": "Assets",
       "currency": "Currency",
@@ -3130,16 +3132,32 @@
       "dunning-policies": {
         "title": "Policies",
         "description": "Collect receivables and manage billing in one workspace."
+      },
+      "promotions": {
+        "title": "Promotions",
+        "singular": "Promotion",
+        "description": "Discount codes and campaigns applied to sales document lines."
+      },
+      "restocking-fee-policies": {
+        "title": "Restocking fees",
+        "singular": "Restocking fee",
+        "description": "Fee rules charged on inspected returns, by item, category, or default."
       }
     },
     "fields": {
       "aggregation": "Aggregation",
       "addressLine1": "Address line 1",
       "addressLine2": "Address line 2",
+      "buyQuantity": "Buy quantity",
       "city": "City",
+      "discountAccountId": "Discount account",
+      "getQuantity": "Free quantity",
+      "incomeAccountId": "Income account",
       "postalCode": "Postal code",
       "stockLocationId": "Stock location",
       "status": "Status",
+      "usageLimit": "Usage limit",
+      "waivable": "Waivable",
       "warehouseId": "Warehouse",
       "strategy": "Strategy",
       "targetLocationId": "Target location",
@@ -5629,6 +5647,10 @@
     "orders": {
       "title": "Quotes & orders",
       "description": "Estimates, sales orders, and purchase orders with conversion to invoices and bills."
+    },
+    "promotions": {
+      "title": "Promotions",
+      "description": "Discount codes and campaigns applied to sales documents, with promotion performance reporting."
     },
     "revenueRecognition": {
       "title": "Revenue recognition",

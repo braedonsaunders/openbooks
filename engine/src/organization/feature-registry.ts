@@ -148,6 +148,9 @@ export const FEATURES: FeatureDef[] = [
   { key: 'dropShipping', defaultEnabled: false, category: 'operations', requiresAll: ['orders', 'inventory'] },
   { key: 'returnAuthorizations', defaultEnabled: false, category: 'operations', navModules: ['returns'], requiresAll: ['fulfillment'] },
   { key: 'customerPartNumbers', defaultEnabled: false, category: 'sales', requiresAll: ['orders'] },
+  // Discount codes and campaigns captured on sales document lines, with
+  // promotion performance reporting. Needs order entry to discount against.
+  { key: 'promotions', defaultEnabled: false, category: 'sales', requiresAll: ['orders'] },
   { key: 'barcodeScanning', defaultEnabled: false, category: 'operations', requiresAll: ['inventory'] },
   // Item variants: product families with ordered options whose combinations
   // become ordinary variant items. Needs the item catalog's stocked kinds.

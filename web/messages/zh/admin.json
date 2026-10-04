@@ -1032,6 +1032,7 @@
     "manufacturing_read": "查看制造记录",
     "manufacturing_manage": "管理制造主数据和工单",
     "orders_fulfill": "订单拣货、包装和发运",
+    "returns_waive_fee": "免除退货的重新入库费用",
     "projects_read": "查看项目和作业成本核算",
     "projects_manage": "创建并编辑项目",
     "resourcing_read": "查看资源分配和请求",
@@ -1973,6 +1974,7 @@
       "taxes": "税务",
       "dimensions": "维度",
       "billing": "计费与编号",
+      "sales": "销售",
       "workforce": "劳动力",
       "assets": "资产",
       "currency": "货币",
@@ -3130,16 +3132,32 @@
       "dunning-policies": {
         "title": "政策",
         "description": "在同一工作区管理应收催收与计费。"
+      },
+      "promotions": {
+        "title": "促销",
+        "singular": "促销",
+        "description": "应用于销售单据行项目的折扣码和促销活动。"
+      },
+      "restocking-fee-policies": {
+        "title": "重新入库费用",
+        "singular": "重新入库费用",
+        "description": "按商品、类别或默认规则对已检验退货收取的费用规则。"
       }
     },
     "fields": {
       "aggregation": "聚合方式",
       "addressLine1": "地址行 1",
       "addressLine2": "地址行 2",
+      "buyQuantity": "购买数量",
       "city": "城市",
+      "discountAccountId": "折扣科目",
+      "getQuantity": "免费数量",
+      "incomeAccountId": "收入科目",
       "postalCode": "邮政编码",
       "stockLocationId": "库存地点",
       "status": "状态",
+      "usageLimit": "使用次数上限",
+      "waivable": "可免除",
       "warehouseId": "仓库",
       "strategy": "策略",
       "targetLocationId": "目标地点",
@@ -5637,6 +5655,10 @@
     "orders": {
       "title": "报价与订单",
       "description": "报价单、销售订单与采购订单，可转为发票与账单。"
+    },
+    "promotions": {
+      "title": "促销",
+      "description": "应用于销售单据的折扣码和促销活动，并提供促销效果报表。"
     },
     "revenueRecognition": {
       "title": "收入确认",

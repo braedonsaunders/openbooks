@@ -1021,6 +1021,7 @@
     "manufacturing_read": "Fertigungsdaten anzeigen",
     "manufacturing_manage": "Fertigungsstammdaten und Fertigungsaufträge verwalten",
     "orders_fulfill": "Aufträge kommissionieren, verpacken und versenden",
+    "returns_waive_fee": "Wiedereinlagerungsgebühren bei Retouren erlassen",
     "projects_read": "Projekte und Auftragskalkulation anzeigen",
     "projects_manage": "Projekte erstellen und bearbeiten",
     "resourcing_read": "Ressourcenzuweisungen und -anfragen anzeigen",
@@ -2252,6 +2253,7 @@
       "taxes": "Steuern",
       "dimensions": "Dimensionen",
       "billing": "Fakturierung & Nummerierung",
+      "sales": "Verkauf",
       "workforce": "Personal",
       "assets": "Anlagen",
       "currency": "Währung",
@@ -3205,16 +3207,32 @@
       "dunning-policies": {
         "title": "Richtlinien",
         "description": "Forderungen einziehen und Abrechnung in einem Arbeitsbereich verwalten."
+      },
+      "promotions": {
+        "title": "Aktionen",
+        "singular": "Aktion",
+        "description": "Rabattcodes und Kampagnen für die Belegzeilen im Verkauf."
+      },
+      "restocking-fee-policies": {
+        "title": "Wiedereinlagerungsgebühren",
+        "singular": "Wiedereinlagerungsgebühr",
+        "description": "Gebührenregeln für geprüfte Retouren, je Artikel, Kategorie oder Standard."
       }
     },
     "fields": {
       "aggregation": "Aggregation",
       "addressLine1": "Adresszeile 1",
       "addressLine2": "Adresszeile 2",
+      "buyQuantity": "Kaufmenge",
       "city": "Ort",
+      "discountAccountId": "Rabattkonto",
+      "getQuantity": "Gratismenge",
+      "incomeAccountId": "Erlöskonto",
       "postalCode": "Postleitzahl",
       "stockLocationId": "Lagerort",
       "status": "Zustand",
+      "usageLimit": "Nutzungslimit",
+      "waivable": "Erlassfähig",
       "warehouseId": "Lager",
       "strategy": "Strategie",
       "targetLocationId": "Ziellagerort",
@@ -5837,6 +5855,10 @@
     "orders": {
       "description": "Kostenvoranschläge, Kunden- und Bestellaufträge mit Überleitung in Rechnungen und Eingangsrechnungen.",
       "title": "Angebote & Aufträge"
+    },
+    "promotions": {
+      "title": "Aktionen",
+      "description": "Rabattcodes und Kampagnen für Verkaufsbelege, mit Erfolgsauswertung je Aktion."
     },
     "projects": {
       "description": "Aufträge mit Budgets, Kalkulation, Abrechnung und Rentabilität.",

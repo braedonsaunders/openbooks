@@ -313,6 +313,12 @@ export const documentLines = pgTable(
      * hand-priced lines (replay reads the stored unit price).
      */
     priceBasis: jsonb("price_basis"),
+    /**
+     * Promotion that produced this discount line (→ promotions). The
+     * composite tenant foreign key lives in migration 0496 rather than here
+     * so the promotions table definition does not cycle back into this file.
+     */
+    promotionId: uuid("promotion_id"),
     amount: money("amount").notNull(), // qty × price, txn currency
     taxCodeId: uuid("tax_code_id"),
     /** Mutually exclusive with tax_code_id; expands to ordered component evidence. */
