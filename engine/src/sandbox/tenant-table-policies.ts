@@ -442,6 +442,7 @@ export const TENANT_TABLE_POLICIES = {
   "payment_attempts": "clone:catalog-uuid-rebase",
   "payment_bank_profiles": "clone:catalog-uuid-rebase",
   "payment_cards": "clone:catalog-uuid-rebase",
+  "payment_disputes": "clone:catalog-uuid-rebase",
   "payment_events": "clone:catalog-uuid-rebase",
   "payment_file_deliveries": "clone:catalog-uuid-rebase",
   "payment_files": "clone:catalog-uuid-rebase",

@@ -1,0 +1,4 @@
+Widens the PSP provider checks to admit Shopify Payments and PayPal, adds
+refund-policy/pull/FX-evidence columns (all nullable or defaulted), and adds
+the payment_disputes table. Every existing row satisfies the wider checks, so
+no tenant data is read, rewritten, or deleted.

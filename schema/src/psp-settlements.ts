@@ -1,11 +1,13 @@
 import {
   date,
   index,
+  jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 /** Providers that support hosted customer payment acceptance (checkout + webhooks). */
@@ -49,5 +51,53 @@ export const paymentLinks = pgTable(
   (t) => [
     uniqueIndex("payment_links_token").on(t.token),
     index("payment_links_doc").on(t.orgId, t.documentId, t.status),
+  ],
+);
+
+/** Settlement provider kinds, widened by migration 0497 with Shopify Payments and PayPal. */
+export const PSP_SETTLEMENT_PROVIDERS = [
+  "stripe",
+  "adyen",
+  "gocardless",
+  "recurly",
+  "chargebee",
+  "shopify_payments",
+  "paypal",
+] as const;
+
+/**
+ * Provider refund/dispute automation ledger: one row per provider event with
+ * status history and posted documents. The customer links through the payment
+ * attempt and receipt documents, never a party column.
+ */
+export const paymentDisputes = pgTable(
+  "payment_disputes",
+  {
+    id: id(),
+    orgId: orgRef(),
+    provider: text("provider").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    kind: text("kind", { enum: ["refund", "dispute"] }).notNull(),
+    status: text("status", {
+      enum: ["pending_review", "posted", "rejected", "opened", "won", "lost"],
+    }).notNull(),
+    attemptId: uuid("attempt_id"),
+    receiptDocumentId: uuid("receipt_document_id"),
+    invoiceDocumentId: uuid("invoice_document_id"),
+    currency: currencyCode("currency").notNull(),
+    amount: money("amount").notNull(),
+    feeAmount: money("fee_amount").notNull().default("0"),
+    providerRef: text("provider_ref"),
+    reason: text("reason"),
+    statusHistory: jsonb("status_history").notNull().default([]),
+    documentsPosted: jsonb("documents_posted").notNull().default([]),
+    reviewedBy: uuid("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("payment_disputes_event_key").on(t.orgId, t.provider, t.providerEventId),
+    index("payment_disputes_status").on(t.orgId, t.status),
+    index("payment_disputes_attempt").on(t.orgId, t.attemptId),
   ],
 );
