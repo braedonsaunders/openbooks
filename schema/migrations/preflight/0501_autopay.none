@@ -1,0 +1,1 @@
+Creates three new autopay tables with org isolation, adds retry/final-action columns with safe defaults to dunning_policies, and widens the subscriptions status check to admit 'suspended'. No existing rows are read, rewritten or deleted, so there is nothing to preflight.
