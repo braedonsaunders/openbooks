@@ -236,6 +236,52 @@ PII inventory.
    queue with a code, the reason and a one-click remedy where one exists
    (map SKU, map location, set account, reopen period), then retried.
 
+## Experience principles
+
+Established ERPs have the capabilities this area needs and the screens nobody
+wants: every option on one form, accounting vocabulary on the first click,
+setup before value. OpenBooks matches their depth and does not copy their
+screens. Each workflow is designed from the job the operator is doing, and
+complexity sits at the depth where it is needed.
+
+1. **Three depths.** *Everyday*: state and the next action, in plain words
+   ("3 orders need a product match"). *Configure*: the settings an operator
+   changes occasionally, in the record's drawer or Settings tab. *Advanced*:
+   effective dating, overrides, per-jurisdiction rules, posting detail, in a
+   `DisclosureSection` (`packages/ui/src/disclosure.tsx`) that stays collapsed
+   and summarizes what it resolves to. Advanced content that needs attention
+   is forced open.
+2. **Defaults over setup.** Connecting a channel or enabling a feature
+   proposes a complete working configuration (suggested accounts by type and
+   name, SKU auto-match, location match by name, the org's default tax
+   treatment) that the operator reviews and accepts. Nothing waits on a blank
+   form. A wizard is used once, for first connection, and its result is
+   editable in place afterwards (exemplar `web/app/(app)/admin/setup/wizard/`).
+3. **Work queues, not reports, for what needs a person.** Exceptions,
+   unmatched products, failed collections and pending reviews appear as a
+   "Needs attention" queue with the reason and a one-click remedy on each row
+   (map, create, retry, approve). Fixing one similar row offers to fix all of
+   them.
+4. **Create in context.** When a mapping needs an item, account or customer
+   that does not exist, create it from the row in a drawer and return to the
+   row. Never send the operator to another module and make them come back.
+5. **Show the consequence before committing.** Posting-affecting actions show
+   what will be posted ("Debit Shopify clearing 104.50, credit Sales 95.00,
+   credit Sales tax 9.50") and what will change, before confirmation.
+   Accounting detail is available on demand and never required to proceed.
+6. **Plain language first.** Labels name the business thing ("Gift card
+   balance owed to customers"), with the accounting term as secondary text
+   where it helps. Statuses use one vocabulary across the area.
+7. **Bulk and keyboard.** Every list supports multi-select actions, filters
+   that persist in the URL, and keyboard navigation through the shared list
+   components.
+8. **Empty states teach.** An empty screen says what it is for, what will
+   appear, and the single action that starts it.
+9. **Reuse is the floor, not the ceiling.** Every screen is composed from the
+   shared components below; innovation is in the flow, the defaults and the
+   queues, not in new widgets. When a flow needs a capability the shared
+   components lack, extend the shared component.
+
 ## Screens
 
 Every screen is a `ModuleView` page with a `view.ts` spec and registered
@@ -271,3 +317,41 @@ Everything a storefront or billing system needs is reachable through
 refunds, customers upsert by external reference, available-to-sell by item
 and location, gift card balance lookup and redemption, payment method
 attach, usage records, and `external_ref` on every document create.
+
+## Roadmap beyond the foundation
+
+The foundation above is followed by capabilities that no single competing
+ERP offers natively, each built on the same contracts:
+
+- **Payout-to-order reconciliation.** Every payout (card processors,
+  storefront payments, wallets, marketplaces) broken into order, refund, fee,
+  reserve, chargeback and adjustment lines, each tied to its native document,
+  the payout tied to the bank deposit, with month-end in-transit accruals.
+- **Order economics.** Contribution margin per order line from stored,
+  additive facts: net revenue, actual cost of goods, actual processor fee,
+  shipping label cost, marketplace fees, discount and stored-value funding,
+  returns. Reported through the report engine with margin as formula
+  measures; restated when late costs arrive.
+- **Commerce close.** Daily and month-end completeness proofs: channel order
+  counts and totals against the storefront, every payout reconciled, clearing
+  accounts at zero, liability roll-forwards.
+- **Customer portal.** Invoices and pay-now, payment methods, subscription
+  changes with a proration preview, pause and cancel with reason capture,
+  usage and credit balances, order history and tracking, self-service
+  returns, gift card balance.
+- **Revenue recovery.** Decline-code-aware retries, card account updater,
+  pre-expiry outreach, backup payment methods, recovery reporting.
+- **Contract costs (ASC 340-40).** Capitalized commissions amortized over
+  the contract or expected customer life, impairment on churn, practical
+  expedient election, roll-forward and disclosure.
+- **Entitlements.** Features per plan version, subscription overrides,
+  overage policy, an entitlement API and change events.
+- **Exception assistance.** Classified exceptions with a proposed fix and its
+  evidence, applied only on approval, becoming effective-dated mappings and
+  replaying the affected events.
+- **Marketplaces, shipping and sourcing.** Marketplace channels with
+  settlement ledgers, a carrier hub (rates, labels, tracking, carrier invoice
+  audit), rule-based order sourcing with simulation.
+- **Pricing and credits.** Prepaid and promotional credits for usage pricing,
+  quote-to-cash with ramps and e-signature, payer hierarchies and
+  consolidated billing, and pricing simulation in a sandbox.
