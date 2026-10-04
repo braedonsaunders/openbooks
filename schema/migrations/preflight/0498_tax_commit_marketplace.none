@@ -1,0 +1,1 @@
+Creates two empty organization tables, one empty global reference table seeded with three cited state rules, and adds defaulted columns to two existing tables. Existing rows satisfy the new CHECK constraints through their defaults ('merchant' collection, NULL facilitator), so no tenant data is read, rewritten or deleted.
