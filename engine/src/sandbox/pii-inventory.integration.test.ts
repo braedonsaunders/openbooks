@@ -1814,6 +1814,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "revenue_contracts.idempotency_key",
   "revenue_contracts.memo",
   "revenue_contracts.pricing",
+  "revenue_contracts.scope",
   "revenue_contracts.status",
   "role_dashboard_layouts.layout",
   "role_dashboard_layouts.role_key",
