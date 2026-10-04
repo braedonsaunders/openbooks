@@ -110,6 +110,7 @@ export const EXCLUDE = new Set([
   // External Stripe identifiers and their native-row targets belong to the
   // connected account and must be linked again inside each sandbox.
   "stripe_billing_links",
+  "stripe_billing_link_skips",
   // The storage cleanup outbox holds object deletes queued against the
   // source org's files; a sandbox that replayed them would delete them.
   "storage_cleanup_outbox",

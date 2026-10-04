@@ -32,6 +32,10 @@ export const USAGE_BAND_KINDS = [
 export const USAGE_PACKAGE_ROUNDINGS = ["up", "down"] as const;
 export const USAGE_COMMIT_PERIODS = ["monthly", "annual"] as const;
 export const STRIPE_BILLING_LINK_TYPES = ["meter", "price", "customer", "subscription", "subscription_item"] as const;
+export const USAGE_RATING_CADENCES = ["billing_period", "monthly", "paused"] as const;
+export const USAGE_RATING_MODES = ["draft", "auto_commit"] as const;
+export const STRIPE_IMPORT_CADENCES = ["off", "hourly", "daily"] as const;
+export const STRIPE_SKIP_OBJECT_TYPES = ["customer", "subscription"] as const;
 
 export const usageMeters = pgTable(
   "usage_meters",
@@ -447,5 +451,92 @@ export const stripeBillingLinks = pgTable(
     check("stripe_billing_links_stripe_id_nonblank", sql`length(btrim(${t.stripeId})) > 0`),
     check("stripe_billing_links_account_nonblank", sql`length(btrim(${t.stripeAccount})) > 0`),
     foreignKey({ name: "stripe_billing_links_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+  ],
+);
+
+/** Rating schedule: one row per subscription usage link, plus at most one
+ * per-org default row (link_id NULL) that link rows override. `cadence`
+ * selects which closed window the scheduler rates; `mode` selects whether
+ * the scheduler only previews (draft) or also creates the invoice through
+ * the commit path. `last_rated_period_end` is the scheduler watermark and is
+ * only meaningful on link rows. */
+export const usageRatingSettings = pgTable(
+  "usage_rating_settings",
+  {
+    id: id(),
+    orgId: orgRef(),
+    linkId: uuid("link_id"),
+    cadence: text("cadence", { enum: USAGE_RATING_CADENCES }).notNull().default("billing_period"),
+    graceDays: integer("grace_days").notNull().default(2),
+    mode: text("mode", { enum: USAGE_RATING_MODES }).notNull().default("draft"),
+    lastRatedPeriodEnd: date("last_rated_period_end"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+  },
+  (t) => [
+    uniqueIndex("usage_rating_settings_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("usage_rating_settings_org_default_unique").on(t.orgId).where(sql`${t.linkId} is null`),
+    uniqueIndex("usage_rating_settings_org_link_unique").on(t.orgId, t.linkId).where(sql`${t.linkId} is not null`),
+    check(
+      "usage_rating_settings_cadence_valid",
+      sql`${t.cadence} in ('billing_period', 'monthly', 'paused')`,
+    ),
+    check("usage_rating_settings_grace_days_valid", sql`${t.graceDays} >= 0 and ${t.graceDays} <= 30`),
+    check("usage_rating_settings_mode_valid", sql`${t.mode} in ('draft', 'auto_commit')`),
+    check("usage_rating_settings_watermark_valid", sql`${t.lastRatedPeriodEnd} is null or ${t.linkId} is not null`),
+    foreignKey({ name: "usage_rating_settings_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_rating_settings_link_org_fk",
+      columns: [t.orgId, t.linkId],
+      foreignColumns: [subscriptionUsageLinks.orgId, subscriptionUsageLinks.id],
+    }),
+  ],
+);
+
+/** Stripe Billing import cadence: at most one row per organization. The last
+ * import time is read from sync_runs, never stored here. */
+export const stripeBillingImportSchedules = pgTable(
+  "stripe_billing_import_schedules",
+  {
+    id: id(),
+    orgId: orgRef(),
+    cadence: text("cadence", { enum: STRIPE_IMPORT_CADENCES }).notNull().default("off"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+  },
+  (t) => [
+    uniqueIndex("stripe_billing_import_schedules_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("stripe_billing_import_schedules_org_singleton_unique").on(t.orgId),
+    check("stripe_billing_import_schedules_cadence_valid", sql`${t.cadence} in ('off', 'hourly', 'daily')`),
+    foreignKey({ name: "stripe_billing_import_schedules_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+  ],
+);
+
+/** Explicit operator decisions to leave a Stripe customer or subscription
+ * unlinked. Skipped objects stay out of the unlinked triage list until
+ * unskipped; linking a skipped object removes its skip. */
+export const stripeBillingLinkSkips = pgTable(
+  "stripe_billing_link_skips",
+  {
+    id: id(),
+    orgId: orgRef(),
+    stripeAccount: text("stripe_account").notNull(),
+    objectType: text("object_type", { enum: STRIPE_SKIP_OBJECT_TYPES }).notNull(),
+    stripeId: text("stripe_id").notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+  },
+  (t) => [
+    uniqueIndex("stripe_billing_link_skips_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("stripe_billing_link_skips_object_unique").on(t.orgId, t.stripeAccount, t.objectType, t.stripeId),
+    check("stripe_billing_link_skips_type_valid", sql`${t.objectType} in ('customer', 'subscription')`),
+    check("stripe_billing_link_skips_stripe_id_nonblank", sql`length(btrim(${t.stripeId})) > 0`),
+    check("stripe_billing_link_skips_account_nonblank", sql`length(btrim(${t.stripeAccount})) > 0`),
+    foreignKey({ name: "stripe_billing_link_skips_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
   ],
 );
