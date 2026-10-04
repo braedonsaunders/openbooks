@@ -1,0 +1,1 @@
+Creates the stored-value tables (programs, accounts, entries) for gift cards and store credit. No existing tenant data is read, rewritten or deleted, and no item, document or journal row changes meaning.

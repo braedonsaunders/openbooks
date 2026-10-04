@@ -955,6 +955,7 @@
       "close": "期间与结账",
       "ap": "应付账款",
       "ar": "应收账款",
+      "stored_value": "储值",
       "usage": "按用量计费",
       "autopay": "自动扣款",
       "reports": "报表",
@@ -1002,6 +1003,9 @@
     "ar_approve": "审批或驳回发票",
     "ar_post": "将发票过账至总账",
     "ar_pay": "记录客户收款",
+    "stored_value_read": "查看礼品卡和商店信用",
+    "stored_value_manage": "发行和兑换礼品卡和商店信用",
+    "stored_value_adjust": "在单据之外调整储值余额",
     "usage_read": "查看计量用量",
     "usage_manage": "管理用量计量器、费率计划和导入的用量记录",
     "usage_bill": "为用量定价并开具订阅费用账单",
@@ -5929,6 +5933,10 @@
     "autopay": {
       "title": "自动扣款",
       "description": "保存的付款方式、对到期发票的自动托收与重试，以及最终失败时的暂停。需要在线支付。"
+    },
+    "storedValue": {
+      "title": "储值卡与商店信用",
+      "description": "将礼品卡和商店信用记为负债，支持发行、兑换、过期和余值收益确认。"
     },
     "subcontractorCompliance": {
       "title": "分包商合规",

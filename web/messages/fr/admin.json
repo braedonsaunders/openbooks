@@ -955,6 +955,7 @@
       "close": "Périodes et clôture",
       "ap": "Comptes fournisseurs",
       "ar": "Comptes clients",
+      "stored_value": "Cartes cadeaux et avoirs",
       "usage": "Facturation à l’usage",
       "autopay": "Prélèvement automatique",
       "reports": "Rapports",
@@ -1002,6 +1003,9 @@
     "ar_approve": "Approuver ou rejeter des factures",
     "ar_post": "Comptabiliser les factures au grand livre",
     "ar_pay": "Enregistrer les paiements clients",
+    "stored_value_read": "Voir les cartes cadeaux et les avoirs",
+    "stored_value_manage": "Émettre et utiliser les cartes cadeaux et les avoirs",
+    "stored_value_adjust": "Ajuster les soldes hors documents",
     "usage_read": "Consulter la consommation mesurée",
     "usage_manage": "Gérer les compteurs, les plans tarifaires et les enregistrements d'usage importés",
     "usage_bill": "Tarifer l'usage et facturer les frais d'abonnement",
@@ -5857,6 +5861,10 @@
     "autopay": {
       "title": "Prélèvement automatique",
       "description": "Moyens de paiement enregistrés, recouvrement automatique des factures échues avec relances et suspension en cas d’échec définitif. Requiert Paiements en ligne."
+    },
+    "storedValue": {
+      "title": "Cartes cadeaux et avoirs",
+      "description": "Cartes cadeaux et avoirs comptabilisés au passif, avec émission, utilisation, péremption et breakage."
     },
     "subcontractorCompliance": {
       "title": "Conformité des sous-traitants",

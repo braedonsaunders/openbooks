@@ -943,6 +943,7 @@
       "close": "Periods & close",
       "ap": "Accounts payable",
       "ar": "Accounts receivable",
+      "stored_value": "Stored value",
       "usage": "Usage billing",
       "autopay": "Autopay",
       "reports": "Reports",
@@ -991,6 +992,9 @@
     "ar_approve": "Approve or reject invoices",
     "ar_post": "Post invoices to the ledger",
     "ar_pay": "Record customer payments",
+    "stored_value_read": "View gift cards and store credit",
+    "stored_value_manage": "Issue and redeem gift cards and store credit",
+    "stored_value_adjust": "Adjust stored-value balances outside documents",
     "usage_read": "View metered usage",
     "usage_manage": "Manage usage meters, rating plans, and imported usage records",
     "usage_bill": "Rate usage and bill subscription charges",
@@ -5929,6 +5933,10 @@
     "autopay": {
       "title": "Autopay",
       "description": "Stored payment methods, automatic collection of due invoices with retries, and suspension when collection finally fails. Needs Online Payments."
+    },
+    "storedValue": {
+      "title": "Stored value",
+      "description": "Gift cards and store credit carried as liabilities, with issuance, redemption, breakage, and expiry."
     },
     "subcontractorCompliance": {
       "title": "Subcontractor compliance",

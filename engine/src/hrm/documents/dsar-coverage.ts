@@ -220,6 +220,7 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   { table: "autopay_enrollments", reason: "collection mandates; finance remit." },
   { table: "payment_mandates", reason: "financial instruments; finance remit." },
   { table: "subscription_usage_links", reason: "usage pricing config; customer counterparty." },
+  { table: "stored_value_accounts", reason: "stored-value balances; customer counterparty. Finance remit." },
   { table: "usage_prepaid_grants", reason: "prepaid balances; customer counterparty." },
   {
     table: "information_return_recipients",

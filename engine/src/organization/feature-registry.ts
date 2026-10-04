@@ -67,6 +67,10 @@ export const FEATURES: FeatureDef[] = [
   // charging of due invoices with retries, and suspension on final failure.
   // Needs onlinePayments — every charge rides a configured PSP provider.
   { key: 'autopay', defaultEnabled: false, category: 'sales', requiresAll: ['onlinePayments'] },
+  // Stored value: gift cards and store credit carried as liabilities, with
+  // issuance, redemption, breakage and expiry. Off by default — selling a
+  // gift card changes what a sale posts, so adoption is deliberate.
+  { key: 'storedValue', defaultEnabled: false, category: 'sales', navModules: ['stored-value'] },
   // Operations
   // Projects is a parent gate on the centralized Features page.
   // Schedule-of-values billing remains a project-type procedure, not a gate.

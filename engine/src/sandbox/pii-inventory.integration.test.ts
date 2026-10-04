@@ -1929,6 +1929,21 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "stock_counts.status",
   "stock_locations.code",
   "stock_locations.kind",
+  // Stored-value program names are configuration; code hashes are one-way
+  // digests unusable without the preimage, the last-four is a bearer-token
+  // fragment identifying nobody, and entry reasons are business record prose.
+  "stored_value_accounts.code_hash",
+  "stored_value_accounts.code_last4",
+  "stored_value_accounts.currency",
+  "stored_value_accounts.kind",
+  "stored_value_accounts.status",
+  "stored_value_entries.currency",
+  "stored_value_entries.idempotency_key",
+  "stored_value_entries.kind",
+  "stored_value_entries.reason",
+  "stored_value_programs.currency",
+  "stored_value_programs.kind",
+  "stored_value_programs.name",
   "stripe_billing_import_schedules.cadence",
   "subcontract_change_orders.description",
   "subcontract_change_orders.number",

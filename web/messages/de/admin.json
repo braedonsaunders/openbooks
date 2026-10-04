@@ -955,6 +955,7 @@
       "close": "Perioden & Abschluss",
       "ap": "Kreditorenbuchhaltung",
       "ar": "Debitorenbuchhaltung",
+      "stored_value": "Guthaben",
       "usage": "Nutzungsabrechnung",
       "autopay": "Automatische Abbuchung",
       "reports": "Berichte",
@@ -1002,6 +1003,9 @@
     "ar_approve": "Ausgangsrechnungen genehmigen oder ablehnen",
     "ar_post": "Ausgangsrechnungen im Hauptbuch buchen",
     "ar_pay": "Kundenzahlungen erfassen",
+    "stored_value_read": "Geschenkkarten und Guthaben ansehen",
+    "stored_value_manage": "Geschenkkarten und Guthaben ausgeben und einlösen",
+    "stored_value_adjust": "Guthaben außerhalb von Belegen anpassen",
     "usage_read": "Gemessene Nutzung anzeigen",
     "usage_manage": "Nutzungsmesser, Tarifpläne und importierte Nutzungsdatensätze verwalten",
     "usage_bill": "Nutzung tarifieren und Abonnementgebühren abrechnen",
@@ -5757,6 +5761,10 @@
     "autopay": {
       "title": "Automatische Abbuchung",
       "description": "Gespeicherte Zahlungsmethoden, automatischer Einzug fälliger Rechnungen mit Wiederholungen und Sperrung bei endgültigem Fehlschlagen. Erfordert Online-Zahlungen."
+    },
+    "storedValue": {
+      "title": "Guthaben",
+      "description": "Geschenkkarten und Ladenguthaben als Verbindlichkeiten, mit Ausgabe, Einlösung, Verfall und Erlöserfassung."
     },
     "advancedClose": {
       "title": "Erweiterte Abschlusssteuerung",
