@@ -956,6 +956,7 @@
       "ap": "Comptes fournisseurs",
       "ar": "Comptes clients",
       "usage": "Facturation à l’usage",
+      "autopay": "Prélèvement automatique",
       "reports": "Rapports",
       "budgets": "Budgets et prévisions",
       "insights": "Analyses",
@@ -1004,6 +1005,9 @@
     "usage_read": "Consulter la consommation mesurée",
     "usage_manage": "Gérer les compteurs, les plans tarifaires et les enregistrements d'usage importés",
     "usage_bill": "Tarifer l'usage et facturer les frais d'abonnement",
+    "payment_methods_read": "Voir les moyens de paiement enregistrés",
+    "payment_methods_manage": "Ajouter, définir par défaut et supprimer les moyens de paiement enregistrés",
+    "autopay_manage": "Gérer l’inscription au prélèvement automatique, les relances et la suspension",
     "reports_read": "Consulter les rapports",
     "reports_create": "Créer et enregistrer des rapports",
     "reports_schedule": "Planifier l’envoi de rapports",
@@ -5759,6 +5763,10 @@
     "onlinePayments": {
       "title": "Paiements en ligne",
       "description": "Liens de paiement hébergés sur les factures (Stripe / Adyen / prélèvement GoCardless), règles de surcharge et webhooks qui imputent automatiquement les encaissements."
+    },
+    "autopay": {
+      "title": "Prélèvement automatique",
+      "description": "Moyens de paiement enregistrés, recouvrement automatique des factures échues avec relances et suspension en cas d’échec définitif. Requiert Paiements en ligne."
     },
     "subcontractorCompliance": {
       "title": "Conformité des sous-traitants",

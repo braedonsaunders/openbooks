@@ -84,6 +84,45 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
 });
 
 /**
+ * Automatic collection duty split: reading a stored method shows only brand,
+ * last four and expiry, so every built-in role may see it; charging, retries
+ * and suspension move money and stay with finance (controller, accountant).
+ */
+test("autopay permissions are catalogued, grouped, and granted by duty", () => {
+  const keys: CataloguePermission[] = ["payment_methods.read", "payment_methods.manage", "autopay.manage"];
+  for (const perm of keys) {
+    assert.ok(
+      (PERMISSION_CATALOGUE as readonly string[]).includes(perm),
+      `${perm} must be seeded so someone can hold it`,
+    );
+    assert.equal(permissionLabelKey(perm), `permissions.${perm.replace(/\./g, "_")}`);
+  }
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "autopay");
+  assert.ok(group, "autopay needs its own catalogue group for the role picker");
+  assert.equal(group.labelKey, "permissions.groups.autopay");
+  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const perm of keys) {
+    assert.equal(holds("controller", perm), true, `controller must hold ${perm}`);
+    assert.equal(holds("accountant", perm), true, `accountant must hold ${perm}`);
+    assert.equal(holds("admin", perm), true, `admin must hold ${perm}`);
+  }
+  assert.equal(holds("approver", "payment_methods.read"), true);
+  assert.equal(holds("approver", "payment_methods.manage"), false, "approver must not move stored methods");
+  assert.equal(holds("approver", "autopay.manage"), false, "approver must not run collection");
+  assert.equal(holds("viewer", "payment_methods.read"), true);
+  assert.equal(holds("viewer", "autopay.manage"), false);
+  for (const role of ["sales_manager", "sales_rep"]) {
+    assert.equal(holds(role, "payment_methods.read"), true, `${role} must see the method on file for support`);
+    assert.equal(holds(role, "payment_methods.manage"), false, `${role} must not move stored methods`);
+    assert.equal(holds(role, "autopay.manage"), false, `${role} must not run collection`);
+  }
+  assert.equal(holds("production", "payment_methods.read"), false, "production stays out of collections");
+});
+
+/**
  * HRM employment foundation slice plus the headcount-plan slice: read sees
  * records, manage authors changes, approve decides them (self-approval
  * refused in engine/src/hrm/authorization.ts); position read sees the
