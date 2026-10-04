@@ -244,6 +244,24 @@ interface GuardedPartyRef {
  */
 const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
   {
+    // One default method per customer backs the autopay charge target. Keep
+    // the absorbed party's default with it when the survivor already has
+    // one instead of violating the default uniqueness or dropping either.
+    table: "customer_payment_methods",
+    column: "party_id",
+    conflict: "s.org_id = d.org_id and s.is_default and d.is_default",
+  },
+  {
+    // One active customer-level enrollment per customer. A conflicting
+    // enrollment stays on the absorbed party; subscription-scoped rows never
+    // conflict (uniqueness is per subscription) and always move.
+    table: "autopay_enrollments",
+    column: "party_id",
+    conflict:
+      "s.org_id = d.org_id and s.subscription_id is null and d.subscription_id is null" +
+      " and s.status = 'active' and d.status = 'active'",
+  },
+  {
     // A customer can have only one row per SKU and one row per item. Keep a
     // conflicting mapping with the absorbed party instead of dropping either.
     table: "customer_item_refs",
