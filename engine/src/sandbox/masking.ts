@@ -152,6 +152,10 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // The network brand ("Visa") stays: it identifies nobody.
   { tableName: "payment_cards", columnName: "label", transform: "faker_name" },
   { tableName: "payment_cards", columnName: "last_four", transform: "null_out" },
+  // Stored autopay methods carry the same card tail as corporate cards: null
+  // it like every other last four. The brand ("Visa") stays allow-listed —
+  // it identifies nobody — as do the opaque provider customer/method ids.
+  { tableName: "customer_payment_methods", columnName: "last4", transform: "null_out" },
   { tableName: "parties", columnName: "email", transform: "faker_email" },
   { tableName: "parties", columnName: "display_name", transform: "faker_name" },
   { tableName: "parties", columnName: "legal_name", transform: "faker_name" },
