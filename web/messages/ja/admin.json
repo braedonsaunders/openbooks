@@ -956,6 +956,7 @@
       "ap": "買掛金",
       "ar": "売掛金",
       "usage": "従量課金",
+      "autopay": "自動引き落とし",
       "reports": "レポート",
       "budgets": "予算と予測",
       "insights": "インサイト",
@@ -1004,6 +1005,9 @@
     "usage_read": "計測された利用量を表示",
     "usage_manage": "使用量メーター、料金プラン、インポートした使用量レコードを管理",
     "usage_bill": "使用量を料金計算し、サブスクリプション料金を請求",
+    "payment_methods_read": "保存した支払方法を表示",
+    "payment_methods_manage": "保存した支払方法の追加、デフォルト設定、削除",
+    "autopay_manage": "自動引き落としの登録、リトライ、利用停止を管理",
     "reports_read": "レポートを表示",
     "reports_create": "レポートを作成および保存",
     "reports_schedule": "レポート配信をスケジュール",
@@ -5659,6 +5663,10 @@
     "onlinePayments": {
       "title": "オンライン決済",
       "description": "請求書のホスト型決済リンク（Stripe / Adyen / GoCardless銀行引落）、サーチャージルール、入金を自動消込するWebhook。"
+    },
+    "autopay": {
+      "title": "自動引き落とし",
+      "description": "保存した支払方法による期日請求書の自動回収、リトライ、最終的な失敗時の利用停止。オンライン決済が必要です。"
     },
     "advancedClose": {
       "title": "高度な決算管理",

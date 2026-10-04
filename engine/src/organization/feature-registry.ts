@@ -62,6 +62,11 @@ export const FEATURES: FeatureDef[] = [
   // auto-apply receipts to open items. Off by default — manual receipts and
   // payment files work without it.
   { key: 'onlinePayments', defaultEnabled: false, category: 'sales' },
+  // Automatic collection: stored payment methods (card on file, bank-debit
+  // mandates), autopay enrollment per customer or subscription, scheduled
+  // charging of due invoices with retries, and suspension on final failure.
+  // Needs onlinePayments — every charge rides a configured PSP provider.
+  { key: 'autopay', defaultEnabled: false, category: 'sales', requiresAll: ['onlinePayments'] },
   // Operations
   // Projects is a parent gate on the centralized Features page.
   // Schedule-of-values billing remains a project-type procedure, not a gate.

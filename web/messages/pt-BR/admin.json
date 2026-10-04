@@ -956,6 +956,7 @@
       "ap": "Contas a pagar",
       "ar": "Contas a receber",
       "usage": "Faturamento por uso",
+      "autopay": "Cobrança automática",
       "reports": "Relatórios",
       "budgets": "Orçamentos e previsões",
       "allocations": "Rateios",
@@ -1004,6 +1005,9 @@
     "usage_read": "Ver o uso medido",
     "usage_manage": "Gerenciar medidores, planos de tarifas e registros de uso importados",
     "usage_bill": "Tarifar o uso e faturar cobranças de assinatura",
+    "payment_methods_read": "Ver métodos de pagamento salvos",
+    "payment_methods_manage": "Adicionar, definir como padrão e remover métodos de pagamento salvos",
+    "autopay_manage": "Gerenciar inscrição na cobrança automática, tentativas e suspensão",
     "reports_read": "Ver relatórios",
     "reports_create": "Criar e salvar relatórios",
     "reports_schedule": "Agendar entrega de relatórios",
@@ -5831,6 +5835,10 @@
     "onlinePayments": {
       "title": "Pagamentos online",
       "description": "Links de pagamento hospedados nas faturas (Stripe / Adyen / débito GoCardless), regras de tarifa e webhooks que baixam recebimentos automaticamente."
+    },
+    "autopay": {
+      "title": "Cobrança automática",
+      "description": "Métodos de pagamento salvos, cobrança automática de faturas vencidas com tentativas e suspensão em caso de falha definitiva. Requer Pagamentos online."
     },
     "subcontractorCompliance": {
       "title": "Conformidade de subcontratados",

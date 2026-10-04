@@ -956,6 +956,7 @@
       "ap": "Cuentas por pagar",
       "ar": "Cuentas por cobrar",
       "usage": "Facturación por uso",
+      "autopay": "Cobro automático",
       "reports": "Informes",
       "budgets": "Presupuestos y pronósticos",
       "insights": "Análisis",
@@ -1004,6 +1005,9 @@
     "usage_read": "Ver el uso medido",
     "usage_manage": "Gestionar medidores, planes de tarifas y registros de uso importados",
     "usage_bill": "Tarifar el uso y facturar cargos de suscripción",
+    "payment_methods_read": "Ver métodos de pago guardados",
+    "payment_methods_manage": "Añadir, establecer por defecto y eliminar métodos de pago guardados",
+    "autopay_manage": "Gestionar la inscripción al cobro automático, los reintentos y la suspensión",
     "reports_read": "Ver informes",
     "reports_create": "Crear y guardar informes",
     "reports_schedule": "Programar el envío de informes",
@@ -5759,6 +5763,10 @@
     "onlinePayments": {
       "title": "Pagos en línea",
       "description": "Enlaces de pago alojados en facturas (Stripe / Adyen / domiciliación GoCardless), reglas de recargo y webhooks que aplican los cobros automáticamente."
+    },
+    "autopay": {
+      "title": "Cobro automático",
+      "description": "Métodos de pago guardados, cobro automático de facturas vencidas con reintentos y suspensión ante el fallo definitivo. Requiere Pagos en línea."
     },
     "subcontractorCompliance": {
       "title": "Cumplimiento de subcontratistas",
