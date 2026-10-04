@@ -61,7 +61,10 @@ export const subscriptions = pgTable(
     quantity: money("quantity").notNull().default("1"),
     /** Overrides the plan amount when set (negotiated price). */
     priceOverride: money("price_override"),
-    status: text("status", { enum: ["active", "paused", "canceled"] })
+    // Suspended is collections-driven (failed autopay after the final retry):
+    // billing stops like paused, but the contract stays for reactivation on
+    // the next successful payment. Paused remains the operator control.
+    status: text("status", { enum: ["active", "paused", "suspended", "canceled"] })
       .notNull()
       .default("active"),
     startOn: date("start_on").notNull(),
