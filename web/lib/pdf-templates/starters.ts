@@ -139,57 +139,79 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
 }
 
 /** Debit/credit starter for journal entries. */
-function payStubStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
+/**
+ * The payroll-bureau stub employees already know: company block, an address
+ * block that sits in a #10 window envelope, a tear rule, then the statement
+ * of earnings in two columns — earnings and hours beside the employee's
+ * banks, income-tax withholdings beside taxable company items, then every
+ * other deduction as an adjustment to net pay. Every row carries its
+ * year-to-date figure. Plain black-and-grey on purpose: it is a pay record,
+ * not a branded sales document. Employers restyle it in the designer.
+ */
+function payStubStarter(): StarterTemplate {
+  const STUB_INK = '#111111'
+  const cell = 'padding:1px 0;font-size:9.5px;line-height:1.35;vertical-align:top;'
+  const num = `${cell}text-align:right;white-space:nowrap;`
+  const head = (label: string, align = 'left', width?: string) =>
+    `<th style="text-align:${align};${width ? `width:${width};` : ''}padding:0 0 2px;font-size:9px;font-weight:700;color:${STUB_INK};border-bottom:1px solid ${STUB_INK};">${label}</th>`
+  const subtotal = (current: string, ytd: string, leadCols: number) =>
+    `<tr><td colspan="${leadCols}"></td>` +
+    `<td style="${num}border-top:1px solid ${STUB_INK};padding-top:3px;font-size:9px;">{{${current}}}</td>` +
+    `<td style="${num}border-top:1px solid ${STUB_INK};padding-top:3px;font-size:9px;">{{${ytd}}}</td></tr>`
+  const section = (title: string, collection: string, totals: [string, string] | null) =>
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;"><tbody>` +
+    `<tr>${head(title)}${head('Current', 'right', '70px')}${head('YTD Amount', 'right', '78px')}</tr>` +
+    `<tr data-each="${collection}"><td style="${cell}">{{description}}</td><td style="${num}">{{current}}</td><td style="${num}">{{ytd_amount}}</td></tr>` +
+    (totals ? subtotal(totals[0], totals[1], 1) : '') +
+    `</tbody></table>`
+
   const sourceHtml =
-    `<div style="${FONT}color:${INK};">` +
-    `<table style="width:100%;border-collapse:collapse;margin:0 0 6px;"><tbody><tr>` +
-    `<td style="vertical-align:bottom;"><div style="font-size:19px;font-weight:800;color:${accent};">{{org_name}}</div></td>` +
-    `<td style="vertical-align:bottom;text-align:right;">` +
-    `<div style="font-size:26px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;color:${INK};">${meta.docTitle}</div>` +
-    `<div style="font-size:12px;color:${MUTED};padding-top:2px;">{{document_number}}</div>` +
+    `<div style="${FONT}color:${STUB_INK};">` +
+    // ---- company block ----------------------------------------------------
+    `<div style="font-size:11px;font-weight:700;font-style:italic;color:${STUB_INK};">{{org_name}}</div>` +
+    // ---- window-envelope address block ------------------------------------
+    `<div style="margin:96px 0 0 52px;min-height:86px;font-size:11.5px;line-height:1.5;">` +
+    `<div>{{employee_name}}</div>` +
+    `<div>{{employee_address_line1}}</div>` +
+    `<div data-if="employee_address_line2">{{employee_address_line2}}</div>` +
+    `<div>{{employee_address_locality}}</div>` +
+    `</div>` +
+    // ---- tear rule + header ------------------------------------------------
+    `<div style="border-top:1px dashed ${STUB_INK};margin:30px 0 8px;"></div>` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody><tr>` +
+    `<td style="font-size:10px;">Employee Paystub</td>` +
+    `<td style="font-size:10px;">Cheque number: {{cheque_number}}</td>` +
+    `<td style="font-size:10px;">Pay Period: {{period_start}} to {{period_end}}</td>` +
+    `<td style="font-size:10px;text-align:right;">Cheque Date: {{pay_date}}</td>` +
+    `</tr></tbody></table>` +
+    `<div style="font-size:10px;border-bottom:1px solid ${STUB_INK};width:66%;padding-bottom:1px;">Employee</div>` +
+    `<div style="font-size:10px;padding:3px 0 14px;">{{employee_name}}, {{employee_address}}</div>` +
+    // ---- statement of earnings, two columns -------------------------------
+    `<table style="width:100%;border-collapse:collapse;"><tbody><tr>` +
+    `<td style="width:51%;vertical-align:top;padding-right:12px;">` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;"><tbody>` +
+    `<tr>${head('Earnings and Hours')}${head('Qty', 'right', '44px')}${head('Rate', 'right', '52px')}${head('Current', 'right', '62px')}${head('YTD Amount', 'right', '70px')}</tr>` +
+    `<tr data-each="earnings_detail"><td style="${cell}">{{description}}</td><td style="${num}">{{hours}}</td><td style="${num}">{{rate}}</td><td style="${num}">{{current}}</td><td style="${num}">{{ytd_amount}}</td></tr>` +
+    subtotal('earnings_current_total', 'earnings_ytd_total', 3) +
+    `</tbody></table>` +
+    section('Withholdings', 'withholdings', ['withholdings_current_total', 'withholdings_ytd_total']) +
+    section('Adjustments to Net Pay', 'net_adjustments', ['net_adjustments_current_total', 'net_adjustments_ytd_total']) +
+    `<table style="width:100%;border-collapse:collapse;"><tbody><tr>` +
+    `<td style="${cell}font-weight:700;">Net pay</td>` +
+    `<td style="${num}font-weight:700;width:70px;">{{net_pay}}</td>` +
+    `<td style="${num}font-weight:700;width:78px;">{{ytd_net}}</td>` +
+    `</tr></tbody></table>` +
+    `</td>` +
+    `<td style="width:49%;vertical-align:top;padding-left:12px;">` +
+    section('Taxable Company Items', 'taxable_company_items', null) +
     `</td>` +
     `</tr></tbody></table>` +
-    `<div style="height:3px;background:${accent};margin:0 0 22px;"></div>` +
-    `<table style="width:100%;border-collapse:collapse;margin:0 0 24px;"><tbody><tr>` +
-    metaCell('Employee', 'employee_name') +
-    metaCell('Period', 'period_start') +
-    metaCell('To', 'period_end') +
-    metaCell('Pay date', 'pay_date') +
-    `</tr></tbody></table>` +
-    `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-    `<tr>${th('Earnings')}${th('Hours', 'right', '70px')}${th('Rate', 'right', '80px')}${th('Amount', 'right', '92px')}</tr>` +
-    `<tr data-each="earnings">${td('description').replace('</td>', '<span data-if="non_cash" style="font-size:9px;color:#64748b;"> · Non-cash</span></td>')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
-    `</tbody></table>` +
-    `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-    `<tr>${th('Deductions')}${th('Amount', 'right', '92px')}</tr>` +
-    `<tr data-each="deductions">${td('description')}${td('amount', 'right')}</tr>` +
-    `</tbody></table>` +
-    `<table style="width:100%;border-collapse:collapse;margin:0 0 26px;"><tbody><tr>` +
-    `<td style="vertical-align:top;">` +
-    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:4px;">Employer contributions</div>` +
-    `<table style="border-collapse:collapse;"><tbody>` +
-    `<tr data-each="employer_contributions"><td style="font-size:10.5px;color:${MUTED};padding:2px 14px 2px 0;">{{description}}</td>` +
-    `<td style="font-size:10.5px;color:${MUTED};text-align:right;">{{amount}}</td></tr>` +
-    `</tbody></table>` +
-    `</td>` +
-    `<td style="vertical-align:top;text-align:right;width:280px;">` +
-    `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
-    totalsRow('Gross pay', 'gross') +
-    totalsRow('Non-cash benefits', 'non_cash_earnings').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
-    totalsRow('Cash earnings', 'cash_gross').replace('<tr', '<tr data-if="has_non_cash_earnings"') +
-    totalsRow('Total deductions', 'total_deductions') +
-    totalsRow('Net pay', 'net_pay', { strong: true, accent }) +
-    `</tbody></table>` +
-    `<div style="font-size:10px;color:${MUTED};padding-top:10px;">YTD gross {{ytd_gross}} · YTD tax {{ytd_tax}} · YTD net {{ytd_net}}</div>` +
-    `</td>` +
-    `</tr></tbody></table>` +
-    `<div style="border-top:1px solid ${RULE};padding-top:10px;font-size:9.5px;color:${FAINT};">Printed {{printed_date}} · {{org_name}} · Confidential</div>` +
     `</div>`
 
   return {
     sourceHtml,
     headerHtml: '',
-    footerHtml: `{{org_name}} · ${meta.docTitle} {{document_number}} · Page {{page}} of {{pages}}`,
+    footerHtml: '',
   }
 }
 
@@ -503,7 +525,7 @@ function shippingLabelStarter(accent: string): StarterTemplate {
 export function starterTemplate(meta: PdfRecordTypeMeta, accent?: string | null): StarterTemplate {
   const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : '#0f766e'
   if (meta.key === 'journal_entry') return journalStarter(meta, color)
-  if (meta.key === 'pay_stub') return payStubStarter(meta, color)
+  if (meta.key === 'pay_stub') return payStubStarter()
   if (meta.key === 'payroll_cheque') return chequeStarter(meta, color)
   if (meta.key === 'field_ticket') return fieldTicketStarter(meta, color)
   if (meta.key === 'shipment_carton_label') return cartonLabelStarter(color)

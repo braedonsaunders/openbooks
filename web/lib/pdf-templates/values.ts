@@ -13,6 +13,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { isFeatureEnabled } from '../features'
 import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
 import { loadFieldTicket } from '../field-tickets'
+import { buildPayStubStatement, toStatementLine, type StatementRow } from './pay-stub-statement'
 import { canonicalDecimal } from '../exact-decimal'
 import type { FulfillmentDocumentView } from '@openbooks/engine/src/sales/fulfillment.ts'
 
@@ -316,11 +317,16 @@ async function loadPayStubValues(
 ): Promise<PdfRecordValues | null> {
   const r = (await db.execute<Record<string, unknown>>(sql`
     select s.*, r.period_start, r.period_end, d.document_number, d.subsidiary_id,
-           p.display_name as employee_name, p.email as employee_email
+           p.display_name as employee_name, p.email as employee_email,
+           a.line1, a.line2, a.city, a.region, a.postal_code, a.country as address_country
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+      left join lateral (
+        select * from addresses where party_id = s.employee_party_id
+         order by is_default_billing desc, created_at limit 1
+      ) a on true
      where s.id = ${id} and s.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
   `))
   const stub = r.rows[0]
@@ -330,8 +336,10 @@ async function loadPayStubValues(
   const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
-    select l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind
+    select l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind,
+           l.component_id, c.system_key, c.taxable
       from pay_stub_lines l
+      left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
   `))
@@ -389,6 +397,51 @@ async function loadPayStubValues(
 
   const nonCash = sum(lines.rows.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
 
+  // Per-line year-to-date for the statement-of-earnings sections: every
+  // committed stub of this employee in the same tax year, legal entity and
+  // currency that precedes this one, plus this stub's own lines. A component
+  // paid earlier in the year but not on this stub still prints with a zero
+  // current amount, so the employee can reconcile the year on every stub.
+  const priorLines = (await db.execute<Record<string, unknown>>(sql`
+    select l.component_id, l.kind, l.payment_kind, max(l.description) as description,
+           c.system_key, c.taxable,
+           coalesce(sum(l.amount), 0) as amount, coalesce(sum(l.hours), 0) as hours
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents d on d.id = r.document_id and d.org_id = r.org_id and d.kind = 'pay_run'
+      left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+     where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
+       and s.tax_year = ${stub.tax_year} and s.id <> ${id}
+       and (s.pay_date < ${stub.pay_date}
+            or (s.pay_date = ${stub.pay_date} and s.created_at < ${stub.created_at}))
+       and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
+       and s.currency_code = ${stub.currency_code}
+     group by l.component_id, l.kind, l.payment_kind, c.system_key, c.taxable
+  `))
+  const statement = buildPayStubStatement(
+    lines.rows.map(toStatementLine),
+    priorLines.rows.map(toStatementLine),
+    new Set(incomeTaxWithholdingSystemKeys()),
+  )
+  const sectionRows = (rows: StatementRow[], sign: '+' | '-') => rows.map((row) => ({
+    description: row.description,
+    hours: isZero(row.hours) ? '' : Number(row.hours).toFixed(2),
+    rate: row.rate != null ? money(row.rate) : '',
+    current: money(sign === '-' ? neg(row.current) : row.current),
+    ytd_amount: money(sign === '-' ? neg(row.ytd) : row.ytd),
+    ytd_hours: isZero(row.ytdHours) ? '' : Number(row.ytdHours).toFixed(2),
+  }))
+  const sectionTotal = (rows: StatementRow[], pick: 'current' | 'ytd', sign: '+' | '-') => {
+    const total = sum(rows.map((row) => row[pick]))
+    return money(sign === '-' ? neg(total) : total)
+  }
+  const addressLines = [
+    stub.line1,
+    stub.line2,
+    [[stub.city, stub.region].filter(Boolean).join(' '), stub.postal_code].filter(Boolean).join(' '),
+  ].map((part) => String(part ?? '').trim()).filter(Boolean)
+
   const values: Record<string, unknown> = {
     employee_name: stub.employee_name ?? '',
     // party_* aliases power the shared record-email path (sendRecordPdfEmail).
@@ -415,6 +468,22 @@ async function loadPayStubValues(
     earnings: byKind('earning'),
     deductions: byKind('deduction'),
     employer_contributions: byKind('employer_contribution'),
+    cheque_number: stub.cheque_number ?? '',
+    employee_address: addressLines.join(', '),
+    employee_address_line1: addressLines[0] ?? '',
+    employee_address_line2: addressLines.length > 2 ? addressLines[1] : '',
+    employee_address_locality: addressLines.length > 1 ? addressLines[addressLines.length - 1] : '',
+    earnings_detail: sectionRows(statement.earnings, '+'),
+    earnings_current_total: sectionTotal(statement.earnings, 'current', '+'),
+    earnings_ytd_total: sectionTotal(statement.earnings, 'ytd', '+'),
+    withholdings: sectionRows(statement.withholdings, '+'),
+    withholdings_current_total: sectionTotal(statement.withholdings, 'current', '+'),
+    withholdings_ytd_total: sectionTotal(statement.withholdings, 'ytd', '+'),
+    taxable_company_items: sectionRows(statement.taxableCompanyItems, '+'),
+    has_taxable_company_items: statement.taxableCompanyItems.length > 0,
+    net_adjustments: sectionRows(statement.netAdjustments, '-'),
+    net_adjustments_current_total: sectionTotal(statement.netAdjustments, 'current', '-'),
+    net_adjustments_ytd_total: sectionTotal(statement.netAdjustments, 'ytd', '-'),
   }
   return { values, reference: `${stub.document_number ?? 'Pay stub'} ${stub.employee_name ?? ''}`.trim() }
 }

@@ -51,21 +51,29 @@ const flattenValues = (values: unknown[]): unknown[] =>
 const harness = {
   async execute(query: { text?: string; values?: unknown[] }) {
     const text = String(query.text ?? '')
-    state.ytdValues = flattenValues(query.values ?? [])
     if (text.includes('select s.*, r.period_start')) {
       return { rows: [state.stub] }
     }
     if (text.includes('select l.kind, l.description')) {
       return {
         rows: [
-          { kind: 'earning', description: 'Regular', hours: '80', rate: '50', amount: '4000.0000' },
-          { kind: 'deduction', description: 'Federal income tax', hours: null, rate: null, amount: '312.3100' },
+          { kind: 'earning', component_id: 'regular', description: 'Regular', hours: '80', rate: '50', amount: '4000.0000', taxable: true },
+          { kind: 'deduction', component_id: 'fit', system_key: 'fit', description: 'Federal income tax', hours: null, rate: null, amount: '312.3100' },
           ...(state.nonCashBenefit ? [{ kind: 'earning', description: 'Gift card', hours: null, rate: null, amount: '100.0000', payment_kind: 'non_cash' }] : []),
+        ],
+      }
+    }
+    if (text.includes('select l.component_id, l.kind')) {
+      // Earlier committed stubs of the year, one aggregated row per component.
+      return {
+        rows: [
+          { component_id: 'regular', kind: 'earning', payment_kind: 'cash', description: 'Regular', system_key: null, taxable: true, amount: '28000.0000', hours: '560' },
         ],
       }
     }
     if (text.includes('select coalesce(sum(s.gross)')) {
       state.ytdQuery = text
+      state.ytdValues = flattenValues(query.values ?? [])
       // YTD income tax aggregates the persisted income-tax component lines
       // (never an enumerated factor list): without the lines join the stub's
       // federal withholding reads as 0.
@@ -219,6 +227,16 @@ test('US pay-stub YTD income tax aggregates persisted income-tax lines and prese
   assert.equal(record.values.ytd_tax, '$312.31')
   assert.equal(record.values.ytd_gross, '$4,000.00')
   assert.equal(record.values.ytd_net, '$3,281.69')
+  // Every statement row carries its own year-to-date: earlier committed
+  // stubs plus this one, and the income-tax line lands under withholdings.
+  assert.deepEqual(
+    (record.values.earnings_detail as Array<Record<string, string>>).map((row) => [row.description, row.current, row.ytd_amount]),
+    [['Regular', '$4,000.00', '$32,000.00']],
+  )
+  assert.deepEqual(
+    (record.values.withholdings as Array<Record<string, string>>).map((row) => [row.description, row.ytd_amount]),
+    [['Federal income tax', '$312.31']],
+  )
 })
 
 
