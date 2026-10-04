@@ -8,7 +8,8 @@ export function menuColumns<T>(blocks: readonly T[], weight: (block: T) => numbe
   for (let index = 1; index < blocks.length; index += 1) {
     left += weight(blocks[index - 1]!)
     const next = Math.abs(total - left * 2)
-    if (next < imbalance) { split = index; imbalance = next }
+    // Equally balanced splits keep the additional section in the left stack.
+    if (next <= imbalance) { split = index; imbalance = next }
   }
   return [blocks.slice(0, split), blocks.slice(split)]
 }
