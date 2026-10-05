@@ -24,6 +24,12 @@ export interface DepContext {
   DP: DecimalInput;
   FY: DecimalInput;
   PB: DecimalInput;
+  /**
+   * Remaining life in full-charge periods, counting the current period and any
+   * periods a first-period convention adds after the nominal life. Defaults to
+   * AL − CP + 1 when no convention applies.
+   */
+  RL?: DecimalInput;
   R?: DecimalInput[];
 }
 
@@ -116,6 +122,7 @@ type Tok =
 
 const OP_RE = /^(<=|>=|==|!=|[-+*/^~()<>,])/;
 const SCALAR_VARS = new Set(["OC", "CC", "NB", "RV", "AL", "CP", "TD", "LD", "CU", "LU", "DH", "DP", "FY", "PB"]);
+// RL is resolved separately because its default derives from AL and CP.
 const KEYWORDS = new Set(["IF", "THEN", "ELSE", "ENDIF", "ROUND"]);
 
 function tokenize(src: string): Tok[] {
@@ -150,6 +157,11 @@ type Node = (context: DepContext) => bigint;
 function resolveVar(name: string): Node {
   if (SCALAR_VARS.has(name)) {
     return (context) => exactUnits((context as unknown as Record<string, DecimalInput>)[name] ?? "0");
+  }
+  if (name === "RL") {
+    return (context) => context.RL !== undefined
+      ? exactUnits(context.RL)
+      : exactUnits(context.AL) - exactUnits(context.CP) + EXACT_SCALE;
   }
   const rate = /^R(\d+)$/.exec(name);
   if (rate) {
@@ -362,8 +374,10 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
   }
   // The charge withheld from the reduced periods has to land somewhere, so the
   // schedule grows by exactly the periods'-worth that was held back: one month
-  // for mid-month, six for a half-year rule on monthly periods. Without this the
-  // whole deferred amount was dumped into a single final period.
+  // for mid-month, six for a half-year rule on monthly periods. Remaining-life
+  // terms (RL) count those added periods, so a declining-balance crossover
+  // spreads what is left across them instead of taking the whole balance in the
+  // last nominal period and leaving the added periods at zero.
   // Integer ratio only: a JS float of (scale − fraction) / scale can flip the
   // rounded period count (one whole extra or missing charge).
   const withheldUnits = EXACT_SCALE - firstPeriodFraction;
@@ -371,6 +385,14 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
     ? Math.max(1, Number(roundDiv(BigInt(fractionPeriods) * withheldUnits, EXACT_SCALE)))
     : 0;
   const totalPeriods = life + extension;
+  const reduced = firstPeriodFraction < EXACT_SCALE ? fractionPeriods : 0;
+  // Full-charge periods left from `period` to the end of the schedule: each
+  // reduced leading period counts as its fraction, every other period as one.
+  const remainingLife = (period: number): bigint => {
+    const reducedLeft = BigInt(Math.max(0, reduced - period + 1));
+    const fullLeft = BigInt(totalPeriods - Math.max(period, reduced + 1) + 1);
+    return reducedLeft * firstPeriodFraction + (fullLeft > 0n ? fullLeft : 0n) * EXACT_SCALE;
+  };
   const lines: FormulaScheduleLine[] = [];
   let accumulated = 0n;
   let last = 0n;
@@ -393,7 +415,7 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
         OC: fromUnits(cost), CC: fromUnits(cost), NB: fromUnits(netBookValue), RV: fromUnits(salvage),
         AL: String(life), CP: String(currentPeriod), TD: fromUnits(accumulated), LD: fromUnits(last),
         CU: input.usage?.[currentPeriod - 1] ?? "0", LU: exactString(lifetimeUsage),
-        DH: "1", DP: "1", FY: "12", PB: "0", R: input.rateTable,
+        DH: "1", DP: "1", FY: "12", PB: "0", RL: exactString(remainingLife(currentPeriod)), R: input.rateTable,
       };
       let evaluated = evaluate(context);
       if (currentPeriod <= fractionPeriods && firstPeriodFraction < EXACT_SCALE) {
@@ -417,10 +439,10 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
 
 export const BUILTIN_FORMULAS = {
   straight_line: "(OC-RV)/AL",
-  straight_line_remaining: "(NB-RV)/(AL-CP+1)",
-  declining_150: "(NB-RV)*(1.5/AL)~(NB-RV)/(AL-CP+1)",
-  double_declining: "(NB-RV)*(2/AL)~(NB-RV)/(AL-CP+1)",
-  declining_250: "(NB-RV)*(2.5/AL)~(NB-RV)/(AL-CP+1)",
+  straight_line_remaining: "(NB-RV)/RL",
+  declining_150: "(NB-RV)*(1.5/AL)~(NB-RV)/RL",
+  double_declining: "(NB-RV)*(2/AL)~(NB-RV)/RL",
+  declining_250: "(NB-RV)*(2.5/AL)~(NB-RV)/RL",
   sum_of_years_digits: "(OC-RV)*(AL-CP+1)/(AL*(AL+1)/2)",
   units_of_production: "(OC-RV)*CU/LU",
   zero: "0",
