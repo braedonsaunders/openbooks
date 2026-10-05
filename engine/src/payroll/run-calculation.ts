@@ -344,6 +344,9 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       select * from (
         select distinct on (p.id)
                p.id as party_id, p.display_name, er.terminated_on,
+               -- Employment start, for packs whose ceilings or year-to-date
+               -- position run from the hire date rather than the year start.
+               er.hired_on,
                -- Payment rail inputs. prof.* already carries the payroll
                -- override; these are the party preference and the bank-details
                -- fact the resolver needs (engine/src/payroll/payment-method.ts).
