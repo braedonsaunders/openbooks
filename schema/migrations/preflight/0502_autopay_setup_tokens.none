@@ -1,0 +1,1 @@
+Adds two nullable columns to customer_payment_methods (setup token hash, provider setup URL) with no backfill: existing rows predate setup links and never need them. No tenant data is read, rewritten or deleted.

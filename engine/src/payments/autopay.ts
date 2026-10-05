@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrg } from "../platform/db.ts";
+import { db, withBypass, withBypassContext, withOrg } from "../platform/db.ts";
+import { paymentLinkTokenHash } from "./payment-link-seal.ts";
 import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
@@ -264,9 +265,9 @@ export async function listPaymentMethods(orgId: string, partyId: string): Promis
  */
 export async function startMethodSetup(
   orgId: string,
-  input: { partyId: string; provider: AcceptanceProvider; currency: string; returnUrl: string; actorId?: string | null },
+  input: { partyId: string; provider: AcceptanceProvider; currency: string; returnUrl: string; setupToken: string; actorId?: string | null },
   fetchFn?: FetchFn,
-): Promise<{ methodId: string; redirectUrl: string }> {
+): Promise<{ methodId: string; setupToken: string; redirectUrl: string }> {
   return withOrg(orgId, async () => {
     await requireAutopayFeature(orgId);
     const party = (await db.execute<{ id: string }>(sql`
@@ -282,9 +283,17 @@ export async function startMethodSetup(
        where org_id = ${orgId} and party_id = ${input.partyId} and status = 'active' and provider_customer_id is not null
        order by is_default desc limit 1
     `)).rows[0];
+    // The setup token is the customer's Bearer [REDACTED] the hosted setup page: same
+    // token handling as payment links (random token, sha256 in storage). The
+    // caller mints it so the return URL can carry it to the return page.
+    const setupToken = input.setupToken;
+    if (!/^[0-9a-f]{32,128}$/i.test(setupToken)) {
+      throw new AutopayError("setup token is malformed; generate a fresh setup link");
+    }
     const inserted = (await db.execute<{ id: string }>(sql`
-      insert into customer_payment_methods (org_id, party_id, provider, status, created_by, updated_by)
-      values (${orgId}, ${input.partyId}, ${input.provider}, 'pending', ${input.actorId ?? null}, ${input.actorId ?? null})
+      insert into customer_payment_methods (org_id, party_id, provider, status, token_hash, created_by, updated_by)
+      values (${orgId}, ${input.partyId}, ${input.provider}, 'pending',
+              ${paymentLinkTokenHash(setupToken)}, ${input.actorId ?? null}, ${input.actorId ?? null})
       returning id
     `));
     const methodId = inserted.rows[0]?.id;
@@ -315,6 +324,7 @@ export async function startMethodSetup(
       update customer_payment_methods
          set provider_method_id = ${session.externalRef},
              provider_customer_id = coalesce(provider_customer_id, ${session.providerCustomerId ?? null}),
+             setup_redirect_url = ${session.redirectUrl},
              updated_at = now(), updated_by = ${input.actorId ?? null}
        where id = ${methodId} and org_id = ${orgId} and status = 'pending'
        returning id
@@ -325,8 +335,103 @@ export async function startMethodSetup(
       after: { provider: input.provider, setupRef: session.externalRef },
       reason: "Operator sent a setup link; the method activates when the provider confirms it.",
     }, input.actorId ?? null);
-    return { methodId, redirectUrl: session.redirectUrl };
+    return { methodId, setupToken, redirectUrl: session.redirectUrl };
   });
+}
+
+/** Resolve a hosted setup token to its org (public page + return handler). */
+export async function setupTokenOrgId(setupToken: string): Promise<string | null> {
+  if (!setupToken || setupToken.length < 16) return null;
+  return withBypassContext(async () => {
+    const row = (await db.execute<{ org_id: string }>(sql`
+      select org_id from customer_payment_methods
+       where token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
+    `)).rows[0];
+    return row?.org_id ?? null;
+  });
+}
+
+export interface PublicSetupPage {
+  orgId: string;
+  orgName: string;
+  partyName: string;
+  provider: AcceptanceProvider;
+  status: string;
+  brand: string | null;
+  last4: string | null;
+}
+
+/**
+ * Public hosted setup page data: what the customer is saving, and for whom.
+ * Refuses when the gate is off or the link is unknown — an unknown token is
+ * a 404, never a hint about which tokens exist.
+ */
+export async function publicSetupPage(setupToken: string): Promise<PublicSetupPage> {
+  if (!setupToken || setupToken.length < 16) throw new AutopayError("this setup link is not valid; ask for a new one");
+  return withBypassContext(async () => {
+    const row = (await db.execute<{
+      org_id: string;
+      org_name: string;
+      party_name: string;
+      provider: AcceptanceProvider;
+      status: string;
+      brand: string | null;
+      last4: string | null;
+    }>(sql`
+      select m.org_id, o.name as "org_name", p.display_name as "party_name",
+             m.provider, m.status, m.brand, m.last4
+        from customer_payment_methods m
+        join orgs o on o.id = m.org_id
+        join parties p on p.id = m.party_id and p.org_id = m.org_id
+       where m.token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
+    `)).rows[0];
+    if (!row) throw new AutopayError("this setup link is not valid; ask for a new one");
+    if (!(await orgFeatureEnabled(row.org_id, "autopay"))) {
+      throw new AutopayError("automatic payments are not available right now; contact us for another way to pay");
+    }
+    return {
+      orgId: row.org_id,
+      orgName: row.org_name,
+      partyName: row.party_name,
+      provider: row.provider,
+      status: row.status,
+      brand: row.brand,
+      last4: row.last4,
+    };
+  });
+}
+
+/** The stored provider URL the customer continues to (minted at setup start). */
+export async function setupContinueUrl(setupToken: string): Promise<string> {
+  const page = await publicSetupPage(setupToken);
+  if (page.status !== "pending") {
+    throw new AutopayError(
+      page.status === "active"
+        ? "this method is already saved; there is nothing left to do"
+        : "this setup link was withdrawn; ask for a new one",
+    );
+  }
+  const url = await withBypassContext(async () => {
+    return (await db.execute<{ setup_redirect_url: string | null }>(sql`
+      select setup_redirect_url from customer_payment_methods
+       where token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
+    `)).rows[0]?.setup_redirect_url ?? null;
+  });
+  if (!url) throw new AutopayError("this setup link expired before use; ask for a new one");
+  return url;
+}
+
+/** Complete a setup from the hosted return page (token-authenticated). */
+export async function completeSetupByToken(setupToken: string, fetchFn?: FetchFn): Promise<StoredPaymentMethod> {
+  const page = await publicSetupPage(setupToken);
+  const methodId = await withBypassContext(async () => {
+    return (await db.execute<{ id: string }>(sql`
+      select id from customer_payment_methods
+       where token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
+    `)).rows[0]?.id ?? null;
+  });
+  if (!methodId) throw new AutopayError("this setup link is not valid; ask for a new one");
+  return completeMethodSetup(page.orgId, methodId, null, fetchFn);
 }
 
 /** Provider method detail read off a completed setup (brand/last4/expiry). */
@@ -931,6 +1036,7 @@ async function collectCandidate(
   policy: AutopayPolicy,
   charge: ChargeFn,
   result: AutopayRunResult,
+  actorId: string | null = null,
 ): Promise<void> {
   await db.execute(sql`
     select pg_advisory_xact_lock(hashtextextended(${collectionLockKey(orgId, candidate.invoiceId)}, 0))
@@ -988,7 +1094,7 @@ async function collectCandidate(
       (org_id, invoice_id, enrollment_id, payment_method_id, amount, currency,
        provider, status, retry_position, created_by, updated_by)
     values (${orgId}, ${candidate.invoiceId}, ${candidate.enrollmentId}, ${candidate.methodId},
-            ${amount}, ${invoice.currency}, ${candidate.provider}, 'initiated', ${position}, null, null)
+            ${amount}, ${invoice.currency}, ${candidate.provider}, 'initiated', ${position}, ${actorId}, ${actorId})
     on conflict (org_id, invoice_id, retry_position) do nothing
     returning id
   `));
@@ -1028,6 +1134,67 @@ async function collectCandidate(
     return;
   }
   await recordDecline(orgId, candidate, attemptId, position, today, policy, outcome.declineCode ?? null, result);
+}
+
+/**
+ * Operator "retry now": an immediate charge outside the schedule for a
+ * soft-declined attempt (the customer just updated the method, the operator
+ * does not wait for tomorrow). Hard declines refuse — they never clear on
+ * retry. A success reactivates exactly like a scheduled one.
+ */
+export async function retryAttemptNow(
+  orgId: string,
+  attemptId: string,
+  actorId: string | null = null,
+  chargeFn?: ChargeFn,
+): Promise<AutopayRunResult> {
+  const result = emptyRunResult();
+  await withOrg(orgId, async () => {
+    await requireAutopayFeature(orgId);
+    const attempt = (await db.execute<{
+      invoice_id: string;
+      enrollment_id: string;
+      method_id: string;
+      retry_position: number;
+      decline_kind: string | null;
+    }>(sql`
+      select a.invoice_id, a.enrollment_id, a.payment_method_id as "method_id",
+             a.retry_position, a.decline_kind
+        from collection_attempts a
+       where a.id = ${attemptId} and a.org_id = ${orgId} and a.status = 'failed'
+       limit 1
+    `)).rows[0];
+    if (!attempt) throw new AutopayError("only a failed attempt can be retried; this one already settled or never failed");
+    if (attempt.decline_kind !== "soft") {
+      throw new AutopayError("this decline will not clear on retry; ask the customer to update the payment method instead");
+    }
+    const candidate = (await db.execute<CollectionCandidate>(sql`
+      select d.id as "invoiceId", d.document_number as "documentNumber",
+             d.open_balance as "openBalance", d.currency,
+             d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
+             d.document_date::text as "documentDate", d.due_date::text as "dueDate",
+             e.id as "enrollmentId", e.subscription_id as "subscriptionId",
+             m.id as "methodId", m.provider, m.provider_customer_id as "providerCustomerId",
+             m.provider_method_id as "providerMethodId"
+        from documents d
+        join autopay_enrollments e on e.id = ${attempt.enrollment_id} and e.org_id = ${orgId} and e.status = 'active'
+        join customer_payment_methods m on m.id = ${attempt.method_id} and m.org_id = ${orgId} and m.status = 'active'
+       where d.id = ${attempt.invoice_id} and d.org_id = ${orgId}
+    `)).rows[0];
+    if (!candidate) {
+      throw new AutopayError("the enrollment or method is no longer active; link a payment method first");
+    }
+    const today = await businessToday(orgId);
+    const policy = await resolveAutopayPolicy(orgId);
+    const charge = chargeFn ?? ((provider, req) => adapterCharge(orgId, provider, req));
+    result.scanned += 1;
+    await collectCandidate(orgId, candidate, attempt.retry_position + 1, today, policy, charge, result, actorId);
+    await auditAutopay(orgId, "collection_attempts", attemptId, {
+      event: "retry_now",
+      reason: "Operator retried the collection immediately instead of waiting for the schedule.",
+    }, actorId);
+  });
+  return result;
 }
 
 /** Why an invoice must not be charged right now, or null when collectible. */
