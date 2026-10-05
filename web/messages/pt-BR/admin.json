@@ -5949,7 +5949,41 @@
       "title": "Envios",
       "description": "Contas de transportadora, tamanhos de pacote e padrões de cada envio.",
       "tabs": {
-        "accounts": "Contas de transportadora"
+        "accounts": "Contas de transportadora",
+        "adjustments": "Ajustes de faturamento"
+      },
+      "adjustments": {
+        "loading": "Carregando contas de transportadora…",
+        "account": "Conta de transportadora",
+        "accountPlaceholder": "Escolher uma conta",
+        "paste": "Exportação de faturamento da transportadora",
+        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "preview": "Prévia",
+        "import": "{count, plural, one {Importar # ajuste} other {Importar # ajustes}}",
+        "columns": {
+          "adjustment": "Ajuste",
+          "shipment": "Remessa",
+          "kind": "Tipo",
+          "amount": "Valor",
+          "reason": "Motivo"
+        },
+        "kinds": {
+          "weight_correction": "Correção de peso",
+          "dimension_correction": "Correção de dimensões",
+          "address_correction": "Correção de endereço",
+          "fuel": "Sobretaxa de combustível",
+          "duplicate": "Cobrança duplicada",
+          "other": "Outro"
+        },
+        "result": "{imported} importados; {skipped} já existentes ignorados.",
+        "noAccounts": {
+          "title": "Nenhuma conta de transportadora ativa",
+          "description": "Conecte primeiro uma conta de transportadora — os ajustes são importados na conta que os faturou.",
+          "action": "Conectar uma conta"
+        },
+        "errors": {
+          "importFailed": "A importação falhou. Verifique as linhas e tente de novo."
+        }
       },
       "accounts": {
         "title": "Contas de transportadora",

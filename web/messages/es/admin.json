@@ -5949,7 +5949,41 @@
       "title": "Envíos",
       "description": "Cuentas de transportista, tamaños de paquete y valores iniciales de cada envío.",
       "tabs": {
-        "accounts": "Cuentas de transportista"
+        "accounts": "Cuentas de transportista",
+        "adjustments": "Ajustes de facturación"
+      },
+      "adjustments": {
+        "loading": "Cargando cuentas de transportista…",
+        "account": "Cuenta de transportista",
+        "accountPlaceholder": "Elegir una cuenta",
+        "paste": "Exportación de facturación del transportista",
+        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "preview": "Vista previa",
+        "import": "{count, plural, one {Importar # ajuste} other {Importar # ajustes}}",
+        "columns": {
+          "adjustment": "Ajuste",
+          "shipment": "Envío",
+          "kind": "Tipo",
+          "amount": "Importe",
+          "reason": "Motivo"
+        },
+        "kinds": {
+          "weight_correction": "Corrección de peso",
+          "dimension_correction": "Corrección de dimensiones",
+          "address_correction": "Corrección de dirección",
+          "fuel": "Recargo de combustible",
+          "duplicate": "Cargo duplicado",
+          "other": "Otro"
+        },
+        "result": "{imported} importados; {skipped} ya existentes omitidos.",
+        "noAccounts": {
+          "title": "Sin cuenta de transportista activa",
+          "description": "Conecte primero una cuenta de transportista: los ajustes se importan en la cuenta que los facturó.",
+          "action": "Conectar una cuenta"
+        },
+        "errors": {
+          "importFailed": "La importación falló. Revise las filas e inténtelo de nuevo."
+        }
       },
       "accounts": {
         "title": "Cuentas de transportista",

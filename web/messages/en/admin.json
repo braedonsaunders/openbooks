@@ -5949,7 +5949,41 @@
       "title": "Shipping",
       "description": "Carrier accounts, package sizes, and the defaults every shipment starts from.",
       "tabs": {
-        "accounts": "Carrier accounts"
+        "accounts": "Carrier accounts",
+        "adjustments": "Billing adjustments"
+      },
+      "adjustments": {
+        "loading": "Loading carrier accounts…",
+        "account": "Carrier account",
+        "accountPlaceholder": "Choose an account",
+        "paste": "Carrier billing export",
+        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "preview": "Preview",
+        "import": "{count, plural, one {Import # adjustment} other {Import # adjustments}}",
+        "columns": {
+          "adjustment": "Adjustment",
+          "shipment": "Shipment",
+          "kind": "Kind",
+          "amount": "Amount",
+          "reason": "Reason"
+        },
+        "kinds": {
+          "weight_correction": "Weight correction",
+          "dimension_correction": "Dimension correction",
+          "address_correction": "Address correction",
+          "fuel": "Fuel surcharge",
+          "duplicate": "Duplicate charge",
+          "other": "Other"
+        },
+        "result": "Imported {imported}; skipped {skipped} already seen.",
+        "noAccounts": {
+          "title": "No active carrier account",
+          "description": "Connect a carrier account first — adjustments import against the account that billed them.",
+          "action": "Connect an account"
+        },
+        "errors": {
+          "importFailed": "The import failed. Check the rows and try again."
+        }
       },
       "accounts": {
         "title": "Carrier accounts",

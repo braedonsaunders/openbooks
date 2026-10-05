@@ -5949,7 +5949,41 @@
       "title": "配送",
       "description": "運送会社アカウント、梱包サイズ、各出荷の初期値を管理します。",
       "tabs": {
-        "accounts": "運送会社アカウント"
+        "accounts": "運送会社アカウント",
+        "adjustments": "請求調整"
+      },
+      "adjustments": {
+        "loading": "配送業者アカウントを読み込み中…",
+        "account": "配送業者アカウント",
+        "accountPlaceholder": "アカウントを選択",
+        "paste": "配送業者の請求エクスポート",
+        "pastePlaceholder": "[{ \"providerAdjustmentId\": \"adj_1\", \"providerShipmentId\": \"shp_1\", \"kind\": \"weight_correction\", \"amount\": \"2.50\", \"currency\": \"USD\" }]",
+        "preview": "プレビュー",
+        "import": "{count}件の調整をインポート",
+        "columns": {
+          "adjustment": "調整",
+          "shipment": "出荷",
+          "kind": "種別",
+          "amount": "金額",
+          "reason": "理由"
+        },
+        "kinds": {
+          "weight_correction": "重量訂正",
+          "dimension_correction": "サイズ訂正",
+          "address_correction": "住所訂正",
+          "fuel": "燃油サーチャージ",
+          "duplicate": "重複請求",
+          "other": "その他"
+        },
+        "result": "{imported}件インポート済み、{skipped}件は登録済みのためスキップ。",
+        "noAccounts": {
+          "title": "有効な配送業者アカウントがありません",
+          "description": "先に配送業者アカウントを接続してください。調整は請求元のアカウントにインポートされます。",
+          "action": "アカウントを接続"
+        },
+        "errors": {
+          "importFailed": "インポートに失敗しました。行を確認して再試行してください。"
+        }
       },
       "accounts": {
         "title": "運送会社アカウント",
