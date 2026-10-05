@@ -29,7 +29,7 @@ import {
 import { buildTimeline, type ApSettings } from "./cash-position";
 import { agingBasisDate } from "../aging-basis";
 import { isCategoryVisibleInScope } from "./core";
-import { fiscalStartMonth } from "../fiscal";
+import { defaultFiscalCalendarPeriods, fiscalStartMonth } from "../fiscal";
 
 export interface ArWeek {
   weekStart: string;
@@ -135,7 +135,7 @@ export async function arPosition(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, model, fiscalStart] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, model, fiscalStart, fiscalCalendar] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds, orgId),
@@ -144,6 +144,7 @@ export async function arPosition(
     loadCategories(orgId),
     cashflowModel(orgId),
     fiscalStartMonth(orgId),
+    defaultFiscalCalendarPeriods(orgId),
   ]);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
@@ -151,7 +152,7 @@ export async function arPosition(
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart, fiscalPeriods: fiscalCalendar?.periods ?? null };
   const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
   // A refusing category contributes zeros and names its reason; the rest of
   // the forecast still renders. Anything else still throws.

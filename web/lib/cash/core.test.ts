@@ -190,7 +190,7 @@ test("monthly spreads use the week's actual calendar month, quarter flags the fi
   // Q3. Run under React's server condition like the other core checks.
   const source = `
     import assert from "node:assert/strict";
-    import { spreadMonthlyOverWeek, spreadWeeklyOverMonth, fiscalFormulaFlags } from "./web/lib/cash/core.ts";
+    import { spreadMonthlyOverWeek, spreadWeeklyOverMonth, fiscalFormulaFlags, fiscalFormulaFlagsFromPeriods } from "./web/lib/cash/core.ts";
 
     // 4345 a month spreads to 4345 * 7 / 31 in a January week and
     // 4345 * 7 / 28 in a February week — never 4345 in both, and never the
@@ -211,7 +211,23 @@ test("monthly spreads use the week's actual calendar month, quarter flags the fi
     assert.deepEqual(fiscalFormulaFlags("2026-06-28", 7, 0, 1), { quarter: 4, isQStart: 0, isQEnd: 1, isYearEnd: 1 });
     // A January-start org keeps calendar quarters: July opens Q3.
     assert.deepEqual(fiscalFormulaFlags("2026-07-05", 1, 1, 0), { quarter: 3, isQStart: 1, isQEnd: 0, isYearEnd: 0 });
-    console.log("cash calendar behavior passed: actual month lengths spread months, fiscal start quarters years");
+
+    // Declared 4-4-5 periods win over month math: P1 opens Q1 on July 1
+    // mid-week, and the flags follow declared bounds, never month ends.
+    const retailFY26 = [
+      { fiscalYear: 2026, periodNumber: 1, name: "P1", from: "2026-07-01", to: "2026-07-28" },
+      { fiscalYear: 2026, periodNumber: 2, name: "P2", from: "2026-07-29", to: "2026-08-25" },
+      { fiscalYear: 2026, periodNumber: 3, name: "P3", from: "2026-08-26", to: "2026-09-22" },
+      { fiscalYear: 2026, periodNumber: 4, name: "P4", from: "2026-09-23", to: "2026-10-20" },
+    ];
+    // A week before any declared period falls back to month math (null).
+    assert.equal(fiscalFormulaFlagsFromPeriods("2026-06-22", retailFY26), null);
+    assert.equal(fiscalFormulaFlagsFromPeriods("2026-07-05", null), null);
+    // The week holding July 1 opens Q1 even though July is calendar Q3.
+    assert.deepEqual(fiscalFormulaFlagsFromPeriods("2026-06-28", retailFY26), { quarter: 1, isQStart: 1, isQEnd: 0, isYearEnd: 0 });
+    // A mid-quarter week names the quarter and no boundary.
+    assert.deepEqual(fiscalFormulaFlagsFromPeriods("2026-08-02", retailFY26), { quarter: 1, isQStart: 0, isQEnd: 0, isYearEnd: 0 });
+    console.log("cash calendar behavior passed: actual month lengths spread months, fiscal start quarters years, declared 4-4-5 wins");
   `;
   const result = spawnSync(
     process.execPath,

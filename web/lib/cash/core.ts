@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
 import { advanceAnchoredMonth } from "@openbooks/engine/src/billing/cadence.ts";
 import { addCalendarDays, addMonthsClamped, businessToday, calendarDaysBetween, daysInCivilMonth, parseIsoDate, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { fiscalMonthOffset } from "@openbooks/reports";
+import { declaredPeriodQuarter, fiscalMonthOffset, type FiscalPeriod } from "@openbooks/reports";
 import { enactedIncomeTaxRate } from "@openbooks/engine/tax-returns";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
@@ -286,6 +286,13 @@ export interface CategoryContext {
    * back to a January start.
    */
   fiscalStartMonth?: number;
+  /**
+   * The default calendar's declared non-adjustment periods (see
+   * defaultFiscalCalendarPeriods). When they cover the week being forecast
+   * the formula flags resolve on declared 4-4-5/custom boundaries instead of
+   * month math; sparse or missing periods fall back to fiscalStartMonth.
+   */
+  fiscalPeriods?: FiscalPeriod[] | null;
 }
 
 /** A source item behind a category estimate (the breakdown rows). */
@@ -910,6 +917,45 @@ export function fiscalFormulaFlags(
     isQEnd: offset % 3 === 2 && isMonthEnd === 1 ? 1 : 0,
     isYearEnd: offset === 11 && isMonthEnd === 1 ? 1 : 0,
   };
+}
+
+/**
+ * Formula flags off DECLARED fiscal periods (4-4-5/13-period/custom): the
+ * quarter comes from the shared declared-period grouping (a trailing P13
+ * joins Q4), and start/end flags fire when the week holds a quarter or
+ * year boundary — never month math, whose ends retail periods never align
+ * to. Null when no declared period touches the week, so callers fall back
+ * to fiscalFormulaFlags month math (monthly calendars, sparse provisioning).
+ * Pure: unit-tested without a database.
+ */
+export function fiscalFormulaFlagsFromPeriods(
+  weekStartIso: string,
+  periods: FiscalPeriod[] | null | undefined,
+): { quarter: number; isQStart: number; isQEnd: number; isYearEnd: number } | null {
+  if (!periods?.length) return null;
+  const weekEnd = toISO(addDays(parseISO(weekStartIso), 6));
+  const overlapping = periods
+    .filter((p) => p.from <= weekEnd && p.to >= weekStartIso)
+    .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
+  if (overlapping.length === 0) return null;
+  const first = overlapping[0]!;
+  const quarter = declaredPeriodQuarter(first.periodNumber);
+  let isQStart = 0;
+  let isQEnd = 0;
+  let isYearEnd = 0;
+  const holds = (d: string) => weekStartIso <= d && d <= weekEnd;
+  for (const p of overlapping) {
+    const q = declaredPeriodQuarter(p.periodNumber);
+    const group = periods.filter((x) => x.fiscalYear === p.fiscalYear && declaredPeriodQuarter(x.periodNumber) === q);
+    const firstFrom = group.reduce((a, x) => (x.from < a ? x.from : a), group[0]!.from);
+    const lastTo = group.reduce((a, x) => (x.to > a ? x.to : a), group[0]!.to);
+    const yearPeriods = periods.filter((x) => x.fiscalYear === p.fiscalYear);
+    const yearEnd = yearPeriods.reduce((a, x) => (x.to > a ? x.to : a), yearPeriods[0]!.to);
+    if (holds(firstFrom)) isQStart = 1;
+    if (holds(lastTo)) isQEnd = 1;
+    if (holds(yearEnd)) isYearEnd = 1;
+  }
+  return { quarter, isQStart, isQEnd, isYearEnd };
 }
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
@@ -1628,8 +1674,10 @@ export async function categoryWeekly(
       const isMonthStart = dayOfMonth <= 7 ? 1 : 0;
       const isMonthEnd = weekEnd.getUTCMonth() !== cur.getUTCMonth() || dayOfMonth >= 25 ? 1 : 0;
       // Quarter flags resolve on the FISCAL calendar, never calendar
-      // quarters: the offset counts months from the org's fiscal year start.
-      const fiscal = fiscalFormulaFlags(k, context.fiscalStartMonth ?? 1, isMonthStart, isMonthEnd);
+      // quarters: declared 4-4-5/custom periods win when they cover the
+      // week, otherwise the offset counts months from the fiscal year start.
+      const fiscal = fiscalFormulaFlagsFromPeriods(k, context.fiscalPeriods)
+        ?? fiscalFormulaFlags(k, context.fiscalStartMonth ?? 1, isMonthStart, isMonthEnd);
       const evalStr = expression
         .replace(/{AR_IN}/g, String(valAR)).replace(/{AP_OUT}/g, String(valAP))
         .replace(/{NET_FLOW}/g, subtractMoney(valAR, valAP)).replace(/{CASH_START}/g, String(context.cashStart))

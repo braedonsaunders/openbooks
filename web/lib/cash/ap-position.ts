@@ -31,6 +31,7 @@ import { buildTimeline, type ApSettings } from "./cash-position";
 import { isCategoryVisibleInScope } from "./core";
 import { agingBasisDate } from "../aging-basis";
 import { fiscalStartMonth } from "../fiscal";
+import { defaultFiscalCalendarPeriods, fiscalStartMonth } from "../fiscal";
 
 export interface ApWeek {
   weekStart: string;
@@ -149,7 +150,7 @@ export async function apPosition(
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
   const exactApSettings: ApSettings = { ...apSettings, weeklyCap: normalizeMoneyValue(String(apSettings.weeklyCap)) };
 
-  const [apItems, arItems, apStats, arStats, banks, catConfigs, model, fiscalStart] = await Promise.all([
+  const [apItems, arItems, apStats, arStats, banks, catConfigs, model, fiscalStart, fiscalCalendar] = await Promise.all([
     openItems(orgId, "ap", asOfIso, subIds),
     openItems(orgId, "ar", asOfIso, subIds),
     paymentStats("ap", asOfIso, subIds, orgId),
@@ -158,6 +159,7 @@ export async function apPosition(
     loadCategories(orgId),
     cashflowModel(orgId),
     fiscalStartMonth(orgId),
+    defaultFiscalCalendarPeriods(orgId),
   ]);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
@@ -165,7 +167,7 @@ export async function apPosition(
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart };
+  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart, fiscalPeriods: fiscalCalendar?.periods ?? null };
   const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
   // A refusing category contributes zeros and names its reason; the rest of
   // the forecast still renders. Anything else still throws.
