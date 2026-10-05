@@ -147,6 +147,24 @@ export type LineSourceOrder = {
 };
 
 /**
+ * Whether any storefront order claims a source order reference, ignoring
+ * caller scope and payout entity. Read-only existence for the matcher: it
+ * tells an unknown reference (ingest it) from an ineligible one (review
+ * access), and its boolean carries no record content.
+ */
+async function sourceOrderClaimed(orgId: string, sourceOrderId: string): Promise<boolean> {
+  const ids = orderIdCandidates(sourceOrderId);
+  if (ids.length === 0) return false;
+  const rows = (await db.execute<{ id: string }>(sql`
+    select o.id from channel_orders o
+      join sales_channels c on c.id = o.channel_id and c.org_id = o.org_id
+     where o.org_id = ${orgId} and c.kind = 'shopify'
+       and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+     limit 1`)).rows;
+  return rows.length > 0;
+}
+
+/**
  * Channel orders behind a settlement line's source order reference. Only
  * orders on channels the caller may see, in the payout's legal entity, are
  * returned: a restricted caller never learns another entity's order numbers
@@ -296,6 +314,16 @@ async function resolveLineDocument(
   if (provider === "shopify_payments" && typeof meta.sourceOrderId === "string" && meta.sourceOrderId.trim() !== "") {
     const orders = await findLineSourceOrders(orgId, meta.sourceOrderId, allowedSubsidiaryIds, batchSubsidiaryId);
     if (orders.length === 0) {
+      // Unknown and ineligible read differently: a reference no storefront
+      // order claims waits for ingestion, while a claimed order the caller
+      // may not use in this payout's entity never asks for re-ingest.
+      if (await sourceOrderClaimed(orgId, meta.sourceOrderId)) {
+        return {
+          status: "unmatched",
+          reason: "order_unavailable",
+          remedy: "No eligible order in this payout's legal entity claims this reference; ask an authorized operator to review access to the order, or link the visible receipt manually.",
+        };
+      }
       return {
         status: "unmatched",
         reason: "order_unknown",
@@ -320,18 +348,16 @@ async function resolveLineDocument(
         };
       }
       // Same resolve-before-count as the external branch above: only posted
-      // refunds visible in the payout's entity can force an ambiguity.
+      // refunds visible in the payout's entity can force an ambiguity. A
+      // visible but unposted refund names itself; hidden-only claims stay
+      // neutral instead of asserting something unposted.
       const postedRefunds: LineDocumentEvidence[] = [];
+      let visibleUnposted: LineDocumentEvidence | null = null;
       for (const id of claimed) {
         const doc = await postedDocument(orgId, id, allowedSubsidiaryIds, batchSubsidiaryId);
-        if (doc && doc.status === "posted") postedRefunds.push(doc);
-      }
-      if (postedRefunds.length === 0) {
-        return {
-          status: "unmatched",
-          reason: "refund_unposted",
-          remedy: "The order's refund is not posted; post it from the channel order, then match the payout again.",
-        };
+        if (!doc) continue;
+        if (doc.status === "posted") postedRefunds.push(doc);
+        else if (!visibleUnposted) visibleUnposted = doc;
       }
       if (postedRefunds.length > 1) {
         return {
@@ -340,13 +366,27 @@ async function resolveLineDocument(
           remedy: "The order has several posted refunds; link the line to the right one manually.",
         };
       }
-      const doc = postedRefunds[0]!;
+      if (postedRefunds.length === 1) {
+        const doc = postedRefunds[0]!;
+        return {
+          status: "matched",
+          documentId: doc.id,
+          documentKind: doc.kind,
+          documentNumber: doc.documentNumber,
+          via: "channel_order",
+        };
+      }
+      if (visibleUnposted) {
+        return {
+          status: "unmatched",
+          reason: "refund_unposted",
+          remedy: `The order's refund ${visibleUnposted.documentNumber ?? visibleUnposted.id} is ${visibleUnposted.status}; post it from the channel order, then match the payout again.`,
+        };
+      }
       return {
-        status: "matched",
-        documentId: doc.id,
-        documentKind: doc.kind,
-        documentNumber: doc.documentNumber,
-        via: "channel_order",
+        status: "unmatched",
+        reason: "refund_unavailable",
+        remedy: "The order's refunds are unavailable in this payout's legal entity; link the line to a visible posted refund in that entity, or ask an authorized operator to review access to the reference.",
       };
     }
     const saleDocumentId = await findOrderSaleDocumentId(orgId, {
