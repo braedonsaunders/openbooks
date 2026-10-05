@@ -1855,13 +1855,16 @@ const UNMATCHED_SETTLEMENT_LINE_KINDS = ['charge', 'refund', 'dispute', 'dispute
 const UNMATCHED_SETTLEMENT_PROVIDERS = ['stripe', 'recurly', 'chargebee', 'shopify_payments', 'paypal'];
 
 function settlementLineUnmatchedWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowedSubsidiaryIds?: Set<string> | null) {
+  // An unknown scope reads nothing: defaulting it to unrestricted would open
+  // every entity's queue, the same fail-closed rule channel lists apply.
+  const scope = allowedSubsidiaryIds === undefined ? new Set<string>() : allowedSubsidiaryIds;
   const parts: SQL[] = [
     sql`l.org_id = ${orgId}`,
     sql`and l.document_id is null`,
     sql`and l.kind in ('charge', 'refund', 'dispute', 'dispute_reversal')`,
     // The batch owns the subsidiary: a scoped operator works only the lines
     // of payouts they may see, the same scope the payouts console reads.
-    subsidiaryVisibleFilter(sql`b.subsidiary_id`, allowedSubsidiaryIds ?? null),
+    subsidiaryVisibleFilter(sql`b.subsidiary_id`, scope),
   ];
   if (adhoc.q) {
     parts.push(sql`and (coalesce(l.external_ref, '') ilike ${`%${adhoc.q}%`} or coalesce(l.description, '') ilike ${`%${adhoc.q}%`} or b.external_ref ilike ${`%${adhoc.q}%`})`)

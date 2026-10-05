@@ -2537,12 +2537,33 @@ function auditSettlementLine(
 }
 
 /**
+ * Legal-entity ownership for a settlement link. An absent subsidiary
+ * resolves to the org root — the same contract payout posting applies to
+ * every other document — so single-entity history links freely while a
+ * receipt anchored to another entity never attaches to this payout. The
+ * suggestion queue shares this predicate with the link writer, so approval
+ * can only propose what the writer accepts.
+ */
+export async function settlementLineDocumentInEntity(
+  orgId: string,
+  batchSubsidiaryId: string | null,
+  documentSubsidiaryId: string | null,
+): Promise<boolean> {
+  if (batchSubsidiaryId !== null && documentSubsidiaryId !== null) {
+    return batchSubsidiaryId === documentSubsidiaryId;
+  }
+  const ctx = await loadSubsidiaryContext(db, orgId);
+  return (batchSubsidiaryId ?? ctx.rootId) === (documentSubsidiaryId ?? ctx.rootId);
+}
+
+/**
  * Link one settlement line to its native document. The link is matching
  * evidence, never posted history: the journal stays untouched, and a later
  * reimport of the same provider reference converges onto the stored link
  * instead of conflicting. The document must be a posted record of this
- * organization — linking an unposted or foreign record would pretend the
- * payout settled something the ledger never booked.
+ * organization in the payout's legal entity — linking an unposted, foreign
+ * or another entity's record would pretend the payout settled something the
+ * ledger never booked for this entity.
  */
 export async function setSettlementLineDocument(
   orgId: string,
@@ -2550,21 +2571,25 @@ export async function setSettlementLineDocument(
   lineId: string,
   documentId: string,
   actorId: string | null,
-  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
 ): Promise<{ lineId: string; documentId: string }> {
   if (!isUuid(documentId)) {
     throw new PspSettlementError(
       "a settlement line links only to a native document; choose the posted receipt, refund or payment this line settles",
     );
   }
+  // An unknown scope writes nothing: the link is refused as missing, never
+  // run as unrestricted.
+  const scope = allowedSubsidiaryIds;
+  if (scope === undefined) throw new ScopeNotFoundError();
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-      select id, subsidiary_id from psp_settlement_batches
+    const batch = (await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(sql`
+      select id, subsidiary_id, external_ref from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
     `)).rows[0];
     if (!batch) throw new ScopeNotFoundError();
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     const line = (await db.execute<SettlementLineLock>(sql`
       select id, kind, document_id, amount::text, currency from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
@@ -2574,13 +2599,22 @@ export async function setSettlementLineDocument(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and link the line again`,
       );
     }
-    const doc = (await db.execute<{ id: string; kind: string; status: string; document_number: string | null }>(sql`
-      select id, kind, status, document_number from documents
+    const doc = (await db.execute<{ id: string; kind: string; status: string; document_number: string | null; subsidiary_id: string | null }>(sql`
+      select id, kind, status, document_number, subsidiary_id from documents
        where id = ${documentId} and org_id = ${orgId}
     `)).rows[0];
     if (!doc) {
       throw new PspSettlementError(
         "the linked record does not belong to this organization; choose a posted sales document in this organization",
+      );
+    }
+    // The receipt's entity is checked before its status or number can steer
+    // anything: a caller outside its scope meets it as missing, and a
+    // receipt outside the payout's entity is refused by name with the remedy.
+    if (!subsidiaryScopeAllows(scope, doc.subsidiary_id)) throw new ScopeNotFoundError();
+    if (!(await settlementLineDocumentInEntity(orgId, batch.subsidiary_id, doc.subsidiary_id))) {
+      throw new PspSettlementError(
+        `receipt ${doc.document_number ?? documentId} belongs to a different legal entity than payout ${batch.external_ref}; link a receipt posted in the payout's entity instead`,
       );
     }
     if (doc.status !== "posted") {

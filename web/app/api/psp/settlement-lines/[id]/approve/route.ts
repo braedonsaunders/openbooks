@@ -22,11 +22,13 @@ export const POST = defineRoute({
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
     try {
+      // The caller's scope is explicit (never defaulted): approval discovers
+      // and writes under it, and an unknown scope fails closed in the engine.
       return NextResponse.json(
         await approvePayoutSuggestion(gate.user.orgId, gate.user.id, id, {
           rank: body.rank,
           applyToSimilar: body.applyToSimilar,
-        }, gate.allowedSubsidiaryIds ?? null),
+        }, gate.allowedSubsidiaryIds),
       );
     } catch (error) {
       if (error instanceof CommerceError && error.code === "payout_line_unknown") return notFound("record");

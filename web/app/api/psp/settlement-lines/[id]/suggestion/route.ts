@@ -19,7 +19,10 @@ export const GET = defineRoute({
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
     try {
-      const suggestion = await suggestPayoutLineFix(gate.user.orgId, id);
+      // Record-level subsidiary enforcement lives in the handler's engine
+      // call: the proposal is discovered under the caller's scope, so
+      // another entity's line reads as missing before any evidence is built.
+      const suggestion = await suggestPayoutLineFix(gate.user.orgId, id, gate.allowedSubsidiaryIds);
       return NextResponse.json({ suggestion });
     } catch (error) {
       if (error instanceof CommerceError && error.code === "payout_line_unknown") return notFound("record");

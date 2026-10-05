@@ -18,6 +18,8 @@ import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import type { PayoutSubsidiaryScope } from "./payout-reconciliation.ts";
 import { db, withOrg } from "../platform/db.ts";
 
 /**
@@ -728,6 +730,8 @@ export interface PayoutLineSuggestion {
 type PayoutLineRow = {
   id: string;
   batchId: string;
+  batchSubsidiaryId: string | null;
+  batchCurrency: string | null;
   kind: string;
   externalRef: string | null;
   description: string | null;
@@ -738,15 +742,34 @@ type PayoutLineRow = {
   provider: string;
 };
 
-async function loadPayoutLine(orgId: string, lineId: string): Promise<PayoutLineRow> {
+/**
+ * One unmatched line with its payout's legal entity, read under the
+ * caller's scope. A line outside the caller's entities reads as missing —
+ * the discovery, the drawer and the approval all start here, so nothing
+ * downstream can disclose it first.
+ */
+async function loadPayoutLine(
+  orgId: string,
+  lineId: string,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
+): Promise<PayoutLineRow> {
+  if (allowedSubsidiaryIds === undefined) {
+    refuse(
+      "payout_line_unknown",
+      "The settlement line does not belong to this organization.",
+      "Reload the payouts workspace and choose an unmatched line from this organization.",
+      "lineId",
+    );
+  }
   const row = (await db.execute<PayoutLineRow>(sql`
-    select l.id, l.batch_id as "batchId", l.kind, l.external_ref as "externalRef",
+    select l.id, l.batch_id as "batchId", b.subsidiary_id as "batchSubsidiaryId", b.currency as "batchCurrency",
+           l.kind, l.external_ref as "externalRef",
            l.description, l.amount::text as amount, l.currency, l.document_id as "documentId",
            l.meta, b.provider
       from psp_settlement_lines l
       join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
      where l.org_id = ${orgId} and l.id = ${lineId}`)).rows[0];
-  if (!row) {
+  if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.batchSubsidiaryId)) {
     refuse(
       "payout_line_unknown",
       "The settlement line does not belong to this organization.",
@@ -794,12 +817,23 @@ function describeDocument(doc: LineDocumentEvidence): string {
  * an exact amount match, never a guess. Identical data gives identical
  * proposals.
  */
-export async function suggestPayoutLineFix(orgId: string, lineId: string): Promise<PayoutLineSuggestion> {
-  return suggestPayoutLineFixInner(orgId, lineId, true);
+export async function suggestPayoutLineFix(
+  orgId: string,
+  lineId: string,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
+): Promise<PayoutLineSuggestion> {
+  return suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true);
 }
 
-async function suggestPayoutLineFixInner(orgId: string, lineId: string, includeSimilar: boolean): Promise<PayoutLineSuggestion> {
-  const line = await loadPayoutLine(orgId, lineId);
+async function suggestPayoutLineFixInner(
+  orgId: string,
+  lineId: string,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
+  includeSimilar: boolean,
+): Promise<PayoutLineSuggestion> {
+  // Past the scoped line read the scope is resolved: unknown scopes refuse
+  // above, so every candidate read below inherits a decided scope.
+  const line = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
   if (!isMatchableSettlementLineKind(line.kind)) {
     return {
       lineId: line.id, batchId: line.batchId, similarCount: 1,
@@ -807,7 +841,7 @@ async function suggestPayoutLineFixInner(orgId: string, lineId: string, includeS
     };
   }
   if (line.documentId) {
-    const stored = await readSettlementDocument(orgId, line.documentId);
+    const stored = await readSettlementDocument(orgId, line.documentId, allowedSubsidiaryIds, line.batchSubsidiaryId);
     if (stored && stored.status === "posted") {
       return {
         lineId: line.id, batchId: line.batchId, similarCount: 1,
@@ -825,7 +859,7 @@ async function suggestPayoutLineFixInner(orgId: string, lineId: string, includeS
     claim(id, `Provider reference "${line.externalRef ?? sourceOrderId}" claims this document directly.`);
   }
   const orders = line.provider === "shopify_payments" && sourceOrderId && sourceOrderId.trim() !== ""
-    ? await findLineSourceOrders(orgId, sourceOrderId)
+    ? await findLineSourceOrders(orgId, sourceOrderId, allowedSubsidiaryIds)
     : [];
   const isRefundLine = line.kind === "refund" || line.kind === "dispute" || line.kind === "dispute_reversal";
   for (const order of orders) {
@@ -840,7 +874,7 @@ async function suggestPayoutLineFixInner(orgId: string, lineId: string, includeS
   }
   const found: Array<{ id: string; doc: LineDocumentEvidence | null; signals: string[] }> = [];
   for (const [id, signals] of provenance) {
-    found.push({ id, doc: await readSettlementDocument(orgId, id), signals });
+    found.push({ id, doc: await readSettlementDocument(orgId, id, allowedSubsidiaryIds, line.batchSubsidiaryId), signals });
   }
   const posted = found.filter((entry): entry is { id: string; doc: LineDocumentEvidence; signals: string[] } => entry.doc !== null && entry.doc.status === "posted");
   const unposted = found.filter((entry) => entry.doc !== null && entry.doc.status !== "posted");
@@ -875,7 +909,7 @@ async function suggestPayoutLineFixInner(orgId: string, lineId: string, includeS
       };
     });
     const top = candidates[0]!;
-    const similar = includeSimilar ? await similarPayoutLineIds(orgId, line.batchId, `payout:${code}:${line.provider}`, 200) : [line.id];
+    const similar = includeSimilar ? await similarPayoutLineIds(orgId, line.batchId, `payout:${code}:${line.provider}`, allowedSubsidiaryIds, 200) : [line.id];
     return {
       lineId: line.id,
       batchId: line.batchId,
@@ -909,8 +943,18 @@ async function suggestPayoutLineFixInner(orgId: string, lineId: string, includeS
   };
 }
 
-/** Unlinked batch lines waiting on the same discovery outcome, oldest first. */
-export async function similarPayoutLineIds(orgId: string, batchId: string, groupKey: string, limit = 200): Promise<string[]> {
+/**
+ * Unlinked batch lines waiting on the same discovery outcome, oldest first.
+ * Every line is rediscovered under the caller's scope, so a similar count
+ * can never smuggle another entity's lines or causes into the queue.
+ */
+export async function similarPayoutLineIds(
+  orgId: string,
+  batchId: string,
+  groupKey: string,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
+  limit = 200,
+): Promise<string[]> {
   const rows = (await db.execute<{ id: string; kind: string }>(sql`
     select id, kind from psp_settlement_lines
      where org_id = ${orgId} and batch_id = ${batchId} and document_id is null
@@ -918,7 +962,7 @@ export async function similarPayoutLineIds(orgId: string, batchId: string, group
   const out: string[] = [];
   for (const row of rows) {
     if (!isMatchableSettlementLineKind(row.kind)) continue;
-    const suggestion = await suggestPayoutLineFixInner(orgId, row.id, false);
+    const suggestion = await suggestPayoutLineFixInner(orgId, row.id, allowedSubsidiaryIds, false);
     if (suggestion.groupKey === groupKey) out.push(row.id);
   }
   return out;
@@ -945,7 +989,7 @@ export async function approvePayoutSuggestion(
   actor: string,
   lineId: string,
   input: { rank: number; applyToSimilar: boolean },
-  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  allowedSubsidiaryIds: PayoutSubsidiaryScope,
 ): Promise<{ applied: string; linked: Array<{ lineId: string; documentId: string }>; skipped: number }> {
   if (!Number.isInteger(input.rank) || input.rank < 0) {
     refuse(
@@ -959,7 +1003,11 @@ export async function approvePayoutSuggestion(
     if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
       refuse("payout_feature_off", "Payout reconciliation is turned off for this organization.", PAYOUT_FEATURE_REMEDY);
     }
-    const suggestion = await suggestPayoutLineFix(orgId, lineId);
+    // The approval discovers under the same scope as the proposal: the
+    // first read already refuses an out-of-scope or unknown-scope line as
+    // missing, before any candidate, count or manual text is built.
+    const approverLine = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
+    const suggestion = await suggestPayoutLineFix(orgId, lineId, allowedSubsidiaryIds);
     const candidate = suggestion.candidates[input.rank];
     if (!candidate) {
       refuse(
@@ -978,13 +1026,13 @@ export async function approvePayoutSuggestion(
       );
     }
     const targets = input.applyToSimilar
-      ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, 200)
+      ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, allowedSubsidiaryIds, 200)
       : [lineId];
     const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
     const linked: Array<{ lineId: string; documentId: string }> = [];
     let skipped = 0;
     for (const targetId of ordered) {
-      const live = targetId === lineId ? suggestion : await suggestPayoutLineFix(orgId, targetId);
+      const live = targetId === lineId ? suggestion : await suggestPayoutLineFix(orgId, targetId, allowedSubsidiaryIds);
       if (live.groupKey !== suggestion.groupKey) {
         skipped += 1;
         continue;
@@ -994,7 +1042,7 @@ export async function approvePayoutSuggestion(
         skipped += 1;
         continue;
       }
-      const doc = await readSettlementDocument(orgId, pick.action.documentId);
+      const doc = await readSettlementDocument(orgId, pick.action.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
       if (!doc || doc.status !== "posted") {
         skipped += 1;
         continue;

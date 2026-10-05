@@ -8,6 +8,7 @@ import { page, pageHeader, widgetBlock, type PageSpec } from '@braedonsaunders/a
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { PayoutLineDrawerData } from './PayoutLineDrawer'
 
@@ -36,6 +37,7 @@ interface UnmatchedLineRow extends Record<string, unknown> {
   description: string | null
   amount: string
   currency: string | null
+  batchCurrency: string | null
   batchRef: string
   settlementDate: string
 }
@@ -55,14 +57,19 @@ export async function loadPspUnmatched(
   const selected = pickString(params.line)
   if (selected) {
     if (!isUuid(selected)) notFound()
+    // The drawer reads the same entity scope as the queue: a line on a
+    // payout the caller may not see reads as missing, with its amount and
+    // reference. An unknown scope reads nothing.
+    const scope = authz.allowedSubsidiaryIds === undefined ? new Set<string>() : authz.allowedSubsidiaryIds
     const row = (
       await db.execute<UnmatchedLineRow>(sql`
         select l.id, b.provider, l.kind, l.external_ref as "externalRef", l.description,
-               l.amount::text as amount, l.currency, b.external_ref as "batchRef",
-               b.settlement_date::text as "settlementDate"
+               l.amount::text as amount, l.currency, b.currency as "batchCurrency",
+               b.external_ref as "batchRef", b.settlement_date::text as "settlementDate"
           from psp_settlement_lines l
           join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
          where l.org_id = ${authz.user.orgId} and l.id = ${selected} and l.document_id is null
+           ${subsidiaryVisibleFilter(sql`b.subsidiary_id`, scope)}
          limit 1
       `)
     ).rows[0]
@@ -71,6 +78,10 @@ export async function loadPspUnmatched(
     if (!row) notFound()
     // Every shipped locale names every matchable kind; parity enforces it.
     const kindLabel = payoutsT(`kindLabels.${row.kind}`)
+    // The amount prices in the record's own currency — the line's, else its
+    // payout's — never a fallback. A line with no usable currency omits its
+    // amount row instead of showing a converted fiction.
+    const currency = (row.currency ?? row.batchCurrency ?? '').trim()
     drawer = {
       widget: 'psp-settlement-line-drawer',
       props: {
@@ -78,7 +89,7 @@ export async function loadPspUnmatched(
           id: String(row.id),
           providerLabel: settlementT(`providers.${row.provider}`),
           kindLabel: kindLabel === `lineKind.${row.kind}` ? String(row.kind) : kindLabel,
-          amount: money(String(row.amount), { currency: String(row.currency ?? 'USD') }),
+          amount: currency === '' ? null : money(String(row.amount), { currency }),
           externalRef: row.externalRef,
           description: row.description,
           batchRef: String(row.batchRef),

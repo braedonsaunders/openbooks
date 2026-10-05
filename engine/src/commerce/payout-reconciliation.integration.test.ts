@@ -40,7 +40,9 @@ registerChannelAdapter({
 });
 
 async function setup(org: ScratchOrg, actor: string): Promise<string> {
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ banking: true, salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+  // Paid channel orders post cash sales, so the seed enables that gate the
+  // same way the product requires before posting them.
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ banking: true, salesChannels: true, cashSales: true })}::jsonb, true) where id = ${org.orgId}`);
   const created = await withBypass(() => createChannel(org.orgId, actor, {
     kind: "shopify",
     name: "Test Shop",
@@ -340,7 +342,9 @@ test("ambiguous payout line proposes each document with evidence; approval links
     assert.ok(queued && queued.status === "unmatched");
     assert.equal(queued.reason, "ambiguous_link", "the matcher alone refuses to guess");
 
-    const suggestion = await suggestPayoutLineFix(org.orgId, queued.lineId);
+    // Unrestricted by explicit sentinel: the readout keeps its established
+    // cross-entity behavior only when the caller says so.
+    const suggestion = await suggestPayoutLineFix(org.orgId, queued.lineId, null);
     assert.equal(suggestion.code, "ambiguous_candidates");
     assert.equal(suggestion.candidates.length, 2, `expected both receipts proposed, got ${JSON.stringify(suggestion.candidates.map((c) => c.label))}`);
     assert.equal(suggestion.modelRanked, false);

@@ -36,6 +36,7 @@ import {
 } from "../../../../lib/authz";
 import {
   ScopeNotFoundError,
+  subsidiaryVisibleFilter,
   UnrestrictedScopeError,
 } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import {
@@ -325,8 +326,9 @@ export const GET = defineRoute({
     // evidence lines and the linked receipt numbers, under the same scope as
     // the list. A malformed id is a tenant-opaque 404, never a uuid cast 500.
     const batchId = new URL(req.url).searchParams.get("batchId");
-    // Document picker for manual line links: posted documents of this
-    // organization whose number contains the query, newest first.
+    // Document picker for manual line links: posted documents the caller may
+    // see whose number contains the query, newest first. A restricted caller
+    // never learns another entity's receipt numbers through the picker.
     const resolveDoc = new URL(req.url).searchParams.get("resolveDoc");
     if (resolveDoc !== null && resolveDoc.trim() !== "") {
       const query = `%${resolveDoc.trim().replace(/[%_\\]/g, "")}%`;
@@ -336,6 +338,7 @@ export const GET = defineRoute({
           from documents d
          where d.org_id = ${orgId} and d.status = 'posted'
            and d.document_number ilike ${query}
+           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by d.document_date desc, d.document_number
          limit 10
       `);
