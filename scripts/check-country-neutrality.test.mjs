@@ -19,7 +19,7 @@ import {
  * silent either way: too strict and it blocks the release train on pack
  * declarations and fixtures, too loose and the next hardcoded jurisdiction
  * lands in the generic layer with no automated walk failing — the exact gap
- * F-w4-001 names.
+ * this gate exists to close.
  *
  * These tests pin both edges: packs, conformance cases, and fixtures stay
  * inside scope, while generic branches still fail the audit.

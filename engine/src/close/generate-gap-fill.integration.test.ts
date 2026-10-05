@@ -12,7 +12,7 @@ import {
 } from "../testing/fixtures.ts";
 
 /**
- * Gap-fill regression (F-t06-007, corroborated F-t09-003/F-t08-006): seeded
+ * Gap-fill regression: seeded
  * tenants carry 2026-05..08 named `2026-05` (not the canonical `P05 FY2026`)
  * with ledger activity, and no 2026-09..12 at all. Regenerating the year must
  * create the missing months without touching the active rows — a cosmetic

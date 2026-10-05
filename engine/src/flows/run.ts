@@ -430,7 +430,7 @@ function retryEvent(trigger: string): TriggerEvent {
 }
 
 /**
- * Re-drive a FAILED run after its failure cause is fixed (F-t04-004: a gate
+ * Re-drive a FAILED run after its failure cause is fixed (a gate
  * that resolved to zero assignees strands its subject with no path forward).
  * The stored trigger is re-planned against the CURRENT flow graph and CURRENT
  * subject values — assignees, conditions and recipients all resolve live —

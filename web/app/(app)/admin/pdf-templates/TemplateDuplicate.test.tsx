@@ -54,10 +54,10 @@ const { PromptRoot } = await import("../../../../lib/prompt");
 const { NewTemplateButton, DuplicateTemplateButton } = await import("./TemplateActions");
 const { TemplatesList } = await import("./TemplatesList");
 
-// F-x6-003: the starter row-level Duplicate button is a dead click — no
+// The starter row-level Duplicate button is a dead click — no
 // dialog opens, so no request can ever fire. The button must open the name
 // prompt (the request fires only after confirm).
-test("F-x6-003: starter Duplicate opens the name prompt", async () => {
+test("starter Duplicate opens the name prompt", async () => {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -365,7 +365,7 @@ test("F4T2-4: a non-JSON failure toasts instead of navigating nowhere", async ()
 
 // Same contract through the real list row (PagedTable cell): the starter
 // row's Duplicate must reach the same prompt.
-test("F-x6-003: starter row Duplicate opens the name prompt in the list", async () => {
+test("starter row Duplicate opens the name prompt in the list", async () => {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);

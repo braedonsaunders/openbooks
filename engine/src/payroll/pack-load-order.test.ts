@@ -7,8 +7,8 @@ import test from "node:test";
 // below. packs.ts imports every pack to build PAYROLL_COUNTRY_PACKS, so a
 // pack subtree that imports a runtime binding back out of packs.ts closes a
 // module cycle, and entering via the pack dies with
-// "Cannot access '<CC>_PAYROLL_PACK' before initialization" (F-reg-002:
-// PayrollPackError lived in packs.ts; five packs imported it back).
+// "Cannot access '<CC>_PAYROLL_PACK' before initialization" (this
+// happened when PayrollPackError lived in packs.ts; five packs imported it back).
 // Every pack subtree must therefore take runtime bindings only from leaf
 // modules (../payroll-error.ts), never from ../packs.ts. This file proves
 // it in the entry order that bites: packs first, registry last. (Run
@@ -58,7 +58,7 @@ test("every registered pack loads before the registry is entered", () => {
 });
 
 test("no pack file imports a runtime binding out of packs.ts", () => {
-  // F-reg-002, four times over. `packs.ts` imports every country pack to build
+  // This cycle has recurred four times. `packs.ts` imports every country pack to build
   // PAYROLL_COUNTRY_PACKS, so a pack importing a RUNTIME binding back out of it
   // closes a load-order-dependent cycle: whichever pack the import order reaches
   // first crashes with "Cannot access 'X' before initialization".
@@ -74,7 +74,7 @@ test("no pack file imports a runtime binding out of packs.ts", () => {
   // TYPE-only imports from packs.ts are fine — they are erased at runtime.
   //
   // LIMIT, worth knowing: this scan only sees a pack importing packs.ts
-  // DIRECTLY. It cannot see a transitive cycle — F-reg-003 runs
+  // DIRECTLY. It cannot see a transitive cycle — the registry cycle runs
   // packs.ts -> it/pack.ts -> it/compute-statutory.ts -> ../statutory-rates.ts
   // -> packs.ts, two hops out, and this test passes while the registry crashes.
   // The load probe above is what actually holds that invariant. Keep both.

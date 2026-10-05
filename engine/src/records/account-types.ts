@@ -1,5 +1,5 @@
 /**
- * Canonical account-type universes (F-u1-001 / P2: one definition).
+ * Canonical account-type universes: one definition.
  *
  * Lives in the engine (records owns the chart's account roles) so posting
  * paths, consolidation and statements all filter on the same lists without

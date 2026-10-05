@@ -47,7 +47,7 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
     "liability_long_term",
   ],
   // Customer-side mirror of retainagePayable: withheld progress-billing
-  // amounts live in receivables until release (F-t04-002 — the engine and
+  // amounts live in receivables until release (the engine and
   // provisioning already read/write this key, but without a policy role the
   // settings writer silently dropped it and setup showed no slot).
   retainageReceivable: ["asset_receivable", "asset_current_other"],

@@ -260,7 +260,7 @@ const { postDocument } = await import("@openbooks/engine/src/ledger/posting-docu
 const {openItems}=await import('./cash/open-items');
 const {agingByParty,agingDetail}=await import('./reports/aging');
 /**
- * F-p3-001 / P5.1: the dashboard AP tile and the formal AP aging agree on one
+ * The dashboard AP tile and the formal AP aging agree on one
  * basis — an expense report contributes exactly its out-of-pocket open lines.
  * Company-paid legs are never open items; personal debits sit on asset-side
  * accounts outside the AP scope; legacy card-override reports (the live

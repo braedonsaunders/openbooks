@@ -10,7 +10,7 @@
  * succeeds, then the first employee throws.
  *
  * France shipped exactly that. `regions.supported` was correctly emptied at
- * the skeleton stage by finding F-fr-001, when PAS genuinely did not compute;
+ * the skeleton stage, when PAS genuinely did not compute;
  * the grille then landed, `withholding().regions[0].implemented` flipped to
  * true and the pack flipped to `installable: true`, and nobody reopened the
  * guard that the earlier finding had closed. Both halves were locally

@@ -59,7 +59,7 @@ function numericValue(value: Exclude<MoneyValue, null | undefined>): IntlMathema
 /**
  * ICU emits U+202F (narrow no-break space) as the grouping separator for fr
  * and a few other locales, but Chromium renders it zero-width in a system-ui
- * stack (F-x6-001 item 5: fr amounts read ungrouped while the DOM stays
+ * stack (fr amounts read ungrouped while the DOM stays
  * correct). Normalize to the universally rendered U+00A0 — still
  * non-breaking, and the pre-CLDR-38 fr convention.
  */

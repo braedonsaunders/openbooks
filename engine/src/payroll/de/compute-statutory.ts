@@ -12,7 +12,7 @@
  * Where each PAP input comes from (both channels the predecessor said were
  * missing, verified against the types):
  * - KVZ: the tenant-entered de_kvz rate slot, read via resolveStatutoryRates
- *   (the F-reg-003 inversion: the pack's rates go in as a PARAMETER, so no
+ *   (the registry-cycle inversion: the pack's rates go in as a PARAMETER, so no
  *   load cycle). Missing → refusal naming the Zusatzbeitrag, never zero or
  *   the BMG average.
  * - Steuerklasse, ZKF, Konfession, Freibetrag/Hinzurechnungsbetrag, Faktor:
