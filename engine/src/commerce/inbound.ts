@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { channelAdapter } from "./adapters.ts";
 import { CommerceError } from "./errors.ts";
+import { ensureShopifyAdapterRegistered } from "./shopify/adapter.ts";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
@@ -133,6 +134,9 @@ export interface ReceiveInboundInput {
  * stores nothing and refuses (the route answers 401).
  */
 export async function receiveInboundEvent(input: ReceiveInboundInput): Promise<InboundEventRow> {
+  // Production workers arrive with no adapter installed; tests that
+  // register their own kind double keep it (first registration wins).
+  ensureShopifyAdapterRegistered();
   const channel = await loadWebhookChannel(input.channelId);
   if (!channel) {
     refuse(
@@ -235,6 +239,7 @@ async function runOneEvent(event: EventDbRow): Promise<void> {
       }
       return;
     }
+    ensureShopifyAdapterRegistered();
     const adapter = channelAdapter(channel.kind);
     const body = (await db.execute<{ raw_body: Buffer; headers: Record<string, string> }>(sql`
       select raw_body, headers from integration_inbound_events where id = ${event.id}`)).rows[0];

@@ -114,7 +114,7 @@ async function requireFeature(orgId: string, feature: ExternalLinkFeature): Prom
  */
 export async function linkExternal(
   orgId: string,
-  actor: string,
+  actor: string | null,
   input: ExternalLinkInput,
   feature: ExternalLinkFeature,
 ): Promise<ExternalLinkRow> {
@@ -343,7 +343,7 @@ export async function bulkFindNative(
 /** Remove an external identity. The native record stays; only the mapping goes, with audit evidence. */
 export async function unlinkExternal(
   orgId: string,
-  actor: string,
+  actor: string | null,
   key: { provider: string; externalAccount: string; objectType: string; externalId: string },
   reason: unknown,
   feature: ExternalLinkFeature,

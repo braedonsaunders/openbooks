@@ -211,6 +211,6 @@ export interface SalesChannelAdapter {
   testConnection(ctx: ChannelContext, channelId: string): Promise<{ ok: boolean; detail: string }>;
   /** Translate and apply one verified delivery. Idempotent per event id. */
   handleEvent(delivery: ChannelInboundDelivery): Promise<ChannelEventOutcome>;
-  /** Extra workspace tabs this adapter contributes. Empty until the order and payout surfaces land. */
+  /** Extra workspace tabs this adapter contributes. Catalog and location tabs arrive with the Shopify connector; order and payout tabs arrive with their surfaces. */
   workspaceTabs(): ChannelWorkspaceTab[];
 }

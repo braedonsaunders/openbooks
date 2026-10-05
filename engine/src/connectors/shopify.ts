@@ -60,6 +60,7 @@ export interface ShopifyThrottleStatus {
 export interface ShopifyGraphqlEnvelope<T> {
   data: T;
   throttleStatus: ShopifyThrottleStatus | null;
+  cost: { requested: number; actual: number } | null;
 }
 
 interface ShopifyErrorExtension {
@@ -150,16 +151,24 @@ export class ShopifyClient {
    * retry inside the shared connector loop.
    */
   async graphql<T>(query: string, variables?: Record<string, unknown>): Promise<ShopifyGraphqlEnvelope<T>> {
-    let lastThrottle: ShopifyThrottleStatus | null = null;
     for (let attempt = 0; ; attempt += 1) {
       const res = await this.postGraphql({ query, variables: variables ?? {} });
       const payload = (await res.json()) as {
         data?: T;
         errors?: Array<{ message?: string; extensions?: ShopifyErrorExtension }>;
-        extensions?: { cost?: { throttleStatus?: ShopifyThrottleStatus } };
+        extensions?: {
+          cost?: {
+            throttleStatus?: ShopifyThrottleStatus;
+            requestedQueryCost?: unknown;
+            actualQueryCost?: unknown;
+          };
+        };
       };
       const throttle = payload.extensions?.cost?.throttleStatus ?? null;
-      if (throttle) lastThrottle = throttle;
+      const requested = payload.extensions?.cost?.requestedQueryCost;
+      const actual = payload.extensions?.cost?.actualQueryCost;
+      const cost =
+        typeof requested === "number" && typeof actual === "number" ? { requested, actual } : null;
       const errors = payload.errors ?? [];
       if (isThrottled(errors)) {
         if (attempt >= this.maxThrottleRetries) {
@@ -182,7 +191,7 @@ export class ShopifyClient {
       if (payload.data === undefined) {
         throw new Error("Shopify answered without data or errors — retry the sync, and ask your administrator if it persists");
       }
-      return { data: payload.data, throttleStatus: throttle };
+      return { data: payload.data, throttleStatus: throttle, cost };
     }
   }
 

@@ -137,7 +137,7 @@ async function writeAudit(
   orgId: string,
   channelId: string,
   action: string,
-  actor: string,
+  actor: string | null,
   before: unknown,
   after: unknown,
   reason: string | null,
@@ -381,6 +381,44 @@ export async function markChannelActive(orgId: string, actor: string, channelId:
     }
     const after = toRow(updated.rows[0]!);
     await writeAudit(orgId, channelId, "update", actor, before, after, "Connection verified");
+    return after;
+  });
+}
+
+/**
+ * Provider-initiated disconnect (the storefront reports the app removed):
+ * audited as a system event with a null actor. Already disconnected stays
+ * put so redelivered uninstall events are no-ops instead of refusals.
+ */
+export async function disconnectChannelByProvider(
+  orgId: string,
+  channelId: string,
+  detail: string,
+): Promise<ChannelRow> {
+  return withOrg(orgId, async () => {
+    await acquireOrgFeatureGateLock(db, orgId);
+    await requireFeature(orgId);
+    const before = toRow(await loadChannel(orgId, channelId));
+    if (before.status === "disconnected") return before;
+    const allowed = LIFECYCLE_TARGETS[before.status] ?? [];
+    if (!allowed.includes("disconnected")) {
+      refuse(
+        "channel_transition_refused",
+        `A ${before.status} channel cannot move to disconnected.`,
+        "Disconnect the channel by hand under Channels.",
+        "status",
+      );
+    }
+    const updated = await db.execute<ChannelDbRow>(sql`
+      update sales_channels
+         set status = 'disconnected', updated_at = now()
+       where org_id = ${orgId} and id = ${channelId}
+       returning ${CHANNEL_COLUMNS}`);
+    if (updated.rows.length !== 1) {
+      throw new Error("Channel provider disconnect matched no row; the channel is no longer in this organization");
+    }
+    const after = toRow(updated.rows[0]!);
+    await writeAudit(orgId, channelId, "update", null, before, after, detail);
     return after;
   });
 }
