@@ -114,6 +114,9 @@ export const EXCLUDE = new Set([
   // Raw inbound webhook bodies may carry customer data; sandboxes never
   // replay the source's deliveries.
   "integration_inbound_events",
+  // Billing-platform import runs record what one connected account imported
+  // and reconciled; a sandbox relinks its own account and runs its own import.
+  "billing_import_runs",
   // The storage cleanup outbox holds object deletes queued against the
   // source org's files; a sandbox that replayed them would delete them.
   "storage_cleanup_outbox",

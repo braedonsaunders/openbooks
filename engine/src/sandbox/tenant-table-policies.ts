@@ -72,6 +72,7 @@ export const TENANT_TABLE_POLICIES = {
   "bank_match_rules": "clone:catalog-uuid-rebase",
   "bank_statement_lines": "clone:catalog-uuid-rebase",
   "bank_statements": "clone:catalog-uuid-rebase",
+  "billing_import_runs": "skip:no-copy",
   "billing_request_field_tickets": "clone:catalog-uuid-rebase",
   "billing_requests": "clone:catalog-uuid-rebase",
   "billing_schedules": "clone:catalog-uuid-rebase",
