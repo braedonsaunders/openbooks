@@ -12,7 +12,8 @@
     "customer": "Customer",
     "total": "Total",
     "recognized": "Recognized",
-    "deferred": "Deferred"
+    "deferred": "Deferred",
+    "scope": "Coverage"
   },
   "status": {
     "draft": "Draft",
@@ -59,7 +60,13 @@
     "reconciled": "Legacy rule reconciled for this obligation",
     "eventsTitle": "Accounting events",
     "supersededStatus": "Superseded plan",
-    "reversedStatus": "Reversed"
+    "reversedStatus": "Reversed",
+    "scheduleTitle": "Recognition schedule",
+    "scheduleSummary": "{periods, plural, one {# period} other {# periods}} · {recognized} recognized of {planned}",
+    "billingsTitle": "Billings",
+    "billingInvoice": "Invoice",
+    "billedOn": "Billed on",
+    "billedAmount": "Billed"
   },
   "cancel": {
     "button": "Cancel recognition",
@@ -180,5 +187,22 @@
     "method": "Recognition assessment",
     "expected_proportional": "Expected breakage in proportion to exercised rights",
     "remaining_use_remote": "Further customer use is assessed as remote"
+  },
+  "scope": {
+    "invoice": "Invoice",
+    "order": "Sales order",
+    "subscription": "Subscription"
+  },
+  "coverage": {
+    "invoice": "Covers invoice {source}.",
+    "order": "Covers sales order {source} across {count, plural, one {# billing} other {# billings}}.",
+    "orderShell": "Covers sales order {source} — booked, nothing billed yet.",
+    "subscription": "Covers subscription {source} across {count, plural, one {# billing} other {# billings}}.",
+    "subscriptionShell": "Covers subscription {source} — booked, nothing billed yet."
+  },
+  "position": {
+    "liability": "Billed {billed}, recognized {recognized} — {net} still to earn.",
+    "asset": "Billed {billed}, recognized {recognized} — {net} earned but not yet billed.",
+    "settled": "Fully billed and recognized."
   }
 }

@@ -12,7 +12,8 @@
     "customer": "Kunde",
     "total": "Gesamt",
     "recognized": "Realisiert",
-    "deferred": "Abgegrenzt"
+    "deferred": "Abgegrenzt",
+    "scope": "Abdeckung"
   },
   "status": {
     "draft": "Entwurf",
@@ -59,7 +60,13 @@
     "reconciled": "Legacy-Regel für diese Verpflichtung abgestimmt",
     "eventsTitle": "Buchungsereignisse",
     "supersededStatus": "Ersetzter Plan",
-    "reversedStatus": "Storniert"
+    "reversedStatus": "Storniert",
+    "scheduleTitle": "Realisierungsplan",
+    "scheduleSummary": "{periods, plural, one {# Periode} other {# Perioden}} · {recognized} von {planned} realisiert",
+    "billingsTitle": "Abrechnungen",
+    "billingInvoice": "Rechnung",
+    "billedOn": "Abgerechnet am",
+    "billedAmount": "Abgerechnet"
   },
   "cancel": {
     "button": "Abgrenzung stornieren",
@@ -180,5 +187,22 @@
     "method": "Ansatzbeurteilung",
     "expected_proportional": "Erwartete nicht ausgeübte Rechte proportional zu ausgeübten Rechten",
     "remaining_use_remote": "Weitere Kundennutzung wird als unwahrscheinlich beurteilt"
+  },
+  "scope": {
+    "invoice": "Rechnung",
+    "order": "Auftrag",
+    "subscription": "Abonnement"
+  },
+  "coverage": {
+    "invoice": "Deckt Rechnung {source} ab.",
+    "order": "Deckt Auftrag {source} über {count, plural, one {# Abrechnung} other {# Abrechnungen}} ab.",
+    "orderShell": "Deckt Auftrag {source} ab — gebucht, noch nichts abgerechnet.",
+    "subscription": "Deckt Abonnement {source} über {count, plural, one {# Abrechnung} other {# Abrechnungen}} ab.",
+    "subscriptionShell": "Deckt Abonnement {source} ab — gebucht, noch nichts abgerechnet."
+  },
+  "position": {
+    "liability": "{billed} abgerechnet, {recognized} realisiert — noch {net} zu realisieren.",
+    "asset": "{billed} abgerechnet, {recognized} realisiert — {net} realisiert, aber noch nicht abgerechnet.",
+    "settled": "Vollständig abgerechnet und realisiert."
   }
 }

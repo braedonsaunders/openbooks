@@ -1,4 +1,5 @@
-import type { breakageGrantOptions } from '@openbooks/engine/revenue'
+import type { breakageGrantOptions, ContractPosition } from '@openbooks/engine/revenue'
+import { contractPosition } from '@openbooks/engine/revenue'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
@@ -45,6 +46,21 @@ export interface ObligationRow {
   lines: ScheduleLineRow[];
 }
 
+export interface ContractSource {
+  kind: "order" | "subscription";
+  /** Display name: the sales order number or the subscription plan. */
+  label: string;
+  /** Deep link where one exists; subscriptions have no record surface yet. */
+  href: string | null;
+}
+
+export interface ContractBillingRow {
+  id: string;
+  document_number: string;
+  amount: string;
+  billed_on: string;
+}
+
 export interface ContractPayload {
   contract: {
     id: string;
@@ -57,6 +73,10 @@ export interface ContractPayload {
     total_transaction_price: string;
     starts_on: string | null;
     ends_on: string | null;
+    /** What the contract covers: one invoice, one sales order, or one subscription. */
+    scope: "invoice" | "order" | "subscription";
+    /** The billed agreement for scoped contracts; null for invoice scope. */
+    source: ContractSource | null;
     /**
      * The source customer invoice for invoice-sourced contracts (one contract
      * per invoice by construction). Null for project percent-complete
@@ -68,6 +88,10 @@ export interface ContractPayload {
     sourceInvoiceNumber: string | null;
   };
   obligations: ObligationRow[];
+  /** Every posted billing of this contract, oldest first. */
+  billings: ContractBillingRow[];
+  /** Net billed-against-recognized position on the primary posting book. */
+  position: ContractPosition;
   prepaidGrants?: Awaited<ReturnType<typeof breakageGrantOptions>>;
   changes?: { id: string; operation: string; effective_on: string; status: string }[];
 }
@@ -90,16 +114,44 @@ export async function loadContract(
     starts_on: string | null;
     ends_on: string | null;
     customer: string;
+    scope: "invoice" | "order" | "subscription";
+    source_document_id: string | null;
+    subscription_id: string | null;
     sourceInvoiceId: string | null;
     sourceInvoiceNumber: string | null;
   }>(sql`
     select c.id, c.subsidiary_id,c.revision,c.contract_number, c.status, c.currency, c.total_transaction_price, c.starts_on, c.ends_on,
+           c.scope, c.source_document_id, c.subscription_id,
            coalesce(p.display_name, '—') as customer
       from revenue_contracts c
       left join parties p on p.id = c.customer_id and p.org_id = c.org_id
      where c.id = ${id} and c.org_id = ${orgId} ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where o.contract_id=c.id and o.org_id=c.org_id order by o.id limit 1))`, allowedSubsidiaryIds)}`);
   const contract = cRes.rows[0];
   if (!contract) return null;
+
+  // The billed agreement behind a scoped contract: the sales order (with its
+  // record drawer) or the subscription (plan name; subscriptions have no
+  // record surface yet, so no deep link).
+  let source: ContractSource | null = null;
+  if (contract.scope === "order" && contract.source_document_id) {
+    const order = (await db.execute<{ document_number: string }>(sql`
+      select document_number from documents
+       where id = ${contract.source_document_id} and org_id = ${orgId}`)).rows[0];
+    if (order) {
+      source = {
+        kind: "order",
+        label: order.document_number,
+        href: `/sales-orders?order=${contract.source_document_id}`,
+      };
+    }
+  } else if (contract.scope === "subscription" && contract.subscription_id) {
+    const subscription = (await db.execute<{ plan: string }>(sql`
+      select coalesce((select p.name from subscription_plans p
+                        where p.id = s.plan_id and p.org_id = s.org_id),
+                      s.id::text) as plan
+        from subscriptions s where s.id = ${contract.subscription_id} and s.org_id = ${orgId}`)).rows[0];
+    if (subscription) source = { kind: "subscription", label: subscription.plan, href: null };
+  }
 
   // One contract per invoice by construction (revenueContractPostingEffectKey),
   // so at most one source invoice exists; project contracts have none.
@@ -193,7 +245,27 @@ export async function loadContract(
       sql`select id,operation,effective_on::text,status from financial_changes where org_id=${orgId} and domain='revenue' and subject_id=${id} order by created_at desc`,
     )
   ).rows;
-  return { contract, obligations, changes };
+
+  const billings = (await db.execute<ContractBillingRow & { billed_on: string }>(sql`
+    select b.document_id as id, d.document_number, b.amount::text as amount,
+           b.billed_on::text as billed_on
+      from revenue_contract_billings b
+      join documents d on d.id = b.document_id and d.org_id = b.org_id
+     where b.contract_id = ${id} and b.org_id = ${orgId}
+     order by b.billed_on, d.document_number`)).rows.map((row) => ({
+    id: row.id,
+    document_number: row.document_number,
+    amount: row.amount,
+    billed_on: row.billed_on,
+  }));
+
+  return {
+    contract: { ...contract, source },
+    obligations,
+    billings,
+    position: await contractPosition(db, orgId, id),
+    changes,
+  };
 }
 
 export async function revenueModificationOptions(

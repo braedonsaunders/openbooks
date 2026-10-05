@@ -12,7 +12,8 @@
     "customer": "得意先",
     "total": "合計",
     "recognized": "認識済み",
-    "deferred": "繰延"
+    "deferred": "繰延",
+    "scope": "対象範囲"
   },
   "status": {
     "draft": "下書き",
@@ -59,7 +60,13 @@
     "reconciled": "この債務についてレガシールールを照合済み",
     "eventsTitle": "会計イベント",
     "supersededStatus": "置換済み計画",
-    "reversedStatus": "取消済み"
+    "reversedStatus": "取消済み",
+    "scheduleTitle": "認識スケジュール",
+    "scheduleSummary": "{periods, plural, one {# 期間} other {# 期間}} · {planned} のうち {recognized} を認識済み",
+    "billingsTitle": "請求一覧",
+    "billingInvoice": "請求書",
+    "billedOn": "請求日",
+    "billedAmount": "請求額"
   },
   "cancel": {
     "button": "認識をキャンセル",
@@ -180,5 +187,22 @@
     "method": "収益認識の評価",
     "expected_proportional": "行使済み権利に比例する予想未行使額",
     "remaining_use_remote": "顧客による追加使用の可能性は極めて低いと評価"
+  },
+  "scope": {
+    "invoice": "請求書",
+    "order": "受注",
+    "subscription": "サブスクリプション"
+  },
+  "coverage": {
+    "invoice": "請求書 {source} を対象とします。",
+    "order": "受注 {source} を {count, plural, one {# 回} other {# 回}}の請求で対象とします。",
+    "orderShell": "受注 {source} を対象とします — 受注済み、まだ請求なし。",
+    "subscription": "サブスクリプション {source} を {count, plural, one {# 回} other {# 回}}の請求で対象とします。",
+    "subscriptionShell": "サブスクリプション {source} を対象とします — 契約済み、まだ請求なし。"
+  },
+  "position": {
+    "liability": "請求済み {billed}、認識済み {recognized} — 未認識 {net}。",
+    "asset": "請求済み {billed}、認識済み {recognized} — 未請求の認識済み {net}。",
+    "settled": "請求と認識が完了しています。"
   }
 }

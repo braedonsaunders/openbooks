@@ -12,7 +12,8 @@
     "customer": "Client",
     "total": "Total",
     "recognized": "Comptabilisé",
-    "deferred": "Différé"
+    "deferred": "Différé",
+    "scope": "Périmètre"
   },
   "status": {
     "draft": "Brouillon",
@@ -59,7 +60,13 @@
     "reconciled": "Règle legacy rapprochée pour cette obligation",
     "eventsTitle": "Événements comptables",
     "supersededStatus": "Plan remplacé",
-    "reversedStatus": "Contre-passé"
+    "reversedStatus": "Contre-passé",
+    "scheduleTitle": "Calendrier de comptabilisation",
+    "scheduleSummary": "{periods, plural, one {# période} other {# périodes}} · {recognized} comptabilisés sur {planned}",
+    "billingsTitle": "Facturations",
+    "billingInvoice": "Facture",
+    "billedOn": "Facturé le",
+    "billedAmount": "Facturé"
   },
   "cancel": {
     "button": "Annuler la reconnaissance",
@@ -180,5 +187,22 @@
     "method": "Évaluation de la comptabilisation",
     "expected_proportional": "Droits non exercés attendus proportionnels aux droits exercés",
     "remaining_use_remote": "Toute utilisation supplémentaire par le client est jugée très peu probable"
+  },
+  "scope": {
+    "invoice": "Facture",
+    "order": "Bon de commande",
+    "subscription": "Abonnement"
+  },
+  "coverage": {
+    "invoice": "Couvre la facture {source}.",
+    "order": "Couvre la commande {source} en {count, plural, one {# facture} other {# factures}}.",
+    "orderShell": "Couvre la commande {source} — enregistrée, rien encore facturé.",
+    "subscription": "Couvre l'abonnement {source} en {count, plural, one {# facture} other {# factures}}.",
+    "subscriptionShell": "Couvre l'abonnement {source} — enregistré, rien encore facturé."
+  },
+  "position": {
+    "liability": "Facturé {billed}, comptabilisé {recognized} — reste {net} à comptabiliser.",
+    "asset": "Facturé {billed}, comptabilisé {recognized} — {net} comptabilisés mais non encore facturés.",
+    "settled": "Entièrement facturé et comptabilisé."
   }
 }

@@ -12,7 +12,8 @@
     "customer": "Cliente",
     "total": "Total",
     "recognized": "Reconocido",
-    "deferred": "Diferido"
+    "deferred": "Diferido",
+    "scope": "Cobertura"
   },
   "status": {
     "draft": "Borrador",
@@ -59,7 +60,13 @@
     "reconciled": "Regla legacy conciliada para esta obligación",
     "eventsTitle": "Eventos contables",
     "supersededStatus": "Plan sustituido",
-    "reversedStatus": "Revertido"
+    "reversedStatus": "Revertido",
+    "scheduleTitle": "Calendario de reconocimiento",
+    "scheduleSummary": "{periods, plural, one {# período} other {# períodos}} · {recognized} reconocidos de {planned}",
+    "billingsTitle": "Facturación",
+    "billingInvoice": "Factura",
+    "billedOn": "Facturado el",
+    "billedAmount": "Facturado"
   },
   "cancel": {
     "button": "Cancelar el reconocimiento",
@@ -180,5 +187,22 @@
     "method": "Evaluación del reconocimiento",
     "expected_proportional": "Derechos no ejercidos esperados en proporción a los derechos ejercidos",
     "remaining_use_remote": "El uso adicional del cliente se considera remoto"
+  },
+  "scope": {
+    "invoice": "Factura",
+    "order": "Pedido de venta",
+    "subscription": "Suscripción"
+  },
+  "coverage": {
+    "invoice": "Cubre la factura {source}.",
+    "order": "Cubre el pedido {source} en {count, plural, one {# factura} other {# facturas}}.",
+    "orderShell": "Cubre el pedido {source} — registrado, aún sin facturar.",
+    "subscription": "Cubre la suscripción {source} en {count, plural, one {# factura} other {# facturas}}.",
+    "subscriptionShell": "Cubre la suscripción {source} — registrada, aún sin facturar."
+  },
+  "position": {
+    "liability": "Facturado {billed}, reconocido {recognized} — quedan {net} por reconocer.",
+    "asset": "Facturado {billed}, reconocido {recognized} — {net} reconocidos aún sin facturar.",
+    "settled": "Totalmente facturado y reconocido."
   }
 }

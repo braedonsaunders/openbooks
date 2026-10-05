@@ -12,7 +12,8 @@
     "customer": "客户",
     "total": "总额",
     "recognized": "已确认",
-    "deferred": "递延"
+    "deferred": "递延",
+    "scope": "涵盖范围"
   },
   "status": {
     "draft": "草稿",
@@ -59,7 +60,13 @@
     "reconciled": "已为该义务核对遗留规则",
     "eventsTitle": "会计事件",
     "supersededStatus": "已取代计划",
-    "reversedStatus": "已冲销"
+    "reversedStatus": "已冲销",
+    "scheduleTitle": "确认计划",
+    "scheduleSummary": "{periods, plural, one {# 个期间} other {# 个期间}} · {planned} 中已确认 {recognized}",
+    "billingsTitle": "开票记录",
+    "billingInvoice": "发票",
+    "billedOn": "开票日期",
+    "billedAmount": "开票金额"
   },
   "cancel": {
     "button": "取消确认",
@@ -180,5 +187,22 @@
     "method": "收入确认评估",
     "expected_proportional": "按已行使权利比例确认预计未行使权利",
     "remaining_use_remote": "客户进一步使用被评估为极小可能"
+  },
+  "scope": {
+    "invoice": "发票",
+    "order": "销售订单",
+    "subscription": "订阅"
+  },
+  "coverage": {
+    "invoice": "涵盖发票 {source}。",
+    "order": "涵盖销售订单 {source}、共开票 {count, plural, one {# 次} other {# 次}}。",
+    "orderShell": "涵盖销售订单 {source}——已预订，尚未开票。",
+    "subscription": "涵盖订阅 {source}、共开票 {count, plural, one {# 次} other {# 次}}。",
+    "subscriptionShell": "涵盖订阅 {source}——已预订，尚未开票。"
+  },
+  "position": {
+    "liability": "已开票 {billed}，已确认 {recognized}——尚有 {net} 待确认。",
+    "asset": "已开票 {billed}，已确认 {recognized}——{net} 已确认尚未开票。",
+    "settled": "已全额开票并确认。"
   }
 }
