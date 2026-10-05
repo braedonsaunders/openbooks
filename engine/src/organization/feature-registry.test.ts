@@ -83,8 +83,30 @@ test("automations is an opt-in platform feature under flows with four sub-featur
     assert.equal(sub.parentKey, "automations");
     // A stale stored override can never resurrect a child while the parent is off.
     assert.equal(featureEnabled({ automations: false, [key]: true }, key), false);
+  }
+  for (const key of ["automationDateTriggers", "automationFieldTriggers", "automationSimulator"]) {
     assert.equal(featureEnabled({ flows: true, automations: true, [key]: true }, key), true);
   }
+  // The webhook action needs the delivery transport: automationWebhooks
+  // additionally requires outboundWebhooks (which itself needs apiAccess).
+  const webhooksOn = {
+    flows: true,
+    automations: true,
+    automationWebhooks: true,
+    outboundWebhooks: true,
+    apiAccess: true,
+  };
+  assert.equal(featureEnabled(webhooksOn, "automationWebhooks"), true);
+  assert.equal(
+    featureEnabled({ ...webhooksOn, outboundWebhooks: false }, "automationWebhooks"),
+    false,
+    "the webhook action stays off while the delivery transport is off",
+  );
+  assert.equal(
+    featureEnabled({ ...webhooksOn, apiAccess: false }, "automationWebhooks"),
+    false,
+    "the transport chain resolves through apiAccess",
+  );
   // Exception-only approval is a per-flow setting, never a feature key.
   assert.equal(FEATURE_BY_KEY.has("automationExceptionApproval"), false);
 });

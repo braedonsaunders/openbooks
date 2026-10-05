@@ -220,12 +220,16 @@ export const FEATURES: FeatureDef[] = [
   { key: 'automations', defaultEnabled: false, category: 'platform', parentKey: 'flows', navModules: ['automations'] },
   { key: 'automationDateTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
   { key: 'automationFieldTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
-  { key: 'automationWebhooks', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  { key: 'automationWebhooks', defaultEnabled: false, category: 'platform', parentKey: 'automations', requiresAll: ['outboundWebhooks'] },
   { key: 'automationSimulator', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
   // HR-16 end
   { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps'] },
   { key: 'scripts', defaultEnabled: false, category: 'platform', navModules: ['admin-scripts'] },
   { key: 'apiAccess', defaultEnabled: false, category: 'platform', navModules: ['admin-api-keys', 'api-docs'] },
+  // Outbound webhooks: signed domain-event delivery to subscriber
+  // endpoints (Settings → Developers → Webhooks). The automation webhook
+  // action additionally requires this gate (see automationWebhooks).
+  { key: 'outboundWebhooks', defaultEnabled: false, category: 'platform', requiresAll: ['apiAccess'] },
   { key: 'mcpAccess', defaultEnabled: false, category: 'platform', requiresAll: ['apiAccess'] },
   { key: 'queryConsole', defaultEnabled: false, category: 'platform', navModules: ['sql'] },
   // Construction compliance — prevailing-wage and union rate tables,

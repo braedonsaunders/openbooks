@@ -56,7 +56,8 @@
         "money",
         "organization",
         "platform",
-        "scheduling"
+        "scheduling",
+        "webhooks"
       ]
     },
     "backup": {
@@ -286,7 +287,8 @@
         "organization",
         "periods",
         "platform",
-        "records"
+        "records",
+        "webhooks"
       ]
     },
     "manufacturing": {
@@ -323,7 +325,8 @@
         "records",
         "revenue",
         "scripting",
-        "tax"
+        "tax",
+        "webhooks"
       ]
     },
     "journal": {
@@ -482,7 +485,8 @@
         "delivery",
         "money",
         "platform",
-        "records"
+        "records",
+        "webhooks"
       ]
     },
     "records": {
@@ -585,7 +589,8 @@
         "receivables",
         "scripting",
         "sftp",
-        "sync"
+        "sync",
+        "webhooks"
       ]
     },
     "scripting": {
@@ -709,6 +714,16 @@
         "money",
         "organization",
         "periods",
+        "platform"
+      ]
+    },
+    "webhooks": {
+      "description": "Subscriber endpoints, domain event catalog, signed delivery, retries and the delivery log.",
+      "dependsOn": [
+        "connectors",
+        "fx",
+        "money",
+        "organization",
         "platform"
       ]
     }

@@ -299,6 +299,11 @@ export const PERMISSION_CATALOGUE = [
   "automations.read",
   "automations.manage",
   "automations.run",
+  // Outbound webhooks — subscriber endpoints and the delivery log. read
+  // sees endpoints and deliveries; manage changes endpoints, rotates
+  // secrets and redelivers. Granted to admin roles, like api.keys.manage.
+  "webhooks.read",
+  "webhooks.manage",
   // HR-16 end
   // Apps — installable packages (sandboxed frontend + governed backend).
   // `apps.use` runs an installed App; `apps.manage` installs/upgrades/removes.
@@ -720,6 +725,8 @@ export const PERMISSION_GROUPS: {
       { key: "admin.sandboxes.manage", labelKey: permissionLabelKey("admin.sandboxes.manage") },
       { key: "admin.backups.manage", labelKey: permissionLabelKey("admin.backups.manage") },
       { key: "api.keys.manage", labelKey: permissionLabelKey("api.keys.manage") },
+      { key: "webhooks.read", labelKey: permissionLabelKey("webhooks.read") },
+      { key: "webhooks.manage", labelKey: permissionLabelKey("webhooks.manage") },
     ],
   },
 ];
