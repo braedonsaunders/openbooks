@@ -1723,6 +1723,12 @@
           "label": "Pagamento de cartão desatualizado (dias)",
           "help": "Dias desde o último pagamento quando nenhum pagamento significativo é visto"
         }
+      },
+      "groups": {
+        "forecast": "Escopo da previsão",
+        "scheduling": "Agendamento de pagamentos",
+        "prediction": "Modelo de datas previstas",
+        "cards": "Modelo de cartão de crédito"
       }
     },
     "unplacedAr": "{count, plural, one {# fatura não tem} other {# faturas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão.",

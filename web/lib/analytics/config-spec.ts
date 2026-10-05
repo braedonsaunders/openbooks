@@ -501,6 +501,12 @@ export const ANALYTICS_CONFIG = {
       ["overduePushShortDays", "overduePushMidDays", "overduePushLongDays"],
       ["overdueMidThresholdDays", "overdueLongThresholdDays"],
     ],
+    groups: [
+      { labelKey: "analytics.cashflow.config.groups.forecast", fields: ["defaultHorizonWeeks", "runwayCautionWeeks", "paymentHistoryMonths"] },
+      { labelKey: "analytics.cashflow.config.groups.scheduling", fields: ["weeklyApCap", "restrictToSafe"] },
+      { labelKey: "analytics.cashflow.config.groups.prediction", fields: ["settleBufferSigma", "overduePushShortDays", "overduePushMidDays", "overduePushLongDays", "overdueMidThresholdDays", "overdueLongThresholdDays", "vendorOutlierSigma"] },
+      { labelKey: "analytics.cashflow.config.groups.cards", fields: ["cardTrajectoryTolerance", "cardMedianBlendWeight", "cardStatementCloseDays", "cardDefaultPayDay", "cardStalePaymentDays"] },
+    ],
   },
   spendVelocity: {
     slug: "spend-velocity",

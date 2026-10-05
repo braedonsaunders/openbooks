@@ -1723,6 +1723,12 @@
           "label": "卡片付款陈旧（天）",
           "help": "未见显著卡片付款时报告的距上次付款天数"
         }
+      },
+      "groups": {
+        "forecast": "预测范围",
+        "scheduling": "付款排期",
+        "prediction": "预测日期模型",
+        "cards": "信用卡模型"
       }
     },
     "unplacedAr": "有{count}张发票既无到期日又无付款历史 · {total}未纳入预测。",

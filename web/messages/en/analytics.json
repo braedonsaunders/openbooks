@@ -1723,6 +1723,12 @@
           "label": "Card stale payment (days)",
           "help": "Days since last payment reported when no significant card payment is seen"
         }
+      },
+      "groups": {
+        "forecast": "Forecast scope",
+        "scheduling": "Pay scheduling",
+        "prediction": "Predicted-date model",
+        "cards": "Credit-card model"
       }
     },
     "unplacedAr": "{count, plural, one {# invoice has} other {# invoices have}} no due date and no payment history · {total} not forecast.",

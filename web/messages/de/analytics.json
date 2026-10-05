@@ -1723,6 +1723,12 @@
           "label": "Veraltete Kartenzahlung (Tage)",
           "help": "Gemeldete Tage seit letzter Zahlung, wenn keine wesentliche Kartenzahlung vorliegt"
         }
+      },
+      "groups": {
+        "forecast": "Prognoseumfang",
+        "scheduling": "Zahlungssteuerung",
+        "prediction": "Terminprognose",
+        "cards": "Kreditkartenmodell"
       }
     },
     "unplacedAr": "{count, plural, one {# Rechnung hat} other {# Rechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert.",

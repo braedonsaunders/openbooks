@@ -1723,6 +1723,12 @@
           "label": "Paiement carte périmé (jours)",
           "help": "Jours depuis le dernier paiement quand aucun paiement significatif n'est observé"
         }
+      },
+      "groups": {
+        "forecast": "Portée de la prévision",
+        "scheduling": "Planification des paiements",
+        "prediction": "Modèle de dates prévues",
+        "cards": "Modèle de carte de crédit"
       }
     },
     "unplacedAr": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu.",
