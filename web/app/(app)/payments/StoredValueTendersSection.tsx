@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, SearchSelect } from '@openbooks/ui'
-import { sum } from '@openbooks/engine/src/money/money.ts'
-import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { sum } from '@openbooks/engine/money'
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { useMoney } from '../../../components/money-provider'
 
