@@ -1038,6 +1038,10 @@
       "collection_recovery": {
         "label": "Recouvrement des encaissements",
         "description": "Une ligne par facture prélevée par le recouvrement automatique — tentatives, première classe de refus, récupération éventuelle par une position ultérieure et par quelle voie, et jours jusqu'à la récupération. Regroupez par classe de refus et par prestataire pour les taux de recouvrement."
+      },
+      "payout_reconciliation": {
+        "label": "Rapprochement des versements",
+        "description": "Chaque versement du prestataire détaillé en lignes de règlement avec son document rattaché, son dépôt bancaire et sa provision de transit — une ligne par écriture avec le statut et l'écart du versement."
       }
     },
     "columns": {
@@ -2612,6 +2616,22 @@
         "recovered_day": "Jour de récupération",
         "days_to_recover": "Jours jusqu'à récupération",
         "first_attempt_day": "Jour de la première tentative"
+      },
+      "payout_reconciliation": {
+        "provider": "Prestataire",
+        "payout_ref": "Versement",
+        "settlement_day": "Jour de règlement",
+        "batch_status": "Statut du lot",
+        "currency": "Devise",
+        "line_number": "Ligne",
+        "line_kind": "Nature",
+        "line_amount": "Montant",
+        "match_status": "Rapprochement",
+        "document_number": "Document",
+        "deposit_status": "Dépôt",
+        "deposit_total": "Total du dépôt",
+        "gap": "Écart",
+        "accrued_amount": "Provisionné"
       }
     },
     "enumValues": {

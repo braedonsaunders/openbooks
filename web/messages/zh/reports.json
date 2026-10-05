@@ -1038,6 +1038,10 @@
       "collection_recovery": {
         "label": "催收回收",
         "description": "自动催收引擎扣款的每张发票占一行 — 尝试次数、首次拒付类别、后续位置是否收回及收回途径、收回天数。按拒付类别和服务商分组查看回收率。"
+      },
+      "payout_reconciliation": {
+        "label": "付款核对",
+        "description": "将每笔付款拆分为结算明细，附带关联凭证、银行到账和在途计提——每行一条明细，含付款状态与差额。"
       }
     },
     "columns": {
@@ -2612,6 +2616,22 @@
         "recovered_day": "收回日期",
         "days_to_recover": "收回天数",
         "first_attempt_day": "首次尝试日期"
+      },
+      "payout_reconciliation": {
+        "provider": "支付机构",
+        "payout_ref": "付款",
+        "settlement_day": "结算日",
+        "batch_status": "批次状态",
+        "currency": "币种",
+        "line_number": "行号",
+        "line_kind": "类型",
+        "line_amount": "金额",
+        "match_status": "关联",
+        "document_number": "凭证号",
+        "deposit_status": "到账状态",
+        "deposit_total": "到账合计",
+        "gap": "差额",
+        "accrued_amount": "计提额"
       }
     },
     "enumValues": {

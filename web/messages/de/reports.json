@@ -1038,6 +1038,10 @@
       "collection_recovery": {
         "label": "Rückgewinnung aus Inkasso",
         "description": "Eine Zeile pro Rechnung, die das automatische Inkasso belastet hat — Versuche, erste Ablehnungsklasse, ob eine spätere Position sie zurückgewinnen konnte und auf welchem Weg, sowie Tage bis zur Rückgewinnung. Nach Ablehnungsklasse und Anbieter gruppieren für Rückgewinnungsquoten."
+      },
+      "payout_reconciliation": {
+        "label": "Auszahlungsabstimmung",
+        "description": "Jede Provider-Auszahlung aufgeschlüsselt in Abrechnungszeilen mit zugeordnetem Beleg, Bankgutschrift und Transit-Abgrenzung — eine Zeile pro Abrechnungszeile mit Status und Differenz der Auszahlung."
       }
     },
     "columns": {
@@ -2612,6 +2616,22 @@
         "recovered_day": "Tag der Rückgewinnung",
         "days_to_recover": "Tage bis zur Rückgewinnung",
         "first_attempt_day": "Erster Versuchstag"
+      },
+      "payout_reconciliation": {
+        "provider": "Anbieter",
+        "payout_ref": "Auszahlung",
+        "settlement_day": "Abrechnungstag",
+        "batch_status": "Abrechnungsstatus",
+        "currency": "Währung",
+        "line_number": "Zeile",
+        "line_kind": "Art",
+        "line_amount": "Betrag",
+        "match_status": "Zuordnung",
+        "document_number": "Beleg",
+        "deposit_status": "Gutschrift",
+        "deposit_total": "Gutschriftssumme",
+        "gap": "Differenz",
+        "accrued_amount": "Abgegrenzt"
       }
     },
     "enumValues": {

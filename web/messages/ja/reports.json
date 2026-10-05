@@ -1038,6 +1038,10 @@
       "collection_recovery": {
         "label": "回収実績",
         "description": "自動回収エンジンが請求した請求書ごとに1行 — 試行回数、最初の拒否クラス、後のポジションで回収できたかとその経路、回収までの日数。拒否クラス別・プロバイダー別に集計して回収率を確認できます。"
+      },
+      "payout_reconciliation": {
+        "label": "ペイアウト照合",
+        "description": "各ペイアウトを精算明細に分解し、紐付け証憑・銀行入金・仕掛引当とともに、ペイアウトの状態と差額付きで1明細1行で表示します。"
       }
     },
     "columns": {
@@ -2612,6 +2616,22 @@
         "recovered_day": "回収日",
         "days_to_recover": "回収までの日数",
         "first_attempt_day": "初回試行日"
+      },
+      "payout_reconciliation": {
+        "provider": "プロバイダー",
+        "payout_ref": "ペイアウト",
+        "settlement_day": "精算日",
+        "batch_status": "バッチ状態",
+        "currency": "通貨",
+        "line_number": "明細番号",
+        "line_kind": "種類",
+        "line_amount": "金額",
+        "match_status": "紐付け",
+        "document_number": "証憑番号",
+        "deposit_status": "入金状態",
+        "deposit_total": "入金合計",
+        "gap": "差額",
+        "accrued_amount": "引当額"
       }
     },
     "enumValues": {

@@ -10,6 +10,7 @@
 // export, drill, scheduled) funnels through that executor.
 
 import { SALES_REPORT_ENTITIES } from './sales-entities'
+import { BANKING_REPORT_ENTITIES } from './banking-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
 import { DEMAND_REPORT_ENTITIES } from './demand-entities'
@@ -323,6 +324,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
 
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...SALES_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  ...BANKING_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...CONTRACT_COST_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...BILLING_IMPORT_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...RECOVERY_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
