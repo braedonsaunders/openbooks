@@ -68,6 +68,8 @@ for (const method of ["POST", "PATCH"] as const) {
           assert.equal(saved.timeout_ms, override.timeoutMs ?? 2000);
           assert.equal(saved.sort_order, override.sortOrder ?? 100);
           assert.equal(saved.next_run_at !== null, label === "valid schedule");
+          // Whoever saves a script answers for its unattended runs.
+          assert.equal(saved.run_as_user_id, actor);
         }
         assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`)).rows.length, valid ? 1 : 0);
       } finally {
@@ -77,6 +79,33 @@ for (const method of ["POST", "PATCH"] as const) {
     });
   }
 }
+
+test("a script that reads or posts cannot be saved by someone who could not do so themselves", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Script administrator", "admin");
+    await db.execute(sql`update app_roles set permissions='["scripts.manage"]'::jsonb where org_id=${org.orgId} and key='admin'`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"scripts":true,"queryConsole":true}'::jsonb) where id=${org.orgId}`);
+    session.user = { id: actor, orgId: org.orgId, name: "Script administrator", email: "script@scratch.test", roles: [], isSuperAdmin: false,
+      envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
+    const save = (source: string) => withOrgContext(org.orgId, () => POST(new Request("http://audit.local/api/admin/scripts", {
+      method: "POST", body: JSON.stringify({ name: "Nightly", triggerPoint: "bulk", source, isActive: true }),
+    })));
+    const reader = await save('function main() { return ob.query("select 1 as n"); }');
+    assert.equal(reader.status, 403);
+    assert.match((await reader.json()).error, /reads with ob\.query.*runs under your permissions: missing permission: sql\.execute/);
+    const poster = await save('function main() { return ob.journal.create({ memo: "m", lines: [] }, { post: true }); }');
+    assert.equal(poster.status, 403);
+    assert.match((await poster.json()).error, /writes journals with ob\.journal\.create.*missing permission: gl\.post/);
+    assert.deepEqual((await db.execute(sql`select id from user_scripts where org_id=${org.orgId}`)).rows, []);
+
+    await db.execute(sql`update app_roles set permissions='["scripts.manage","sql.execute","gl.post"]'::jsonb where org_id=${org.orgId} and key='admin'`);
+    assert.equal((await save('function main() { return ob.query("select 1 as n"); }')).status, 200);
+  } finally {
+    session.user = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 for (const method of ["PATCH", "DELETE"] as const) {
   test(`script ${method} audit records the row immediately before its serialized write`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

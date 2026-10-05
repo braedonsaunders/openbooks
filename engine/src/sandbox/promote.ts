@@ -5,7 +5,7 @@ import { assertUuid } from "./catalog.ts";
 import { withSandboxRefreshLock } from "./lifecycle.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { computeScheduledScriptNextRunAt } from "../scripting/scripting.ts";
+import { computeScheduledScriptNextRunAt, scriptSaveRefusal } from "../scripting/scripting.ts";
 import { validateScriptConfiguration } from "../scripting/script-config.ts";
 import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../organization/permissions.ts";
 
@@ -45,9 +45,10 @@ const PROMOTABLE = Object.keys(PROMOTION_PERMISSIONS);
 const PROMOTABLE_ARRAY = `{${PROMOTABLE.join(",")}}`;
 
 const STRUCTURAL = new Set(["id", "org_id", "created_at", "updated_at", "created_by", "updated_by"]);
-// Execution evidence and scheduler cursors belong to their environment. They
-// are neither configuration differences nor reasons to invalidate a review.
-const SCRIPT_RUNTIME = new Set(["last_run_at", "next_run_at"]);
+// Execution evidence, scheduler cursors and the run-as identity belong to
+// their environment. They are neither configuration differences nor reasons
+// to invalidate a review; promotion makes the promoting user the run-as user.
+const SCRIPT_RUNTIME = new Set(["last_run_at", "next_run_at", "run_as_user_id"]);
 const USER_REFERENCE_COLUMNS: Readonly<Record<string, string>> = {
   saved_views: "owner_id",
   list_views: "owner_id",
@@ -503,7 +504,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       }
       const target = assertUuid(it.target_id);
       const table = sql`public.${sql.identifier(t)}`;
-      const runtimeColumns = t === "user_scripts" ? "{last_run_at,next_run_at}" : "{}";
+      const runtimeColumns = t === "user_scripts" ? `{${[...SCRIPT_RUNTIME].join(",")}}` : "{}";
       // Insert captures carry a null base, and jsonb `- text[]` rejects
       // non-objects — strip runtime cursors only from object bases so new
       // scripts can still promote.
@@ -563,6 +564,11 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
           const schedulingChanged = !before || ["trigger_point", "cron", "is_active"].some(field => payload[field] !== before[field]);
           if (schedulingChanged) payload.next_run_at = payload.is_active ? next?.toISOString() ?? null : null;
           if (!before) payload.last_run_at = null;
+          // Unattended runs act under this user's live permissions, so the
+          // promoter must hold what the script calls, like any saver.
+          const refusal = await scriptSaveRefusal(prod, actor, String(payload.source ?? ""));
+          if (refusal && payload.trigger_point !== "endpoint") throw new Error(`script promotion: ${refusal}`);
+          payload.run_as_user_id = actor;
         }
         const userField = USER_REFERENCE_COLUMNS[t];
         if (userField && payload[userField] !== null) {

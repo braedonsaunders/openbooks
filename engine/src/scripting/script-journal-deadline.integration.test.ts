@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { runScript, triggerTargetStamp } from "./scripting.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
@@ -53,6 +53,13 @@ async function journalCounts(orgId: string): Promise<{ docs: number; entries: nu
   return { docs: Number(r.rows[0]!.docs), entries: Number(r.rows[0]!.entries) };
 }
 
+/** The unattended run's accountable user: a saver holding gl.post. */
+async function seedRunAs(orgId: string): Promise<string> {
+  const userId = await createScratchUser(orgId, "Script saver", "saver");
+  await db.execute(sql`update app_roles set permissions = '["gl.post"]'::jsonb where org_id = ${orgId} and key = 'saver'`);
+  return userId;
+}
+
 test("a journal write blocked past the run deadline commits nothing; the retry posts exactly once", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb) where id = ${org.orgId}`);
@@ -61,6 +68,7 @@ test("a journal write blocked past the run deadline commits nothing; the retry p
       trigger: "scheduled",
       org: { id: org.orgId, name: "probe", baseCurrency: "CAD" },
     };
+    const runAsUserId = await seedRunAs(org.orgId);
     const namespace = `deadline-probe/${randomUUID()}`;
 
     // A second connection holds documents hostage for the whole run: every
@@ -71,7 +79,7 @@ test("a journal write blocked past the run deadline commits nothing; the retry p
     try {
       await locker.query("begin");
       await locker.query("lock table documents in access exclusive mode");
-      timed = await runScript(draftScript(org.date), ctx, 400, { idempotencyNamespace: namespace });
+      timed = await runScript(draftScript(org.date), ctx, 400, { idempotencyNamespace: namespace, runAsUserId });
     } finally {
       await locker.query("rollback");
       locker.release();
@@ -84,7 +92,7 @@ test("a journal write blocked past the run deadline commits nothing; the retry p
     await new Promise((resolve) => setTimeout(resolve, 500));
     assert.deepEqual(await journalCounts(org.orgId), { docs: 0, entries: 0 });
 
-    const retried = await runScript(draftScript(org.date), ctx, 10_000, { idempotencyNamespace: namespace });
+    const retried = await runScript(draftScript(org.date), ctx, 10_000, { idempotencyNamespace: namespace, runAsUserId });
     assert.equal(retried.status, "ok", `retry errored: ${retried.abortReason}`);
     assert.deepEqual(await journalCounts(org.orgId), { docs: 1, entries: 0 });
     assert.ok((retried.returned as { id: string }).id, "retry returns the created document");
@@ -101,11 +109,12 @@ test("a retried run observes the first execution's document instead of double-po
       trigger: "scheduled",
       org: { id: org.orgId, name: "probe", baseCurrency: "CAD" },
     };
+    const runAsUserId = await seedRunAs(org.orgId);
     const namespace = `idempotent-retry/${randomUUID()}`;
-    const first = await runScript(draftScript(org.date), ctx, 10_000, { idempotencyNamespace: namespace });
+    const first = await runScript(draftScript(org.date), ctx, 10_000, { idempotencyNamespace: namespace, runAsUserId });
     assert.equal(first.status, "ok", `first run errored: ${first.abortReason}`);
     const firstId = (first.returned as { id: string }).id;
-    const second = await runScript(draftScript(org.date), ctx, 10_000, { idempotencyNamespace: namespace });
+    const second = await runScript(draftScript(org.date), ctx, 10_000, { idempotencyNamespace: namespace, runAsUserId });
     assert.equal(second.status, "ok", `retry errored: ${second.abortReason}`);
     assert.equal((second.returned as { id: string }).id, firstId, "retry observes the first document");
     assert.deepEqual(await journalCounts(org.orgId), { docs: 1, entries: 0 });
@@ -122,12 +131,13 @@ test("a retried posting run observes the first execution's entry instead of doub
       trigger: "scheduled",
       org: { id: org.orgId, name: "probe", baseCurrency: "CAD" },
     };
+    const runAsUserId = await seedRunAs(org.orgId);
     const namespace = `idempotent-post/${randomUUID()}`;
-    const first = await runScript(postScript(org.date), ctx, 30_000, { idempotencyNamespace: namespace });
+    const first = await runScript(postScript(org.date), ctx, 30_000, { idempotencyNamespace: namespace, runAsUserId });
     assert.equal(first.status, "ok", `first run errored: ${first.abortReason}`);
     const firstResult = first.returned as { id: string; entryId?: string };
     assert.ok(firstResult.entryId, "first run posted");
-    const second = await runScript(postScript(org.date), ctx, 30_000, { idempotencyNamespace: namespace });
+    const second = await runScript(postScript(org.date), ctx, 30_000, { idempotencyNamespace: namespace, runAsUserId });
     assert.equal(second.status, "ok", `retry errored: ${second.abortReason}`);
     const secondResult = second.returned as { id: string; entryId?: string };
     assert.equal(secondResult.id, firstResult.id, "retry observes the first document");

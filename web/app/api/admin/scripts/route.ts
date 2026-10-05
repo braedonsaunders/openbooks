@@ -9,6 +9,7 @@ import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-f
 import {
   computeScheduledScriptNextRunAt,
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
+  scriptSaveRefusal,
 } from '@openbooks/engine/src/scripting/scripting.ts'
 import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/src/scripting/script-config.ts'
 import {
@@ -62,6 +63,25 @@ class ScriptValidationRefusal extends Error {
   }
 }
 
+/**
+ * A saved script runs its unattended executions (schedules, bulk runs, system
+ * postings) under its saver's live permissions, so the saver must hold what
+ * the script plainly calls. Endpoint scripts always run as their caller.
+ */
+class ScriptAuthorityRefusal extends Error {
+  readonly status = 403
+  constructor(message: string) {
+    super(message)
+    this.name = 'ScriptAuthorityRefusal'
+  }
+}
+
+async function saverRefusal(orgId: string, saverId: string, body: { triggerPoint: string; source: string }): Promise<NextResponse | null> {
+  if (body.triggerPoint === 'endpoint') return null
+  const refusal = await scriptSaveRefusal(orgId, saverId, body.source)
+  return refusal ? apiErrorResponse(new ScriptAuthorityRefusal(refusal)) : null
+}
+
 function validationResponse(error: ValidationError): Promise<NextResponse> {
   const refusal = new ScriptValidationRefusal(
     error,
@@ -88,6 +108,8 @@ export const POST = defineRoute({
 
     const err = validate(body)
     if (err) return validationResponse(err)
+    const refused = await saverRefusal(user.orgId, user.id, body)
+    if (refused) return refused
 
     const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
     const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
@@ -108,9 +130,11 @@ export const POST = defineRoute({
     const row = await db.transaction(async (tx) => {
       if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
       const created = (await tx.execute<Record<string, unknown>>(sql`
-        insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
+        insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active,
+                                  run_as_user_id, created_by, updated_by)
         values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
-                ${cron}, ${nextRunAt}, ${body.timeoutMs ?? 2000}, ${body.sortOrder ?? 100}, ${body.isActive !== false})
+                ${cron}, ${nextRunAt}, ${body.timeoutMs ?? 2000}, ${body.sortOrder ?? 100}, ${body.isActive !== false},
+                ${user.id}, ${user.id}, ${user.id})
         returning *
       `))
       await tx.execute(sql`
@@ -148,6 +172,8 @@ export const PATCH = defineRoute({
     }
     const err = validate(body)
     if (err) return validationResponse(err)
+    const refused = await saverRefusal(user.orgId, user.id, body)
+    if (refused) return refused
 
     const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
     const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
@@ -183,10 +209,12 @@ export const PATCH = defineRoute({
           endpoint_slug = ${slug},
           source = ${body.source}, cron = ${cron}, next_run_at = ${nextRunAt},
           timeout_ms = ${body.timeoutMs ?? 2000},
-          sort_order = ${body.sortOrder ?? 100}, is_active = ${body.isActive !== false}, updated_at = now()
+          sort_order = ${body.sortOrder ?? 100}, is_active = ${body.isActive !== false},
+          run_as_user_id = ${user.id}, updated_by = ${user.id}, updated_at = now()
         where id = ${body.id} and org_id = ${user.orgId}
         returning *
       `))
+      if (!updated.rows[0]) throw new Error('script update matched no row after its lock')
       await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
