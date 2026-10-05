@@ -10,6 +10,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
+const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -83,9 +84,9 @@ test('purchasing cockpit translates every payable functional to presentation', {
       await withOrgContext(org.orgId, async () => {
         const home = await purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true })
         assert.equal(home.apOutstanding, 235)
-        assert.equal(home.spend30d, 235)
-        assert.equal(home.badges.paid7dValue, 235)
-        assert.equal(home.trend.find((w) => w.spend > 0)?.spend, 235)
+        assert.equal(toUnits(home.spend30d), toUnits(235))
+        assert.equal(toUnits(home.badges.paid7dValue), toUnits(235))
+        assert.equal(toUnits(home.trend.find((w) => toUnits(w.spend) > 0n)?.spend ?? '0'), toUnits(235))
         const usRow = home.topExposure.find((r) => r.partyId === usVend)!
         assert.equal(usRow.billedOpen, 135)
       })

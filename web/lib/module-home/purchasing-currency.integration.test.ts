@@ -10,6 +10,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
+const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -89,9 +90,13 @@ test('purchasing scalar metrics convert transaction-currency documents before or
 
       await withOrgContext(org.orgId, async () => {
         const home = await purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true })
-        assert.equal(home.spend30d, 235, '30-day spend is shown in organization currency')
-        assert.equal(home.badges.paid7dValue, 235, '7-day payments are shown in organization currency')
-        assert.equal(home.trend.find((week) => week.spend > 0)?.spend, 235, 'trend spend is shown in organization currency')
+        assert.equal(toUnits(home.spend30d), toUnits(235), '30-day spend is shown in organization currency')
+        assert.equal(toUnits(home.badges.paid7dValue), toUnits(235), '7-day payments are shown in organization currency')
+        assert.equal(
+          toUnits(home.trend.find((week) => toUnits(week.spend) > 0n)?.spend ?? '0'),
+          toUnits(235),
+          'trend spend is shown in organization currency',
+        )
       })
     })
   } finally {

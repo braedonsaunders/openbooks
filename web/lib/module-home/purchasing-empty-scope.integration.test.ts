@@ -10,6 +10,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
+const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
 const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -68,16 +69,16 @@ test('purchasing cockpit denies every row to an empty subsidiary scope', { skip:
       })
 
       const denied = await withBypass(() => purchasingHome(scratch.orgId, [], undefined, { ap: true, orders: true, expenses: true, parties: true }))
-      assert.equal(denied.spend30d, 0, 'empty scope reads no spend')
+      assert.equal(toUnits(denied.spend30d), toUnits(0), 'empty scope reads no spend')
       assert.equal(denied.apOutstanding, 0, 'empty scope reads no payables')
       assert.deepEqual(denied.topExposure, [], 'empty scope exposes no vendor')
       assert.ok(
-        denied.trend.every((w) => w.spend === 0),
+        denied.trend.every((w) => toUnits(w.spend) === 0n),
         'empty scope trend stays at zero',
       )
 
       const all = await withBypass(() => purchasingHome(scratch.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true }))
-      assert.equal(all.spend30d, 100, 'unrestricted callers still see the spend')
+      assert.equal(toUnits(all.spend30d), toUnits(100), 'unrestricted callers still see the spend')
     })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
