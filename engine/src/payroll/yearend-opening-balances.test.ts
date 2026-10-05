@@ -407,3 +407,21 @@ test("the FICA split never attributes more than was withheld", () => {
   assert.equal(after.box4SsTax, "100.0000");
   assert.equal(after.box6MedicareTax, "0.0000");
 });
+
+test("box 3 caps the FICA wage carry-in at the Social Security wage base", () => {
+  // A $200,000 prior-provider FICA wage carry-in alone is past the 2025
+  // $176,100 base: box 3 files the base (the SSA rejects more), box 5 the
+  // full Medicare wages. Committed stubs and the carry-in cap together.
+  const rates = { ssRate: "0.062", ssWageBase: "176100" };
+  const fresh = w2("e1", { box3SsWages: "0", box5MedicareWages: "0" });
+  const legacy = openingYtdIntoW2Slip(fresh, opening({ pensionableYtd: "200000" }), rates);
+  assert.equal(legacy.box3SsWages, "176100.0000");
+  assert.equal(legacy.box5MedicareWages, "200000.0000");
+  const perEin = openingAccountYtdIntoW2Slip({ ...fresh, filingAccountId: "ein-a" }, opening({ accountBasesYtd: {
+    us_w2_fica_wages: [{ filingAccountId: "ein-a", insurableYtd: "150000" }],
+  } }), rates);
+  assert.equal(perEin.box3SsWages, "150000.0000");
+  const withStubs = openingAccountYtdIntoW2Slip({ ...fresh, filingAccountId: "ein-a", box3SsWages: "26100.0000" },
+    opening({ accountBasesYtd: { us_w2_fica_wages: [{ filingAccountId: "ein-a", insurableYtd: "160000" }] } }), rates);
+  assert.equal(withStubs.box3SsWages, "176100.0000");
+});
