@@ -2024,6 +2024,13 @@
           "label": "Taktisch (%)",
           "help": "Lieferanten bis zu diesem Anteil bilden die taktische Stufe"
         }
+      },
+      "groups": {
+        "grading": "Bewertung",
+        "tiers": "Stufen",
+        "scorecard": "Scorecard",
+        "concentration": "Konzentration",
+        "paymentMarks": "Zahlungsmarken"
       }
     },
     "payment": {
@@ -3055,10 +3062,6 @@
           "label": "Klipp-Kritiklücke (pp)",
           "help": "Kauf-/Verkaufs-Dynamiklücke darüber ist kritisch"
         },
-        "cliffCriticalPoints": {
-          "label": "Klipp-Kritikpunkte",
-          "help": "Gesundheitsabzug bei kritischer Klippe"
-        },
         "cliffCriticalRatio": {
           "label": "Klipp-Kritikquote",
           "help": "Kauf-/Verkaufs-Quote darüber ist kritisch"
@@ -3066,10 +3069,6 @@
         "cliffWarningGap": {
           "label": "Klipp-Warnlücke (pp)",
           "help": "Kauf-/Verkaufs-Dynamiklücke darüber ist eine Warnung"
-        },
-        "cliffWarningPoints": {
-          "label": "Klipp-Warnpunkte",
-          "help": "Gesundheitsabzug bei warnender Klippe"
         },
         "cliffWarningRatio": {
           "label": "Klipp-Warnquote",
@@ -3091,42 +3090,6 @@
           "label": "Fragmentierung hoch (Trans./Mon.)",
           "help": "Monatstransaktionen darüber sind schwerwiegend"
         },
-        "fragmentationUnitCap": {
-          "label": "Fragmentierungsdeckel",
-          "help": "Maximale Strukturpunkte für Fragmentierung"
-        },
-        "fragmentationUnitWeight": {
-          "label": "Fragmentierungsgewicht",
-          "help": "Strukturpunkte je fragmentierter Kategorie"
-        },
-        "healthCriticalAnomalyCap": {
-          "label": "Kritik-Anomalie-Deckel",
-          "help": "Maximalabzug für kritische Anomalien"
-        },
-        "healthCriticalAnomalyUnit": {
-          "label": "Kritik-Anomalie-Stück",
-          "help": "Abzug je kritischer Anomalie"
-        },
-        "healthCriticalCap": {
-          "label": "Kritikobergrenze",
-          "help": "Maximalabzug für kritische Probleme"
-        },
-        "healthCriticalFrogCap": {
-          "label": "Kritik-Kriech-Deckel",
-          "help": "Maximalabzug für kritisches Kriechen"
-        },
-        "healthCriticalFrogUnit": {
-          "label": "Kritik-Kriech-Stück",
-          "help": "Abzug je kritischem Frosch-Konto"
-        },
-        "healthCriticalZombieCap": {
-          "label": "Kritik-Zombie-Deckel",
-          "help": "Maximalabzug für kritische Zombies"
-        },
-        "healthCriticalZombieUnit": {
-          "label": "Kritik-Zombie-Stück",
-          "help": "Abzug je kritischem Zombie-Abo"
-        },
         "healthGradeA": {
           "label": "Gesundheit A",
           "help": "Gesundheitswert ab hier erhält Note A"
@@ -3142,50 +3105,6 @@
         "healthGradeD": {
           "label": "Gesundheit D",
           "help": "Gesundheitswert ab hier erhält Note D"
-        },
-        "healthStructuralCap": {
-          "label": "Strukturobergrenze",
-          "help": "Maximalabzug für Strukturrisiko"
-        },
-        "healthVelocityCap": {
-          "label": "Dynamikobergrenze",
-          "help": "Maximalabzug für heiße Dynamik"
-        },
-        "healthVelocityUnit": {
-          "label": "Dynamik-Stückkosten",
-          "help": "Abzug je heißem Dynamikkonto"
-        },
-        "healthVelocityUnitCap": {
-          "label": "Dynamik-Stückdeckel",
-          "help": "Maximaler Dynamikabzug je Kontogruppe"
-        },
-        "healthWarningAnomalyCap": {
-          "label": "Warn-Anomalie-Deckel",
-          "help": "Maximalabzug für nicht-kritische Anomalien"
-        },
-        "healthWarningAnomalyUnit": {
-          "label": "Warn-Anomalie-Stück",
-          "help": "Abzug je nicht-kritischer Anomalie"
-        },
-        "healthWarningCap": {
-          "label": "Warnobergrenze",
-          "help": "Maximalabzug für Warnungen"
-        },
-        "healthWarningFrogCap": {
-          "label": "Warn-Kriech-Deckel",
-          "help": "Maximalabzug für nicht-kritisches Kriechen"
-        },
-        "healthWarningFrogUnit": {
-          "label": "Warn-Kriech-Stück",
-          "help": "Abzug je nicht-kritischem Frosch-Konto"
-        },
-        "healthWarningZombieCap": {
-          "label": "Warn-Zombie-Deckel",
-          "help": "Maximalabzug für nicht-kritische Zombies"
-        },
-        "healthWarningZombieUnit": {
-          "label": "Warn-Zombie-Stück",
-          "help": "Abzug je nicht-kritischem Zombie-Abo"
         },
         "hhiCritical": {
           "label": "HHI-kritische Stufe",
@@ -3215,22 +3134,6 @@
           "label": "Prognoseobergrenze, gesamt (%)",
           "help": "Gesamtprognose-Änderung wird hierauf begrenzt"
         },
-        "savingsCriticalPoints": {
-          "label": "Sparpunkte, kritisch",
-          "help": "Abzug beim Überschreiten der kritischen Stufe"
-        },
-        "savingsHighPoints": {
-          "label": "Sparpunkte, hoch",
-          "help": "Abzug beim Überschreiten der hohen Stufe"
-        },
-        "savingsLowPoints": {
-          "label": "Sparpunkte, niedrig",
-          "help": "Abzug beim Überschreiten der niedrigen Stufe"
-        },
-        "savingsMediumPoints": {
-          "label": "Sparpunkte, mittel",
-          "help": "Abzug beim Überschreiten der mittleren Stufe"
-        },
         "savingsRatioCritical": {
           "label": "Sparquote, kritisch (%)",
           "help": "Spar-/Ausgabenquote darüber zieht kritische Punkte ab"
@@ -3251,10 +3154,6 @@
           "label": "Sparquote, beobachten (%)",
           "help": "Spar-/Ausgabenquote darüber zieht Beobachtungspunkte ab"
         },
-        "savingsWatchPoints": {
-          "label": "Sparpunkte, beobachten",
-          "help": "Abzug beim Überschreiten der Beobachtungsstufe"
-        },
         "seasonalBand": {
           "label": "Saisonband (%)",
           "help": "Monatsabweichung jenseits meldet Hoch-/Tiefsaison"
@@ -3271,25 +3170,13 @@
           "label": "Top-Anteil hoch (%)",
           "help": "Top-Kontoanteil darüber gibt hohe Strukturpunkte"
         },
-        "structuralTop1HighPoints": {
-          "label": "Top-Punkte (hoch)",
-          "help": "Strukturpunkte beim Überschreiten der hohen Stufe"
-        },
         "structuralTop1Low": {
           "label": "Top-Anteil niedrig (%)",
           "help": "Top-Kontoanteil darüber gibt niedrige Strukturpunkte"
         },
-        "structuralTop1LowPoints": {
-          "label": "Top-Punkte (niedrig)",
-          "help": "Strukturpunkte beim Überschreiten der niedrigen Stufe"
-        },
         "structuralTop1Medium": {
           "label": "Top-Anteil mittel (%)",
           "help": "Top-Kontoanteil darüber gibt mittlere Strukturpunkte"
-        },
-        "structuralTop1MediumPoints": {
-          "label": "Top-Punkte (mittel)",
-          "help": "Strukturpunkte beim Überschreiten der mittleren Stufe"
         },
         "topVendorsCount": {
           "label": "Top-Lieferanten",
@@ -3325,7 +3212,21 @@
         "label": "Zombie-Fenster",
         "note": "Identische wiederkehrende Lieferantensummen (<1 % Abweichung)"
       },
-      "unsetMinimum": "Kein Minimum — jede Serie wird ab ihrem ersten Monat bewertet"
+      "unsetMinimum": "Kein Minimum — jede Serie wird ab ihrem ersten Monat bewertet",
+      "groups": {
+        "growth": "Wachstum",
+        "anomalyDetection": "Anomalieerkennung",
+        "creepAndZombies": "Kochender Frosch & Zombies",
+        "fragmentation": "Fragmentierung",
+        "seasonal": "Saisonalität",
+        "concentration": "Konzentration",
+        "cliff": "Verpflichtungsklippe",
+        "projections": "Projektionen",
+        "insightTriggers": "Insight-Auslöser",
+        "grading": "Bewertung",
+        "structuralBands": "Strukturbänder",
+        "savingsBands": "Einsparungsbänder"
+      }
     },
     "csv": {
       "changePct": "Änderung %",
@@ -3420,6 +3321,7 @@
       "highestVelocity": "Konten mit höchster Dynamik",
       "insights": "Einblicke",
       "modelThresholds": "Modell & Schwellen",
+      "severityModel": "Scoring-Modell",
       "monthlySpendVelocity": "Monatliche Ausgabendynamik",
       "monthlySpendVelocityHint": "Aktueller Monat vs Vorjahresmonat",
       "monthlySummary": "Monatsübersicht",
@@ -3533,6 +3435,53 @@
     "labels": {
       "unknownParty": "Unbekannt",
       "accountFallback": "Konto {id}"
+    },
+    "model": {
+      "velocity": {
+        "label": "Wachstumsabzüge",
+        "cap": "Abzugsobergrenze",
+        "unit": "Punkte pro auffälligem Konto",
+        "unitCap": "Obergrenze pro auffälligem Konto"
+      },
+      "critical": {
+        "label": "Abzüge für kritische Probleme",
+        "cap": "Abzugsobergrenze",
+        "anomalyUnit": "Punkte pro kritischer Anomalie",
+        "anomalyCap": "Anomalieobergrenze",
+        "frogUnit": "Punkte pro Frosch-Konto (kritisch)",
+        "frogCap": "Frosch-Obergrenze",
+        "zombieUnit": "Punkte pro Zombie-Abo (kritisch)",
+        "zombieCap": "Zombie-Obergrenze"
+      },
+      "warning": {
+        "label": "Abzüge für Warnungen",
+        "cap": "Abzugsobergrenze",
+        "anomalyUnit": "Punkte pro Warn-Anomalie",
+        "anomalyCap": "Anomalieobergrenze",
+        "frogUnit": "Punkte pro Frosch-Konto (Warnung)",
+        "frogCap": "Frosch-Obergrenze",
+        "zombieUnit": "Punkte pro Zombie-Abo (Warnung)",
+        "zombieCap": "Zombie-Obergrenze"
+      },
+      "structural": {
+        "label": "Abzüge für strukturelle Risiken",
+        "cap": "Abzugsobergrenze",
+        "top1HighPoints": "Punkte für hohen Top-Anteil",
+        "top1MediumPoints": "Punkte für mittleren Top-Anteil",
+        "top1LowPoints": "Punkte für niedrigen Top-Anteil",
+        "fragmentationUnitWeight": "Punkte pro fragmentierter Kategorie",
+        "fragmentationUnitCap": "Fragmentierungsobergrenze",
+        "cliffCriticalPoints": "Punkte für kritische Klippe",
+        "cliffWarningPoints": "Punkte für Warn-Klippe"
+      },
+      "savings": {
+        "label": "Abzüge für Einsparpotenzial",
+        "watchPoints": "Beobachtungspunkte",
+        "lowPoints": "Niedrige Punkte",
+        "mediumPoints": "Mittlere Punkte",
+        "highPoints": "Hohe Punkte",
+        "criticalPoints": "Kritische Punkte"
+      }
     }
   },
   "sentinel": {

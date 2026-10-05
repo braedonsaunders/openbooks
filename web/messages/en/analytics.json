@@ -2024,6 +2024,13 @@
           "label": "Tactical tier (%)",
           "help": "Vendors ranked up to this share of the vendor count form the tactical tier"
         }
+      },
+      "groups": {
+        "grading": "Grading",
+        "tiers": "Tiers",
+        "scorecard": "Scorecard",
+        "concentration": "Concentration",
+        "paymentMarks": "Payment marks"
       }
     },
     "payment": {
@@ -2958,6 +2965,7 @@
       "seasonalPatterns": "Seasonal Patterns",
       "monthlySummary": "Monthly Summary",
       "modelThresholds": "Model & Thresholds",
+      "severityModel": "Scoring model",
       "dataSources": "Data sources"
     },
     "table": {
@@ -3205,10 +3213,6 @@
           "label": "Cliff critical gap (pp)",
           "help": "PO/SO velocity gap above this is critical"
         },
-        "cliffCriticalPoints": {
-          "label": "Cliff critical points",
-          "help": "Health-score deduction for a critical cliff"
-        },
         "cliffCriticalRatio": {
           "label": "Cliff critical ratio",
           "help": "PO/SO ratio above this is critical"
@@ -3216,10 +3220,6 @@
         "cliffWarningGap": {
           "label": "Cliff warning gap (pp)",
           "help": "PO/SO velocity gap above this is a warning"
-        },
-        "cliffWarningPoints": {
-          "label": "Cliff warning points",
-          "help": "Health-score deduction for a warning cliff"
         },
         "cliffWarningRatio": {
           "label": "Cliff warning ratio",
@@ -3241,42 +3241,6 @@
           "label": "Fragmentation high (txns/mo)",
           "help": "Monthly transactions above this are high severity"
         },
-        "fragmentationUnitCap": {
-          "label": "Fragmentation ceiling",
-          "help": "Maximum structural points for fragmentation"
-        },
-        "fragmentationUnitWeight": {
-          "label": "Fragmentation weight",
-          "help": "Structural points per fragmented category"
-        },
-        "healthCriticalAnomalyCap": {
-          "label": "Critical anomaly ceiling",
-          "help": "Maximum deduction for critical anomalies"
-        },
-        "healthCriticalAnomalyUnit": {
-          "label": "Critical anomaly unit",
-          "help": "Deduction per critical anomaly"
-        },
-        "healthCriticalCap": {
-          "label": "Critical cap",
-          "help": "Maximum deduction for critical issues"
-        },
-        "healthCriticalFrogCap": {
-          "label": "Critical creep ceiling",
-          "help": "Maximum deduction for critical creep"
-        },
-        "healthCriticalFrogUnit": {
-          "label": "Critical creep unit",
-          "help": "Deduction per critical boiling-frog account"
-        },
-        "healthCriticalZombieCap": {
-          "label": "Critical zombie ceiling",
-          "help": "Maximum deduction for critical zombies"
-        },
-        "healthCriticalZombieUnit": {
-          "label": "Critical zombie unit",
-          "help": "Deduction per critical zombie subscription"
-        },
         "healthGradeA": {
           "label": "Health grade A",
           "help": "Health score at or above this earns grade A"
@@ -3292,50 +3256,6 @@
         "healthGradeD": {
           "label": "Health grade D",
           "help": "Health score at or above this earns grade D"
-        },
-        "healthStructuralCap": {
-          "label": "Structural cap",
-          "help": "Maximum deduction for structural risk"
-        },
-        "healthVelocityCap": {
-          "label": "Velocity cap",
-          "help": "Maximum health-score deduction for hot velocity"
-        },
-        "healthVelocityUnit": {
-          "label": "Velocity unit cost",
-          "help": "Deduction per hot-velocity account"
-        },
-        "healthVelocityUnitCap": {
-          "label": "Velocity unit ceiling",
-          "help": "Maximum velocity deduction per account group"
-        },
-        "healthWarningAnomalyCap": {
-          "label": "Warning anomaly ceiling",
-          "help": "Maximum deduction for non-critical anomalies"
-        },
-        "healthWarningAnomalyUnit": {
-          "label": "Warning anomaly unit",
-          "help": "Deduction per non-critical anomaly"
-        },
-        "healthWarningCap": {
-          "label": "Warning cap",
-          "help": "Maximum deduction for warnings"
-        },
-        "healthWarningFrogCap": {
-          "label": "Warning creep ceiling",
-          "help": "Maximum deduction for non-critical creep"
-        },
-        "healthWarningFrogUnit": {
-          "label": "Warning creep unit",
-          "help": "Deduction per non-critical boiling-frog account"
-        },
-        "healthWarningZombieCap": {
-          "label": "Warning zombie ceiling",
-          "help": "Maximum deduction for non-critical zombies"
-        },
-        "healthWarningZombieUnit": {
-          "label": "Warning zombie unit",
-          "help": "Deduction per non-critical zombie subscription"
         },
         "hhiCritical": {
           "label": "HHI critical level",
@@ -3365,22 +3285,6 @@
           "label": "Projection cap, total (%)",
           "help": "Total projection change is clamped to this"
         },
-        "savingsCriticalPoints": {
-          "label": "Savings points, critical",
-          "help": "Deduction when the savings ratio passes the critical tier"
-        },
-        "savingsHighPoints": {
-          "label": "Savings points, high",
-          "help": "Deduction when the savings ratio passes the high tier"
-        },
-        "savingsLowPoints": {
-          "label": "Savings points, low",
-          "help": "Deduction when the savings ratio passes the low tier"
-        },
-        "savingsMediumPoints": {
-          "label": "Savings points, medium",
-          "help": "Deduction when the savings ratio passes the medium tier"
-        },
         "savingsRatioCritical": {
           "label": "Savings ratio, critical (%)",
           "help": "Savings-to-spend ratio above this deducts critical points"
@@ -3401,10 +3305,6 @@
           "label": "Savings ratio, watch (%)",
           "help": "Savings-to-spend ratio above this deducts watch points"
         },
-        "savingsWatchPoints": {
-          "label": "Savings points, watch",
-          "help": "Deduction when the savings ratio passes the watch tier"
-        },
         "seasonalBand": {
           "label": "Seasonal band (%)",
           "help": "Monthly deviation beyond this marks a high or low season"
@@ -3421,25 +3321,13 @@
           "label": "Top-share high (%)",
           "help": "Top-account share above this adds high structural points"
         },
-        "structuralTop1HighPoints": {
-          "label": "Top-share points (high)",
-          "help": "Structural points when the top share passes the high tier"
-        },
         "structuralTop1Low": {
           "label": "Top-share low (%)",
           "help": "Top-account share above this adds low structural points"
         },
-        "structuralTop1LowPoints": {
-          "label": "Top-share points (low)",
-          "help": "Structural points when the top share passes the low tier"
-        },
         "structuralTop1Medium": {
           "label": "Top-share medium (%)",
           "help": "Top-account share above this adds medium structural points"
-        },
-        "structuralTop1MediumPoints": {
-          "label": "Top-share points (medium)",
-          "help": "Structural points when the top share passes the medium tier"
         },
         "topVendorsCount": {
           "label": "Top vendors",
@@ -3458,7 +3346,21 @@
           "help": "Largest variation around the mean that still reads as an unchanged subscription"
         }
       },
-      "unsetMinimum": "No minimum — every series is scored from its first month"
+      "unsetMinimum": "No minimum — every series is scored from its first month",
+      "groups": {
+        "growth": "Growth",
+        "anomalyDetection": "Anomaly detection",
+        "creepAndZombies": "Boiling frog & zombies",
+        "fragmentation": "Fragmentation",
+        "seasonal": "Seasonality",
+        "concentration": "Concentration",
+        "cliff": "Commitment cliff",
+        "projections": "Projections",
+        "insightTriggers": "Insight triggers",
+        "grading": "Grading",
+        "structuralBands": "Structural bands",
+        "savingsBands": "Savings bands"
+      }
     },
     "sources": {
       "intro": "Spend = expense/COGS journal lines from the four spend document types:",
@@ -3533,6 +3435,53 @@
     "labels": {
       "unknownParty": "Unknown",
       "accountFallback": "Account {id}"
+    },
+    "model": {
+      "velocity": {
+        "label": "Velocity deductions",
+        "cap": "Deduction cap",
+        "unit": "Points per hot account",
+        "unitCap": "Cap per hot account"
+      },
+      "critical": {
+        "label": "Critical-issue deductions",
+        "cap": "Deduction cap",
+        "anomalyUnit": "Points per critical anomaly",
+        "anomalyCap": "Anomaly cap",
+        "frogUnit": "Points per critical boiling-frog account",
+        "frogCap": "Boiling-frog cap",
+        "zombieUnit": "Points per critical zombie subscription",
+        "zombieCap": "Zombie cap"
+      },
+      "warning": {
+        "label": "Warning deductions",
+        "cap": "Deduction cap",
+        "anomalyUnit": "Points per warning anomaly",
+        "anomalyCap": "Anomaly cap",
+        "frogUnit": "Points per warning boiling-frog account",
+        "frogCap": "Boiling-frog cap",
+        "zombieUnit": "Points per warning zombie subscription",
+        "zombieCap": "Zombie cap"
+      },
+      "structural": {
+        "label": "Structural-risk deductions",
+        "cap": "Deduction cap",
+        "top1HighPoints": "Top-share high points",
+        "top1MediumPoints": "Top-share medium points",
+        "top1LowPoints": "Top-share low points",
+        "fragmentationUnitWeight": "Points per fragmented category",
+        "fragmentationUnitCap": "Fragmentation cap",
+        "cliffCriticalPoints": "Critical cliff points",
+        "cliffWarningPoints": "Warning cliff points"
+      },
+      "savings": {
+        "label": "Savings-impact deductions",
+        "watchPoints": "Watch points",
+        "lowPoints": "Low points",
+        "mediumPoints": "Medium points",
+        "highPoints": "High points",
+        "criticalPoints": "Critical points"
+      }
     }
   },
   "sentinel": {
