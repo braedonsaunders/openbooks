@@ -162,74 +162,70 @@ export function FamilyDrawer({ familyId, canManage }: { familyId: string; canMan
         </p>
       </div>
 
-      {activeTab === 'variants' ? (
-        <section className="space-y-3">
-          <div>
-            <h3 className="text-base font-semibold">{t('variants.title')}</h3>
-            <p className="mt-0.5 text-sm text-slate-500">{t('variants.description')}</p>
-          </div>
-          <FamilyVariantsGrid
-            key={`${detail.id}:${detail.variants.length}`}
-            familyId={detail.id}
-            optionNames={detail.options.map((option) => option.name)}
-            variants={gridVariants}
-            familyRate={detail.defaultRate}
-            canManage={canManage}
-            onChanged={() => void load()}
-          />
-        </section>
-      ) : null}
+      {/* Every visited panel stays mounted and hides instead of
+        unmounting: switching tabs must never discard an unsaved draft in
+        the options, defaults or pricing editors, and the dialog DOM stays
+        the same node throughout. */}
+      <section className="space-y-3" hidden={activeTab !== 'variants'}>
+        <div>
+          <h3 className="text-base font-semibold">{t('variants.title')}</h3>
+          <p className="mt-0.5 text-sm text-slate-500">{t('variants.description')}</p>
+        </div>
+        <FamilyVariantsGrid
+          key={`${detail.id}:${detail.variants.length}`}
+          familyId={detail.id}
+          optionNames={detail.options.map((option) => option.name)}
+          variants={gridVariants}
+          familyRate={detail.defaultRate}
+          canManage={canManage}
+          onChanged={() => void load()}
+        />
+      </section>
 
-      {activeTab === 'pricing' ? (
-        <section className="space-y-3">
-          <div>
-            <h3 className="text-base font-semibold">{t('pricing.title')}</h3>
-            <p className="mt-0.5 text-sm text-slate-500">{t('pricing.description')}</p>
-          </div>
-          <ItemPriceMatrixEditor familyId={detail.id} canManage={canManage} />
-        </section>
-      ) : null}
+      <section className="space-y-3" hidden={activeTab !== 'pricing'}>
+        <div>
+          <h3 className="text-base font-semibold">{t('pricing.title')}</h3>
+          <p className="mt-0.5 text-sm text-slate-500">{t('pricing.description')}</p>
+        </div>
+        <ItemPriceMatrixEditor familyId={detail.id} canManage={canManage} />
+      </section>
 
-      {activeTab === 'options' ? (
-        <section className="space-y-3">
-          <div>
-            <h3 className="text-base font-semibold">{t('options.title')}</h3>
-            <p className="mt-0.5 text-sm text-slate-500">{t('options.description')}</p>
-          </div>
-          <FamilyOptionsEditor
-            key={detail.options.map((option) => option.id).join(',')}
-            initial={detail.options.map((option) => ({ id: option.id, name: option.name, values: option.values }))}
-            variantValues={variantValues}
-            disabled={!canManage}
-            onSave={async (options) => {
-              try {
-                await apiJson(`/api/item-families/${detail.id}/options`, {
-                  method: 'PUT',
-                  body: JSON.stringify({ options }),
-                })
-                toast.success(t('options.saved'))
-                await load()
-              } catch (saveError) {
-                throw new Error(saveError instanceof Error ? saveError.message : String(saveError))
-              }
-            }}
-          />
-        </section>
-      ) : null}
+      <section className="space-y-3" hidden={activeTab !== 'options'}>
+        <div>
+          <h3 className="text-base font-semibold">{t('options.title')}</h3>
+          <p className="mt-0.5 text-sm text-slate-500">{t('options.description')}</p>
+        </div>
+        <FamilyOptionsEditor
+          key={detail.options.map((option) => option.id).join(',')}
+          initial={detail.options.map((option) => ({ id: option.id, name: option.name, values: option.values }))}
+          variantValues={variantValues}
+          disabled={!canManage}
+          onSave={async (options) => {
+            try {
+              await apiJson(`/api/item-families/${detail.id}/options`, {
+                method: 'PUT',
+                body: JSON.stringify({ options }),
+              })
+              toast.success(t('options.saved'))
+              await load()
+            } catch (saveError) {
+              throw new Error(saveError instanceof Error ? saveError.message : String(saveError))
+            }
+          }}
+        />
+      </section>
 
-      {activeTab === 'details' ? (
-        <section className="space-y-3">
-          <div>
-            <h3 className="text-base font-semibold">{t('defaults.title')}</h3>
-            <p className="mt-0.5 text-sm text-slate-500">{t('defaults.description')}</p>
-          </div>
-          <DefaultsForm
-            detail={detail}
-            canManage={canManage}
-            onSaved={() => void load()}
-          />
-        </section>
-      ) : null}
+      <section className="space-y-3" hidden={activeTab !== 'details'}>
+        <div>
+          <h3 className="text-base font-semibold">{t('defaults.title')}</h3>
+          <p className="mt-0.5 text-sm text-slate-500">{t('defaults.description')}</p>
+        </div>
+        <DefaultsForm
+          detail={detail}
+          canManage={canManage}
+          onSaved={() => void load()}
+        />
+      </section>
     </div>
   )
 }
