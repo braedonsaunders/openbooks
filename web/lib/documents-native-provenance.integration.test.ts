@@ -34,10 +34,13 @@ type Fixture = {
   userId: string;
 };
 
-async function newFixture(displayName: string, role: string): Promise<Fixture> {
+async function newFixture(displayName: string, role: string, permissions: readonly string[] = []): Promise<Fixture> {
   return withBypassContext(async () => {
     const org = await createScratchOrg();
     const userId = await createScratchUser(org.orgId, displayName, role);
+    if (permissions.length) await db.execute(sql`
+      update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
+       where org_id = ${org.orgId} and key = ${role}`);
     return { org, userId };
   });
 }
@@ -742,7 +745,7 @@ test("capture evidence without a PO reference stays editable audit metadata", { 
 });
 
 test("posted correction copies source line identities as new replacement lines", { skip: !DB }, async () => {
-  const fx = await newFixture("Bookkeeper", "bookkeeper");
+  const fx = await newFixture("Correction controller", "correction_controller", ["ar.create", "ar.post"]);
   try {
     const { org, userId } = fx;
     const invoiceId = randomUUID();
