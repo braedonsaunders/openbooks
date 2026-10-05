@@ -29,6 +29,8 @@ import { EMPTY_EMPLOYER_LEVY_FACTORS } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { computeAuStatutory } from "./compute-statutory.ts";
 import { AU_PAYROLL_PACK } from "./pack.ts";
+import { resolveCertificate } from "../certificates.ts";
+import { AU_CERTIFICATES } from "./jurisdictions.ts";
 
 const GROSS = "3653.8500";
 const SACRIFICE = "200.0000";
@@ -84,7 +86,10 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
       key === "au_tfn_declaration"
         ? { answers: TFN_ANSWERS, onFile: true }
         : key === "au_sg_administration"
-          ? { answers: { opening_qualifying_ytd: "0" }, onFile: true }
+          ? resolveCertificate({
+            certificate: AU_CERTIFICATES.certificates.find((certificate) => certificate.key === key)!,
+            stored: [{ certificateKey: key, answers: { opening_qualifying_ytd: "0" }, effectiveFrom: null }],
+          })
           : null) as never,
     bool: (value) => value === "true",
     assertRegionSupported: () => {},

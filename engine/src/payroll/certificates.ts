@@ -266,6 +266,26 @@ export interface PayrollCertificate {
   storage: "profile_columns" | "certificate_rows";
   /** Employer policy elections cannot reinterpret already committed payroll. */
   protectCommittedHistory?:boolean;
+  /**
+   * Field keys this certificate once stored and no longer reads, each with
+   * the field that replaced it. A stored row still carrying a retired answer
+   * and no answer for its replacement was filed under the old meaning: it is
+   * refused by name (see `retiredCertificateAnswerProblem`) rather than read
+   * as if the employee had answered nothing.
+   */
+  retiredFields?: readonly PayrollRetiredCertificateField[];
+}
+
+export interface PayrollRetiredCertificateField {
+  /** The key the old declaration stored answers under. */
+  key: string;
+  /** The current field that took its place. */
+  replacedBy: string;
+  /**
+   * Why the old answer cannot simply be read as the new field — completes
+   * "its value is not carried into <field> because …".
+   */
+  notCarriedBecause: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +517,12 @@ export function certificateDeclarationProblem(certificate: PayrollCertificate): 
   for (const field of certificate.fields) {
     const problem = fieldDeclarationProblem(field);
     if (problem) return `${field.key}: ${problem}`;
+  }
+  for (const retired of certificate.retiredFields ?? []) {
+    if (keys.includes(retired.key)) return `retired field ${retired.key} is still declared`;
+    if (!keys.includes(retired.replacedBy)) {
+      return `retired field ${retired.key} names ${retired.replacedBy}, which the certificate does not declare`;
+    }
   }
   return null;
 }
@@ -736,6 +762,11 @@ export interface ResolvedCertificate {
   answers: Record<string, string | null>;
   /** Required fields with no answer and no default. */
   missing: string[];
+  /**
+   * The answers exactly as stored on the certificate row in force, declared
+   * or not — the only place a retired field's answer is still visible.
+   */
+  storedAnswers?: Readonly<Record<string, string>>;
 }
 
 /** The profile row, as far as this module is concerned: a bag of columns. */
@@ -842,7 +873,35 @@ export function resolveCertificate(input: {
     effectiveFrom: current?.effectiveFrom ?? null,
     answers,
     missing,
+    ...(current ? { storedAnswers: current.answers } : {}),
   };
+}
+
+/**
+ * The refusal for a certificate row filed under a retired field: the row
+ * holds an answer for the retired key and none for its replacement, so
+ * reading the current declaration would see an unanswered field and silently
+ * drop a figure the employer did enter. Null when nothing retired is held.
+ * The calculation and the run readiness check both call this, so the
+ * operator meets the same message before and at calculation.
+ */
+export function retiredCertificateAnswerProblem(
+  resolved: Pick<ResolvedCertificate, "certificate" | "storedAnswers">,
+  employeeName: string,
+): string | null {
+  const stored = resolved.storedAnswers ?? {};
+  for (const retired of resolved.certificate.retiredFields ?? []) {
+    const old = stored[retired.key];
+    if (old == null || old === "") continue;
+    const current = stored[retired.replacedBy];
+    if (current != null && current !== "") continue;
+    const field = resolved.certificate.fields.find((candidate) => candidate.key === retired.replacedBy);
+    const label = field?.label ?? retired.replacedBy;
+    return `${employeeName}'s ${resolved.certificate.label} still holds ${old} under the retired `
+      + `"${retired.key}" answer and no "${label}". Its value is not carried into "${label}" because `
+      + `${retired.notCarriedBecause}. Re-declare "${label}" on the employee's Payroll tab before calculating.`;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
