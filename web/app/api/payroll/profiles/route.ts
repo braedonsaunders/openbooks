@@ -886,11 +886,16 @@ export const POST = defineRoute({
       money[key] = normalizeMoney(value)
     }
     return withOrgTransaction(orgId, async () => {
+      // A dated former employee still needs tax configuration for historical
+      // payroll. Saving these facts leaves party activation and employment
+      // dates intact; the run's termination-date population filter still applies.
       const refs = (await Promise.all([
         db.execute(sql`
           select p.subsidiary_id as "subsidiaryId" from parties p
-           join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
-           where p.org_id = ${orgId} and p.id = ${body.employeePartyId} and p.is_active
+           join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+             and (er.is_active or er.terminated_on is not null)
+           where p.org_id = ${orgId} and p.id = ${body.employeePartyId}
+             and (p.is_active or er.terminated_on is not null)
            for no key update of p for share of er`),
         db.execute(sql`
           select subsidiary_id as "subsidiaryId"
@@ -899,7 +904,8 @@ export const POST = defineRoute({
       ]))
       // The two locking reads above stay exactly as they are: one round trip on
       // the success path. A zero-row inner join is a single outcome for three
-      // employee-side causes (no such party, inactive party, no active role),
+      // employee-side causes (no such party, inactive party without a dated
+      // termination, no eligible employee role),
       // so the refusal below re-reads with a left join to resolve WHICH
       // predicate failed — but only on this failure path, never on success.
       if (refs[0].rows.length !== 1 || refs[1].rows.length !== 1) {

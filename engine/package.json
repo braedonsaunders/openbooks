@@ -79,6 +79,7 @@
     "./payroll/withholding": "./src/payroll/public-withholding.ts",
     "./payroll/setup": "./src/payroll/public-setup.ts",
     "./payroll/inputs": "./src/payroll/public-inputs.ts",
+    "./payroll/compensation-packages": "./src/payroll/compensation-package-public.ts",
     "./payroll/non-cash-offsets": "./src/payroll/non-cash-offset-types.ts",
     "./payroll/assigned-components": "./src/payroll/public-assigned-components.ts",
     "./money/quantity": "./src/money/quantity.ts",

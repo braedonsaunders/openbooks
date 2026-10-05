@@ -1,4 +1,5 @@
 import { rebaseChecklistReferences } from "./checklist-references.ts";
+import { rebaseClonedCompensationPackages } from "../payroll/compensation-package-sandbox.ts";
 import { sql } from "drizzle-orm";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { db } from "../platform/db.ts";
@@ -118,6 +119,9 @@ export async function rebaseClonedJsonReferences(args: {
     }
   }
   await rebaseChecklistReferences(args);
+  if (args.copiedTables.has("payroll_compensation_versions")) {
+    await rebaseClonedCompensationPackages(db, args.productionOrgId, args.sandboxOrgId, args.seed);
+  }
   const scoped = SCOPE_FILTER_TABLES.filter((table) => args.copiedTables.has(table));
   if (scoped.length) {
     // A refresh that re-copies the HRM rules always re-copies the entity tree

@@ -671,4 +671,23 @@ test('profile save returns the employment identity refusal without altering a co
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 
+test('dated former employees can configure historical payroll without reactivating their party or role', async () => {
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`update parties set is_active=false where org_id=${org.orgId} and id=${employeeId}`)
+      await db.execute(sql`update employee_roles set is_active=false,terminated_on='2026-05-08' where org_id=${org.orgId} and party_id=${employeeId}`)
+    })
+    const saved = await post({ employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly' })
+    assert.equal(saved.status, 200, await saved.clone().text())
+    await withBypassContext(async () => {
+      const flags = (await db.execute<{ party_active: boolean; role_active: boolean; terminated_on: string }>(sql`
+        select p.is_active as party_active,e.is_active as role_active,e.terminated_on::text
+        from parties p join employee_roles e on e.party_id=p.id and e.org_id=p.org_id
+        where p.org_id=${org.orgId} and p.id=${employeeId}`)).rows[0]!
+      assert.deepEqual(flags, { party_active: false, role_active: false, terminated_on: '2026-05-08' })
+    })
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
 test.after(async () => { await pool.end() })
