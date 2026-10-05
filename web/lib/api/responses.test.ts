@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
@@ -64,6 +65,8 @@ test("status-less engine refusals map by family, 409 on conflict", async () => {
     { error: new PaymentRevisionConflictError(), status: 409, body: { error: "this payment changed after you opened it; reload and review the latest revision", code: "payment_refused" } },
     { error: new PayrollError("No open pay run for 2026-07"), status: 422, body: { error: "No open pay run for 2026-07", code: "payroll_refused" } },
     { error: new TemporalError("OVERLAP", "Ranges overlap"), status: 422, body: { error: "Ranges overlap", code: "OVERLAP" } },
+    { error: new CommerceError("channel_map_unmapped", "No account is mapped.", "Map the account under Channels → Settings.", { field: "role" }), status: 422, body: { error: "No account is mapped.", code: "channel_map_unmapped", remedy: "Map the account under Channels → Settings." } },
+    { error: new CommerceError("channel_account_in_use", "Already connected.", "Open the existing channel.", { field: "externalAccount", status: 409 }), status: 409, body: { error: "Already connected.", code: "channel_account_in_use", remedy: "Open the existing channel." } },
   ];
   for (const { error, status, body } of cases) {
     const response = postingRefusal(error);

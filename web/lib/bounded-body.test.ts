@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readBoundedBodyText } from "./bounded-body";
+import { readBoundedBodyBytes, readBoundedBodyText } from "./bounded-body";
 
 function chunkedRequest(chunk: string, repeats: number): Request {
   let sent = 0;
@@ -96,4 +96,25 @@ test("a body that errors mid-stream reports unreadable, not too_large", async ()
   });
   const result = await readBoundedBodyText(req, 1024 * 1024);
   assert.deepEqual(result, { ok: false, reason: "unreadable" });
+});
+
+test("the byte reader returns raw bytes past the cap refused, at the cap kept", async () => {
+  const over = await readBoundedBodyBytes(chunkedRequest("x".repeat(1024), 100), 1024);
+  assert.deepEqual(over, { ok: false, reason: "too_large" });
+  const exact = await readBoundedBodyBytes(chunkedRequest("z".repeat(512), 2), 1024);
+  assert.equal(exact.ok, true);
+  if (exact.ok) {
+    assert.equal(exact.bytes.length, 1024);
+    assert.equal(exact.bytes.toString("utf8"), "z".repeat(1024));
+  }
+});
+
+test("the byte reader preserves bytes text decoding would change", async () => {
+  // U+00E9 in latin-1 bytes is invalid UTF-8; the text reader would replace
+  // it, but a signature over the raw delivery must see the original byte.
+  const raw = Buffer.from([0x65, 0xe9, 0x65]);
+  const req = new Request("http://localhost/inbound", { method: "POST", body: raw as unknown as BodyInit });
+  const result = await readBoundedBodyBytes(req, 1024);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(Array.from(result.bytes), [0x65, 0xe9, 0x65]);
 });

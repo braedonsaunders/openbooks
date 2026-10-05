@@ -132,6 +132,12 @@ const TOKEN_SURFACES: TokenSurface[] = [
     refusalMarker: /apiErrorResponse\(error, \{ safeStatus: 404 \}\)/,
   },
   {
+    dir: join(webApp, "api", "channels", "[id]", "webhooks"),
+    kind: "api",
+    tokenMarker: /receiveInboundEvent/,
+    refusalMarker: /status: 401/,
+  },
+  {
     dir: join(webApp, "sign", "[token]"),
     kind: "page",
     tokenMarker: /verifyDocumentSignerToken/,
