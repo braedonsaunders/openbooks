@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { cmp, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { cmp, normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { isFeatureEnabled } from "../../../lib/features";
 import { isUuid } from "../../../lib/list-params";
@@ -68,11 +68,6 @@ function textOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
 }
 
 /**

@@ -24,7 +24,7 @@ import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { notFound } from "@/lib/api/responses";
 
 const nullableUuid = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable())
@@ -180,11 +180,6 @@ async function storedLineCount(executor: QueryExecutor, opportunityId: string, o
     select count(*)::int as count from crm_opportunity_lines
      where opportunity_id = ${opportunityId} and org_id = ${orgId}`)
   return Number(result.rows[0]?.count ?? 0)
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 type QueryExecutor = Pick<typeof db, 'execute'>

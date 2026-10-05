@@ -14,7 +14,7 @@ import {
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import type { LienWaiverExecutedSnapshot } from '@/lib/lien-waiver-form'
 import { isUuid } from '@/lib/list-params'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
@@ -60,11 +60,6 @@ const requestBodySchema = z.preprocess(
 
 
 export const runtime = 'nodejs'
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
 
 type Action = 'request' | 'receive' | 'sign' | 'reject' | 'void' | 'update'
 

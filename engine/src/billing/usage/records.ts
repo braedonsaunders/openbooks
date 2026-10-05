@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { USAGE_AGGREGATIONS, USAGE_RECORD_SOURCES, type usageMeters, type usageRecords } from "@openbooks/schema";
-import { cmp, neg } from "../../money/money.ts";
+import { cmp, neg, wholeDigits } from "../../money/money.ts";
 import { parseQuantity } from "../../money/brands.ts";
 import { assertPeriodModulesOpen, CloseError } from "../../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../../periods/period-resolution.ts";
@@ -133,8 +133,7 @@ function normalizeQuantity(value: unknown): string {
       "quantity",
     );
   }
-  const wholeDigits = quantity.split(".", 1)[0]!.replace(/^0+/, "");
-  if (wholeDigits.length > 20) {
+  if (wholeDigits(quantity) > 20) {
     refuse(
       "usage_quantity_invalid",
       "Usage quantity exceeds the supported numeric(28,8) range.",

@@ -25,12 +25,7 @@ import {
 import { can, guardSubsidiaryScope } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
 import { projectCostSummary } from "../../../lib/project-costing";
-import {
-  add,
-  cmp,
-  normalizeMoney,
-  sum,
-} from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, normalizeMoney, sum, wholeDigits } from "@openbooks/engine/money";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import {
   moneyRefusal,
@@ -58,8 +53,7 @@ function moneyField(field: string) {
     .string({ error: `${field} must be sent as decimal text` })
     .superRefine((value, context) => {
       const parsed = canonicalDecimal(value, 4);
-      const wholeDigits = parsed?.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length ?? 0;
-      if (parsed === null || wholeDigits > 15) {
+      if (parsed === null || wholeDigits(parsed) > 15) {
         context.addIssue({
           code: "custom",
           message: moneyRefusal(field, value),
@@ -308,12 +302,6 @@ export const GET = defineRoute({
     }
   },
 });
-
-/** Whole-digit width of a canonical decimal, for column-range guards. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "")
-    .length;
-}
 
 async function pinIncomeAccount(
   exec: SqlExecutor,

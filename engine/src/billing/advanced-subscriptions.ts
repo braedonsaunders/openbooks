@@ -5,7 +5,7 @@ import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
-import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
+import { add, mul, normalizeMoney, prorateDays, toUnits, wholeDigits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
 import type { Money } from "../money/brands.ts";
@@ -245,11 +245,6 @@ function validDate(value: string | null | undefined, label: string, required = f
     throw new AdvancedSubscriptionError(`${label} must be an ISO date`);
   }
   return value;
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
 }
 
 function exactMoney(value: unknown, label: string): string {

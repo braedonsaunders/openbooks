@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { resolveInvoicingPreference } from "./invoicing-preference.ts";
 import { loadProjectType } from "./project-type";
 import { canonicalDecimal } from "./exact-decimal";
@@ -59,11 +59,6 @@ const BASES = new Set([
   "milestone",
   "field_ticket",
 ]);
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
-}
 
 export async function createBillingRequest(
   orgId: string,

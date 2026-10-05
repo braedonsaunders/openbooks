@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { cmp, normalizeDecimal, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { cmp, normalizeDecimal, normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { isUuid } from "../../../../lib/list-params";
 import {
   findUnownedCustomReferences,
@@ -84,11 +84,6 @@ function date(value: unknown) {
   // column deep inside the transaction.
   return isIsoCalendarDate(value);
 }
-/** Whole-digit width of a canonical decimal. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
-
 function nonnegativeMoney(value: unknown, nullable = false): string | null | false {
   if ((value == null || value === "") && nullable) return null;
   const exact = canonicalDecimal(value, 4);

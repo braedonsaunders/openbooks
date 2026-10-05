@@ -13,6 +13,7 @@
  * floats) so engine code can import it without an upward edge.
  */
 import { canonicalDecimal } from "./exact-decimal.ts";
+import { wholeDigits } from "./money.ts";
 
 /**
  * What the operator supplied, safe to put in a refusal. The body is arbitrary
@@ -147,11 +148,6 @@ export function moneyRefusal(
     return `${field} must fit the ledger (at most ${maxWholeDigits} whole digits)`;
   }
   return decimalNullRefusal(field, noun, raw, maxScale);
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length;
 }
 
 export function decimalNullRefusal(field: string, noun: string, raw: unknown, maxScale: number): string {

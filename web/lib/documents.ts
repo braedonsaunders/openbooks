@@ -22,7 +22,7 @@ import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.
 import { db, schema, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { assertReturnSourceSelectable, type ReturnSide } from '@openbooks/engine/src/inventory/returnable-sources.ts'
 import { InventoryError } from '@openbooks/engine/src/inventory/contracts.ts'
-import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
@@ -362,11 +362,6 @@ function exactUnitPrice(value: unknown): string | null {
   }
 }
 
-/** Whole-digit width of a canonical decimal, for column-range guards. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
-
 /** A validation/period failure with the HTTP status the callers should return. */
 type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -426,8 +421,7 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
           decimalNullRefusal(`Line ${n} quantity`, 'an exact decimal quantity', l.quantity, 8),
         )
       }
-      const wholeDigits = exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '')
-      if (wholeDigits.length > 20) {
+      if (wholeDigits(exact) > 20) {
         throw new DocumentEditError(
           422,
           `Line ${n}: quantity is out of range — at most 20 whole digits fit the ledger`,

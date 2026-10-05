@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { allocateDocumentNumber } from "@openbooks/engine/src/records/numbering.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { normalizeMoney, sum, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney, sum, toUnits, wholeDigits } from "@openbooks/engine/money";
 import { can, subsidiaryScopeAllows } from "../../../../lib/authz";
 import { defineRoute } from "../../../../lib/api/route";
 import { applicationContextFromSession } from "../../../../lib/application/context";
@@ -16,12 +16,6 @@ import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/p
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { notFound } from "@/lib/api/responses";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
-}
 
 /** Exact numeric(19,4) money string, or 'invalid'. */
 function exactMoney(v: unknown): string | "invalid" {

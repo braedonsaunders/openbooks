@@ -1,4 +1,5 @@
 import { canonicalDecimal } from './exact-decimal'
+import { wholeDigits } from '@openbooks/engine/money'
 
 /**
  * Single source of truth for item-rate numerics (PRC6). Rate quantities and
@@ -11,10 +12,6 @@ export const ITEM_RATE_DECIMAL_SCALE = 4
 export const ITEM_RATE_WHOLE_DIGITS = 15
 
 export type ItemRateDecimalError = 'not-a-number' | 'too-many-decimals' | 'too-wide'
-
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
 
 export function parseItemRateDecimal(value: unknown): { value: string } | { error: ItemRateDecimalError } {
   const text = String(value ?? '')
