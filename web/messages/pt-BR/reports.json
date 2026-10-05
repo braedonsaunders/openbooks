@@ -1002,6 +1002,14 @@
       "billing_import_reconciliation": {
         "label": "Conciliação de importação de cobrança",
         "description": "Conciliação por importação: MRR mensal origem versus OpenBooks, contas a receber em aberto por cliente e as diferenças que bloqueiam a virada."
+      },
+      "shipment_labels": {
+        "label": "Etiquetas de envio",
+        "description": "Etiquetas de transportadora compradas com custo ao vivo, estado de rastreio e lançamento de custo."
+      },
+      "shipping_adjustments": {
+        "label": "Ajustes da transportadora",
+        "description": "Correções de cobrança aplicadas após a compra, com motivo e estado de lançamento."
       }
     },
     "columns": {
@@ -2441,6 +2449,38 @@
         "openbooks_major": "Valor OpenBooks",
         "diff_major": "Diferença",
         "explanation": "Explicação"
+      },
+      "shipment_labels": {
+        "id": "Etiqueta (id)",
+        "shipment_number": "Envio",
+        "order_number": "Pedido",
+        "shipment_id": "Envio (id)",
+        "account": "Conta de transportadora",
+        "provider": "Provedor",
+        "carrier": "Transportadora",
+        "service": "Serviço",
+        "tracking_number": "Rastreio",
+        "tracking_status": "Estado de rastreio",
+        "status": "Estado de etiqueta",
+        "amount": "Custo de etiqueta",
+        "currency": "Moeda",
+        "purchased_at": "Comprada em",
+        "purchased_date": "Data de compra",
+        "voided_at": "Anulada em",
+        "cost_entry_id": "Lançamento de custo (id)"
+      },
+      "shipping_adjustments": {
+        "id": "Ajuste (id)",
+        "shipment_number": "Envio",
+        "carrier": "Transportadora",
+        "service": "Serviço",
+        "kind": "Motivo",
+        "amount": "Ajuste",
+        "currency": "Moeda",
+        "reason": "Detalhe",
+        "status": "Estado de lançamento",
+        "occurred_at": "Ocorrido em",
+        "entry_id": "Lançamento de ajuste (id)"
       }
     },
     "enumValues": {

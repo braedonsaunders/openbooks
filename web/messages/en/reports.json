@@ -1002,6 +1002,14 @@
       "billing_import_reconciliation": {
         "label": "Billing import reconciliation",
         "description": "Per-run billing-platform import reconciliation: MRR by month source vs OpenBooks, open AR by customer, and the differences that block cut-over."
+      },
+      "shipment_labels": {
+        "label": "Shipping labels",
+        "description": "Bought carrier labels with live cost, tracking state and their cost journal."
+      },
+      "shipping_adjustments": {
+        "label": "Carrier adjustments",
+        "description": "Billing corrections the carrier applied after purchase, with reason and posting state."
       }
     },
     "columns": {
@@ -2441,6 +2449,38 @@
         "openbooks_major": "OpenBooks amount",
         "diff_major": "Difference",
         "explanation": "Explanation"
+      },
+      "shipment_labels": {
+        "id": "Label (id)",
+        "shipment_number": "Shipment #",
+        "order_number": "Order #",
+        "shipment_id": "Shipment (id)",
+        "account": "Carrier account",
+        "provider": "Provider",
+        "carrier": "Carrier",
+        "service": "Service",
+        "tracking_number": "Tracking #",
+        "tracking_status": "Tracking state",
+        "status": "Label state",
+        "amount": "Label cost",
+        "currency": "Currency",
+        "purchased_at": "Purchased",
+        "purchased_date": "Purchase date",
+        "voided_at": "Voided",
+        "cost_entry_id": "Cost journal (id)"
+      },
+      "shipping_adjustments": {
+        "id": "Adjustment (id)",
+        "shipment_number": "Shipment #",
+        "carrier": "Carrier",
+        "service": "Service",
+        "kind": "Reason",
+        "amount": "Adjustment",
+        "currency": "Currency",
+        "reason": "Detail",
+        "status": "Posting state",
+        "occurred_at": "Occurred",
+        "entry_id": "Adjustment journal (id)"
       }
     },
     "enumValues": {

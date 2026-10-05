@@ -1002,6 +1002,14 @@
       "billing_import_reconciliation": {
         "label": "Abrechnungsimport-Abstimmung",
         "description": "Abstimmung je Importlauf: MRR je Monat Quelle gegen OpenBooks, offene Forderungen je Kunde und die Differenzen, die die Umstellung blockieren."
+      },
+      "shipment_labels": {
+        "label": "Versandetiketten",
+        "description": "Gekaufte Frachtführeretiketten mit Live-Kosten, Trackingstand und Kostenbuchung."
+      },
+      "shipping_adjustments": {
+        "label": "Frachtkorrekturen",
+        "description": "Nachträgliche Abrechnungskorrekturen des Frachtführers, mit Grund und Buchungsstand."
       }
     },
     "columns": {
@@ -2441,6 +2449,38 @@
         "openbooks_major": "OpenBooks-Betrag",
         "diff_major": "Differenz",
         "explanation": "Erläuterung"
+      },
+      "shipment_labels": {
+        "id": "Etikett (ID)",
+        "shipment_number": "Sendung",
+        "order_number": "Auftrag",
+        "shipment_id": "Sendung (ID)",
+        "account": "Frachtkonto",
+        "provider": "Anbieter",
+        "carrier": "Frachtführer",
+        "service": "Versandart",
+        "tracking_number": "Trackingnr.",
+        "tracking_status": "Trackingstand",
+        "status": "Etikettstatus",
+        "amount": "Etikettkosten",
+        "currency": "Währung",
+        "purchased_at": "Gekauft am",
+        "purchased_date": "Kaufdatum",
+        "voided_at": "Storniert am",
+        "cost_entry_id": "Kostenbuchung (ID)"
+      },
+      "shipping_adjustments": {
+        "id": "Korrektur (ID)",
+        "shipment_number": "Sendung",
+        "carrier": "Frachtführer",
+        "service": "Versandart",
+        "kind": "Grund",
+        "amount": "Korrektur",
+        "currency": "Währung",
+        "reason": "Details",
+        "status": "Buchungsstand",
+        "occurred_at": "Entstanden am",
+        "entry_id": "Korrekturbuchung (ID)"
       }
     },
     "enumValues": {

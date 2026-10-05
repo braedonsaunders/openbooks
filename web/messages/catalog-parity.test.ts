@@ -3351,6 +3351,10 @@ const COGNATES = new Set<string>([
   'zh:items.shipping.hsPlaceholder|8471.30',
   'de:items.shipping.originPlaceholder|US',
   'es:items.shipping.originPlaceholder|US',
+  // Carrier service level is Service in French logistics copy, matching the
+  // reviewed enumValues entry.
+  'fr:reports.catalog.columns.shipment_labels.service|Service',
+  'fr:reports.catalog.columns.shipping_adjustments.service|Service',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
