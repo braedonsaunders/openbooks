@@ -9,6 +9,7 @@ import {
 } from '@openbooks/engine/payments/autopay'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
+import { guardEnrollmentScope } from '@/lib/autopay-scope'
 
 export const runtime = 'nodejs'
 
@@ -22,6 +23,8 @@ export const PATCH = defineRoute({
   handler: async ({ authz, params: routeParams, body }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'enrollment id is required' }, { status: 400 })
+    const outOfScope = await guardEnrollmentScope(authz, id)
+    if (outOfScope) return outOfScope
     try {
       if (body.status === 'paused') await pauseEnrollment(authz.user.orgId, id, authz.user.id)
       else if (body.status === 'canceled') await cancelEnrollment(authz.user.orgId, id, authz.user.id)

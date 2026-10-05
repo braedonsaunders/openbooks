@@ -10,6 +10,7 @@ import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
 import { db } from '@openbooks/engine/platform/database'
 import { sql } from 'drizzle-orm'
+import { guardAutopayPartyScope } from '@/lib/autopay-scope'
 
 export const runtime = 'nodejs'
 
@@ -30,6 +31,8 @@ export const GET = defineRoute({
   handler: async ({ authz, request }) => {
     const partyId = new URL(request.url).searchParams.get('partyId') ?? ''
     if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+    const outOfScope = await guardAutopayPartyScope(authz, partyId)
+    if (outOfScope) return outOfScope
     // Subscription rows carry the subscription name: an id alone cannot tell
     // two enrollments apart on the customer drawer.
     const rows = (await db.execute(sql`
@@ -50,6 +53,8 @@ export const POST = defineRoute({
   feature: 'autopay',
   body: enrollBody,
   handler: async ({ authz, body }) => {
+    const outOfScope = await guardAutopayPartyScope(authz, body.partyId)
+    if (outOfScope) return outOfScope
     try {
       const enrollment = await enrollAutopay(authz.user.orgId, {
         partyId: body.partyId,
