@@ -162,6 +162,13 @@ export const payComponents = pgTable(
      * pool: lowest first (support outranks an ordinary creditor), and whatever
      * does not fit is reported as a shortfall, never silently dropped. */
     protectionPriority: integer("protection_priority").notNull().default(100),
+    /**
+     * The pack-declared class of protected order (0542): an ordinary
+     * creditor garnishment carries an exempt floor the order may not reach,
+     * a support order its percentage alone. Null applies the percentage
+     * alone; the run refuses a class the employee's pack does not declare.
+     */
+    protectionClass: text("protection_class"),
     /** Membership of the protected pool: earnings add to it, deductions
      * subtract from it. This flag — not a hardcode — is what excludes an
      * allowance or a benefit from the base a garnishment is measured against. */
@@ -233,6 +240,9 @@ export const payComponents = pgTable(
     check("pay_components_protection_shape",
       sql`${t.protectionBase} = 'none' or ${t.protectionMaxPercent} is not null`),
     check("pay_components_protection_priority", sql`${t.protectionPriority} >= 0`),
+    check("pay_components_protection_class",
+      sql`${t.protectionClass} is null
+          or (${t.protectionBase} <> 'none' and ${t.protectionClass} ~ '^[a-z][a-z0-9_]{0,63}$')`),
     check("pay_components_basis_caps_nonnegative",
       sql`(${t.basisCapHoursPerPeriod} is null or ${t.basisCapHoursPerPeriod} >= 0)
           and (${t.basisCapAmountPerPeriod} is null or ${t.basisCapAmountPerPeriod} >= 0)

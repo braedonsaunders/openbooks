@@ -314,7 +314,11 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
         { key: 'earning', iconKey: 'banknote', labelKey: 'payComponentChooser.earning.label', descriptionKey: 'payComponentChooser.earning.description', values: { kind: 'earning', paymentKind: 'cash', taxable: true } },
         { key: 'taxable-benefit', iconKey: 'gift', labelKey: 'payComponentChooser.taxableBenefit.label', descriptionKey: 'payComponentChooser.taxableBenefit.description', values: { kind: 'earning', paymentKind: 'non_cash', taxable: true, vacationable: false } },
         { key: 'allowance', iconKey: 'receipt', labelKey: 'payComponentChooser.allowance.label', descriptionKey: 'payComponentChooser.allowance.description', values: { kind: 'earning', paymentKind: 'cash', taxable: false, pensionable: false, insurable: false, vacationable: false } },
-        { key: 'deduction', iconKey: 'circle-minus', labelKey: 'payComponentChooser.deduction.label', descriptionKey: 'payComponentChooser.deduction.description', values: { kind: 'deduction', vacationable: false } },
+        // A new deduction starts outside the protected base: disposable
+        // earnings are pay after deductions required by law, and the
+        // deductions an operator creates (retirement deferrals, premiums,
+        // dues) are voluntary unless they say otherwise.
+        { key: 'deduction', iconKey: 'circle-minus', labelKey: 'payComponentChooser.deduction.label', descriptionKey: 'payComponentChooser.deduction.description', values: { kind: 'deduction', vacationable: false, includeInDisposableEarnings: false } },
         { key: 'employer-contribution', iconKey: 'building', labelKey: 'payComponentChooser.employerContribution.label', descriptionKey: 'payComponentChooser.employerContribution.description', values: { kind: 'employer_contribution', vacationable: false } },
       ],
     },
@@ -323,7 +327,7 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { titleKey: 'sections.payComponentCalculation', descriptionKey: 'sections.payComponentCalculationHelp', fields: ['basis', 'value', 'basisCapHoursPerPeriod', 'basisCapAmountPerPeriod', 'basisCapAmountPerYear'] },
       { titleKey: 'sections.payComponentTaxability', descriptionKey: 'sections.payComponentTaxabilityHelp', fields: ['taxable', 'pensionable', 'insurable', 'programExclusions', 'vacationable', 'nonPeriodic', 'taxTreatment', 'supplementalWageCategory', 'statutoryExemptionCategory', 'statutoryReportingCategory'] },
       { titleKey: 'sections.payComponentAccounting', descriptionKey: 'sections.payComponentAccountingHelp', fields: ['expenseAccountId', 'liabilityAccountId', 'remittancePartyId'] },
-      { titleKey: 'sections.deductionProtection', fields: ['protectionBase', 'protectionMaxPercent', 'protectionPriority', 'includeInDisposableEarnings'] },
+      { titleKey: 'sections.deductionProtection', fields: ['protectionBase', 'protectionMaxPercent', 'protectionClass', 'protectionPriority', 'includeInDisposableEarnings'] },
     ],
     orgScoped: true,
     actorCols: true,
@@ -428,6 +432,16 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
         key: 'protectionMaxPercent', kind: 'percent', sectionKey: 'sections.deductionProtection',
         showWhen: { field: 'protectionBase', in: PAY_PROTECTED_BASES },
         helpTextKey: 'fieldHelp.protectionMaxPercent',
+      },
+      // The legal class of order, from THE COMPONENT'S PACK (scoped like the
+      // treatments): a creditor garnishment adds the pack's exempt floor
+      // beside the percentage, a support order is its percentage alone.
+      // Blank keeps the percentage alone.
+      {
+        key: 'protectionClass', kind: 'select', options: [], optionsSource: 'payroll-protection-classes',
+        sectionKey: 'sections.deductionProtection',
+        showWhen: { field: 'protectionBase', in: PAY_PROTECTED_BASES },
+        helpTextKey: 'fieldHelp.protectionClass',
       },
       {
         key: 'protectionPriority', kind: 'integer', keepDefault: true, defaultValue: 100,

@@ -471,6 +471,7 @@ export async function applyAssignedComponentLines(
       protectionBase: c.protection_base as string,
       protectionMaxPercent: c.protection_max_percent as string | null,
       protectionPriority: Number(c.protection_priority ?? 100),
+      protectionClass: (c.protection_class as string | null) ?? null,
       includeInDisposableEarnings: c.include_in_disposable_earnings as boolean,
     });
   }
@@ -553,6 +554,7 @@ export async function applyRunLineAdjustments(
       protectionBase: adj.protection_base as string,
       protectionMaxPercent: adj.protection_max_percent as string | null,
       protectionPriority: Number(adj.protection_priority ?? 100),
+      protectionClass: (adj.protection_class as string | null) ?? null,
       includeInDisposableEarnings: adj.include_in_disposable_earnings as boolean,
     });
   }

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "../money/money.ts";
+import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
+import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import {
   PROTECTION_MAX_PASSES,
   amountForBasis,
@@ -13,6 +15,7 @@ import {
   PayrollLimitError,
   protectedBase,
   protectionConverged,
+  protectionExemptFloor,
   protectionNeedsIteration,
   settleProtectionOscillation,
   totalShortfall,
@@ -584,4 +587,37 @@ test("a negative stub line nets the protected base instead of failing the run", 
   );
   assert.equal(applied[0]?.amount, "250.0000");
   assert.equal(shortfalls[0]?.shortfall, "150.0000");
+});
+
+test("a creditor garnishment never reaches disposable earnings below the exempt floor", () => {
+  // CCPA §1673(a): the lesser of 25% of disposable earnings and the excess
+  // over 30 × the $7.25 federal minimum wage — $217.50 a week.
+  assert.equal(protectionExemptFloor("7.25", "30", 52), "217.5000");
+  assert.equal(protectionExemptFloor("7.25", "30", 26), "435.0000");
+  assert.equal(protectionExemptFloor("7.25", "30", 24), "471.2500");
+  assert.equal(protectionExemptFloor("7.25", "30", 12), "942.5000");
+  const take = (disposable: string) => applyDeductionProtection(
+    [{ key: "g", requested: "500", maxPercent: "25", exemptFloor: "217.50" }], disposable,
+  ).applied[0]!.amount;
+  assert.equal(take("250"), "32.5000", "$250 a week yields the $32.50 above the floor, not 25% ($62.50)");
+  assert.equal(take("200"), "0.0000", "below the floor nothing is garnished");
+  assert.equal(take("1000"), "250.0000", "well above the floor the 25% binds");
+});
+
+test("a protection class the pack does not declare, or a floor wage nobody recorded, refuses by name", async () => {
+  const classes = PAYROLL_COUNTRY_PACKS.US!.protectionClasses ?? [];
+  const recorded = (value: string | null) => ({
+    execute: async () => ({ rows: value === null ? [] : [{ fact_value: value }] }),
+  }) as unknown as Parameters<typeof resolveProtectionExemptFloors>[0]["tx"];
+  const input = (tx: ReturnType<typeof recorded>, protectionClass: string) => ({
+    tx, orgId: "org", subsidiaryId: "sub", country: "US", classes, payDate: "2026-07-21",
+    periodsPerYear: 26, employeeLabel: "Dana", lines: [{ description: "Card debt order", protectionClass }],
+  });
+  assert.deepEqual(await resolveProtectionExemptFloors(input(recorded("7.25"), "us_creditor_garnishment")),
+    { us_creditor_garnishment: "435.0000" });
+  assert.deepEqual(await resolveProtectionExemptFloors(input(recorded(null), "us_support_order")), {});
+  await assert.rejects(resolveProtectionExemptFloors(input(recorded(null), "us_creditor_garnishment")),
+    /Dana: Card debt order \(Ordinary creditor garnishment\) may not reach the protected base below 30 × the minimum hourly wage for garnishment protection per week, and no minimum hourly wage for garnishment protection is recorded for 2026-07-21\. Record it in Payroll Setup → Employer facts/);
+  await assert.rejects(resolveProtectionExemptFloors(input(recorded("7.25"), "ca_family_support")),
+    /protection class "ca_family_support", which the US payroll pack does not declare \(it declares: Ordinary creditor garnishment, Child or spousal support order\)/);
 });

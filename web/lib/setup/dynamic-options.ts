@@ -49,6 +49,11 @@ function packTreatmentOptions(country: string): SetupOption[] {
   ]
 }
 
+/** This pack's protection classes (blank is "no class": the percentage alone). */
+function packProtectionClassOptions(country: string): SetupOption[] {
+  return (payrollPack(country).protectionClasses ?? []).map((entry) => ({ value: entry.key, label: entry.label }))
+}
+
 function dynamicOptions(source: SetupDynamicOptionsSource, packs: PayrollPackChoice[]): SetupOption[] {
   switch (source) {
     case 'payroll-filing-countries':
@@ -89,6 +94,11 @@ function dynamicOptions(source: SetupDynamicOptionsSource, packs: PayrollPackCho
       }
       return union
     }
+    case 'payroll-protection-classes':
+      // Flat fallback where no country is in scope: every installed pack's
+      // classes, named with their pack — a class carries one country's law.
+      return packs.flatMap((pack) => packProtectionClassOptions(pack.country)
+        .map((option) => ({ ...option, label: `${pack.name}: ${option.label}` })))
     case 'payroll-contribution-programs': {
       // Type-ahead over the packs' declared contribution programs AND
       // employer-levy programs (the pay-component program exclusion picker).
@@ -124,11 +134,15 @@ function dynamicOptions(source: SetupDynamicOptionsSource, packs: PayrollPackCho
   }
 }
 
-/** Per-country treatment lists for a scoped treatment field, keyed by pack country. */
-function deductionTreatmentsByCountry(packs: PayrollPackChoice[]): Record<string, SetupOption[]> {
-  return Object.fromEntries(
-    packs.map((pack) => [pack.country, packTreatmentOptions(pack.country)]),
-  )
+/** Sources whose choices depend on the component's country, with each pack's own list. */
+const COUNTRY_SCOPED_SOURCES: Partial<Record<SetupDynamicOptionsSource, (country: string) => SetupOption[]>> = {
+  'payroll-deduction-treatments': packTreatmentOptions,
+  'payroll-protection-classes': packProtectionClassOptions,
+}
+
+/** Per-country option lists for a country-scoped field, keyed by pack country. */
+function optionsByCountry(packs: PayrollPackChoice[], forCountry: (country: string) => SetupOption[]): Record<string, SetupOption[]> {
+  return Object.fromEntries(packs.map((pack) => [pack.country, forCountry(pack.country)]))
 }
 
 type PayrollPackChoice = ReturnType<typeof installablePayrollPacks>[number]
@@ -148,6 +162,7 @@ export interface SetupOptionsContext {
 const PAYROLL_PACK_SOURCES = new Set<SetupDynamicOptionsSource>([
   'payroll-component-countries',
   'payroll-deduction-treatments',
+  'payroll-protection-classes',
   'payroll-contribution-programs',
   'payroll-statutory-reporting-categories',
 ])
@@ -193,10 +208,11 @@ const resolveField = (field: SetupField, packs: PayrollPackChoice[], context: Se
     ? { ...field, options: dynamicOptions(field.optionsSource, packs) }
     : field
   if (singleCountry(field, context, packs)) return { ...resolved, hidden: true }
-  if (field.optionsSource !== 'payroll-deduction-treatments') return resolved
+  const forCountry = field.optionsSource ? COUNTRY_SCOPED_SOURCES[field.optionsSource] : undefined
+  if (!forCountry) return resolved
   return {
     ...resolved,
-    scopedOptions: { scopeField: 'country', byValue: deductionTreatmentsByCountry(packs) },
+    scopedOptions: { scopeField: 'country', byValue: optionsByCountry(packs, forCountry) },
   }
 }
 

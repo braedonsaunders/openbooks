@@ -238,7 +238,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         statutoryReportingCategory: component.statutory_reporting_category as string | null,
         statutoryExemptionCategory: component.statutory_exemption_category as Line['statutoryExemptionCategory'],
         protectionBase: component.protection_base as string, protectionMaxPercent: component.protection_max_percent as string | null,
-        protectionPriority: Number(component.protection_priority ?? 100), includeInDisposableEarnings: component.include_in_disposable_earnings as boolean,
+        protectionPriority: Number(component.protection_priority ?? 100), protectionClass: (component.protection_class as string | null) ?? null, includeInDisposableEarnings: component.include_in_disposable_earnings as boolean,
       } : null;
       if (benefitLine) args.lines.push(benefitLine);
       if (!args.simulate) {

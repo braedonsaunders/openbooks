@@ -452,7 +452,8 @@ function foldRecruitingSetupCreate(
 }
 // HR-18 end
 
-// Create-time program-exclusion default for pay components. A non-taxable
+// Create-time defaults for pay components. A deduction that does not state
+// its protected-base membership starts outside it. A non-taxable
 // earning created without an explicit exclusion list defaults to excluded
 // from every employer levy in its scope (a per-diem is not assessable);
 // folded before coercion like the recruiting default above. An explicitly
@@ -463,6 +464,12 @@ export function foldPayComponentSetupCreate(
   rawBody: Record<string, unknown>,
 ): Record<string, unknown> {
   if (entityKey !== 'pay-components') return rawBody
+  // A deduction created without stating its pool membership starts outside
+  // the protected base (see the deduction chooser in the workforce entity):
+  // disposable earnings are pay after deductions required by law.
+  if (rawBody.kind === 'deduction' && rawBody.includeInDisposableEarnings === undefined) {
+    return { ...rawBody, includeInDisposableEarnings: false }
+  }
   if (rawBody.kind !== 'earning') return rawBody
   if (rawBody.programExclusions !== undefined) return rawBody
   const exclusions = defaultLevyExclusionsForNewComponent({

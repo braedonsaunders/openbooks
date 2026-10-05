@@ -321,6 +321,13 @@ export interface ProtectedDeduction {
    *  order measured on disposable earnings beside a creditor garnishment
    *  measured on net wages). */
   base?: string;
+  /**
+   * Money of the order's base kept out of its reach this period — the
+   * exempt floor of the order's protection class (`protectionExemptFloor`).
+   * The ceiling is then the lesser of the percentage and the base above the
+   * floor; a base at or below the floor yields nothing.
+   */
+  exemptFloor?: string;
 }
 
 export interface DeductionProtectionOptions {
@@ -386,7 +393,11 @@ export function applyDeductionProtection(
       );
     }
     const ownBase = requireNonNegative(deduction.base ?? base, "a protected base");
-    const cap = percentFloorCents(ownBase, deduction.maxPercent);
+    const percentCap = percentFloorCents(ownBase, deduction.maxPercent);
+    const cap = deduction.exemptFloor === undefined
+      ? percentCap
+      : lesser(percentCap, floorCents(atLeastZero(add(ownBase,
+        neg(requireNonNegative(deduction.exemptFloor, "an exempt floor"))))));
     // One pool, several ceilings: every order competes for the same money, so
     // each one's room is its own ceiling less what the higher-priority orders
     // already took.
@@ -406,6 +417,26 @@ export function applyDeductionProtection(
     }
   }
   return { applied, shortfalls };
+}
+
+/**
+ * One pay period's exempt floor: `weeklyHours` of `hourlyWage` per week,
+ * prorated by the weeks in the period (52 ÷ periods per year) — 30 hours a
+ * week is 30 × the wage weekly, 60 biweekly, 65 semimonthly and 130
+ * monthly. Exact, and rounded UP to the cent: the floor protects the
+ * employee, so rounding never moves money toward the creditor.
+ */
+export function protectionExemptFloor(hourlyWage: string, weeklyHours: string, periodsPerYear: number): string {
+  if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
+    throw new PayrollLimitError("an exempt floor needs a whole number of pay periods per year");
+  }
+  // Both factors carry SCALE units; the product carries SCALE², and one
+  // cent is SCALE²/CENT of it.
+  const numerator = toUnits(requireNonNegative(hourlyWage, "a floor wage"))
+    * toUnits(requireNonNegative(weeklyHours, "floor hours")) * 52n;
+  const denominator = BigInt(periodsPerYear) * SCALE * (SCALE / CENT);
+  const cents = (numerator + denominator - 1n) / denominator;
+  return fromUnits(cents * (SCALE / CENT));
 }
 
 /* ------------------------------------------------------------------ */

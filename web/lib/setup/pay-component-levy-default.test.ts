@@ -29,9 +29,20 @@ test('an explicit exclusion list is never rewritten', () => {
   assert.equal(foldPayComponentSetupCreate('pay-components', empty), empty)
 })
 
-test('other entities and non-earnings pass through untouched', () => {
+test('other entities and employer contributions pass through untouched', () => {
   const account = { kind: 'earning', taxable: false }
   assert.equal(foldPayComponentSetupCreate('payroll-filing-accounts', account), account)
-  const deduction = { kind: 'deduction', taxable: false, country: 'CA' }
-  assert.equal(foldPayComponentSetupCreate('pay-components', deduction), deduction)
+  const contribution = { kind: 'employer_contribution', country: 'CA' }
+  assert.equal(foldPayComponentSetupCreate('pay-components', contribution), contribution)
+})
+
+test('a new deduction starts outside the protected base unless it says otherwise', () => {
+  // Disposable earnings are pay after deductions required by law: a 401(k)
+  // deferral created with no stated membership must not shrink the base.
+  assert.deepEqual(
+    foldPayComponentSetupCreate('pay-components', { kind: 'deduction', country: 'US' }),
+    { kind: 'deduction', country: 'US', includeInDisposableEarnings: false },
+  )
+  const required = { kind: 'deduction', country: 'US', includeInDisposableEarnings: true }
+  assert.equal(foldPayComponentSetupCreate('pay-components', required), required)
 })

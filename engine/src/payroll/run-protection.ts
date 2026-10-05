@@ -27,9 +27,15 @@ export async function settleDeductionProtection(args: {
   employeeLabel: string;
   /** The run's pack vocabulary: decides which protected treatments iterate. */
   packTreatments: readonly PayrollDeductionTreatment[];
+  /**
+   * This period's exempt floor per protection class (see
+   * ./protection-classes.ts): money of the order's base it may not reach.
+   */
+  exemptFloors?: Readonly<Record<string, string>>;
   runStatutoryPass: () => Promise<void>;
 }) {
   const { lines, gross, employeeLabel, packTreatments, runStatutoryPass } = args;
+  const exemptFloors = args.exemptFloors ?? {};
   const protectedLines = lines.filter(
     (l) => l.kind === "deduction" && l.protectionBase && l.protectionBase !== "none",
   );
@@ -65,6 +71,7 @@ export async function settleDeductionProtection(args: {
         maxPercent: l.protectionMaxPercent ?? "0",
         priority: l.protectionPriority ?? 100,
         base: protectedBase(l.protectionBase as ProtectionBase, baseLines),
+        exemptFloor: l.protectionClass ? exemptFloors[l.protectionClass] : undefined,
       })),
       protectedBase("net_pay", baseLines),
       { available: cmp(available, "0") > 0 ? available : "0" },
