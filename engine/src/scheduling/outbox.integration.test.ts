@@ -24,6 +24,8 @@ import {
   recoverStaleSchedulerOutbox,
   replayTerminalSchedulerOutbox,
   deliverFlowEmail,
+  ensureScanOutboxRows,
+  SCHEDULER_OUTBOX_SCAN_KINDS,
   type FlowEmailQueueEnqueuer,
 } from "./outbox.ts";
 import {
@@ -67,6 +69,16 @@ function terminalEvents(lines: string[]): TerminalLog[] {
     })
     .filter((value): value is TerminalLog => value?.event === TERMINAL_FAILURE_LOG_EVENT);
 }
+
+test("every registered scan kind is admitted by the scheduler outbox constraints", { skip: !DB }, async () => {
+  // The tick enqueues every scan kind in one pass, so a kind the constraints
+  // refuse stops every scheduled job, not just its own.
+  await ensureScanOutboxRows();
+  const rows = (await db.execute<{ kind: string }>(sql`
+    select kind from scheduler_outbox where kind = occurrence_key
+  `)).rows.map((row) => row.kind);
+  for (const kind of SCHEDULER_OUTBOX_SCAN_KINDS) assert.ok(rows.includes(kind), `scan kind ${kind} has no outbox row`);
+});
 
 test("failed dunning and escalation rows stay visible and retry with backoff", { skip: !DB }, async () => {
   const org = await createScratchOrg();
