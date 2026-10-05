@@ -58,6 +58,9 @@ export const TAX_ENTITIES: SetupEntity[] = [
       { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions', required: true },
       { key: 'registrationNumber', kind: 'text' },
       { key: 'filingFrequency', kind: 'select', options: FILING_FREQUENCIES, keepDefault: true },
+      // The month a filing period starts: 1 files calendar-aligned periods,
+      // 2 or 3 file a UK VAT stagger, 4 an April fiscal year.
+      { key: 'filingPeriodStartMonth', kind: 'integer', required: true, min: 1, max: 12, defaultValue: 1 },
       // The org's own configured return forms (by code) — the picker offers
       // only valid, installed forms instead of free text, while the
       // write-time integrity check refuses a form from another jurisdiction.

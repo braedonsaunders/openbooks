@@ -3690,6 +3690,7 @@
       "fairValueAdjustmentAccountId": "Konto für Zeitwertanpassungen",
       "fairValueNetAssets": "Beizulegender Zeitwert des Nettovermögens",
       "filingFrequency": "Meldehäufigkeit",
+      "filingPeriodStartMonth": "Startmonat des Meldezeitraums (1–12)",
       "frequency": "Häufigkeit",
       "goodwillAccountId": "Geschäftswertkonto",
       "graceDays": "Karenztage",

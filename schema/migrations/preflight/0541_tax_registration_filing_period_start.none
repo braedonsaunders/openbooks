@@ -1,0 +1,1 @@
+Adds a defaulted column: every existing registration keeps January as its filing period start, the calendar-aligned periods it files today. No tenant rows are rewritten and no filed return changes.

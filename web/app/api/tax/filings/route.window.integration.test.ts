@@ -4,14 +4,11 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { SessionUser } from '@/lib/auth'
 
-// TAX-02: a year-wide prepare request against a quarterly form silently
-// narrowed to Q1 — the engine clamped the requested window to the first
-// overlapping obligation and stored that window as the filing's identity,
-// but the 201 creation response carried only {id, version}, so no operator
-// or API consumer could see which period was actually filed. The route now
-// echoes the persisted window (formCode/from/to) in the creation response.
-// This test proves both halves through the public POST: the stored row AND
-// the response body carry the narrowed Q1 window.
+// A prepare request whose window spans several filing periods of the form's
+// registration used to be narrowed silently to the first period, leaving the
+// rest of the window on no return. It now refuses by name, listing the
+// periods; a window inside one period stores and echoes that period's window
+// as the filing's identity.
 
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __taxFilingWindowUser: state })
@@ -48,7 +45,7 @@ const prepare = (body: unknown) =>
     }),
   )
 
-test('a year-wide prepare stores and responds with the narrowed quarterly window', async () => {
+test('a year-wide prepare refuses by name; one quarter stores and echoes its window', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Tax filer', 'tax_filer'))
@@ -87,8 +84,11 @@ test('a year-wide prepare stores and responds with the narrowed quarterly window
     }
 
     await withOrgContext(org.orgId, async () => {
-      // The filer asks for the whole year; only Q1 is filed.
-      const response = await prepare({ code: formCode, from: `${year}-01-01`, to: `${year}-12-31` })
+      // The whole year spans four quarters: refused, nothing stored.
+      const yearWide = await prepare({ code: formCode, from: `${year}-01-01`, to: `${year}-12-31` })
+      assert.equal(yearWide.status, 422)
+      assert.match(JSON.stringify(await yearWide.json()), new RegExp(`spans 4 filing periods.*${year}-04-01 to ${year}-06-30.*prepare one return per filing period`))
+      const response = await prepare({ code: formCode, from: `${year}-01-01`, to: `${year}-03-31` })
       assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
       const body = (await response.json()) as {
         id: string

@@ -36,17 +36,22 @@ export interface FilingPeriod {
 }
 
 /**
- * Every return period for `frequency` whose period START falls within
- * [rangeFrom, rangeTo]. Periods are aligned to the calendar year from January
- * (a quarterly filer gets Jan–Mar, Apr–Jun, …), which matches how indirect-tax
- * periods are defined in every jurisdiction we ship. Returns them in order.
+ * Every return period for `frequency` that overlaps [rangeFrom, rangeTo].
+ * Periods are aligned to `periodStartMonth` (1 = January, the default): a
+ * quarterly filer starting in January gets Jan–Mar, Apr–Jun, …, while a UK
+ * VAT stagger starting in February gets Feb–Apr, May–Jul, Aug–Oct, Nov–Jan.
+ * A period may cross a calendar year. Returns them in order.
  */
 export function filingPeriods(
   frequency: FilingFrequency,
   rangeFrom: string,
   rangeTo: string,
+  periodStartMonth = 1,
 ): FilingPeriod[] {
   const span = MONTHS_PER_PERIOD[frequency];
+  if (!Number.isInteger(periodStartMonth) || periodStartMonth < 1 || periodStartMonth > 12) {
+    throw new RangeError(`filing period start month must be 1–12, got ${periodStartMonth}`);
+  }
   const from = new Date(`${rangeFrom}T00:00:00Z`);
   const to = new Date(`${rangeTo}T00:00:00Z`);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
@@ -54,13 +59,14 @@ export function filingPeriods(
   }
 
   const periods: FilingPeriod[] = [];
-  // First period of the range's start year that could overlap: walk aligned
-  // period boundaries from January of the start year.
-  let year = from.getUTCFullYear();
-  let startMonth = 1; // 1-based
+  // Walk aligned period boundaries from the anchor month of the year BEFORE
+  // the range: a period that started then (Nov–Jan, or a fiscal year) can
+  // still overlap the range.
+  let year = from.getUTCFullYear() - 1;
+  let startMonth = ((periodStartMonth - 1) % span) + 1; // earliest aligned start in a year
   while (true) {
     if (startMonth > 12) {
-      startMonth = 1;
+      startMonth -= 12;
       year += 1;
     }
     const endMonthAbsolute = startMonth + span - 1;
@@ -97,6 +103,8 @@ export interface NexusRegistration {
   jurisdictionCode: string;
   country: string;
   filingFrequency: FilingFrequency;
+  /** Month (1–12) a filing period starts in; absent means January. */
+  filingPeriodStartMonth?: number;
   returnFormCode: string | null;
   registrationNumber: string | null;
   effectiveFrom: string | null;
@@ -147,7 +155,7 @@ export function buildFilingCalendar(
       reg.effectiveFrom && reg.effectiveFrom > rangeFrom ? reg.effectiveFrom : rangeFrom;
     const effTo = reg.effectiveTo && reg.effectiveTo < rangeTo ? reg.effectiveTo : rangeTo;
     if (effFrom > effTo) continue;
-    for (const period of filingPeriods(reg.filingFrequency, effFrom, effTo)) {
+    for (const period of filingPeriods(reg.filingFrequency, effFrom, effTo, reg.filingPeriodStartMonth ?? 1)) {
       obligations.push({
         ...period,
         ...(reg.registrationId ? {registrationId:reg.registrationId,subsidiaryId:reg.subsidiaryId ?? null,subsidiaryName:reg.subsidiaryName ?? null,registrationNumber:reg.registrationNumber} : {}),

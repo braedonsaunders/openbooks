@@ -3599,6 +3599,7 @@
       "fairValueAdjustmentAccountId": "Cuenta de ajuste a valor razonable",
       "fairValueNetAssets": "Valor razonable del activo neto",
       "filingFrequency": "Frecuencia de declaración",
+      "filingPeriodStartMonth": "Mes de inicio del período de declaración (1–12)",
       "frequency": "Frecuencia",
       "goodwillAccountId": "Cuenta de plusvalía",
       "includeInDisposableEarnings": "Cuenta para la base protegida",

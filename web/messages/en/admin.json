@@ -3468,6 +3468,7 @@
       "level": "Level",
       "taxType": "Tax type",
       "filingFrequency": "Filing frequency",
+      "filingPeriodStartMonth": "Filing period start month (1–12)",
       "registrationNumber": "Registration number",
       "returnFormCode": "Return form",
       "classAttribute": "Asset class attribute",

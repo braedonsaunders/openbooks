@@ -3468,6 +3468,7 @@
       "level": "Nível",
       "taxType": "Tipo de tributo",
       "filingFrequency": "Periodicidade",
+      "filingPeriodStartMonth": "Mês de início do período de declaração (1–12)",
       "registrationNumber": "Número de inscrição",
       "returnFormCode": "Declaração",
       "classAttribute": "Atributo de classe do ativo",
