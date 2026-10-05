@@ -240,8 +240,8 @@ export async function computeCaStatutory(
 
   // ---- Supplemental-period priors ----------------------------------------
   // Earlier runs of the same period and schedule already paid and withheld
-  // part of this period. Contributions always price on the period-to-date
-  // base (a per-period exemption applies once per period); income tax
+  // part of this period. CPP prices the period-to-date base so its exemption
+  // applies once; EI rounds each payment against its annual room. Income tax
   // follows the org's supplemental method. With no priors every combined leg
   // below equals its current leg and every subtraction is zero, so the first
   // run of a period prices exactly as a standalone run.
@@ -345,19 +345,32 @@ export async function computeCaStatutory(
       ...(cumulative?.bonusYtd??{}),
     },
   };
-  // Call 1 — contributions on the period-to-date base (always). Its tax
-  // outputs serve the cumulative method; the per-run method prices tax in
-  // call 2 below and discards these.
-  const statutory = calculateT4127(t4127Input);
+  // EI has no per-period exemption: each payment rounds its own premium,
+  // constrained by the full committed annual history. Combining payments
+  // before rounding can shift a cent onto the later employee deduction and
+  // misprice the employer's multiple. CPP still shares one period exemption.
+  const paymentPremiums = hasPriors
+    ? calculateT4127({
+      ...t4127Input,
+      insurable,
+      ytd: { ...t4127Input.ytd, ei: ytd.ei },
+    })
+    : null;
+  // The cumulative tax credit uses the premiums actually withheld across
+  // the period; the per-run method below credits only this payment.
+  const statutory = calculateT4127({
+    ...t4127Input,
+    ...(paymentPremiums ? { eiWithheld: add(priorFactor("EI"), paymentPremiums.ei) } : {}),
+  });
 
-  // This run's share of each combined amount: the period total minus what
+  // This run's share of the combined pension amounts: the period total minus what
   // earlier runs of the period already withheld. Each stub traces its share,
   // so the next run's priors telescope to the period total exactly.
   const cpp = nonNegative(add(statutory.cpp, neg(priorFactor("C"))));
   const cpp2 = nonNegative(add(statutory.cpp2, neg(priorFactor("C2"))));
   const cppEmployer = add(cpp, cpp2);
-  const ei = nonNegative(add(statutory.ei, neg(priorFactor("EI"))));
-  const eiEmployer = nonNegative(add(statutory.eiEmployer, neg(priorFactor("EI_ER"))));
+  const ei = paymentPremiums?.ei ?? statutory.ei;
+  const eiEmployer = paymentPremiums?.eiEmployer ?? statutory.eiEmployer;
   const qpip = nonNegative(add(statutory.qpip, neg(priorFactor("QPIP"))));
   const qpipEmployer = nonNegative(add(statutory.qpipEmployer, neg(priorFactor("QPIP_ER"))));
 

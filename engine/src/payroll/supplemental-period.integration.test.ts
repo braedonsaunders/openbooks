@@ -17,7 +17,7 @@ import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 
 /**
- * Supplemental same-period runs price the period once, not once per run.
+ * Supplemental runs share the CPP exemption and retain payment-level EI rounding.
  *
  * Measured against the employer's real stubs (2026, weekly P=52, Ontario,
  * TD1 claims 16452 federal / 12989 Ontario, June 2026 so the July edition is
@@ -29,8 +29,8 @@ import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
  *   provincial 491.71 (total 1277.84).
  * - Run 2 pays 800.00 cash earnings plus 193.77 of taxable non-cash
  *   benefits (188.16 insurable, 5.61 not). CPP prices on the period total
- *   once: (4000.00 + 993.77 - 67.31) x 0.0595 - 234.00 = 59.12.
- *   EI likewise: (4000.00 + 988.16) x 0.0163 - 65.20 = 16.11.
+ *   once: (4000.00 + 993.77 - 67.30) x 0.0595 - 234.00 = 59.12.
+ *   EI rounds this payment: 988.16 x 0.0163 = 16.11.
  *   Income tax prices run 2 as its own periodic pay, with the K2/F5
  *   credits off the 59.12/16.11 actually withheld (not a 55.12
  *   standalone recomputation): federal 80.26, provincial 45.31.
@@ -187,9 +187,9 @@ test("default: each run taxed as its own periodic pay, credits off what the run 
     await line(fx, run2.documentId, fx.benInsComponentId, "188.16");
     await line(fx, run2.documentId, fx.benNinsComponentId, "5.61");
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run2.documentId })).errors, []);
-    // (4000.00 + 993.77 - 67.31) x 0.0595 - 234.00 = 59.12.
+    // (4000.00 + 993.77 - 67.30) x 0.0595 - 234.00 = 59.12.
     assert.equal(await stubLine(fx, run2.documentId, "cpp"), "59.1200");
-    // (4000.00 + 988.16) x 0.0163 - 65.20 = 16.11.
+    // EI rounds this payment: 988.16 x 0.0163 = 16.11.
     assert.equal(await stubLine(fx, run2.documentId, "ei"), "16.1100");
     // Run 2 as its own periodic pay, credits off the 59.12/16.11 withheld.
     assert.deepEqual(await taxSplit(fx, run2.documentId), { federal: 8026n, provincial: 4531n });
@@ -309,5 +309,36 @@ test("alternative: period-cumulative income tax folds the period into one pay", 
     assert.equal(await stubLine(fx, run2.documentId, "income_tax"), "483.0800");
   } finally {
     await dropScratchOrgReporting(fx.orgId);
+  }
+});
+
+test('separate payments round EI independently while sharing the CPP exemption', { skip: !DB }, async () => {
+  for (const method of ['per_run', 'period_cumulative'] as const) {
+    const fx = await payrollOrg(method);
+    try {
+      const first = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: '2025-12-28', periodEnd: '2026-01-03', payDate: '2026-01-08', runType: 'supplemental',
+      });
+      await line(fx, first.documentId, fx.bonusComponentId, '312.00');
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
+      assert.equal(await stubLine(fx, first.documentId, 'cpp'), '14.5600');
+      assert.equal(await stubLine(fx, first.documentId, 'ei'), '5.0900');
+      await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId });
+      const second = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: '2025-12-28', periodEnd: '2026-01-03', payDate: '2026-01-09', runType: 'regular',
+      });
+      await line(fx, second.documentId, fx.bonusComponentId, '858.00');
+      await line(fx, second.documentId, fx.benNinsComponentId, '5.61');
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId })).errors, []);
+      assert.equal(await stubLine(fx, second.documentId, 'cpp'), '51.3800');
+      // 858 × 1.63% = 13.9854, rounded to 13.99 on this payment. Rounding
+      // both payments together and subtracting 5.09 incorrectly yields 13.98.
+      assert.equal(await stubLine(fx, second.documentId, 'ei'), '13.9900');
+      assert.equal(await stubFactor(fx, second.documentId, 'EI_ER'), '19.5900');
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
   }
 });
