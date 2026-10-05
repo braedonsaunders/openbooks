@@ -25,6 +25,7 @@
       "netIncome": "Jahresüberschuss",
       "close": "Abschlussfortschritt",
       "closeSub": "{period}",
+      "closeUnavailable": "Nicht verfügbar",
       "noClose": "—",
       "noCloseSub": "Kein Abschluss gestartet",
       "draftJournals": "Buchungsentwürfe",
