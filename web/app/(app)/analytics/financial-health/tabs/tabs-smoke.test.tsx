@@ -137,6 +137,45 @@ test("segments read configured HHI bands and translate every band", async () => 
   assert.match(text, /By Department/);
 });
 
+test("segments with no revenue show no concentration verdict", async () => {
+  // An empty dimension prices HHI 0, which the bands would grade
+  // "Unconcentrated" green: with nothing to concentrate the card shows a
+  // dash untoned instead.
+  globalThis.__smRouter = { push() {}, refresh() {} };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <SegmentsTab data={{
+            figures, ratios, bands,
+            monthly: [], pnlSummary: [], marginFlow: [],
+            segments: { department: [], class: [], location: [] },
+            drivers: { revenue: [], cost: [] },
+            items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
+            insights: [],
+            budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
+          } as never} />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  const text = host.textContent ?? "";
+  assert.ok(!text.includes("Unconcentrated"), "no green verdict on no data");
+  const card = [...host.querySelectorAll("p")].find((p) => p.textContent === "Concentration")?.parentElement;
+  const values = [...(card?.querySelectorAll("p") ?? [])].map((p) => p.textContent);
+  assert.ok(values.includes("—"), "the concentration card shows a dash");
+  assert.ok(!host.innerHTML.includes("text-emerald-600"), "nothing reads good on no data");
+  await act(async () => {
+    root.unmount();
+  });
+  host.remove();
+});
+
 test("drivers render both tables in the reader's language", async () => {
   const row = (name: string) => ({ id: `a-${name}`, name, current: "100000.0000", change: "10000.0000", changePct: 0.1, contribution: 0.5 });
   const text = await mount(
