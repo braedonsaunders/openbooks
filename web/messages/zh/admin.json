@@ -2673,6 +2673,11 @@
         "singularTitle": "税务登记",
         "description": "企业登记代征代缴的地点、申报频率以及所申报的税表。"
       },
+      "tax-oss-registrations": {
+        "title": "OSS注册",
+        "singularTitle": "OSS注册",
+        "description": "一站式注册：企业申报欧盟跨境销售的识别成员国、机制与编号。"
+      },
       "tax-codes": {
         "title": "税码",
         "singularTitle": "税码",
@@ -4147,6 +4152,11 @@
       "marketplaceCollectionMode": {
         "gross": "平台代收税款并结算",
         "net": "单据已为扣除平台税后的净额"
+      },
+      "ossScheme": {
+        "union": "欧盟OSS（季度欧盟销售）",
+        "nonUnion": "非欧盟OSS（季度）",
+        "ioss": "进口OSS（月度低价值进口）"
       },
       "sign": {
         "positive": "加（+）",

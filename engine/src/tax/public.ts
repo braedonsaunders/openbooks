@@ -35,3 +35,12 @@ export {
   type CrossBorderElection,
   type CrossBorderVerdict,
 } from './cross-border-posting.ts';
+export {
+  savePartyTaxId,
+  recordSupplyEvidence,
+  validateStoredTaxId,
+  type SavePartyTaxIdInput,
+  type RecordSupplyEvidenceInput,
+  type SupplyEvidenceInput,
+  type ValidateStoredTaxIdOptions,
+} from './cross-border-records.ts';

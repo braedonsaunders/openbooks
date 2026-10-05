@@ -2673,6 +2673,11 @@
         "singularTitle": "Tax Registration",
         "description": "Where the business is registered to collect and remit, its filing frequency, and the return it files."
       },
+      "tax-oss-registrations": {
+        "title": "OSS Registrations",
+        "singularTitle": "OSS Registration",
+        "description": "One-Stop-Shop registrations: the member state of identification, scheme and number the business files its EU cross-border sales under."
+      },
       "tax-codes": {
         "title": "Tax Codes",
         "singularTitle": "Tax Code",
@@ -4147,6 +4152,11 @@
       "marketplaceCollectionMode": {
         "gross": "Marketplace collects the tax and settles it",
         "net": "Document is already net of the marketplace tax"
+      },
+      "ossScheme": {
+        "union": "Union OSS (quarterly EU sales)",
+        "nonUnion": "Non-Union OSS (quarterly)",
+        "ioss": "Import OSS (monthly low-value imports)"
       },
       "sign": {
         "positive": "Add (+)",

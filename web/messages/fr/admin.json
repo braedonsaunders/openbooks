@@ -2961,6 +2961,11 @@
         "description": "Où l’entreprise est inscrite pour percevoir et verser, sa fréquence de déclaration et la déclaration qu’elle produit.",
         "singularTitle": "Inscription fiscale"
       },
+      "tax-oss-registrations": {
+        "title": "Immatriculations OSS",
+        "singularTitle": "Immatriculation OSS",
+        "description": "Immatriculations au guichet unique : État membre d'identification, régime et numéro sous lesquels l'entreprise déclare ses ventes transfrontalières dans l'UE."
+      },
       "tax-regimes": {
         "title": "Régimes d'amortissement fiscal",
         "description": "Régimes d’amortissement fiscal mutualisé configurables. Ensembles intégrés pour le Canada (DPA), le Royaume-Uni, l’Australie et la Nouvelle-Zélande ; ajoutez les vôtres ou remplacez un ensemble intégré.",
@@ -4050,6 +4055,11 @@
       "marketplaceCollectionMode": {
         "gross": "La place de marché collecte la taxe et la règle",
         "net": "Le document est déjà net de la taxe de la place de marché"
+      },
+      "ossScheme": {
+        "union": "OSS Union (ventes trimestrielles dans l'UE)",
+        "nonUnion": "OSS non-Union (trimestriel)",
+        "ioss": "IOSS à l'importation (importations mensuelles de faible valeur)"
       },
       "sign": {
         "positive": "Ajouter (+)",

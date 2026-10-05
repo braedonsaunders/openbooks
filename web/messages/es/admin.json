@@ -2961,6 +2961,11 @@
         "description": "Dónde la empresa está registrada para recaudar y remitir, su frecuencia de declaración y la declaración que presenta.",
         "singularTitle": "Registro fiscal"
       },
+      "tax-oss-registrations": {
+        "title": "Registros OSS",
+        "singularTitle": "Registro OSS",
+        "description": "Registros de ventanilla única: Estado miembro de identificación, régimen y número con los que la empresa declara sus ventas transfronterizas en la UE."
+      },
       "tax-regimes": {
         "title": "Regímenes de depreciación fiscal",
         "description": "Regímenes configurables de depreciación fiscal agrupada. Integrados para Canadá (CCA), el Reino Unido, Australia y Nueva Zelanda; añada los suyos o reemplace uno integrado.",
@@ -4050,6 +4055,11 @@
       "marketplaceCollectionMode": {
         "gross": "El mercado recauda el impuesto y lo liquida",
         "net": "El documento ya es neto del impuesto del mercado"
+      },
+      "ossScheme": {
+        "union": "OSS de la Unión (ventas trimestrales en la UE)",
+        "nonUnion": "OSS no UE (trimestral)",
+        "ioss": "IOSS de importación (importaciones mensuales de escaso valor)"
       },
       "sign": {
         "positive": "Sumar (+)",
