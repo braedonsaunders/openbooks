@@ -161,6 +161,7 @@ export const POST = defineRoute({
   body: POSTBodySchema1,
   opaque: {
     retryOffsetsDays: "retry offsets are normalized by normalizeRetryOffsets, refusing non-integer days with a 422",
+    insufficientFundsOffsetsDays: "insufficient-funds offsets are normalized by normalizeRetryOffsets, refusing non-integer days with a 422",
   },
   handler: async ({ request, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;

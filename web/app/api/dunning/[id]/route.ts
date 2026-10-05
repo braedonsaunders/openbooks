@@ -132,6 +132,7 @@ export const PATCH = defineRoute({
   body: PATCHBodySchema1,
   opaque: {
     retryOffsetsDays: "retry offsets are normalized by normalizeRetryOffsets, refusing non-integer days with a 422",
+    insufficientFundsOffsetsDays: "insufficient-funds offsets are normalized by normalizeRetryOffsets, refusing non-integer days with a 422",
   },
   handler: async ({ authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });

@@ -23,6 +23,9 @@ export const POST = defineRoute({
   permission: 'payment_methods.manage',
   feature: 'autopay',
   body: outreachBody,
+  opaque: {
+    sentOn: "an omitted date records today; the handler defaults an empty body to the current UTC date",
+  },
   handler: async ({ authz, body, params: routeParams }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'method id is required' }, { status: 400 })

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { sql } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
+import { taxOssFxEvidence } from '@openbooks/schema'
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
@@ -32,21 +33,17 @@ export const GET = defineRoute({
       return NextResponse.json({ error: 'scheme (union|non_union|ioss), from and to (YYYY-MM-DD) are required' }, { status: 400 })
     }
     try {
-      const rows = (
-        await db.execute<{
-          currency: string;
-          rate: string;
-          rateAsOf: string;
-          rateSource: string;
-        }>(sql`
-          select currency, rate, rate_as_of::text as "rateAsOf", rate_source as "rateSource"
-            from tax_oss_fx_evidence
-           where org_id = ${routeAuthz.user.orgId}
-             and scheme = ${parsed.data.scheme}
-             and period_from = ${parsed.data.from}::date
-             and period_to = ${parsed.data.to}::date
-           order by currency`)
-      ).rows
+      const rows = await db.select({
+        currency: taxOssFxEvidence.currency,
+        rate: taxOssFxEvidence.rate,
+        rateAsOf: taxOssFxEvidence.rateAsOf,
+        rateSource: taxOssFxEvidence.rateSource,
+      }).from(taxOssFxEvidence).where(and(
+        eq(taxOssFxEvidence.orgId, routeAuthz.user.orgId),
+        eq(taxOssFxEvidence.scheme, parsed.data.scheme),
+        eq(taxOssFxEvidence.periodFrom, parsed.data.from),
+        eq(taxOssFxEvidence.periodTo, parsed.data.to),
+      )).orderBy(asc(taxOssFxEvidence.currency))
       return NextResponse.json({ rows })
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 })
