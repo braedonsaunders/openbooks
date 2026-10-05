@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import type { FiscalPeriod } from "@openbooks/reports";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig, ANALYTICS_CONFIG, type ConfigValuesOf } from "./config";
-import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope, fiscalPeriodsPerYear } from "./fiscal-buckets";
+import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope, fiscalPeriodsPerYear, priorYearWindow } from "./fiscal-buckets";
 import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
 import { spendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { englishCatalogMessage } from "./catalog-strings";
@@ -443,9 +443,13 @@ export async function spendVelocityData(
   };
   const priorLabel = buckets.useFiscal ? windowName(priorFrom, priorTo) : monthRange(priorFrom, priorTo);
   const twoBackLabel = buckets.useFiscal ? windowName(twoBackFrom, twoBackTo) : monthRange(twoBackFrom, twoBackTo);
-  // Prior YEAR window for YoY trends.
-  const pyFrom = addMonthsClamped(from, -12);
-  const pyTo = addMonthsClamped(to, -12);
+  // Prior YEAR window for YoY trends: the matched prior-year periods on a
+  // declared calendar (never a cut-off calendar −12 months), whose span the
+  // bucket matcher below resolves against.
+  const calendarPy = { from: addMonthsClamped(from, -12), to: addMonthsClamped(to, -12) };
+  const fiscalPy = buckets.useFiscal ? priorYearWindow(buckets.periods, from, to) : null;
+  const pyFrom = fiscalPy ? fiscalPy.from : calendarPy.from;
+  const pyTo = fiscalPy ? fiscalPy.to : calendarPy.to;
 
   const spendKindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
   // The spend base: expense/COGS journal lines sourced from spend documents,

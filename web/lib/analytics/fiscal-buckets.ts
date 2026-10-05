@@ -63,6 +63,32 @@ export function fiscalBucketKey(dateExpr: SQL, useFiscal: boolean): SQL {
 }
 
 /**
+ * The prior-year window for year-over-year comparison on a declared
+ * calendar: the same period numbers one fiscal year back over the current
+ * window's overlapping periods, spanned from the earliest start to the
+ * latest end. Querying calendar −12 months instead would cut a matched
+ * prior period short wherever the two calendars' edges disagree (4-4-5,
+ * 52-53-week years), understating it. Null when nothing matches — the
+ * caller keeps the calendar window then.
+ */
+export function priorYearWindow(
+  periods: FiscalPeriod[],
+  from: string,
+  to: string,
+): { from: string; to: string } | null {
+  const byKey = new Map(periods.map((p) => [`${p.fiscalYear}:${p.periodNumber}`, p]));
+  const current = periods.filter((p) => p.from <= to && p.to >= from);
+  const matched = current
+    .map((p) => byKey.get(`${p.fiscalYear - 1}:${p.periodNumber}`))
+    .filter((p): p is FiscalPeriod => !!p);
+  if (matched.length === 0) return null;
+  return {
+    from: matched.reduce((a, p) => (a < p.from ? a : p.from), matched[0]!.from),
+    to: matched.reduce((a, p) => (a > p.to ? a : p.to), matched[0]!.to),
+  };
+}
+
+/**
  * Periods per fiscal year around a date, for annualising per-period figures
  * (13 for a thirteen-period year, 12 for 4-4-5 or monthly calendars).
  * Unknown coverage annualises by calendar months.
