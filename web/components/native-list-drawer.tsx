@@ -14,7 +14,9 @@ import { ExpenseDrawer } from '../app/(app)/expenses/ExpenseDrawer'
 import { OrderDrawer } from '../app/(app)/_order/OrderDrawer'
 import { PickListDrawer } from '../app/(app)/picks/PickListDrawer'
 import { ShipmentDrawer } from '../app/(app)/shipments/ShipmentDrawer'
+import { PaymentDrawer } from '../app/(app)/payments/PaymentDrawer'
 import type { NativeListDrawerData } from '../lib/list/drawer-routes'
+import type { ReceiptDrawerPayload } from '../app/(app)/receipts/view'
 
 const renderers = {
   'document-drawer': (props: { drawer: unknown }) => {
@@ -126,6 +128,26 @@ const renderers = {
     if (!drawer) return null
     const { initialMode, ...data } = drawer
     return <ShipmentDrawer key={data.document.id} data={data} initialMode={initialMode} />
+  },
+  'payment-drawer': (props: { drawer: unknown }) => {
+    const payload = props.drawer as ReceiptDrawerPayload | null
+    if (!payload || payload.flyout.mode !== 'record') return null
+    const flyout = payload.flyout
+    return (
+      <PaymentDrawer
+        key={String(flyout.payment.doc.id)}
+        payment={flyout.payment}
+        initialMode={payload.initialMode}
+        initialOpenItems={flyout.initialOpenItems}
+        parties={flyout.parties}
+        bankAccounts={flyout.bankAccounts}
+        side={flyout.side}
+        basePath={payload.basePath}
+        layout={flyout.layout}
+        storedValue={flyout.storedValue}
+        closeHref={payload.closeHref}
+      />
+    )
   },
 }
 

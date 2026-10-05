@@ -3,7 +3,8 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
-import { mergeHref, pickString } from '../../../lib/list-params'
+import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
+import { loadPaymentFlyout, type PaymentFlyout } from '../payments/payment-flyout'
 
 /**
  * Money in — customer receipts applied to open AR items — split into a loader
@@ -30,6 +31,16 @@ export interface ReceiptsData {
   view: 'receipts' | 'runs'
   tabLabels: { receipts: string; collections: string }
   currentParams: Record<string, string | string[] | undefined>
+  /** ?payment= flyout payload for the receipt drawer (list-drawer route). */
+  drawer: ReceiptDrawerPayload | null
+}
+
+/** Receipt drawer payload: the shared flyout plus the list return address. */
+export interface ReceiptDrawerPayload {
+  flyout: PaymentFlyout
+  basePath: '/receipts'
+  closeHref: string
+  initialMode: 'edit' | 'view'
 }
 
 export async function loadReceipts(
@@ -38,6 +49,37 @@ export async function loadReceipts(
   const authz = await requirePermission('ar.pay')
   const t = await getTranslations('receipts')
   const view = pickString(sp.view) === 'runs' ? 'runs' : 'receipts'
+
+  // Only a real receipt id reaches the loader: a malformed ?payment= must
+  // never bind to a uuid column and render a 500.
+  const rawPayment = typeof sp.payment === 'string' ? sp.payment : undefined
+  const paymentId = rawPayment && isUuid(rawPayment) ? rawPayment : undefined
+  const flyout = paymentId
+    ? await loadPaymentFlyout({
+        paymentId,
+        creating: false,
+        kind: 'customer_payment',
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        userRoles: authz.user.roles.map(({ key }) => key),
+        authz,
+        formId: pickString(sp.form),
+      })
+    : null
+  const drawer: ReceiptDrawerPayload | null =
+    flyout && flyout.mode === 'record'
+      ? {
+          flyout,
+          basePath: '/receipts',
+          closeHref: mergeHref('/receipts', sp, {
+            payment: undefined,
+            paymentNew: undefined,
+            mode: undefined,
+            form: undefined,
+          }),
+          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+        }
+      : null
 
   return {
     title: t('page.title'),
@@ -51,6 +93,7 @@ export async function loadReceipts(
     view,
     tabLabels: { receipts: t('page.tabs.receipts'), collections: t('page.tabs.collections') },
     currentParams: sp,
+    drawer,
   }
 }
 
