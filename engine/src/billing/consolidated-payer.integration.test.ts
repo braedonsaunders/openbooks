@@ -9,6 +9,7 @@ import { runConsolidationGroup } from "./consolidated-billing.ts";
 import { runAutopayCollectionForOrg, type ChargeFn } from "../payments/autopay.ts";
 import { runDunningForOrg } from "../receivables/dunning.ts";
 import { sealJson } from "../platform/secrets.ts";
+import { endOfMonth } from "../platform/civil-date.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -65,7 +66,7 @@ async function seedPayerInvoice(dueDate: string): Promise<PayerFixture> {
   {
     const today = new Date().toISOString().slice(0, 10);
     const startsOn = `${today.slice(0, 7)}-01`;
-    const endsOn = `${today.slice(0, 7)}-${new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0).getDate()}`;
+    const endsOn = endOfMonth(today);
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
