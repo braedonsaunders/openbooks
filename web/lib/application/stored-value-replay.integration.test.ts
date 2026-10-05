@@ -59,8 +59,7 @@ async function seedReplayOrg(): Promise<ReplayFixture> {
   // 2026-07 period: open the current month so the redemption reaches the
   // scope and replay boundaries instead of the period guard.
   const today = new Date().toISOString().slice(0, 10)
-  const year = Number(today.slice(0, 4))
-  const month = Number(today.slice(5, 7))
+  const [year, month] = [Number(today.slice(0, 4)), Number(today.slice(5, 7))]
   const endsOn = utcDateFromParts(year, month, 0).toISOString().slice(0, 10)
   await withBypass(() => db.execute(sql`
     insert into accounting_periods
