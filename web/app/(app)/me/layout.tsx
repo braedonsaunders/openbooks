@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
+  manifest: '/employee-app/manifest.webmanifest',
   appleWebApp: { capable: true, title: 'OpenBooks', statusBarStyle: 'default' },
   icons: { apple: '/employee-app/apple-touch-icon.png' },
 }
