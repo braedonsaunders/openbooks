@@ -46,20 +46,20 @@ export interface ObligationRow {
   lines: ScheduleLineRow[];
 }
 
-export interface ContractSource {
+export type ContractSource = {
   kind: "order" | "subscription";
   /** Display name: the sales order number or the subscription plan. */
   label: string;
   /** Deep link where one exists; subscriptions have no record surface yet. */
   href: string | null;
-}
+};
 
-export interface ContractBillingRow {
+export type ContractBillingRow = {
   id: string;
   document_number: string;
   amount: string;
   billed_on: string;
-}
+};
 
 export interface ContractPayload {
   contract: {
@@ -246,7 +246,7 @@ export async function loadContract(
     )
   ).rows;
 
-  const billings = (await db.execute<ContractBillingRow & { billed_on: string }>(sql`
+  const billings = (await db.execute<ContractBillingRow>(sql`
     select b.document_id as id, d.document_number, b.amount::text as amount,
            b.billed_on::text as billed_on
       from revenue_contract_billings b
