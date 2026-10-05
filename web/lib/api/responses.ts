@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
@@ -108,6 +109,7 @@ interface RefusalFamily {
 }
 
 const REFUSAL_FAMILIES: RefusalFamily[] = [
+  { match: (error) => error instanceof CommerceError, code: "commerce_refused", pinCode: false },
   { match: (error) => error instanceof PostingEffectsReplayError, code: "posting_effects_replay_refused", pinCode: true },
   { match: (error) => error instanceof PostingError, code: "posting_refused", pinCode: false },
   { match: (error) => error instanceof InventoryError, code: "inventory_refused", pinCode: false },

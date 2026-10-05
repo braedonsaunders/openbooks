@@ -88,6 +88,22 @@ function matchesSegment(pathname: string, root: string): boolean {
 }
 
 /**
+ * Storefront webhook deliveries (`/api/channels/<id>/webhooks`): sessionless
+ * BY DESIGN — the provider holds no session cookie and authenticates every
+ * delivery with the channel's webhook secret, verified inside the route
+ * (adapter HMAC over the raw body, fail-closed 401). Named as one exact
+ * shape on purpose: a bare `/api/channels` root would make every session
+ * route under it (list, create, settings) sessionless and CSRF-exempt the
+ * moment the file lands. Only this delivery path matches — the channel
+ * workspace routes stay behind the session gate.
+ */
+const CHANNEL_WEBHOOK_PATTERN = /^\/api\/channels\/[^/]+\/webhooks$/;
+
+export function isChannelWebhookPath(pathname: string): boolean {
+  return CHANNEL_WEBHOOK_PATTERN.test(pathname);
+}
+
+/**
  * Forwarded Host/Proto/For are security input only when the operator opts in
  * and the reverse proxy strips client-supplied copies before setting its own
  * values. Same gate as `authRequestContext` — kept here so the Edge CSRF
@@ -102,6 +118,7 @@ export function trustsForwardedHeaders(
 export function isPublicPath(pathname: string): boolean {
   return EXACT_PUBLIC_PATHS.has(pathname)
     || PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root))
+    || isChannelWebhookPath(pathname)
     || matchesSegment(pathname, "/_next");
 }
 
@@ -115,5 +132,6 @@ export function isPublicPath(pathname: string): boolean {
  */
 export function isCsrfExemptPath(pathname: string): boolean {
   return pathname === "/mcp"
-    || PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root));
+    || PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root))
+    || isChannelWebhookPath(pathname);
 }
