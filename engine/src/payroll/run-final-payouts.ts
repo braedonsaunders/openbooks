@@ -95,7 +95,7 @@ export function appendCashVacationPay(args: {
       const c = need("vacation_payout", "earning");
       lines.push({
         componentId: c.id as string, kind: "earning", description: "Vacation pay",
-        amount: vacation, sequence: 45, vacationable: false,
+        amount: vacation, sequence: 45, vacationable: false, fundedByEntitlementBank: false,
       });
     }
   }

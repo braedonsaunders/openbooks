@@ -111,6 +111,35 @@ async function balanceOf(fx: Fixture, partyId: string, planId: string, asOf: str
   return balances.find((b) => b.plan.id === planId)!.balance;
 }
 
+test('vacation paid as earned needs no bank balance while additional bank withdrawals still refuse', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId, employmentId } = await employee(fx, 'Vacation Cash Employee');
+    const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+    await db.execute(sql`update payroll_vacation_terms set method='pay_each_period',updated_by=${fx.actorId},updated_at=now()
+      where org_id=${fx.orgId} and employment_id=${employmentId}`);
+    await hours(fx, partyId, ['2026-07-13']);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+      assert.deepEqual(result.errors, [], 'newly earned vacation is payable without a carried bank balance');
+      const stubs = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+      assert.deepEqual(stubs, [{ gross: '249.6000', vacation_accrued: '0.0000' }]);
+      const movements = (await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
+        and plan_id=${plan.id} and employee_party_id=${partyId}`)).rows;
+      assert.equal(movements.length, 0, 'current-period cash vacation neither accrues nor withdraws a bank');
+    }
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
+      values(${fx.orgId},${run.documentId},${partyId},'line',${plan.payout_component_id},'10')`);
+    const refused = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(refused.errors.length, 1);
+    assert.match(refused.errors[0]!.message, /Vacation Cash Employee.*payout of 10\.0000 exceeds the available 0\.0000/);
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
 test('a vacation payout on a regular run withdraws from the bank without accruing on the payout', { skip: !DB }, async () => {
   const fx = await payrollOrg();
   try {

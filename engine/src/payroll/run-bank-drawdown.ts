@@ -17,7 +17,8 @@ type Executor = Pick<typeof db, "execute">;
  * (worked time banked instead of paid) deposits those hours; a positive line
  * pays them out. Settlements net per plan because the ledger is unique on
  * (run, plan, employee, kind): the stub keeps every cash line itemized while
- * the bank carries the net effect.
+ * the bank carries the net effect. Newly earned cash vacation explicitly
+ * identifies its independent funding and does not withdraw from the bank.
  *
  * Termination runs skip this phase: the termination settlement already pays
  * every bank in full, and settling again would withdraw twice. Simulations
@@ -67,6 +68,7 @@ export async function applyBankDrawdown(
   const nets = new Map<string, { plan: EntitlementPlan; net: string; line: Line }>();
   for (const line of lines) {
     if (line.kind !== "earning" || line.componentId === null) continue;
+    if (line.fundedByEntitlementBank === false) continue;
     const entry = settling.get(line.componentId);
     if (!entry) continue;
     const value = entry.plan.unit === "hours" ? line.hours ?? null : line.amount;
