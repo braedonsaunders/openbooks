@@ -26,6 +26,7 @@
       "close": "Abschlussfortschritt",
       "closeSub": "{period}",
       "closeUnavailable": "Nicht verfügbar",
+      "closeOrgWide": "Abschlussdiagnosen sind organisationsweit — bitte einen Administrator mit unbeschränktem Zugriff auf Tochtergesellschaften um Auflistung",
       "noClose": "—",
       "noCloseSub": "Kein Abschluss gestartet",
       "draftJournals": "Buchungsentwürfe",

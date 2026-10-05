@@ -26,6 +26,7 @@
       "close": "Close progress",
       "closeSub": "{period}",
       "closeUnavailable": "Unavailable",
+      "closeOrgWide": "Close diagnostics are organization-wide — ask an administrator with unrestricted subsidiary visibility to list them",
       "noClose": "—",
       "noCloseSub": "No close run started",
       "draftJournals": "Draft journals",

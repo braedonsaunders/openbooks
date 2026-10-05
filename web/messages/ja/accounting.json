@@ -26,6 +26,7 @@
       "close": "決算進捗",
       "closeSub": "{period}",
       "closeUnavailable": "利用不可",
+      "closeOrgWide": "決算診断は組織全体が対象です — 制限のない子会社可視性を持つ管理者に一覧表示を依頼してください",
       "noClose": "—",
       "noCloseSub": "決算未開始",
       "draftJournals": "下書き仕訳",

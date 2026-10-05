@@ -26,6 +26,7 @@
       "close": "结账进度",
       "closeSub": "{period}",
       "closeUnavailable": "不可用",
+      "closeOrgWide": "结账诊断覆盖整个组织 — 请让具有子公司无限制可见性的管理员列出",
       "noClose": "—",
       "noCloseSub": "尚未开始结账",
       "draftJournals": "草稿凭证",
