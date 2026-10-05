@@ -1,0 +1,1 @@
+Function-only change: accepts existing posted assembly_build movements as serial receipt evidence. No tenant rows, identities, monetary values or movement history are rewritten. Unit-quantity, organization and stock-location predicates remain enforced.

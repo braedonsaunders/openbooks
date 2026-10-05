@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -193,6 +193,20 @@ const cases: Case[] = [
       where org_id=${f.org.orgId} and journal_entry_id=${result.entryId} and item_id in (${f.org.items.standard},${f.org.items.fifo})`)).rows[0]!.total);
     assert.equal(value, "3.5000");
   } },
+  { name: "serial receipts accept equivalent decimal spellings of one and refuse multiple units per serial", run: async (f) => {
+    const wo = await prepare(f, { quantity: "3" });
+    await withBypassContext(() => db.execute(sql`update item_inventory_profiles set tracking='serial' where org_id=${f.org.orgId} and item_id=${f.org.items.assembly} returning item_id`));
+    await stock(f, f.org.items.component, "6", "3");
+    await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "6" }]);
+    await refuse(run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "2", lots: [{ quantity: "2.0000", serialNumber: "SERIAL-MULTIPLE" }] })), "receipt_serial_required", "one serial number per unit", "Enter a serial number");
+    for (const [i, quantity] of ["1", "1.0", "1.0000"].entries()) {
+      const result = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity, lots: [{ quantity, serialNumber: "SERIAL-" + i }] }));
+      const movements = await withBypassContext(() => db.execute<{ quantity: string; status: string }>(sql`
+        select m.quantity::text as quantity, s.status from inventory_movements m join serials s on s.id=m.serial_id and s.org_id=m.org_id
+        where m.org_id=${f.org.orgId} and m.journal_entry_id=${result.entryId} and m.item_id=${f.org.items.assembly}`));
+      assert.deepEqual(movements.rows, [{ quantity: "1.0000", status: "in_stock" }]);
+    }
+  } },
   { name: "tracked finished good refuses without its lot", run: async (f) => {
     const wo = await prepare(f); await withBypassContext(() => db.execute(sql`update item_inventory_profiles set tracking='lot' where org_id=${f.org.orgId} and item_id=${f.org.items.assembly} returning item_id`));
     await stock(f, f.org.items.component, "4", "3"); await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
@@ -250,7 +264,7 @@ const cases: Case[] = [
     const movementId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from inventory_movements where org_id=${f.org.orgId} and journal_entry_id=${issued.entryId} and kind='assembly_consume'`)).rows[0]!.id);
     await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, wo.id, "Stop the production run"));
     await run(() => reverseMaterialIssue(f.org.orgId, f.actorId, { movementId, reversalDate: f.postingDate, reason: "Correct the issue quantity" }));
-    assert.equal((await getOnHand(f.org.orgId, f.org.items.component, f.org.stockLocationId)).quantity, "5.0000");
+    assert.equal((await withOrgContext(f.org.orgId, () => getOnHand(f.org.orgId, f.org.items.component, f.org.stockLocationId))).quantity, "5.0000");
     const restoredLayerQuantity = await withBypassContext(async () => (await db.execute<{ quantity: string }>(sql`select coalesce(sum(remaining_quantity),0)::text quantity
       from cost_layers where org_id=${f.org.orgId} and item_id=${f.org.items.component} and stock_location_id=${f.org.stockLocationId}`)).rows[0]!.quantity);
     assert.equal(restoredLayerQuantity, "5.0000");
