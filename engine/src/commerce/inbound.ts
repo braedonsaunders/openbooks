@@ -359,12 +359,13 @@ export async function runCommerceInboundScan(): Promise<void> {
 
 /**
  * Drain one tick of the channel order queue across organizations: pending
- * per-order posts first, then due daily summaries. An org that throws keeps
- * its orders pending for the next tick; summaries that throw wait as well.
+ * per-order posts first, then due daily summaries. Failed organizations retain
+ * their pending work and the scheduler receives the failure for its retry log.
  */
 export async function runChannelOrderScan(): Promise<{ posted: number; parked: number }> {
   let posted = 0;
   let parked = 0;
+  const failures: string[] = [];
   // bypass: scheduler-tick — the commerce scan drains pending orders across
   // organizations before each row's organization is known.
   const orgs = await withBypassContext(() => db.execute<{ org_id: string }>(sql`
@@ -378,17 +379,18 @@ export async function runChannelOrderScan(): Promise<{ posted: number; parked: n
       // Late label and payout costs restate beside the posting drain, so no
       // new scheduler kind is needed for margin restatement.
       await recomputePendingOrderEconomics(org.org_id, null, 100);
-    } catch {
-      continue;
+    } catch (error) {
+      failures.push(`Organization ${org.org_id}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   try {
     const summaries = await postDueDailySummaries();
     posted += summaries.posted;
     parked += summaries.parked;
-  } catch {
-    // Summaries wait for the next tick; pending orders keep their state.
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error));
   }
+  if (failures.length) throw new Error(`Channel order scan failed: ${failures.join('; ')}`);
   return { posted, parked };
 }
 

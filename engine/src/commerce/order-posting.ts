@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { ChannelOrderLine } from "./contracts.ts";
 import { CommerceError } from "./errors.ts";
-import { markOrderEconomicsDirty, recomputeOrderEconomicsScoped } from "./economics.ts";
 import { findNative } from "./external-links.ts";
 import {
   claimPendingChannelOrders,
@@ -12,6 +11,7 @@ import {
   markOrderPosted,
   maybeCloseGoverningOrder,
   resolveCustomer,
+  refreshOrderEconomics,
   type ChannelOrderDetail,
 } from "./orders.ts";
 import { getPostingPolicy, type ChannelPostingPolicy } from "./posting-policies.ts";
@@ -1125,16 +1125,10 @@ export async function postChannelOrder(
       if (outcome.effectsDocumentId) {
         await runPostDocumentEffects(outcome.effectsDocumentId, "draft", { actorId: actor });
       }
-      // Margin facts follow the posting and never block it: the stock issues
-      // land in the effects above, so economics reads them here; a refusal
-      // parks a restatement mark for the channel scan instead of failing
-      // an order that already posted.
+      // Margin facts follow stock effects. A refused refresh records durable
+      // restatement work atomically with posting instead of losing the retry.
       if (outcome.status === "posted" && outcome.documentId) {
-        try {
-          await recomputeOrderEconomicsScoped(orgId, actor, orderId);
-        } catch {
-          await markOrderEconomicsDirty(orgId, orderId, "order posted").catch(() => null);
-        }
+        await refreshOrderEconomics(orgId, actor, orderId, "order posted");
         // A storefront-fulfilled sale leaves its governing draft behind; a
         // completed order closes it while the posting is in hand.
         await maybeCloseGoverningOrder(orgId, actor, orderId);
@@ -1283,5 +1277,4 @@ export async function postPendingChannelOrders(
     return { posted, parked, waiting };
   });
 }
-
 

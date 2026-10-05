@@ -11,6 +11,7 @@ import { ingestChannelOrder } from "./orders.ts";
 import { postChannelOrder } from "./order-posting.ts";
 import { listChannelExceptions, replayChannelExceptions } from "./exceptions.ts";
 import { setPostingPolicy } from "./posting-policies.ts";
+import { CommerceError } from "./errors.ts";
 import type { ChannelOrder } from "./contracts.ts";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
@@ -219,6 +220,15 @@ test("paid order posts one balanced cash sale with gateway tenders, tax and COGS
       select code, status from promotions where id = ${promoLine.promotion_id} and org_id = ${org.orgId}`))).rows[0]!;
     assert.equal(promo.code, "SAVE10");
     assert.equal(promo.status, "active");
+    // An inactive linked customer cannot silently become a second native party.
+    await db.execute(sql`update parties set is_active=false where org_id=${org.orgId} and id=${doc.party_id}`);
+    const count = async () => (await db.execute<{n:number}>(sql`select count(*)::int as n from parties where org_id=${org.orgId}`)).rows[0]!.n;
+    const before = await count();
+    await assert.rejects(withBypass(() => ingestChannelOrder(org.orgId,actor,channelId,paidOrder('1001-conflict'))),
+      (error:unknown) => error instanceof CommerceError && error.code==='external_link_conflict'
+        && error.message.includes('cust-1') && error.remedy.includes('unlink it first'));
+    assert.equal(await count(),before,'a refused customer mapping rolls back the new party');
+    assert.equal((await db.execute(sql`select id from channel_orders where org_id=${org.orgId} and external_id='1001-conflict'`)).rows.length,0);
   } finally {
     await dropScratchOrg(org.orgId);
   }

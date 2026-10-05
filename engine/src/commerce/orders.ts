@@ -8,7 +8,7 @@ import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
-import { db, withOrg } from "../platform/db.ts";
+import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
 
 const FEATURE_REMEDY = "Enable Sales Channels in Company Settings → Features.";
 
@@ -126,15 +126,14 @@ function refuse(code: string, message: string, remedy: string, field: string | n
 }
 
 /**
- * Refresh one order's margin facts without disturbing the order flow: the
- * recompute joins this unit of work, and a refusal parks a restatement mark
- * for the channel scan instead of failing an ingest that already stored.
+ * A refused margin refresh leaves durable restatement work in the same unit
+ * as the order. A failed queue write refuses the unit instead of losing it.
  */
-async function refreshOrderEconomics(orgId: string, actor: string | null, orderId: string, reason: string): Promise<void> {
+export async function refreshOrderEconomics(orgId: string, actor: string | null, orderId: string, reason: string): Promise<void> {
   try {
-    await recomputeOrderEconomicsScoped(orgId, actor, orderId);
+    await withTransactionSavepoint(db, () => recomputeOrderEconomicsScoped(orgId, actor, orderId));
   } catch {
-    await markOrderEconomicsDirty(orgId, orderId, reason).catch(() => null);
+    await markOrderEconomicsDirty(orgId, orderId, reason);
   }
 }
 
@@ -226,7 +225,7 @@ export async function resolveCustomer(
          and lower(email) = ${email}
        order by created_at limit 1`)).rows[0];
     if (party) {
-      if (order.customerExternalId && actor) {
+      if (order.customerExternalId) {
         await linkExternal(orgId, actor, {
           channelId: channel.id,
           provider: channel.kind,
@@ -235,7 +234,7 @@ export async function resolveCustomer(
           externalId: order.customerExternalId,
           nativeTable: "parties",
           nativeId: party.id,
-        }, "salesChannels").catch(() => null);
+        }, "salesChannels");
       }
       return party.id;
     }
@@ -249,7 +248,7 @@ export async function resolveCustomer(
     returning id`);
   if (inserted.rows.length !== 1) throw new Error("Customer party insert returned an unexpected row count");
   const partyId = inserted.rows[0]!.id;
-  if (order.customerExternalId && actor) {
+  if (order.customerExternalId) {
     await linkExternal(orgId, actor, {
       channelId: channel.id,
       provider: channel.kind,
@@ -258,7 +257,7 @@ export async function resolveCustomer(
       externalId: order.customerExternalId,
       nativeTable: "parties",
       nativeId: partyId,
-    }, "salesChannels").catch(() => null);
+    }, "salesChannels");
   }
   return partyId;
 }
@@ -649,6 +648,20 @@ export async function markOrderException(
   actor: string | null,
   exception: { code: string; reason: string; remedy: string },
 ): Promise<void> {
+  return withOrg(orgId, () => markOrderExceptionIn(orgId, orderId, actor, exception));
+}
+
+async function markOrderExceptionIn(
+  orgId: string,
+  orderId: string,
+  actor: string | null,
+  exception: { code: string; reason: string; remedy: string },
+): Promise<void> {
+  const before = (await db.execute<Record<string, unknown>>(sql`
+    select posting_status, posting_document_id, summary_id, exception_code, exception_reason, exception_remedy
+      from channel_orders where org_id = ${orgId} and id = ${orderId}
+       and posting_status in ('pending','exception') for update`)).rows[0];
+  if (!before) throw new Error("Channel order exception mark matched no row; the order posted or left while it parked");
   const updated = await db.execute(sql`
     update channel_orders
        set posting_status = 'exception',
@@ -666,7 +679,31 @@ export async function markOrderException(
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'channel_orders', ${orderId}, 'update',
-      ${JSON.stringify({ before: null, after: null, reason: `${exception.code}: ${exception.reason}` })}::jsonb, ${actor})`);
+      ${JSON.stringify({
+        before,
+        after: {
+          posting_status: 'exception', posting_document_id: null, summary_id: null,
+          exception_code: exception.code, exception_reason: exception.reason, exception_remedy: exception.remedy,
+        },
+        reason: `${exception.code}: ${exception.reason}`,
+      })}::jsonb, ${actor})`);
+}
+
+/** Park only still-pending orders under their own organization and channel locks. */
+export async function parkPendingChannelOrders(
+  orgId: string,
+  channelId: string,
+  actor: string | null,
+  error: CommerceError,
+): Promise<number> {
+  return withOrg(orgId, async () => {
+    const pending = (await db.execute<{ id: string }>(sql`select id from channel_orders
+      where org_id = ${orgId} and channel_id = ${channelId} and posting_status = 'pending'
+      order by id for update`)).rows;
+    for (const order of pending) await markOrderException(orgId, order.id, actor,
+      { code: error.code, reason: error.message, remedy: error.remedy });
+    return pending.length;
+  });
 }
 
 /** Link an order to its posted document. Posted history is never rewritten: only a pending or parked row moves. */
