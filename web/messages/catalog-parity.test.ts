@@ -282,6 +282,19 @@ const COGNATES = new Set<string>([
   'fr:analytics.spendVelocity.config.groups.concentration|Concentration',
   'fr:analytics.spendVelocity.config.groups.fragmentation|Fragmentation',
   'fr:analytics.spendVelocity.config.groups.projections|Projections',
+  // CSV names the file format on export buttons; every locale keeps the acronym.
+  'de:analytics.vendor.csv.export|CSV',
+  'de:analytics.spendVelocity.csv.export|CSV',
+  'es:analytics.vendor.csv.export|CSV',
+  'es:analytics.spendVelocity.csv.export|CSV',
+  'fr:analytics.vendor.csv.export|CSV',
+  'fr:analytics.spendVelocity.csv.export|CSV',
+  'ja:analytics.vendor.csv.export|CSV',
+  'ja:analytics.spendVelocity.csv.export|CSV',
+  'pt-BR:analytics.vendor.csv.export|CSV',
+  'pt-BR:analytics.spendVelocity.csv.export|CSV',
+  'zh:analytics.vendor.csv.export|CSV',
+  'zh:analytics.spendVelocity.csv.export|CSV',
   // Order margin: CM1/CM2/CM3 are abbreviations every locale keeps, and the
   // bare percent template carries no translatable words.
   'de:channels.drawer.cm1|CM1',

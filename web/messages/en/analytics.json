@@ -1929,7 +1929,8 @@
     },
     "csv": {
       "sharePct": "Share %",
-      "onTimePct": "On-Time %"
+      "onTimePct": "On-Time %",
+      "export": "CSV"
     },
     "days": "{days}d",
     "empty": {
@@ -3024,7 +3025,8 @@
       "twoBack": "2 Back",
       "changePct": "Change %",
       "projected": "Projected",
-      "velocityPctMo": "Velocity %/mo"
+      "velocityPctMo": "Velocity %/mo",
+      "export": "CSV"
     },
     "newBadge": "NEW",
     "detectors": {
@@ -3125,7 +3127,8 @@
       },
       "fragmentation": {
         "label": "Fragmentation",
-        "note": "Transactions per month / avg transaction size"
+        "note": "Transactions per month / avg transaction size",
+        "value": ">{txns}/mo & <{max}"
       },
       "velocityEngine": {
         "label": "Velocity engine",
