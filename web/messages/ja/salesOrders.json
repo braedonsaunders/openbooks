@@ -33,7 +33,7 @@
     "codeTitle": "プロモーションコードを適用",
     "codeLabel": "プロモーションコード",
     "applied": "{code}を適用しました：{amount}の割引（{count}明細）",
-    "precisionUnknown": "割引は適用されましたが、{currency}の金額には設定 → 通貨での精度設定が必要です。",
+    "precisionUnknown": "割引は適用されましたが、{currency}の金額は表示できません:{currency}にはISO通貨レジストリ（読み取り専用の参照データ）に精度がありません。レジストリからサポートされている通貨コードを選択してください。",
     "loadFailed": "プロモーションを読み込めませんでした",
     "applyFailed": "プロモーションを適用できませんでした"
   }

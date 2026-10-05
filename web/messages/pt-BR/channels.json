@@ -63,7 +63,7 @@
     "marginTitle": "Margem do pedido",
     "marginHint": "Contribuição dos últimos 30 dias por canal, após envio e taxas",
     "marginEmpty": "A margem aparece aqui quando os pedidos do canal são lançados com custos. Atualize um pedido para calculá-la agora.",
-    "marginPrecisionUnknown": "Os valores em {currency} precisam da precisão em Configuração → Moedas.",
+    "marginPrecisionUnknown": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Se o código estiver errado, desconecte e reconecte o canal com o código ISO de três letras suportado — a moeda de um canal ativo não pode ser alterada.",
     "marginReport": "Relatório de margem",
     "marginMeta": "{orders} pedido(s) · {revenue} de receita · {adSpend} em anúncios",
     "marginEstimated": "{count} estimado(s)",
@@ -367,7 +367,7 @@
   },
   "drawer": {
     "lines": "Itens",
-    "unknownPrecision": "Os valores em {currency} precisam da precisão em Configuração → Moedas.",
+    "unknownPrecision": "Os valores em {currency} não podem ser exibidos: {currency} não tem precisão no registro ISO de moedas (dados de referência somente leitura). Se o código estiver errado, desconecte e reconecte o canal com o código ISO de três letras suportado — a moeda de um canal ativo não pode ser alterada.",
     "tenders": "Pagamentos",
     "activity": "Atividade",
     "posting": "Contabilização",

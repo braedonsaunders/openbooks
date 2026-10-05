@@ -63,7 +63,7 @@
     "marginTitle": "订单毛利",
     "marginHint": "各渠道近30天贡献毛利（扣除就运与费用后）",
     "marginEmpty": "渠道订单附成本记账后，毛利将显示在此。立即构建可刷新订单。",
-    "marginPrecisionUnknown": "{currency}金额需要在设置 → 币种中设置精度。",
+    "marginPrecisionUnknown": "无法显示{currency}金额：{currency}在ISO币种登记册（只读参考数据）中没有精度。如果代码有误，请断开频道并使用受支持的三字母ISO代码重新连接 — 已上线频道的币种无法更改。",
     "marginReport": "毛利报表",
     "marginMeta": "{orders}个订单·营收{revenue}·广告{adSpend}",
     "marginEstimated": "{count}个估计",
@@ -367,7 +367,7 @@
   },
   "drawer": {
     "lines": "明细",
-    "unknownPrecision": "{currency}金额需要在设置 → 币种中设置精度。",
+    "unknownPrecision": "无法显示{currency}金额：{currency}在ISO币种登记册（只读参考数据）中没有精度。如果代码有误，请断开频道并使用受支持的三字母ISO代码重新连接 — 已上线频道的币种无法更改。",
     "tenders": "收款",
     "activity": "动态",
     "posting": "过账",

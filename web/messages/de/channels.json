@@ -63,7 +63,7 @@
     "marginTitle": "Auftragsmarge",
     "marginHint": "Deckungsbeitrag der letzten 30 Tage je Kanal, nach Versand und Gebühren",
     "marginEmpty": "Die Marge erscheint hier, sobald Kanalaufträge mit Kosten gebucht sind. Einen Auftrag aktualisieren, um sie sofort zu bilden.",
-    "marginPrecisionUnknown": "Beträge in {currency} brauchen ihre Genauigkeit unter Setup → Währungen.",
+    "marginPrecisionUnknown": "Beträge in {currency} können nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Falls der Code falsch ist, trennen Sie den Kanal und verbinden Sie ihn mit dem unterstützten dreistelligen ISO-Code erneut — die Währung eines live geschalteten Kanals kann nicht geändert werden.",
     "marginReport": "Margenbericht",
     "marginMeta": "{orders} Auftrag/Aufträge · {revenue} Umsatz · {adSpend} Werbeausgaben",
     "marginEstimated": "{count} geschätzt",
@@ -367,7 +367,7 @@
   },
   "drawer": {
     "lines": "Positionen",
-    "unknownPrecision": "Beträge in {currency} brauchen ihre Genauigkeit unter Setup → Währungen.",
+    "unknownPrecision": "Beträge in {currency} können nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Falls der Code falsch ist, trennen Sie den Kanal und verbinden Sie ihn mit dem unterstützten dreistelligen ISO-Code erneut — die Währung eines live geschalteten Kanals kann nicht geändert werden.",
     "tenders": "Zahlungen",
     "activity": "Verlauf",
     "posting": "Buchung",

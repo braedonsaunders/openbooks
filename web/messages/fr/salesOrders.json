@@ -33,7 +33,7 @@
     "codeTitle": "Appliquer un code promo",
     "codeLabel": "Code promo",
     "applied": "{code} appliquée : {amount} de remise sur {count, plural, one {# ligne} other {# lignes}}",
-    "precisionUnknown": "La remise est appliquée, mais les montants en {currency} nécessitent leur précision dans Configuration → Devises.",
+    "precisionUnknown": "La remise est appliquée, mais les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Choisissez un code devise pris en charge dans le registre.",
     "loadFailed": "Impossible de charger les promotions",
     "applyFailed": "Impossible d’appliquer la promotion"
   }

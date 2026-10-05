@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { tryMinorToMajorTextUnits } from '@/lib/money-format'
+import { displayMinorAmount } from '@/lib/money-format'
 import { promptDialog } from '@/lib/prompt'
 
 type ActivePromotion = { id: string; code: string; name: string; kind: string }
@@ -79,9 +79,17 @@ export function PromotionApplyControl({ documentId, currency, disabled, onApplie
       const applied = await readJson(applyRes)
       // A missing or malformed discount total never renders as a zero-value
       // success: it takes the same named-refusal path as unknown precision.
-      const major = tryMinorToMajorTextUnits(applied.discountMinor, applied.minorUnits)
+      // The registry exponent rides as both fraction digits so Intl
+      // defaults cannot override it for private/custom codes.
+      const display = displayMinorAmount(applied.discountMinor, applied.minorUnits)
       const count = Array.isArray(applied.lines) ? applied.lines.length : 0
-      const amount = major === null ? null : money(major)
+      const amount =
+        display === null
+          ? null
+          : money(display.major, {
+              minimumFractionDigits: display.digits,
+              maximumFractionDigits: display.digits,
+            })
       if (amount === null) {
         // The discount applied; only its display amount refuses by name.
         toast.error(t('promotion.precisionUnknown', {
