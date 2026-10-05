@@ -13,6 +13,7 @@ import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-rea
 import { loadApprovalPerson, loadTeamEmploymentIdsForManager } from '@openbooks/engine/src/hrm/authorization.ts'
 import { listMyReviews } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
 import { listLeaveTypes, timeBalanceAsOf } from '@openbooks/engine/src/hrm/leave-read.ts'
+import { MissingExchangeRateError } from '@/lib/fx-presentation'
 import { liveHomeAnnouncements } from '@/lib/setup/home-announcements'
 import { inboxContext, inboxCounts, INBOX_TASK_KINDS } from '@/lib/inbox-context'
 import { can, type Authz } from '@/lib/authz'
@@ -106,7 +107,7 @@ export interface PersonaMetrics {
   teamNudges: { text: string; href: string }[] | null
   teamHeadcount: number | null
   teamQuals: { name: string; detail: string }[] | null
-  adminAttention: { label: string; count: number; href: string; unavailable?: true }[] | null
+  adminAttention: { label: string; count: number; href: string; unavailable?: true; reason?: string | null }[] | null
   workflowErrors: { count: number; href: string; unavailable?: true } | null
   adminCalendar: { label: string; date: string }[] | null
 }
@@ -403,7 +404,7 @@ export async function loadPersonaMetrics(
   }
 
   if (need('adminAttention') && hasAdminPersona(authz) && authz.allowedSubsidiaryIds === null) {
-    const attention: { label: string; count: number; href: string; unavailable?: true }[] = []
+    const attention: { label: string; count: number; href: string; unavailable?: true; reason?: string | null }[] = []
     if (can(authz, 'hrm.employment.read')) {
       const pending = await listInbox(ctx ?? await inboxContext(authz), {
         kinds: ['hrm_leave_request', 'hrm_change_request', 'hrm_process_step'],
@@ -413,17 +414,22 @@ export async function loadPersonaMetrics(
     }
     if (await isFeatureEnabled(orgId, 'payroll')) {
       const { payrollHome } = await import('@/lib/module-home/payroll')
-      // A failed cockpit read (a missing YTD translation rate refuses
-      // inside) is unavailable, never a verified zero that would hide the
-      // setup item — the same rule as the bank-lines count below.
+      // Only the declared FX refusal reads as unavailable — carrying its
+      // reason to the chip by name — never a verified zero that would hide
+      // the setup item. Anything else is a real defect and still rejects
+      // the dashboard instead of hiding behind "unavailable".
       let missing: number | null
+      let payrollReason: string | null = null
       try {
         missing = (await payrollHome(orgId, authz.allowedSubsidiaryIds ?? undefined)).missingSettings.length
-      } catch {
+      } catch (e: unknown) {
+        if (!(e instanceof MissingExchangeRateError)) throw e
         missing = null
+        payrollReason = e.message
       }
-      if (missing === null) attention.push({ label: tp('attentionPayrollSetup'), count: 0, href: '/payroll', unavailable: true })
-      else if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
+      if (missing === null) {
+        attention.push({ label: tp('attentionPayrollSetup'), count: 0, href: '/payroll', unavailable: true, reason: payrollReason })
+      } else if (missing > 0) attention.push({ label: tp('attentionPayrollSetup'), count: missing, href: '/payroll' })
     }
     // A failed operator-control count reads as unavailable, never as a
     // verified zero that would hide a real backlog. A probe the caller may
