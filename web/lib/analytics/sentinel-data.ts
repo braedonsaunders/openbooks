@@ -406,7 +406,8 @@ export interface SentinelData {
 interface AggregateRow extends Record<string, string | number | null> {
   count: string | number;
   amount: string | number;
-  txnAmount?: string | number;
+  /** Exact transaction-currency sum for the group, as selected (`txn_amount`). */
+  txn_amount: string | number;
 }
 interface FlaggedDocumentRow extends Record<string, unknown> {
   id: string; document_number: string | null; kind: string; date: string; amount: string;
@@ -1012,12 +1013,12 @@ export async function sentinelData(
   const b1Rows = {
     rows: aggAll
       .filter((r) => Number(r.g_digit1) === 0 && Number(r.g_cur) === 0 && r.digit1 !== null && String(r.digit1) !== "0")
-      .map((r) => ({ currency: String(r.cur), digit: r.digit1, count: r.count, amount: r.txnAmount })),
+      .map((r) => ({ currency: String(r.cur), digit: r.digit1, count: r.count, amount: r.txn_amount })),
   };
   const b2Rows = {
     rows: aggAll
       .filter((r) => Number(r.g_digit2) === 0 && Number(r.g_cur) === 0 && r.digit2 !== null && String(r.digit2).length === 2)
-      .map((r) => ({ currency: String(r.cur), digits: r.digit2, count: r.count, amount: r.txnAmount })),
+      .map((r) => ({ currency: String(r.cur), digits: r.digit2, count: r.count, amount: r.txn_amount })),
   };
   const trapAgg = {
     rows: aggAll
@@ -1221,7 +1222,7 @@ export async function sentinelData(
     partyId: r.party_id, partyName: r.party_name ?? "",
     flagType: "trap" as const,
     reason: strings.trapReason(r.trap as string),
-    riskScore: r.trap === "9999" ? trapRules.ends9999.points! : r.trap === "999" ? trapRules.ends999.points! : trapRules.ends99.points!,
+    riskScore: r.trap === "9999" ? trapRules.ends9999!.points! : r.trap === "999" ? trapRules.ends999!.points! : trapRules.ends99!.points!,
   }));
   const trapByTrap = (trapAgg.rows as AggregateRow[]).map((r) => ({ trap: String(r.trap), count: Number(r.count), amount: "0.0000" }));
   for (const t of trapByTrap) {
@@ -1233,22 +1234,22 @@ export async function sentinelData(
   // ---- Duplicates: one finding per natural-key group ---------------------------------
   const dupRules = RISK_SCORING.duplicate.rules;
   const dupTierBump = (translated: string): number => {
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) return dupRules.tierCritical.points!;
-    if (cmp(translated, cfg.highRiskAmount) >= 0) return dupRules.tierHigh.points!;
-    if (cmp(translated, cfg.moderateRiskAmount) >= 0) return dupRules.tierModerate.points!;
+    if (cmp(translated, cfg.criticalRiskAmount) >= 0) return dupRules.tierCritical!.points!;
+    if (cmp(translated, cfg.highRiskAmount) >= 0) return dupRules.tierHigh!.points!;
+    if (cmp(translated, cfg.moderateRiskAmount) >= 0) return dupRules.tierModerate!.points!;
     return 0;
   };
   const dupSpanBump = (spanDays: number): number => {
-    if (spanDays <= dupRules.span1Day.days!) return dupRules.span1Day.points!;
-    if (spanDays <= dupRules.span3Days.days!) return dupRules.span3Days.points!;
-    if (spanDays <= dupRules.span7Days.days!) return dupRules.span7Days.points!;
+    if (spanDays <= dupRules.span1Day!.days!) return dupRules.span1Day!.points!;
+    if (spanDays <= dupRules.span3Days!.days!) return dupRules.span3Days!.points!;
+    if (spanDays <= dupRules.span7Days!.days!) return dupRules.span7Days!.points!;
     return 0;
   };
   const dupConfidence = (sameReference: boolean, spanDays: number): number => {
-    if (sameReference) return dupRules.confSharedReference.confidence!;
-    if (spanDays <= dupRules.confSpan3Days.days!) return dupRules.confSpan3Days.confidence!;
-    if (spanDays <= dupRules.confSpan7Days.days!) return dupRules.confSpan7Days.confidence!;
-    return dupRules.confOtherwise.confidence!;
+    if (sameReference) return dupRules.confSharedReference!.confidence!;
+    if (spanDays <= dupRules.confSpan3Days!.days!) return dupRules.confSpan3Days!.confidence!;
+    if (spanDays <= dupRules.confSpan7Days!.days!) return dupRules.confSpan7Days!.confidence!;
+    return dupRules.confOtherwise!.confidence!;
   };
   const dupGroups: DuplicateGroup[] = (dupGroupRows.rows as DuplicateGroupRow[]).map((r) => {
     const amount = r.amt;
@@ -1262,8 +1263,8 @@ export async function sentinelData(
     }));
     const presented = members.map((m) => m.funcAmount);
     const funcTotal = sum(presented.length > 0 ? presented : ["0.0000"]);
-    let score = dupRules.base.points! + dupTierBump(funcTotal) + dupSpanBump(spanDays);
-    if (sameReference) score += dupRules.sharedReference.points!;
+    let score = dupRules.base!.points! + dupTierBump(funcTotal) + dupSpanBump(spanDays);
+    if (sameReference) score += dupRules.sharedReference!.points!;
     return {
       groupId: [r.party_id ?? "", r.kind, r.currency, amount, r.refkey].join("|"),
       partyId: r.party_id, partyName: r.party_name,
@@ -1299,15 +1300,15 @@ export async function sentinelData(
         const a = ms[i]!, b = ms[j]!;
         const days = Math.abs(calendarDaysBetween(a.date, b.date));
         const sameMemo = a.memo !== null && a.memo === b.memo;
-        let score = dupRules.base.points! + dupTierBump(g.funcTotal) + dupSpanBump(days);
-        if (sameMemo || g.sameReference) score += dupRules.sharedReference.points!;
+        let score = dupRules.base!.points! + dupTierBump(g.funcTotal) + dupSpanBump(days);
+        if (sameMemo || g.sameReference) score += dupRules.sharedReference!.points!;
         dupPairs.push({
           docId1: a.docId, docId2: b.docId, docNumber1: a.docNumber, docNumber2: b.docNumber,
           kind: g.kind, date1: a.date, date2: b.date, daysBetween: days, amount: g.amount,
           currency: g.currency, partyId: g.partyId, partyName: g.partyName,
           sameMemo,
           confidence: sameMemo || g.sameReference
-            ? dupRules.confSharedReference.confidence!
+            ? dupRules.confSharedReference!.confidence!
             : dupConfidence(false, days),
           riskScore: Math.min(100, score),
         });
@@ -1323,10 +1324,10 @@ export async function sentinelData(
   const weekendItems: FlaggedDoc[] = (weekendDetail.rows as FlaggedDocumentRow[]).map((r) => {
     const translated = translatedOf(r);
     const isSunday = Number(r.dow) === 0;
-    let score = weekendRules.base.points!;
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += weekendRules.tierCritical.points!;
-    else if (cmp(translated, cfg.highRiskAmount) >= 0) score += weekendRules.tierHigh.points!;
-    if (isSunday) score += weekendRules.sunday.points!;
+    let score = weekendRules.base!.points!;
+    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += weekendRules.tierCritical!.points!;
+    else if (cmp(translated, cfg.highRiskAmount) >= 0) score += weekendRules.tierHigh!.points!;
+    if (isSunday) score += weekendRules.sunday!.points!;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
@@ -1349,13 +1350,13 @@ export async function sentinelData(
   const rsfItems = rsfFull.map((r) => {
     const rsf = Number(r.rsf);
     const translated = translatedOf(r);
-    let score = rsfRules.base.points!;
-    if (rsf >= rsfRules.ratio50.ratio!) score += rsfRules.ratio50.points!;
-    else if (rsf >= rsfRules.ratio20.ratio!) score += rsfRules.ratio20.points!;
-    else if (rsf >= rsfRules.ratio15.ratio!) score += rsfRules.ratio15.points!;
-    else score += rsfRules.ratioBase.points!;
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += rsfRules.tierCritical.points!;
-    else if (cmp(translated, cfg.highRiskAmount) >= 0) score += rsfRules.tierHigh.points!;
+    let score = rsfRules.base!.points!;
+    if (rsf >= rsfRules.ratio50!.ratio!) score += rsfRules.ratio50!.points!;
+    else if (rsf >= rsfRules.ratio20!.ratio!) score += rsfRules.ratio20!.points!;
+    else if (rsf >= rsfRules.ratio15!.ratio!) score += rsfRules.ratio15!.points!;
+    else score += rsfRules.ratioBase!.points!;
+    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += rsfRules.tierCritical!.points!;
+    else if (cmp(translated, cfg.highRiskAmount) >= 0) score += rsfRules.tierHigh!.points!;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
@@ -1375,10 +1376,10 @@ export async function sentinelData(
   const zItems = zFull.map((r) => {
     const z = Number(r.z);
     const translated = translatedOf(r);
-    let score = zRules.base.points!;
-    if (Math.abs(z) >= zRules.z5.z!) score += zRules.z5.points!;
-    else if (Math.abs(z) >= zRules.z4.z!) score += zRules.z4.points!;
-    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += zRules.tierCritical.points!;
+    let score = zRules.base!.points!;
+    if (Math.abs(z) >= zRules.z5!.z!) score += zRules.z5!.points!;
+    else if (Math.abs(z) >= zRules.z4!.z!) score += zRules.z4!.points!;
+    if (cmp(translated, cfg.criticalRiskAmount) >= 0) score += zRules.tierCritical!.points!;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
       amount: r.amount, currency: r.currency, funcAmount: translated,
@@ -1403,11 +1404,11 @@ export async function sentinelData(
       amount: inv.amount, currency: inv.currency, funcAmount: present(inv.funcAmount, inv.funcCcy, inv.date),
     }));
     const totalAmount = sum(invoices.length > 0 ? invoices.map((inv) => inv.funcAmount) : ["0.0000"]);
-    let score = spanDays >= seqHighDays ? seqRules.highSpan.points! : seqRules.baseSpan.points!;
-    score += Math.min(count * seqRules.perInvoice.perUnit!, seqRules.perInvoice.cap!);
-    if (cmp(totalAmount, cfg.aggregateCriticalAmount) > 0) score += seqRules.tierCritical.points!;
-    else if (cmp(totalAmount, cfg.aggregateHighAmount) > 0) score += seqRules.tierHigh.points!;
-    else if (cmp(totalAmount, cfg.criticalRiskAmount) > 0) score += seqRules.tierModerate.points!;
+    let score = spanDays >= seqHighDays ? seqRules.highSpan!.points! : seqRules.baseSpan!.points!;
+    score += Math.min(count * seqRules.perInvoice!.perUnit!, seqRules.perInvoice!.cap!);
+    if (cmp(totalAmount, cfg.aggregateCriticalAmount) > 0) score += seqRules.tierCritical!.points!;
+    else if (cmp(totalAmount, cfg.aggregateHighAmount) > 0) score += seqRules.tierHigh!.points!;
+    else if (cmp(totalAmount, cfg.criticalRiskAmount) > 0) score += seqRules.tierModerate!.points!;
     const level: "high" | "medium" = spanDays >= seqHighDays ? "high" : "medium";
     return {
       partyId: r.party_id, partyName: r.party_name, count, totalAmount,
@@ -1432,7 +1433,7 @@ export async function sentinelData(
     return {
       vendorId: r.vendor_id, vendorName: r.vendor_name, employeeId: r.employee_id, employeeName: r.employee_name,
       matchType,
-      riskScore: name && addr ? ghostRules.nameAndAddress.points! : addr ? ghostRules.addressOnly.points! : ghostRules.nameOnly.points!,
+      riskScore: name && addr ? ghostRules.nameAndAddress!.points! : addr ? ghostRules.addressOnly!.points! : ghostRules.nameOnly!.points!,
       reason: name && addr
         ? strings.ghostBoth(String(r.vendor_name), String(r.employee_name))
         : addr
@@ -1531,24 +1532,24 @@ export async function sentinelData(
   // Composite vendor score from the severity model, capped at 100.
   for (const v of vendorMap.values()) {
     const amountTier = cmp(v.totalAmount, cfg.aggregateHighAmount) >= 0
-      ? vendorRules.tierCritical.points!
+      ? vendorRules.tierCritical!.points!
       : cmp(v.totalAmount, cfg.highRiskAmount) >= 0
-        ? vendorRules.tierHigh.points!
-        : vendorRules.tierBase.points!;
-    v.compositeScore = Math.min(100, Math.round(Math.min(v.flagCount * vendorRules.perFlag.perUnit!, vendorRules.perFlag.cap!) + amountTier + v.flagTypes.length * vendorRules.perType.points! + v.maxRiskScore * vendorRules.worstShare.share!));
+        ? vendorRules.tierHigh!.points!
+        : vendorRules.tierBase!.points!;
+    v.compositeScore = Math.min(100, Math.round(Math.min(v.flagCount * vendorRules.perFlag!.perUnit!, vendorRules.perFlag!.cap!) + amountTier + v.flagTypes.length * vendorRules.perType!.points! + v.maxRiskScore * vendorRules.worstShare!.share!));
   }
   const vendorRisk = [...vendorMap.values()].sort((a, b) => b.compositeScore - a.compositeScore || cmp(b.totalAmount, a.totalAmount)).slice(0, 50);
 
   // ---- Summary (risk points from the severity model) ------------------------------------------------------------
   const summaryRules = RISK_SCORING.summary.rules;
   let risk = 0;
-  if (flaggedCount >= cfg.summaryFlaggedHigh) risk += summaryRules.flaggedHigh.points!;
-  else if (flaggedCount >= cfg.summaryFlaggedMedium) risk += summaryRules.flaggedMedium.points!;
-  if (cmp(dupAmount, cfg.aggregateCriticalAmount) > 0) risk += summaryRules.dupCritical.points!;
-  else if (cmp(dupAmount, cfg.aggregateHighAmount) > 0) risk += summaryRules.dupHigh.points!;
-  if (ghostCount > 0) risk += summaryRules.ghostAny.points!;
-  if (sequentialGroups > 0) risk += summaryRules.sequentialAny.points!;
-  if (deviating1D.length > 0) risk += summaryRules.benford.points!;
+  if (flaggedCount >= cfg.summaryFlaggedHigh) risk += summaryRules.flaggedHigh!.points!;
+  else if (flaggedCount >= cfg.summaryFlaggedMedium) risk += summaryRules.flaggedMedium!.points!;
+  if (cmp(dupAmount, cfg.aggregateCriticalAmount) > 0) risk += summaryRules.dupCritical!.points!;
+  else if (cmp(dupAmount, cfg.aggregateHighAmount) > 0) risk += summaryRules.dupHigh!.points!;
+  if (ghostCount > 0) risk += summaryRules.ghostAny!.points!;
+  if (sequentialGroups > 0) risk += summaryRules.sequentialAny!.points!;
+  if (deviating1D.length > 0) risk += summaryRules.benford!.points!;
 
   const topRiskAreas: SentinelData["summary"]["topRiskAreas"] = [];
   if (ghostCount) topRiskAreas.push({ severity: "critical", count: ghostCount, ...strings.riskGhosts(ghostCount) });

@@ -121,12 +121,23 @@ test('sentinel benford runs one distribution per document currency', { skip: !en
     ])
     const data = await runSentinel(org.orgId)
     const slices = (data.benford1D as unknown as {
-      byCurrency?: Array<{ currency: string; totalTransactions: number }>
+      byCurrency?: Array<{
+        currency: string
+        totalTransactions: number
+        digits: Array<{ digit: number; count: number; amount: string }>
+      }>
     }).byCurrency
     assert.ok(slices)
     assert.equal(slices!.length, 2)
     assert.equal(slices!.find((s) => s.currency === 'USD')?.totalTransactions, 3)
     assert.equal(slices!.find((s) => s.currency === 'CAD')?.totalTransactions, 2)
+    // Digit amounts are exact transaction-currency sums in the slice
+    // currency — never blended, never zero: USD 120 + 1800 behind digit 1,
+    // CAD 410 behind digit 4.
+    const usd = slices!.find((s) => s.currency === 'USD')!
+    assert.equal(usd.digits.find((d) => d.digit === 1)?.amount, 1920)
+    const cad = slices!.find((s) => s.currency === 'CAD')!
+    assert.equal(cad.digits.find((d) => d.digit === 4)?.amount, 410)
     // The legacy top-level shape carries the largest slice, not a blend.
     assert.equal(data.benford1D.totalTransactions, 3)
   } finally {
