@@ -29,12 +29,17 @@ export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: 
   }, [data.drivers])
   const best = data.drivers.revenue[0]
   const worst = data.drivers.cost[0]
+  // The server ranks each side by absolute movement, so the top row can be
+  // a decline (revenue) or a saving (cost). The verdict follows sign times
+  // favourability: revenue up is good, cost up is bad, flat is neutral.
+  const bestTone = !best || cmp(best.change, '0') === 0 ? 'neutral' : cmp(best.change, '0') > 0 ? 'positive' : 'negative'
+  const worstTone = !worst || cmp(worst.change, '0') === 0 ? 'neutral' : cmp(worst.change, '0') > 0 ? 'negative' : 'positive'
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={TrendingUp} accent="emerald" label={t('kpi.topRevenue')} value={best ? fmtMoney(best.change) : '—'} sub={best ? `${best.name} · ${t('kpiSub.vsPrior')}` : '—'} tone="positive" />
-        <KpiCard icon={TrendingDown} accent="red" label={t('kpi.topCost')} value={worst ? fmtMoney(worst.change) : '—'} sub={worst ? `${worst.name} · ${t('kpiSub.vsPrior')}` : '—'} tone="negative" />
+        <KpiCard icon={TrendingUp} accent="emerald" label={t('kpi.topRevenue')} value={best ? fmtMoney(best.change) : '—'} sub={best ? `${best.name} · ${t('kpiSub.vsPrior')}` : '—'} tone={bestTone} />
+        <KpiCard icon={TrendingDown} accent="red" label={t('kpi.topCost')} value={worst ? fmtMoney(worst.change) : '—'} sub={worst ? `${worst.name} · ${t('kpiSub.vsPrior')}` : '—'} tone={worstTone} />
         <div className="col-span-2">
           <Panel title={t('movers')} icon={ArrowLeftRight}>
             <DivergingBar labels={top.map((d) => d.name)} values={top.map((d) => toChartNumber(d.change))} height={Math.max(180, top.length * 26)} />
