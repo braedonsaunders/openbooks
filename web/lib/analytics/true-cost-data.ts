@@ -22,6 +22,7 @@ import {
 } from "@openbooks/engine/src/projects/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
+import { overheadApplicationSettings } from "@openbooks/engine/src/allocations/overhead-sync.ts";
 import {
   type AllocationBase,
   type AllocationMethod,
@@ -52,12 +53,17 @@ import { englishCatalogMessage } from "./catalog-strings";
  * dimension); COGS is direct cost, never burden. Accounts with spend that no
  * burden category matches surface as "Unassigned".
  *
- * Absorption: this ledger HAS an "Overhead Burden" GL account (5200) + a
- * clearing account, but neither carries postings — the applied-burden
- * mechanism is unused. Until it is, absorption uses the utilization-recovery
- * model: burden is only recovered on BILLABLE hours, so
- * applied = actual × utilization and The Gap = applied − actual. Stated in
- * the Configuration tab.
+ * Applied overhead is read from the organization's configured overhead
+ * application account (`overheadApplicationSettings`, the same account the
+ * posting kernel writes) restricted to `origin = 'overhead_applied'`
+ * project-tagged legs — the same legs `listOverheadApplications` sums. The
+ * pair's offsetting untagged leg nets to zero on the same account, so only
+ * the project-tagged legs measure applied burden. Labour dollars are the
+ * configured `cost_pool` / `direct_labor` account group (rule plus pin),
+ * the same classification that excludes direct labour from burden below.
+ *
+ * (Absorption modelling is unchanged by this classification fix and is
+ * addressed separately.)
  */
 
 export interface Dept {
@@ -344,10 +350,29 @@ export async function trueCostData(
 
   const monthCount = Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth()) + 1);
 
-  const [cfg, burdenGroups, poolGroups, acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, deptRows, baseRows] = await Promise.all([
+  // Classification owners resolve before any scan: the direct-labour
+  // account set (rule plus pin) and the configured overhead application
+  // account feed the SQL below, so no English name pattern remains.
+  const [cfg, burdenGroups, poolGroups, appliedSettings] = await Promise.all([
     loadTrueCostConfig(orgId),
     resolveAccountGroups("burden", orgId),
     resolveAccountGroups("cost_pool", orgId),
+    overheadApplicationSettings(orgId),
+  ]);
+  const directLaborIds = new Set(
+    [...poolGroups.byAccount.entries()].filter(([, g]) => g.key === "direct_labor").map(([id]) => id),
+  );
+  const laborIdList = [...directLaborIds];
+  const laborFilter = laborIdList.length > 0
+    ? sql`l.account_id in (${sql.join(laborIdList.map((id) => sql`${id}::uuid`), sql`, `)})`
+    : sql`1 = 0`;
+  // With no configured application account the mechanism is absent: the
+  // applied scan matches nothing and absorption reports unavailable.
+  const appliedAccountId = appliedSettings.accountId;
+  const appliedFilter = appliedAccountId
+    ? sql`l.account_id = ${appliedAccountId}::uuid and e.origin = 'overhead_applied' and l.project_id is not null`
+    : sql`1 = 0`;
+  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, deptRows, baseRows] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
     // translate to presentation before the burden math ever sees them.
@@ -446,15 +471,17 @@ export async function trueCostData(
       where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}
       group by 1
     `) : Promise.resolve({rows:[]})),
-    // Does the "burden applied" GL mechanism carry postings in the period?
+    // Applied burden: project-tagged legs on the configured application
+    // account with origin 'overhead_applied' — the same legs
+    // listOverheadApplications sums. The pair's offsetting untagged leg nets
+    // to zero on the same account, so it is excluded by the project tag.
     analyticsQuery(sql`
       select sub.base_currency as func, max(e.posting_date)::text as late,
-        coalesce(-sum(l.amount), 0) as applied, count(*) as lines
+        coalesce(sum(l.amount), 0) as applied, count(*) as lines
       from journal_lines l
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-      where l.org_id = ${orgId} ${ledgerScope} and a.name ~* 'burden applied|overhead burden'
+      where l.org_id = ${orgId} ${ledgerScope} and ${appliedFilter}
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1
     `),
@@ -464,17 +491,13 @@ export async function trueCostData(
     // One grouped pass per source instead of a correlated GL subquery per
     // department per basis — that shape re-scanned the window's ledger three
     // times for every department on the page.
-    // No entry join: the line carries its own posting date. And the account
-    // classification is resolved once into id sets rather than joined per
-    // line — the labour regex was being evaluated for every journal line in
-    // the window.
+    // No entry join: the line carries its own posting date. And the labour
+    // classification is the configured cost_pool / direct_labor account set
+    // (rule plus pin) resolved once above — never an account-name pattern.
     analyticsQuery(sql`
       with gl as (
         select l.department_id, sub.base_currency as func, max(e.posting_date)::text as late,
-               coalesce(sum(l.amount) filter (where l.account_id in (
-                 select id from accounts where org_id = ${orgId}
-                   and type in ('expense','expense_other','expense_deferred','cogs')
-                   and name ~* 'wage|salary|payroll|labou?r')), 0) as labor_dollars,
+               coalesce(sum(l.amount) filter (where ${laborFilter}), 0) as labor_dollars,
                coalesce(-sum(l.amount) filter (where l.account_id in (
                  select id from accounts where org_id = ${orgId}
                    and type in ('income','income_other'))), 0) as revenue,
@@ -708,9 +731,9 @@ export async function trueCostData(
 
 
   // ---- classify expense into burden categories --------------------------------
-  const directLabor = new Set(
-    [...poolGroups.byAccount.entries()].filter(([, g]) => g.key === "direct_labor").map(([id]) => id),
-  );
+  // Direct labour is the same configured cost_pool / direct_labor set that
+  // feeds the labour-dollars allocation base above: one classification.
+  const directLabor = directLaborIds;
 
   interface CatAgg {
     id: string; key: string; name: string; color: string | null;
