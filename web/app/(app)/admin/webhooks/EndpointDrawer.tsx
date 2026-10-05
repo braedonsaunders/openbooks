@@ -20,8 +20,8 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
-import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
-import { PagedTable } from '../../../components/paged-table'
+import { DrawerTabStrip } from '@/components/drawer-tab-strip'
+import { PagedTable } from '@/components/paged-table'
 
 export type EndpointDelivery = {
   id: string
