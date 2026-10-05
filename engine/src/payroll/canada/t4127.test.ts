@@ -13,7 +13,8 @@ import { payrollCertificate, resolveCertificate, type StoredCertificate } from "
 import "../packs.ts";
 import { unfilledPaths } from "../unfilled.ts";
 import { computeCaStatutory } from "./compute-statutory.ts";
-import { calculateT4127, type T4127Input, type T4127Result } from "./t4127.ts";
+import { calculateT4127, periodTaxLegs, type T4127Input, type T4127Result } from "./t4127.ts";
+import { U } from "../../money/payroll-decimal.ts";
 import { RATES_2026_JAN, RATES_2026_JUL, ratesForPayDate, type Province } from "./rates.ts";
 import { RATES_2024_JAN } from "./rates-2024.ts";
 import { RATES_2025_JAN, RATES_2025_JUL } from "./rates-2025.ts";
@@ -225,12 +226,15 @@ const GOLDENS: Golden[] = [
     input: { payDate: "2026-11-06", province: "AB", periodsPerYear: 52, ...cc1, income: "3000.00",
       ytd: { ei: "1120.00" } },
     expected: { ei: "3.07" } },
+  // The federal (TF) and provincial (TP) period legs round separately, as
+  // the CRA payroll deductions calculator withholds them; the period tax is
+  // their sum, a cent above rounding (T1 + T2) / 12 once.
   { year: 2026, label: "bonus method: Ontario monthly $5,000 + $10,000 bonus", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, ...cc1, income: "5000.00",
       nonPeriodic: "10000.00" },
-    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.98", bonusTax: "2935.92",
-      totalTax: "3614.90" },
-    expectedFactors: { A: "69313.59", A_step2: "59411.64" } },
+    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.99", bonusTax: "2935.92",
+      totalTax: "3614.91" },
+    expectedFactors: { A: "69313.59", A_step2: "59411.64", TF: "434.34", TP: "244.65" } },
   { year: 2026, label: "bonus flat 15% when annual income is $5,000 or less", citation: `hand-worked, ${ED[122]}`,
     input: { payDate: "2026-03-06", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00",
       nonPeriodic: "400.00" },
@@ -414,3 +418,12 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
   const withFunds = await tax("QC", { ftq_shares_per_period: "100", fondaction_shares_per_period: "150" });
   assert.deepEqual([withFunds.income_tax, withFunds.qc_income_tax], ["9.6900", "13.9500"]);
 });
+
+test("federal and provincial tax round to the cent separately before they add", () => {
+  // 0.26 a year over 52 periods is half a cent on each leg: each leg rounds
+  // up to 0.01, so the period owes 0.02 where rounding the combined 0.52
+  // once would owe 0.01.
+  const legs = periodTaxLegs(U("0.26"), U("0.26"), 52);
+  assert.equal(legs.federal + legs.provincial, U("0.02"));
+  assert.equal(legs.federal, U("0.01"));
+})

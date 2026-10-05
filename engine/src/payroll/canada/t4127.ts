@@ -233,6 +233,8 @@ export const T4127_FACTOR_LABELS: Readonly<Record<string, string>> = {
   T2: "Provincial tax (annual)",
   T: "Income tax this period",
   TB: "Tax on the bonus (payable now)",
+  TF: "Federal tax this period",
+  TP: "Provincial tax this period",
 };
 
 const ZERO = 0n;
@@ -583,7 +585,11 @@ export function calculateT4127(input: T4127Input): T4127Result {
     periodicTax=max0(mulRatioCents(withoutBonus.t1+withoutBonus.t2-M1,BigInt(averaging.elapsedPeriods),BigInt(P))-M)+L;
     trace("S1_NUM",U(String(P)));trace("S1_DEN",U(String(averaging.elapsedPeriods)));trace("M",M);trace("M1",M1);
   } else if (aWithoutBonus <= ZERO) periodicTax = L;
-  else periodicTax = divIntCents(withoutBonus.t1 + withoutBonus.t2, P) + L;
+  else {
+    const legs = periodTaxLegs(withoutBonus.t1, withoutBonus.t2, P);
+    trace("TF", legs.federal); trace("TP", legs.provincial);
+    periodicTax = legs.federal + legs.provincial + L;
+  }
 
   let bonusTax = ZERO;
   if (bonus > ZERO) {
@@ -615,6 +621,17 @@ export function calculateT4127(input: T4127Input): T4127Result {
     totalTax: D(periodicTax + bonusTax) as Money,
     factors,
   };
+}
+
+/**
+ * The per-period federal and provincial tax, each rounded half-up to the
+ * cent on its own. CRA's payroll deductions calculator and bureau payroll
+ * withhold the two as separate amounts, so the period's tax is the sum of
+ * the rounded legs; rounding (T1 + T2) / P once drifts by a cent whenever
+ * both remainders sit at or above the half cent.
+ */
+export function periodTaxLegs(t1: bigint, t2: bigint, P: number): { federal: bigint; provincial: bigint } {
+  return { federal: divIntCents(t1, P), provincial: divIntCents(t2, P) };
 }
 
 export type { EditionRates };

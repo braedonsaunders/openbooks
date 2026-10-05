@@ -46,7 +46,7 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
       "EI is 1,500.00 × 1.63% = $24.45 — within the $1,123.07 maximum.",
       "Employer CPP matches at $85.25; employer EI is 24.45 × 1.4 = $34.23.",
       "The enhanced-CPP income deduction (F5) is 85.25 × 1.00/5.95 = $14.33, carried wholly against periodic pay.",
-      "Annual taxable income is (1,500.00 − 14.33) × 52 = $77,254.84; federal tax on it is $8,869.87 and Saskatchewan tax is $5,938.39, so the period withholding is (8,869.87 + 5,938.39) / 52 = $284.77.",
+      "Annual taxable income is (1,500.00 − 14.33) × 52 = $77,254.84; federal tax on it is $8,869.87 and Saskatchewan tax is $5,938.39; each leg rounds to the cent per period (8,869.87 / 52 = $170.57, 5,938.39 / 52 = $114.20), so the period withholding is $284.77.",
     ],
     expected: {
       values: {
