@@ -5938,6 +5938,26 @@
           "disconnectFailed": "No se pudo pausar la cuenta."
         }
       }
+    },
+    "quoteCashPolicy": "Política de quote-to-cash",
+    "quoteCashPolicyFields": {
+      "description": "Umbral de aprobación de descuentos, activación automática, condiciones predeterminadas y caducidad de enlaces para presupuestos SaaS.",
+      "approval": "Aprobación",
+      "terms": "Condiciones",
+      "maxDiscountPercent": "Umbral de aprobación del descuento (%)",
+      "maxDiscountPercentHelp": "Los descuentos mayores requieren aprobación de Flows antes del envío.",
+      "autoActivateOnSign": "Activar automáticamente al firmar",
+      "autoActivateOnSignHelp": "Crea la suscripción en cuanto firma el cliente, sin paso manual.",
+      "defaultBillingTiming": "Facturación predeterminada",
+      "timingAdvance": "Por adelantado",
+      "timingArrears": "A posteriori",
+      "defaultStartRule": "Regla de inicio predeterminada",
+      "startQuoteDate": "Fecha del presupuesto",
+      "startNextMonth": "Primero del mes siguiente",
+      "startCustom": "Fecha personalizada",
+      "signatureExpiryDays": "Caducidad del enlace (días)",
+      "orderFormTemplateId": "Plantilla del formulario",
+      "orderFormTemplateHelp": "Plantilla PDF de la vista de firma. Vacío mantiene el valor del presupuesto."
     }
   },
   "flows": {
@@ -6554,6 +6574,10 @@
     "billingHistoryImport": {
       "title": "Importar historial de facturación",
       "description": "Importe clientes, planes, suscripciones, facturas, pagos y uso desde Chargebee, Recurly, Maxio o Zuora con conciliación de MRR, cuentas por cobrar e ingresos diferidos."
+    },
+    "quoteToCash": {
+      "title": "De presupuesto a suscripción",
+      "description": "Presupuestos SaaS con precios escalonados, aprobación de descuentos, firma electrónica y activación en un clic."
     }
   },
   "backupsManager": {

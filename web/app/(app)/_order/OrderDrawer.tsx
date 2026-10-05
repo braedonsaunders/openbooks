@@ -28,6 +28,7 @@ import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { DropShipAssessmentButton } from './DropShipAssessmentButton'
 import { OrderBackorders } from './OrderBackorders'
+import { QuoteCashSection } from './QuoteCashSection'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
@@ -503,6 +504,7 @@ export function OrderDrawer({
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
+  const tEstimates = useTranslations('estimates')
   const tCommon = useTranslations('common')
   const tFulfillment = useTranslations('fulfillment')
   const tReturns = useTranslations('returns')
@@ -1584,6 +1586,24 @@ export function OrderDrawer({
           label: tCommon('approvalFlow.historyTitle'),
           content: <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />,
         },
+        ...(kind === 'quote' ? [{
+          key: 'subscription',
+          label: tEstimates('quoteCash.tab'),
+          content: (
+            <QuoteCashSection
+              quoteId={String(doc.id)}
+              currency={doc.currency}
+              canManage={canManage}
+              docStatus={doc.status}
+              lines={order.lines
+                .filter((l) => typeof (l as { id?: unknown }).id === 'string')
+                .map((l) => ({
+                  id: (l as unknown as { id: string }).id,
+                  description: typeof l.description === 'string' ? l.description : null,
+                }))}
+            />
+          ),
+        }] : []),
         ...(backorders && kind === 'sales_order' && isApproved ? [{
           key: 'backorders',
           label: t('backorders.tab'),

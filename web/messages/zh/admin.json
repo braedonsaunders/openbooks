@@ -5938,6 +5938,26 @@
           "disconnectFailed": "无法停用账号。"
         }
       }
+    },
+    "quoteCashPolicy": "Quote-to-Cash 策略",
+    "quoteCashPolicyFields": {
+      "description": "SaaS 报价的折扣审批阈值、自动激活、默认条款和签署链接有效期。",
+      "approval": "审批",
+      "terms": "条款",
+      "maxDiscountPercent": "折扣审批阈值（%）",
+      "maxDiscountPercentHelp": "超过此值的折扣在发送前需经 Flows 审批。",
+      "autoActivateOnSign": "签署时自动激活",
+      "autoActivateOnSignHelp": "客户签署后立即创建订阅，无需手动操作。",
+      "defaultBillingTiming": "默认计费",
+      "timingAdvance": "预付",
+      "timingArrears": "后付",
+      "defaultStartRule": "默认开始规则",
+      "startQuoteDate": "报价日期",
+      "startNextMonth": "次月1日",
+      "startCustom": "自定义日期",
+      "signatureExpiryDays": "链接有效期（天）",
+      "orderFormTemplateId": "订单模板",
+      "orderFormTemplateHelp": "签署视图的 PDF 模板。留空则使用报价默认模板。"
     }
   },
   "flows": {
@@ -6554,6 +6574,10 @@
     "billingHistoryImport": {
       "title": "导入账单历史记录",
       "description": "从 Chargebee、Recurly、Maxio 或 Zuora 导入客户、套餐、订阅、发票、付款和用量，并对账 MRR、应收账款和递延收入。"
+    },
+    "quoteToCash": {
+      "title": "报价转订阅",
+      "description": "阶梯定价的 SaaS 报价，含折扣审批、电子签署和一键激活订阅。"
     }
   },
   "backupsManager": {

@@ -2,6 +2,7 @@ import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.
 import { NextResponse } from 'next/server';
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts';
 import type { Authz } from './authz';
+import type { SqlExecutor } from '@openbooks/engine/platform/database';
 import { isUuid } from './list-params';
 import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from '../app/api/_order/line-selection';
 import { cmp } from '@openbooks/engine/src/money/money.ts';
@@ -43,6 +44,7 @@ export interface OrderEditServices {
   flows: Pick<typeof import('@openbooks/engine/src/flows/index.ts'), 'submitAndReleaseIfUngated'>;
   sales: Pick<typeof import('@openbooks/engine/src/sales/sales-orders.ts'), 'issueSalesOrder' | 'SalesOrderIssueError'>;
   documentVoid: Pick<typeof import('@openbooks/engine/src/ledger/document-void.ts'), 'DocumentVoidError' | 'requestDocumentVoid'>;
+  signing: Pick<typeof import('@openbooks/engine/billing/quote-to-cash'), 'voidSignatureRequestsForSubject' | 'QUOTE_SUBJECT_TABLE'>;
 }
 
 export interface OrderPatchBody {
@@ -611,6 +613,23 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
       if (cfg.kind === 'sales_order' && !promotion.customerRoleActive) {
         throw new Error('customer role was not established while saving the sales order')
       }
+    }
+    // A sent quote's signature covers its exact presentation: any content
+    // edit voids open requests so the quote must be re-sent, never signed
+    // stale. Pure touches (revision pings without content) keep the link.
+    const contentChanged = body.lines !== undefined
+      || body.partyId !== undefined
+      || body.documentDate !== undefined
+      || body.dueDate !== undefined
+      || body.memo !== undefined
+      || body.departmentId !== undefined
+      || body.projectId !== undefined
+      || body.subsidiaryId !== undefined
+      || body.extraDims !== undefined
+    if (cfg.kind === 'quote' && contentChanged) {
+      await services.signing.voidSignatureRequestsForSubject(
+        tx as unknown as SqlExecutor, user.orgId, services.signing.QUOTE_SUBJECT_TABLE, id,
+      )
     }
     return 'saved' as const
   })

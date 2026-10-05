@@ -5938,6 +5938,26 @@
           "disconnectFailed": "アカウントを停止できませんでした。"
         }
       }
+    },
+    "quoteCashPolicy": "Quote-to-cashポリシー",
+    "quoteCashPolicyFields": {
+      "description": "SaaS見積の値引き承認しきい値、自動有効化、標準条件、署名リンク有効期限。",
+      "approval": "承認",
+      "terms": "条件",
+      "maxDiscountPercent": "値引き承認しきい値（%）",
+      "maxDiscountPercentHelp": "この値を超える値引きは送付前にFlows承認が必要です。",
+      "autoActivateOnSign": "署名時に自動有効化",
+      "autoActivateOnSignHelp": "顧客の署名直後に手動手順なしでサブスクリプションを作成します。",
+      "defaultBillingTiming": "標準の請求",
+      "timingAdvance": "前払い",
+      "timingArrears": "後払い",
+      "defaultStartRule": "標準の開始ルール",
+      "startQuoteDate": "見積日",
+      "startNextMonth": "翌月1日",
+      "startCustom": "任意の日付",
+      "signatureExpiryDays": "リンク有効期限（日）",
+      "orderFormTemplateId": "注文書テンプレート",
+      "orderFormTemplateHelp": "署名表示のPDFテンプレート。空欄の場合は見積の標準を使用。"
     }
   },
   "flows": {
@@ -6554,6 +6574,10 @@
     "billingHistoryImport": {
       "title": "請求履歴のインポート",
       "description": "Chargebee・Recurly・Maxio・Zuoraから顧客・プラン・サブスクリプション・請求書・支払い・利用量を取り込み、MRR・売掛金・前受収益を照合します。"
+    },
+    "quoteToCash": {
+      "title": "見積からサブスク化まで",
+      "description": "ランプ価格のSaaS見積、値引き承認、電子署名、ワンクリック有効化。"
     }
   },
   "extensions": {
