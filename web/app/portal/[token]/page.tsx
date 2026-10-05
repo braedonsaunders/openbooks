@@ -11,12 +11,15 @@ export default async function PortalTokenPage({ params }: { params: Promise<{ to
   const t = await getTranslations('portal')
   const session = await resolvePortalSession(token)
   if (!session) {
+    // The redirect throws to abort rendering, so it must stay outside the
+    // try: catching it here would swallow a successful consume into a 404.
+    let consumed
     try {
-      const consumed = await consumePortalLink(token)
-      redirect(`/portal/${consumed.sessionToken}`)
+      consumed = await consumePortalLink(token)
     } catch {
       notFound()
     }
+    redirect(`/portal/${consumed.sessionToken}`)
   }
   const active = session!
   const home = await withOrgContext(active.orgId, () => portalHome(active.orgId, active.partyId, db))
