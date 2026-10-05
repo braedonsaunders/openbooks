@@ -5,6 +5,7 @@ import {
   classifyDecline,
   parseExpiryNoticeDays,
   retryLadderForClass,
+  terminalDeclineDetail,
   type AutopayPolicy,
 } from "./autopay.ts";
 
@@ -46,6 +47,12 @@ test("each decline class reads its own retry ladder", () => {
   assert.deepEqual(retryLadderForClass(p, "insufficient_funds"), [3, 7, 14]);
   assert.deepEqual(retryLadderForClass(p, "hard"), []);
   assert.deepEqual(retryLadderForClass(p, "needs_authentication"), []);
+});
+
+test("terminal declines name the remedy that clears them", () => {
+  assert.match(terminalDeclineDetail("hard", "stolen_card"), /update the payment method/);
+  assert.match(terminalDeclineDetail("needs_authentication", "authentication_required"), /authentication link/);
+  assert.match(terminalDeclineDetail("soft", "do_not_honor"), /final retry/);
 });
 
 test("pre-expiry notice window is a whole day between 1 and 90", () => {
