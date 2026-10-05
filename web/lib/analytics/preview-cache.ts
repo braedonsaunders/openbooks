@@ -1,6 +1,6 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
-import { getLocale } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { readSharedCache, claimSharedCache, publishSharedCache, releaseSharedCache } from '@openbooks/jobs/read-cache'
 import { ANALYTICS_PREVIEW_FRESHNESS_MS as FRESHNESS_MS, analyticsPreviewVersionKey as versionKey, analyticsLocalPreviewVersion } from './preview-invalidation'
 export { invalidateAnalyticsPreviews } from './preview-invalidation'
@@ -22,7 +22,18 @@ const waiting: (() => void)[] = []
 
 export class AnalyticsPreviewBusyError extends Error {
   readonly status = 429
-  constructor() { super('Analytics metrics are being calculated. Use Retry metrics in a moment.'); this.name = 'AnalyticsPreviewBusyError' }
+  constructor(message: string) {
+    super(message)
+    this.name = 'AnalyticsPreviewBusyError'
+  }
+}
+
+/**
+ * The busy refusal is catalogued, never a hardcoded English string: the hub
+ * renders it beside its Retry control, which is the named remedy.
+ */
+async function busyRefusal(): Promise<AnalyticsPreviewBusyError> {
+  return new AnalyticsPreviewBusyError((await getTranslations('analytics'))('preview.busy'))
 }
 
 export function analyticsPreviewKey(authz: Authz, slug: string, query: Record<string, string | undefined>, locale: string, revision: string): string {
@@ -59,7 +70,7 @@ function decoded(raw: string | null | undefined): CachedValue | null {
 
 async function build<T>(load: () => Promise<T>): Promise<T> {
   if (builders >= MAX_BUILDERS) {
-    if (waiting.length >= 128) throw new AnalyticsPreviewBusyError()
+    if (waiting.length >= 128) throw await busyRefusal()
     await new Promise<void>((resolve) => waiting.push(resolve))
   } else builders += 1
   try { return await load() }
@@ -117,7 +128,7 @@ export async function cachedAnalyticsRead<T>(authz: Authz, slug: string, query: 
         token = await claimSharedCache(key)
         if (token !== null) break
       }
-      if (token === null) throw new AnalyticsPreviewBusyError()
+      if (token === null) throw await busyRefusal()
     }
     try {
       const value = options.admit === false ? await load() : await build(load)
