@@ -33,6 +33,8 @@ export interface SentinelStrings {
   rsfFloorUnset: string;
   /** Z-score refusal when its noise floor is not configured. */
   zscoreFloorUnset: string;
+  /** Statistics-detector refusal when historic spot coverage is missing. `detail` is the missing leg. */
+  spotRateMissing(detail: string): string;
   /** Translated names of detectors the score had to skip, for the exclusion note. */
   detectorDuplicate: string;
   detectorTrap: string;
@@ -148,6 +150,7 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
     duplicateFloorUnset: t("sentinel.forensics.duplicateFloorUnset"),
     rsfFloorUnset: t("sentinel.forensics.rsfFloorUnset"),
     zscoreFloorUnset: t("sentinel.forensics.zscoreFloorUnset"),
+    spotRateMissing: (detail) => t("sentinel.forensics.spotRateMissing", { detail }),
     detectorDuplicate: t("sentinel.detectors.duplicates"),
     detectorTrap: t("sentinel.detectors.trap"),
     detectorRsf: t("sentinel.detectors.rsf"),

@@ -3598,7 +3598,8 @@
       "trapUnavailable": "Flows中没有审批金额条件——请在支出主题流中添加总金额条件。Sentinel区间只会缩小真实限额周围的窗口。",
       "duplicateFloorUnset": "请在Sentinel→配置中设置重复下限。",
       "rsfFloorUnset": "请在Sentinel→配置中设置相对规模基线下限。",
-      "zscoreFloorUnset": "请在Sentinel→配置中设置Z分数噪声下限。"
+      "zscoreFloorUnset": "请在Sentinel→配置中设置Z分数噪声下限。",
+      "spotRateMissing": "缺少即期汇率覆盖({detail})——请通过汇率提供商导入缺失的每日汇率。"
     },
     "analysis": {
       "calendar": "日历",

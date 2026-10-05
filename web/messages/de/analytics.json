@@ -3598,7 +3598,8 @@
       "trapUnavailable": "Keine Genehmigungs-Betragsgrenzen in Flows — lege eine Gesamtbetrags-Bedingung in einem Ausgaben-Flow an. Das Sentinel-Band verengt nur das Fenster um eine echte Grenze.",
       "duplicateFloorUnset": "Lege das Duplikatminimum unter Sentinel → Konfiguration fest.",
       "rsfFloorUnset": "Lege die Basisuntergrenze der relativen Größe unter Sentinel → Konfiguration fest.",
-      "zscoreFloorUnset": "Lege die Rauschuntergrenze des Z-Werts unter Sentinel → Konfiguration fest."
+      "zscoreFloorUnset": "Lege die Rauschuntergrenze des Z-Werts unter Sentinel → Konfiguration fest.",
+      "spotRateMissing": "Keine Kassakurs-Abdeckung ({detail}) — importiere die fehlenden Tageskurse über den Wechselkursanbieter."
     },
     "analysis": {
       "calendar": "Kalender",
