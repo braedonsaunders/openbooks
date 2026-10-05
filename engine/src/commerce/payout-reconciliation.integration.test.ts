@@ -5,12 +5,14 @@ import { z } from "zod";
 import { registerChannelAdapter } from "./adapters.ts";
 import { upsertAccountMap } from "./account-maps.ts";
 import { createChannel, retryChannel, markChannelActive } from "./channels.ts";
+import { linkExternal } from "./external-links.ts";
 import { upsertChannelLocation } from "./locations.ts";
 import { ingestChannelOrder } from "./orders.ts";
 import { postChannelOrder } from "./order-posting.ts";
 import { setPostingPolicy } from "./posting-policies.ts";
 import type { ChannelOrder } from "./contracts.ts";
 import { matchPayoutLines } from "./payout-reconciliation.ts";
+import { approvePayoutSuggestion, suggestPayoutLineFix } from "./exception-assistance.ts";
 import { db, withBypass } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import {
@@ -258,6 +260,121 @@ test("manual link refuses unposted documents; adjustment reclass refoots the bat
     `)).rows[0]!;
     assert.notEqual(after.net_amount, before.net_amount, "the batch refoots after reclassification");
     assert.ok(Number(after.adjustment_amount) > Number(before.adjustment_amount));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("ambiguous payout line proposes each document with evidence; approval links and audits", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const channelId = await setup(org, actor);
+    const ingested = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3201")));
+    const first = await withBypass(() => postChannelOrder(org.orgId, actor, ingested.id));
+    assert.equal(first.status, "posted");
+    assert.ok(first.documentId);
+    // A second posted receipt for a different amount: the payout reference
+    // claims the order's cash sale while the recorded source order claims
+    // this one, so the matcher refuses to guess between the two.
+    const smaller = paidOrder("3202", {
+      subtotalMinor: 2500n,
+      taxMinor: 250n,
+      totalMinor: 3350n,
+      lines: [{
+        sku: "TEE-RED-M",
+        variantExternalId: null,
+        title: "Red Tee — M",
+        quantity: "1",
+        priceMinor: 2500n,
+        discountMinor: 0n,
+        discountCode: null,
+        taxLines: [{ jurisdiction: "NY", collectedBy: "merchant", amountMinor: 190n, ratePercent: "8.625" }],
+        giftCard: false,
+        promotionId: null,
+      }],
+      tenders: [{ gateway: "shopify_payments", amountMinor: 3350n, giftCardExternalId: null, authorizationRef: "auth-2" }],
+    });
+    const smallerIngested = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, smaller));
+    const smallerPosted = await withBypass(() => postChannelOrder(org.orgId, actor, smallerIngested.id));
+    assert.equal(smallerPosted.status, "posted");
+    assert.ok(smallerPosted.documentId);
+    const otherId = smallerPosted.documentId!;
+    await withBypass(() => linkExternal(org.orgId, actor, {
+      provider: "stripe",
+      externalAccount: "acct_1",
+      objectType: "payout",
+      externalId: "txn-amb",
+      nativeTable: "documents",
+      nativeId: first.documentId!,
+    }, "salesChannels"));
+    await withBypass(() => linkExternal(org.orgId, actor, {
+      provider: "stripe",
+      externalAccount: "acct_1",
+      objectType: "order",
+      externalId: "order-9",
+      nativeTable: "documents",
+      nativeId: otherId,
+    }, "salesChannels"));
+
+    const imported = await importSettlementBatch(org.orgId, actor, {
+      provider: "stripe",
+      externalRef: "po_ambiguous_1",
+      settlementDate: "2026-07-10",
+      currency: "CAD",
+      lines: [{
+        kind: "charge",
+        amount: "60.40",
+        externalRef: "txn-amb",
+        currency: "CAD",
+        meta: { sourceOrderId: "order-9" },
+      }],
+    }, {
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing,
+      subsidiaryId: org.subsidiaryId,
+    }, null);
+    const matched = await matchPayoutLines(org.orgId, imported.batchId, actor, null);
+    const queued = matched.lines.find((line) => line.status === "unmatched");
+    assert.ok(queued && queued.status === "unmatched");
+    assert.equal(queued.reason, "ambiguous_link", "the matcher alone refuses to guess");
+
+    const suggestion = await suggestPayoutLineFix(org.orgId, queued.lineId);
+    assert.equal(suggestion.code, "ambiguous_candidates");
+    assert.equal(suggestion.candidates.length, 2, `expected both receipts proposed, got ${JSON.stringify(suggestion.candidates.map((c) => c.label))}`);
+    assert.equal(suggestion.modelRanked, false);
+    const [top, second] = suggestion.candidates as [typeof suggestion.candidates[number], typeof suggestion.candidates[number]];
+    assert.equal(top!.kind, "link_document");
+    assert.equal(top!.confidence, "high", "the exact amount match ranks first");
+    assert.ok(top!.action.type === "link_document" && top!.action.documentId === first.documentId);
+    assert.ok(top!.evidence.some((signal) => signal.includes("equals the document total")));
+    assert.equal(second!.confidence, "low", "the differing amount is flagged, not guessed");
+    assert.ok(second!.evidence.some((signal) => signal.includes("Amounts differ")));
+
+    // Approving the lower-ranked candidate links exactly that document:
+    // the operator's choice wins over the ranking.
+    const approved = await approvePayoutSuggestion(org.orgId, actor, queued.lineId, { rank: 1, applyToSimilar: false }, null);
+    assert.equal(approved.linked.length, 1);
+    assert.equal(approved.skipped, 0);
+    assert.equal(approved.linked[0]!.documentId, otherId);
+    const stored = (await db.execute<{ document_id: string | null }>(sql`
+      select document_id from psp_settlement_lines where id = ${queued.lineId} and org_id = ${org.orgId}
+    `)).rows[0];
+    assert.equal(stored!.document_id, otherId, "approval writes the chosen link");
+    const audits = (await db.execute<{ action: string; changes: unknown }>(sql`
+      select action, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'psp_settlement_lines' and row_id = ${queued.lineId}
+       order by at
+    `)).rows;
+    assert.ok(audits.some((row) => JSON.stringify(row.changes).includes("suggestionApproved")), "the approval decision is audited");
+    assert.ok(audits.some((row) => row.action === "link"), "the link itself is audited");
+
+    await assert.rejects(
+      () => approvePayoutSuggestion(org.orgId, actor, queued.lineId, { rank: 5, applyToSimilar: false }, null),
+      /one of the proposed candidates/,
+      "an unknown rank refuses naming the remedy",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

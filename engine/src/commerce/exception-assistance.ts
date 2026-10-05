@@ -6,6 +6,15 @@ import { upsertChannelLocation } from "./locations.ts";
 import { loadChannelOrder, type ChannelOrderDetail } from "./orders.ts";
 import { postChannelOrder } from "./order-posting.ts";
 import {
+  findLineSourceOrders,
+  findOrderRefundDocumentIds,
+  findOrderSaleDocumentId,
+  lineExternalDocumentIds,
+  readSettlementDocument,
+  type LineDocumentEvidence,
+} from "./payout-reconciliation.ts";
+import { isMatchableSettlementLineKind, setSettlementLineDocument } from "../payments/psp-settlement.ts";
+import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
@@ -29,11 +38,12 @@ export type SuggestionAction =
   | { type: "link_variant"; variantExternalId: string; itemId: string }
   | { type: "map_account"; role: string; key: string; accountId: string; effectiveFrom: string }
   | { type: "map_location"; externalLocationId: string; externalName: string; stockLocationId: string }
+  | { type: "link_document"; documentId: string }
   | { type: "manual"; note: string };
 
 export interface SuggestionCandidate {
   rank: number;
-  kind: "link_variant" | "map_account" | "map_location" | "manual";
+  kind: "link_variant" | "map_account" | "map_location" | "link_document" | "manual";
   /** The exact record the approval would write: item code, account or location name. */
   label: string;
   detail: string;
@@ -682,5 +692,329 @@ export async function rejectExceptionSuggestion(orgId: string, actor: string, or
       values (${orgId}, 'channel_orders', ${orderId}, 'update',
         ${JSON.stringify({ before: { exceptionCode: order.exceptionCode }, after: { exceptionCode: order.exceptionCode, suggestionRejected: true }, reason: why })}::jsonb, ${actor})`);
     if (inserted.rowCount !== 1) throw new Error("Rejection audit insert matched no row; the decision was lost");
+  });
+}
+
+/**
+ * Payout unmatched-line assistance. An unmatched settlement line gets the
+ * same treatment as a parked channel order: the engine replays the
+ * matcher's own identity chain (provider reference, then channel order) and
+ * proposes each posted document it finds as a ranked link candidate with
+ * the evidence behind it. The automatic matcher never guesses between
+ * several documents; the assistant lists them so the operator can. Approval
+ * links the chosen document through the settlement link writer — which
+ * re-validates the document and audits the link — plus a decision row naming
+ * who approved the proposal. Nothing here applies itself.
+ */
+
+const PAYOUT_FEATURE_REMEDY = "Enable Banking in Company Settings → Features.";
+
+export interface PayoutLineSuggestion {
+  lineId: string;
+  batchId: string;
+  provider: string;
+  /** Discovery outcome: what the identity chain found behind the line. */
+  code: "ambiguous_candidates" | "single_candidate" | "candidates_unposted" | "links_dangling" | "no_candidate" | "already_linked" | "not_matchable";
+  /** Stable key grouping batch lines blocked by the same cause for fix-all-similar. */
+  groupKey: string;
+  candidates: SuggestionCandidate[];
+  /** Unlinked batch lines waiting on the same cause, including this one. */
+  similarCount: number;
+  explanation: string;
+  /** The engine never calls the model; the web layer may reword through it. */
+  modelRanked: false;
+}
+
+type PayoutLineRow = {
+  id: string;
+  batchId: string;
+  kind: string;
+  externalRef: string | null;
+  description: string | null;
+  amount: string;
+  currency: string | null;
+  documentId: string | null;
+  meta: Record<string, unknown> | null;
+  provider: string;
+};
+
+async function loadPayoutLine(orgId: string, lineId: string): Promise<PayoutLineRow> {
+  const row = (await db.execute<PayoutLineRow>(sql`
+    select l.id, l.batch_id as "batchId", l.kind, l.external_ref as "externalRef",
+           l.description, l.amount::text as amount, l.currency, l.document_id as "documentId",
+           l.meta, b.provider
+      from psp_settlement_lines l
+      join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
+     where l.org_id = ${orgId} and l.id = ${lineId}`)).rows[0];
+  if (!row) {
+    refuse(
+      "payout_line_unknown",
+      "The settlement line does not belong to this organization.",
+      "Reload the payouts workspace and choose an unmatched line from this organization.",
+      "lineId",
+    );
+  }
+  return row;
+}
+
+/** Exact decimal-text equality without arithmetic: "100.5" reads as "100.50", never as a float. */
+function decimalTextEqual(a: string | null, b: string | null): boolean {
+  const clean = (value: string | null): string | null => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return null;
+    const [whole, fraction = ""] = trimmed.split(".") as [string, string];
+    const stripped = fraction.replace(/0+$/, "");
+    return stripped === "" ? whole : `${whole}.${stripped}`;
+  };
+  const left = clean(a);
+  const right = clean(b);
+  return left !== null && left === right;
+}
+
+function payoutManual(provider: string, code: PayoutLineSuggestion["code"], label: string, detail: string, evidence: string[]): Omit<PayoutLineSuggestion, "lineId" | "batchId" | "similarCount"> {
+  return {
+    provider,
+    code,
+    groupKey: `payout:${code}:${provider}`,
+    candidates: [{ rank: 0, kind: "manual", label, detail, confidence: "low", evidence, action: { type: "manual", note: detail } }],
+    explanation: `${label}. ${detail}`,
+    modelRanked: false,
+  };
+}
+
+function describeDocument(doc: LineDocumentEvidence): string {
+  const total = doc.total !== null ? ` for ${doc.currency ?? ""} ${doc.total}`.trimEnd() : "";
+  return `${doc.documentNumber ?? "the document"} (posted ${doc.kind}${total ? `, ${total}` : ""})`;
+}
+
+/**
+ * Deterministic proposed link for one settlement line. Candidates are the
+ * posted documents the matcher's own identity chain finds; ranking prefers
+ * an exact amount match, never a guess. Identical data gives identical
+ * proposals.
+ */
+export async function suggestPayoutLineFix(orgId: string, lineId: string): Promise<PayoutLineSuggestion> {
+  return suggestPayoutLineFixInner(orgId, lineId, true);
+}
+
+async function suggestPayoutLineFixInner(orgId: string, lineId: string, includeSimilar: boolean): Promise<PayoutLineSuggestion> {
+  const line = await loadPayoutLine(orgId, lineId);
+  if (!isMatchableSettlementLineKind(line.kind)) {
+    return {
+      lineId: line.id, batchId: line.batchId, similarCount: 1,
+      ...payoutManual(line.provider, "not_matchable", `Kind "${line.kind}" never links`, `${line.kind} lines settle provider charges, never native documents; mark the line as an adjustment when it is one.`, [`Line kind ${line.kind} is outside the matcher`]),
+    };
+  }
+  if (line.documentId) {
+    const stored = await readSettlementDocument(orgId, line.documentId);
+    if (stored && stored.status === "posted") {
+      return {
+        lineId: line.id, batchId: line.batchId, similarCount: 1,
+        ...payoutManual(line.provider, "already_linked", `Already linked to ${stored.documentNumber ?? "a posted document"}`, "This line already points at a posted document; matching again changes nothing.", [`Stored link resolves to posted ${stored.kind} ${stored.documentNumber ?? stored.id}`]),
+      };
+    }
+  }
+  const meta = line.meta ?? {};
+  const sourceOrderId = typeof meta.sourceOrderId === "string" ? meta.sourceOrderId : null;
+  const provenance = new Map<string, string[]>();
+  const claim = (id: string, signal: string): void => {
+    provenance.set(id, [...(provenance.get(id) ?? []), signal]);
+  };
+  for (const id of await lineExternalDocumentIds(orgId, line.provider, [line.externalRef, sourceOrderId])) {
+    claim(id, `Provider reference "${line.externalRef ?? sourceOrderId}" claims this document directly.`);
+  }
+  const orders = line.provider === "shopify_payments" && sourceOrderId && sourceOrderId.trim() !== ""
+    ? await findLineSourceOrders(orgId, sourceOrderId)
+    : [];
+  const isRefundLine = line.kind === "refund" || line.kind === "dispute" || line.kind === "dispute_reversal";
+  for (const order of orders) {
+    if (isRefundLine) {
+      for (const id of await findOrderRefundDocumentIds(orgId, order.id)) {
+        claim(id, `Channel order ${order.externalNumber} posted its refund as this document.`);
+      }
+    } else {
+      const saleId = await findOrderSaleDocumentId(orgId, { postingDocumentId: order.postingDocumentId, summaryId: order.summaryId });
+      if (saleId) claim(saleId, `Channel order ${order.externalNumber} posted as this document.`);
+    }
+  }
+  const found: Array<{ id: string; doc: LineDocumentEvidence | null; signals: string[] }> = [];
+  for (const [id, signals] of provenance) {
+    found.push({ id, doc: await readSettlementDocument(orgId, id), signals });
+  }
+  const posted = found.filter((entry): entry is { id: string; doc: LineDocumentEvidence; signals: string[] } => entry.doc !== null && entry.doc.status === "posted");
+  const unposted = found.filter((entry) => entry.doc !== null && entry.doc.status !== "posted");
+  const dangling = found.filter((entry) => entry.doc === null);
+  const lineMoney = `${line.currency ?? ""} ${line.amount}`.trim();
+  if (posted.length > 0) {
+    const code = posted.length > 1 ? "ambiguous_candidates" : "single_candidate";
+    const scored = posted
+      .map((entry) => ({
+        entry,
+        exact: decimalTextEqual(line.amount, entry.doc.total)
+          && (line.currency ?? "").toUpperCase() === (entry.doc.currency ?? "").toUpperCase(),
+      }))
+      .sort((a, b) => Number(b.exact) - Number(a.exact) || (a.entry.doc.documentNumber ?? "").localeCompare(b.entry.doc.documentNumber ?? ""));
+    const candidates = scored.map((item, index): SuggestionCandidate => {
+      const doc = item.entry.doc;
+      const label = `${doc.documentNumber ?? "Unnumbered document"} · ${doc.kind}`;
+      return {
+        rank: index,
+        kind: "link_document",
+        label,
+        detail: `Link this line to ${describeDocument(doc)}.`,
+        confidence: item.exact ? "high" : posted.length === 1 ? "medium" : "low",
+        evidence: [
+          ...item.entry.signals,
+          `${doc.documentNumber ?? doc.id} is a posted ${doc.kind}${doc.total !== null ? ` for ${doc.currency ?? ""} ${doc.total}` : ""}.`,
+          item.exact
+            ? `The line amount ${lineMoney} equals the document total.`
+            : `Amounts differ — line ${lineMoney} against document total ${doc.currency ?? ""} ${doc.total ?? "unknown"}; confirm before applying.`,
+        ],
+        action: { type: "link_document", documentId: doc.id },
+      };
+    });
+    const top = candidates[0]!;
+    const similar = includeSimilar ? await similarPayoutLineIds(orgId, line.batchId, `payout:${code}:${line.provider}`, 200) : [line.id];
+    return {
+      lineId: line.id,
+      batchId: line.batchId,
+      provider: line.provider,
+      code,
+      groupKey: `payout:${code}:${line.provider}`,
+      candidates,
+      similarCount: similar.length,
+      explanation: posted.length > 1
+        ? `The matcher refuses to guess between ${posted.length} documents; top proposal for this line: ${top.detail} Evidence: ${top.evidence.join(" ")} Approving links this line only unless fix-all-similar is chosen — nothing else changes.`
+        : `Proposed link for this line: ${top.detail} Evidence: ${top.evidence.join(" ")} Approving links the line; the link writer re-validates the document first.`,
+      modelRanked: false,
+    };
+  }
+  if (unposted.length > 0) {
+    const names = unposted.map((entry) => entry.doc!.documentNumber ?? "an unnumbered document").join(", ");
+    return {
+      lineId: line.id, batchId: line.batchId, similarCount: 1,
+      ...payoutManual(line.provider, "candidates_unposted", `Post ${names}`, `The identity chain finds ${names}, but it is not posted and a line links only to a posted document. Post it, then match the payout again.`, unposted.flatMap((entry) => [...entry.signals, `${entry.doc!.documentNumber ?? entry.id} is ${entry.doc!.status}, not posted.`])),
+    };
+  }
+  if (dangling.length > 0) {
+    return {
+      lineId: line.id, batchId: line.batchId, similarCount: 1,
+      ...payoutManual(line.provider, "links_dangling", "The claimed document is gone", "The provider reference claims a document that no longer belongs to this organization. Find its replacement receipt and link the line to it manually.", dangling.flatMap((entry) => [...entry.signals, "The claimed document is gone from this organization."])),
+    };
+  }
+  return {
+    lineId: line.id, batchId: line.batchId, similarCount: 1,
+    ...payoutManual(line.provider, "no_candidate", "No document claims this line", "No native document claims this provider reference; link the receipt manually, or mark the line as an adjustment.", [`Provider reference "${line.externalRef ?? sourceOrderId ?? line.description ?? line.id}" names no document`]),
+  };
+}
+
+/** Unlinked batch lines waiting on the same discovery outcome, oldest first. */
+export async function similarPayoutLineIds(orgId: string, batchId: string, groupKey: string, limit = 200): Promise<string[]> {
+  const rows = (await db.execute<{ id: string; kind: string }>(sql`
+    select id, kind from psp_settlement_lines
+     where org_id = ${orgId} and batch_id = ${batchId} and document_id is null
+     order by line_number limit ${limit}`)).rows;
+  const out: string[] = [];
+  for (const row of rows) {
+    if (!isMatchableSettlementLineKind(row.kind)) continue;
+    const suggestion = await suggestPayoutLineFixInner(orgId, row.id, false);
+    if (suggestion.groupKey === groupKey) out.push(row.id);
+  }
+  return out;
+}
+
+async function writePayoutApprovalAudit(orgId: string, actor: string, lineId: string, code: string, detail: string): Promise<void> {
+  const inserted = await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'psp_settlement_lines', ${lineId}, 'update',
+      ${JSON.stringify({ before: { unmatchedReason: code }, after: { suggestionApproved: detail }, reason: "Operator approved the proposed payout fix" })}::jsonb, ${actor})`);
+  if (inserted.rowCount !== 1) throw new Error("Approval audit insert matched no row; the decision was lost");
+}
+
+/**
+ * Apply the approved link candidate, then the same treatment for similar
+ * lines when asked: each similar line gets its own top-ranked link, never
+ * the approved line's document. The candidate is recomputed server-side:
+ * the request names a rank, never a target, so a tampered body cannot
+ * redirect the link. The link writer re-validates every document and audits
+ * every link; unposted or vanished documents are skipped, never forced.
+ */
+export async function approvePayoutSuggestion(
+  orgId: string,
+  actor: string,
+  lineId: string,
+  input: { rank: number; applyToSimilar: boolean },
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<{ applied: string; linked: Array<{ lineId: string; documentId: string }>; skipped: number }> {
+  if (!Number.isInteger(input.rank) || input.rank < 0) {
+    refuse(
+      "payout_assistance_candidate_unknown",
+      "The chosen fix is not one of the proposed candidates.",
+      "Reload the suggestion and approve one of the listed fixes.",
+      "rank",
+    );
+  }
+  return withOrg(orgId, async () => {
+    if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
+      refuse("payout_feature_off", "Payout reconciliation is turned off for this organization.", PAYOUT_FEATURE_REMEDY);
+    }
+    const suggestion = await suggestPayoutLineFix(orgId, lineId);
+    const candidate = suggestion.candidates[input.rank];
+    if (!candidate) {
+      refuse(
+        "payout_assistance_candidate_unknown",
+        "The chosen fix is not one of the proposed candidates.",
+        "Reload the suggestion and approve one of the listed fixes.",
+        "rank",
+      );
+    }
+    if (candidate.action.type !== "link_document") {
+      refuse(
+        "payout_assistance_manual_only",
+        "This line has no document the assistant can link.",
+        candidate.detail,
+        "rank",
+      );
+    }
+    const targets = input.applyToSimilar
+      ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, 200)
+      : [lineId];
+    const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
+    const linked: Array<{ lineId: string; documentId: string }> = [];
+    let skipped = 0;
+    for (const targetId of ordered) {
+      const live = targetId === lineId ? suggestion : await suggestPayoutLineFix(orgId, targetId);
+      if (live.groupKey !== suggestion.groupKey) {
+        skipped += 1;
+        continue;
+      }
+      const pick = targetId === lineId ? candidate : live.candidates[0];
+      if (!pick || pick.action.type !== "link_document") {
+        skipped += 1;
+        continue;
+      }
+      const doc = await readSettlementDocument(orgId, pick.action.documentId);
+      if (!doc || doc.status !== "posted") {
+        skipped += 1;
+        continue;
+      }
+      await setSettlementLineDocument(orgId, live.batchId, targetId, pick.action.documentId, actor, allowedSubsidiaryIds);
+      await writePayoutApprovalAudit(orgId, actor, targetId, suggestion.code, `${doc.documentNumber ?? doc.id} linked on approval. Similar: ${input.applyToSimilar ? suggestion.groupKey : "this line only"}.`);
+      linked.push({ lineId: targetId, documentId: pick.action.documentId });
+    }
+    if (linked.length === 0) {
+      refuse(
+        "payout_assistance_candidate_stale",
+        "The proposed document changed before approval.",
+        "Reload the suggestion and approve the fresh proposal.",
+        "rank",
+      );
+    }
+    const first = linked[0]!;
+    const applied = input.applyToSimilar
+      ? `${linked.length} line${linked.length === 1 ? "" : "s"} linked${skipped > 0 ? `, ${skipped} skipped (their proposal changed)` : ""}.`
+      : `Line linked to ${first.documentId}.`;
+    return { applied, linked, skipped };
   });
 }
