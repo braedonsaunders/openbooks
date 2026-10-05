@@ -93,6 +93,8 @@ export const camPools = pgTable(
     periodStartsOn: date("period_starts_on").notNull(),
     periodEndsOn: date("period_ends_on").notNull(),
     allocationBasis: text("allocation_basis", { enum: ["rentable_area", "equal", "custom"] }).notNull().default("rentable_area"),
+    /** Rentable-area pools: whether occupied leases share vacant area or the landlord absorbs it. */
+    vacancyTreatment: text("vacancy_treatment", { enum: ["occupied_area", "total_rentable_area"] }).notNull().default("occupied_area"),
     budgetAmount: money("budget_amount").notNull().default("0"),
     actualAmount: money("actual_amount"),
     expenseAccountIds: jsonb("expense_account_ids").$type<string[]>().notNull().default([]),
@@ -106,6 +108,7 @@ export const camPools = pgTable(
     check("cam_pools_window", sql`${t.periodEndsOn} >= ${t.periodStartsOn}`),
     check("cam_pools_budget_nonnegative", sql`${t.budgetAmount} >= 0`),
     check("cam_pools_expense_accounts_array", sql`jsonb_typeof(${t.expenseAccountIds}) = 'array'`),
+    check("cam_pools_vacancy_treatment_check", sql`${t.vacancyTreatment} in ('occupied_area', 'total_rentable_area')`),
   ],
 );
 
