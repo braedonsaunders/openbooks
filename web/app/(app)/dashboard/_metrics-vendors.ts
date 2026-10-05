@@ -1,5 +1,6 @@
 import 'server-only'
 import { getTranslations } from 'next-intl/server'
+import { cmp } from '@openbooks/engine/money'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
 import { vendorData } from '@/lib/analytics/vendor-data'
 import { spendVelocityData } from '@/lib/analytics/spend-velocity-data'
@@ -84,13 +85,23 @@ export async function loadVendorWidgetMetrics(
     // The dashboard's own loader: same scope, same window, same figures.
     const data = await vendorData(window, ctx.orgId, ctx.allowedSubsidiaryIds)
     out.vendorPeriodLabel = data.period.label
-    out.concentrationHhi = { available: true, value: data.totals.hhiScaled }
-    out.concentrationTop5Share = { available: true, value: data.totals.top5SharePct }
-    out.concentrationBand = concentrationBand(
-      data.totals.hhiScaled,
-      data.config.hhiWarning,
-      data.config.hhiCritical,
-    )
+    // Concentration of nothing is not diversification: with no vendor spend
+    // the tile stays unavailable by name instead of reading green.
+    if (cmp(data.totals.spend, '0') <= 0) {
+      const t = await analyticsReason()
+      const noSpend = t('vendor.empty.noSpend')
+      out.concentrationHhi = unavailable(noSpend)
+      out.concentrationTop5Share = unavailable(noSpend)
+      out.concentrationBand = null
+    } else {
+      out.concentrationHhi = { available: true, value: data.totals.hhiScaled }
+      out.concentrationTop5Share = { available: true, value: data.totals.top5SharePct }
+      out.concentrationBand = concentrationBand(
+        data.totals.hhiScaled,
+        data.config.hhiWarning,
+        data.config.hhiCritical,
+      )
+    }
     if (need('vendorOnTimeRate', 'vendorAvgDaysToPay', 'vendorLateSpend', 'vendorUnratedCount')) {
       const t = await analyticsReason()
       const noHistory = t('vendor.payment.noHistory')

@@ -1840,7 +1840,8 @@
       "billsSpend": "{bills} Rechnungen · {spend} Ausgaben"
     },
     "empty": {
-      "noLatePaid": "Keine verspätet bezahlten Ausgaben."
+      "noLatePaid": "Keine verspätet bezahlten Ausgaben.",
+      "noSpend": "Keine Lieferantenausgaben in diesem Zeitraum."
     },
     "gauge": {
       "balanced": "Ausgewogen",

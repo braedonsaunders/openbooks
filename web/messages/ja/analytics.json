@@ -1840,7 +1840,8 @@
       "billsSpend": "仕入請求書{bills}件 · 支出{spend}"
     },
     "empty": {
-      "noLatePaid": "延滞支払の支出はありません。"
+      "noLatePaid": "延滞支払の支出はありません。",
+      "noSpend": "この期間の仕入先支出はありません。"
     },
     "gauge": {
       "balanced": "均衡",

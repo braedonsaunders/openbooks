@@ -1934,7 +1934,8 @@
     },
     "days": "{days}d",
     "empty": {
-      "noLatePaid": "No late-paid spend."
+      "noLatePaid": "No late-paid spend.",
+      "noSpend": "No vendor spend in this period."
     },
     "drill": {
       "billsSpend": "{bills} bills · {spend} spend"
