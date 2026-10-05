@@ -30,6 +30,24 @@ const unapplyCreditSettlement = (orgId: string, userId: string | null, applicati
   unapplyCreditSettlementScoped(orgId, userId, applicationId, null);
 
 /**
+ * Every settlement case below needs the same isolated stage: one scratch org
+ * with one admin actor, dropped when the case ends. The display name stays at
+ * the call site so actor columns keep a readable per-case author.
+ */
+async function withCreditOrg(
+  displayName: string,
+  work: (org: Awaited<ReturnType<typeof createScratchOrg>>, userId: string) => Promise<void>,
+): Promise<void> {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, displayName, "admin"));
+    await work(org, userId);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+}
+
+/**
  * Live-Postgres: applying a posted credit memo to a posted invoice when NO cash
  * moves. Before this path existed, `postPayment` refused any payment carrying
  * zero cash allocations ("select at least one open item to apply"), so a credit
@@ -120,10 +138,8 @@ async function entryCount(orgId: string): Promise<number> {
   return Number(row!.n);
 }
 
-test("a full credit settles an invoice with no cash and posts no journal entry", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit settler", "admin"));
+test("a full credit settles an invoice with no cash and posts no journal entry", { skip: !DB }, () =>
+  withCreditOrg("Credit settler", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-1", "210");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-1", "210");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -166,15 +182,11 @@ test("a full credit settles an invoice with no cash and posts no journal entry",
            and row_id = ${result.applicationIds[0]!} and action = 'insert'`)).rows[0],
     );
     assert.equal(Number(audit!.n), 1);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("a partial credit leaves the remainder open on both sides", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Partial settler", "admin"));
+test("a partial credit leaves the remainder open on both sides", { skip: !DB }, () =>
+  withCreditOrg("Partial settler", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-2", "500");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-2", "200");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -193,15 +205,11 @@ test("a partial credit leaves the remainder open on both sides", { skip: !DB }, 
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "380.0000");
     assert.equal(await sourceOpenBalance(org.orgId, creditLine), "80.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("applying more than the credit's open balance is refused", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Over applier", "admin"));
+test("applying more than the credit's open balance is refused", { skip: !DB }, () =>
+  withCreditOrg("Over applier", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-3", "500");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-3", "200");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -223,15 +231,11 @@ test("applying more than the credit's open balance is refused", { skip: !DB }, a
       /exceed/i,
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "500.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("a settlement with no credits is refused rather than reporting success", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Empty settler", "admin"));
+test("a settlement with no credits is refused rather than reporting success", { skip: !DB }, () =>
+  withCreditOrg("Empty settler", async (org, userId) => {
     await assert.rejects(
       () =>
         withBypass(() =>
@@ -245,15 +249,11 @@ test("a settlement with no credits is refused rather than reporting success", { 
         ),
       /at least one credit/i,
     );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("a settlement dated into a closed AR period is refused", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Closed period settler", "admin"));
+test("a settlement dated into a closed AR period is refused", { skip: !DB }, () =>
+  withCreditOrg("Closed period settler", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-4", "90");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-4", "90");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -281,15 +281,11 @@ test("a settlement dated into a closed AR period is refused", { skip: !DB }, asy
       /AR is closed for this period/i,
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "90.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("releasing a credit settlement reopens both balances exactly once", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Releaser", "admin"));
+test("releasing a credit settlement reopens both balances exactly once", { skip: !DB }, () =>
+  withCreditOrg("Releaser", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-5", "310");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-5", "310");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -327,15 +323,11 @@ test("releasing a credit settlement reopens both balances exactly once", { skip:
       /not live/i,
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "310.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("the released credit can be applied again", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Reapplier", "admin"));
+test("the released credit can be applied again", { skip: !DB }, () =>
+  withCreditOrg("Reapplier", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-6", "75");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-6", "75");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -359,15 +351,11 @@ test("the released credit can be applied again", { skip: !DB }, async () => {
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
     assert.equal(await sourceOpenBalance(org.orgId, creditLine), "0.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("a credit the wrong party owns cannot settle this party's invoice", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Cross party", "admin"));
+test("a credit the wrong party owns cannot settle this party's invoice", { skip: !DB }, () =>
+  withCreditOrg("Cross party", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-7", "60");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-7", "60");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -395,15 +383,11 @@ test("a credit the wrong party owns cannot settle this party's invoice", { skip:
       /party/i,
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "60.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("a credit naming the wrong source document is refused", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Wrong source", "admin"));
+test("a credit naming the wrong source document is refused", { skip: !DB }, () =>
+  withCreditOrg("Wrong source", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-8", "45");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-8", "45");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -426,15 +410,11 @@ test("a credit naming the wrong source document is refused", { skip: !DB }, asyn
       /source document/i,
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "45.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("the panel's state reports what a credit settled and what is left", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "State reader", "admin"));
+test("the panel's state reports what a credit settled and what is left", { skip: !DB }, () =>
+  withCreditOrg("State reader", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STATE-1", "400");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-STATE-1", "250");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -475,15 +455,11 @@ test("the panel's state reports what a credit settled and what is left", { skip:
     const released = await withBypass(() => creditSettlementState(org.orgId, creditId));
     assert.equal(released!.open, "250.0000");
     assert.deepEqual(released!.settlements, []);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("an unposted credit has no settlement state to show", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Draft reader", "admin"));
+test("an unposted credit has no settlement state to show", { skip: !DB }, () =>
+  withCreditOrg("Draft reader", async (org, userId) => {
     const draftId = randomUUID();
     await withBypass(async () => {
       await db.execute(sql`
@@ -497,23 +473,19 @@ test("an unposted credit has no settlement state to show", { skip: !DB }, async 
     // The panel keys off this null and renders nothing, rather than offering
     // an Apply button for a credit with no posted open item behind it.
     assert.equal(await withBypass(() => creditSettlementState(org.orgId, draftId)), null);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // The retry fence: one idempotency key, one settlement.
 // ---------------------------------------------------------------------------
 
-test("a retried apply with the same key replays the settlement it already wrote", { skip: !DB }, async () => {
-  // A PARTIAL application is the duplication case: app_check_open only stops
-  // a retry that overdraws the credit, so before the fence a resubmit wrote a
-  // second applications row beside the first and the operator saw success
-  // twice. The retry now replays the first result byte-for-byte.
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit retrier", "admin"));
+test("a retried apply with the same key replays the settlement it already wrote", { skip: !DB }, () =>
+  withCreditOrg("Credit retrier", async (org, userId) => {
+    // A PARTIAL application is the duplication case: app_check_open only stops
+    // a retry that overdraws the credit, so before the fence a resubmit wrote a
+    // second applications row beside the first and the operator saw success
+    // twice. The retry now replays the first result byte-for-byte.
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-RETRY-1", "210");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-RETRY-1", "210");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -540,15 +512,11 @@ test("a retried apply with the same key replays the settlement it already wrote"
     assert.equal(Number(rows!.n), 1, "a retried submit must not write a second settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
     assert.equal(await sourceOpenBalance(org.orgId, creditLine), "170.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("the same key with a different payload is a named conflict, never a second settlement", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit conflict", "admin"));
+test("the same key with a different payload is a named conflict, never a second settlement", { skip: !DB }, () =>
+  withCreditOrg("Credit conflict", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CONFLICT-1", "210");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-CONFLICT-1", "210");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -584,76 +552,71 @@ test("the same key with a different payload is a named conflict, never a second 
     );
     assert.equal(Number(rows!.n), 1, "a conflicting payload must not write beside the keyed settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("a key owned by another organization fails closed as a foreign key", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  const other = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit owner", "admin"));
-    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-FK-1", "100");
-    const creditId = await postDoc(org, userId, "customer_credit", "CM-FK-1", "100");
-    const invoiceLine = await openLineId(org.orgId, invoiceId);
-    const creditLine = await openLineId(org.orgId, creditId);
-    const key = randomUUID();
-    await withBypass(() =>
-      applyStandaloneCredits(org.orgId, userId, {
-        idempotencyKey: key,
-        partyId: org.customerId,
-        side: "ar",
-        appliedOn: org.date,
-        credits: [
-          { fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId },
-        ],
-      }),
-    );
-    // The other org has its own posted pair; only the reused KEY is foreign.
-    const otherUser = await withBypass(() => createScratchUser(other.orgId, "Foreign retry", "admin"));
-    const otherInvoice = await postDoc(other, otherUser, "customer_invoice", "INV-FK-2", "100");
-    const otherCredit = await postDoc(other, otherUser, "customer_credit", "CM-FK-2", "100");
-    const otherInvoiceLine = await openLineId(other.orgId, otherInvoice);
-    const otherCreditLine = await openLineId(other.orgId, otherCredit);
-    await assert.rejects(
-      () =>
-        withBypass(() =>
-          applyStandaloneCredits(other.orgId, otherUser, {
-            idempotencyKey: key,
-            partyId: other.customerId,
-            side: "ar",
-            appliedOn: other.date,
-            credits: [
-              { fromLineId: otherCreditLine, toLineId: otherInvoiceLine, amount: "100", sourceDocumentId: otherCredit },
-            ],
-          }),
-        ),
-      (e: unknown) =>
-        e instanceof CreditApplicationConflictError && /already in use by another organization/.test(e.message),
-      "a cross-org key collision must fail closed, not read as a fresh claim",
-    );
-    const otherRows = await withBypass(async () =>
-      (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from applications where org_id = ${other.orgId}`)).rows[0],
-    );
-    assert.equal(Number(otherRows!.n), 0, "the foreign-key refusal must write nothing");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-    await withBypass(() => dropScratchOrg(other.orgId));
-  }
-});
+test("a key owned by another organization fails closed as a foreign key", { skip: !DB }, () =>
+  withCreditOrg("Credit owner", async (org, userId) => {
+    const other = await withBypass(() => createScratchOrg());
+    try {
+      const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-FK-1", "100");
+      const creditId = await postDoc(org, userId, "customer_credit", "CM-FK-1", "100");
+      const invoiceLine = await openLineId(org.orgId, invoiceId);
+      const creditLine = await openLineId(org.orgId, creditId);
+      const key = randomUUID();
+      await withBypass(() =>
+        applyStandaloneCredits(org.orgId, userId, {
+          idempotencyKey: key,
+          partyId: org.customerId,
+          side: "ar",
+          appliedOn: org.date,
+          credits: [
+            { fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId },
+          ],
+        }),
+      );
+      // The other org has its own posted pair; only the reused KEY is foreign.
+      const otherUser = await withBypass(() => createScratchUser(other.orgId, "Foreign retry", "admin"));
+      const otherInvoice = await postDoc(other, otherUser, "customer_invoice", "INV-FK-2", "100");
+      const otherCredit = await postDoc(other, otherUser, "customer_credit", "CM-FK-2", "100");
+      const otherInvoiceLine = await openLineId(other.orgId, otherInvoice);
+      const otherCreditLine = await openLineId(other.orgId, otherCredit);
+      await assert.rejects(
+        () =>
+          withBypass(() =>
+            applyStandaloneCredits(other.orgId, otherUser, {
+              idempotencyKey: key,
+              partyId: other.customerId,
+              side: "ar",
+              appliedOn: other.date,
+              credits: [
+                { fromLineId: otherCreditLine, toLineId: otherInvoiceLine, amount: "100", sourceDocumentId: otherCredit },
+              ],
+            }),
+          ),
+        (e: unknown) =>
+          e instanceof CreditApplicationConflictError && /already in use by another organization/.test(e.message),
+        "a cross-org key collision must fail closed, not read as a fresh claim",
+      );
+      const otherRows = await withBypass(async () =>
+        (await db.execute<{ n: string }>(sql`
+          select count(*)::text as n from applications where org_id = ${other.orgId}`)).rows[0],
+      );
+      assert.equal(Number(otherRows!.n), 0, "the foreign-key refusal must write nothing");
+    } finally {
+      await withBypass(() => dropScratchOrg(other.orgId));
+    }
+  }),
+);
 
-test("an invoice line cannot masquerade as the credit, even naming its own source document", { skip: !DB }, async () => {
-  // Every check except the kind passes for this input: the from-line is a
-  // posted open item of the right sign on the right control account, and its
-  // entry's source document matches the named one — it is just an INVOICE
-  // line, not a credit memo. Before the kind check, the engine stamped
-  // 'credit applied without cash' settlement evidence on a receivable, and
-  // the unapply refusal then pointed at the destructive void.
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit kind guard", "admin"));
+test("an invoice line cannot masquerade as the credit, even naming its own source document", { skip: !DB }, () =>
+  withCreditOrg("Credit kind guard", async (org, userId) => {
+    // Every check except the kind passes for this input: the from-line is a
+    // posted open item of the right sign on the right control account, and its
+    // entry's source document matches the named one — it is just an INVOICE
+    // line, not a credit memo. Before the kind check, the engine stamped
+    // 'credit applied without cash' settlement evidence on a receivable, and
+    // the unapply refusal then pointed at the destructive void.
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-KIND-1", "210");
     const targetId = await postDoc(org, userId, "customer_invoice", "INV-KIND-2", "210");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -681,15 +644,11 @@ test("an invoice line cannot masquerade as the credit, even naming its own sourc
          where org_id = ${org.orgId} and (from_line_id = ${invoiceLine} or to_line_id = ${targetLine})`)).rows[0],
     );
     assert.equal(Number(rows!.n), 0, "the refused masquerade must write nothing");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("concurrent identical submits share one settlement through the key fence", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit racer", "admin"));
+test("concurrent identical submits share one settlement through the key fence", { skip: !DB }, () =>
+  withCreditOrg("Credit racer", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-RACE-1", "210");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-RACE-1", "210");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -716,15 +675,11 @@ test("concurrent identical submits share one settlement through the key fence", 
     );
     assert.equal(Number(rows!.n), 1, "both concurrent submits resolve to one settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
 
-test("voiding a payment releases the credits it applied, and only then may they be released", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Carried credit voider", "admin"));
+test("voiding a payment releases the credits it applied, and only then may they be released", { skip: !DB }, () =>
+  withCreditOrg("Carried credit voider", async (org, userId) => {
     const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CARRIED-1", "300");
     const creditId = await postDoc(org, userId, "customer_credit", "CM-CARRIED-1", "100");
     const invoiceLine = await openLineId(org.orgId, invoiceId);
@@ -778,7 +733,5 @@ test("voiding a payment releases the credits it applied, and only then may they 
       credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
     }));
     assert.equal(await openBalance(org.orgId, invoiceLine), "200.0000");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+  }),
+);
