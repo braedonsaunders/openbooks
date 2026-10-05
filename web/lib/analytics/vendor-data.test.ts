@@ -103,11 +103,13 @@ test("vendor spend excludes parties without a vendor role", { skip: !DB }, async
       const entryId = randomUUID();
       await db.execute(sql`
         insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'NON-VENDOR-SPEND', '2026-07-10', ${org.periodId}, 'posted', 'manual')`);
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'NON-VENDOR-SPEND', '2026-07-10', ${org.periodId}, 'draft', 'manual')`);
       await db.execute(sql`
         insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate)
         values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.customerId}, '500', 'CAD', '500', '1'),
                (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.customerId}, '-500', 'CAD', '-500', '1')`);
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
     });
     const data = await withOrgContext(org.orgId, () => vendorData(
       { from: "2026-07-01", to: "2026-07-31", label: "July 2026" },
@@ -138,23 +140,29 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
       const billLine = randomUUID();
       await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, due_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
-        values (${docId}, ${org.orgId}, 'vendor_bill', ${docNum}, ${party}, ${org.subsidiaryId}, ${billDate}, ${billDate}, ${docDue}, 'CAD', '1', 'posted', '100', 0, '100', '100')`);
+        values (${docId}, ${org.orgId}, 'vendor_bill', ${docNum}, ${party}, ${org.subsidiaryId}, ${billDate}, ${billDate}, ${docDue}, 'CAD', '1', 'draft', '100', 0, '100', '100')`);
       await db.execute(sql`
         insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
-        values (${billEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${docNum}, ${billDate}, ${org.periodId}, 'posted', 'manual', ${docId})`);
+        values (${billEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${docNum}, ${billDate}, ${org.periodId}, 'draft', 'manual', ${docId})`);
       await db.execute(sql`
         insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
         values (${billLine}, ${org.orgId}, ${billEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${party}, true, '-100', 'CAD', '-100', 1),
                (${randomUUID()}, ${org.orgId}, ${billEntry}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${party}, false, '100', 'CAD', '100', 1)`);
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now() where id = ${billEntry}`);
+      await db.execute(sql`
+        update documents set status = 'posted', posted_entry_id = ${billEntry}, posting_period_id = ${org.periodId} where id = ${docId}`);
       const payEntry = randomUUID();
       const payLine = randomUUID();
       await db.execute(sql`
         insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${payEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${'PAY-' + docNum}, ${payDate}, ${org.periodId}, 'posted', 'manual')`);
+        values (${payEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${'PAY-' + docNum}, ${payDate}, ${org.periodId}, 'draft', 'manual')`);
       await db.execute(sql`
         insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
         values (${payLine}, ${org.orgId}, ${payEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${party}, true, '100', 'CAD', '100', 1),
                (${randomUUID()}, ${org.orgId}, ${payEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${party}, false, '-100', 'CAD', '-100', 1)`);
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now() where id = ${payEntry}`);
       await db.execute(sql`
         insert into applications (id, org_id, from_line_id, to_line_id, amount, source_amount,
           source_transaction_amount, source_transaction_currency, target_transaction_amount, target_transaction_currency,
