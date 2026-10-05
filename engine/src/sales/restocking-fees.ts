@@ -180,6 +180,8 @@ export type ResolvedRestockingFeeLine = {
 export type ResolveRestockingFeeResult = {
   lines: ResolvedRestockingFeeLine[];
   totalMinor: string;
+  /** Fee before any waiver, so the waiver audit records what was forgiven. */
+  unwaivedTotalMinor: string;
   currency: string;
   waived: boolean;
 };
@@ -220,6 +222,7 @@ export async function resolveRestockingFee(
   // keep working. One that did but lapsed every policy fails closed below.
   const configured = await hasAnyPolicy(runner, orgId);
   const lines: ResolvedRestockingFeeLine[] = [];
+  let unwaived = 0n;
   for (const line of input.lines) {
     const policy = await findPolicy(runner, orgId, input.returnDate, line);
     if (!policy) {
@@ -229,10 +232,12 @@ export async function resolveRestockingFee(
       }
       throw refusal("No restocking fee policy covers this return date", "not_found", 404, "Extend a restocking fee policy over the return date, create a default policy in Setup → Inventory → Restocking fees, or waive the fee with a reason");
     }
-    lines.push(feeForLine(policy, line, currency, input.waived));
+    const fee = feeForLine(policy, line, currency, false);
+    unwaived += BigInt(fee.feeMinor);
+    lines.push(input.waived ? { ...fee, feeMinor: "0", capped: false } : fee);
   }
   const total = lines.reduce((sum, line) => sum + BigInt(line.feeMinor), 0n);
-  return { lines, totalMinor: total.toString(), currency, waived: input.waived };
+  return { lines, totalMinor: total.toString(), unwaivedTotalMinor: unwaived.toString(), currency, waived: input.waived };
 }
 
 async function hasAnyPolicy(runner: SqlExecutor, orgId: string): Promise<boolean> {
