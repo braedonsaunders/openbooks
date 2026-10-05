@@ -37,6 +37,16 @@ export const runtime = "nodejs";
 
 const paramsSchema = z.object({ entity: z.string() });
 
+/**
+ * Operation names feed the idempotency ledger, which admits lowercase dotted
+ * names only; command markers read as engine function names in camelCase. The
+ * route bridges the two (setup.record_channel_ad_spend), so every declared
+ * command writes instead of tripping the ledger guard.
+ */
+export function commandOperationName(name: SetupCommandName): string {
+  return `setup.${String(name).replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase()}`;
+}
+
 const frameworkBody = z.strictObject({
   framework: z.enum(["us_asc958", "ew_sorp_frs102"]),
   reason: z.string(),
@@ -266,7 +276,7 @@ async function runCommand(
     // executes unrecorded (the claim rolls back) and maps below.
     const outcome = await executeIdempotent({
       context: applicationContextFromSession(authz, "api", requestId),
-      operation: `setup.${command.name}`,
+      operation: commandOperationName(command.name),
       idempotencyKey: requestId,
       request: { entity: entityKey, body: raw },
       execute: () => runCommandBody(authz, command, raw),
