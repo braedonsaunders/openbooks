@@ -209,3 +209,39 @@ test('sentinel consolidated money translates at document FX', { skip: !env.OPENB
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+/**
+ * The analysis population keeps documents of at least one hundred minor
+ * units in their own currency (currencies.minor_units): a USD 0.05 bill is
+ * dust in any gate, a JPY 50 bill is dust at zero decimals, while USD 1.00
+ * and KWD 0.150 stay. Under the old bare `>= 1` gate the JPY bill was
+ * analyzed and the KWD bill was dropped. The KWD bill's '0' leading digit
+ * still never enters a Benford slice: the law is defined on digits 1-9.
+ */
+test('sentinel dust gate scales with each currency precision', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    await seedVendorBills(org.orgId, org.subsidiaryId, 'Dust Vendor', [
+      { num: 'DUST-USD', currency: 'USD', fx: '1', total: '0.05', date: '2026-07-10', ref: 'D-U' },
+      { num: 'DUST-JPY', currency: 'JPY', fx: '1', total: '50', date: '2026-07-10', ref: 'D-J' },
+      { num: 'KEEP-USD', currency: 'USD', fx: '1', total: '1.00', date: '2026-07-13', ref: 'D-KU' },
+      { num: 'KEEP-KWD', currency: 'KWD', fx: '1', total: '0.150', date: '2026-07-14', ref: 'D-KK' },
+    ])
+    const data = await runSentinel(org.orgId)
+    assert.equal(data.meta.totalDocs, 2)
+    const slices1D = (data.benford1D as unknown as {
+      byCurrency?: Array<{ currency: string; totalTransactions: number }>
+    }).byCurrency
+    assert.ok(slices1D)
+    assert.equal(slices1D!.find((s) => s.currency === 'USD')?.totalTransactions, 1)
+    assert.ok(!slices1D!.some((s) => s.currency === 'JPY'), 'a JPY 50 bill is dust at zero decimals')
+    assert.ok(!slices1D!.some((s) => s.currency === 'KWD'), "a '0' leading digit is not a Benford observation")
+    const slices2D = (data.benford2D as unknown as {
+      byCurrency?: Array<{ currency: string; totalTransactions: number }>
+    }).byCurrency
+    assert.ok(slices2D)
+    assert.ok(!slices2D!.some((s) => s.currency === 'JPY'), 'the dust gate applies to every detector population')
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})

@@ -522,7 +522,11 @@ export async function sentinelData(
     throw new Error(`organization time zone "${auditZone}" is not valid — fix it in Company Settings`);
   }
 
-  // Shared filter: non-voided spend documents in the period, |total| ≥ 1.
+  // Shared filter: non-voided spend documents in the period with a readable
+  // amount — at least one hundred minor units in the document's own
+  // currency, derived from currencies.minor_units. For two-decimal
+  // currencies this is the historical one-major-unit gate bit for bit;
+  // yen-scale and three-decimal currencies stop assuming two decimals.
   // func is the posting subsidiary's functional currency (root-owned lines
   // read the org base); func_amt carries the first translation leg at ledger
   // precision, and flowRates completes the second leg per (func, date). The
@@ -537,7 +541,7 @@ export async function sentinelData(
     where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
       and coalesce(d.document_date, d.posting_date) >= ${from}
       and coalesce(d.document_date, d.posting_date) <= ${to}
-      and abs(coalesce(d.total, 0)) >= 1`;
+      and abs(coalesce(d.total, 0)) * power(10, coalesce(cu.minor_units, 2)) >= 100`;
 
   const [
     aggRows, trapRows, dupAll, weekendDetail, weekendIds,
@@ -610,7 +614,8 @@ export async function sentinelData(
       where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
-        and abs(coalesce(d.total, 0)) >= 1
+        -- Same minor-unit dust gate as the shared filter above.
+        and abs(coalesce(d.total, 0)) * power(10, coalesce(c.minor_units, 2)) >= 100
         and trunc(abs(d.total))::bigint % 100 = 99
         and round((abs(d.total) - trunc(abs(d.total))) * power(10, coalesce(c.minor_units, 2)))
             in (0, power(10, coalesce(c.minor_units, 2)) - 1)
@@ -722,10 +727,12 @@ export async function sentinelData(
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
+      left join currencies cu on cu.code = d.currency
       where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
-        and abs(coalesce(d.total, 0)) >= 1
+        -- Same minor-unit dust gate as the shared filter above.
+        and abs(coalesce(d.total, 0)) * power(10, coalesce(cu.minor_units, 2)) >= 100
         and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
       order by abs(d.total) desc
       limit 200
@@ -737,10 +744,12 @@ export async function sentinelData(
         coalesce(d.document_date, d.posting_date)::text as date
       from documents d
       left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
+      left join currencies cu on cu.code = d.currency
       where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
-        and abs(coalesce(d.total, 0)) >= 1
+        -- Same minor-unit dust gate as the shared filter above.
+        and abs(coalesce(d.total, 0)) * power(10, coalesce(cu.minor_units, 2)) >= 100
         and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
     `)),
 
@@ -997,14 +1006,17 @@ export async function sentinelData(
   const aggAll = aggRows.rows as AggregateRow[];
   const metaRow = aggAll.find((r) =>
     ["g_func", "g_cur", "g_digit1", "g_digit2", "g_trap", "g_dow", "g_date"].every((f) => Number(r[f]) === 1));
+  // Benford's law is defined on leading digits 1-9 (first digit) and 10-99
+  // (first two): a '0' leading digit or a short second digit from a sub-unit
+  // amount is not a Benford observation, so those rows never enter a slice.
   const b1Rows = {
     rows: aggAll
-      .filter((r) => Number(r.g_digit1) === 0 && Number(r.g_cur) === 0 && r.digit1 !== null)
+      .filter((r) => Number(r.g_digit1) === 0 && Number(r.g_cur) === 0 && r.digit1 !== null && String(r.digit1) !== "0")
       .map((r) => ({ currency: String(r.cur), digit: r.digit1, count: r.count, amount: r.txnAmount })),
   };
   const b2Rows = {
     rows: aggAll
-      .filter((r) => Number(r.g_digit2) === 0 && Number(r.g_cur) === 0 && r.digit2 !== null)
+      .filter((r) => Number(r.g_digit2) === 0 && Number(r.g_cur) === 0 && r.digit2 !== null && String(r.digit2).length === 2)
       .map((r) => ({ currency: String(r.cur), digits: r.digit2, count: r.count, amount: r.txnAmount })),
   };
   const trapAgg = {
