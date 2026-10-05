@@ -2957,6 +2957,7 @@
       "seasonalLow": "El gasto reducido suele concentrarse en {months}",
       "shadowItReason": "Las líneas de informes de gastos no llevan comercio ni proveedor — solo la cuenta de gastos y una descripción libre — por lo que la adopción viral de software entre empleados no se puede rastrear.",
       "fragmentationUnconfigured": "Configure el tope de fragmentación en Velocidad de gasto → Configuración",
+      "annualizedUnknown": "Las cifras anualizadas necesitan el fin del período dentro de un período fiscal declarado",
       "cliffUnconfigured": "Configure la base mínima en Velocidad de gasto → Configuración"
     },
     "banner": {

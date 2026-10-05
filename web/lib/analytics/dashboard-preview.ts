@@ -1,7 +1,7 @@
 import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { getMoneyFormatter } from '../money-server'
-import { boundChartNumber, toChartNumber } from '../chart-number'
+import { toChartNumber } from '../chart-number'
 import { formatDecimal } from '../money-format'
 import type { AnalyticsDashboardDefinition, AnalyticsPreview, AnalyticsPreviewChart } from './dashboard-catalog'
 import { requirePermission, ForbiddenError } from '../authz'
@@ -72,19 +72,13 @@ async function buildDashboardPreview(dashboard: AnalyticsDashboardDefinition, sp
     }
     case 'vendor-performance': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/vendor-performance/view')).loadVendorPerformance(sp)
-      // Monthly vendor spend arrives as floats from its loader (its
-      // dashboard's scope); the chart boundary is the only crossing, through
-      // boundChartNumber until that loader returns exact decimal strings.
-      chart = trend(t('vendor.kpi.totalSpend'), data.monthly.map((month) => boundChartNumber(month.spend)), data.monthly.map((month) => month.label))
+      chart = trend(t('vendor.kpi.totalSpend'), data.monthly.map((month) => month.spend), data.monthly.map((month) => month.label))
       return result(periodLabel, [metric('vendor.kpi.activeVendors', number(data.totals.vendors)), metric('vendor.kpi.totalSpend', fmt.money(data.totals.spend)), metric('vendor.kpi.onTimeRate', percent(data.totals.onTimePct)), metric('vendor.kpi.top5Share', percent(data.totals.top5SharePct))])
     }
     case 'spend-velocity': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/spend-velocity/view')).loadSpendVelocity(sp)
-      // Monthly velocity totals arrive as floats from their loader (its
-      // dashboard's scope); the chart boundary is the only crossing, through
-      // boundChartNumber until that loader returns exact decimal strings.
-      chart = trend(t('spendVelocity.kpi.totalSpend'), data.monthlyTrends.map((month) => boundChartNumber(month.totalAmount)), data.monthlyTrends.map((month) => month.month))
-      return result(periodLabel, [metric('spendVelocity.kpi.totalSpend', fmt.money(data.summary.totalSpend)), metric('spendVelocity.kpi.avgVelocity', percent(data.summary.avgVelocity)), metric('spendVelocity.kpi.savingsPotential', fmt.money(data.summary.savingsPotential)), metric('spendVelocity.kpi.alerts', number(data.summary.totalAlerts))])
+      chart = trend(t('spendVelocity.kpi.totalSpend'), data.monthlyTrends.map((month) => month.totalAmount), data.monthlyTrends.map((month) => month.month))
+      return result(periodLabel, [metric('spendVelocity.kpi.totalSpend', fmt.money(data.summary.totalSpend)), metric('spendVelocity.kpi.avgVelocity', percent(data.summary.avgVelocity)), metric('spendVelocity.kpi.savingsPotential', data.summary.savingsPotential === null ? '—' : fmt.money(data.summary.savingsPotential)), metric('spendVelocity.kpi.alerts', number(data.summary.totalAlerts))])
     }
     case 'sentinel': {
       const { data, periodLabel } = await (await import('../../app/(app)/analytics/sentinel/view')).loadSentinel(sp)

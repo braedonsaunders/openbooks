@@ -2957,6 +2957,7 @@
       "seasonalLow": "Les dépenses faibles se concentrent généralement en {months}",
       "shadowItReason": "Les lignes de notes de frais ne portent ni commerçant ni fournisseur — seul le compte de charges et une description libre — il est donc impossible de tracer l'adoption virale de logiciels par les employés.",
       "fragmentationUnconfigured": "Renseignez le plafond de fragmentation dans Vélocité des dépenses → Configuration",
+      "annualizedUnknown": "Les chiffres annualisés exigent la fin de période dans un exercice déclaré",
       "cliffUnconfigured": "Renseignez la base minimale dans Vélocité des dépenses → Configuration"
     },
     "banner": {
