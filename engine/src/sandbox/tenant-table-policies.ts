@@ -655,6 +655,13 @@ export const TENANT_TABLE_POLICIES = {
   "worker_comp_groups": "clone:catalog-uuid-rebase",
   "worker_employment_versions": "clone:catalog-uuid-rebase",
   "worker_employments": "clone:catalog-uuid-rebase",
+  // Outbound webhook transport is never copied. Endpoints carry sealed
+  // signing secrets and production subscriber URLs a sandbox must never
+  // deliver to; events and deliveries are in-flight operational rows the
+  // sandbox re-derives from its own activity.
+  "webhook_deliveries": "skip:no-copy",
+  "webhook_endpoints": "skip:no-copy",
+  "webhook_events": "skip:no-copy",
 } as const satisfies Record<string, "clone:catalog-uuid-rebase" | "clone:parent-filter" | "skip:no-copy">;
 
 export type TenantTablePolicy = (typeof TENANT_TABLE_POLICIES)[keyof typeof TENANT_TABLE_POLICIES];
