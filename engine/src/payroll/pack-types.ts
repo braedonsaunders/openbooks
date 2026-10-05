@@ -1009,6 +1009,8 @@ export interface PayrollCountryPack {
       region: string | null;
       filingAccountId: string | null;
       payDate: string;
+      /** The employee being run, when known: resolves an org-wide account's legal employer. */
+      employeePartyId?: string;
     },
   ) => Promise<readonly string[]>;
   /**

@@ -10,6 +10,7 @@ import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 import { seedUsSuiAccount } from "../filing-test-fixtures.ts";
+import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { form941Worksheet, w2Slips } from "../yearend.ts";
 import { resolveUsSuiYtd, resolveUsSuiYtdForCoverage, usEmployeeYtd } from "./compute-statutory.ts";
@@ -396,9 +397,9 @@ test(
          where org_id = ${fx.orgId} and employee_party_id = ${employee}
       `)).rows[0];
       assert.equal(priorStateStub?.province, "TX", "the committed stub preserves the prior work state");
-      // Year-to-date reads scope stubs to the assigned filing account, the
-      // same scoping the run's own money path passes — otherwise the Texas
-      // stub the transfer rule must credit is filtered out of history.
+      // Year-to-date reads scope stubs to the assigned account's employer,
+      // the same scoping the run's own money path passes — otherwise the
+      // Texas stub the transfer rule must credit is filtered out of history.
       const stateHistory = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
         documentId: randomUUID(),
@@ -465,6 +466,65 @@ test(
       assert.equal(amount(futaOnlyExempt, "suta"), "60.0000");
       assert.equal(amount(suiOnlyExempt, "futa"), "12.0000");
       assert.equal(amount(suiOnlyExempt, "suta"), "0");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+/** The employer's federal EIN account, under the fixture's legal employer. */
+async function seedEin(fx: Fixture): Promise<string> {
+  const id = randomUUID();
+  await db.execute(sql`
+    insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
+                                         subsidiary_id, is_active, created_by, updated_by)
+    values (${id}, ${fx.orgId}, 'US', 'us_ein', '12-3456789', 'Federal EIN', ${fx.subsidiaryId}, true,
+            ${fx.actorId}, ${fx.actorId})`);
+  return id;
+}
+
+test(
+  "federal wage bases continue across one EIN's accounts, and an EIN profile honours its state account's financing method",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
+      const employee = await usEmployee(fx, "Account mover");
+      const einId = await seedEin(fx);
+      const first = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+      });
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: first.documentId, actorId: fx.actorId })).errors, []);
+      await commitPayRun({ orgId: fx.orgId, documentId: first.documentId, actorId: fx.actorId });
+
+      // The profile moves from the Texas state account onto the EIN: same
+      // employer, so the Texas-account wages stay in the federal bases.
+      await db.execute(sql`
+        update employee_payroll_profiles set filing_account_id = ${einId}
+         where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
+      const ytd = await usEmployeeYtd({
+        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026, documentId: randomUUID(),
+      }, "TX", einId);
+      assert.equal(ytd.fica, PERIOD_WAGES);
+      assert.equal(ytd.futa, PERIOD_WAGES);
+      assert.equal(ytd.suiCurrentRegion, PERIOD_WAGES);
+      assert.equal(ytd.suiAccountId, fx.suiAccountId);
+
+      // Texas records the account as reimbursable: the EIN-profile run reads
+      // the method from the Texas account and prices no SUI.
+      await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId, filingAccountId: fx.suiAccountId,
+        country: "US", factKey: "sui_financing_method", effectiveFrom: "2026-07-19", value: "reimbursable",
+        changeReason: "state reimbursable election" });
+      const second = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-19", periodEnd: "2026-08-01",
+      });
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: second.documentId, actorId: fx.actorId })).errors, []);
+      const factors = await stubFactors(fx, second.documentId, employee);
+      assert.equal(factors?.SUTA, "0.0000");
+      assert.equal(factors?.SS, "124.0000");
+      assert.equal(factors?.FUTA, "12.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

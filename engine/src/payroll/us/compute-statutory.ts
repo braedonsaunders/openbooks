@@ -27,6 +27,7 @@ import { usPayrollConfig } from "./config.ts";
 import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { applySuiTransferCredits, suiTransferRuleFor, type SuiPriorStateWages } from "./sui-transfer.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
+import { loadUsFilingAccounts, resolveUsEmployerScope, resolveUsStateSuiAccount } from "./employer-scope.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
@@ -101,24 +102,37 @@ export function resolveUsSuiFinancingMethod(method: string | null, region: strin
  * non-contributory financing method prices no SUI, so the rate gate that
  * would otherwise refuse the missing rate notice stands down for it.
  *
- * Nothing recorded waives nothing: an employee not assigned to a state SUI
- * account, or an account whose method was never recorded, keeps today's
- * gate exactly — and the compute pass still refuses the missing method by
- * name. So the gate and the compute pass cannot disagree about what is
- * missing.
+ * The account is the employer's state SUI account for the run's work state
+ * — resolved exactly as the compute pass resolves it (./employer-scope.ts),
+ * whichever account the profile names. Nothing recorded waives nothing: an
+ * employee with no filing account, or an account whose method was never
+ * recorded, keeps the rate gate — and the compute pass still refuses the
+ * missing method by name. So the gate and the compute pass cannot disagree
+ * about what is missing.
  */
 export async function usWaivedSuiRateSlots(
   tx: Pick<typeof db, "execute">,
-  input: { orgId: string; filingAccountId: string | null; region: string | null; payDate: string },
+  input: {
+    orgId: string; filingAccountId: string | null; region: string | null; payDate: string;
+    employeePartyId?: string;
+  },
 ): Promise<readonly string[]> {
-  const { orgId, filingAccountId, region, payDate } = input;
-  if (!filingAccountId) return [];
+  const { orgId, filingAccountId, region, payDate, employeePartyId } = input;
+  if (!filingAccountId || !region) return [];
+  const employeeSubsidiaryId = employeePartyId
+    ? (await tx.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from parties where org_id = ${orgId} and id = ${employeePartyId}`)).rows[0]?.subsidiary_id ?? null
+    : null;
+  const suiAccountId = resolveUsStateSuiAccount(
+    await loadUsFilingAccounts(tx, orgId), filingAccountId, employeeSubsidiaryId, region,
+  );
+  if (!suiAccountId) return [];
   const recorded = await findStoredEmployerFactValue({
-    tx, orgId, filingAccountId,
+    tx, orgId, filingAccountId: suiAccountId,
     country: "US", factKey: "sui_financing_method", asOf: payDate,
   });
   if (recorded == null) return [];
-  const method = resolveUsSuiFinancingMethod(recorded, region ?? "state");
+  const method = resolveUsSuiFinancingMethod(recorded, region);
   return method === "contributory" ? [] : ["us_sui"];
 }
 
@@ -265,28 +279,16 @@ export async function usEmployeeYtd(
   filingAccountId: string | null = null,
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
-  const suiAccountRows = await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
-    with employer as (
-      select coalesce(ein.subsidiary_id, p.subsidiary_id) as subsidiary_id
-        from parties p
-        left join payroll_filing_accounts ein
-          on ein.org_id = p.org_id and ein.id = ${filingAccountId}::uuid
-       where p.org_id = ${orgId} and p.id = ${employeePartyId}
-    )
-    select sui.id, sui.subsidiary_id
-      from payroll_filing_accounts sui
-      cross join employer
-     where sui.org_id = ${orgId} and sui.country = 'US' and sui.program_type = 'us_state_sui'
-       and sui.state_code = ${region} and sui.is_active
-       and (sui.subsidiary_id = employer.subsidiary_id or sui.subsidiary_id is null)
-     order by (sui.subsidiary_id is not null) desc
-  `);
-  const bestSubsidiary = suiAccountRows.rows[0]?.subsidiary_id ?? null;
-  const bestSuiAccounts = suiAccountRows.rows.filter((account) => account.subsidiary_id === bestSubsidiary);
-  if (bestSuiAccounts.length > 1) {
-    throw new PayrollError(`US SUI account is ambiguous for ${region}; resolve the employee's legal-employer state account before calculating.`);
-  }
-  const suiAccountId = bestSuiAccounts[0]?.id ?? null;
+  const accounts = await loadUsFilingAccounts(tx, orgId);
+  const employeeSubsidiaryId = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from parties where org_id = ${orgId} and id = ${employeePartyId}`)).rows[0]?.subsidiary_id ?? null;
+  const scope = resolveUsEmployerScope(accounts, filingAccountId, employeeSubsidiaryId);
+  const suiAccountId = resolveUsStateSuiAccount(accounts, filingAccountId, employeeSubsidiaryId, region);
+  // Committed stubs under the same EMPLOYER — every state account of the
+  // run's EIN — feed the federal bases; see ./employer-scope.ts.
+  const employerStubs = scope.stubAccountIds === null
+    ? sql`s.filing_account_id is null`
+    : sql`s.filing_account_id = any(${`{${scope.stubAccountIds.join(",")}}`}::uuid[])`;
   const ficaWithheldColumn = US_OPENING_YTD_FIELDS.find((field) => field.key === "ficaWithheldYtd")!.column;
   const r = (await tx.execute<UsYtdRow>(sql`
     select
@@ -295,7 +297,7 @@ export async function usEmployeeYtd(
       + coalesce(sum(s.pensionable_earnings), 0) as fica,
       coalesce((select insurable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + 0 as futa,
+      + coalesce(sum(s.insurable_earnings), 0) as futa,
       coalesce((select insurable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0) > 0 as "futaOpeningUnscoped",
       coalesce((select insurable_ytd from payroll_opening_balances
@@ -334,11 +336,9 @@ export async function usEmployeeYtd(
       coalesce((select insurable_ytd from payroll_opening_account_bases
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId}
                    and tax_year = ${taxYear} and program_key = 'us_futa'
-                   and filing_account_id is not distinct from ${filingAccountId}
+                   and filing_account_id = ${scope.federalAccountId}::uuid
                    and region is null), 0)
-      + coalesce(sum(s.insurable_earnings) filter (
-          where s.filing_account_id is not distinct from ${filingAccountId}
-        ), 0) as "futaCurrentAccount",
+      + coalesce(sum(s.insurable_earnings), 0) as "futaCurrentAccount",
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
@@ -399,7 +399,7 @@ export async function usEmployeeYtd(
     join documents d on d.id = r.document_id and d.org_id = r.org_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
-      and s.filing_account_id is not distinct from ${filingAccountId}
+      and ${employerStubs}
       and r.run_status = 'committed'
       and d.status <> 'voided'
   `));
@@ -432,16 +432,12 @@ export async function computeUsStatutory(
   // The method is read raw and resolved through the declaration: a missing
   // fact refuses here (Payroll Setup → Employer facts), an unknown value
   // refuses by name, and only a recorded declared value prices below. The
-  // requirement is per SUI account: an employee not assigned to an active
-  // state SUI account prices presence-only SUI (legacy or region rates)
-  // with no method to record — exactly as before this rule — while every
-  // assigned SUI account must declare its method.
-  const suiAccountId = filingAccountId && !suiExempt
-    ? (await tx.execute<{ id: string }>(sql`
-        select id from payroll_filing_accounts
-         where org_id = ${orgId} and id = ${filingAccountId} and country = 'US'
-           and program_type = 'us_state_sui' and is_active`)).rows[0]?.id ?? null
-    : null;
+  // requirement is per SUI account — the employer's account for the run's
+  // work state, whichever account (EIN or state) the profile names. An
+  // employee whose profile names no filing account prices presence-only SUI
+  // (legacy or region rates) with no method to record, while every resolved
+  // SUI account must declare its method.
+  const suiAccountId = filingAccountId && !suiExempt ? ytd.suiAccountId : null;
   const suiFinancingMethod = suiAccountId ? resolveUsSuiFinancingMethod(
     await findStoredEmployerFactValue({
       tx, orgId, filingAccountId: suiAccountId,
