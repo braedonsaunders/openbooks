@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import { RISK_SCORE_BANDS } from '@/lib/analytics/sentinel-scoring'
 import { Copy, ShieldAlert } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import { CardShell, MetricTile, UnavailableRow, type MetricTone, type WidgetCardProps } from './_widget-tiles'
@@ -10,14 +11,14 @@ import { CardShell, MetricTile, UnavailableRow, type MetricTone, type WidgetCard
  * delegates every widget whose registry entry names this source here.
  *
  * Both tiles show the dashboard's own figures through the shared summary —
- * never re-derived — and link to the dashboard. The risk tone mirrors the
- * Sentinel risk gauge bands, so the tile and the dashboard agree on what a
- * score means.
+ * never re-derived — and link to the dashboard. The risk tone reads the
+ * shared severity-model bands, so the tile and the Sentinel gauge agree on
+ * what a score means.
  */
 function scoreTone(score: number): MetricTone {
-  if (score >= 60) return 'rose'
-  if (score >= 40) return 'orange'
-  if (score >= 20) return 'amber'
+  if (score >= RISK_SCORE_BANDS.high) return 'rose'
+  if (score >= RISK_SCORE_BANDS.elevated) return 'orange'
+  if (score >= RISK_SCORE_BANDS.moderate) return 'amber'
   return 'emerald'
 }
 
