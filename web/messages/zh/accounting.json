@@ -10,12 +10,15 @@
       "excellent": "优秀",
       "good": "良好",
       "average": "一般",
-      "needsWork": "需改进"
+      "needsWork": "需改进",
+      "unscored": "未评分"
     },
     "categories": {
       "profitability": "盈利能力",
       "efficiency": "效率",
-      "operating": "运营"
+      "operating": "运营",
+      "liquidity": "流动性",
+      "solvency": "偿债能力"
     },
     "vitals": {
       "healthScore": "健康评分",

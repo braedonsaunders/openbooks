@@ -137,7 +137,10 @@
       "growth": "A/A {pct}",
       "grossProfit": "LB: {amount}",
       "opex": "Despesas op.: {amount}",
-      "perMonth": "por mês"
+      "perMonth": "por mês",
+      "noPriorYear": "Sem receita no mesmo período do ano anterior",
+      "forPeriod": "Receita necessária neste período",
+      "noBreakeven": "Requer margem bruta positiva"
     },
     "score": {
       "title": "Pontuação de saúde financeira",
@@ -145,12 +148,16 @@
       "excellent": "Excelente",
       "good": "Boa",
       "average": "Média",
-      "needsWork": "Precisa melhorar"
+      "needsWork": "Precisa melhorar",
+      "notScored": "Ainda não foi possível avaliar nada neste período.",
+      "unscored": "Sem pontuação"
     },
     "categories": {
       "profitability": "Rentabilidade",
       "efficiency": "Eficiência",
-      "operating": "Operações"
+      "operating": "Operações",
+      "liquidity": "Liquidez",
+      "solvency": "Solvência"
     },
     "subKpi": {
       "roic": "ROIC",
@@ -309,67 +316,67 @@
         "label": "Margem bruta",
         "formula": "Lucro bruto / Receita",
         "desc": "Parcela da receita restante após o custo direto.",
-        "interpret": "Quanto maior, melhor. Empresas de serviços miram tipicamente 35–50 %."
+        "interpret": "Quanto maior, melhor; os níveis típicos variam muito por setor, então defina uma meta adequada."
       },
       "operating_margin": {
         "label": "Margem operacional",
         "formula": "Resultado operacional / Receita",
         "desc": "Rentabilidade da operação central, antes de juros e itens não operacionais.",
-        "interpret": "Acima de 15 % é sólido para a maioria dos negócios."
+        "interpret": "Quanto maior, melhor; compare com a meta que você definiu."
       },
       "ebitda_margin": {
         "label": "Margem EBITDA",
         "formula": "(Resultado operacional + Depreciação + Amortização) / Receita",
         "desc": "Rentabilidade operacional antes de encargos não caixa e financiamento.",
-        "interpret": "Acima de 20 % é saudável; útil para comparar estruturas de capital."
+        "interpret": "Útil para comparar empresas com estruturas de capital diferentes; compare com a meta que você definiu."
       },
       "net_margin": {
         "label": "Margem líquida",
         "formula": "Lucro líquido / Receita",
         "desc": "Lucro final como parcela da receita, depois de tudo.",
-        "interpret": "Acima de 10 % é saudável na maioria dos setores."
+        "interpret": "Quanto maior, melhor; compare com a meta que você definiu."
       },
       "roa": {
         "label": "Retorno sobre ativos",
         "formula": "Lucro líquido / Ativos totais",
-        "desc": "Eficiência com que os ativos geram lucro.",
-        "interpret": "Acima de 8 % indica bom uso dos ativos."
+        "desc": "Eficiência com que os ativos geram lucro, anualizada em períodos menores que um ano.",
+        "interpret": "Quanto maior, melhor; compare com a meta que você definiu."
       },
       "roe": {
         "label": "Retorno sobre patrimônio",
         "formula": "Lucro líquido / Patrimônio total",
-        "desc": "Retorno gerado sobre o patrimônio dos acionistas.",
-        "interpret": "Acima de 15 % é geralmente considerado sólido."
+        "desc": "Retorno sobre o patrimônio dos acionistas, anualizado em períodos menores que um ano. Não é significativo com patrimônio negativo.",
+        "interpret": "Quanto maior, melhor; compare com a meta que você definiu."
       },
       "roic": {
         "label": "Retorno sobre capital investido",
         "formula": "NOPAT / Capital investido",
-        "desc": "Retorno de todo o capital investido. NOPAT = Resultado operacional × (1 − 25 % de imposto presumido). Capital investido = Patrimônio + Dívida de longo prazo.",
-        "interpret": "Acima do custo de capital (tipicamente 8–12 %) cria valor."
+        "desc": "Retorno sobre todo o capital investido. NOPAT = resultado operacional × (1 − alíquota), usando a alíquota efetiva lançada no período ou, na falta dela, a alíquota legal da configuração de impostos. Capital investido = patrimônio + a dívida com juros que você classificar.",
+        "interpret": "Acima do seu custo de capital, cria valor; compare com a meta que você definiu."
       },
       "roce": {
         "label": "Retorno sobre capital empregado",
-        "formula": "Resultado operacional / Capital investido",
-        "desc": "Retorno operacional antes de impostos do capital empregado.",
-        "interpret": "Acima de 15 % indica alocação eficiente de capital."
+        "formula": "Resultado operacional / (Ativo total − Passivo circulante)",
+        "desc": "Retorno operacional antes de impostos sobre o capital empregado de longo prazo, anualizado em períodos menores que um ano.",
+        "interpret": "Quanto maior, melhor; compare com a meta que você definiu."
       },
       "rev_per_employee": {
         "label": "Receita por funcionário",
-        "formula": "Receita / Headcount no fim do período",
+        "formula": "Receita anualizada / Quadro de pessoal no fim do período",
         "desc": "Produtividade comercial da equipe.",
-        "interpret": "Os benchmarks variam muito por setor, geografia e moeda."
+        "interpret": "As referências variam por setor, região e moeda; só é avaliado em relação a uma meta que você definir."
       },
       "gp_per_employee": {
         "label": "Lucro bruto por funcionário",
-        "formula": "Lucro bruto / Headcount no fim do período",
+        "formula": "Lucro bruto anualizado / Quadro de pessoal no fim do período",
         "desc": "Valor que cada funcionário agrega após custos diretos.",
         "interpret": "Um sinal de produtividade mais puro que receita por cabeça."
       },
       "asset_turnover": {
         "label": "Giro dos ativos",
         "formula": "Receita / Ativos totais",
-        "desc": "Receita gerada por unidade monetária de ativos.",
-        "interpret": "Acima de 1,0x, os ativos giram mais de uma vez ao ano."
+        "desc": "Receita gerada por unidade de ativo, anualizada em períodos menores que um ano.",
+        "interpret": "Acima de 1,0× os ativos giram mais de uma vez por ano."
       },
       "cogs_ratio": {
         "label": "Razão de CMV",
@@ -391,24 +398,66 @@
       },
       "interest_coverage": {
         "label": "Cobertura de juros",
-        "formula": "Resultado operacional / Outras despesas",
-        "desc": "Vezes que o resultado operacional cobre as despesas não operacionais (juros).",
-        "interpret": "Acima de 5x é confortável; abaixo de 1,5x é um alerta."
+        "formula": "Resultado operacional / Despesa de juros",
+        "desc": "Quantas vezes o resultado operacional cobre a despesa de juros das contas que você classifica como juros.",
+        "interpret": "Quanto maior, mais seguro; compare com sua meta e as cláusulas dos seus credores."
       },
       "rule_of_40": {
         "label": "Regra dos 40",
         "formula": "Crescimento da receita % + Margem operacional %",
         "desc": "Equilibra crescimento e rentabilidade em um só número.",
-        "interpret": "40 ou mais é excelente — troque crescimento por margem ou vice-versa."
+        "interpret": "Troque crescimento por margem ou vice-versa; compare com a meta que você definiu."
+      },
+      "current_ratio": {
+        "label": "Liquidez corrente",
+        "formula": "Ativo circulante / Passivo circulante",
+        "desc": "Ativos de curto prazo disponíveis para cada unidade de obrigações com vencimento em um ano.",
+        "interpret": "Abaixo de 1,0× as obrigações correntes superam o ativo circulante."
+      },
+      "quick_ratio": {
+        "label": "Liquidez seca",
+        "formula": "(Caixa + Contas a receber) / Passivo circulante",
+        "desc": "Cobertura das obrigações de um ano apenas com caixa e contas a receber, sem vender estoque.",
+        "interpret": "A partir de 1,0× as obrigações de curto prazo ficam cobertas sem estoque."
+      },
+      "working_capital": {
+        "label": "Capital de giro",
+        "formula": "Ativo circulante − Passivo circulante",
+        "desc": "Os recursos de curto prazo que restam após as obrigações de um ano.",
+        "interpret": "Capital de giro negativo significa que as obrigações correntes superam o ativo circulante."
+      },
+      "debt_to_equity": {
+        "label": "Dívida sobre patrimônio",
+        "formula": "Dívida com juros / Patrimônio total",
+        "desc": "Alavancagem financeira: dívida por unidade de patrimônio, com as contas de dívida que você classificar. Mais baixo é mais seguro.",
+        "interpret": "Mais baixo é mais seguro; compare com sua meta e as cláusulas dos seus credores."
+      },
+      "liabilities_to_equity": {
+        "label": "Passivo sobre patrimônio",
+        "formula": "Passivo total / Patrimônio total",
+        "desc": "Tudo o que a empresa deve por unidade de patrimônio. Mais baixo é mais seguro.",
+        "interpret": "Mais baixo é mais seguro; compare com a meta que você definiu."
       }
     },
     "ratioNotes": {
-      "noDA": "Nenhuma conta de depreciação/amortização encontrada",
+      "noDA": "Há ativos imobilizados com saldo, mas nenhuma depreciação ou amortização foi encontrada no período",
       "noBalanceSheet": "Sem dados de balanço",
       "noHeadcount": "Sem funcionários ativos",
       "noInterestExpense": "Sem despesas com juros",
       "unavailable": "Dados não disponíveis",
-      "perEmployees": "{revenue} / {count, plural, one {# funcionário} other {# funcionários}}"
+      "perEmployees": "{revenue} / {count, plural, one {# funcionário} other {# funcionários}}",
+      "noRevenue": "Sem receita no período",
+      "noCurrentLiabilities": "Sem passivos circulantes no fim do período",
+      "noPriorComparison": "Requer receita no mesmo período do ano anterior",
+      "equityNotPositive": "O patrimônio líquido é zero ou negativo",
+      "investedCapitalNotPositive": "O capital investido é zero ou negativo",
+      "debtNotClassified": "Escolha suas contas de dívida com juros em Saúde financeira → Configuração",
+      "interestNotClassified": "Escolha suas contas de despesa de juros em Saúde financeira → Configuração",
+      "noTaxRate": "Não há imposto de renda lançado no período nem alíquota configurada — adicione uma em Configuração → Impostos → Alíquotas de imposto de renda",
+      "mixedTaxRates": "As entidades exibidas são tributadas a alíquotas legais diferentes; o retorno sobre o capital investido usa a alíquota efetiva quando o imposto do período for lançado",
+      "annualized": "anualizado a partir de {periodDays} de {yearDays} dias",
+      "effectiveTaxRate": "alíquota efetiva {rate}",
+      "statutoryTaxRate": "alíquota legal {rate}"
     },
     "config": {
       "fields": {
@@ -441,13 +490,163 @@
           "help": "Referência para a nota de ROIC (requer dados do balanço)"
         },
         "revenuePerEmployee": {
-          "label": "Receita por funcionário ({currency})",
-          "help": "Referência de produtividade da equipe"
+          "label": "Meta de receita por funcionário ({currency})",
+          "help": "Valor anual por funcionário; deixe vazio para exibir o índice sem nota"
         },
         "gpPerEmployee": {
-          "label": "Lucro bruto por funcionário ({currency})",
-          "help": "Referência de produtividade da equipe"
+          "label": "Meta de lucro bruto por funcionário ({currency})",
+          "help": "Valor anual por funcionário; deixe vazio para exibir o índice sem nota"
+        },
+        "roceTarget": {
+          "label": "Meta de retorno sobre o capital empregado (%)",
+          "help": "Referência para a nota de ROCE (requer dados do balanço)"
+        },
+        "currentRatioTarget": {
+          "label": "Meta de liquidez corrente (×)",
+          "help": "Ativo circulante por unidade de passivo circulante considerado na meta"
+        },
+        "quickRatioTarget": {
+          "label": "Meta de liquidez seca (×)",
+          "help": "Caixa e contas a receber por unidade de passivo circulante considerados na meta"
+        },
+        "debtToEquityTarget": {
+          "label": "Teto de dívida sobre patrimônio (×)",
+          "help": "Mais baixo é melhor: igual ou abaixo é considerado na meta"
+        },
+        "liabilitiesToEquityTarget": {
+          "label": "Teto de passivo sobre patrimônio (×)",
+          "help": "Mais baixo é melhor: igual ou abaixo é considerado na meta"
+        },
+        "interestCoverageTarget": {
+          "label": "Meta de cobertura de juros (×)",
+          "help": "Vezes que o resultado operacional deve cobrir os juros"
+        },
+        "assetTurnoverTarget": {
+          "label": "Meta de giro do ativo (×)",
+          "help": "Receita anual por unidade de ativo considerada na meta"
+        },
+        "cogsRatioTarget": {
+          "label": "Teto do custo das vendas (% da receita)",
+          "help": "Mais baixo é melhor: igual ou abaixo é considerado na meta"
+        },
+        "opexRatioTarget": {
+          "label": "Teto de despesas operacionais (% da receita)",
+          "help": "Mais baixo é melhor: igual ou abaixo é considerado na meta"
+        },
+        "operatingLeverageTarget": {
+          "label": "Meta de alavancagem operacional (×)",
+          "help": "Crescimento do resultado operacional por unidade de crescimento da receita"
+        },
+        "ruleOf40Target": {
+          "label": "Meta da regra dos 40 (pontos)",
+          "help": "Crescimento da receita % mais margem operacional % considerados na meta"
+        },
+        "gradeDPercent": {
+          "label": "Nota D a partir de (% da meta)",
+          "help": "Atingimento da meta (invertido quando menor é melhor) necessário para esta nota; abaixo de D é F"
+        },
+        "gradeCPercent": {
+          "label": "Nota C a partir de (% da meta)",
+          "help": "Atingimento da meta (invertido quando menor é melhor) necessário para esta nota; abaixo de D é F"
+        },
+        "gradeBPercent": {
+          "label": "Nota B a partir de (% da meta)",
+          "help": "Atingimento da meta (invertido quando menor é melhor) necessário para esta nota; abaixo de D é F"
+        },
+        "gradeAPercent": {
+          "label": "Nota A a partir de (% da meta)",
+          "help": "Atingimento da meta (invertido quando menor é melhor) necessário para esta nota; abaixo de D é F"
+        },
+        "scoreAverage": {
+          "label": "Pontuação “Média” a partir de",
+          "help": "Pontuação geral (0–100) necessária para este rótulo"
+        },
+        "scoreGood": {
+          "label": "Pontuação “Boa” a partir de",
+          "help": "Pontuação geral (0–100) necessária para este rótulo"
+        },
+        "scoreExcellent": {
+          "label": "Pontuação “Excelente” a partir de",
+          "help": "Pontuação geral (0–100) necessária para este rótulo"
+        },
+        "insightCriticalPercent": {
+          "label": "Alerta crítico abaixo de (% da meta)",
+          "help": "Uma margem abaixo desta parcela da meta é relatada como crítica"
+        },
+        "insightWarningPercent": {
+          "label": "Alerta de atenção abaixo de (% da meta)",
+          "help": "Uma margem abaixo desta parcela da meta é relatada como muito abaixo da meta"
+        },
+        "revenueDeclineAlertPercent": {
+          "label": "Alerta de queda de receita (%)",
+          "help": "Uma queda frente ao mesmo período do ano anterior acima disso é relatada como receita em queda"
+        },
+        "revenueTrendAlertPercent": {
+          "label": "Alerta de tendência de receita em três meses (%)",
+          "help": "Uma queda nos últimos três meses acima disso é relatada como tendência de baixa"
+        },
+        "marginCompressionPoints": {
+          "label": "Alerta de compressão de margem (pontos)",
+          "help": "Uma queda da margem bruta nos últimos três meses acima destes pontos percentuais"
+        },
+        "breakevenSafetyPercent": {
+          "label": "Margem de segurança sobre o ponto de equilíbrio (%)",
+          "help": "Receita dentro desta parcela acima do equilíbrio é relatada como margem estreita"
+        },
+        "anomalySigma": {
+          "label": "Limite de anomalia (σ)",
+          "help": "Meses além deste número de desvios-padrão da média são relatados como anomalias"
         }
+      }
+    },
+    "ratioCard": {
+      "notAvailable": "N/D",
+      "ungraded": "Sem meta",
+      "noTarget": "Sem meta definida — sem nota",
+      "target": "Meta: {target}",
+      "versusTarget": "frente à meta de {target}",
+      "formula": "Fórmula",
+      "meaning": "O que significa",
+      "interpretation": "Interpretação",
+      "thisPeriod": "Este período"
+    },
+    "dupont": {
+      "title": "Análise DuPont",
+      "hint": "ROE = Margem líquida × Giro do ativo × Multiplicador de patrimônio",
+      "netMargin": "Margem líquida",
+      "netMarginSub": "Lucro líquido ÷ receita",
+      "assetTurnover": "Giro do ativo",
+      "assetTurnoverSub": "Receita anualizada ÷ ativo total",
+      "equityMultiplier": "Multiplicador de patrimônio",
+      "equityMultiplierSub": "Ativo total ÷ patrimônio (alavancagem)",
+      "roe": "Retorno sobre o patrimônio"
+    },
+    "grading": {
+      "title": "Como as notas são calculadas",
+      "body": "Cada índice é comparado com sua meta. Atingir {a} da meta ou mais vale A, {b} vale B, {c} vale C e {d} vale D; abaixo disso é F. Para índices em que menor é melhor (custos, alavancagem), a comparação é invertida. Um índice sem meta, ou sem os dados necessários, é exibido mas não avaliado.",
+      "labels": "A pontuação faz a média das categorias avaliadas: a partir de {excellent} é Excelente, de {good} Boa, de {average} Média e abaixo Precisa melhorar. Todos esses valores são definidos em Limites."
+    },
+    "ratioInputs": {
+      "title": "Dados dos índices",
+      "hint": "Quais contas os índices de alavancagem leem",
+      "notDecided": "Ainda não escolhido — os índices que dependem disso mostram por que estão indisponíveis.",
+      "add": "Adicionar uma conta…",
+      "remove": "Remover {account}",
+      "save": "Salvar",
+      "saved": "Salvo — os índices são recalculados.",
+      "saveFailed": "Não foi possível salvar a classificação.",
+      "loadFailed": "Não foi possível carregar as classificações.",
+      "interest_expense": {
+        "title": "Despesa de juros",
+        "help": "Contas de despesa que registram juros de empréstimos. A cobertura de juros divide o resultado operacional pelo total delas.",
+        "none": "Sem contas de despesa de juros — a cobertura de juros não se aplica.",
+        "confirmNone": "Não temos despesa de juros"
+      },
+      "interest_bearing_debt": {
+        "title": "Dívida com juros",
+        "help": "Contas de passivo com empréstimos, linhas de crédito, títulos e outros financiamentos — parcelas circulantes e de longo prazo. Dívida sobre patrimônio e retorno sobre o capital investido leem seus saldos.",
+        "none": "Sem dívida com juros — a dívida sobre patrimônio é zero.",
+        "confirmNone": "Não temos dívida com juros"
       }
     }
   },

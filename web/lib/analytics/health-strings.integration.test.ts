@@ -9,8 +9,9 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { healthStrings, localizedRatioDefs } = await import('./health-strings.ts')
+type RatioDefText = import('./health-strings.ts').RatioDefText
 const { healthData } = await import('./health-data.ts')
-const { RATIO_DEFS } = await import('./financial-health.ts')
+const { RATIO_IDS } = await import('./ratio-ids.ts')
 
 function catalogTranslator(locale: string) {
   const analytics = JSON.parse(
@@ -62,20 +63,20 @@ test('health findings and labels render in the request locale', { skip: !env.OPE
 })
 
 /**
- * The ratio-defs catalog must stay in lockstep with the static RATIO_DEFS
- * table (still served to surfaces outside the analytics dashboards): same 16
- * ids, same English copy — and a real translation in every other locale.
+ * The catalog is the only copy of the ratio definitions: every ratio the
+ * engine computes has one in every locale, and the prose is translated.
  */
-test('the ratio-defs catalog matches the static table and translates every locale', () => {
-  assert.deepEqual(localizedRatioDefs(catalogTranslator('en')), RATIO_DEFS)
+test('every engine ratio has a catalog definition, translated in every locale', () => {
+  const en = localizedRatioDefs(catalogTranslator('en'))
+  assert.deepEqual(Object.keys(en).sort(), [...RATIO_IDS].sort())
   assert.equal(localizedRatioDefs(catalogTranslator('fr')).gross_margin?.label, 'Marge brute')
   for (const locale of ['fr', 'es', 'de', 'pt-BR', 'ja', 'zh']) {
     const defs = localizedRatioDefs(catalogTranslator(locale))
-    assert.deepEqual(Object.keys(defs).sort(), Object.keys(RATIO_DEFS).sort(), `${locale} needs all 16 ratio defs`)
-    const enTable = RATIO_DEFS as Record<string, Record<string, string>>
+    assert.deepEqual(Object.keys(defs).sort(), [...RATIO_IDS].sort(), `${locale} needs every ratio definition`)
+    const enTable: Record<string, RatioDefText | undefined> = en
     for (const [id, def] of Object.entries(defs)) {
       const enDef = enTable[id]
-      assert.ok(enDef, `${locale} ${id} must exist in the static table`)
+      assert.ok(enDef, `${locale} ${id} must exist in English`)
       for (const field of ['label', 'formula', 'desc', 'interpret'] as const) {
         assert.ok(def[field].trim().length > 0, `${locale} ${id}.${field} must resolve`)
         assert.ok(!def[field].includes('financialHealth.ratios'), `${locale} ${id}.${field} must resolve a catalog key`)
