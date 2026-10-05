@@ -41,6 +41,8 @@ function decemberZus(year: 2024 | 2025 | 2026) {
     payDate: `${year}-12-15`,
     periodsPerYear: 12,
     rokUrodzenia: DEC_YOB,
+    // Eleven committed months of 22 000 zł from this payer.
+    ytdPodstawaSpoleczne: "242000.00",
   } as const;
   if (year === 2024) return calculatePlZus2024(input);
   if (year === 2025) return calculatePlZus2025(input);
@@ -55,6 +57,8 @@ function decemberPit(year: 2024 | 2025 | 2026, zusEe: string) {
     pomniejszenie: "1/12",
     payDate: `${year}-12-15`,
     periodsPerYear: 12,
+    // Eleven months of dochód from this payer, well past the 120 000 zł threshold.
+    ytdDochod: "200000.00",
   } as const;
   if (year === 2024) return calculatePlPit2024(input);
   if (year === 2025) return calculatePlPit2025(input);
@@ -62,7 +66,7 @@ function decemberPit(year: 2024 | 2025 | 2026, zusEe: string) {
 }
 
 test("December 22 000 zł prices a different advance every year", () => {
-  // Prior 11 × 22 000 = 242 000 annualised: past 2024's 234 720 room (zero
+  // Prior 11 × 22 000 = 242 000 committed: past 2024's 234 720 room (zero
   // base), inside 2025's 260 190 (18 190 room) and 2026's 282 600 (full base).
   const zus2024 = decemberZus(2024);
   const zus2025 = decemberZus(2025);
@@ -103,6 +107,12 @@ function adapterCtx(taxYear: number, payDate: string, income: string) {
     }),
   });
   const ctx = {
+    tx: {
+      execute: async () => ({
+        rows: [{ dochod: "200000.0000", podstawa: "242000.0000", payer_first_pay: `${taxYear}-01-15`, payer_first_period: `${taxYear}-01-01` }],
+      }),
+    },
+    orgId: "org", subsidiaryId: "payer", employeePartyId: "emp", documentId: "doc",
     taxYear,
     region: "PL",
     run: { pay_date: payDate },

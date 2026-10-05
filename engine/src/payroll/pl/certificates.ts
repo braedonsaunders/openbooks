@@ -159,7 +159,59 @@ const PL_ZATRUDNIENIE_CERTIFICATE: PayrollCertificate = {
   ],
 };
 
+/**
+ * Opening year-to-date (the employer's own record, not an agency form): what
+ * this payer paid the employee in the tax year BEFORE its payroll ran here.
+ * The 120 000 zł PIT threshold tests dochód from this payer since 1 January
+ * (art. 32 ust. 2) and the emerytalne/rentowe annual limit tests the
+ * contribution base since 1 January (ZUS art. 19 ust. 1); the engine reads
+ * everything committed here from the pay stubs and adds these figures. A
+ * mid-year adopter copies them from the prior provider's year-to-date
+ * report; without them the engine refuses rather than treating months paid
+ * elsewhere as nil.
+ */
+const PL_OTWARCIE_ROKU_CERTIFICATE: PayrollCertificate = {
+  key: "pl_otwarcie_roku",
+  form: "Dane narastające od początku roku (poprzedni system płacowy)",
+  label: "Opening year-to-date from before payroll ran here",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation:
+    "ustawa o podatku dochodowym od osób fizycznych, art. 32 ust. 2 (próg 120 000 zł od początku roku); "
+    + "ustawa o systemie ubezpieczeń społecznych, art. 19 ust. 1 (roczna podstawa emerytalna i rentowa)",
+  summary:
+    "This payer's dochód and emerytalne/rentowe contribution base for the employee in the tax "
+    + "year before its payroll ran here. Runs committed here are added automatically.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "dochod_ytd",
+      label: "Dochód od początku roku (przed uruchomieniem płac w systemie)",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      required: true,
+      help: "Sum of the monthly dochód (revenue less KUP and employee social contributions) this "
+        + "payer paid the employee this year before its payroll ran here, from the prior "
+        + "provider's report. Zero when nothing was paid. Exclude runs committed here.",
+    },
+    {
+      key: "podstawa_emerytalna_ytd",
+      label: "Podstawa składek emerytalnych i rentowych od początku roku",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      required: true,
+      help: "Emerytalne/rentowe contribution base this payer already assessed this year before "
+        + "its payroll ran here, from the prior provider's report. Zero when nothing was paid. "
+        + "Exclude runs committed here.",
+    },
+  ],
+};
+
 export const PL_CERTIFICATES: PayrollPackCertificates = {
   country: "PL",
-  certificates: [PL_PIT2_CERTIFICATE, PL_WIEK_CERTIFICATE, PL_ZATRUDNIENIE_CERTIFICATE],
+  certificates: [
+    PL_PIT2_CERTIFICATE, PL_WIEK_CERTIFICATE, PL_ZATRUDNIENIE_CERTIFICATE, PL_OTWARCIE_ROKU_CERTIFICATE,
+  ],
 };

@@ -19,7 +19,7 @@
  * module so every read registers before it can run. See
  * `../employee-facts.ts` for the shape and the derivation of `payable`.
  */
-import { registerEmployeeFacts } from "../employee-facts.ts";
+import { employeeRecordDateFact, registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
 export const DE_AUSGLEICH_GANZJAEHRIG = "de_ausgleich_ganzjaehrig";
@@ -69,6 +69,15 @@ export const DE_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     required: false,
     producer: { kind: "certificate", certificate: "de_ausgleich", field: "kein_ausschluss" },
   },
+  employeeRecordDateFact(
+    "hired_on",
+    "A part month's contribution ceilings are prorated by the days employed (SV-Tage), so a "
+    + "mid-month hire cannot be priced against the full monthly ceiling without the hire date.",
+  ),
+  employeeRecordDateFact(
+    "terminated_on",
+    "A leaver's last month is a part month whose ceilings are prorated by the days employed.",
+  ),
 ];
 
 registerEmployeeFacts("DE", DE_EMPLOYEE_FACTS);

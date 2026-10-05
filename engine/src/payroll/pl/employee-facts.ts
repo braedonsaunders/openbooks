@@ -7,7 +7,7 @@
  * module so every read registers before it can run. See
  * `../employee-facts.ts` for the shape and the derivation of `payable`.
  */
-import { registerEmployeeFacts } from "../employee-facts.ts";
+import { employeeRecordDateFact, registerEmployeeFacts } from "../employee-facts.ts";
 import type { PayrollEmployeeFact } from "../employee-facts.ts";
 
 // Required employee facts. The compute path reads the employee's birth year
@@ -45,6 +45,12 @@ export const PL_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     required: false,
     producer: { kind: "certificate", certificate: "pl_zatrudnienie", field: "wymiar_etatu" },
   },
+  employeeRecordDateFact(
+    "hired_on",
+    "The 120 000 zł PIT threshold and the emerytalne/rentowe limit test what this payer paid since "
+    + "1 January; an employee hired after the payer's payroll started running here has every "
+    + "payment on file, which the hire date proves.",
+  ),
 ];
 
 registerEmployeeFacts("PL", PL_EMPLOYEE_FACTS);

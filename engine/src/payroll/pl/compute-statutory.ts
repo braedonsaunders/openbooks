@@ -31,15 +31,15 @@
  *   (art. 31b ust. 1: 1/12/1/24/1/36 of 3 600), rounded to whole złotych
  *   (Ordynacja art. 63 § 1) and floored at zero ("nie więcej niż" caps the
  *   reduction at the advance itself).
- * - Year-to-date under level pay: no pack channel carries YTD, so the
- *   engine annualises the month's figure at monthly periodicity — prior
- *   months = (month − 1) × this month — exact for level pay, refused by
- *   name for uneven paths (see PL_REFUSALS_2026). The calendar month comes
- *   from the run's pay_date.
+ * - Year-to-date: the dochód and emerytalne/rentowe base this payer already
+ *   paid this year, read from its committed stubs plus the declared opening
+ *   carry-in for months paid before its payroll ran here (./year-to-date.ts).
+ *   A record that cannot be shown complete refuses by name — prior months
+ *   are never inferred from the current one.
  * - ZUS base: the month's revenue, emerytalne/rentowe capped at the
  *   remaining 282 600 zł room (art. 19 ust. 1 and 3 — "Od nadwyżki …
  *   nie pobiera się składek na ubezpieczenia emerytalne i rentowe"),
- *   same level-pay annualisation. Chorobowe, zdrowotna and the fundusz
+ *   room = limit less the year-to-date base. Chorobowe, zdrowotna and the fundusz
  *   lines price the full revenue: the cap covers emerytalne/rentowe only,
  *   and art. 81 ust. 5 explicitly exempts zdrowotna from it.
  * - Zdrowotna base: revenue minus the employee's emerytalne/rentowe/
@@ -59,7 +59,7 @@
  *   adapter refuses instead of omitting an owed contribution.
  *
  * What this pass does NOT do (named refusals, stated): non-monthly
- * periodicity, uneven-pay threshold crossings, the FP age band, PUP-hire
+ * periodicity, an incomplete year-to-date record, the FP age band, PUP-hire
  * FP exemptions, sub-minimum pay without a recorded working-time fraction,
  * ulga dla młodych, 50 % KUP,
  * joint filing, PPK, non-employment titles, zero-advance requests and
@@ -79,6 +79,7 @@ import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
 import "./employee-facts.ts";
+import { committedPlHistory, resolvePlYearToDate } from "./year-to-date.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
@@ -287,15 +288,16 @@ function groupPl(amount: string): string {
   return amount.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
-/** Calendar month (1–12) of an ISO pay date already gated to its year. */
-function monthOf(payDate: string): number {
-  const month = Number(payDate.slice(5, 7));
-  if (!Number.isInteger(month) || month < 1 || month > 12) {
-    throw new PayrollPackError(
-      `PL pay date has no calendar month 01–12: "${payDate}"`,
-    );
+/** A non-negative year-to-date decimal, or a named refusal. */
+function ytdAmount(value: string, label: string): bigint {
+  let units: bigint;
+  try {
+    units = U(value);
+  } catch {
+    throw new PayrollPackError(`${label} is not a decimal amount: "${value}"`);
   }
-  return month;
+  if (units < 0n) throw new PayrollPackError(`${label} cannot be negative, got "${value}"`);
+  return units;
 }
 
 function requireMonthly(periodsPerYear: number, tables: PlYearTables): void {
@@ -401,6 +403,12 @@ export interface PlZusCalcInput {
   wymiarEtatu?: string | null;
   /** Tenant-declared wypadkowe rate as a percent ("1.67" = 1.67 %); null = undeclared. */
   wypadkowePct?: string | null;
+  /**
+   * Emerytalne/rentowe contribution base this payer already assessed in the
+   * year before this payslip (see ./year-to-date.ts), decimal. The annual
+   * limit room is the limit less this figure.
+   */
+  ytdPodstawaSpoleczne: string;
 }
 
 /**
@@ -468,11 +476,11 @@ export function calculatePlZusWithTables(
     );
   }
 
-  // Annual emerytalne/rentowe room under level pay: prior months priced the
-  // same base, so remaining = limit − (month − 1) × brut.
-  const month = monthOf(input.payDate);
+  // Annual emerytalne/rentowe room: the limit less the base this payer
+  // already assessed this year (art. 19 ust. 1 — "Od nadwyżki … nie pobiera
+  // się składek").
   const limit = U(tables.limitAnnual);
-  const prior = brut * BigInt(month - 1);
+  const prior = ytdAmount(input.ytdPodstawaSpoleczne, "PL ZUS year-to-date emerytalne/rentowe base");
   const remaining = limit - prior;
   const podstawaSpol = remaining <= 0n ? 0n : brut < remaining ? brut : remaining;
 
@@ -639,10 +647,15 @@ export interface PlPitCalcInput {
   kup: PlKupVariant;
   /** Oświadczenie reduction from the pl_pit2 certificate. */
   pomniejszenie: PlPomniejszenie;
-  /** Pay date, ISO YYYY-MM-DD — selects the calendar month for the YTD test. */
+  /** Pay date, ISO YYYY-MM-DD — selects the tax year's tables. */
   payDate: string;
   /** Usual pay periodicity; 12 = monthly, the only priced shape. */
   periodsPerYear: number;
+  /**
+   * Dochód this payer already paid the employee in the year before this
+   * payslip (see ./year-to-date.ts), decimal — the 120 000 zł test's prior.
+   */
+  ytdDochod: string;
 }
 
 /**
@@ -724,11 +737,9 @@ export function calculatePlPitWithTables(
   const dochodExact = brut - zusEe - kupUnits;
   const dochod = rZloty(dochodExact < 0n ? 0n : dochodExact);
 
-  // 120 000 zł year-to-date test under level pay: prior months priced the
-  // same monthly dochód.
-  const month = monthOf(input.payDate);
+  // 120 000 zł test on the dochód this payer already paid this year.
   const prog = U(tables.prog);
-  const prior = dochod * BigInt(month - 1);
+  const prior = ytdAmount(input.ytdDochod, "PL PIT year-to-date dochód");
   let podstawa12 = dochod;
   let podstawa32 = 0n;
   if (prior >= prog) {
@@ -887,27 +898,31 @@ export async function computePlStatutory(
     );
   }
 
-  // Uneven pay breaks the level-pay annualisation below: a bonus folded into
-  // this month's base is multiplied into every prior month, collapsing the
-  // 282 600 zł ZUS room and pushing PIT to 32 % on fabricated YTD
-  // January has no priors, so it prices exactly; any later
-  // month with a non-periodic component refuses by name — committed
-  // same-payer YTD (updof art. 32 ust. 2; ZUS art. 19) rides no pack channel
-  // (see PL_REFUSALS_2026).
-  // https://eli.gov.pl/api/acts/DU/2025/163/text.html
-  // https://monitorpolski.gov.pl/MP/2025/1206
+  // A bonus joins the month's revenue (art. 32: taxed as ordinary income of
+  // the month paid); the thresholds test the real year-to-date figures.
   const bonusUnits = U(nonPeriodic === "" ? "0" : nonPeriodic);
-  if (monthOf(payDate) > 1 && bonusUnits !== 0n) {
+  if (!ctx.subsidiaryId) {
     throw new PayrollPackError(
-      `PL refuses a bonus/uneven versement in ${payDate.slice(0, 7)}: the 120 000 zł PIT threshold tests `
-      + "year-to-date income from this payer (updof art. 32 ust. 2) and the 282 600 zł emerytalne/rentowe "
-      + "room tests YTD contributions (ZUS art. 19), but no pack channel carries YTD — the engine prices "
-      + "prior months as (month − 1) × this month, exact for level pay only. A bonus implies every prior "
-      + "month paid the same inflated figure. Pay January bonuses normally (no priors exist); for later "
-      + "months have a qualified Polish payroll provider price the month from committed same-payer YTD "
-      + "before posting (see PL_REFUSALS_2026).",
+      "PL withholding needs the paying legal employer: the 120 000 zł PIT threshold and the "
+      + "emerytalne/rentowe annual limit test what this payer paid since 1 January.",
     );
   }
+  const ytd = resolvePlYearToDate({
+    taxYear,
+    payDate,
+    periodStart: run["period_start"],
+    hiredOn: emp["hired_on"],
+    history: await committedPlHistory({
+      tx: ctx.tx,
+      orgId: ctx.orgId,
+      subsidiaryId: ctx.subsidiaryId,
+      employeePartyId: ctx.employeePartyId,
+      taxYear,
+      payDate,
+      excludeDocumentId: ctx.documentId,
+    }),
+    opening: certificateFor("pl_otwarcie_roku"),
+  });
   // The working-time fraction behind the pro-rata FP/FS threshold, read
   // through the pack's employeeFacts declaration (optional: absent is an
   // accepted answer, and the core prices the full-minimum case without it).
@@ -925,6 +940,7 @@ export async function computePlStatutory(
     rokUrodzenia: yob,
     wymiarEtatu,
     wypadkowePct,
+    ytdPodstawaSpoleczne: ytd.podstawaSpoleczne,
   }, tables);
   const pit = calculatePlPitWithTables({
     brut: base,
@@ -933,6 +949,7 @@ export async function computePlStatutory(
     pomniejszenie,
     payDate,
     periodsPerYear,
+    ytdDochod: ytd.dochod,
   }, tables);
 
   pushStatutory("pit", "deduction", "Zaliczka na podatek dochodowy (PIT)", pit.zaliczka, 110);

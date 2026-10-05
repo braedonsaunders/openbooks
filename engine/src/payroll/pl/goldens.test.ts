@@ -45,13 +45,15 @@ interface Golden {
   label: string;
   citation: string;
   input: Omit<PlZusCalcInput, "periodsPerYear">;
+  /** Dochód this payer already paid this year — the PIT threshold's prior. */
+  ytdDochod?: string;
   expectedZus: Partial<PlZusCalcResult>;
   /** Present when the row also prices the PIT advance from the row's zusEe. */
   expectedPit?: Partial<PlPitCalcResult>;
 }
 
 // The 8 000 zł June payslip is frozen across the transcribed years: no cap
-// binds (6 × 8 000 = 48 000); 8 000 × 9,76 % = 780,80; zdrowotna
+// binds (5 prior × 8 000 = 40 000 base, 5 × 6 653 = 33 265 dochód); 8 000 × 9,76 % = 780,80; zdrowotna
 // (8 000 − 1 096,80) × 9 % = 621,288 → 621,29; dochód 6 653; 6 653 × 12 % − 300 → 498.
 const JUNE_8000_ZUS: Partial<PlZusCalcResult> = {
   podstawaSpoleczne: "8000.0000", emerytEe: "780.8000", emerytEr: "780.8000",
@@ -67,18 +69,20 @@ const SENIOR: Partial<PlZusCalcResult> = {
   fpNalezne: false, fpZwolnioneWiek: true, fp: "0.0000", fs: "0.0000", fgsp: "0.0000",
 };
 const june = (year: Year, extra: Partial<PlZusCalcInput> = {}) =>
-  ({ brut: "8000.00", payDate: `${year}-06-15`, rokUrodzenia: 1990, ...extra });
+  ({ brut: "8000.00", payDate: `${year}-06-15`, rokUrodzenia: 1990, ytdPodstawaSpoleczne: "40000.00", ...extra });
+const JUNE_YTD_DOCHOD = "33265";
 
 const GOLDENS: readonly Golden[] = [
   // ── 2026 ──
   { year: 2026, label: "standard June payslip: 8 000 zł prices every line (4 806 zł threshold cleared, age 36)",
     citation: `M.P. 2025 poz. 1206 limit; Dz.U. 2025 poz. 1242 minimum wage; ${ZUS_2026}`,
-    input: june(2026), expectedZus: JUNE_8000_ZUS, expectedPit: JUNE_8000_PIT },
+    input: june(2026), ytdDochod: JUNE_YTD_DOCHOD, expectedZus: JUNE_8000_ZUS, expectedPit: JUNE_8000_PIT },
   { year: 2026, label: "December sweep: the 282 600 zł room binds emerytalne/rentowe only",
     citation: `M.P. 2025 poz. 1206 limit (282 600 zł); ${ZUS_2026}`,
     // Prior 11 × 25 000 = 275 000 → room 7 600; zdrowotna uncapped;
     // dochód 25 000 − 1 468,26 − 250 → 23 282, all at 32 %: 7 450,24 − 300 → 7 150.
-    input: { brut: "25000.00", payDate: "2026-12-15", rokUrodzenia: 1985 },
+    input: { brut: "25000.00", payDate: "2026-12-15", rokUrodzenia: 1985, ytdPodstawaSpoleczne: "275000.00" },
+    ytdDochod: "256102",
     expectedZus: {
       podstawaSpoleczne: "7600.0000", emerytEe: "741.7600", emerytEr: "741.7600", rentEe: "114.0000",
       rentEr: "494.0000", chorEe: "612.5000", zusEe: "1468.2600", podstawaZdrowotna: "23531.7400",
@@ -89,12 +93,27 @@ const GOLDENS: readonly Golden[] = [
     citation: ZUS_2026,
     // Dochód 25 000 − 3 427,50 − 250 = 21 322,50 → 21 323; prior 5 × 21 323 = 106 615:
     // 13 385 at 12 % + 7 938 at 32 % − 300 = 3 846,36 → 3 846.
-    input: { brut: "25000.00", payDate: "2026-06-15", rokUrodzenia: 1985 },
+    input: { brut: "25000.00", payDate: "2026-06-15", rokUrodzenia: 1985, ytdPodstawaSpoleczne: "125000.00" },
+    ytdDochod: "106615",
     expectedZus: { podstawaSpoleczne: "25000.0000", zusEe: "3427.5000", zdrowotna: "1941.5300" },
     expectedPit: { dochod: "21323.0000", podstawa12: "13385.0000", podstawa32: "7938.0000", zaliczka: "3846.0000" } },
+  // A July hire paid 25 000 zł has no earlier dochód from this payer: the whole 21 323 sits at 12 %,
+  // 2 558,76 − 300 → 2 259 (inferring six prior months at the same pay would tax it all at 32 %: 6 523).
+  { year: 2026, label: "July hire: no prior dochód from this payer keeps the month at 12 %",
+    citation: "PIT art. 32 ust. 2 (dochód od początku roku u tego płatnika)",
+    input: { brut: "25000.00", payDate: "2026-07-31", rokUrodzenia: 1985, ytdPodstawaSpoleczne: "0" },
+    ytdDochod: "0",
+    expectedZus: { podstawaSpoleczne: "25000.0000", zusEe: "3427.5000" },
+    expectedPit: { dochod: "21323.0000", podstawa12: "21323.0000", podstawa32: "0.0000", zaliczka: "2259.0000" } },
+  // 10 000 zł January–June, then 40 000 zł: by December the real base is 6 × 10 000 + 5 × 40 000 =
+  // 260 000, leaving 22 600 of the 282 600 room (inferring 11 × 40 000 would leave none).
+  { year: 2026, label: "after a mid-year raise the annual limit binds on the real base",
+    citation: "ZUS art. 19 ust. 1 (M.P. 2025 poz. 1206: 282 600 zł)",
+    input: { brut: "40000.00", payDate: "2026-12-15", rokUrodzenia: 1985, ytdPodstawaSpoleczne: "260000.00" },
+    expectedZus: { podstawaSpoleczne: "22600.0000", emerytEe: "2205.7600", rentEe: "339.0000" } },
   { year: 2026, label: "4 000 zł clears no FP/FS threshold; FGŚP still priced",
     citation: "Dz.U. 2025 poz. 1242 minimum wage; Dz.U. 2025 poz. 620 art. 259 ust. 1",
-    input: { brut: "4000.00", payDate: "2026-06-15", rokUrodzenia: 1990, wymiarEtatu: "1" },
+    input: { brut: "4000.00", payDate: "2026-06-15", rokUrodzenia: 1990, wymiarEtatu: "1", ytdPodstawaSpoleczne: "20000.00" },
     expectedZus: { fpNalezne: false, fpZwolnioneWiek: false, fp: "0.0000", fs: "0.0000", fgsp: "4.0000" } },
   { year: 2026, label: "born 1960: FP/FS and FGŚP age-barred to zero",
     citation: "labour-market art. 261; claims-protection art. 9b ust. 2 (Dz.U. 2026 poz. 186)",
@@ -106,12 +125,13 @@ const GOLDENS: readonly Golden[] = [
   // ── 2025 ──
   { year: 2025, label: "standard June payslip: 8 000 zł prices every line (4 666 zł threshold cleared, age 35)",
     citation: `M.P. 2024 poz. 1051 limit; Dz.U. 2024 poz. 1362 minimum wage; ${ZUS_2025}`,
-    input: june(2025), expectedZus: JUNE_8000_ZUS, expectedPit: JUNE_8000_PIT },
+    input: june(2025), ytdDochod: JUNE_YTD_DOCHOD, expectedZus: JUNE_8000_ZUS, expectedPit: JUNE_8000_PIT },
   { year: 2025, label: "December sweep: prior 275 000 zł exhausts the 260 190 zł room",
     citation: `M.P. 2024 poz. 1051 limit (260 190 zł); ${ZUS_2025}`,
     // Chorobowe 612,50 on the full 25 000; zdrowotna (25 000 − 612,50) × 9 % = 2 194,875 → 2 194,88;
     // dochód 24 137,50 → 24 138, all at 32 %: 7 724,16 − 300 → 7 424.
-    input: { brut: "25000.00", payDate: "2025-12-15", rokUrodzenia: 1985 },
+    input: { brut: "25000.00", payDate: "2025-12-15", rokUrodzenia: 1985, ytdPodstawaSpoleczne: "275000.00" },
+    ytdDochod: "265518",
     expectedZus: {
       podstawaSpoleczne: "0.0000", emerytEe: "0.0000", emerytEr: "0.0000", rentEe: "0.0000", rentEr: "0.0000",
       chorEe: "612.5000", zusEe: "612.5000", podstawaZdrowotna: "24387.5000", zdrowotna: "2194.8800",
@@ -119,7 +139,7 @@ const GOLDENS: readonly Golden[] = [
     expectedPit: { dochod: "24138.0000", podstawa12: "0.0000", podstawa32: "24138.0000", zaliczka: "7424.0000" } },
   { year: 2025, label: "4 250 zł clears no 4 666 zł threshold; FGŚP still priced",
     citation: "Dz.U. 2024 poz. 1362 minimum wage",
-    input: { brut: "4250.00", payDate: "2025-06-15", rokUrodzenia: 1990, wymiarEtatu: "1" },
+    input: { brut: "4250.00", payDate: "2025-06-15", rokUrodzenia: 1990, wymiarEtatu: "1", ytdPodstawaSpoleczne: "21250.00" },
     expectedZus: { fpNalezne: false, fpZwolnioneWiek: false, fp: "0.0000", fs: "0.0000", fgsp: "4.2500" } },
   { year: 2025, label: "born 1960: FP/FS and FGŚP age-barred to zero",
     citation: "art. 104b ust. 2 / art. 261; claims-protection art. 9b ust. 2",
@@ -131,11 +151,12 @@ const GOLDENS: readonly Golden[] = [
   // ── 2024 ──
   { year: 2024, label: "standard June payslip: 8 000 zł prices every line (4 242 zł threshold cleared, age 34)",
     citation: `M.P. 2023 poz. 1356 limit; Dz.U. 2023 poz. 1893 minimum wage; ${ZUS_2024}`,
-    input: june(2024), expectedZus: JUNE_8000_ZUS, expectedPit: JUNE_8000_PIT },
+    input: june(2024), ytdDochod: JUNE_YTD_DOCHOD, expectedZus: JUNE_8000_ZUS, expectedPit: JUNE_8000_PIT },
   { year: 2024, label: "December sweep: prior 275 000 zł exhausts the 234 720 zł room",
     citation: `M.P. 2023 poz. 1356 limit (234 720 zł); ${ZUS_2024}`,
     // Same arithmetic as 2025: chorobowe 612,50; zdrowotna 2 194,88; dochód 24 138 → 7 424.
-    input: { brut: "25000.00", payDate: "2024-12-15", rokUrodzenia: 1985 },
+    input: { brut: "25000.00", payDate: "2024-12-15", rokUrodzenia: 1985, ytdPodstawaSpoleczne: "275000.00" },
+    ytdDochod: "265518",
     expectedZus: {
       podstawaSpoleczne: "0.0000", emerytEe: "0.0000", rentEe: "0.0000", chorEe: "612.5000",
       zusEe: "612.5000", podstawaZdrowotna: "24387.5000", zdrowotna: "2194.8800",
@@ -145,23 +166,25 @@ const GOLDENS: readonly Golden[] = [
   // social lines and PIT do not move: 4 250 − 582,68 − 250 → 3 417; 410,04 − 300 → 110.
   { year: 2024, label: "February 4 250 zł ≥ 4 242 zł: FP/FS due on the full revenue",
     citation: `Dz.U. 2023 poz. 1893 (first-half minimum wage); ${ZUS_2024}`,
-    input: { brut: "4250.00", payDate: "2024-02-15", rokUrodzenia: 1990 },
+    input: { brut: "4250.00", payDate: "2024-02-15", rokUrodzenia: 1990, ytdPodstawaSpoleczne: "4250.00" },
+    ytdDochod: "3417",
     expectedZus: { fpNalezne: true, fp: "42.5000", fs: "61.6300", fgsp: "4.2500",
       zusEe: "582.6800", podstawaZdrowotna: "3667.3200", zdrowotna: "330.0600" },
     expectedPit: { dochod: "3417.0000", zaliczka: "110.0000" } },
   { year: 2024, label: "July 4 250 zł < 4 300 zł: the same pay prices no FP/FS; FGŚP stays",
     citation: `Dz.U. 2023 poz. 1893 (second-half minimum wage from 2024-07-01); ${ZUS_2024}`,
-    input: { brut: "4250.00", payDate: "2024-07-15", rokUrodzenia: 1990, wymiarEtatu: "1" },
+    input: { brut: "4250.00", payDate: "2024-07-15", rokUrodzenia: 1990, wymiarEtatu: "1", ytdPodstawaSpoleczne: "25500.00" },
+    ytdDochod: "20502",
     expectedZus: { fpNalezne: false, fp: "0.0000", fs: "0.0000", fgsp: "4.2500",
       zusEe: "582.6800", podstawaZdrowotna: "3667.3200", zdrowotna: "330.0600" },
     expectedPit: { dochod: "3417.0000", zaliczka: "110.0000" } },
   { year: 2024, label: "January 4 242,00 zł meets the threshold exactly: FS 61,509 → 61,51",
     citation: "Dz.U. 2023 poz. 1893 minimum wage; funds Dz.U. 2024 poz. 122",
-    input: { brut: "4242.00", payDate: "2024-01-15", rokUrodzenia: 1990 },
+    input: { brut: "4242.00", payDate: "2024-01-15", rokUrodzenia: 1990, ytdPodstawaSpoleczne: "0" },
     expectedZus: { fpNalezne: true, fp: "42.4200", fs: "61.5100" } },
   { year: 2024, label: "January 4 241,99 zł, one grosz under: no FP/FS; FGŚP 4,24199 → 4,24",
     citation: "Dz.U. 2023 poz. 1893 minimum wage; funds Dz.U. 2024 poz. 122",
-    input: { brut: "4241.99", payDate: "2024-01-15", rokUrodzenia: 1990, wymiarEtatu: "1" },
+    input: { brut: "4241.99", payDate: "2024-01-15", rokUrodzenia: 1990, wymiarEtatu: "1", ytdPodstawaSpoleczne: "0" },
     expectedZus: { fpNalezne: false, fp: "0.0000", fs: "0.0000", fgsp: "4.2400" } },
   { year: 2024, label: "born 1960: FP/FS and FGŚP age-barred to zero",
     citation: "art. 104b ust. 2; claims-protection art. 9b ust. 2",
@@ -181,7 +204,7 @@ for (const row of GOLDENS) {
     if (!row.expectedPit) return;
     const pit = CALC[row.year].pit({
       brut: row.input.brut, zusEe: zus.zusEe, kup: "miejscowy", pomniejszenie: "1/12",
-      payDate: row.input.payDate, periodsPerYear: 12,
+      payDate: row.input.payDate, periodsPerYear: 12, ytdDochod: row.ytdDochod ?? "missing",
     });
     for (const [key, want] of Object.entries(row.expectedPit)) {
       assert.equal(pit[key as keyof PlPitCalcResult], want, `${at}: PIT ${key}`);
@@ -224,7 +247,7 @@ for (const row of REFUSALS) {
       ? () => CALC[row.year].zus({ ...base, ...input.zus } as PlZusCalcInput)
       : () => CALC[row.year].pit({
           brut: base.brut, zusEe: "1096.8000", kup: "miejscowy", pomniejszenie: "1/12",
-          payDate: base.payDate, periodsPerYear: 12, ...input.pit,
+          payDate: base.payDate, periodsPerYear: 12, ytdDochod: JUNE_YTD_DOCHOD, ...input.pit,
         });
     assert.throws(run, row.refusal, `${row.year} ${row.label}`);
   });
@@ -234,6 +257,10 @@ for (const row of REFUSALS) {
 // Only the component-row lookup (`need`) is stubbed — unit tests have no
 // database. The statutoryAssessment consult is real, so an undeclared
 // (systemKey, kind) throws PayrollPackError here exactly as in a live run.
+/** Committed history the year-to-date query returns: a payer running here since January. */
+const HISTORY = { dochod: "33265.0000", podstawa: "40000.0000", payer_first_pay: "2026-01-31", payer_first_period: "2026-01-01" };
+const historyTx = (row: Record<string, string | null> = HISTORY) => ({ execute: async () => ({ rows: [row] }) });
+
 function adapterContext(payDate: string, overrides: Record<string, unknown> = {}) {
   const lines: StubLine[] = [];
   const pushStatutory = createPushStatutory({
@@ -243,10 +270,12 @@ function adapterContext(payDate: string, overrides: Record<string, unknown> = {}
     need: (systemKey: string, kind: string): Record<string, unknown> => ({ id: `${systemKey}:${kind}` }),
   });
   const ctx = {
+    tx: historyTx(),
+    orgId: "org", subsidiaryId: "payer", employeePartyId: "emp", documentId: "doc",
     taxYear: 2026,
     region: "PL",
-    run: { pay_date: payDate },
-    emp: { pl_rok_urodzenia: "1990" },
+    run: { pay_date: payDate, period_start: `${payDate.slice(0, 7)}-01` },
+    emp: { pl_rok_urodzenia: "1990", hired_on: "2019-04-01" },
     income: "8000.00",
     nonPeriodic: "",
     pensionable: "8000.00",
@@ -302,11 +331,11 @@ const ADAPTER_REFUSALS: readonly { label: string; payDate: string; input: Record
   { label: "a missing ZUS wypadkowe rate is refused instead of omitting WYP-ER", payDate: "2026-06-15",
     input: { resolveStatutoryRates: async () => ({ values: () => null }) },
     refusal: /PL wypadkowe refuses.*ZUS-notified rate.*Payroll Setup/ },
-  // Prior months are priced as (month − 1) × this month: a bonus would imply every
-  // prior month paid it too, collapsing the ZUS room and pushing PIT to 32 %.
-  { label: "a December bonus is refused instead of annualised into YTD", payDate: "2026-12-15",
-    input: { nonPeriodic: "20000.00" },
-    refusal: /PL refuses a bonus\/uneven versement.*no pack channel carries YTD/ },
+  // A payer that adopted payroll here in July, an employee hired before then, and no
+  // opening carry-in: the months paid elsewhere are unknown, so nothing is inferred.
+  { label: "an incomplete year-to-date record is refused with both remedies", payDate: "2026-08-10",
+    input: { tx: historyTx({ dochod: "0", podstawa: "0", payer_first_pay: "2026-07-10", payer_first_period: "2026-07-01" }) },
+    refusal: /year-to-date is incomplete.*record the hire date on the employee record.*pl_otwarcie_roku/s },
   // No certificate must not fall through to the 300 zł reduction or the 250 zł KUP.
   { label: "no PIT-2 certificate on file is refused by name", payDate: "2026-06-15",
     input: { certificateFor: () => null }, refusal: /pl_pit2/ },
@@ -323,3 +352,34 @@ for (const row of ADAPTER_REFUSALS) {
     assert.deepEqual(lines, [], `${row.label}: a refused run pushes nothing`);
   });
 }
+
+test("adapter prices from the payer's real year-to-date: July hire, December bonus, opening carry-in", async () => {
+  // July hire on 25 000 zł at a payer running here since January: no earlier dochód, 12 % → 2 259.
+  const hire = adapterContext("2026-07-31", {
+    income: "25000.00", pensionable: "25000.00", emp: { pl_rok_urodzenia: "1985", hired_on: "2026-07-01" },
+    tx: historyTx({ dochod: "0", podstawa: "0", payer_first_pay: null, payer_first_period: null }),
+  });
+  assert.equal((await computePlStatutory(hire.ctx))["ZALICZKA"], "2259.0000");
+  // A December 8 000 + 20 000 zł bonus on 11 committed months of 8 000 (88 000 base, 73 183 dochód):
+  // dochód 28 000 − 3 838,80 − 250 = 23 911,20 → 23 911; 120 000 − 73 183 = 46 817 room, all at 12 %
+  // → 2 869,32 − 300 → 2 569. The bonus no longer refuses.
+  const bonus = adapterContext("2026-12-15", {
+    nonPeriodic: "20000.00",
+    tx: historyTx({ ...HISTORY, dochod: "73183.0000", podstawa: "88000.0000" }),
+  });
+  const priced = await computePlStatutory(bonus.ctx);
+  assert.deepEqual([priced["PODSTAWA_SP"], priced["DOCHOD"], priced["ZALICZKA"]], ["28000.0000", "23911.0000", "2569.0000"]);
+  // A mid-year adopter declares what it paid before it ran payroll here: 116 000 zł of dochód
+  // carried in leaves 4 000 of the threshold for August's 6 653.
+  const carried = adapterContext("2026-08-10", {
+    tx: historyTx({ dochod: "0", podstawa: "0", payer_first_pay: "2026-07-10", payer_first_period: "2026-07-01" }),
+    certificateFor: (key: string) => key === "pl_pit2"
+      ? { answers: { pomniejszenie: "1/12", kup: "miejscowy" } }
+      : key === "pl_otwarcie_roku"
+        ? { onFile: true, answers: { dochod_ytd: "116000.00", podstawa_emerytalna_ytd: "140000.00" } }
+        : null,
+  });
+  const result = await computePlStatutory(carried.ctx);
+  // 120 000 − 116 000 = 4 000 at 12 % + 2 653 at 32 % − 300 = 480 + 848,96 − 300 = 1 028,96 → 1 029.
+  assert.deepEqual([result["PODSTAWA_12"], result["PODSTAWA_32"], result["ZALICZKA"]], ["4000.0000", "2653.0000", "1029.0000"]);
+});

@@ -17,8 +17,10 @@ import { PL_TAX_YEARS } from "./rates.ts";
 /** Minimal adapter context: PIT-2 filed, KUP 250, birth year 1990. */
 function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
   return {
-    tx: null as never,
+    // A payer running its payroll here since January, five months of 8 000 zł committed.
+    tx: { execute: async () => ({ rows: [{ dochod: "33265.0000", podstawa: "40000.0000", payer_first_pay: "2026-01-15", payer_first_period: "2026-01-01" }] }) },
     orgId: "org",
+    subsidiaryId: "payer",
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Test",
@@ -109,11 +111,14 @@ test("PL certificate declares the PIT-2 answers, not a W-4 clone", () => {
   assert.equal(declared.country, "PL");
   // Since 0191 a second, column-backed declaration carries the payer-held
   // birth year (`pl_wiek`) — the PIT-2 itself is unchanged, still first;
-  // the employer-recorded employment facts (`pl_zatrudnienie`) are the
-  // second row-backed (fileable) form.
+  // the employer-recorded employment facts (`pl_zatrudnienie`) and the
+  // opening year-to-date carry-in (`pl_otwarcie_roku`) are row-backed forms.
   assert.deepEqual(
     declared.certificates.map((certificate) => [certificate.key, certificate.storage]),
-    [["pl_pit2", "certificate_rows"], ["pl_wiek", "profile_columns"], ["pl_zatrudnienie", "certificate_rows"]],
+    [
+      ["pl_pit2", "certificate_rows"], ["pl_wiek", "profile_columns"], ["pl_zatrudnienie", "certificate_rows"],
+      ["pl_otwarcie_roku", "certificate_rows"],
+    ],
   );
   const cert = declared.certificates[0];
   assert.ok(cert);
