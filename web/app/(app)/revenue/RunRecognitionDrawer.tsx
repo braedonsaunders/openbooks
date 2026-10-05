@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { Badge, Button, Drawer, Input, Label, Select, TableCell, TableRow } from '@openbooks/ui'
 
 export interface RecognitionBook {
@@ -156,20 +157,23 @@ export function RunRecognitionDrawer({
 
   /**
    * Every refusal this boundary can emit, mapped to a message naming the
-   * remedy. An unknown body falls back to the raw code (or the status) so a
-   * refusal always reaches the operator instead of dying silent.
+   * remedy. Known scope codes keep their localized remedies; everything
+   * else goes through the shared reader so the server's message, detail
+   * and remedy all reach the operator instead of dying silent. The code
+   * check reads a clone: the shared reader gets the unread body, and a
+   * non-JSON body still falls back to the status.
    */
   async function refusalText(res: Response, fallback: string): Promise<string> {
-    let body: Record<string, unknown> = {}
+    let code: string | null = null
     try {
-      const parsed: unknown = await res.json()
+      const parsed: unknown = await res.clone().json()
       if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        body = parsed as Record<string, unknown>
+        const raw = (parsed as Record<string, unknown>).error
+        code = typeof raw === 'string' && raw.trim() !== '' ? raw : null
       }
     } catch {
-      body = {}
+      code = null
     }
-    const code = typeof body.error === 'string' && body.error.trim() !== '' ? body.error : null
     switch (code) {
       case 'invalid_as_of_date':
         return t('review.errDate')
@@ -185,7 +189,7 @@ export function RunRecognitionDrawer({
       case 'feature disabled':
         return t('review.errScope')
       default:
-        return code ?? `${fallback} (status ${res.status})`
+        return readApiErrorMessage(res, fallback)
     }
   }
 
