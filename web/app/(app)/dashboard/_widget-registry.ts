@@ -714,6 +714,26 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
+  'kpi-forensic-risk': {
+    id: 'kpi-forensic-risk',
+    category: 'analytics',
+    labelKey: 'widgets.forensicRisk',
+    descriptionKey: 'catalog.forensicRisk',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    analyticsSource: 'sentinel',
+  },
+  'kpi-duplicate-payments': {
+    id: 'kpi-duplicate-payments',
+    category: 'analytics',
+    labelKey: 'widgets.duplicatePayments',
+    descriptionKey: 'catalog.duplicatePayments',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    analyticsSource: 'sentinel',
+  },
 }
 
 export const CATEGORY_LABEL_KEYS: Record<WidgetCategory, string> = {

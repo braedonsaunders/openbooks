@@ -97,7 +97,11 @@
     "kpiSpendVelocity": "支出增速",
     "kpiVendorConcentrationHint": "前五大：{share} · {period}",
     "kpiVendorPaymentHint": "平均付款{days}天 · 延迟{late} · {period}",
-    "kpiSpendVelocityHint": "潜在节约{savings} · {period}"
+    "kpiSpendVelocityHint": "潜在节约{savings} · {period}",
+    "forensicRisk": "法证风险",
+    "forensicRiskHint": "{flagged} 条已标记 · {value} 风险敞口 · {period}",
+    "duplicatePayments": "重复付款",
+    "duplicatePaymentsHint": "{value} 风险敞口 · {period}"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -213,7 +217,9 @@
     "budgetVariance": "本期已批准预算与实际对比，以及偏离的科目。",
     "kpiVendorConcentration": "来自供应商绩效的供应商HHI与前五大支出占比。",
     "kpiVendorPayment": "来自供应商绩效的准时付款率与延迟付款支出。",
-    "kpiSpendVelocity": "来自支出增速的未处理预警与节约潜力。"
+    "kpiSpendVelocity": "来自支出增速的未处理预警与节约潜力。",
+    "forensicRisk": "Sentinel总体风险评分，含已标记数量和风险敞口。",
+    "duplicatePayments": "重复付款分组及其风险敞口。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",

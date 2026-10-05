@@ -1044,6 +1044,8 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
+  'kpi-forensic-risk': ['forensicRisk'],
+  'kpi-duplicate-payments': ['duplicatePayments'],
 }
 
 const EMPTY_ANALYTICS_WIDGET_METRICS = {

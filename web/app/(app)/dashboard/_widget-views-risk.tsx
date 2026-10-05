@@ -1,11 +1,74 @@
 'use client'
 
-import type { WidgetCardProps } from './_widget-tiles'
+import { useTranslations } from 'next-intl'
+import { Copy, ShieldAlert } from 'lucide-react'
+import { useMoney } from '@/components/money-provider'
+import { CardShell, MetricTile, UnavailableRow, type MetricTone, type WidgetCardProps } from './_widget-tiles'
 
 /**
  * Render cases for the dashboard widgets extracted from Sentinel. WidgetCard
  * delegates every widget whose registry entry names this source here.
+ *
+ * Both tiles show the dashboard's own figures through the shared summary —
+ * never re-derived — and link to the dashboard. The risk tone mirrors the
+ * Sentinel risk gauge bands, so the tile and the dashboard agree on what a
+ * score means.
  */
-export function RiskWidgetCard(_props: WidgetCardProps): React.ReactNode {
-  return null
+function scoreTone(score: number): MetricTone {
+  if (score >= 60) return 'rose'
+  if (score >= 40) return 'orange'
+  if (score >= 20) return 'amber'
+  return 'emerald'
+}
+
+export function RiskWidgetCard({ widgetId, data }: WidgetCardProps): React.ReactNode {
+  const t = useTranslations('dashboard')
+  const { money } = useMoney()
+  switch (widgetId) {
+    case 'kpi-forensic-risk': {
+      const tile = data.forensicRisk
+      if (tile === null) return null
+      return (
+        <MetricTile
+          icon={<ShieldAlert size={15} />}
+          label={t('widgets.forensicRisk')}
+          value={String(tile.score)}
+          href="/analytics/sentinel"
+          tone={scoreTone(tile.score)}
+          hint={t('widgets.forensicRiskHint', {
+            flagged: tile.flagged,
+            value: money(tile.value, { currency: tile.currency }),
+            period: tile.periodLabel,
+          })}
+        />
+      )
+    }
+    case 'kpi-duplicate-payments': {
+      const tile = data.duplicatePayments
+      if (tile === null) return null
+      if (!tile.available) {
+        return (
+          <CardShell title={t('widgets.duplicatePayments')} icon={<Copy size={15} />} href="/analytics/sentinel">
+            <UnavailableRow reason={tile.reason} />
+          </CardShell>
+        )
+      }
+      const dup = tile.value
+      return (
+        <MetricTile
+          icon={<Copy size={15} />}
+          label={t('widgets.duplicatePayments')}
+          value={String(dup.groups)}
+          href="/analytics/sentinel"
+          tone={dup.groups > 0 ? 'amber' : 'emerald'}
+          hint={t('widgets.duplicatePaymentsHint', {
+            value: money(dup.value, { currency: dup.currency }),
+            period: dup.periodLabel,
+          })}
+        />
+      )
+    }
+    default:
+      return null
+  }
 }

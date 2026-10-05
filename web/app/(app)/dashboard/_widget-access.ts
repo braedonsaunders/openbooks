@@ -115,6 +115,8 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
+  'kpi-forensic-risk': ['reports.read'],
+  'kpi-duplicate-payments': ['reports.read'],
 }
 
 function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly string[]): boolean {
