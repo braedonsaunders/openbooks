@@ -847,17 +847,17 @@ test("a claimed but ineligible order never asks for re-ingest", { skip: !DB }, a
   }
 });
 
-test("a hidden sale document never asks for posting work already done", { skip: !DB }, async () => {
+test("hidden, draft and missing sale documents share one neutral answer", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
     const { channelA, docB } = await seed(org, actor);
-    // Legacy cross-posted evidence: the home order points at the hidden
-    // receipt the way a pre-control posting left it. Discovery must not
-    // propose from it, and the matcher must not ask to post it again.
-    const moved = await db.execute(sql`update channel_orders set posting_document_id = ${docB.id}
-       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
-    assert.equal(moved.rowCount, 1, "the home order carries the hidden receipt");
+    const draftId = (await db.execute<{ id: string }>(sql`
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
+    // Legacy cross-posted evidence: the home order points at receipts the
+    // caller may not use the way a pre-control posting left them. Posted,
+    // draft and missing targets must answer identically: the remedy never
+    // infers posting state from denied visibility.
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-hidden-sale-1", currency: "CAD", issuedAt: "2026-07-10" },
       [{ id: "txn-hidden-sale-1", type: "charge", amount: "60.40", currency: "CAD", sourceOrderId: "gid://shopify/Order/8801" }],
@@ -866,36 +866,47 @@ test("a hidden sale document never asks for posting work already done", { skip: 
       bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
       clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
     }, null)).batchId;
-    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
-    assert.equal(result.lines.length, 1);
-    const [verdict] = result.lines;
-    assert.ok(verdict, "the batch yields its sale verdict");
-    assert.equal(verdict.status, "unmatched");
-    assert.ok(verdict.status === "unmatched");
-    assert.equal(verdict.reason, "document_unavailable", `a hidden sale document never reads as unposted, got ${verdict.reason}`);
-    assert.match(verdict.remedy, /unavailable in this payout's legal entity/);
-    assert.match(verdict.remedy, /authorized operator/);
-    for (const text of [verdict.reason, verdict.remedy]) {
-      assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
-      assert.doesNotMatch(text, /post the order/i, `posted work never asks for posting: ${text}`);
+    const remedies: string[] = [];
+    for (const [label, documentId] of [["posted", docB.id], ["draft", draftId], ["missing", randomUUID()]] as const) {
+      const moved = await db.execute(sql`update channel_orders set posting_document_id = ${documentId}
+         where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
+      assert.equal(moved.rowCount, 1, `the home order carries the ${label} receipt`);
+      const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+      assert.equal(result.lines.length, 1);
+      const [verdict] = result.lines;
+      assert.ok(verdict, `the batch yields its ${label} sale verdict`);
+      assert.equal(verdict.status, "unmatched");
+      assert.ok(verdict.status === "unmatched");
+      assert.equal(verdict.reason, "document_unavailable", `a ${label} sale document never reads as unposted, got ${verdict.reason}`);
+      assert.match(verdict.remedy, /channel order's document is unavailable/);
+      assert.match(verdict.remedy, /authorized operator/);
+      for (const text of [verdict.reason, verdict.remedy]) {
+        assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
+        assert.ok(!text.includes("CS-DRAFT-W1"), `hidden draft number leaks: ${text}`);
+        assert.doesNotMatch(text, /post the order/i, `denied visibility never asks for posting: ${text}`);
+      }
+      remedies.push(verdict.remedy);
     }
+    assert.deepEqual(remedies, [remedies[0], remedies[0], remedies[0]], "posting state never steers the answer");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("a hidden summary document never asks for posting work already done", { skip: !DB }, async () => {
+test("hidden, draft and missing summary documents share one neutral answer", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
     const { channelA, docB } = await seed(org, actor);
+    const draftId = (await db.execute<{ id: string }>(sql`
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
     const summaryId = (await db.execute<{ id: string }>(sql`
       insert into channel_daily_summaries (org_id, channel_id, summary_date, stock_location_id, currency, posting_document_id)
       values (${org.orgId}, ${channelA}, ${org.date}, ${org.stockLocationId}, 'CAD', ${docB.id})
       returning id`)).rows[0]!.id;
     const moved = await db.execute(sql`update channel_orders set posting_document_id = null, summary_id = ${summaryId}
        where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
-    assert.equal(moved.rowCount, 1, "the home order summarizes through the hidden receipt");
+    assert.equal(moved.rowCount, 1, "the home order summarizes in the channel");
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-hidden-summary-1", currency: "CAD", issuedAt: "2026-07-10" },
       [{ id: "txn-hidden-sum-1", type: "charge", amount: "60.40", currency: "CAD", sourceOrderId: "8801" }],
@@ -904,31 +915,41 @@ test("a hidden summary document never asks for posting work already done", { ski
       bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
       clearingAccountId: org.accounts.clearing, subsidiaryId: org.subsidiaryId,
     }, null)).batchId;
-    const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
-    assert.equal(result.lines.length, 1);
-    const [verdict] = result.lines;
-    assert.ok(verdict, "the batch yields its summary verdict");
-    assert.equal(verdict.status, "unmatched");
-    assert.ok(verdict.status === "unmatched");
-    assert.equal(verdict.reason, "document_unavailable", `a hidden summary document never reads as unposted, got ${verdict.reason}`);
-    assert.match(verdict.remedy, /daily summary's document is unavailable/);
-    assert.match(verdict.remedy, /authorized operator/);
-    for (const text of [verdict.reason, verdict.remedy]) {
-      assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
-      assert.doesNotMatch(text, /post it/i, `posted work never asks for posting: ${text}`);
+    const remedies: string[] = [];
+    for (const [label, documentId] of [["posted", docB.id], ["draft", draftId], ["missing", randomUUID()]] as const) {
+      const pointed = await db.execute(sql`update channel_daily_summaries set posting_document_id = ${documentId}
+         where org_id = ${org.orgId} and id = ${summaryId}`);
+      assert.equal(pointed.rowCount, 1, `the summary carries the ${label} receipt`);
+      const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
+      assert.equal(result.lines.length, 1);
+      const [verdict] = result.lines;
+      assert.ok(verdict, `the batch yields its ${label} summary verdict`);
+      assert.equal(verdict.status, "unmatched");
+      assert.ok(verdict.status === "unmatched");
+      assert.equal(verdict.reason, "document_unavailable", `a ${label} summary document never reads as unposted, got ${verdict.reason}`);
+      assert.match(verdict.remedy, /daily summary's document is unavailable/);
+      assert.match(verdict.remedy, /authorized operator/);
+      for (const text of [verdict.reason, verdict.remedy]) {
+        assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
+        assert.ok(!text.includes("CS-DRAFT-W1"), `hidden draft number leaks: ${text}`);
+        assert.doesNotMatch(text, /post it/i, `denied visibility never asks for posting: ${text}`);
+      }
+      remedies.push(verdict.remedy);
     }
+    assert.deepEqual(remedies, [remedies[0], remedies[0], remedies[0]], "posting state never steers the answer");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("a hidden order reads exactly like an unknown one to a restricted caller", { skip: !DB }, async () => {
+test("a hidden order answers exactly like an unknown one to a restricted caller", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
     await seed(org, actor);
     // 8802 exists on a channel the caller may not see; 9999 exists nowhere.
-    // A restricted caller must not distinguish the two responses.
+    // A restricted caller runs no existence read, so both answer identically
+    // without ever instructing ingestion.
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-oracle-1", currency: "CAD", issuedAt: "2026-07-10" },
       [
@@ -948,9 +969,44 @@ test("a hidden order reads exactly like an unknown one to a restricted caller", 
     const hidden = byRef.get("txn-oracle-hidden")!;
     const unknown = byRef.get("txn-oracle-unknown")!;
     assert.ok(hidden.status === "unmatched" && unknown.status === "unmatched");
-    assert.equal(hidden.reason, "order_unknown");
+    assert.equal(hidden.reason, "order_unavailable");
     assert.equal(hidden.reason, unknown.reason, "hidden reads exactly like missing");
     assert.equal(hidden.remedy, unknown.remedy, "hidden remedies exactly like missing");
+    assert.doesNotMatch(hidden.remedy, /ingest/i, "no existence read ever instructs ingestion");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an unrestricted caller keeps unknown and foreign order answers apart", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
+    const { subB } = await seed(org, actor);
+    // Explicit null hides nothing: a foreign-entity order reads unavailable
+    // while a reference nothing claims keeps the ingest remedy.
+    const parsed = parseShopifyPaymentsPayout(
+      { id: "shopify-payout-null-oracle-1", currency: "CAD", issuedAt: "2026-07-10" },
+      [
+        { id: "txn-null-foreign", type: "charge", amount: "25.30", currency: "CAD", sourceOrderId: "8802" },
+        { id: "txn-null-unknown", type: "charge", amount: "11.00", currency: "CAD", sourceOrderId: "9999" },
+      ],
+    );
+    const batch = (await importSettlementBatch(org.orgId, actor, parsed, {
+      bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment,
+      clearingAccountId: org.accounts.clearing, subsidiaryId: subB,
+    }, null)).batchId;
+    const refs = new Map((await db.execute<{ id: string; ref: string }>(sql`
+      select id, external_ref as ref from psp_settlement_lines
+       where org_id = ${org.orgId} and batch_id = ${batch}`)).rows.map((row) => [row.id, row.ref] as const));
+    const result = await matchPayoutLines(org.orgId, batch, actor, null);
+    const byRef = new Map([...refs].map(([id, ref]) => [ref, result.lines.find((line) => line.lineId === id)!]));
+    const foreign = byRef.get("txn-null-foreign")!;
+    const unknown = byRef.get("txn-null-unknown")!;
+    assert.ok(foreign.status === "unmatched" && unknown.status === "unmatched");
+    assert.equal(foreign.reason, "order_unavailable", `a foreign order reads unavailable, got ${foreign.reason}`);
+    assert.equal(unknown.reason, "order_unknown", `a truly unknown reference keeps ingestion, got ${unknown.reason}`);
+    assert.match(unknown.remedy, /ingest it under Channels/, "the ingest remedy survives where nothing hides");
   } finally {
     await dropScratchOrg(org.orgId);
   }
