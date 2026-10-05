@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { cmp } from '@openbooks/engine/money'
 
 registerHooks({
   resolve(specifier, _context, next) {
@@ -93,13 +94,13 @@ test('sentinel z-scores run per currency so foreign bills cannot mask outliers',
       { num: 'Z-CAD', currency: 'CAD', fx: '1', total: '1500', date: '2026-07-13', ref: 'Z-C1' },
     ])
     const data = await runSentinel(org.orgId)
-    const hits = data.zscore.items.filter((i) => i.amount === 150)
+    const hits = data.zscore.items.filter((i) => cmp(i.amount, '150') === 0)
     assert.equal(hits.length, 1)
     assert.equal(hits[0]!.docNumber, 'Z-USD')
     assert.equal((hits[0] as unknown as { currency?: string }).currency, 'USD')
     // The lone CAD bill has no CAD baseline: no z finding, no RSF finding.
-    assert.equal(data.zscore.items.filter((i) => i.amount === 1500).length, 0)
-    assert.equal(data.rsf.items.filter((i) => i.amount === 1500).length, 0)
+    assert.equal(data.zscore.items.filter((i) => cmp(i.amount, '1500') === 0).length, 0)
+    assert.equal(data.rsf.items.filter((i) => cmp(i.amount, '1500') === 0).length, 0)
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }
