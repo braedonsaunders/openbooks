@@ -18,6 +18,6 @@ export default async function CollectionsPage({
 }) {
   const sp = await searchParams
   if (sp.view === 'reports') redirect('/reports')
-  const data = await loadCollections()
+  const data = await loadCollections(sp)
   return <ModuleView spec={collectionsSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -49,7 +49,8 @@
     "shipment": "Shipment",
     "rma": "Return authorization",
     "fund": "Fund",
-    "fund_release": "Fund release"
+    "fund_release": "Fund release",
+    "collection_attempt": "Collection attempt"
   },
   "resourcing": {
     "fields": {

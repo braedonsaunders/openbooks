@@ -49,7 +49,8 @@
     "shipment": "发运单",
     "rma": "退货授权",
     "fund": "资金",
-    "fund_release": "资金发放"
+    "fund_release": "资金发放",
+    "collection_attempt": "托收尝试"
   },
   "resourcing": {
     "fields": {

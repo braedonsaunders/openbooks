@@ -111,6 +111,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'close-readiness-cell',
   'close-status-cell',
   'code-cell',
+  'collection-attempt-drawer',
   'collections-shell',
   'commitments-section',
   'compliance-matrix',

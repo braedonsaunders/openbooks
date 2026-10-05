@@ -49,7 +49,8 @@
     "shipment": "Sendung",
     "rma": "Rückgabegenehmigung",
     "fund": "Fonds",
-    "fund_release": "Fondsfreigabe"
+    "fund_release": "Fondsfreigabe",
+    "collection_attempt": "Einzugsversuch"
   },
   "resourcing": {
     "fields": {
