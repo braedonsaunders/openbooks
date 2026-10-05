@@ -118,13 +118,16 @@ export function StoredValueDrawer({ drawer }: { drawer: StoredValueDrawerData })
           />
         </section>
       )}
-      {tab === 'adjust' && drawer.canAdjust && (
-        <AdjustForm
-          accountId={account.id}
-          currency={account.currency}
-          liabilityAccountName={program?.liabilityAccountName ?? null}
-          offsetAccounts={drawer.offsetAccounts}
-        />
+      {drawer.canAdjust && (
+        <div hidden={tab !== 'adjust'}>
+          <AdjustForm
+            key={account.id}
+            accountId={account.id}
+            currency={account.currency}
+            liabilityAccountName={program?.liabilityAccountName ?? null}
+            offsetAccounts={drawer.offsetAccounts}
+          />
+        </div>
       )}
       {tab === 'details' && program && (
         <section aria-label={t('drawer.accountSection')} className="space-y-4">
