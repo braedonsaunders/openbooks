@@ -271,6 +271,8 @@ export type DashboardMetrics = {
     status: string
     lineCount: number
     totalDebits: string
+    /** The entry entity's functional currency — the tile formats in this, never the org currency. */
+    currency: string | null
   }>
   /** Top-5 of the unified approval worklist (gates + documents + budgets). */
   pendingApprovalList: Array<{
@@ -280,6 +282,8 @@ export type DashboardMetrics = {
     /** The record's approval deep link; null when the kind has no surface. */
     href: string | null
     amount: string | null
+    /** Transaction currency of the amount (null for budget scenarios, which sum across entities). */
+    currency: string | null
     title: string
     createdAt: string
   }>
@@ -294,6 +298,8 @@ export type DashboardMetrics = {
     /** The record's approval deep link; null when the kind has no surface. */
     href: string | null
     amount: string | null
+    /** Transaction currency of the amount (null for budget scenarios, which sum across entities). */
+    currency: string | null
     title: string
     createdAt: string
   }>
@@ -305,6 +311,8 @@ export type DashboardMetrics = {
     /** Null while the author has not dated the draft. */
     documentDate: string | null
     total: string
+    /** Transaction currency of the draft total. */
+    currency: string
     status: string
   }>
   // HR-15 persona-home fields (see _persona.ts). Each widget reads only
@@ -401,6 +409,8 @@ interface RecentEntryRow extends Record<string, unknown> {
   status: string
   line_count: string | number
   total_debits: string
+  /** The entry entity's functional currency (null for root-owned entries of a baseless org). */
+  currency: string | null
 }
 
 /** The caller's own draft documents. */
@@ -410,6 +420,8 @@ interface DraftDocumentRow extends Record<string, unknown> {
   document_number: string | null
   document_date: string | null
   total: string
+  /** Transaction currency of the draft (documents.currency is not null). */
+  currency: string
   status: string
 }
 
@@ -601,9 +613,9 @@ export async function loadDashboardMetrics(
     need('recentEntries')
       ? db.execute<RecentEntryRow>(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status,
-             lt.line_count, lt.total_debits
+             lt.line_count, lt.total_debits, sub.base_currency as currency
         from (
-          select id, entry_number, posting_date, memo, status, created_at
+          select id, entry_number, posting_date, memo, status, created_at, subsidiary_id
             from journal_entries e
            where e.org_id = ${orgId} and e.status in ('posted', 'reversed') ${recentEntryScope}
            order by created_at desc, entry_number desc
@@ -614,12 +626,13 @@ export async function loadDashboardMetrics(
                  sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
             from journal_lines l where l.entry_id = e.id and l.org_id = ${orgId}
         ) lt on true
+        left join subsidiaries sub on sub.id = e.subsidiary_id and sub.org_id = ${orgId}
        order by e.created_at desc, e.entry_number desc
     `)
       : Promise.resolve({ rows: [] }),
     need('draftDocuments')
       ? db.execute<DraftDocumentRow>(sql`
-      select id, kind, document_number, document_date, total, status
+      select id, kind, document_number, document_date, total, currency, status
         from documents d
        where d.org_id = ${orgId} and d.status = 'draft' and d.created_by = ${userId} ${draftDocumentScope}
        order by updated_at desc
@@ -700,6 +713,7 @@ export async function loadDashboardMetrics(
           targetKind: item.docKind,
           targetId: item.id,
           amount: item.total,
+          currency: item.currency,
           title: item.documentNumber,
           createdAt: unionRequestedAt(item),
         }
@@ -710,6 +724,7 @@ export async function loadDashboardMetrics(
           targetKind: 'budget_scenario',
           targetId: item.id,
           amount: item.total,
+          currency: null as string | null,
           title: item.name,
           createdAt: unionRequestedAt(item),
         }
@@ -719,6 +734,7 @@ export async function loadDashboardMetrics(
         targetKind: item.document?.kind ?? item.subjectKind,
         targetId: item.subjectId,
         amount: item.document?.total ?? null,
+        currency: item.document?.currency ?? null,
         title: item.title,
         createdAt: unionRequestedAt(item),
       }
@@ -804,6 +820,9 @@ export async function loadDashboardMetrics(
       status: r.status,
       lineCount: Number(r.line_count),
       totalDebits: r.total_debits,
+      // The entry entity's functional currency; root-owned entries of a
+      // baseless org carry null and the tile falls back to the formatter.
+      currency: r.currency ?? baseCurrency,
     })),
     // Both widgets list the same unified worklist the tile counts:
     // top-5 oldest first, gates + gateless documents + budgets.
@@ -815,6 +834,7 @@ export async function loadDashboardMetrics(
       documentNumber: r.document_number,
       documentDate: r.document_date,
       total: r.total,
+      currency: r.currency,
       status: r.status,
     })),
     ...persona,
