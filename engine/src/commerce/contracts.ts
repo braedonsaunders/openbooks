@@ -56,7 +56,9 @@ export interface ChannelVariant {
   barcode: string | null;
   title: string;
   optionValues: Record<string, string>;
-  /** Minor units in the channel currency. */
+  /** ISO currency the price is quoted in. */
+  currencyCode: string;
+  /** Minor units in the variant currency. */
   priceMinor: bigint;
   compareAtPriceMinor: bigint | null;
   taxable: boolean;

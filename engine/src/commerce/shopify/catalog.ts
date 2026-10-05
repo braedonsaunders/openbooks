@@ -140,6 +140,7 @@ function normalizeGraphqlVariant(
     barcode: cleanText(v.barcode, 200),
     title: cleanText(v.title, 500) ?? "Default",
     optionValues,
+    currencyCode: price.currency,
     priceMinor: price.minor ?? 0n,
     compareAtPriceMinor: compareAt,
     taxable: v.taxable !== false,
@@ -193,6 +194,7 @@ export function normalizeWebhookProduct(payload: unknown, shopCurrency: string):
       barcode: cleanText(v.barcode, 200),
       title: cleanText(v.title, 500) ?? "Default",
       optionValues,
+      currencyCode: price.currency,
       priceMinor: price.minor ?? 0n,
       compareAtPriceMinor: null,
       taxable: v.taxable !== false,
@@ -460,17 +462,21 @@ async function upsertCatalogProductUnit(
       sku: variant.sku,
       barcode: variant.barcode,
       priceMinor: variant.priceMinor,
-      currency: channel.currency,
+      currency: variant.currencyCode,
       optionValues: variant.optionValues,
       shopifyUpdatedAt: variant.updatedAt,
     });
     if (row.status === "matched" && row.native_table === "items" && row.native_id) {
+      const currentSku = (variant.sku ?? "").trim().toLowerCase() || null;
+      // A variant carrying no SKU (barcode match, option-only family
+      // variant) cannot have changed its SKU — only a present SKU that
+      // differs from the linked code raises a re-match proposal.
+      if (currentSku === null) continue;
       const item = (
         await db.execute<{ code: string | null }>(sql`
           select code from items where org_id = ${orgId} and id = ${row.native_id}`)
       ).rows[0];
       const linkedCode = item?.code?.trim().toLowerCase() ?? null;
-      const currentSku = (variant.sku ?? "").trim().toLowerCase() || null;
       if (item && linkedCode !== currentSku) {
         await setProposal(orgId, actorId, row.id, {
           kind: "sku_changed",
