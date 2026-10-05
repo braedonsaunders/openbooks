@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../periods/period-policy.ts";
 import { inExecutorTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -126,6 +127,63 @@ function fail(message: string): never {
   throw new LedgerPostError(message);
 }
 
+/** A decimal string with insignificant trailing zeros removed ("10.50" -> "10.5"). */
+function canonicalAmount(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value ?? null);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
+}
+
+/**
+ * Fingerprint of everything an idempotent posting asserts about the ledger:
+ * the book, entity, date, period, lineage and every line's account, amounts,
+ * currency, rate and dimensions. Presentation that a retry may legitimately
+ * regenerate (entry number, memos, actor, request id) is excluded, so an
+ * identical retry matches and a different posting under a reused key does not.
+ */
+function postingFingerprint(input: PostEntryInput, lines: PreparedLine[]): string {
+  const payload = {
+    bookId: input.bookId,
+    subsidiaryId: input.subsidiaryId,
+    postingDate: input.postingDate,
+    periodId: input.periodId,
+    origin: input.origin,
+    reversesEntryId: input.reversesEntryId ?? null,
+    sourceDocumentId: input.sourceDocumentId ?? null,
+    lines: [...lines].sort((a, b) => a.lineNumber - b.lineNumber).map((line) => ({
+      lineNumber: line.lineNumber,
+      accountId: line.accountId,
+      subsidiaryId: line.subsidiaryId,
+      amount: canonicalAmount(line.amount),
+      currency: line.currency,
+      txnAmount: canonicalAmount(line.txnAmount),
+      fxRate: canonicalAmount(line.fxRate),
+      partyId: line.partyId ?? null,
+      departmentId: line.departmentId ?? null,
+      projectId: line.projectId ?? null,
+      locationId: line.locationId ?? null,
+      classId: line.classId ?? null,
+      equipmentUnitId: line.equipmentUnitId ?? null,
+      paymentCardId: line.paymentCardId ?? null,
+      taxCodeId: line.taxCodeId ?? null,
+      extraDims: line.extraDims ?? {},
+      quantity: canonicalAmount(line.quantity),
+      unit: line.unit ?? null,
+      dueDate: line.dueDate ?? null,
+      isOpenItem: line.isOpenItem ?? false,
+    })),
+  };
+  return `sha256:${createHash("sha256").update(canonicalJson(payload)).digest("hex")}`;
+}
+
 export async function postEntry(
   executor: SqlExecutor,
   input: PostEntryInput,
@@ -199,16 +257,47 @@ async function writeEntry(
   // visible header always has its lines. A lineless keyed header is damaged
   // ledger data, never a success and never a replay in progress — it is
   // refused by name instead of returned with zero lines.
+  // The fingerprint of the REQUEST (before balancing legs are derived), so a
+  // replay compares like with like.
+  const fingerprint = input.idempotencyKey ? postingFingerprint(input, lines) : null;
   const readKeyedEntry = async (idempotencyKey: string): Promise<PostEntryResult | null> => {
-    const rows = (await executor.execute<{ entry_id: string; id: string | null; line_number: number | null }>(sql`
-      select je.id as entry_id, jl.id as id, jl.line_number as line_number
+    const rows = (await executor.execute<{
+      entry_id: string;
+      id: string | null;
+      line_number: number | null;
+      book_id: string;
+      subsidiary_id: string;
+      posting_date: string;
+      period_id: string;
+      origin: string;
+      fingerprint: string | null;
+    }>(sql`
+      select je.id as entry_id, jl.id as id, jl.line_number as line_number,
+             je.book_id, je.subsidiary_id, je.posting_date::text as posting_date,
+             je.period_id, je.origin, je.custom->>'idempotencyFingerprint' as fingerprint
         from journal_entries je
         left join journal_lines jl
           on jl.org_id = je.org_id and jl.entry_id = je.id
        where je.org_id = ${orgId} and je.custom->>'idempotencyKey' = ${idempotencyKey}
        order by jl.line_number`)).rows;
     if (rows.length === 0) return null;
-    const entryId = rows[0]!.entry_id;
+    const head = rows[0]!;
+    const entryId = head.entry_id;
+    // A key names ONE posting. Returning the earlier entry for a different
+    // payload would report success while posting nothing the caller asked
+    // for. The stored header is always compared; the line-level fingerprint
+    // is compared whenever the keyed entry recorded one.
+    const differs =
+      head.book_id !== input.bookId ||
+      head.subsidiary_id !== input.subsidiaryId ||
+      head.posting_date !== input.postingDate ||
+      head.period_id !== input.periodId ||
+      head.origin !== input.origin ||
+      (head.fingerprint !== null && head.fingerprint !== fingerprint);
+    if (differs)
+      fail(
+        `journal entry ${input.entryNumber}: this idempotency key was already used for a different entry (entry ${entryId}) — an identical retry returns that entry, but a different posting needs its own idempotency key`,
+      );
     const replayed = rows.flatMap((row) =>
       row.id === null ? [] : [{ id: row.id, lineNumber: row.line_number! }],
     );
@@ -413,7 +502,10 @@ async function writeEntry(
 
   const custom =
     input.idempotencyKey || input.custom
-      ? { ...(input.custom ?? {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}) }
+      ? {
+          ...(input.custom ?? {}),
+          ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey, idempotencyFingerprint: fingerprint } : {}),
+        }
       : null;
   // With an idempotencyKey the entry insert is ON CONFLICT DO NOTHING on
   // the partial (org_id, custom->>'idempotencyKey') index and a conflicting
