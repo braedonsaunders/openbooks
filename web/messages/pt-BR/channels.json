@@ -324,6 +324,8 @@
     "save": "Salvar política de contabilização",
     "saved": "Política salva, vigente desde {date}. Pedidos já contabilizados mantêm seus documentos.",
     "history": "Histórico de políticas",
-    "noPolicy": "Este canal ainda não tem política de contabilização. Os pedidos aguardam até você escolher um modo."
+    "noPolicy": "Este canal ainda não tem política de contabilização. Os pedidos aguardam até você escolher um modo.",
+    "advanced": "Avançado",
+    "advancedSummary": "Fuso horário de corte, tags e fontes excluídas e histórico de políticas."
   }
 }

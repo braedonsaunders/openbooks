@@ -1120,6 +1120,42 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/channels/exceptions': {
+    route: '/channels/exceptions',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/channels/exceptions/view')
+      return {
+        load: (input) => m.loadChannelExceptions(input.searchParams ?? {}),
+        spec: (data) => m.channelExceptionsSpec(data as never),
+      }
+    },
+  },
+  '/channels/orders': {
+    route: '/channels/orders',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/channels/orders/view')
+      return {
+        load: (input) => m.loadChannelOrders(input.searchParams ?? {}),
+        spec: (data) => m.channelOrdersSpec(data as never),
+      }
+    },
+  },
+  '/channels/posting': {
+    route: '/channels/posting',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/channels/posting/view')
+      return {
+        load: () => m.loadChannelPosting(),
+        spec: (data) => m.channelPostingSpec(data as never),
+      }
+    },
+  },
   '/close': {
     route: '/close',
     segments: [],
