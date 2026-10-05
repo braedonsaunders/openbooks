@@ -39,7 +39,7 @@ test('cash-sale tenders have a separate active body and preserve unresolved code
     const dialog = document.querySelector('[role="dialog"]')
     assert.ok(dialog, 'the cash-sale record must own one dialog')
     async function tab(label: string) {
-      const button = [...dialog!.querySelectorAll('button')].find(node => node.getAttribute('role') === 'tab' && node.textContent?.trim() === label)
+      const button = [...dialog!.querySelectorAll('button')].find(node => node.hasAttribute('aria-pressed') && node.textContent?.trim() === label)
       assert.ok(button, `expected a reachable ${label} tab`)
       await act(async () => { button.click(); await tick() })
     }
