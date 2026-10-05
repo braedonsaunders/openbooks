@@ -1,0 +1,1 @@
+Creates two new org-isolated tables (tax_authority_connections, tax_oss_fx_evidence) with no reads or writes to existing tenant data, so there is nothing to probe before applying.
