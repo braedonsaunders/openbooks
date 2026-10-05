@@ -56,7 +56,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney, fmtPct, ratioNumber, toChartNumber } from '../_ui/format'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
+import { cmp, neg, sum } from '@openbooks/engine/src/money/money.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
@@ -181,22 +181,21 @@ export function CustomerView({
       kind: 'party', id: r.id, name: r.name, sub: t('drill.invoicesRevenue', { invoices: r.invoices, revenue: money(r.revenue) }),
       // Waterfall-signed rows (recognized = invoiced + rows): the bridge
       // stores gap contributions (invoiced − recognized), so the display
-      // negates each leg. Deferrals subtract from invoiced; recognition adds back.
-      // The shared drawer renders signed numbers only: this single Number
-      // crossing is the presentation boundary (no arithmetic follows).
+      // negates each leg exactly. Deferrals subtract from invoiced;
+      // recognition adds back. The shared drawer renders exact strings.
       recon: {
         title: t('recon.title'),
         invoicedLabel: t('table.invoiced'),
-        invoiced: Number(r.invoicedRevenue),
+        invoiced: r.invoicedRevenue,
         recognizedLabel: t('table.revenue'),
-        recognized: Number(r.revenue),
+        recognized: r.revenue,
         rows: [
-          { label: t('recon.tax'), amount: -Number(r.recon.tax) },
-          { label: t('recon.credits'), amount: -Number(r.recon.credits) },
-          { label: t('recon.deferred'), amount: -Number(r.recon.timingDeferred) },
-          { label: t('recon.recognized'), amount: Number(r.recon.timingRecognized) },
-          { label: t('recon.voids'), amount: -Number(r.recon.voids) },
-          { label: t('recon.other'), amount: -Number(r.recon.other) },
+          { label: t('recon.tax'), amount: neg(r.recon.tax) },
+          { label: t('recon.credits'), amount: neg(r.recon.credits) },
+          { label: t('recon.deferred'), amount: neg(r.recon.timingDeferred) },
+          { label: t('recon.recognized'), amount: r.recon.timingRecognized },
+          { label: t('recon.voids'), amount: neg(r.recon.voids) },
+          { label: t('recon.other'), amount: neg(r.recon.other) },
         ],
       },
     })

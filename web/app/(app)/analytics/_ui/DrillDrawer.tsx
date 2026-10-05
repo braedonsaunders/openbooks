@@ -21,8 +21,8 @@ import { dateLabel, monthYearLabel } from '@/lib/format'
  */
 export interface DrillReconRow {
   label: string
-  /** Waterfall-signed: recognized = invoiced + every row. */
-  amount: number
+  /** Waterfall-signed exact decimal: recognized = invoiced + every row. */
+  amount: string
 }
 
 export interface DrillTarget {
@@ -39,9 +39,9 @@ export interface DrillTarget {
   recon?: {
     title: string
     invoicedLabel: string
-    invoiced: number
+    invoiced: string
     recognizedLabel: string
-    recognized: number
+    recognized: string
     rows: DrillReconRow[]
   } | null
 }
@@ -175,8 +175,8 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
             {target.recon.rows.map((row) => (
               <div key={row.label} className="flex items-center justify-between">
                 <dt className="text-slate-500 dark:text-slate-400">{row.label}</dt>
-                <dd className={cn('tabular-nums', row.amount < 0 ? 'text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200')}>
-                  {row.amount < 0 ? `−${money(-row.amount)}` : `+${money(row.amount)}`}
+                <dd className={cn('tabular-nums', compareMoney(row.amount, '0') < 0 ? 'text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200')}>
+                  {compareMoney(row.amount, '0') < 0 ? `−${money(absoluteMoney(row.amount))}` : `+${money(row.amount)}`}
                 </dd>
               </div>
             ))}
