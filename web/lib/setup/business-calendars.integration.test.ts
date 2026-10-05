@@ -179,7 +179,8 @@ test('a subsidiary calendar must match the subsidiary’s country', { skip: !env
     assert.match(String((mismatched.body as { error?: string }).error ?? ''), /domiciled in GB/)
 
     const weekendsOnly = await withBypass(() => createSetupRecord(asAdmin, 'business-calendars', {
-      subsidiaryId, weekStartsOn: '1', weekendDays: [6, 7], effectiveFrom: '2026-01-01', isActive: true,
+      subsidiaryId, weekStartsOn: '1', weekendDays: [6, 7], effectiveFrom: '2026-01-01',
+      effectiveTo: '2026-06-30', isActive: true,
     }))
     assert.equal(weekendsOnly.status, 200, 'no country names no holidays, so nothing can mismatch')
 
@@ -387,6 +388,9 @@ test('calendar coverage refusals name the working remedy', { skip: !env.OPENBOOK
 test('company closures file under any declared pack calendar', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const { org, asAdmin } = await adminOrg()
   try {
+    // The holidays entity is payroll-gated; the write path refuses unknown
+    // entities with 404 where the feature is off.
+    await withBypass(() => db.execute(sql`update orgs set settings = settings || '{"features": {"payroll": true}}'::jsonb where id = ${org.orgId}`))
     const closure = await withBypass(() => createSetupRecord(asAdmin, 'payroll-holidays', {
       jurisdiction: 'DE-BY', effectiveFrom: '2026-01-01', name: 'Betriebsruhe',
       ruleKind: 'date', observedOn: '2026-12-24',
