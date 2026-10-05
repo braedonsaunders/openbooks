@@ -66,7 +66,11 @@
     "billingsTitle": "Faturamentos",
     "billingInvoice": "Fatura",
     "billedOn": "Faturado em",
-    "billedAmount": "Faturado"
+    "billedAmount": "Faturado",
+    "contractTabs": {
+      "ariaLabel": "Seções do contrato",
+      "overview": "Visão geral"
+    }
   },
   "cancel": {
     "button": "Cancelar o reconhecimento",
