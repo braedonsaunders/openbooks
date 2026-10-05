@@ -2149,8 +2149,10 @@
       "required": "{field} 为必填项",
       "invalidStructuredValue": "{field} 含有无法读取的已存储记录。请先修正配置再保存。",
       "moneyAmount": "请按 {currency} 的常规金额输入 {field}，例如 120.50——不要使用最小单位，且小数位数不得超过 {currency} 的精度。",
-      "moneyUnknownCurrency": "无法按 {currency} 为 {field} 定价：该货币没有受支持的最小单位精度。"
+      "moneyUnknownCurrency": "无法按 {currency} 为 {field} 定价：该货币没有受支持的最小单位精度。",
+      "moneyUnknownPrecision": "已保存的{field}（{raw}最小单位）无法以{currency}显示：请重新输入金额。"
     },
+    "moneyMinorUnitsNote": "最小单位",
     "drawer": {
       "newTitle": "新建 {name}",
       "editTitle": "编辑 {name}",
@@ -3326,7 +3328,7 @@
         "title": "渠道广告支出",
         "singular": "渠道广告支出",
         "description": "每个店面渠道的每日营销支出；当日订单毛利随之重算。",
-        "amount": "支出（最小单位）"
+        "amount": "支出"
       },
       "channel-account-maps": {
         "title": "渠道记账科目",

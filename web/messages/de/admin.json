@@ -2398,8 +2398,10 @@
       "required": "{field} ist erforderlich",
       "invalidStructuredValue": "{field} enthält einen unlesbaren gespeicherten Datensatz. Korrigieren Sie die Konfiguration vor dem Speichern.",
       "moneyAmount": "Geben Sie {field} als normalen {currency}-Betrag ein, zum Beispiel 120,50 — nicht in Nebeneinheiten und mit nicht mehr Nachkommastellen, als {currency} führt.",
-      "moneyUnknownCurrency": "{field} kann in {currency} nicht bepreist werden: Die Währung hat keine unterstützte Nebeneinheiten-Genauigkeit."
+      "moneyUnknownCurrency": "{field} kann in {currency} nicht bepreist werden: Die Währung hat keine unterstützte Nebeneinheiten-Genauigkeit.",
+      "moneyUnknownPrecision": "Der gespeicherte Wert für {field} ({raw} Nebeneinheiten) kann in {currency} nicht angezeigt werden: Geben Sie den Betrag erneut ein."
     },
+    "moneyMinorUnitsNote": "Nebeneinheiten",
     "drawer": {
       "newTitle": "Neu: {name}",
       "editTitle": "{name} bearbeiten",
@@ -3371,7 +3373,7 @@
         "title": "Werbeausgaben der Kanäle",
         "singular": "Werbeausgaben eines Kanals",
         "description": "Tägliche Marketingausgaben je Vertriebskanal; die Tagesmargen werden damit neu berechnet.",
-        "amount": "Ausgaben (kleinste Einheit)"
+        "amount": "Ausgaben"
       },
       "channel-account-maps": {
         "title": "Konten für Kanalbuchungen",

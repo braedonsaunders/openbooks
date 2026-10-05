@@ -2074,8 +2074,10 @@
       "required": "{field} es obligatorio",
       "invalidStructuredValue": "{field} contiene un registro guardado ilegible. Corrija la configuración antes de guardar.",
       "moneyAmount": "Introduzca {field} como un importe normal en {currency}, por ejemplo 120,50: no en unidades menores y sin más decimales de los que usa {currency}.",
-      "moneyUnknownCurrency": "No se puede fijar el precio de {field} en {currency}: la moneda no tiene una precisión de unidades menores admitida."
+      "moneyUnknownCurrency": "No se puede fijar el precio de {field} en {currency}: la moneda no tiene una precisión de unidades menores admitida.",
+      "moneyUnknownPrecision": "El valor guardado de {field} ({raw} unidades menores) no se puede mostrar en {currency}: introduzca el importe de nuevo."
     },
+    "moneyMinorUnitsNote": "unidades menores",
     "drawer": {
       "newTitle": "Nuevo: {name}",
       "editTitle": "Editar: {name}",
@@ -3251,7 +3253,7 @@
         "title": "Gasto publicitario de los canales",
         "singular": "Gasto publicitario del canal",
         "description": "Gasto diario de marketing por canal de venta; los márgenes del día se recalculan con él.",
-        "amount": "Gasto (unidades menores)"
+        "amount": "Gasto"
       },
       "channel-account-maps": {
         "title": "Cuentas contables del canal",
