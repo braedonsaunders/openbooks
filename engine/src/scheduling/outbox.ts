@@ -93,6 +93,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "demand_forecast",
   "tax_id_revalidation",
   "consolidated_billing",
+  "signature_reminder",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -744,6 +745,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       noticeKind: "tax_id_revalidation_scan_failed",
       href: "/admin/setup/tax-setup",
       remedy: "Review customer tax IDs and the authority credentials in Setup → Taxes; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "signature_reminder") {
+    const { runSignatureReminderScan } = await import("../billing/quote-to-cash.ts");
+    const result = await runSignatureReminderScan();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "signature reminder",
+      noticeKind: "signature_reminder_scan_failed",
+      href: "/estimates",
+      remedy: "Review open signature requests on quotes in Estimates; the scan retries automatically.",
       problems,
       unattributed: [],
     });

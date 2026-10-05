@@ -328,3 +328,68 @@ export function hrmSurveyInvitationEmail(args: {
   })
   return { subject, html, text }
 }
+
+// --- Quote-to-cash signatures -------------------------------------------------
+//
+// The customer's signing link for a SaaS quote (initial send and expiry
+// reminder). Both carry the same possession link; the signing page
+// re-validates the request row — the email itself never decides.
+
+/** Please sign this quote: total contract value, term, and signing link. */
+export function quoteSignatureRequestEmail(args: {
+  orgName: string
+  quoteNumber: string
+  signerName?: string
+  totalContractValue: string
+  currency: string
+  termMonths: number
+  signUrl: string
+  expiresDate?: string
+}): EmailOut {
+  const subject = `Please sign quote ${args.quoteNumber} — ${args.orgName}`
+  const greeting = args.signerName ? `Hello ${args.signerName},` : 'Hello,'
+  const text =
+    `${greeting}\n\n` +
+    `${args.orgName} asks you to sign quote ${args.quoteNumber} (${args.termMonths}-month subscription, ${args.totalContractValue} ${args.currency} total contract value).\n\n` +
+    `Sign here: ${args.signUrl}\n\n` +
+    (args.expiresDate ? `The link expires ${args.expiresDate}.\n\n` : '') +
+    `Your signature accepts the subscription on the stated start date at the stated prices.\n\n` +
+    `— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: `Please sign quote ${esc(args.quoteNumber)}`,
+    bodyHtml: `
+      <p>${esc(greeting)}</p>
+      <p>${esc(args.orgName)} asks you to sign quote <strong>${esc(args.quoteNumber)}</strong> (${args.termMonths}-month subscription, <strong>${esc(args.totalContractValue)} ${esc(args.currency)}</strong> total contract value).</p>
+      <p style="margin:16px 0"><a href="${esc(args.signUrl)}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">Review and sign</a></p><p style="font-size:12px;color:#666;word-break:break-all">${esc(args.signUrl)}</p>
+      ${args.expiresDate ? `<p style="color:#666">The link expires ${esc(args.expiresDate)}.</p>` : ''}
+      <p style="color:#666">Your signature accepts the subscription on the stated start date at the stated prices.</p>`,
+    footer: `Quote from ${args.orgName}.`,
+  })
+  return { subject, html, text }
+}
+
+/** The signing link expires soon: same terms, same link, nudge to sign. */
+export function quoteSignatureReminderEmail(args: {
+  orgName: string
+  quoteNumber: string
+  signerName?: string
+  signUrl: string
+  expiresDate: string
+}): EmailOut {
+  const subject = `Reminder: quote ${args.quoteNumber} still needs your signature — ${args.orgName}`
+  const greeting = args.signerName ? `Hello ${args.signerName},` : 'Hello,'
+  const text =
+    `${greeting}\n\n` +
+    `A quick reminder that quote ${args.quoteNumber} from ${args.orgName} is still waiting for your signature. The link expires ${args.expiresDate}, after which we will need to re-issue the quote.\n\n` +
+    `Sign here: ${args.signUrl}\n\n` +
+    `— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: `Reminder: quote ${esc(args.quoteNumber)} needs your signature`,
+    bodyHtml: `
+      <p>${esc(greeting)}</p>
+      <p>A quick reminder that quote <strong>${esc(args.quoteNumber)}</strong> from ${esc(args.orgName)} is still waiting for your signature. The link expires <strong>${esc(args.expiresDate)}</strong>, after which we will need to re-issue the quote.</p>
+      <p style="margin:16px 0"><a href="${esc(args.signUrl)}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">Review and sign</a></p><p style="font-size:12px;color:#666;word-break:break-all">${esc(args.signUrl)}</p>`,
+    footer: `Quote reminder from ${args.orgName}.`,
+  })
+  return { subject, html, text }
+}

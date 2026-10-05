@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { quoteSignatureReminderEmail } from "@openbooks/emails";
+import { db, withBypass, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
+import { appBaseUrl } from "../flows/email-tokens.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { add, cmp, mul, mulPercent, roundDiv, toUnits } from "../money/money.ts";
 import { addMonthsClamped, addMonthsStart } from "../platform/civil-date.ts";
@@ -908,6 +911,383 @@ export async function voidSignatureRequestsForSubject(
   return { voided: updated.rows.length };
 }
 
+export interface SaveQuoteTermStepInput {
+  startsAfterMonths: number;
+  unitPrice: string;
+  quantity: string;
+  escalatorPercent?: string | null;
+}
+
+export interface SaveQuoteTermInput {
+  /** Null to open a new term on the line; set to re-price it. */
+  termId?: string | null;
+  quoteLineId: string;
+  planId: string;
+  planVersionId?: string | null;
+  termMonths: number;
+  startRule?: QuoteStartRule | null;
+  billingTiming?: QuoteBillingTiming | null;
+  cotermSubscriptionId?: string | null;
+  steps: SaveQuoteTermStepInput[];
+}
+
+export interface SaveQuoteTermResult {
+  termId: string;
+  schedule: RampSchedule;
+  tcv: string;
+  /** Open signature requests voided by this re-price (re-send to sign). */
+  voided: number;
+}
+
+function exactMoneyInput(value: string, label: string, min: "zero" | "positive"): string {
+  let units: bigint;
+  try {
+    units = toUnits(value);
+  } catch {
+    throw new QuoteToCashError(`${label} is not a readable amount — enter it as digits with up to four decimals`);
+  }
+  if (min === "positive" ? units <= 0n : units < 0n) {
+    throw new QuoteToCashError(
+      min === "positive"
+        ? `${label} must be more than zero`
+        : `${label} cannot be negative`,
+    );
+  }
+  return value;
+}
+
+function exactPercentInput(value: string | null | undefined, label: string): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(value.trim())) {
+    throw new QuoteToCashError(`${label} is not a readable percent — enter it as digits, for example 7.5 for seven and a half percent`);
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < -100 || numeric > 100) {
+    throw new QuoteToCashError(`${label} must sit between -100 and 100 percent`);
+  }
+  return value.trim();
+}
+
+/**
+ * Save a quote's subscription term: validate the plan, price and ramp,
+ * replace the term's steps, and void any open signature request — the
+ * presentation hash changed, so a sent quote must be re-sent, never signed
+ * stale. Only draft quotes re-price; approval locks the terms.
+ */
+export async function saveQuoteTerm(
+  orgId: string,
+  actorId: string,
+  quoteId: string,
+  input: SaveQuoteTermInput,
+): Promise<SaveQuoteTermResult> {
+  if (!Number.isSafeInteger(input.termMonths) || input.termMonths < 1 || input.termMonths > 120) {
+    throw new QuoteToCashError("Term length must be between 1 and 120 months");
+  }
+  if (!input.steps.length) throw new QuoteToCashError("A subscription term needs at least one ramp period");
+  const steps: RampStepInput[] = input.steps.map((step, index) => {
+    if (!Number.isSafeInteger(step.startsAfterMonths) || step.startsAfterMonths < 0) {
+      throw new QuoteToCashError(`Ramp period ${index} must start a whole number of months into the term`);
+    }
+    return {
+      id: "",
+      periodIndex: index,
+      startsAfterMonths: step.startsAfterMonths,
+      unitPrice: exactMoneyInput(step.unitPrice, `Ramp period ${index} price`, "zero"),
+      quantity: exactMoneyInput(step.quantity, `Ramp period ${index} quantity`, "positive"),
+      escalatorPercent: exactPercentInput(step.escalatorPercent, `Ramp period ${index} escalator`),
+    };
+  });
+  // Pure validation first: gaps, overlaps, and out-of-term periods refuse
+  // before anything is written.
+  const schedule = resolveRampSchedule(input.termMonths, steps);
+  return withOrgTransaction(orgId, async () => {
+    await assertQuoteToCashEnabled(db, orgId);
+    const settings = await getQuoteToCashSettings(orgId, db);
+    const quote = await loadQuote(db, orgId, quoteId);
+    if (quote.status !== "draft") {
+      throw new QuoteToCashError(
+        `This quote is ${quote.status} — only draft quotes re-price their subscription terms; void and re-draft to change them`,
+      );
+    }
+    const line = (
+      await db.execute<{ id: string }>(sql`
+        select id from document_lines
+         where id = ${input.quoteLineId} and org_id = ${orgId} and document_id = ${quoteId}`)
+    ).rows[0];
+    if (!line) {
+      throw new QuoteToCashError("That quote line is not on this quote — refresh the quote and try again");
+    }
+    const plan = (
+      await db.execute<{ id: string }>(sql`
+        select id from subscription_plans where id = ${input.planId} and org_id = ${orgId} and is_active`)
+    ).rows[0];
+    if (!plan) throw new QuoteToCashError("That plan is not an active plan — pick an active subscription plan");
+    if (input.planVersionId) {
+      const version = (
+        await db.execute<{ id: string }>(sql`
+          select id from subscription_plan_versions
+           where id = ${input.planVersionId} and org_id = ${orgId} and plan_id = ${input.planId}`)
+      ).rows[0];
+      if (!version) throw new QuoteToCashError("That plan version is not on this plan — re-price from the plan's versions");
+    }
+    if (input.cotermSubscriptionId) {
+      const anchor = (
+        await db.execute<{ id: string }>(sql`
+          select id from subscriptions where id = ${input.cotermSubscriptionId} and org_id = ${orgId}`)
+      ).rows[0];
+      if (!anchor) {
+        throw new QuoteToCashError("That co-term subscription is not in this organization — pick a live subscription");
+      }
+    }
+    const startRule = input.startRule ?? settings.defaultStartRule;
+    const billingTiming = input.billingTiming ?? settings.defaultBillingTiming;
+    let termId = input.termId ?? null;
+    if (termId) {
+      const updated = (
+        await db.execute<{ id: string }>(sql`
+          update quote_subscription_terms
+             set plan_id = ${input.planId}, plan_version_id = ${input.planVersionId ?? null},
+                 term_months = ${input.termMonths}, start_rule = ${startRule},
+                 billing_timing = ${billingTiming}, coterm_subscription_id = ${input.cotermSubscriptionId ?? null},
+                 updated_at = now(), updated_by = ${actorId}
+           where id = ${termId} and org_id = ${orgId} and quote_id = ${quoteId}
+          returning id`)
+      ).rows[0];
+      // Under row-level security an unscoped update silently matches nothing,
+      // so zero rows is raised, never treated as a saved term.
+      if (!updated) throw new QuoteToCashError("That subscription term is not on this quote — refresh the quote and try again");
+      await db.execute(sql`delete from quote_ramp_steps where org_id = ${orgId} and term_id = ${termId}`);
+    } else {
+      try {
+        termId = (
+          await db.execute<{ id: string }>(sql`
+            insert into quote_subscription_terms
+              (org_id, quote_id, quote_line_id, plan_id, plan_version_id, term_months,
+               start_rule, billing_timing, coterm_subscription_id, created_by, updated_by)
+            values (${orgId}, ${quoteId}, ${input.quoteLineId}, ${input.planId}, ${input.planVersionId ?? null},
+                    ${input.termMonths}, ${startRule}, ${billingTiming}, ${input.cotermSubscriptionId ?? null},
+                    ${actorId}, ${actorId})
+            returning id`)
+        ).rows[0]?.id ?? null;
+      } catch (error) {
+        // One term per quote line: a twin save converges on the existing
+        // term instead of pricing the line twice.
+        if (!isUniqueViolation(error)) throw error;
+        termId = (
+          await db.execute<{ id: string }>(sql`
+            select id from quote_subscription_terms
+             where org_id = ${orgId} and quote_id = ${quoteId} and quote_line_id = ${input.quoteLineId}`)
+        ).rows[0]?.id ?? null;
+      }
+      if (!termId) throw new QuoteToCashError("The subscription term was not recorded");
+    }
+    for (const step of steps) {
+      await db.execute(sql`
+        insert into quote_ramp_steps
+          (org_id, term_id, period_index, starts_after_months, unit_price, quantity, escalator_percent, created_by, updated_by)
+        values (${orgId}, ${termId}, ${step.periodIndex}, ${step.startsAfterMonths},
+                ${step.unitPrice}, ${step.quantity}, ${step.escalatorPercent}, ${actorId}, ${actorId})`);
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'quote_subscription_terms', ${termId}, ${input.termId ? "update" : "insert"},
+              ${JSON.stringify({ after: { quote: quoteId, plan: input.planId, months: input.termMonths } })}::jsonb,
+              ${actorId})`);
+    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId);
+    if (voided > 0) {
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'documents', ${quoteId}, 'update',
+                ${JSON.stringify({ after: { quoteToCash: "terms repriced, signature voided" } })}::jsonb,
+                ${actorId})`);
+    }
+    return { termId, schedule, tcv: schedule.tcv, voided };
+  });
+}
+
+/**
+ * Remove a quote's subscription term with its ramp. Only draft quotes shed
+ * terms; the voided signature requests (if any) force a re-send.
+ */
+export async function deleteQuoteTerm(
+  orgId: string,
+  actorId: string,
+  quoteId: string,
+  termId: string,
+): Promise<{ voided: number }> {
+  return withOrgTransaction(orgId, async () => {
+    await assertQuoteToCashEnabled(db, orgId);
+    const quote = await loadQuote(db, orgId, quoteId);
+    if (quote.status !== "draft") {
+      throw new QuoteToCashError(`This quote is ${quote.status} — only draft quotes shed subscription terms`);
+    }
+    const deleted = (
+      await db.execute<{ id: string }>(sql`
+        delete from quote_subscription_terms
+         where id = ${termId} and org_id = ${orgId} and quote_id = ${quoteId}
+        returning id`)
+    ).rows;
+    if (deleted.length !== 1) {
+      throw new QuoteToCashError("That subscription term is not on this quote — refresh the quote and try again");
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'quote_subscription_terms', ${termId}, 'delete',
+              ${JSON.stringify({ before: { quote: quoteId } })}::jsonb,
+              ${actorId})`);
+    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId);
+    return { voided };
+  });
+}
+
+export interface SaveQuoteToCashSettingsInput {
+  maxDiscountPercent: string;
+  autoActivateOnSign: boolean;
+  defaultBillingTiming: QuoteBillingTiming;
+  defaultStartRule: QuoteStartRule;
+  signatureExpiryDays: number;
+  orderFormTemplateId?: string | null;
+}
+
+/**
+ * Save the org's quote-to-cash policy (Setup's single policy row). Every
+ * field is validated by name before the upsert; an unknown template refuses
+ * with the re-pick remedy instead of storing a dangling reference.
+ */
+export async function saveQuoteToCashSettings(
+  orgId: string,
+  actorId: string,
+  input: SaveQuoteToCashSettingsInput,
+): Promise<QuoteToCashSettings> {
+  if (!/^\d+(\.\d+)?$/.test(input.maxDiscountPercent.trim()) || Number(input.maxDiscountPercent) < 0 || Number(input.maxDiscountPercent) > 100) {
+    throw new QuoteToCashError("The discount threshold must be a percent between 0 and 100");
+  }
+  if (!Number.isSafeInteger(input.signatureExpiryDays) || input.signatureExpiryDays < 1 || input.signatureExpiryDays > 90) {
+    throw new QuoteToCashError("Signature expiry must be between 1 and 90 days");
+  }
+  if (input.orderFormTemplateId !== undefined && input.orderFormTemplateId !== null) {
+    if (!/^[0-9a-fA-F-]{36}$/.test(input.orderFormTemplateId)) {
+      throw new QuoteToCashError("That order-form template is not a template id — pick one in the PDF template designer");
+    }
+  }
+  return withOrgTransaction(orgId, async () => {
+    await assertQuoteToCashEnabled(db, orgId);
+    if (input.orderFormTemplateId) {
+      const template = (
+        await db.execute<{ id: string }>(sql`
+          select id from pdf_templates
+           where id = ${input.orderFormTemplateId} and org_id = ${orgId} and is_active`)
+      ).rows[0];
+      if (!template) {
+        throw new QuoteToCashError("That order-form template is not an active template of this organization — pick one in the PDF template designer");
+      }
+    }
+    const row = (
+      await db.execute<{
+        max_discount_percent: string;
+        auto_activate_on_sign: boolean;
+        default_billing_timing: string;
+        default_start_rule: string;
+        signature_expiry_days: number;
+      }>(sql`
+        insert into quote_to_cash_settings
+          (org_id, max_discount_percent, auto_activate_on_sign, default_billing_timing,
+           default_start_rule, signature_expiry_days, order_form_template_id, created_by, updated_by)
+        values (${orgId}, ${input.maxDiscountPercent.trim()}, ${input.autoActivateOnSign},
+                ${input.defaultBillingTiming}, ${input.defaultStartRule}, ${input.signatureExpiryDays},
+                ${input.orderFormTemplateId ?? null}, ${actorId}, ${actorId})
+        -- Singleton policy row: a twin save converges on one row per org.
+        on conflict (org_id) do update
+           set max_discount_percent = excluded.max_discount_percent,
+               auto_activate_on_sign = excluded.auto_activate_on_sign,
+               default_billing_timing = excluded.default_billing_timing,
+               default_start_rule = excluded.default_start_rule,
+               signature_expiry_days = excluded.signature_expiry_days,
+               order_form_template_id = excluded.order_form_template_id,
+               updated_at = now(), updated_by = excluded.updated_by
+        returning max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+                  default_billing_timing, default_start_rule, signature_expiry_days`)
+    ).rows[0];
+    // The org-scoped upsert always writes exactly one row; zero rows is raised.
+    if (!row) throw new QuoteToCashError("The quote-to-cash policy was not recorded");
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'quote_to_cash_settings', (select id from quote_to_cash_settings where org_id = ${orgId}),
+              'update', ${JSON.stringify({ after: { maxDiscountPercent: input.maxDiscountPercent } })}::jsonb, ${actorId})`);
+    return {
+      maxDiscountPercent: row.max_discount_percent,
+      autoActivateOnSign: row.auto_activate_on_sign,
+      defaultBillingTiming: row.default_billing_timing as QuoteBillingTiming,
+      defaultStartRule: row.default_start_rule as QuoteStartRule,
+      signatureExpiryDays: row.signature_expiry_days,
+    };
+  });
+}
+
+/**
+ * Clear the org's quote-to-cash policy back to the working defaults. The row
+ * must exist — resetting defaults that already apply is a caller error, not
+ * a second success.
+ */
+export async function clearQuoteToCashSettings(orgId: string, actorId: string): Promise<{ cleared: boolean }> {
+  return withOrgTransaction(orgId, async () => {
+    await assertQuoteToCashEnabled(db, orgId);
+    const deleted = (
+      await db.execute<{ id: string }>(sql`
+        delete from quote_to_cash_settings where org_id = ${orgId} returning id`)
+    ).rows;
+    if (deleted.length !== 1) {
+      throw new QuoteToCashError("No quote-to-cash policy is saved — the working defaults already apply");
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'quote_to_cash_settings', ${deleted[0]!.id}, 'delete',
+              ${JSON.stringify({ before: { policy: "cleared to defaults" } })}::jsonb,
+              ${actorId})`);
+    return { cleared: true };
+  });
+}
+
+export interface QuoteCashPreview {
+  quote: QuoteRow;
+  terms: TermValuation[];
+  tcv: string;
+  listTcv: string;
+  discountPct: string;
+  floorBreached: boolean;
+  signature: SignatureRequestRow | null;
+  settings: QuoteToCashSettings;
+  advancedSubscriptions: boolean;
+  revenueContracts: boolean;
+}
+
+/**
+ * Everything the quote drawer and the activation preview render: the quote,
+ * every term valued, the open or latest signature request, and the policy
+ * and capability flags the preview branches on. Read-only.
+ */
+export async function quoteCashPreview(orgId: string, quoteId: string): Promise<QuoteCashPreview> {
+  return withOrgTransaction(orgId, async () => {
+    const quote = await loadQuote(db, orgId, quoteId);
+    const terms = await loadQuoteTerms(db, orgId, quoteId);
+    const valuation = valueQuoteTerms(terms);
+    const signature = await latestSignatureRequest(db, orgId, QUOTE_SUBJECT_TABLE, quoteId);
+    const settings = await getQuoteToCashSettings(orgId, db);
+    return {
+      quote,
+      terms: valuation.valuations,
+      tcv: valuation.tcv,
+      listTcv: valuation.listTcv,
+      discountPct: valuation.discountPct,
+      floorBreached: valuation.floorBreached,
+      signature,
+      settings,
+      advancedSubscriptions: await orgFeatureEnabled(orgId, "advancedSubscriptions", db),
+      revenueContracts: await revenueContractsEnabled(db, orgId),
+    };
+  });
+}
+
 export interface ActivateQuoteOptions {
   /** Explicit term start for custom start rules (YYYY-MM-DD). */
   startOn?: string | null;
@@ -1205,4 +1585,153 @@ async function activateQuoteLocked(
             ${JSON.stringify({ after: { quoteToCash: "activated", subscriptions: subscriptionIds, contract: contractId } })}::jsonb,
             ${actor})`);
   return { subscriptionIds, created: true, contractId };
+}
+
+/** One signature_reminder tick: requests seen, lapsed requests expired, reminders sent. */
+export interface SignatureReminderScanResult {
+  scanned: number;
+  expired: number;
+  reminded: number;
+  orgErrors: Array<{ orgId: string; error: string }>;
+}
+
+/** Hours before expiry a still-open request earns its single reminder. */
+const REMINDER_WINDOW_HOURS = 72;
+
+/**
+ * The signature_reminder scan: expire lapsed requests and send each
+ * soon-expiring request its single reminder. The reminder rotates the
+ * possession token (the stored hash is replaced, so the emailed link is
+ * fresh and any earlier copy dies) and defers the email through a
+ * deterministic flow_email row — the occurrence key is the once-guard, so
+ * twin ticks converge on one email and a loser restores the hash it
+ * replaced instead of stranding two live links.
+ */
+export async function runSignatureReminderScan(): Promise<SignatureReminderScanResult> {
+  const result: SignatureReminderScanResult = { scanned: 0, expired: 0, reminded: 0, orgErrors: [] };
+  const orgRows = (
+    // bypass: scheduler-tick — the unscoped run lists every production
+    // organization that switched quote-to-cash on.
+    await withBypass(async () => {
+      return await db.execute<{ orgId: string }>(sql`
+        select distinct organization.id as "orgId"
+          from orgs organization
+         where organization.env_kind = 'production'
+           and (organization.settings->'features'->>'quoteToCash') = 'true'
+      `);
+    })
+  ).rows;
+  for (const { orgId } of orgRows) {
+    try {
+      const one = await runOneOrgSignatureReminders(orgId);
+      result.scanned += one.scanned;
+      result.expired += one.expired;
+      result.reminded += one.reminded;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result.orgErrors.push({ orgId, error: message.slice(0, 500) });
+    }
+  }
+  return result;
+}
+
+async function runOneOrgSignatureReminders(
+  orgId: string,
+): Promise<{ scanned: number; expired: number; reminded: number }> {
+  return withOrgTransaction(orgId, async () => {
+    if (!(await lockAndCheckOrgFeature(db, orgId, "quoteToCash"))) return { scanned: 0, expired: 0, reminded: 0 };
+    const expired = (
+      await db.execute<{ id: string }>(sql`
+        update signature_requests set status = 'expired', updated_at = now()
+         where org_id = ${orgId} and status in ('sent', 'viewed') and expires_at < now()
+        returning id`)
+    ).rows.length;
+    const due = (
+      await db.execute<{
+        id: string;
+        subject_id: string;
+        signer_name: string;
+        signer_email: string;
+        token_hash: string;
+        expires_at: Date | string;
+      }>(sql`
+        select r.id, r.subject_id, r.signer_name, r.signer_email, r.token_hash, r.expires_at
+          from signature_requests r
+         where r.org_id = ${orgId} and r.status in ('sent', 'viewed')
+           and r.expires_at >= now()
+           and r.expires_at < now() + (${REMINDER_WINDOW_HOURS} || ' hours')::interval
+           and not exists (
+             select 1 from scheduler_outbox o
+              where o.kind = 'flow_email'
+                and o.occurrence_key = ${"signature-reminder:"} || r.id::text
+           )
+         order by r.expires_at`)
+    ).rows;
+    let reminded = 0;
+    // Sequential rotation keeps twin ticks ordered per request.
+    for (const request of due) {
+      if (await remindOneSignatureRequest(orgId, request)) reminded += 1;
+    }
+    return { scanned: due.length, expired, reminded };
+  });
+}
+
+async function remindOneSignatureRequest(
+  orgId: string,
+  request: {
+    id: string;
+    subject_id: string;
+    signer_name: string;
+    signer_email: string;
+    token_hash: string;
+    expires_at: Date | string;
+  },
+): Promise<boolean> {
+  const quote = (
+    await db.execute<{ document_number: string }>(sql`
+      select document_number from documents
+       where id = ${request.subject_id} and org_id = ${orgId}`)
+  ).rows[0];
+  if (!quote) return false;
+  const orgName = (
+    await db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`)
+  ).rows[0]?.name;
+  if (!orgName) return false;
+  const expiresAt = request.expires_at instanceof Date ? request.expires_at : new Date(request.expires_at);
+  // A fresh possession token over the same request and expiry: the emailed
+  // link verifies through the signing page exactly like the original send.
+  const fresh = mintPossessionToken(QUOTE_SIGN_DOMAIN, orgId, request.id, expiresAt);
+  const rotated = (
+    await db.execute<{ id: string }>(sql`
+      update signature_requests
+         set token_hash = ${hashPossessionToken(fresh)}, updated_at = now()
+       where id = ${request.id} and org_id = ${orgId} and token_hash = ${request.token_hash}
+         and status in ('sent', 'viewed')
+      returning id`)
+  ).rows;
+  // A twin tick rotated first: its email carries the live link, so this
+  // rotation loses and nothing is sent twice.
+  if (rotated.length !== 1) return false;
+  const email = quoteSignatureReminderEmail({
+    orgName,
+    quoteNumber: quote.document_number,
+    signerName: request.signer_name,
+    signUrl: `${appBaseUrl()}/sign/quotes/${fresh}`,
+    expiresDate: expiresAt.toISOString().slice(0, 10),
+  });
+  const enqueued = await enqueueFlowEmail({
+    orgId,
+    runId: request.id,
+    occurrenceKey: `signature-reminder:${request.id}`,
+    payload: { to: [request.signer_email], subject: email.subject, html: email.html, text: email.text },
+  });
+  if (!enqueued) {
+    // The reminder already left on an earlier tick: restore the hash it
+    // replaced so exactly one link stays live.
+    await db.execute(sql`
+      update signature_requests set token_hash = ${request.token_hash}, updated_at = now()
+       where id = ${request.id} and org_id = ${orgId}`);
+    return false;
+  }
+  return true;
 }
