@@ -71,6 +71,13 @@ export function WidgetCard({
       })
     : null
   const withAsOf = (hint: string) => (asOf ? `${hint} · ${asOf}` : hint)
+  // The P&L window plus the subsidiary scope it covers: a restricted caller
+  // scoped to one subtree reads the scope name here, never as the whole
+  // company. Subsidiary names need no translation.
+  const plWindowHint = (periodLabel: string | null, scopeLabel: string | null) => {
+    const window = periodLabel ?? t('metricContext.monthToDate')
+    return scopeLabel ? `${window} · ${scopeLabel}` : window
+  }
   // Money without a currency is a mislabelled figure: with no base currency
   // the tile refuses by name instead of formatting as dollars.
   const withoutCurrency = (label: string, icon: React.ReactNode, href: string, tone: MetricTone) => (
@@ -181,7 +188,7 @@ export function WidgetCard({
       if (revenueCcy === null) return withoutCurrency(t('widgets.revenue'), <TrendingUp size={15} />, '/reports/pnl', 'emerald')
       return data.revenueMtd === null
         ? <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value="—" href="/reports/pnl" tone="emerald" hint={withAsOf(t('metricContext.noData'))} />
-        : <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value={money(data.revenueMtd, { currency: revenueCcy })} href="/reports/pnl" tone="emerald" hint={withAsOf(data.plPeriodLabel ?? t('metricContext.monthToDate'))} />
+        : <MetricTile icon={<TrendingUp size={15} />} label={t('widgets.revenue')} value={money(data.revenueMtd, { currency: revenueCcy })} href="/reports/pnl" tone="emerald" hint={withAsOf(plWindowHint(data.plPeriodLabel, data.plScopeLabel))} />
     }
     case 'kpi-expenses-mtd': {
       if (data.plUnavailable) {
@@ -189,7 +196,7 @@ export function WidgetCard({
       }
       const expensesCcy = data.plCurrency ?? data.baseCurrency
       if (expensesCcy === null) return withoutCurrency(t('widgets.operatingExpenses'), <Wallet size={15} />, '/reports/pnl', 'amber')
-      return <MetricTile icon={<Wallet size={15} />} label={t('widgets.operatingExpenses')} value={data.expensesMtd === null ? '—' : money(data.expensesMtd, { currency: expensesCcy })} href="/reports/pnl" tone="amber" hint={withAsOf(data.expensesMtd === null ? t('metricContext.noData') : (data.plPeriodLabel ?? t('metricContext.monthToDate')))} />
+      return <MetricTile icon={<Wallet size={15} />} label={t('widgets.operatingExpenses')} value={data.expensesMtd === null ? '—' : money(data.expensesMtd, { currency: expensesCcy })} href="/reports/pnl" tone="amber" hint={withAsOf(data.expensesMtd === null ? t('metricContext.noData') : plWindowHint(data.plPeriodLabel, data.plScopeLabel))} />
     }
     case 'kpi-net-income-mtd': {
       if (data.plUnavailable) {
@@ -199,7 +206,7 @@ export function WidgetCard({
       if (incomeCcy === null) return withoutCurrency(t('widgets.netIncome'), <Wallet size={15} />, '/reports/pnl', 'teal')
       return data.netIncomeMtd === null
         ? <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value="—" href="/reports/pnl" tone="teal" hint={withAsOf(t('metricContext.noData'))} />
-        : <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value={money(data.netIncomeMtd, { currency: incomeCcy })} href="/reports/pnl" tone="teal" hint={withAsOf(data.plPeriodLabel ?? t('metricContext.monthToDate'))} />
+        : <MetricTile icon={<Wallet size={15} />} label={t('widgets.netIncome')} value={money(data.netIncomeMtd, { currency: incomeCcy })} href="/reports/pnl" tone="teal" hint={withAsOf(plWindowHint(data.plPeriodLabel, data.plScopeLabel))} />
     }
     case 'kpi-gross-margin-mtd': {
       if (data.plUnavailable) {
@@ -209,7 +216,7 @@ export function WidgetCard({
       if (marginCcy === null) return withoutCurrency(t('widgets.grossMargin'), <Percent size={15} />, '/reports/pnl', 'slate')
       // No period revenue means the ratio is undefined, not zero — the tile
       // shows the gross profit it can state and drops the margin it cannot.
-      const periodHint = data.plPeriodLabel ?? t('metricContext.monthToDate')
+      const periodHint = plWindowHint(data.plPeriodLabel, data.plScopeLabel)
       const margin = data.grossMarginMtd === null
         ? null
         : number(Number(data.grossMarginMtd), { style: 'percent', maximumFractionDigits: 1 })

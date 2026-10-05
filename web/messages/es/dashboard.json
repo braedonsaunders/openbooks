@@ -94,6 +94,7 @@
     "agentClear": "Sin pendientes",
     "asOf": "Al {date}",
     "monthToDate": "Mes hasta la fecha",
+    "periodToDate": "{label} hasta la fecha",
     "noData": "Sin datos",
     "noBaseCurrency": "Sin moneda base configurada",
     "next30Days": "Próximos 30 días",

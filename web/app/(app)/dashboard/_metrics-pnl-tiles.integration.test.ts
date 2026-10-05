@@ -12,6 +12,20 @@ import test from "node:test";
 // the remedy), never as a zero that reads as a fact.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    // Server copy ('next-intl') is stubbed at the boundary so the assertions
+    // pin the reader, not the catalog — the same boundary the pay-tile suite
+    // draws. The stub renders the English catalog line for the one key under
+    // test, so the hint assertions still pin the reader's strip-and-route
+    // through t(); the translations themselves are covered by catalog-parity.
+    if (specifier === "next-intl/server") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent(
+          "export async function getLocale() { return \"en\" }"
+          + "export async function getTranslations() { return (key, values) => key === \"metricContext.periodToDate\" && values && typeof values.label === \"string\" ? `${values.label} to date` : key }",
+        ),
+      };
+    }
 
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a
@@ -45,7 +59,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // date off the pinned business day, so the clock and the postings share it.
 const TODAY = "2026-07-15";
 
-function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
+function authzFor(orgId: string, userId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): Authz {
   return {
     user: {
       id: userId, email: `${userId}@test`, name: "P&L Watcher", orgId,
@@ -54,7 +68,7 @@ function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
       homeUserId: userId, homeOrgId: orgId,
     },
     permissions: new Set(permissions),
-    allowedSubsidiaryIds: null,
+    allowedSubsidiaryIds,
   };
 }
 
@@ -198,6 +212,69 @@ test("derived consolidated rates translate a multi-functional scope into figures
     assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1135"), "USD 100 at 1.35 joins CAD 1000");
     assert.equal(metrics.plCurrency, "CAD");
     assert.equal(metrics.plUnavailable, null);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a subsidiary-scoped caller tiles their subtree, labelled with its name", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const east = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${east},${org.orgId},${org.subsidiaryId},'East Co','CAD','CA')`);
+      // Root revenue 1000 plus East revenue 100: the scoped caller tiles
+      // East only, and the scope label names it — never as the company.
+      await post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] });
+      await post(org, { sub: east, legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
+    });
+    const calls: string[] = [];
+    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
+    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"], new Set([east]));
+    const metrics = await pinClock(TODAY, () =>
+      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
+    );
+    assert.deepEqual(calls, ["profitAndLoss"]);
+    assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("100"), "the scoped caller tiles their subtree only");
+    assert.equal(metrics.plScopeLabel, "East Co", "the tile hint names the visible subtree");
+    assert.equal(metrics.plCurrency, "CAD");
+    assert.equal(metrics.plUnavailable, null);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a business day before the first accounting period refuses on the tiles, never rejects the dashboard", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    await withBypass(async () => {
+      // No configured period covers the pinned business day: resolution
+      // throws, and the loader must map that misconfiguration into the tile
+      // refusal — the dashboard still renders.
+      await db.execute(sql`delete from accounting_periods where org_id = ${org.orgId}`);
+      const cal = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+      await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+        values(${randomUUID()},${org.orgId},2026,8,'2026-08','2026-08-01','2026-08-31',false,${cal})`);
+    });
+    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
+    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
+    const readers: DashboardMoneyReaders = {
+      ...denialProofReaders([]),
+      profitAndLoss: (async () => {
+        throw new Error("profitAndLoss must not run without a resolved period");
+      }) as DashboardMoneyReaders["profitAndLoss"],
+    };
+    const metrics = await pinClock(TODAY, () =>
+      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], readers)),
+    );
+    assert.equal(metrics.revenueMtd, null);
+    assert.equal(metrics.netIncomeMtd, null);
+    assert.equal(metrics.plPeriodLabel, null, "no window was resolved to label");
+    assert.ok(
+      metrics.plUnavailable?.includes("Close Setup"),
+      `the refusal names the remedy: ${metrics.plUnavailable}`,
+    );
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

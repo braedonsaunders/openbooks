@@ -94,6 +94,7 @@
     "agentClear": "All clear",
     "asOf": "As of {date}",
     "monthToDate": "Month to date",
+    "periodToDate": "{label} to date",
     "noData": "No data",
     "noBaseCurrency": "No base currency configured",
     "next30Days": "Next 30 days",
