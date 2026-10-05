@@ -1018,6 +1018,10 @@
       "stored_value_balances": {
         "label": "ストアドバリュー残高",
         "description": "口座ごとに未利用残高、顧客地域、最終利用日を1行ずつ表示します。ステータスで絞り込み、地域別・最終利用月別に集計して休眠残高を確認します。"
+      },
+      "demand_forecast_accuracy": {
+        "label": "予測精度",
+        "description": "品目クラス別の実績に対する過去の需要予測の評価: 評価週数、MAPE、バイアス。"
       }
     },
     "columns": {
@@ -2516,6 +2520,12 @@
         "last_activity_on": "最終利用日",
         "expires_on": "有効期限",
         "inactivity_months": "休眠判定月数"
+      },
+      "demand_forecast_accuracy": {
+        "item_class": "品目クラス",
+        "scored_weeks": "評価週数",
+        "mape": "MAPE",
+        "bias": "バイアス"
       }
     },
     "enumValues": {

@@ -1,0 +1,127 @@
+{
+  "title": "在庫計画",
+  "description": "今週購入・移動すべき在庫: 品目・ロケーション別の統計予測と、確認可能な購買・振替提案。",
+  "run": {
+    "title": "計画を実行",
+    "description": "需要を予測し、法人の提案を更新する。",
+    "horizon": "ホライズン (週)",
+    "history": "履歴 (週)",
+    "start": "計画を実行",
+    "running": "計画中…",
+    "done": "計画 {number} が完了: 提案 {count} 件。",
+    "uptodate": "計画 {number} は最新です: 前回実行からの変化はありません。"
+  },
+  "list": {
+    "needsAttention": "要対応",
+    "emptyTitle": "購入・移動の必要なし",
+    "emptyDescription": "すべての在庫ポジションが予測をカバーしています。販売・入荷・ポリシー変更の後に計画を実行してください。",
+    "emptyAction": "計画を実行",
+    "allCaughtUp": "すべて対応済み"
+  },
+  "columns": {
+    "item": "品目",
+    "location": "ロケーション",
+    "action": "アクション",
+    "quantity": "提案数",
+    "supplier": "仕入先",
+    "due": "期限",
+    "cover": "カバー日数",
+    "forecast": "予測",
+    "supply": "予測在庫",
+    "status": "ステータス",
+    "trend": "需要トレンド"
+  },
+  "actions": {
+    "buy": "購買",
+    "transfer": "振替",
+    "confirm": "確定",
+    "dismiss": "却下",
+    "convert": "転換",
+    "convertAll": "購買オーダーを作成",
+    "confirmAll": "提案をすべて確定",
+    "confirmed": "{count} 件の提案を確定しました。",
+    "convertedOrders": "購買オーダーを {orders} 件作成しました。",
+    "convertedTransfers": "振替を {transfers} 件作成しました。",
+    "dismissTitle": "提案の却下",
+    "dismissPrompt": "この提案を見送る理由は?",
+    "chooseVendor": "仕入先を選択",
+    "chooseSource": "移動元",
+    "noSupplier": "仕入先が特定できません — 転換する仕入先を選択してください。"
+  },
+  "drawer": {
+    "title": "{action} {quantity} {item}",
+    "forecast": "予測",
+    "history": "履歴",
+    "band": "80% 区間",
+    "stockout": "欠品",
+    "explanation": "提案の理由",
+    "supply": "在庫",
+    "policy": "計画ポリシー",
+    "advanced": "詳細設定",
+    "advancedSummary": "手法の指定、履歴期間、予測の上書き",
+    "overrideTitle": "予測の上書き",
+    "overrideReason": "理由",
+    "overrideQuantity": "数量",
+    "overrideSave": "上書きを保存",
+    "overrideSaved": "上書きは次回実行から適用されます。",
+    "runBy": "実行 {number}"
+  },
+  "explanation": {
+    "method": "{weeks} 週の履歴による {method} 予測。",
+    "stockouts": "欠品週 {count} 週を除外。",
+    "promo": "販促 {code} により需要が {lift} 増加。",
+    "peak": "季節ピークは {month}。",
+    "policyDefault": "標準ポリシー: 購買前に確認してください。",
+    "override": "上書き: {reason}。"
+  },
+  "methods": {
+    "seasonal_additive": "季節性",
+    "seasonal_multiplicative": "季節性",
+    "croston_sba": "間欠",
+    "moving_average": "平均",
+    "override": "上書き"
+  },
+  "policy": {
+    "title": "計画ポリシー",
+    "leadTime": "リードタイム (日)",
+    "reviewCycle": "見直しサイクル (日)",
+    "serviceLevel": "サービスレベル",
+    "moq": "最小発注数",
+    "casePack": "ケース入数",
+    "supplier": "優先仕入先",
+    "method": "予測手法",
+    "history": "履歴 (週)",
+    "save": "ポリシーを保存",
+    "saved": "計画ポリシーを保存しました。",
+    "methodAuto": "自動",
+    "methodSeasonal": "季節性",
+    "methodIntermittent": "間欠",
+    "methodAverage": "平均",
+    "defaulted": "標準ポリシーを使用中 — 品目ごとに調整できます。"
+  },
+  "itemTab": {
+    "title": "計画",
+    "cover": "カバー日数",
+    "nextSuggestion": "次の提案",
+    "none": "この品目の未処理提案はありません。",
+    "openPlanning": "在庫計画を開く"
+  },
+  "report": {
+    "accuracyTitle": "予測精度",
+    "accuracyDescription": "品目クラス別の過去予測の MAPE とバイアス。",
+    "class": "品目クラス",
+    "periods": "評価週数",
+    "mape": "MAPE",
+    "bias": "バイアス"
+  },
+  "status": {
+    "suggested": "提案",
+    "confirmed": "確定",
+    "converted": "転換済み",
+    "dismissed": "却下"
+  },
+  "gate": {
+    "offTitle": "需要計画はオフです",
+    "offDescription": "在庫ニーズを予測するには、会社設定 → 機能で需要計画をオンにしてください。"
+  }
+}

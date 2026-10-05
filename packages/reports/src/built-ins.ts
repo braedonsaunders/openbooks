@@ -12,6 +12,7 @@
 import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
+import { DEMAND_REPORT_ENTITIES } from './demand-entities'
 import { defaultRowsQuery } from './custom-query'
 import { utcCivilDate } from './fiscal-calendar'
 import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
@@ -368,6 +369,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       limit: 1000,
     },
   },
+  ...DEMAND_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   {
     slug: 'ap-aging-by-vendor',
     name: 'AP aging by vendor',

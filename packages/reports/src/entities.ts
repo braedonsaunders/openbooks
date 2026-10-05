@@ -16,6 +16,7 @@ import { HRM_REPORT_ENTITIES } from './hrm-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
+import { DEMAND_REPORT_ENTITIES } from './demand-entities'
 import { RESOURCING_REPORT_ENTITIES } from './resourcing-entities'
 import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
 import { SHIPPING_REPORT_ENTITIES } from './shipping-entities'
@@ -1606,6 +1607,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // orders they shipped, without growing this file.
   ...SHIPPING_REPORT_ENTITIES,
   ...STORED_VALUE_REPORT_ENTITIES,
+  ...DEMAND_REPORT_ENTITIES,
   // HR-20 begin: field time capture (0231). Clock events carry geo FLAGS
   // (inside/outside/unavailable) — raw coordinates are worker location
   // and live only in field_clock_coordinates behind hrm.employment.read.

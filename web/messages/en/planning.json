@@ -1,0 +1,127 @@
+{
+  "title": "Inventory planning",
+  "description": "What to buy or move this week: statistical forecasts per item and location with reviewable purchase and transfer suggestions.",
+  "run": {
+    "title": "Run plan",
+    "description": "Forecast demand and refresh the suggestions for one legal entity.",
+    "horizon": "Horizon (weeks)",
+    "history": "History (weeks)",
+    "start": "Run plan",
+    "running": "Planning…",
+    "done": "Plan {number} is complete with {count, plural, one {# suggestion} other {# suggestions}}.",
+    "uptodate": "Plan {number} is current: nothing sold since the last run changed the picture."
+  },
+  "list": {
+    "needsAttention": "Needs attention",
+    "emptyTitle": "Nothing to buy or move",
+    "emptyDescription": "Every stocked position covers its forecast. Run the plan after selling, receiving or changing a policy.",
+    "emptyAction": "Run plan",
+    "allCaughtUp": "All caught up"
+  },
+  "columns": {
+    "item": "Item",
+    "location": "Location",
+    "action": "Action",
+    "quantity": "Suggested",
+    "supplier": "Supplier",
+    "due": "Due",
+    "cover": "Days of cover",
+    "forecast": "Forecast",
+    "supply": "Projected supply",
+    "status": "Status",
+    "trend": "Demand trend"
+  },
+  "actions": {
+    "buy": "Buy",
+    "transfer": "Transfer",
+    "confirm": "Confirm",
+    "dismiss": "Dismiss",
+    "convert": "Convert",
+    "convertAll": "Create purchase orders",
+    "confirmAll": "Confirm all suggested",
+    "confirmed": "Confirmed {count, plural, one {# suggestion} other {# suggestions}}.",
+    "convertedOrders": "Created {orders, plural, one {# purchase order} other {# purchase orders}}.",
+    "convertedTransfers": "Created {transfers, plural, one {# transfer} other {# transfers}}.",
+    "dismissTitle": "Dismiss suggestion",
+    "dismissPrompt": "Why is this suggestion not being pursued?",
+    "chooseVendor": "Choose vendor",
+    "chooseSource": "Move from",
+    "noSupplier": "No supplier resolved — choose a vendor to convert."
+  },
+  "drawer": {
+    "title": "{action} {quantity} {item}",
+    "forecast": "Forecast",
+    "history": "History",
+    "band": "80% interval",
+    "stockout": "Stockout",
+    "explanation": "Why this is suggested",
+    "supply": "Supply",
+    "policy": "Planning policy",
+    "advanced": "Advanced",
+    "advancedSummary": "Method override, history window and forecast overrides",
+    "overrideTitle": "Forecast override",
+    "overrideReason": "Reason",
+    "overrideQuantity": "Quantity",
+    "overrideSave": "Save override",
+    "overrideSaved": "The override applies from the next run.",
+    "runBy": "Run {number}"
+  },
+  "explanation": {
+    "method": "{method} forecast over {weeks, plural, one {# week} other {# weeks}} of history.",
+    "stockouts": "{count, plural, one {# stockout week} other {# stockout weeks}} excluded.",
+    "promo": "Promotion {code} lifted demand {lift}.",
+    "peak": "Seasonal peak in {month}.",
+    "policyDefault": "Standard policy: review before buying.",
+    "override": "Overridden: {reason}."
+  },
+  "methods": {
+    "seasonal_additive": "Seasonal",
+    "seasonal_multiplicative": "Seasonal",
+    "croston_sba": "Intermittent",
+    "moving_average": "Average",
+    "override": "Override"
+  },
+  "policy": {
+    "title": "Planning policy",
+    "leadTime": "Lead time (days)",
+    "reviewCycle": "Review cycle (days)",
+    "serviceLevel": "Service level",
+    "moq": "Minimum order",
+    "casePack": "Case pack",
+    "supplier": "Preferred supplier",
+    "method": "Forecast method",
+    "history": "History (weeks)",
+    "save": "Save policy",
+    "saved": "Planning policy saved.",
+    "methodAuto": "Automatic",
+    "methodSeasonal": "Seasonal",
+    "methodIntermittent": "Intermittent",
+    "methodAverage": "Average",
+    "defaulted": "Using the standard policy — set per-item values to tune it."
+  },
+  "itemTab": {
+    "title": "Planning",
+    "cover": "Days of cover",
+    "nextSuggestion": "Next suggestion",
+    "none": "No open suggestion for this item.",
+    "openPlanning": "Open Inventory planning"
+  },
+  "report": {
+    "accuracyTitle": "Forecast accuracy",
+    "accuracyDescription": "Mean absolute percentage error and bias of past forecasts by item class.",
+    "class": "Item class",
+    "periods": "Scored weeks",
+    "mape": "MAPE",
+    "bias": "Bias"
+  },
+  "status": {
+    "suggested": "Suggested",
+    "confirmed": "Confirmed",
+    "converted": "Converted",
+    "dismissed": "Dismissed"
+  },
+  "gate": {
+    "offTitle": "Demand planning is off",
+    "offDescription": "Turn on Demand planning in Company Settings → Features to forecast stock needs."
+  }
+}

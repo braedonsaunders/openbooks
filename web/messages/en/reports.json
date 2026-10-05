@@ -1018,6 +1018,10 @@
       "stored_value_balances": {
         "label": "Stored-value balances",
         "description": "One row per stored-value account with its open balance, customer region and last activity. Filter to open statuses and group by region and activity month for unclaimed-property (escheat) review."
+      },
+      "demand_forecast_accuracy": {
+        "label": "Forecast accuracy",
+        "description": "Past demand forecasts scored against actual issues by item class: scored weeks, mean absolute percentage error, and bias."
       }
     },
     "columns": {
@@ -2516,6 +2520,12 @@
         "last_activity_on": "Last activity",
         "expires_on": "Expires on",
         "inactivity_months": "Program inactivity threshold (months)"
+      },
+      "demand_forecast_accuracy": {
+        "item_class": "Item class",
+        "scored_weeks": "Scored weeks",
+        "mape": "MAPE",
+        "bias": "Bias"
       }
     },
     "enumValues": {

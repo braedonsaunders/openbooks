@@ -1018,6 +1018,10 @@
       "stored_value_balances": {
         "label": "Guthabenbestände",
         "description": "Eine Zeile je Guthabenkonto mit offenem Saldo, Kundenregion und letzter Aktivität. Nach Status filtern und nach Region und Aktivitätsmonat gruppieren für die Prüfung nicht beanspruchter Guthaben."
+      },
+      "demand_forecast_accuracy": {
+        "label": "Prognosegenauigkeit",
+        "description": "Frühere Bedarfsprognosen im Abgleich mit tatsächlichen Verbräuchen je Artikelklasse: bewertete Wochen, mittlerer absoluter Prozentfehler und Verzerrung."
       }
     },
     "columns": {
@@ -2516,6 +2520,12 @@
         "last_activity_on": "Letzte Aktivität",
         "expires_on": "Läuft ab am",
         "inactivity_months": "Inaktivitätsschwelle des Programms (Monate)"
+      },
+      "demand_forecast_accuracy": {
+        "item_class": "Artikelklasse",
+        "scored_weeks": "Bewertete Wochen",
+        "mape": "MAPE",
+        "bias": "Verzerrung"
       }
     },
     "enumValues": {

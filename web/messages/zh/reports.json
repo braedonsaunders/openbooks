@@ -1018,6 +1018,10 @@
       "stored_value_balances": {
         "label": "储值余额",
         "description": "每个储值账户一行，含未清余额、客户地区和最近活动。按状态筛选，按地区和活动月份分组，复核无人认领款项。"
+      },
+      "demand_forecast_accuracy": {
+        "label": "预测准确率",
+        "description": "按物料类别将历史需求预测与实际消耗对比评分: 已评分周数、平均绝对百分比误差与偏差。"
       }
     },
     "columns": {
@@ -2516,6 +2520,12 @@
         "last_activity_on": "最近活动",
         "expires_on": "到期日",
         "inactivity_months": "方案休眠阈值（月）"
+      },
+      "demand_forecast_accuracy": {
+        "item_class": "物料类别",
+        "scored_weeks": "已评分周数",
+        "mape": "MAPE",
+        "bias": "偏差"
       }
     },
     "enumValues": {

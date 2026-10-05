@@ -1,0 +1,127 @@
+{
+  "title": "Bestandsplanung",
+  "description": "Was diese Woche zu kaufen oder umzulagern ist: statistische Prognosen je Artikel und Standort mit prüfbaren Bestell- und Umlagervorschlägen.",
+  "run": {
+    "title": "Plan ausführen",
+    "description": "Bedarf prognostizieren und die Vorschläge für eine Gesellschaft aktualisieren.",
+    "horizon": "Horizont (Wochen)",
+    "history": "Historie (Wochen)",
+    "start": "Plan ausführen",
+    "running": "Plane…",
+    "done": "Plan {number} ist fertig mit {count, plural, one {# Vorschlag} other {# Vorschlägen}}.",
+    "uptodate": "Plan {number} ist aktuell: Nichts hat das Bild seit dem letzten Lauf verändert."
+  },
+  "list": {
+    "needsAttention": "Handlungsbedarf",
+    "emptyTitle": "Nichts zu kaufen oder umzulagern",
+    "emptyDescription": "Jede lagergeführte Position deckt ihre Prognose ab. Führe den Plan nach Verkäufen, Wareneingängen oder Richtlinienänderungen aus.",
+    "emptyAction": "Plan ausführen",
+    "allCaughtUp": "Alles erledigt"
+  },
+  "columns": {
+    "item": "Artikel",
+    "location": "Standort",
+    "action": "Aktion",
+    "quantity": "Vorgeschlagen",
+    "supplier": "Lieferant",
+    "due": "Fällig",
+    "cover": "Reichweite (Tage)",
+    "forecast": "Prognose",
+    "supply": "Verfügbar (progn.)",
+    "status": "Status",
+    "trend": "Nachfragetrend"
+  },
+  "actions": {
+    "buy": "Kaufen",
+    "transfer": "Umlagern",
+    "confirm": "Bestätigen",
+    "dismiss": "Verwerfen",
+    "convert": "Umwandeln",
+    "convertAll": "Bestellungen anlegen",
+    "confirmAll": "Alle Vorschläge bestätigen",
+    "confirmed": "{count, plural, one {# Vorschlag} other {# Vorschläge}} bestätigt.",
+    "convertedOrders": "{orders, plural, one {# Bestellung angelegt} other {# Bestellungen angelegt}}.",
+    "convertedTransfers": "{transfers, plural, one {# Umlagerung angelegt} other {# Umlagerungen angelegt}}.",
+    "dismissTitle": "Vorschlag verwerfen",
+    "dismissPrompt": "Warum wird dieser Vorschlag nicht verfolgt?",
+    "chooseVendor": "Lieferant wählen",
+    "chooseSource": "Umlagern von",
+    "noSupplier": "Kein Lieferant ermittelt — wähle einen Lieferanten zum Umwandeln."
+  },
+  "drawer": {
+    "title": "{action} {quantity} {item}",
+    "forecast": "Prognose",
+    "history": "Historie",
+    "band": "80-%-Intervall",
+    "stockout": "Leerbestand",
+    "explanation": "Warum wird das vorgeschlagen",
+    "supply": "Bestand",
+    "policy": "Planungsrichtlinie",
+    "advanced": "Erweitert",
+    "advancedSummary": "Methodenwahl, Historie und Prognose-Übersteuerungen",
+    "overrideTitle": "Prognose-Übersteuerung",
+    "overrideReason": "Begründung",
+    "overrideQuantity": "Menge",
+    "overrideSave": "Übersteuerung speichern",
+    "overrideSaved": "Die Übersteuerung gilt ab dem nächsten Lauf.",
+    "runBy": "Lauf {number}"
+  },
+  "explanation": {
+    "method": "{method}-Prognose über {weeks, plural, one {# Woche} other {# Wochen}} Historie.",
+    "stockouts": "{count, plural, one {# Leerbestandswoche} other {# Leerbestandswochen}} ausgeschlossen.",
+    "promo": "Aktion {code} hat die Nachfrage um {lift} erhöht.",
+    "peak": "Saisonspitze im {month}.",
+    "policyDefault": "Standardrichtlinie: vor dem Kauf prüfen.",
+    "override": "Übersteuert: {reason}."
+  },
+  "methods": {
+    "seasonal_additive": "Saisonal",
+    "seasonal_multiplicative": "Saisonal",
+    "croston_sba": "Sporadisch",
+    "moving_average": "Mittelwert",
+    "override": "Übersteuert"
+  },
+  "policy": {
+    "title": "Planungsrichtlinie",
+    "leadTime": "Lieferzeit (Tage)",
+    "reviewCycle": "Prüfzyklus (Tage)",
+    "serviceLevel": "Servicegrad",
+    "moq": "Mindestbestellmenge",
+    "casePack": "Gebinde",
+    "supplier": "Bevorzugter Lieferant",
+    "method": "Prognosemethode",
+    "history": "Historie (Wochen)",
+    "save": "Richtlinie speichern",
+    "saved": "Planungsrichtlinie gespeichert.",
+    "methodAuto": "Automatisch",
+    "methodSeasonal": "Saisonal",
+    "methodIntermittent": "Sporadisch",
+    "methodAverage": "Mittelwert",
+    "defaulted": "Standardrichtlinie wird verwendet — je Artikel feinjustieren."
+  },
+  "itemTab": {
+    "title": "Planung",
+    "cover": "Reichweite (Tage)",
+    "nextSuggestion": "Nächster Vorschlag",
+    "none": "Kein offener Vorschlag für diesen Artikel.",
+    "openPlanning": "Bestandsplanung öffnen"
+  },
+  "report": {
+    "accuracyTitle": "Prognosegenauigkeit",
+    "accuracyDescription": "Mittlerer absoluter Prozentfehler und Verzerrung früherer Prognosen je Artikelklasse.",
+    "class": "Artikelklasse",
+    "periods": "Bewertete Wochen",
+    "mape": "MAPE",
+    "bias": "Verzerrung"
+  },
+  "status": {
+    "suggested": "Vorgeschlagen",
+    "confirmed": "Bestätigt",
+    "converted": "Umgewandelt",
+    "dismissed": "Verworfen"
+  },
+  "gate": {
+    "offTitle": "Bedarfsplanung ist ausgeschaltet",
+    "offDescription": "Schalte die Bedarfsplanung unter Firmeneinstellungen → Funktionen ein, um Bedarfe zu prognostizieren."
+  }
+}
