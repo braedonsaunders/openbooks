@@ -137,7 +137,10 @@
       "growth": "同比 {pct}",
       "grossProfit": "毛利：{amount}",
       "opex": "运营费用：{amount}",
-      "perMonth": "每月"
+      "perMonth": "每月",
+      "noPriorYear": "上年同期无收入",
+      "forPeriod": "本期所需收入",
+      "noBreakeven": "需要正的毛利率"
     },
     "score": {
       "title": "财务健康评分",
@@ -145,12 +148,16 @@
       "excellent": "优秀",
       "good": "良好",
       "average": "一般",
-      "needsWork": "有待改进"
+      "needsWork": "有待改进",
+      "notScored": "本期暂无可评级的项目。",
+      "unscored": "未评分"
     },
     "categories": {
       "profitability": "盈利能力",
       "efficiency": "效率",
-      "operating": "运营"
+      "operating": "运营",
+      "liquidity": "流动性",
+      "solvency": "偿债能力"
     },
     "subKpi": {
       "roic": "ROIC",
@@ -309,67 +316,67 @@
         "label": "毛利率",
         "formula": "毛利润 / 营收",
         "desc": "扣除直接成本后剩余的营收份额。",
-        "interpret": "越高越好，服务型企业通常目标为35–50%。"
+        "interpret": "越高越好；不同行业的典型水平差异很大，请设定适合您的目标。"
       },
       "operating_margin": {
         "label": "营业利润率",
         "formula": "营业利润 / 营收",
         "desc": "核心业务盈利能力，扣除利息和非经营项目之前。",
-        "interpret": "超过15%对多数经营性企业已属强劲。"
+        "interpret": "越高越好；请与您设定的目标比较。"
       },
       "ebitda_margin": {
         "label": "EBITDA利润率",
         "formula": "（营业利润＋折旧＋摊销）/ 营收",
         "desc": "扣除非现金费用和融资之前的经营盈利能力。",
-        "interpret": "超过20%属健康，便于比较不同资本结构。"
+        "interpret": "便于比较资本结构不同的企业；请与您设定的目标比较。"
       },
       "net_margin": {
         "label": "净利润率",
         "formula": "净利润 / 营收",
         "desc": "扣除一切之后的底线利润占营收份额。",
-        "interpret": "多数行业超过10%属健康。"
+        "interpret": "越高越好；请与您设定的目标比较。"
       },
       "roa": {
         "label": "总资产收益率",
         "formula": "净利润 / 总资产",
-        "desc": "资产创造利润的效率。",
-        "interpret": "超过8%表明资产利用高效。"
+        "desc": "资产创造利润的效率，不足一年的期间按年化计算。",
+        "interpret": "越高越好；请与您设定的目标比较。"
       },
       "roe": {
         "label": "净资产收益率",
         "formula": "净利润 / 净资产",
-        "desc": "股东权益产生的回报。",
-        "interpret": "超过15%通常视为强劲。"
+        "desc": "股东权益回报，不足一年的期间按年化计算。权益为负时无意义。",
+        "interpret": "越高越好；请与您设定的目标比较。"
       },
       "roic": {
         "label": "投入资本回报率",
         "formula": "NOPAT / 投入资本",
-        "desc": "全部投入资本的回报。NOPAT＝营业利润×（1−25%假设税率）。投入资本＝净资产＋长期负债。",
-        "interpret": "超过资本成本（通常8–12%）即创造价值。"
+        "desc": "全部投入资本的回报。NOPAT = 营业利润 ×（1 − 税率），税率采用本期已入账的实际税率，否则采用税务设置中的法定税率。投入资本 = 所有者权益 + 您分类的有息负债。",
+        "interpret": "高于资本成本即创造价值；请与您设定的目标比较。"
       },
       "roce": {
         "label": "已动用资本回报率",
-        "formula": "营业利润 / 投入资本",
-        "desc": "已动用资本的税前经营回报。",
-        "interpret": "超过15%表明资本配置高效。"
+        "formula": "营业利润 /（总资产 − 流动负债）",
+        "desc": "企业所用长期资本的税前营业回报，不足一年的期间按年化计算。",
+        "interpret": "越高越好；请与您设定的目标比较。"
       },
       "rev_per_employee": {
         "label": "人均营收",
-        "formula": "营收 / 期末人数",
+        "formula": "年化收入 / 期末员工人数",
         "desc": "员工的销售生产力。",
-        "interpret": "基准因行业、地域和币种差异很大。"
+        "interpret": "基准因行业、地区和币种而异；仅在您设定目标后才会评级。"
       },
       "gp_per_employee": {
         "label": "人均毛利",
-        "formula": "毛利润 / 期末人数",
+        "formula": "年化毛利 / 期末员工人数",
         "desc": "扣除直接成本后每位员工贡献的价值。",
         "interpret": "比人均营收更纯粹的生产力信号。"
       },
       "asset_turnover": {
         "label": "资产周转率",
         "formula": "营收 / 总资产",
-        "desc": "每单位资产产生的营收。",
-        "interpret": "超过1.0倍意味着资产年周转超过一次。"
+        "desc": "每单位资产产生的收入，不足一年的期间按年化计算。",
+        "interpret": "高于 1.0× 表示资产每年周转一次以上。"
       },
       "cogs_ratio": {
         "label": "销售成本率",
@@ -391,24 +398,66 @@
       },
       "interest_coverage": {
         "label": "利息保障倍数",
-        "formula": "营业利润 / 其他费用",
-        "desc": "营业利润覆盖非经营（利息）费用的倍数。",
-        "interpret": "超过5倍较从容，低于1.5倍是危险信号。"
+        "formula": "营业利润 / 利息费用",
+        "desc": "营业利润可覆盖您归类为利息的科目利息费用的倍数。",
+        "interpret": "越高越安全；请与您设定的目标及贷款方契约比较。"
       },
       "rule_of_40": {
         "label": "40法则",
         "formula": "营收增长率% ＋ 营业利润率%",
         "desc": "用一个数字平衡增长与盈利。",
-        "interpret": "40及以上为优秀——在增长与利润率之间取舍。"
+        "interpret": "在增长与利润率之间权衡；请与您设定的目标比较。"
+      },
+      "current_ratio": {
+        "label": "流动比率",
+        "formula": "流动资产 / 流动负债",
+        "desc": "每单位一年内到期债务可用的短期资产。",
+        "interpret": "低于 1.0× 表示流动负债超过流动资产。"
+      },
+      "quick_ratio": {
+        "label": "速动比率",
+        "formula": "（现金 + 应收账款）/ 流动负债",
+        "desc": "仅凭现金和应收账款（不出售存货）覆盖一年内到期债务的能力。",
+        "interpret": "达到或高于 1.0× 表示无需存货即可覆盖短期债务。"
+      },
+      "working_capital": {
+        "label": "营运资本",
+        "formula": "流动资产 − 流动负债",
+        "desc": "偿付一年内到期债务后剩余的短期资源。",
+        "interpret": "营运资本为负表示流动负债超过流动资产。"
+      },
+      "debt_to_equity": {
+        "label": "债务权益比",
+        "formula": "有息负债 / 所有者权益",
+        "desc": "财务杠杆：基于您分类的负债科目，每单位所有者权益对应的借款。越低越安全。",
+        "interpret": "越低越安全；请与您设定的目标及贷款方契约比较。"
+      },
+      "liabilities_to_equity": {
+        "label": "负债权益比",
+        "formula": "负债总额 / 所有者权益",
+        "desc": "每单位所有者权益对应的全部负债。越低越安全。",
+        "interpret": "越低越安全；请与您设定的目标比较。"
       }
     },
     "ratioNotes": {
-      "noDA": "未找到折旧/摊销科目",
+      "noDA": "存在固定资产余额，但本期未找到折旧或摊销",
       "noBalanceSheet": "无资产负债表数据",
       "noHeadcount": "无在职员工记录",
       "noInterestExpense": "无利息费用",
       "unavailable": "暂无数据",
-      "perEmployees": "{revenue} / {count, plural, one {# 人} other {# 人}}"
+      "perEmployees": "{revenue} / {count, plural, one {# 人} other {# 人}}",
+      "noRevenue": "本期无收入",
+      "noCurrentLiabilities": "期末无流动负债",
+      "noPriorComparison": "需要上年同期的收入",
+      "equityNotPositive": "所有者权益为零或负数",
+      "investedCapitalNotPositive": "投入资本为零或负数",
+      "debtNotClassified": "请在“财务健康 → 配置”中选择您的有息负债科目",
+      "interestNotClassified": "请在“财务健康 → 配置”中选择您的利息费用科目",
+      "noTaxRate": "本期未计提所得税，也未设置所得税税率 — 请在“设置 → 税务 → 所得税税率”中添加",
+      "mixedTaxRates": "当前范围内的实体适用不同的法定税率；本期所得税入账后，投入资本回报率将使用实际税率",
+      "annualized": "按{yearDays}天中的{periodDays}天年化",
+      "effectiveTaxRate": "实际税率 {rate}",
+      "statutoryTaxRate": "法定税率 {rate}"
     },
     "config": {
       "fields": {
@@ -441,13 +490,163 @@
           "help": "ROIC 评级的基准（需要资产负债表数据）"
         },
         "revenuePerEmployee": {
-          "label": "人均收入（{currency}）",
-          "help": "员工生产率的基准"
+          "label": "人均收入目标（{currency}）",
+          "help": "每名员工的年度金额；留空则只显示比率不评级"
         },
         "gpPerEmployee": {
-          "label": "人均毛利（{currency}）",
-          "help": "员工生产率的基准"
+          "label": "人均毛利目标（{currency}）",
+          "help": "每名员工的年度金额；留空则只显示比率不评级"
+        },
+        "roceTarget": {
+          "label": "已动用资本回报率目标（%）",
+          "help": "ROCE 评级的基准（需要资产负债表数据）"
+        },
+        "currentRatioTarget": {
+          "label": "流动比率目标（倍）",
+          "help": "视为达标的每单位流动负债对应的流动资产"
+        },
+        "quickRatioTarget": {
+          "label": "速动比率目标（倍）",
+          "help": "视为达标的每单位流动负债对应的现金及应收账款"
+        },
+        "debtToEquityTarget": {
+          "label": "债务权益比上限（倍）",
+          "help": "越低越好：等于或低于此值视为达标"
+        },
+        "liabilitiesToEquityTarget": {
+          "label": "负债权益比上限（倍）",
+          "help": "越低越好：等于或低于此值视为达标"
+        },
+        "interestCoverageTarget": {
+          "label": "利息保障倍数目标（倍）",
+          "help": "营业利润应覆盖利息费用的倍数"
+        },
+        "assetTurnoverTarget": {
+          "label": "资产周转率目标（倍）",
+          "help": "视为达标的每单位资产年收入"
+        },
+        "cogsRatioTarget": {
+          "label": "销售成本上限（占收入 %）",
+          "help": "越低越好：等于或低于此值视为达标"
+        },
+        "opexRatioTarget": {
+          "label": "营业费用上限（占收入 %）",
+          "help": "越低越好：等于或低于此值视为达标"
+        },
+        "operatingLeverageTarget": {
+          "label": "经营杠杆目标（倍）",
+          "help": "每单位收入增长对应的营业利润增长"
+        },
+        "ruleOf40Target": {
+          "label": "40 法则目标（分）",
+          "help": "视为达标的收入增长率与营业利润率之和"
+        },
+        "gradeDPercent": {
+          "label": "D 级起点（目标的 %）",
+          "help": "获得该等级所需的目标达成度（越低越好的比率取倒数）；低于 D 为 F"
+        },
+        "gradeCPercent": {
+          "label": "C 级起点（目标的 %）",
+          "help": "获得该等级所需的目标达成度（越低越好的比率取倒数）；低于 D 为 F"
+        },
+        "gradeBPercent": {
+          "label": "B 级起点（目标的 %）",
+          "help": "获得该等级所需的目标达成度（越低越好的比率取倒数）；低于 D 为 F"
+        },
+        "gradeAPercent": {
+          "label": "A 级起点（目标的 %）",
+          "help": "获得该等级所需的目标达成度（越低越好的比率取倒数）；低于 D 为 F"
+        },
+        "scoreAverage": {
+          "label": "“一般”分数下限",
+          "help": "获得该标签所需的总体健康分（0–100）"
+        },
+        "scoreGood": {
+          "label": "“良好”分数下限",
+          "help": "获得该标签所需的总体健康分（0–100）"
+        },
+        "scoreExcellent": {
+          "label": "“优秀”分数下限",
+          "help": "获得该标签所需的总体健康分（0–100）"
+        },
+        "insightCriticalPercent": {
+          "label": "低于此值为严重问题（目标的 %）",
+          "help": "利润率低于其目标的此比例时报告为严重"
+        },
+        "insightWarningPercent": {
+          "label": "低于此值为警告（目标的 %）",
+          "help": "利润率低于其目标的此比例时报告为显著低于目标"
+        },
+        "revenueDeclineAlertPercent": {
+          "label": "收入下降警报（%）",
+          "help": "较上年同期下降超过此值时报告为收入下滑"
+        },
+        "revenueTrendAlertPercent": {
+          "label": "三个月收入趋势警报（%）",
+          "help": "最近三个月下降超过此值时报告为下降趋势"
+        },
+        "marginCompressionPoints": {
+          "label": "利润率压缩警报（百分点）",
+          "help": "最近三个月毛利率下降超过此百分点数"
+        },
+        "breakevenSafetyPercent": {
+          "label": "盈亏平衡安全边际（%）",
+          "help": "收入仅高出盈亏平衡点此比例以内时报告为利润微薄"
+        },
+        "anomalySigma": {
+          "label": "异常阈值（σ）",
+          "help": "偏离均值超过此标准差数的月份报告为异常"
         }
+      }
+    },
+    "ratioCard": {
+      "notAvailable": "不适用",
+      "ungraded": "无目标",
+      "noTarget": "未设定目标 — 不评级",
+      "target": "目标：{target}",
+      "versusTarget": "对比目标 {target}",
+      "formula": "公式",
+      "meaning": "含义",
+      "interpretation": "解读",
+      "thisPeriod": "本期"
+    },
+    "dupont": {
+      "title": "杜邦分析",
+      "hint": "ROE = 净利率 × 资产周转率 × 权益乘数",
+      "netMargin": "净利率",
+      "netMarginSub": "净利润 ÷ 收入",
+      "assetTurnover": "资产周转率",
+      "assetTurnoverSub": "年化收入 ÷ 总资产",
+      "equityMultiplier": "权益乘数",
+      "equityMultiplierSub": "总资产 ÷ 所有者权益（杠杆）",
+      "roe": "净资产收益率"
+    },
+    "grading": {
+      "title": "等级如何计算",
+      "body": "每个比率都与其目标比较。达到目标的 {a} 及以上为 A，{b} 为 B，{c} 为 C，{d} 为 D，低于此为 F。对于越低越好的比率（成本、杠杆），比较方向相反。没有目标或缺少所需数据的比率会显示但不评级。",
+      "labels": "健康分为已评级类别的平均值：{excellent} 及以上为优秀，{good} 及以上为良好，{average} 及以上为一般，低于此为需改进。所有这些数值均在“阈值”中设置。"
+    },
+    "ratioInputs": {
+      "title": "比率输入",
+      "hint": "杠杆比率读取的科目",
+      "notDecided": "尚未选择 — 依赖此项的比率会显示不可用的原因。",
+      "add": "添加科目…",
+      "remove": "移除 {account}",
+      "save": "保存",
+      "saved": "已保存 — 比率将重新计算。",
+      "saveFailed": "无法保存该分类。",
+      "loadFailed": "无法加载分类。",
+      "interest_expense": {
+        "title": "利息费用",
+        "help": "记录借款利息的费用科目。利息保障倍数用营业利润除以其合计。",
+        "none": "无利息费用科目 — 利息保障倍数不适用。",
+        "confirmNone": "我们没有利息费用"
+      },
+      "interest_bearing_debt": {
+        "title": "有息负债",
+        "help": "记录贷款、信贷额度、债券等借款的负债科目（含流动和长期部分）。债务权益比和投入资本回报率读取其余额。",
+        "none": "无有息负债 — 债务权益比为零。",
+        "confirmNone": "我们没有有息负债"
       }
     }
   },

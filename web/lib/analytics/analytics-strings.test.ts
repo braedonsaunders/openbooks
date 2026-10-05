@@ -21,8 +21,8 @@ import test from 'node:test'
  *   Interpolated templates are SQL/value composition, not display copy.
  *   Lowercase-start literals are error/code contracts, untouched by design.
  * - IDENTIFIER_ALLOWLIST names declarations whose string contents stay
- *   English: key registries the config API reads keys from (RATIO_DEFS
- *   precedent), the ANALYTICS_CONFIG API contract, data codes, units and
+ *   English: key registries the config API reads keys from, the
+ *   ANALYTICS_CONFIG API contract, data codes, units and
  *   formula text.
  * - LEGACY_ALLOWLIST pins exact leftover literals with their owner/reason.
  *   Localize one and delete its entry; add nothing without a reason.
@@ -42,7 +42,6 @@ const EXEMPT_BASENAMES = new Set(['catalog-strings.ts'])
 
 /** identifier -> why its string contents stay English. */
 const IDENTIFIER_ALLOWLIST: Record<string, string> = {
-  RATIO_DEFS: 'static English ratio registry for out-of-scope surfaces (accounting home, widgets); dashboards read localizedRatioDefs()',
   ANALYTICS_CONFIG: 'config API contract: GET serves spec.fields labels/help; hub clients render catalog config.fields.* keys instead',
   ALLOCATION_BASES: 'static English rate-engine key registry; the config API reads keys only and the hub renders trueCost.bases.*',
   ALLOCATION_METHODS: 'same as ALLOCATION_BASES; descriptions are formula reference text',
