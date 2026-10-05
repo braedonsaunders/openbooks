@@ -149,12 +149,14 @@ function computeHogarStatutory(args: {
   ano: number;
   temporal: string | null | undefined;
   periodPay: bigint;
-  income: string;
-  nonPeriodic: string;
+  /** Certified calendar-year remuneration expected from this payer (es_retribucion_anual). */
+  retribucionAnual: bigint;
+  /** Certified recurring monthly periods expected this calendar year. */
+  periodosAnuales: number;
   pushStatutory: PushStatutoryFn;
 }): Record<string, string> {
   const { emp, payDate, situacion, situacionLaboral, ano, temporal } = args;
-  const { periodPay, income, nonPeriodic, pushStatutory } = args;
+  const { periodPay, retribucionAnual, periodosAnuales, pushStatutory } = args;
   const retribucion = empFact("ES", emp, "es_hogar_retribucion_mensual");
   if (retribucion == null || retribucion === "") {
     fail(
@@ -204,11 +206,14 @@ function computeHogarStatutory(args: {
     atEpRate,
   });
 
-  // Household IRPF follows the general tipo; COTIZACIONES annualise the
-  // household employee share (mid-year changes take the regularización
-  // path, refused by name like the General Regime).
-  const cotizacionesAnual = D(U(ss.trabajadorTotal) * 12n);
-  const retribAnual = D(dec(income, "income") * 12n + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic"));
+  // Household IRPF follows the general tipo on the same basis as the
+  // General Regime (RIRPF art. 83.2.1ª): the calendar-year remuneration
+  // certified as expected from this payer — not twelve copies of this
+  // month, which overstates a mid-year starter's year — and COTIZACIONES
+  // over the certified recurring periods (mid-year changes take the
+  // regularización path, refused by name like the General Regime).
+  const cotizacionesAnual = D(U(ss.trabajadorTotal) * BigInt(periodosAnuales));
+  const retribAnual = D(retribucionAnual);
   const irpf = calculateEsIrpf2026({
     payDate,
     retribuciones: retribAnual,
@@ -529,9 +534,16 @@ export async function computeEsStatutory(
   // proportional extras) selects the tramo, the SMI floor guards it, and
   // household IRPF follows the general tipo on the month's pay.
   if (esHogar) {
+    if (irnrRateHundredths !== null) {
+      fail(
+        "a non-resident household employee is refused by name: the Sistema Especial path prices "
+        + "resident IRPF only, and IRNR on household pay is not transcribed. Withhold IRNR outside "
+        + "this payroll or record the employee's Spanish tax residence if it applies",
+      );
+    }
     return computeHogarStatutory({
       emp, payDate, situacion, situacionLaboral, ano, temporal,
-      periodPay, income, nonPeriodic, pushStatutory,
+      periodPay, retribucionAnual: retribucionAnualUnits, periodosAnuales, pushStatutory,
     });
   }
 
