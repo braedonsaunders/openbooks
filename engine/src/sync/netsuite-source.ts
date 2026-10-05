@@ -128,6 +128,7 @@ const NS_ITEM_KIND: Record<string, string> = {
   OthCharge: "other_charge",
   Markup: "other_charge",
   Discount: "discount",
+  GiftCertificateItem: "gift_card",
   InvtPart: "inventory",
   Assembly: "assembly",
   Kit: "kit",

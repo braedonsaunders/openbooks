@@ -513,6 +513,7 @@ export const ITEM_KIND_VALUES = [
   "labor",
   "absence",
   "discount",
+  "gift_card",
 ] as const;
 
 export const ITEM_INVENTORY_KINDS = new Set<string>(["inventory", "assembly", "kit"]);

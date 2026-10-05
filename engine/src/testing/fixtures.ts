@@ -993,6 +993,11 @@ async function orgRowCountsCommitted(orgId: string): Promise<Record<string, numb
  * hang for minutes on the shared DB).
  */
 const CORE_A = [
+  // Stored value before journals, parties and programs: entries reference
+  // journal entries, accounts reference programs and parties.
+  "stored_value_entries",
+  "stored_value_accounts",
+  "stored_value_programs",
   // Physical operation headers and movements share deferred provenance links.
   "assembly_disassemblies",
   "inventory_provisional_costs",
@@ -1358,6 +1363,10 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
   // time_entry_id), so null the time side, then delete lines before entries.
   await db.transaction(async (tx) => {
     await guardTeardownTransaction(tx, orgId, kind);
+    // Mark this transaction as the org's teardown: storage guards that
+    // refuse ordinary rewrites (stored-value entries) let this tx remove the
+    // doomed org's rows. Transaction-local, never visible outside teardown.
+    await tx.execute(sql`select set_config('openbooks.teardown_org', ${orgId}, true)`);
     await tx.execute(sql`update time_entries
       set invoiced_by_line_id = null, cost_journal_entry_id = null
       where org_id = ${orgId}`);

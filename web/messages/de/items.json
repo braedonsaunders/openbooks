@@ -35,7 +35,8 @@
     "labor": "Arbeit",
     "absence": "Abwesenheit",
     "discount": "Rabatt",
-    "equipment_charge": "Geräteverrechnung"
+    "equipment_charge": "Geräteverrechnung",
+    "gift_card": "Geschenkkarte"
   },
   "kindDescriptions": {
     "service": "Arbeit oder Fachwissen ohne physische Bestandsführung.",
@@ -47,7 +48,8 @@
     "equipment_charge": "Abrechenbare Nutzung eigener oder gemieteter Geräte.",
     "labor": "Arbeitszeit mit Lohnpreis- und Lohnkostenlogik.",
     "absence": "Bezahlte oder unbezahlte Abwesenheit in der Zeiterfassung.",
-    "discount": "Eine Minderung einer Position oder Transaktionssumme."
+    "discount": "Eine Minderung einer Position oder Transaktionssumme.",
+    "gift_card": "Ein Guthabenverkauf: wird auf die Guthabenverbindlichkeit gebucht, niemals auf Erlöse, und erzeugt bei Buchung einen einlösbaren Code."
   },
   "drawer": {
     "tabs": { "overview": "Übersicht", "pricing": "Preise", "accounting": "Buchhaltung", "costing": "Lagerbestand", "revenue": "Umsatzrealisierung" },

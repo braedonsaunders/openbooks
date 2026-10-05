@@ -16,6 +16,7 @@ import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";
 import { openItemsForParty } from "./payment-queries.ts";
 import { assertCreditSourcesExist, validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind } from "./payment-documents.ts";
+import { redeemStoredValue } from "../stored-value/accounts.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { expireStalePaymentLinkSessions } from "./payment-link-session-expiry.ts";
 // ---------------------------------------------------------------------------
@@ -394,6 +395,26 @@ export async function postPaymentWithApplications(
       }
     }
     const entryId = await postDocument(doc.id, deps, { deferEffects: true });
+    if (doc.kind === "customer_payment") {
+      // Stored-value tenders: the journal already debited the liability per
+      // line above. Move the subledger now that the entry exists, in this
+      // same unit — a refusal rolls the journal back with it. Accounts lock
+      // in id order so concurrent split-tender receipts cannot deadlock.
+      const tenders = ((custom as { storedValueTenders?: Array<{ accountId: string; amount: string }> }).storedValueTenders ?? [])
+        .map((tender, index) => ({ ...tender, index }))
+        .sort((a, b) => (a.accountId < b.accountId ? -1 : a.accountId > b.accountId ? 1 : a.index - b.index));
+      for (const tender of tenders) {
+        await redeemStoredValue({
+          orgId: doc.orgId,
+          accountId: tender.accountId,
+          amountMinor: toUnits(tender.amount),
+          documentId: doc.id,
+          journalEntryId: entryId,
+          idempotencyKey: `sv-pay:${doc.id}:${tender.index}`,
+          actorId: userId ?? null,
+        });
+      }
+    }
     const sourceResult = (await db.execute<{
       id: string; amount: string; currency: string; txn_amount: string; account_id: string;
       party_id: string | null; subsidiary_id: string; posting_date: string; period_id: string;

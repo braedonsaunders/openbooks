@@ -35,7 +35,8 @@
     "labor": "Labor",
     "absence": "Absence",
     "discount": "Discount",
-    "equipment_charge": "Equipment charge"
+    "equipment_charge": "Equipment charge",
+    "gift_card": "Gift card"
   },
   "kindDescriptions": {
     "service": "Work or expertise sold without tracking physical stock.",
@@ -47,7 +48,8 @@
     "equipment_charge": "Billable use of owned or rented equipment.",
     "labor": "Worked time with labor pricing and payroll costing behavior.",
     "absence": "Paid or unpaid time away recorded against a time entry.",
-    "discount": "A reduction applied to another line or transaction total."
+    "discount": "A reduction applied to another line or transaction total.",
+    "gift_card": "A stored-value sale: posts to the gift card liability, never revenue, and mints a redeemable code on posting."
   },
   "drawer": {
     "tabs": { "overview": "Overview", "pricing": "Pricing", "accounting": "Accounting", "costing": "Inventory", "revenue": "Revenue recognition" },

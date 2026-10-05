@@ -13,6 +13,7 @@ import { transferCorrectionApplications } from "./posting-replay-applications.ts
 import { type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
+import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
 import { glProjectionScopeUnchanged, buildProjection, glLineKey, glProjectionKey } from "./posting-projection.ts";
@@ -132,6 +133,21 @@ export async function regenerateGlImpactTx(
       ...deps,
       deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id, doc.orgId),
     };
+  }
+  if (doc.kind === "customer_invoice" && !deps.storedValueLiabilityByLine) {
+    deps = {
+      ...deps,
+      storedValueLiabilityByLine: await resolveStoredValueLiabilityByLine(tx, doc.id, doc.orgId),
+    };
+  }
+  if (doc.kind === "customer_credit" && !deps.storeCreditLiabilityAccountId) {
+    const custom = (doc.custom ?? {}) as { storeCreditProgramId?: unknown };
+    if (typeof custom.storeCreditProgramId === "string" && custom.storeCreditProgramId) {
+      deps = {
+        ...deps,
+        storeCreditLiabilityAccountId: await resolveStoreCreditLiability(tx, doc.orgId, custom.storeCreditProgramId),
+      };
+    }
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
     deps = {

@@ -8,6 +8,7 @@ import { applyInventoryReturnsForCustomerCredit } from "../inventory/documents-c
 import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
+import { issueStoredValueForInvoice, issueStoreCreditForCreditMemo } from "../stored-value/invoice-effects.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { emitDocumentPosted, emitPaymentReceived } from "../webhooks/emit.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
@@ -87,6 +88,7 @@ export async function runPostDocumentEffects(
         postingDate,
         await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
       );
+      await issueStoredValueForInvoice(doc.id, doc.orgId, effectActorId);
     } else if (doc.kind === "vendor_bill") {
       // A posted vendor_bill carries its entry id by construction — the
       // kernel flips status and stamps posted_entry_id in one statement — so
@@ -125,6 +127,7 @@ export async function runPostDocumentEffects(
         postingDate,
         await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
       );
+      await issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
     }
 
     const lines = await db

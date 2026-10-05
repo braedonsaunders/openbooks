@@ -325,6 +325,7 @@
         "records",
         "revenue",
         "scripting",
+        "stored-value",
         "tax",
         "webhooks"
       ]
@@ -397,7 +398,8 @@
         "platform",
         "projects",
         "records",
-        "scripting"
+        "scripting",
+        "stored-value"
       ]
     },
     "payments-core": {
@@ -589,6 +591,7 @@
         "receivables",
         "scripting",
         "sftp",
+        "stored-value",
         "sync",
         "webhooks"
       ]
@@ -637,6 +640,17 @@
         "revenue",
         "tax-returns",
         "testing"
+      ]
+    },
+    "stored-value": {
+      "description": "Gift card and store credit accounts, issuance, redemption, breakage, and expiry.",
+      "dependsOn": [
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records"
       ]
     },
     "sync": {

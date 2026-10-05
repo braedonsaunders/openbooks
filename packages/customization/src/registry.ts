@@ -835,7 +835,7 @@ const ITEM: RecordTypeMeta = {
       labelKey: "items.labels.kind",
       kind: "select",
       operators: OPERATORS_BY_KIND.select,
-      options: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount"].map((value) => ({
+      options: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount", "gift_card"].map((value) => ({
         value,
         labelKey: `items.kinds.${value}`,
       })),

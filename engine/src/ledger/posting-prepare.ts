@@ -29,6 +29,7 @@ import { validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import { RULES } from "./posting-rules.ts";
 import { assertFinalKernelBalance, assertCreditMemoDirection } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
+import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 
@@ -106,6 +107,21 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       ...deps,
       deferralAccountByLine: await resolveDeferralAccounts(db, doc.id, doc.orgId),
     };
+  }
+  if (doc.kind === "customer_invoice" && !deps.storedValueLiabilityByLine) {
+    deps = {
+      ...deps,
+      storedValueLiabilityByLine: await resolveStoredValueLiabilityByLine(db, doc.id, doc.orgId),
+    };
+  }
+  if (doc.kind === "customer_credit" && !deps.storeCreditLiabilityAccountId) {
+    const custom = (doc.custom ?? {}) as { storeCreditProgramId?: unknown };
+    if (typeof custom.storeCreditProgramId === "string" && custom.storeCreditProgramId) {
+      deps = {
+        ...deps,
+        storeCreditLiabilityAccountId: await resolveStoreCreditLiability(db, doc.orgId, custom.storeCreditProgramId),
+      };
+    }
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
     deps = {
