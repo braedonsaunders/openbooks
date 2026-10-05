@@ -10,7 +10,7 @@ const recordLink = 'font-medium text-teal-700 hover:underline dark:text-teal-300
 
 export async function CompensationCycleRegister({ data }: { data: CompHomeData }) {
   const t = await getTranslations('hrm.compensation')
-  const options = ['draft', 'open', 'in_review', 'approved', 'pushed', 'closed', 'cancelled'].map((value) => ({ value, label: t(`cycleStatus.${value}`) }))
+  const options = ['draft', 'open', 'in_review', 'approved', 'pushed', 'closed', 'cancelled', 'historical'].map((value) => ({ value, label: t(`cycleStatus.${value}`) }))
   const selected = pickString(data.currentParams.cycleStatus)
   const rows = options.some((option) => option.value === selected) ? data.cycles.filter((row) => row.status === selected) : data.cycles
   return <RegisteredListTable source="hrm_compensation_cycles" contained
@@ -28,7 +28,7 @@ export async function CompensationCycleRegister({ data }: { data: CompHomeData }
       { key: 'kind', sortKey: 'kind', sortValue: (row) => row.kindLabel, header: data.kindLabel, search: (row) => row.kindLabel, cell: (row) => row.kindLabel },
       { key: 'status', sortKey: 'status', sortValue: (row) => row.statusLabel, header: data.cyclesColumns.status, search: (row) => row.statusLabel,
         cell: (row) => <Badge variant={row.statusVariant}>{row.statusLabel}</Badge> },
-      { key: 'effective', sortKey: 'effective', sortValue: (row) => row.effectiveOn, header: data.cyclesColumns.effective, search: (row) => row.effectiveOn, cell: (row) => row.effectiveOn },
+      { key: 'effective', sortKey: 'effective', sortValue: (row) => row.effectiveDate, header: data.cyclesColumns.effective, search: (row) => row.effectiveOn, cell: (row) => row.effectiveOn },
     ]} />
 }
 

@@ -2058,7 +2058,8 @@
       "approved": "Approuvé",
       "pushed": "Transféré",
       "closed": "Clôturé",
-      "cancelled": "Annulé"
+      "cancelled": "Annulé",
+      "historical": "Source historique"
     },
     "lineStatus": {
       "pending": "En attente",
@@ -2187,6 +2188,41 @@
       "bandHistory": "Historique",
       "bandVersions": "{count, plural, one {Afficher # version} other {Afficher # versions}}",
       "bandsEmptyFiltered": "Aucune plage salariale ne correspond à ce filtre."
+    },
+    "dashboard": {
+      "activeWorkers": "Salariés actifs",
+      "activeBands": "Fourchettes salariales actuelles",
+      "bandHistoryCount": "{count, plural, one {# version de fourchette} many {# versions de fourchette} other {# versions de fourchette}}",
+      "averageHourly": "Salaire horaire moyen",
+      "averageAnnual": "Salaire annuel moyen",
+      "wageGroupCount": "{count, plural, one {# salarié} many {# salariés} other {# salariés}} · au {date}",
+      "actualWages": "Salaires actuels des salariés",
+      "wageCoverage": "{covered} salariés actifs sur {total} ont un salaire applicable unique.",
+      "missingWages": "{count, plural, one {# salarié n’a aucun salaire applicable.} many {# salariés n’ont aucun salaire applicable.} other {# salariés n’ont aucun salaire applicable.}}",
+      "ambiguousWages": "{count, plural, one {# salarié a des salaires qui se chevauchent et est exclu.} many {# salariés ont des salaires qui se chevauchent et sont exclus.} other {# salariés ont des salaires qui se chevauchent et sont exclus.}}",
+      "averageHelp": "Les moyennes utilisent les salaires individuels applicables, regroupés par devise et base de rémunération. Les taux manquants ou qui se chevauchent sont exclus.",
+      "reviewWages": "Consulter les salaires",
+      "cyclesCount": "{count, plural, one {# cycle de rémunération} many {# cycles de rémunération} other {# cycles de rémunération}}",
+      "historicalCount": "{count, plural, one {# révision historique issue des sources} many {# révisions historiques issues des sources} other {# révisions historiques issues des sources}}",
+      "reviewCycles": "Consulter les cycles"
+    },
+    "sourceCycle": {
+      "description": "Preuves originales de révision salariale. Les propositions ne constituent ni des approbations ni des changements de paie dans l’application.",
+      "back": "Retour aux cycles",
+      "status": "Source historique",
+      "effectiveDate": "Date d’effet",
+      "unknownDate": "Non établie par la source",
+      "recordedDate": "Révision consignée",
+      "hourly": "Horaire",
+      "annual": "Annuel",
+      "empty": "Aucune ligne source disponible",
+      "division": "Service",
+      "employee": "Salarié",
+      "sourceKey": "Identifiant source",
+      "role": "Fonction",
+      "current": "Salaire actuel dans la source",
+      "proposed": "Salaire proposé dans la source",
+      "notes": "Notes de la source"
     }
   },
   "equity": {

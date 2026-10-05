@@ -2058,7 +2058,8 @@
       "approved": "Genehmigt",
       "pushed": "Übertragen",
       "closed": "Geschlossen",
-      "cancelled": "Abgebrochen"
+      "cancelled": "Abgebrochen",
+      "historical": "Historische Quelle"
     },
     "lineStatus": {
       "pending": "Ausstehend",
@@ -2187,6 +2188,41 @@
       "bandHistory": "Verlauf",
       "bandVersions": "{count, plural, one {# Version anzeigen} other {# Versionen anzeigen}}",
       "bandsEmptyFiltered": "Keine Gehaltsbänder entsprechen diesem Filter."
+    },
+    "dashboard": {
+      "activeWorkers": "Aktive Beschäftigte",
+      "activeBands": "Aktuelle Gehaltsbänder",
+      "bandHistoryCount": "{count, plural, one {# Bandversion} other {# Bandversionen}}",
+      "averageHourly": "Durchschnittlicher Stundenlohn",
+      "averageAnnual": "Durchschnittliches Jahresgehalt",
+      "wageGroupCount": "{count, plural, one {# Beschäftigter} other {# Beschäftigte}} · Stand {date}",
+      "actualWages": "Aktuelle Mitarbeitervergütung",
+      "wageCoverage": "{covered} von {total} aktiven Beschäftigten haben genau einen gültigen Vergütungssatz.",
+      "missingWages": "{count, plural, one {Für # Beschäftigten fehlt ein gültiger Vergütungssatz.} other {Für # Beschäftigte fehlt ein gültiger Vergütungssatz.}}",
+      "ambiguousWages": "{count, plural, one {Bei # Beschäftigten überschneiden sich Vergütungssätze; diese Person wird ausgeschlossen.} other {Bei # Beschäftigten überschneiden sich Vergütungssätze; sie werden ausgeschlossen.}}",
+      "averageHelp": "Durchschnitte basieren auf gültigen individuellen Vergütungssätzen, getrennt nach Währung und Vergütungsbasis. Fehlende oder überlappende Sätze werden ausgeschlossen.",
+      "reviewWages": "Mitarbeitervergütung prüfen",
+      "cyclesCount": "{count, plural, one {# Vergütungszyklus} other {# Vergütungszyklen}}",
+      "historicalCount": "{count, plural, one {# historische Überprüfung aus Quelldaten} other {# historische Überprüfungen aus Quelldaten}}",
+      "reviewCycles": "Vergütungszyklen prüfen"
+    },
+    "sourceCycle": {
+      "description": "Originalbelege der Gehaltsüberprüfung. Vorschläge stellen weder Freigaben noch Änderungen der Lohnabrechnung im System dar.",
+      "back": "Zurück zu Vergütungszyklen",
+      "status": "Historische Quelle",
+      "effectiveDate": "Gültig ab",
+      "unknownDate": "In der Quelle nicht belegt",
+      "recordedDate": "Überprüfung dokumentiert",
+      "hourly": "Stündlich",
+      "annual": "Jährlich",
+      "empty": "Keine Quellzeilen verfügbar",
+      "division": "Bereich",
+      "employee": "Beschäftigte",
+      "sourceKey": "Quellkennung",
+      "role": "Funktion",
+      "current": "Bisherige Vergütung laut Quelle",
+      "proposed": "Vorgeschlagene Vergütung laut Quelle",
+      "notes": "Quellnotizen"
     }
   },
   "equity": {

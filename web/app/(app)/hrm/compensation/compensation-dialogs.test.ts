@@ -36,7 +36,7 @@ registerHooks({
 
     const parent = context.parentURL ?? "";
     const owned =
-      parent.endsWith("/web/lib/hrm/compensation.ts") || parent.endsWith("/web/lib/hrm/workspace-tabs.ts");
+      parent.endsWith("/web/lib/hrm/compensation.ts") || parent.endsWith("/web/lib/hrm/workspace-tabs.ts") || parent.endsWith("/CompensationRegisters.tsx");
     if (owned && specifier === "next-intl/server") {
       return {
         shortCircuit: true,
@@ -44,9 +44,10 @@ registerHooks({
         url:
           "data:text/javascript," +
           encodeURIComponent(
-            `export async function getTranslations(ns) {
+            `export async function getLocale() { return 'en'; }
+             export async function getTranslations(ns) {
               const catalogs = globalThis.__compDlgCatalogs;
-              const catalog = ns === 'shell.routeState' ? catalogs.routeState : ns === 'admin' ? catalogs.admin : catalogs.hrm;
+              const catalog = ns === 'shell.routeState' ? catalogs.routeState : ns === 'admin' ? catalogs.admin : ns === 'hrm.compensation' ? catalogs.hrm.compensation : catalogs.hrm;
               const lookup = (key) => {
                 let node = catalog;
                 for (const part of key.split('.')) {
@@ -124,6 +125,19 @@ registerHooks({
                return { id: 'cycle-1', name: 'Fall merit round', kind: 'merit', status: 'open', effectiveOn: '2026-10-01' };
              }`,
           ),
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/hrm/compensation") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript," + encodeURIComponent(`
+          export async function listJobFamilies() { return []; }
+          export async function listPayBandVersions() { return []; }
+          export async function compensationWageSummary() {
+            return { asOf: '2026-09-22', workers: 0, covered: 0, missing: 0, ambiguous: 0, groups: [] };
+          }
+        `),
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/bands.ts") {
@@ -439,8 +453,8 @@ test("home tables head their columns from the resolved catalog, never literals",
     "the plan headers resolve from the en catalog",
   );
   const { CompensationCycleRegister, CompensationPlanRegister } = await import("./CompensationRegisters.tsx");
-  const cycle = CompensationCycleRegister({ data });
-  const plan = CompensationPlanRegister({ data });
+  const cycle = await CompensationCycleRegister({ data });
+  const plan = await CompensationPlanRegister({ data });
   assert.deepEqual(
     cycle.props.columns.map((column: { header: string }) => column.header),
     [data.cyclesColumns.name, data.kindLabel, data.cyclesColumns.status, data.cyclesColumns.effective],

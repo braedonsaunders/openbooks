@@ -358,6 +358,7 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  hrm_compensation_source_lines: { route: '/hrm/compensation/cycles', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
   hrm_compensation_cycles: {
     route: '/hrm/compensation',
     rowsField: 'cycles',

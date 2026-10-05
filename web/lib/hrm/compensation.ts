@@ -1,7 +1,9 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
+import { compensationWageSummary, listJobFamilies, listPayBandVersions, type CompensationWageSummary } from '@openbooks/engine/hrm/compensation'
+import { formatDecimal } from '../money-format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
@@ -14,7 +16,6 @@ import {
   listPayBands,
   compaRatioFor,
 } from '@openbooks/engine/src/hrm/compensation/bands.ts'
-import { countBandHolders } from '@openbooks/engine/src/hrm/compensation/band-headcounts.ts'
 import {
   listJobLevels,
   compensationSettings,
@@ -83,6 +84,7 @@ export interface CompCycleRow {
   statusLabel: string
   statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   effectiveOn: string
+  effectiveDate: string | null
   href: string
 }
 
@@ -174,6 +176,8 @@ export interface CompEquityDialogState {
 export type CompensationView = 'overview' | 'cycles' | 'plans' | 'families' | 'levels' | 'bands'
 
 export interface CompHomeData {
+  overview: { wages: CompensationWageSummary; families: number; levels: number; bands: number; bandVersions: number; cycles: number; historicalCycles: number } | null
+  wageTiles: CompStatTile[]
   activeView: CompensationView
   workspaceTabs: { href: string; label: string; active: boolean }[]
   currentParams: Record<string, string | string[] | undefined>
@@ -301,8 +305,9 @@ export async function loadCompensationHome(
     ? requestedView as CompensationView : 'overview'
   // Each work area loads only its own authorized register. Architecture
   // lists use the shared registry reader and its server pagination.
-  const cycles = (activeView === 'cycles' || activeView === 'overview') && meritOn
+  const cycleRecords = activeView === 'cycles' || activeView === 'overview'
     ? await listCycles({ orgId, actorId: authz.user.id }) : []
+  const cycles = meritOn ? cycleRecords : cycleRecords.filter((cycle) => cycle.status === 'historical')
   const plans = activeView === 'plans' || activeView === 'overview'
     ? await listPlans({ orgId, actorId: authz.user.id }) : []
   const workspaceTabs = views.map((view) => ({
@@ -322,82 +327,33 @@ export async function loadCompensationHome(
   ]
   let tiles: CompStatTile[] = []
   const bandRows: CompBandRow[] = []
-  let gapRefusal: CompHomeData['refusal'] = null
+  const gapRefusal: CompHomeData['refusal'] = null
+  let overview: CompHomeData['overview'] = null
+  const wageTiles: CompStatTile[] = []
   if (activeView === 'overview') {
     const today = await businessToday(orgId)
-    const [bands, levels] = await Promise.all([
+    const [bands, levels, families, versions, wages, locale] = await Promise.all([
       listPayBands({ orgId, actorId: authz.user.id, asOf: today }),
       listJobLevels({ orgId, actorId: authz.user.id }),
+      listJobFamilies({ orgId, actorId: authz.user.id }),
+      listPayBandVersions({ orgId, actorId: authz.user.id }),
+      compensationWageSummary({ orgId, actorId: authz.user.id }),
+      getLocale(),
     ])
-    const levelById = new Map(levels.map((l) => [l.id, l]))
-    // Headcount per band scope: employments whose position level the band
-    // prices, resolved read-only through the fenced engine counter so the
-    // count matches the caller lens (empty scope sees zero, never the
-    // whole org). Band configuration itself stays visible; placement stays
-    // the band service's job.
-    for (const band of bands) {
-      const level = levelById.get(band.levelId)
-      const holders = await countBandHolders({ orgId, actorId: authz.user.id, levelId: band.levelId, asOf: today })
-      bandRows.push({
-        id: band.id,
-        levelCode: level?.code ?? band.levelId.slice(0, 8),
-        levelName: level?.name ?? '',
-        range: `${band.min} – ${band.max} ${band.currency}`,
-        currency: band.currency,
-        headcount: String(holders),
-        belowMin: '',
-        inRange: '',
-        aboveMax: '',
-        noBand: '',
-      })
-    }
-    const openCycles = cycles.filter((c) => c.status === 'open' || c.status === 'in_review')
-    let pacingNote = ''
-    let belowMinRound = '—'
-    if (openCycles[0]) {
-      const pacing = await cyclePacing(orgId, authz.user.id, openCycles[0].id)
-      if (pacing?.totalPct !== null && pacing?.totalPct !== undefined) {
-        pacingNote = `${Math.round(pacing.totalPct)}%`
-      }
-      // Below-min on the live round: lines whose frozen rate sits under
-      // their band's min edge (read back, never stored).
-      const roundLines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId: openCycles[0].id })
-      const roundBandIds = [...new Set(roundLines.map((l) => l.bandId).filter((b): b is string => b !== null))]
-      const roundEdges = new Map<string, string>()
-      if (roundBandIds.length > 0) {
-        const edgeRows = (await db.execute<{ id: string; min: string }>(sql`
-          select id, min::text as min from hrm_pay_bands
-           where org_id = ${orgId} and id = any(${`{${roundBandIds.join(',')}}`}::uuid[])`)).rows
-        for (const row of edgeRows) roundEdges.set(row.id, row.min)
-      }
-      belowMinRound = String(
-        roundLines.filter((l) => l.bandId !== null && cmp(l.currentRate, roundEdges.get(l.bandId) ?? '0') < 0).length,
-      )
-    }
-    const awaitingPlans = plans.filter((p) => p.status === 'submitted').length
-    // A refused snapshot read (a scoped reader cannot read org-wide frozen
-    // aggregates) travels as data with its remedy intact: the tile shows
-    // unavailable, never a zero that reads as "no flags". A genuinely
-    // absent snapshot still counts zero. Unexpected DB/system failures
-    // propagate — never an empty tile.
-    let jointFlags: number | null = 0
-    try {
-      const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
-      jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
-    } catch (error) {
-      if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
-        gapRefusal = { title: t('compensation.title'), message: error.message }
-        jointFlags = null
-      } else {
-        throw error
-      }
-    }
+    overview = { wages, families: families.length, levels: levels.length, bands: bands.length, bandVersions: versions.length,
+      cycles: cycles.length, historicalCycles: cycles.filter((cycle) => cycle.status === 'historical').length }
     tiles = [
-      { iconKey: 'trending-down', accent: 'amber', label: t('compensation.tiles.belowMin'), value: belowMinRound, tone: 'default' },
-      { iconKey: 'gauge', accent: 'blue', label: t('compensation.tiles.openCyclePacing'), value: pacingNote || '—', tone: 'default' },
-      { iconKey: 'users', accent: 'violet', label: t('compensation.tiles.awaitingPlans'), value: String(awaitingPlans), tone: awaitingPlans > 0 ? 'warning' : 'default' },
-      { iconKey: 'scale', accent: 'rose', label: t('compensation.tiles.jointFlags'), value: jointFlags === null ? '—' : String(jointFlags), tone: jointFlags !== null && jointFlags > 0 ? 'warning' : 'default' },
+      { iconKey: 'users', accent: 'violet', label: t('compensation.dashboard.activeWorkers'), value: String(wages.workers), tone: 'default' },
+      { iconKey: 'briefcase', accent: 'blue', label: t('compensation.workspace.families'), value: String(families.length), tone: 'default' },
+      { iconKey: 'trending-up', accent: 'teal', label: t('compensation.workspace.levels'), value: String(levels.length), tone: 'default' },
+      { iconKey: 'scale', accent: 'amber', label: t('compensation.dashboard.activeBands'), value: String(bands.length),
+        sub: t('compensation.dashboard.bandHistoryCount', { count: versions.length }), tone: 'default' },
     ]
+    for (const group of wages.groups) wageTiles.push({
+      iconKey: 'coins', accent: 'teal', label: t(group.basis === 'hour' ? 'compensation.dashboard.averageHourly' : 'compensation.dashboard.averageAnnual'),
+      value: `${formatDecimal(locale, group.average, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${group.currency}`,
+      sub: t('compensation.dashboard.wageGroupCount', { count: group.workers, date: wages.asOf }), tone: 'default',
+    })
   }
   const planRows: CompPlanRow[] = []
   for (const plan of plans) {
@@ -519,7 +475,7 @@ export async function loadCompensationHome(
     }
   }
   return {
-    activeView, workspaceTabs, currentParams: sp, newItems,
+    activeView, workspaceTabs, currentParams: sp, newItems, overview, wageTiles,
     kindLabel: t('compensation.columns.kind'),
     periodLabel: t('compensation.workspace.period'),
     workspaceDescription: t(`compensation.workspace.${activeView}Description`),
@@ -536,7 +492,7 @@ export async function loadCompensationHome(
     },
     bands: bandRows,
     bandsEmpty: t('compensation.bandsEmpty'),
-    cyclesTitle: t('compensation.cyclesTitle'),
+    cyclesTitle: t('compensation.workspace.cycles'),
     cyclesColumns: { name: t('compensation.columns.name'), status: t('compensation.columns.status'), effective: t('compensation.columns.effective') },
     cycles: cycles.map((c) => ({
       id: c.id,
@@ -545,7 +501,8 @@ export async function loadCompensationHome(
       status: c.status,
       statusLabel: t.has(`compensation.cycleStatus.${c.status}`) ? t(`compensation.cycleStatus.${c.status}`) : c.status,
       statusVariant: cycleStatusVariant(c.status),
-      effectiveOn: c.effectiveOn,
+      effectiveOn: c.effectiveOn ?? t('compensation.sourceCycle.unknownDate'),
+      effectiveDate: c.effectiveOn,
       href: `/hrm/compensation/cycles/${c.id}`,
     })),
     cyclesEmpty: t('compensation.cyclesEmpty'),
@@ -848,7 +805,7 @@ export async function loadCompCycleDetail(
     cycleName: cycle.name,
     status: cycle.status,
     statusLabel: t.has(`compensation.cycleStatus.${cycle.status}`) ? t(`compensation.cycleStatus.${cycle.status}`) : cycle.status,
-    effectiveOn: cycle.effectiveOn,
+    effectiveOn: cycle.effectiveOn ?? t('compensation.sourceCycle.unknownDate'),
     tabs,
     pacingLabel: t('compensation.pacing'),
     pacingPct: pacing.totalPct,
