@@ -2,7 +2,8 @@ import { sql } from "drizzle-orm";
 import { addCalendarDays, calendarDaysBetween, endOfMonth, startOfMonth, addMonthsStart } from "../../platform/civil-date.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { db, orgContext, withBypass, withOrg } from "../../platform/db.ts";
-import { orgFeatureEnabled } from "../../organization/org-feature-lock.ts";
+import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../../organization/org-feature-lock.ts";
 import { UsageBillingError } from "./errors.ts";
 import { commitRateRun, previewRateRun } from "./rate-run.ts";
 
@@ -242,4 +243,126 @@ export async function runDueUsageRating(asOf?: string): Promise<UsageRatingScanR
     }
   }
   return result;
+}
+
+export interface UsageRatingSettingRow {
+  id: string;
+  linkId: string | null;
+  subscriptionId: string | null;
+  customerName: string | null;
+  cadence: UsageRatingCadence;
+  graceDays: number;
+  mode: UsageRatingMode;
+  lastRatedPeriodEnd: string | null;
+}
+
+export interface SaveUsageRatingScheduleInput {
+  linkId?: string | null;
+  cadence?: UsageRatingCadence;
+  graceDays?: number;
+  mode?: UsageRatingMode;
+}
+
+/** Every schedule row with its subscription context, org default first, so
+ * the operator sees which links follow the default and which override it. */
+export async function listUsageRatingSettings(orgId: string): Promise<UsageRatingSettingRow[]> {
+  return withOrg(orgId, async () => {
+    await requireUsageBillingRead(orgId);
+    return (await db.execute<UsageRatingSettingRow>(sql`
+      select g.id, g.link_id as "linkId", l.subscription_id as "subscriptionId",
+             c.name as "customerName", g.cadence as "cadence",
+             g.grace_days as "graceDays", g.mode as "mode",
+             g.last_rated_period_end::text as "lastRatedPeriodEnd"
+        from usage_rating_settings g
+        left join subscription_usage_links l
+          on l.org_id = g.org_id and l.id = g.link_id
+        left join parties c on c.org_id = l.org_id and c.id = l.customer_id
+       where g.org_id = ${orgId}
+       order by g.link_id nulls first, g.updated_at desc`)).rows;
+  });
+}
+
+async function requireUsageBillingRead(orgId: string): Promise<void> {
+  if (!(await orgFeatureEnabled(orgId, "usageBilling"))) {
+    refuse("feature_off", "Usage billing is turned off for this organization.", "Enable Usage Billing in Company Settings → Features.");
+  }
+}
+
+/** Create or update the org default schedule (linkId null) or one link's
+ * override. Absent fields keep the row's current values, else the built-in
+ * defaults. The write and its before/after evidence commit together. */
+export async function saveUsageRatingSchedule(
+  orgId: string,
+  actorId: string | null,
+  input: SaveUsageRatingScheduleInput,
+): Promise<UsageRatingSettingRow> {
+  const linkId = input.linkId ?? null;
+  if (input.cadence !== undefined) asCadence(input.cadence, linkId ?? "default");
+  if (input.mode !== undefined) asMode(input.mode, linkId ?? "default");
+  if (input.graceDays !== undefined) asGraceDays(input.graceDays, linkId ?? "default");
+  return withOrg(orgId, async () => {
+    await acquireOrgFeatureGateLock(db, orgId);
+    if (!(await lockAndCheckOrgFeature(db, orgId, "usageBilling"))) {
+      refuse("feature_off", "Usage billing is turned off for this organization.", "Enable Usage Billing in Company Settings → Features.");
+    }
+    if (linkId !== null) {
+      const link = (await db.execute<{ id: string }>(sql`
+        select id from subscription_usage_links where org_id = ${orgId} and id = ${linkId}`)).rows[0];
+      if (!link) throw new ScopeNotFoundError();
+    }
+    const current = (await db.execute<{
+      id: string; cadence: unknown; graceDays: unknown; mode: unknown; lastRatedPeriodEnd: string | null;
+    }>(linkId === null ? sql`
+      select id, cadence, grace_days as "graceDays", mode,
+             last_rated_period_end::text as "lastRatedPeriodEnd"
+        from usage_rating_settings where org_id = ${orgId} and link_id is null` : sql`
+      select id, cadence, grace_days as "graceDays", mode,
+             last_rated_period_end::text as "lastRatedPeriodEnd"
+        from usage_rating_settings where org_id = ${orgId} and link_id = ${linkId}`)).rows[0] ?? null;
+    const before = current === null ? null : {
+      cadence: asCadence(current.cadence, linkId ?? "default"),
+      graceDays: asGraceDays(current.graceDays, linkId ?? "default"),
+      mode: asMode(current.mode, linkId ?? "default"),
+    };
+    const after = {
+      cadence: input.cadence ?? before?.cadence ?? DEFAULT_SCHEDULE.cadence,
+      graceDays: input.graceDays ?? before?.graceDays ?? DEFAULT_SCHEDULE.graceDays,
+      mode: input.mode ?? before?.mode ?? DEFAULT_SCHEDULE.mode,
+    };
+    // A repeated save is an expected unique-key collision; the conflict path
+    // refreshes the values instead of failing the operator's retry.
+    const saved = linkId === null
+      ? (await db.execute<{ id: string }>(sql`
+          insert into usage_rating_settings (id, org_id, link_id, cadence, grace_days, mode, created_by, updated_by)
+          values (gen_random_uuid(), ${orgId}, null, ${after.cadence}, ${after.graceDays}, ${after.mode}, ${actorId}, ${actorId})
+          on conflict (org_id) where link_id is null
+          do update set cadence = ${after.cadence}, grace_days = ${after.graceDays}, mode = ${after.mode},
+                          updated_at = now(), updated_by = ${actorId}
+          returning id`)).rows[0]
+      : (await db.execute<{ id: string }>(sql`
+          insert into usage_rating_settings (id, org_id, link_id, cadence, grace_days, mode, created_by, updated_by)
+          values (gen_random_uuid(), ${orgId}, ${linkId}, ${after.cadence}, ${after.graceDays}, ${after.mode}, ${actorId}, ${actorId})
+          on conflict (org_id, link_id) where link_id is not null
+          do update set cadence = ${after.cadence}, grace_days = ${after.graceDays}, mode = ${after.mode},
+                          updated_at = now(), updated_by = ${actorId}
+          returning id`)).rows[0];
+    if (!saved) throw new Error("the rating schedule was not stored — no row was written; retry the action");
+    // Attributable evidence in the SAME transaction as the schedule: a
+    // forced audit failure rolls the configuration change back with it.
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'usage_rating_settings', ${saved.id},
+              ${before === null ? "insert" : "update"},
+              ${JSON.stringify({
+                reason: "operator changed the usage rating schedule",
+                before,
+                after,
+              })}::jsonb,
+              ${actorId})
+    `);
+    const rows = await listUsageRatingSettings(orgId);
+    const row = rows.find((candidate) => candidate.id === saved.id);
+    if (!row) throw new Error("the rating schedule was not stored — no row was written; retry the action");
+    return row;
+  });
 }

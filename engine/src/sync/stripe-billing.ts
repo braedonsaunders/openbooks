@@ -22,6 +22,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
 type StripeLinkType = (typeof STRIPE_BILLING_LINK_TYPES)[number];
 type StripeObject = Record<string, unknown>;
@@ -46,7 +47,7 @@ export interface StripeBillingImportReport {
   stripeAccount: string;
   meters: { seen: number; created: number; unchanged: number };
   prices: { seen: number; draftsCreated: number; awaitingPublication: Array<{ stripeId: string; versionId: string }> };
-  customers: { seen: number; linked: number; skipped: number; unlinked: Array<{ stripeId: string; emailMatch: boolean; suggestedCustomerId: string | null }> };
+  customers: { seen: number; linked: number; skipped: number; unlinked: Array<{ stripeId: string; email: string | null; emailMatch: boolean; suggestedCustomerId: string | null }> };
   subscriptions: { seen: number; itemsLinked: number; skipped: number };
   usage: { summariesSeen: number; recordsCreated: number; recordsReplayed: number };
   refusals: Array<{ objectType: string; stripeId: string; code: string; message: string; remedy: string; field: string | null; status: 422 | 409 }>;
@@ -367,6 +368,7 @@ async function saveStripeLink(
       await clearStripeSkip(orgId, stripeAccountId, objectType, stripeId);
       return;
     }
+    let created: { id: string } | null = null;
     try {
       // A retry for the same external object is an expected unique-key collision; re-read below to verify its target.
       const inserted = await db.execute<{ id: string }>(sql`
@@ -375,8 +377,10 @@ async function saveStripeLink(
         values (${orgId}, ${objectType}, ${stripeId}, ${openbooksId}, ${stripeAccountId}, ${actor}, ${actor})
         on conflict (org_id, stripe_account, object_type, stripe_id) do nothing
         returning id`);
-      if (inserted.rows.length === 1) return;
-      if (inserted.rows.length !== 0) throw new Error("Stripe link insert returned an unexpected row count");
+      if (inserted.rows.length !== 0 && inserted.rows.length !== 1) {
+        throw new Error("Stripe link insert returned an unexpected row count");
+      }
+      created = inserted.rows[0] ?? null;
     } catch (error) {
       if (error instanceof UsageBillingError) throw error;
       const candidate = error as { code?: unknown; constraint?: unknown };
@@ -386,6 +390,23 @@ async function saveStripeLink(
     const raced = await findStripeLink(orgId, stripeAccountId, objectType, stripeId);
     if (!raced || raced.openbooks_id !== openbooksId) {
       refuse("stripe_link_conflict", `Stripe ${objectType} ${stripeId} was linked concurrently to a different OpenBooks record.`, "Review the existing link before retrying.", objectType, 409);
+    }
+    if (created) {
+      // Attributable evidence in the SAME transaction as the link: a forced
+      // audit failure rolls the mapping back with it. Only the call that
+      // created the row writes evidence; a replay that finds the same
+      // mapping changes nothing and records nothing.
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'stripe_billing_links', ${created.id},
+                'insert',
+                ${JSON.stringify({
+                  reason: "operator linked a Stripe object to its OpenBooks record",
+                  before: null,
+                  after: { objectType, stripeId, openbooksId, stripeAccount: stripeAccountId },
+                })}::jsonb,
+                ${actor})
+      `);
     }
     await clearStripeSkip(orgId, stripeAccountId, objectType, stripeId);
   });
@@ -403,14 +424,16 @@ export async function linkStripeCustomer(
   actor: string,
   stripeCustomerId: string,
   customerId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
   transport: StripeBillingTransport = {},
 ): Promise<void> {
   await requireUsageFeature(orgId);
   const stripe = await stripeAccount(orgId, transport);
   const customer = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
     select p.id from parties p
-     where p.org_id = ${orgId} and p.id = ${customerId} and p.kind = 'customer'`))).rows[0];
-  if (!customer) refuse("stripe_customer_unavailable", "The OpenBooks customer does not belong to this organization.", "Choose a customer in this organization.", "customer_id");
+     where p.org_id = ${orgId} and p.id = ${customerId} and p.kind = 'customer'
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`))).rows[0];
+  if (!customer) throw new ScopeNotFoundError();
   await saveStripeLink(orgId, actor, stripe.id, "customer", requiredString(stripeCustomerId, "customer id"), customer.id);
 }
 
@@ -420,13 +443,17 @@ export async function linkStripeSubscription(
   actor: string,
   stripeSubscriptionId: string,
   subscriptionId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
   transport: StripeBillingTransport = {},
 ): Promise<void> {
   await requireUsageFeature(orgId);
   const stripe = await stripeAccount(orgId, transport);
   const subscription = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
-    select id from subscriptions where org_id = ${orgId} and id = ${subscriptionId}`))).rows[0];
-  if (!subscription) refuse("stripe_subscription_unavailable", "The OpenBooks subscription does not belong to this organization.", "Choose a subscription in this organization.", "subscription_id");
+    select s.id from subscriptions s
+      join parties c on c.org_id = s.org_id and c.id = s.customer_id
+     where s.org_id = ${orgId} and s.id = ${subscriptionId}
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+  if (!subscription) throw new ScopeNotFoundError();
   await saveStripeLink(orgId, actor, stripe.id, "subscription", requiredString(stripeSubscriptionId, "subscription id"), subscription.id);
 }
 
@@ -700,6 +727,7 @@ async function importCustomers(
       const matches = email ? suggestions.get(email.toLowerCase()) ?? [] : [];
       report.customers.unlinked.push({
         stripeId: validStripeId,
+        email,
         emailMatch: matches.length === 1,
         suggestedCustomerId: matches.length === 1 ? matches[0]! : null,
       });
@@ -1008,12 +1036,26 @@ export async function skipStripeObject(
        where org_id = ${orgId} and stripe_account = ${account}
          and object_type = ${objectType} and stripe_id = ${stripeId}`)).rows[0];
     if (!stored) throw new Error("the Stripe skip was not stored — no row was written; retry the action");
+    // Attributable evidence in the SAME transaction as the skip: a forced
+    // audit failure rolls the decision back with it.
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'stripe_billing_link_skips', ${stored.id},
+              'insert',
+              ${JSON.stringify({
+                reason: reason ?? "operator left a Stripe object unlinked",
+                before: null,
+                after: { objectType, stripeId, stripeAccount: account, reason },
+              })}::jsonb,
+              ${actor})
+    `);
   });
 }
 
 /** Withdraw a skip decision so the object returns to unlinked triage. */
 export async function unskipStripeObject(
   orgId: string,
+  actor: string | null,
   stripeAccountId: string,
   objectTypeValue: string,
   stripeIdValue: string,
@@ -1026,13 +1068,27 @@ export async function unskipStripeObject(
     if (!(await lockAndCheckOrgFeature(db, orgId, "usageBilling"))) {
       refuse("feature_off", "Usage billing is turned off for this organization.", "Enable Usage Billing in Company Settings → Features.");
     }
-    const removed = await db.execute(sql`
+    const removed = (await db.execute<{ id: string }>(sql`
       delete from stripe_billing_link_skips
        where org_id = ${orgId} and stripe_account = ${account}
-         and object_type = ${objectType} and stripe_id = ${stripeId}`);
-    if ((removed.rowCount ?? 0) !== 1) {
+         and object_type = ${objectType} and stripe_id = ${stripeId}
+       returning id`)).rows;
+    if (removed.length !== 1) {
       refuse("stripe_skip_missing", `Stripe ${objectType} ${stripeId} is not skipped.`, "Run the import again to refresh the unlinked list under Setup → Payment providers.", "stripe_id");
     }
+    // Attributable evidence in the SAME transaction as the unskip: a forced
+    // audit failure rolls the decision back with it.
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'stripe_billing_link_skips', ${removed[0]!.id},
+              'delete',
+              ${JSON.stringify({
+                reason: "operator returned a Stripe object to unlinked triage",
+                before: { objectType, stripeId, stripeAccount: account },
+                after: null,
+              })}::jsonb,
+              ${actor})
+    `);
   });
 }
 
@@ -1128,4 +1184,212 @@ async function stripeHourlyDue(orgId: string, now: Date): Promise<boolean> {
        and status in ('ok', 'ok_with_errors') and finished_at is not null`)).rows[0];
   if (last?.finishedEpoch === null || last?.finishedEpoch === undefined) return true;
   return Number(last.finishedEpoch) * 1000 <= now.getTime() - 60 * 60_000;
+}
+
+export interface StripeBillingRunRefusal {
+  objectType: string;
+  stripeId: string;
+  code: string;
+  message: string;
+  remedy: string;
+}
+
+export interface StripeBillingRunSummary {
+  id: string;
+  status: string;
+  startedAt: string;
+  finishedAt: string | null;
+  stripeAccount: string | null;
+  seen: { meters: number; prices: number; customers: number; subscriptions: number; summaries: number };
+  created: { meters: number; prices: number; records: number; replayed: number };
+  linked: number;
+  skipped: number;
+  unlinked: number;
+  refusals: number;
+  refusalDetails: StripeBillingRunRefusal[];
+  errorMessage: string | null;
+}
+
+export interface StripeBillingUnlinkedCustomer {
+  stripeId: string;
+  email: string | null;
+  emailMatch: boolean;
+  suggestedCustomerId: string | null;
+  suggestedCustomerName: string | null;
+}
+
+export interface StripeBillingOverview {
+  schedule: "off" | "hourly" | "daily";
+  lastRun: StripeBillingRunSummary | null;
+  runs: StripeBillingRunSummary[];
+  unlinked: StripeBillingUnlinkedCustomer[];
+  skipped: StripeBillingLinkSkip[];
+}
+
+function reportNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function reportSection(stats: unknown, key: string): Record<string, unknown> {
+  if (stats === null || typeof stats !== "object" || Array.isArray(stats)) return {};
+  const section = (stats as Record<string, unknown>)[key];
+  if (section === null || typeof section !== "object" || Array.isArray(section)) return {};
+  return section as Record<string, unknown>;
+}
+
+function isUnlinkedEntry(value: unknown): value is {
+  stripeId: string; email: string | null; emailMatch: boolean; suggestedCustomerId: string | null;
+} {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.stripeId === "string"
+    && (row.email === null || typeof row.email === "string")
+    && typeof row.emailMatch === "boolean"
+    && (row.suggestedCustomerId === null || typeof row.suggestedCustomerId === "string");
+}
+
+function summarizeStripeRun(row: {
+  id: string; status: string; startedAt: string; finishedAt: string | null;
+  stats: unknown; errorMessage: string | null;
+}): StripeBillingRunSummary {
+  const stats = row.stats;
+  const stripeAccount = stats !== null && typeof stats === "object" && !Array.isArray(stats)
+    && typeof (stats as Record<string, unknown>).stripeAccount === "string"
+    ? (stats as Record<string, unknown>).stripeAccount as string : null;
+  const meters = reportSection(stats, "meters");
+  const prices = reportSection(stats, "prices");
+  const customers = reportSection(stats, "customers");
+  const subscriptions = reportSection(stats, "subscriptions");
+  const usage = reportSection(stats, "usage");
+  const rawRefusals = stats !== null && typeof stats === "object" && !Array.isArray(stats)
+    ? (stats as Record<string, unknown>).refusals : undefined;
+  const refusalDetails = Array.isArray(rawRefusals)
+    ? rawRefusals.filter(isRefusalDetail).slice(0, 25) : [];
+  const unlinked = Array.isArray(customers.unlinked) ? customers.unlinked.filter(isUnlinkedEntry) : [];
+  return {
+    id: row.id,
+    status: row.status,
+    startedAt: row.startedAt,
+    finishedAt: row.finishedAt,
+    stripeAccount,
+    seen: {
+      meters: reportNumber(meters.seen),
+      prices: reportNumber(prices.seen),
+      customers: reportNumber(customers.seen),
+      subscriptions: reportNumber(subscriptions.seen),
+      summaries: reportNumber(usage.summariesSeen),
+    },
+    created: {
+      meters: reportNumber(meters.created),
+      prices: reportNumber(prices.draftsCreated),
+      records: reportNumber(usage.recordsCreated),
+      replayed: reportNumber(usage.recordsReplayed),
+    },
+    linked: reportNumber(customers.linked),
+    skipped: reportNumber(customers.skipped) + reportNumber(subscriptions.skipped),
+    unlinked: unlinked.length,
+    refusals: refusalDetails.length,
+    refusalDetails,
+    errorMessage: row.errorMessage,
+  };
+}
+
+function isRefusalDetail(value: unknown): value is StripeBillingRunRefusal {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.objectType === "string"
+    && typeof row.stripeId === "string"
+    && typeof row.code === "string"
+    && typeof row.message === "string"
+    && typeof row.remedy === "string";
+}
+
+/** Everything the Payment providers Stripe card needs: the schedule, the
+ * run log with per-type counts, the current unlinked triage queue with the
+ * engine's exact-email suggestions, and the skipped decisions. Never throws
+ * when no import has run yet — the empty state teaches the first run. */
+export async function getStripeBillingOverview(orgId: string): Promise<StripeBillingOverview> {
+  return withOrg(orgId, async () => {
+    await requireUsageFeature(orgId);
+    const schedule = (await db.execute<{ cadence: string }>(sql`
+      select cadence from stripe_billing_import_schedules where org_id = ${orgId}`)).rows[0];
+    const runs = (await db.execute<{
+      id: string; status: string; startedAt: string; finishedAt: string | null;
+      stats: unknown; errorMessage: string | null;
+    }>(sql`
+      select id, status, started_at::text as "startedAt", finished_at::text as "finishedAt",
+             stats, error_message as "errorMessage"
+        from sync_runs
+       where org_id = ${orgId} and kind = 'stripe_billing'
+       order by started_at desc limit 10`)).rows.map(summarizeStripeRun);
+    const lastStats = (await db.execute<{ stats: unknown }>(sql`
+      select stats from sync_runs
+       where org_id = ${orgId} and kind = 'stripe_billing'
+       order by started_at desc limit 1`)).rows[0]?.stats;
+    const rawUnlinked = reportSection(lastStats, "customers").unlinked;
+    const entries = Array.isArray(rawUnlinked) ? rawUnlinked.filter(isUnlinkedEntry) : [];
+    const suggestedIds = [...new Set(entries.map((entry) => entry.suggestedCustomerId).filter((id): id is string => id !== null))];
+    const names = new Map<string, string>();
+    if (suggestedIds.length > 0) {
+      const nameRows = (await db.execute<{ id: string; name: string }>(sql`
+        select id, coalesce(nullif(display_name, ''), email, id) as name from parties
+         where org_id = ${orgId} and kind = 'customer'
+           and id = any(${`{${suggestedIds.join(",")}}`}::uuid[])`)).rows;
+      for (const nameRow of nameRows) names.set(nameRow.id, nameRow.name);
+    }
+    const unlinked: StripeBillingUnlinkedCustomer[] = entries.map((entry) => ({
+      stripeId: entry.stripeId,
+      email: entry.email,
+      emailMatch: entry.emailMatch,
+      suggestedCustomerId: entry.suggestedCustomerId,
+      suggestedCustomerName: entry.suggestedCustomerId !== null
+        ? names.get(entry.suggestedCustomerId) ?? null : null,
+    }));
+    return {
+      schedule: schedule?.cadence === "hourly" || schedule?.cadence === "daily" ? schedule.cadence : "off",
+      lastRun: runs[0] ?? null,
+      runs,
+      unlinked,
+      skipped: await listStripeSkips(orgId),
+    };
+  });
+}
+
+/** Create or replace the organization's Stripe Billing import cadence. The
+ * last import time is read from sync_runs, never stored here. */
+export async function saveStripeBillingSchedule(
+  orgId: string,
+  actorId: string | null,
+  cadenceValue: string,
+): Promise<"off" | "hourly" | "daily"> {
+  const cadence = cadenceValue === "hourly" || cadenceValue === "daily" ? cadenceValue
+    : cadenceValue === "off" ? "off"
+    : refuse("stripe_schedule_invalid", "The Stripe Billing import schedule must be off, hourly or daily.", "Choose off, hourly or daily under Setup → Payment providers → Stripe.", "cadence");
+  return withOrg(orgId, async () => {
+    await acquireOrgFeatureGateLock(db, orgId);
+    if (!(await lockAndCheckOrgFeature(db, orgId, "usageBilling"))) {
+      refuse("feature_off", "Usage billing is turned off for this organization.", "Enable Usage Billing in Company Settings → Features.");
+    }
+    // One row per organization: a repeated save is an expected unique-key
+    // collision, and the conflict path refreshes the cadence instead of
+    // failing the operator's retry.
+    const saved = (await db.execute<{ id: string }>(sql`
+      insert into stripe_billing_import_schedules (id, org_id, cadence, created_by, updated_by)
+      values (gen_random_uuid(), ${orgId}, ${cadence}, ${actorId}, ${actorId})
+      on conflict (org_id) do update set cadence = ${cadence}, updated_at = now(), updated_by = ${actorId}
+      returning id`)).rows[0];
+    if (!saved) throw new Error("the Stripe import schedule was not stored — no row was written; retry the action");
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'stripe_billing_import_schedules', ${saved.id},
+              'insert',
+              ${JSON.stringify({
+                reason: "operator changed the Stripe Billing import schedule",
+                before: null,
+                after: { cadence },
+              })}::jsonb,
+              ${actorId})
+    `);
+    return cadence;
+  });
 }
