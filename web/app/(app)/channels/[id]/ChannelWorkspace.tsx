@@ -12,7 +12,7 @@ import { SETUP_ENTITY_BY_KEY } from "../../../../lib/setup/registry";
 import { DetailPageLayout } from "../../../../components/page-layout";
 import { Badge } from "@openbooks/ui";
 import { DetailHeader } from "@openbooks/ui";
-import { WorkspaceTabs } from "./WorkspaceTabs";
+import { SettingsSubTabs, WorkspaceTabs } from "./WorkspaceTabs";
 import { ChannelActions } from "./ChannelActions";
 import { ChannelActivity } from "./ChannelActivity";
 import { ProductsTab } from "./ProductsTab";
@@ -204,49 +204,41 @@ async function WorkspaceSettings({
   const authz = await getAuthz();
   if (!authz) notFound();
   const t = await getTranslations("channels");
-  const maps = SETUP_ENTITY_BY_KEY.get("channel-account-maps");
-  const locations = SETUP_ENTITY_BY_KEY.get("channel-locations");
-  const adSpend = SETUP_ENTITY_BY_KEY.get("channel-ad-spend");
-  if (!maps || !locations || !adSpend) notFound();
+  const tRoot = await getTranslations();
+  const sections = [
+    { key: "posting", entityKey: "channel-account-maps", rowParam: "mapRow", paramPrefix: "map" },
+    { key: "locations", entityKey: "channel-locations", rowParam: "locationRow", paramPrefix: "location" },
+    { key: "adspend", entityKey: "channel-ad-spend", rowParam: "spendRow", paramPrefix: "spend" },
+  ] as const;
+  const rawSection = typeof sp.section === "string" ? sp.section : "";
+  const requested = rawSection === "posting" || rawSection === "locations" || rawSection === "adspend" ? rawSection : "posting";
+  const activeSection = requested;
+  const active = sections.find((section) => section.key === activeSection)!;
+  const entity = SETUP_ENTITY_BY_KEY.get(active.entityKey);
+  if (!entity) notFound();
+  const sectionLabel = (entityKey: string): string => {
+    const labelKey = `admin.setup.entities.${entityKey}.title`;
+    return tRoot.has(labelKey) ? tRoot(labelKey) : labelKey;
+  };
   return (
     <div className="space-y-5">
       <p className="text-sm text-slate-500">{t("workspace.settingsHint")}</p>
-      <SetupEntitySection
-        entity={maps}
-        orgId={authz.user.orgId}
-        actorId={authz.user.id}
-        searchParams={sp}
-        basePath={`/channels/${channelId}`}
-        canManage={canManage}
-        allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-        rowParam="mapRow"
-        paramPrefix="map"
-        fixedFilter={{ fieldKey: "channelId", value: channelId }}
-        hideHeader={false}
+      <SettingsSubTabs
+        channelId={channelId}
+        activeSection={activeSection}
+        sections={sections.map((section) => ({ key: section.key, label: sectionLabel(section.entityKey) }))}
+        ariaLabel={t("workspace.tabs.settings")}
       />
       <SetupEntitySection
-        entity={locations}
+        entity={entity}
         orgId={authz.user.orgId}
         actorId={authz.user.id}
         searchParams={sp}
         basePath={`/channels/${channelId}`}
         canManage={canManage}
         allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-        rowParam="locationRow"
-        paramPrefix="location"
-        fixedFilter={{ fieldKey: "channelId", value: channelId }}
-        hideHeader={false}
-      />
-      <SetupEntitySection
-        entity={adSpend}
-        orgId={authz.user.orgId}
-        actorId={authz.user.id}
-        searchParams={sp}
-        basePath={`/channels/${channelId}`}
-        canManage={canManage}
-        allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-        rowParam="spendRow"
-        paramPrefix="spend"
+        rowParam={active.rowParam}
+        paramPrefix={active.paramPrefix}
         fixedFilter={{ fieldKey: "channelId", value: channelId }}
         hideHeader={false}
       />
