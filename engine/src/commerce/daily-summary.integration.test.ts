@@ -68,7 +68,7 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
-    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"salesChannels": true, "inventory": true}'::jsonb, true) where id = ${org.orgId}`);
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"salesChannels": true, "cashSales": true, "inventory": true}'::jsonb, true) where id = ${org.orgId}`);
     const created = await withBypass(() => createChannel(org.orgId, actor, {
       kind: "shopify", name: "Test Shop", currency: "CAD", externalAccount: "test.myshopify.com", settings: {},
     }));

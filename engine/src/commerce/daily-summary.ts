@@ -156,6 +156,9 @@ export async function postSummaryBatch(
       if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
         throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", "Enable Sales Channels in Company Settings → Features.");
       }
+      if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales"))) {
+        throw new CommerceError("feature_off", "Cash sales is turned off for this organization.", "Enable Cash sales in Company Settings → Features.");
+      }
       const resolved: ResolvedOrder[] = [];
       const resolvedIds: string[] = [];
       let parked = 0;

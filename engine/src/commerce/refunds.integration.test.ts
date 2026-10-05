@@ -11,6 +11,7 @@ import { upsertChannelLocation } from "./locations.ts";
 import { ingestChannelEvent, ingestChannelOrder } from "./orders.ts";
 import { postChannelOrder } from "./order-posting.ts";
 import { postChannelRefund } from "./refunds.ts";
+import { CommerceError } from "./errors.ts";
 import { postDueDailySummariesForOrg } from "./daily-summary.ts";
 import { setPostingPolicy } from "./posting-policies.ts";
 import type { ChannelOrder, ChannelRefund } from "./contracts.ts";
@@ -43,7 +44,7 @@ interface Fixture {
 }
 
 async function setup(org: ScratchOrg, actor: string, mode: "per_order" | "daily_summary"): Promise<Fixture> {
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, storedValue: true, promotions: true })}::jsonb, true) where id = ${org.orgId}`);
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, cashSales: true, storedValue: true, promotions: true })}::jsonb, true) where id = ${org.orgId}`);
   const created = await withBypass(() => createChannel(org.orgId, actor, {
     kind: "shopify",
     name: "Test Shop",
@@ -570,6 +571,37 @@ test("summary mode folds the day's refund into the batch", { skip: !DB }, async 
     assert.equal(doc.total, "68.8600");
     assert.equal(await journalSum(org.orgId, refunded.posting_document_id!), 0n);
     void stored;
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("channel cash postings refuse while Cash sales is off", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const { channelId } = await setup(org, actor, "per_order");
+    // Sales Channels runs but Cash sales stays off: posting a cash sale or
+    // refund would strand a document its own surface refuses, so both refuse
+    // naming the toggle that unblocks them.
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,cashSales}', 'false'::jsonb, true) where id = ${org.orgId}`);
+    const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1010")));
+    await assert.rejects(
+      withBypass(() => postChannelOrder(org.orgId, actor, stored.id)),
+      (error: unknown) => error instanceof CommerceError && /Cash sales is turned off/.test(error.message),
+      "a paid channel order must not post a cash sale its surface hides",
+    );
+    const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "1010", {
+      kind: "refund",
+      externalId: "r-9010",
+      refund: fullRefund("1010", "r-9010"),
+      occurredAt: "2026-07-16T09:00:00Z",
+    }));
+    await assert.rejects(
+      withBypass(() => postChannelRefund(org.orgId, actor, event.eventId)),
+      (error: unknown) => error instanceof CommerceError && /Cash sales is turned off/.test(error.message),
+      "a channel refund must not post a cash refund its surface hides",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -1332,6 +1332,9 @@ export async function postChannelRefund(
         if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
           throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
         }
+        if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales"))) {
+          throw new CommerceError("feature_off", "Cash sales is turned off for this organization.", "Enable Cash sales in Company Settings → Features.");
+        }
         const live = await loadChannelEvent(orgId, eventId);
         if (!live) throw new Error("Channel refund left while it posted");
         if (live.postingStatus === "posted") {
@@ -1477,6 +1480,9 @@ export async function postRefundBatchDocument(
       await acquireOrgFeatureGateLock(db, orgId);
       if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
         throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
+      }
+      if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales"))) {
+        throw new CommerceError("feature_off", "Cash sales is turned off for this organization.", "Enable Cash sales in Company Settings → Features.");
       }
       interface BatchedRefund {
         eventId: string;

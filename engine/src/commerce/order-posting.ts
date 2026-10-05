@@ -1086,6 +1086,17 @@ export async function postChannelOrder(
           await markOrderPosted(orgId, orderId, actor, documentId);
           return { status: "posted", documentId, effectsDocumentId: documentId };
         }
+        // Paid channel orders post cash sales, so they need the Cash sales
+        // gate as well as Sales Channels: with Cash sales off the document
+        // kind is hidden and refused everywhere else, and posting it here
+        // would strand an invisible document.
+        if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales"))) {
+          throw new CommerceError(
+            "feature_off",
+            "Cash sales is turned off for this organization.",
+            "Enable Cash sales in Company Settings → Features.",
+          );
+        }
         await assertPostingPeriodOpen(orgId, "cash_sale", resolved.subsidiaryId, resolved.documentDate, live.externalNumber);
         if (resolved.policy.mode === "daily_summary" && !options.forcePerOrder) {
           const day = live.orderedAt.slice(0, 10);

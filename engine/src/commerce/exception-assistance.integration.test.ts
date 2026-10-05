@@ -47,7 +47,7 @@ interface Fixture {
 async function setup(): Promise<Fixture> {
   const org = await withBypass(() => createScratchOrg());
   const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, storedValue: true, promotions: true })}::jsonb, true) where id = ${org.orgId}`);
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, cashSales: true, storedValue: true, promotions: true })}::jsonb, true) where id = ${org.orgId}`);
   const created = await withBypass(() => createChannel(org.orgId, actor, {
     kind: "shopify",
     name: "Test Shop",
