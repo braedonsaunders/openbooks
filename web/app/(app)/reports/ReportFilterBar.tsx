@@ -93,6 +93,7 @@ export function ReportFilterBar({
   fromParamKey = 'from',
   toParamKey = 'to',
   resetParamKeys,
+  compact = false,
 }: {
   controls: ReportControls
   dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[]; segments?: SegmentOption[]; builtinSegments?: BuiltinSegmentOption[] }
@@ -121,6 +122,8 @@ export function ReportFilterBar({
   toParamKey?: string
   /** Drop these keys on every change (e.g. reset a drawer page). */
   resetParamKeys?: readonly string[]
+  /** Fit the shared period control into a page-header action row. */
+  compact?: boolean
 }) {
   const t = useTranslations('reports.filterBar')
   const router = useRouter()
@@ -210,7 +213,7 @@ export function ReportFilterBar({
     ) : null
 
   return (
-    <div className="flex flex-nowrap items-center gap-x-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/60 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900/40">
+    <div className={cn('flex flex-nowrap items-center gap-x-1 overflow-x-auto border border-slate-200 dark:border-slate-800', compact ? 'h-[var(--page-control-height,2.25rem)] rounded-md bg-white px-2 dark:bg-slate-950' : 'rounded-xl bg-slate-50/60 px-2 py-1.5 dark:bg-slate-900/40')}>
       {leading ? <div className="flex shrink-0 items-center gap-2">{leading}</div> : null}
 
       {controls.search ? (
@@ -242,7 +245,7 @@ export function ReportFilterBar({
               if (extra) setParams({ period: 'custom', from: extra.from, to: extra.to })
               else setParams({ period: e.target.value, ...(e.target.value === 'custom' ? {} : { from: null, to: null }) })
             }}
-            className={cn(SELECT, 'font-semibold')}
+            className={cn(SELECT, 'font-semibold', compact && 'h-[var(--page-control-height,2.25rem)]')}
             aria-label={t('period')}
           >
             {extraPeriods && extraPeriods.length > 0 ? (

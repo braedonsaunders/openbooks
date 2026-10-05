@@ -127,6 +127,7 @@ export const REPORTING_WIDGETS = {
       title={str(props, 'title') ?? ''}
       description={str(props, 'description') ?? ''}
       groups={(props.groups as ComponentProps<typeof AnalyticsHub>['groups']) ?? []}
+      initialLayout={props.initialLayout as ComponentProps<typeof AnalyticsHub>['initialLayout']}
     />
   ),
   'reports-hub': (props) => (

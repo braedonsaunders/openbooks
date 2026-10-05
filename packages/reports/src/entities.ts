@@ -11,6 +11,7 @@
 // report modules register their own lists for shared catalog checks without
 // changing the core query map.
 
+import { ANALYTICS_REPORT_ENTITIES } from './analytics-entities'
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
@@ -271,6 +272,7 @@ const SAAS_NORMALIZATION: ReportEntityNormalization = {
 const SAAS_BASE_NOUNS = { plural: 'reporting currencies', breakout: 'Reporting currency' } as const
 
 export const REPORT_ENTITIES: ReportEntity[] = [
+  ...ANALYTICS_REPORT_ENTITIES,
   {
     key: 'ledger_lines',
     label: 'Ledger lines',
@@ -921,7 +923,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     subsidiaryScope: { column: 'd.subsidiary_id' },
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
+    currencyColumn: 'currency',
     columns: [
+      { key: 'currency', label: 'Pay currency', kind: 'text', expr: 's.currency_code' },
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
       { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
       { key: 'schedule', label: 'Schedule', kind: 'text', expr: 'ps.name' },
@@ -939,24 +943,24 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         expr: "case when r.paid_at is not null then 'paid' else 'unpaid' end",
         options: ['paid', 'unpaid'],
       },
-      { key: 'gross', label: 'Gross pay', kind: 'money', expr: 's.gross' },
+      { key: 'gross', label: 'Gross pay', kind: 'money', txnCurrency: true, expr: 's.gross' },
       {
-        key: 'cpp_fica', label: 'CPP / FICA (employee)', kind: 'money',
+        key: 'cpp_fica', label: 'CPP / FICA (employee)', kind: 'money', txnCurrency: true,
         expr: `(coalesce((s.factors->>'C')::numeric, 0) + coalesce((s.factors->>'C2')::numeric, 0)
           + coalesce((s.factors->>'SS')::numeric, 0) + coalesce((s.factors->>'MED')::numeric, 0)
           + coalesce((s.factors->>'MED2')::numeric, 0))`,
       },
-      { key: 'ei', label: 'EI (employee)', kind: 'money', expr: `coalesce((s.factors->>'EI')::numeric, 0)` },
+      { key: 'ei', label: 'EI (employee)', kind: 'money', txnCurrency: true, expr: `coalesce((s.factors->>'EI')::numeric, 0)` },
       {
-        key: 'income_tax', label: 'Income tax', kind: 'money',
+        key: 'income_tax', label: 'Income tax', kind: 'money', txnCurrency: true,
         expr: `(coalesce((s.factors->>'T')::numeric, 0) + coalesce((s.factors->>'TB')::numeric, 0)
           + coalesce((s.factors->>'FIT')::numeric, 0))`,
       },
-      { key: 'net_pay', label: 'Net pay', kind: 'money', expr: 's.net_pay' },
-      { key: 'employer_cost', label: 'Employer cost', kind: 'money', expr: 's.employer_cost' },
-      { key: 'vacation_accrued', label: 'Vacation accrued', kind: 'money', expr: 's.vacation_accrued' },
-      { key: 'pensionable', label: 'Pensionable earnings', kind: 'money', expr: 's.pensionable_earnings' },
-      { key: 'insurable', label: 'Insurable earnings', kind: 'money', expr: 's.insurable_earnings' },
+      { key: 'net_pay', label: 'Net pay', kind: 'money', txnCurrency: true, expr: 's.net_pay' },
+      { key: 'employer_cost', label: 'Employer cost', kind: 'money', txnCurrency: true, expr: 's.employer_cost' },
+      { key: 'vacation_accrued', label: 'Vacation accrued', kind: 'money', txnCurrency: true, expr: 's.vacation_accrued' },
+      { key: 'pensionable', label: 'Pensionable earnings', kind: 'money', txnCurrency: true, expr: 's.pensionable_earnings' },
+      { key: 'insurable', label: 'Insurable earnings', kind: 'money', txnCurrency: true, expr: 's.insurable_earnings' },
     ],
     defaultSort: { column: 'pay_date', direction: 'desc' },
   },

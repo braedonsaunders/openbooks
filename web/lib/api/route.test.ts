@@ -6,6 +6,8 @@ import { z } from "zod";
 import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 
+const invalidated: string[] = [];
+Object.assign(globalThis, { __analyticsInvalidations: invalidated });
 const stateKey = Symbol.for("openbooks.route-factory-test");
 const state: { permission: "allow" | "deny401" | "deny403"; feature: "on" | "off"; scope: "allow" | "deny"; session: boolean; calls: string[] }
   = { permission: "allow", feature: "on", scope: "allow", session: true, calls: [] };
@@ -13,6 +15,7 @@ const state: { permission: "allow" | "deny401" | "deny403"; feature: "on" | "off
 (globalThis as Record<string, unknown>).openbooksRouteFactoryNextResponse = NextResponse;
 
 const mockSources = new Map<string, string>([
+  ["mock:preview-cache", "export async function invalidateAnalyticsPreviews(orgId){globalThis.__analyticsInvalidations.push(orgId)}"],
   ["mock:authz", `
     const state = globalThis[Symbol.for('openbooks.route-factory-test')];
     const NextResponse = globalThis.openbooksRouteFactoryNextResponse;
@@ -55,6 +58,7 @@ const mockSources = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "@/lib/analytics/preview-invalidation") return { shortCircuit: true, url: "mock:preview-cache" };
     if (specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:authz" };
     if (specifier === "@/lib/feature-gates") return { shortCircuit: true, url: "mock:feature-gates" };
     if (specifier === "@/lib/features") return { shortCircuit: true, url: "mock:features" };
@@ -261,4 +265,18 @@ test('routes may declare a larger bounded payload without widening the shared de
   const defaultHandler = defineRoute({ permission: 'x', feature: { none: 'test surface' }, body, handler: async () => NextResponse.json({ ok: true }) });
   assert.equal((await defaultHandler(post(large))).status, 413);
   assert.equal((await handler(post({ text: 'x'.repeat(2 * 1024 * 1024 + 16) }))).status, 413);
+});
+
+
+test("successful organization writes invalidate analytics; reads, personal layouts and refusals do not", async () => {
+  reset(); invalidated.length = 0;
+  const route = defineRoute({ public: "session", handler: () => ok() });
+  await route(get());
+  await route(new Request("http://test.local/api/me/page-layout", { method: "PUT" }));
+  assert.deepEqual(invalidated, []);
+  await route(post({}));
+  assert.deepEqual(invalidated, ["org-1"]);
+  const refused = defineRoute({ public: "session", handler: () => NextResponse.json({ error: "Approval required." }, { status: 422 }) });
+  await refused(post({}));
+  assert.deepEqual(invalidated, ["org-1"]);
 });

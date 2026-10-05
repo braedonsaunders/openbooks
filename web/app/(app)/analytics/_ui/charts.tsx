@@ -275,6 +275,7 @@ export function Donut({
   height = 200,
   valueFormat,
   colors,
+  compact = false,
 }: {
   data: { name: string; value: number }[]
   height?: ChartHeight
@@ -282,17 +283,19 @@ export function Donut({
   valueFormat?: (v: number) => string
   /** Per-slice color override (positional); falls back to the shared palette. */
   colors?: string[]
+  /** Miniature composition preview without a legend in the analytics library. */
+  compact?: boolean
 }) {
   const money = useChartMoney()
   const fmt = valueFormat ?? money
   const option: EChartsOption = {
     tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: ChartParam) => `${escapeTooltipHtml(p.name)}: ${fmt(p.value)} (${p.percent}%)` },
-    legend: { type: 'scroll', orient: 'vertical', right: 0, top: 'center', textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 8 },
+    legend: { show: !compact, type: 'scroll', orient: 'vertical', right: 0, top: 'center', textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 8 },
     series: [
       {
         type: 'pie',
-        radius: ['45%', '72%'],
-        center: ['38%', '50%'],
+        radius: compact ? ['58%', '90%'] : ['45%', '72%'],
+        center: compact ? ['50%', '50%'] : ['38%', '50%'],
         avoidLabelOverlap: true,
         itemStyle: { borderColor: 'transparent', borderWidth: 2 },
         label: { show: false },

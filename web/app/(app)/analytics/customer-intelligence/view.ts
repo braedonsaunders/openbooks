@@ -6,7 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { customerData, customerProfitability } from '../../../../lib/analytics/customer-data'
+import { customerData, customerProfitability, customerSummaryData } from '../../../../lib/analytics/customer-data'
 import { customerStrings } from '../../../../lib/analytics/customer-strings'
 import type { CustomerView } from './CustomerView'
 
@@ -39,7 +39,7 @@ export interface CustomerIntelligenceData {
   canConfigure: boolean
 }
 
-export async function loadCustomerIntelligence(sp: Record<string, string | undefined>): Promise<CustomerIntelligenceData> {
+async function customerContext(sp: Record<string, string | undefined>) {
   const t = await getTranslations('analytics.customer')
   const authz = await requirePermission('reports.read')
 
@@ -50,6 +50,16 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
   // locale — the same locale the statements use.
   const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
   const strings = customerStrings((key, values) => tc(key, values), locale)
+  return { t, authz, period, strings }
+}
+
+export async function loadCustomerIntelligencePreview(sp: Record<string, string | undefined>) {
+  const { authz, period, strings } = await customerContext(sp)
+  return { data: await customerSummaryData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings), periodLabel: period.label }
+}
+
+export async function loadCustomerIntelligence(sp: Record<string, string | undefined>): Promise<CustomerIntelligenceData> {
+  const { t, authz, period, strings } = await customerContext(sp)
   const [data, profitability, projectsEnabled] = await Promise.all([
     customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
     customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),

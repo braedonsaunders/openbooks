@@ -21,6 +21,7 @@ export function SearchInput({
   className,
   value: localValue,
   onValueChange,
+  size = 'sm',
 }: {
   placeholder?: string
   paramKey?: string
@@ -32,6 +33,7 @@ export function SearchInput({
    *  where a navigation per keystroke would re-run the page loader. */
   value?: string
   onValueChange?: (value: string) => void
+  size?: 'sm' | 'md'
 }) {
   const t = useTranslations('ui.search')
   const pathname = usePathname()
@@ -83,7 +85,7 @@ export function SearchInput({
   return (
     <div className={cn('relative', LIST_SEARCH_WIDTH, className)}>
       <Search
-        className="pointer-events-none absolute top-2 left-2.5 text-slate-400 dark:text-slate-500"
+        className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400 dark:text-slate-500"
         size={16}
       />
       <Input
@@ -95,14 +97,14 @@ export function SearchInput({
         }
         // Hide the browser's native search clear (×) — we render our own below,
         // so the native one would show a duplicate clear button.
-        className="h-8 pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
+        className={cn('pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden', size === 'md' ? 'h-[var(--page-control-height,2.25rem)]' : 'h-8')}
       />
       {value ? (
         <button
           type="button"
           aria-label={t('clearAria')}
           onClick={() => (onValueChange ? onValueChange('') : setEdit(applySearchInputEdit('', urlValue, navigationPending)))}
-          className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
+          className="absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500"
         >
           <X size={16} />
         </button>

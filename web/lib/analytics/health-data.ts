@@ -751,6 +751,37 @@ function buildInsights(
   return out;
 }
 
+async function healthBenchmarks(orgId: string): Promise<HealthBenchmarks> {
+  const cfg = await analyticsConfig(orgId, "financialHealth");
+  return {
+    grossMargin: cfg.grossMarginTarget! / 100,
+    operatingMargin: cfg.operatingMarginTarget! / 100,
+    ebitdaMargin: cfg.ebitdaMarginTarget! / 100,
+    netMargin: cfg.netMarginTarget! / 100,
+    roa: cfg.roaTarget! / 100,
+    roe: cfg.roeTarget! / 100,
+    roic: cfg.roicTarget! / 100,
+    revenuePerEmployee: cfg.revenuePerEmployee!,
+    gpPerEmployee: cfg.gpPerEmployee!,
+  };
+}
+
+/** The landing card reads the authoritative scorecard and monthly summary,
+ * without loading comparison tables, dimensional analyses or budget detail. */
+export async function healthSummaryData(
+  period: { from: string; to: string; label: string },
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
+): Promise<FinancialHealth & { monthly: MonthPoint[] }> {
+  const benchmarks = await healthBenchmarks(orgId);
+  const [base, monthly] = await Promise.all([
+    financialHealth(period, benchmarks, orgId, allowedSubsidiaryIds, strings),
+    monthlySeries(orgId, period.to, allowedSubsidiaryIds, 12, strings),
+  ]);
+  return { ...base, monthly };
+}
+
 export async function healthData(
   period: { from: string; to: string; label: string },
   orgId: string,
@@ -764,19 +795,7 @@ export async function healthData(
   const pTo = priorYear(to);
 
   // Per-org benchmark targets (percent-scale in the store → decimals here).
-  const cfg = await analyticsConfig(orgId, "financialHealth");
-  // mergeConfig always materializes every default key for the dashboard.
-  const benchmarks: HealthBenchmarks = {
-    grossMargin: cfg.grossMarginTarget! / 100,
-    operatingMargin: cfg.operatingMarginTarget! / 100,
-    ebitdaMargin: cfg.ebitdaMarginTarget! / 100,
-    netMargin: cfg.netMarginTarget! / 100,
-    roa: cfg.roaTarget! / 100,
-    roe: cfg.roeTarget! / 100,
-    roic: cfg.roicTarget! / 100,
-    revenuePerEmployee: cfg.revenuePerEmployee!,
-    gpPerEmployee: cfg.gpPerEmployee!,
-  };
+  const benchmarks = await healthBenchmarks(orgId);
 
   const emptyBudget = (): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" } });
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");

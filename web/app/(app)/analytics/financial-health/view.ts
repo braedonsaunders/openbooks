@@ -6,7 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { healthData } from '../../../../lib/analytics/health-data'
+import { healthData, healthSummaryData } from '../../../../lib/analytics/health-data'
 import { healthStrings, localizedRatioDefs } from '../../../../lib/analytics/health-strings'
 import type { FinancialHealthView } from './FinancialHealthView'
 
@@ -41,7 +41,7 @@ export interface FinancialHealthData {
   canConfigure: boolean
 }
 
-export async function loadFinancialHealth(sp: Record<string, string | undefined>): Promise<FinancialHealthData> {
+async function financialHealthContext(sp: Record<string, string | undefined>) {
   const t = await getTranslations('analytics.financialHealth')
   const authz = await requirePermission('reports.read')
 
@@ -54,6 +54,16 @@ export async function loadFinancialHealth(sp: Record<string, string | undefined>
   const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
   const boundT = (key: string, values?: Record<string, string | number>) => tc(key, values)
   const strings = healthStrings(boundT, locale)
+  return { t, authz, period, strings, boundT }
+}
+
+export async function loadFinancialHealthPreview(sp: Record<string, string | undefined>) {
+  const { authz, period, strings } = await financialHealthContext(sp)
+  return { data: await healthSummaryData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings), periodLabel: period.label }
+}
+
+export async function loadFinancialHealth(sp: Record<string, string | undefined>): Promise<FinancialHealthData> {
+  const { t, authz, period, strings, boundT } = await financialHealthContext(sp)
   const [data, budgetsEnabled] = await Promise.all([
     healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
     isFeatureEnabled(authz.user.orgId, 'budgets'),

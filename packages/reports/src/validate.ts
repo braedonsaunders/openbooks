@@ -220,6 +220,10 @@ export function validateCustomQuery(
   }
   const validColumn = (c: unknown): c is string =>
     typeof c === 'string' && entityColumn(entityMeta, c) !== null
+  if (q.periodField !== undefined && q.periodField !== null &&
+      (typeof q.periodField !== 'string' || entityColumn(entityMeta, q.periodField)?.kind !== 'date')) {
+    throw new ReportQueryValidationError('The report period field must name a date column, or be null for a current-state report')
+  }
 
   const mode: 'rows' | 'summarize' = q.mode === 'summarize' ? 'summarize' : 'rows'
 
@@ -465,6 +469,7 @@ export function validateCustomQuery(
 
   return {
     entity,
+    ...(q.periodField !== undefined ? { periodField: q.periodField as string | null } : {}),
     mode,
     columns,
     breakouts,

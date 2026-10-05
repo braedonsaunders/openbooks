@@ -1042,6 +1042,14 @@
       "payout_reconciliation": {
         "label": "付款核对",
         "description": "将每笔付款拆分为结算明细，附带关联凭证、银行到账和在途计提——每行一条明细，含付款状态与差额。"
+      },
+      "manufacturing_work_orders": {
+        "label": "Manufacturing work orders",
+        "description": "Production order lifecycle by subsidiary. Counts describe orders, not quantities across different units."
+      },
+      "managed_property_portfolio": {
+        "label": "Managed properties",
+        "description": "Current portfolio lifecycle, scoped to the reader’s legal entities."
       }
     },
     "columns": {
@@ -1378,7 +1386,8 @@
         "employer_cost": "雇主成本",
         "vacation_accrued": "已计提年假",
         "pensionable": "养老保险缴费基数",
-        "insurable": "受保收入"
+        "insurable": "受保收入",
+        "currency": "薪资币种"
       },
       "pay_stub_lines": {
         "employee": "员工",
@@ -2639,6 +2648,17 @@
         "deposit_total": "到账合计",
         "gap": "差额",
         "accrued_amount": "计提额"
+      },
+      "manufacturing_work_orders": {
+        "number": "Order number",
+        "status": "Status",
+        "planned_start": "Planned start",
+        "planned_end": "Planned end"
+      },
+      "managed_property_portfolio": {
+        "code": "Property code",
+        "name": "Property",
+        "status": "Status"
       }
     },
     "enumValues": {
@@ -2987,6 +3007,38 @@
     "usage-billing-detail": {
       "name": "用量计费明细",
       "description": "列出每条已计价的用量发票行，以及其计量器、计价运行、计划版本和源记录追踪信息。"
+    },
+    "analytics-project-portfolio": {
+      "name": "Project portfolio",
+      "description": "Current project lifecycle: active work, quotations, awards and closed projects."
+    },
+    "analytics-asset-lifecycle": {
+      "name": "Asset lifecycle",
+      "description": "Current fixed-asset register: assets in service, fully depreciated, disposed and awaiting activation."
+    },
+    "analytics-production": {
+      "name": "Production overview",
+      "description": "Current production orders: released, in progress, on hold and completed."
+    },
+    "analytics-property-portfolio": {
+      "name": "Property portfolio",
+      "description": "Current managed-property portfolio: active, inactive, sold and total properties."
+    },
+    "analytics-grant-portfolio": {
+      "name": "Grant portfolio",
+      "description": "Current grant lifecycle: awarded, active, closed out and draft grants. Requires nonprofit reporting permission."
+    },
+    "analytics-allocation-controls": {
+      "name": "Allocation controls",
+      "description": "Current allocation run controls: posted runs, pending approvals, failed calculations and total runs."
+    },
+    "analytics-payroll-reconciliation": {
+      "name": "Payroll reconciliation",
+      "description": "Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells."
+    },
+    "analytics-workforce-capacity": {
+      "name": "Workforce capacity",
+      "description": "Current workforce establishment: planned, funded, filled and vacant full-time equivalents."
     }
   },
   "generalLedger": {

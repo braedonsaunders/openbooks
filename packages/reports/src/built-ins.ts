@@ -1,3 +1,4 @@
+import { ANALYTICS_SUMMARY_REPORTS } from './analytics-summaries'
 // Built-in report definitions — plain ReportCustomQuery plans against the
 // entity catalog, seeded per-org by engine/src/provisioning/seed-reports.ts (kind =
 // 'built_in'). Users can run/schedule them as-is or clone them in the studio.
@@ -323,6 +324,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
 ]
 
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
+  ...ANALYTICS_SUMMARY_REPORTS,
   ...SALES_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...BANKING_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...CONTRACT_COST_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),

@@ -64,17 +64,6 @@ describe('denomination flags are enforceable', () => {
     // assets/field lane
     equipment: ['purchase_price', 'cost_recovery', 'billable_value', 'billed_revenue', 'depreciation'],
     // payroll lane
-    pay_stubs: [
-      'gross',
-      'cpp_fica',
-      'ei',
-      'income_tax',
-      'net_pay',
-      'employer_cost',
-      'vacation_accrued',
-      'pensionable',
-      'insurable',
-    ],
     pay_stub_lines: ['rate', 'amount', 'ytd_amount'],
     payroll_parallel_findings: ['prior_amount', 'our_amount', 'difference', 'tolerance_applied'],
     // entitlements/allocations lanes

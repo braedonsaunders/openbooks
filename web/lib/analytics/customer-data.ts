@@ -5,7 +5,7 @@ import { REVENUE_TYPES } from "../reports/statements";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/database";
 import { analyticsConfig } from "./config";
 import { customerStrings, type CustomerStrings } from "./customer-strings";
 import { englishCatalogMessage } from "./catalog-strings";
@@ -593,12 +593,36 @@ function customerDocumentMovements(
 }
 
 /* ------------------------------------------------------------------- main */
-export async function customerData(
-  period: { from: string; to: string; label: string },
-  orgId: string,
+export interface CustomerSummary {
+  kpis: Pick<CustomerData['kpis'], 'totalCustomers' | 'atRiskCount'> & { totalRevenue: string; totalInvoiced: string };
+  growth: Pick<CustomerData['growth'], 'monthly'>;
+}
+
+export function customerData(
+  period: { from: string; to: string; label: string }, orgId: string,
   allowed: ReadonlySet<string> | null,
   strings: CustomerStrings = customerStrings(englishCatalogMessage, "en"),
 ): Promise<CustomerData> {
+  return readCustomerData(period, orgId, allowed, strings, false);
+}
+
+/** The card reads the same recognized revenue and churn model, without
+ * lifetime cohorts, settlement detail or project profitability. */
+export function customerSummaryData(
+  period: { from: string; to: string; label: string }, orgId: string,
+  allowed: ReadonlySet<string> | null,
+  strings: CustomerStrings = customerStrings(englishCatalogMessage, "en"),
+): Promise<CustomerSummary> {
+  return readCustomerData(period, orgId, allowed, strings, true);
+}
+
+type CustomerPeriod = { from: string; to: string; label: string };
+function readCustomerData(period: CustomerPeriod, orgId: string, allowed: ReadonlySet<string> | null, strings: CustomerStrings, preview: true): Promise<CustomerSummary>;
+function readCustomerData(period: CustomerPeriod, orgId: string, allowed: ReadonlySet<string> | null, strings: CustomerStrings, preview: false): Promise<CustomerData>;
+async function readCustomerData(
+  period: CustomerPeriod, orgId: string, allowed: ReadonlySet<string> | null,
+  strings: CustomerStrings, preview: boolean,
+): Promise<CustomerData | CustomerSummary> {
   const { moneyCompact } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const pFrom = priorYearIso(from);
@@ -643,7 +667,7 @@ export async function customerData(
     // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
     // Credit value translates per (party, functional) below.
-    (db.execute(sql`
+    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_credit', 'cash_refund', 'customer_invoice'], allowed, from, to)})
       select movement.party_id as id, movement.func,
         sum(movement.direction) filter (where movement.kind in ('customer_credit', 'cash_refund')) as credit_count,
@@ -657,7 +681,7 @@ export async function customerData(
     // Payment behaviour — paid = fully-applied invoice; days-to-pay = final
     // application date − invoice date; overdue =
     // past due and not fully paid, as of the reference date.
-    (db.execute(sql`
+    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
       with inv as (
         select d.id, d.party_id, d.posting_date, d.due_date, abs(d.total) as total,
           -- documents.total is denominated in the invoice transaction
@@ -740,7 +764,7 @@ export async function customerData(
     // Cohorts — lifetime per-customer first/last order + lifetime revenue;
     // grouped into join-year cohorts below (active = ordered in last 6 months).
     // Lifetime revenue translates per (party, functional) below.
-    (db.execute(sql`
+    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
       with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed)})
       select movement.party_id as id, movement.func,
         max(movement.posting_date) filter (where movement.direction > 0) as last_order,
@@ -862,7 +886,7 @@ export async function customerData(
     `)),
     // Lifetime recognized per customer, for cohorts (lifetime invoiced stays
     // on the document query above).
-    (db.execute(sql`
+    (preview ? Promise.resolve({ rows: [] }) : db.execute(sql`
       with ew as materialized (
         select id, posting_date, origin
           from journal_entries
@@ -895,11 +919,11 @@ export async function customerData(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       group by 1, 2
     `)),
-    customerProfitability(period, orgId, allowed),
+    preview ? Promise.resolve(null) : customerProfitability(period, orgId, allowed),
     // The header "Avg DSO" is the ONE org DSO — the same settlement-weighted
     // trailing mean the cash cockpit, cashflow analytics, MCP cashflow tool,
     // and get_vitals read — never a second per-customer grain computed here.
-    paymentStats("ar", ref, allowed ? [...allowed] : undefined, orgId),
+    preview ? Promise.resolve(null) : paymentStats("ar", ref, allowed ? [...allowed] : undefined, orgId),
   ]);
 
   /* ---- recognized revenue + recon (ledger universe, per party) ---- */
@@ -1155,9 +1179,9 @@ export async function customerData(
   const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : 0;
   // Per-customer rows keep their own days-to-pay (drill detail); the header
   // KPI is the engine DSO so every surface quotes one number.
-  const avgDaysToPay = dsoStats.globalAvg;
+  const avgDaysToPay = dsoStats?.globalAvg ?? null;
 
-  const profitMap = new Map(profitData.customers.map((c) => [c.customerId, c]));
+  const profitMap = new Map((profitData?.customers ?? []).map((c) => [c.customerId, c]));
 
   /* ---- assemble per-customer, CLV tiers by rank ---- */
   const enriched = base.map((c) => {
@@ -1186,7 +1210,8 @@ export async function customerData(
   };
 
   /* ---- concentration () ---- */
-  const totalRevenueExact = sum(base.map((c) => String(c.revenue)));
+  const totalRevenueExact = sum([...baseByParty.keys()].map((id) => ledgerByParty.get(id)?.recognized ?? "0"));
+  const totalInvoicedExact = sum([...baseByParty.values()].map((customer) => customer.revenue));
   const totalRevenue = Number(totalRevenueExact);
   const byRevenue = [...enriched].sort((a, b) => b.c.revenue - a.c.revenue);
   const shareMap = new Map<string, { sharePct: number; risk: RiskLevel }>();
@@ -1407,6 +1432,15 @@ export async function customerData(
       isMature,
     };
   });
+  if (preview) return {
+    kpis: {
+      totalCustomers: base.length,
+      totalRevenue: totalRevenueExact,
+      totalInvoiced: totalInvoicedExact,
+      atRiskCount: base.filter((customer) => ["critical", "high"].includes(churnOf(customer).level)).length,
+    },
+    growth: { monthly },
+  };
   let yoyGrowth: number | null = null;
   if (monthly.length >= 15) {
     const recent3 = monthly.slice(-3).reduce((a, m) => a + m.revenue, 0);
@@ -1534,7 +1568,7 @@ export async function customerData(
     kpis: {
       totalCustomers: rows.length,
       totalRevenue: Math.round(totalRevenue),
-      totalInvoiced: Math.round(rows.reduce((a, r) => a + r.invoicedRevenue, 0)),
+      totalInvoiced: Math.round(Number(totalInvoicedExact)),
       avgCustomerValue: Math.round(totalRevenue / Math.max(1, rows.length)),
       projectedClv: Math.round(totalProjectedClv),
       avgClv: rows.length ? Math.round(totalProjectedClv / rows.length) : 0,
@@ -1556,7 +1590,7 @@ export async function customerData(
       overdueOrders,
       criticalFriction: rows.filter((r) => r.frictionLevel === "critical").length,
       highFriction: rows.filter((r) => r.frictionLevel === "high").length,
-      fakeChampions: profitData.summary.fakeChampions,
+      fakeChampions: profitData!.summary.fakeChampions,
     },
     segments,
     tierBreakdown: TIERS.map((tier) => {

@@ -66,6 +66,7 @@ export const TEMPORAL_OPS: ReadonlySet<string> = new Set([
  * recall must remain complete history rather than silently becoming fiscal).
  */
 export function reportPeriodField(query: ReportCustomQuery, entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP): string | null {
+  if (query.periodField !== undefined) return query.periodField
   const entity = entityMap[query.entity]
   if (!entity) return null
   const dateColumns = new Set(

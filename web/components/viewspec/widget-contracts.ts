@@ -46,7 +46,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'allocations-rules-tab': { props: [], open: true },
   'allocations-runs-tab': { props: [] },
   'allocations-setup-header': { props: [], open: true },
-  'analytics-hub': { props: ['description', 'groups', 'title'] },
+  'analytics-hub': { props: ['description', 'groups', 'initialLayout', 'title'] },
   'ap-capture-link': { props: ['href', 'label'] },
   'ap-cockpit': { props: ['canConfigure', 'canPay', 'data'] },
   'ap-header-actions': { props: ['canCreate', 'captureHref', 'captureLabel', 'newBasePath', 'newItems', 'newTriggerLabel'] },

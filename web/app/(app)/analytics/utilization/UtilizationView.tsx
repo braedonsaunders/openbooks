@@ -482,8 +482,12 @@ function OverviewTab({ data }: { data: UtilizationData }) {
               <div className="space-y-2.5">
                 {topDepts.map((x) => {
                   const tone = statusTone(x.range.percentBilled, target)
-                  const max = String(topDepts[0]?.range.nonBillableCost || '1')
-                  const costRatio = Number(divideDecimal(String(x.range.nonBillableCost), max, 8))
+                  const max = topDepts[0]?.range.nonBillableCost ?? '0'
+                  // A decimal zero string is truthy. With no cost across the
+                  // departments, show empty bars without dividing by zero.
+                  const costRatio = compareMoney(max, '0') === 0
+                    ? 0
+                    : Number(divideDecimal(x.range.nonBillableCost, max, 8))
                   return (
                     <div key={x.id}>
                       <div className="mb-0.5 flex justify-between text-xs">
@@ -491,7 +495,7 @@ function OverviewTab({ data }: { data: UtilizationData }) {
                         <span className="tabular-nums text-slate-500 dark:text-slate-400">{money(x.range.nonBillableCost)} · <span className={tone.text}>{pct1(x.range.percentBilled, 0)}</span></span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${Math.max(2, Math.min(100, costRatio * 100))}%` }} />
+                        <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${compareMoney(x.range.nonBillableCost, '0') > 0 ? Math.max(2, Math.min(100, costRatio * 100)) : 0}%` }} />
                       </div>
                     </div>
                   )

@@ -13,7 +13,7 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-const { customerData } = await import('./customer-data')
+const { customerData, customerSummaryData } = await import('./customer-data')
 
 async function invoice(orgId: string, actor: string, subsidiaryId: string, partyId: string, revenue: string, currency: string, fxRate: string, date: string, accounts: { ar: string; ap: string; bank: string; revenue: string }) {
   const id = randomUUID()
@@ -76,6 +76,12 @@ test('customer intelligence translates every revenue functional to presentation'
       assert.equal(byName.get('US Customer')?.revenue, 270)
       assert.equal(byName.get('US Customer')?.priorRevenue, 130)
       assert.equal(data.kpis.totalRevenue, 520)
+      const summary = await withOrgContext(scratch.orgId, () => customerSummaryData(P, scratch.orgId, null))
+      for (const key of ['totalCustomers', 'atRiskCount'] as const) assert.equal(summary.kpis[key], data.kpis[key], key)
+      assert.equal(summary.kpis.totalRevenue, '520.0000')
+      assert.equal(summary.kpis.totalInvoiced, '520.0000')
+      assert.deepEqual(summary.growth.monthly, data.growth.monthly)
+
     })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))

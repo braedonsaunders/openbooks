@@ -129,6 +129,8 @@ export type ReportMeasure = {
 export type ReportCustomQuery = {
   /** Entity key — validated at runtime against the entity catalog. */
   entity: string
+  /** Explicit period ownership; null keeps a current-state report unfiltered. */
+  periodField?: string | null
   /** 'rows' (default) = detail rows; 'summarize' = GROUP BY breakouts + measures. */
   mode?: 'rows' | 'summarize'
   columns: string[]
