@@ -3320,6 +3320,12 @@
         "singular": "Item identifier",
         "description": "Exact GTIN, UPC, EAN and internal values used to identify items during scanning."
       },
+      "channel-ad-spend": {
+        "title": "Channel ad spend",
+        "singular": "Channel ad spend",
+        "description": "Daily marketing spend per storefront channel; the day's order margins restate with it.",
+        "amount": "Spend (minor units)"
+      },
       "channel-account-maps": {
         "title": "Channel posting accounts",
         "singular": "Channel posting account",
@@ -3975,6 +3981,7 @@
       "defaultSignature": "Default signature",
       "customsDefaults": "Customs defaults",
       "channelId": "Channel",
+      "spendDate": "Spend date",
       "externalLocationId": "Storefront location ID",
       "externalName": "Storefront name",
       "syncInventory": "Sync inventory",

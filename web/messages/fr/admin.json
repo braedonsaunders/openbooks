@@ -3245,6 +3245,12 @@
         "singular": "Identifiant d’article",
         "description": "Valeurs GTIN, UPC, EAN et internes exactes pour identifier les articles par scan."
       },
+      "channel-ad-spend": {
+        "title": "Dépenses publicitaires des canaux",
+        "singular": "Dépense publicitaire du canal",
+        "description": "Dépenses marketing quotidiennes par canal de vente ; les marges du jour sont recalculées en conséquence.",
+        "amount": "Dépense (plus petite unité)"
+      },
       "channel-account-maps": {
         "title": "Comptes comptables du canal",
         "singular": "Compte comptable du canal",
@@ -3900,6 +3906,7 @@
       "defaultSignature": "Signature par défaut",
       "customsDefaults": "Réglages de douane",
       "channelId": "Canal",
+      "spendDate": "Date de dépense",
       "externalLocationId": "ID d'emplacement de la boutique",
       "externalName": "Nom de la boutique",
       "syncInventory": "Synchroniser le stock",

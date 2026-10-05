@@ -192,7 +192,8 @@ async function WorkspaceSettings({
   const t = await getTranslations("channels");
   const maps = SETUP_ENTITY_BY_KEY.get("channel-account-maps");
   const locations = SETUP_ENTITY_BY_KEY.get("channel-locations");
-  if (!maps || !locations) notFound();
+  const adSpend = SETUP_ENTITY_BY_KEY.get("channel-ad-spend");
+  if (!maps || !locations || !adSpend) notFound();
   return (
     <div className="space-y-5">
       <p className="text-sm text-slate-500">{t("workspace.settingsHint")}</p>
@@ -219,6 +220,19 @@ async function WorkspaceSettings({
         allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
         rowParam="locationRow"
         paramPrefix="location"
+        fixedFilter={{ fieldKey: "channelId", value: channelId }}
+        hideHeader={false}
+      />
+      <SetupEntitySection
+        entity={adSpend}
+        orgId={authz.user.orgId}
+        actorId={authz.user.id}
+        searchParams={sp}
+        basePath={`/channels/${channelId}`}
+        canManage={canManage}
+        allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
+        rowParam="spendRow"
+        paramPrefix="spend"
         fixedFilter={{ fieldKey: "channelId", value: channelId }}
         hideHeader={false}
       />

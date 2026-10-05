@@ -82,6 +82,36 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    key: 'channel-ad-spend',
+    table: 'channel_ad_spend',
+    singularTitleKey: 'entities.channel-ad-spend.singular',
+    actorCols: true,
+    groupKey: 'billing',
+    featureKey: 'salesChannels',
+    writePermission: 'channels.manage',
+    iconKey: 'megaphone',
+    orgScoped: true,
+    orderBy: 'spend_date desc',
+    hasActive: false,
+    rehomed: true,
+    // Daily marketing spend restates the day's order margins through the
+    // commerce engine (re-importing a source replaces its figure), never raw CRUD.
+    command: { name: 'recordChannelAdSpend', permission: 'channels.manage', feature: 'salesChannels' },
+    columns: [
+      { key: 'spendDate', kind: 'date' },
+      { key: 'amountMinor', kind: 'number', labelKey: 'entities.channel-ad-spend.amount' },
+      { key: 'currency', kind: 'text' },
+      { key: 'source', kind: 'text' },
+    ],
+    fields: [
+      { key: 'channelId', kind: 'ref', ref: 'sales-channels', required: true, lockedOnEdit: true },
+      { key: 'spendDate', kind: 'date', required: true, lockedOnEdit: true },
+      { key: 'amountMinor', kind: 'integer', min: 0, required: true, labelKey: 'entities.channel-ad-spend.amount', helpTextKey: 'fieldHelp.minorAmount' },
+      { key: 'currency', kind: 'ref', ref: 'currencies', required: true },
+      { key: 'source', kind: 'text', lockedOnEdit: true },
+    ],
+  },
+  {
     key: 'external-links',
     table: 'external_links',
     singularTitleKey: 'entities.external-links.singular',

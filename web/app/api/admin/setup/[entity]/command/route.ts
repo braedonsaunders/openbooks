@@ -15,6 +15,7 @@ import { setFundPair } from "@openbooks/engine/src/nonprofit/funds.ts";
 import { setFunctionalMapping } from "@openbooks/engine/src/nonprofit/functional.ts";
 import {
   CHANNEL_ACCOUNT_ROLES,
+  recordChannelAdSpend,
   upsertAccountMap,
   upsertChannelLocation,
 } from "@openbooks/engine/commerce";
@@ -106,6 +107,17 @@ const portalSettingsBody = z.strictObject({
   })).max(10).optional(),
 });
 
+// The drawer also POSTs the row id on edits; the spend upserts by its
+// natural key (channel, day, source), so the id is accepted and ignored.
+const channelAdSpendBody = z.strictObject({
+  id: z.string().uuid().nullish(),
+  channelId: z.string().uuid(),
+  spendDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  amountMinor: z.number().int().min(0),
+  currency: z.string().trim().min(3).max(3),
+  source: z.string().trim().max(120).nullish(),
+});
+
 /** Domain refusals keep typed status with message, code, remedy, and field. */
 export function commandRefusalResponse(error: unknown): { status: number; body: Record<string, unknown> } | null {
   if (!(error instanceof Error)) return null;
@@ -165,6 +177,19 @@ async function runCommandBody(
         key: parsed.data.key ?? "",
         accountId: parsed.data.accountId,
         effectiveFrom: parsed.data.effectiveFrom,
+      });
+    }
+    case "recordChannelAdSpend": {
+      const parsed = channelAdSpendBody.safeParse(raw);
+      if (!parsed.success) throw invalidCommandBody();
+      // Minor units travel as JSON integers; the engine prices in exact
+      // bigint arithmetic and restates the day's orders beside the write.
+      return recordChannelAdSpend(orgId, actorId, {
+        channelId: parsed.data.channelId,
+        spendDate: parsed.data.spendDate,
+        amountMinor: BigInt(parsed.data.amountMinor),
+        currency: parsed.data.currency.trim().toUpperCase(),
+        source: parsed.data.source?.trim() ? parsed.data.source.trim() : "manual",
       });
     }
     case "upsertChannelLocation": {
