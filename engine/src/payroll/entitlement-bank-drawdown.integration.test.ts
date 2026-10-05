@@ -21,7 +21,7 @@ import { validateEntitlementPlanConfiguration } from "./entitlement-plan-config.
  * Bank drawdown on ordinary runs: a plan's payout component withdraws from
  * the bank on any non-termination run, an hours bank funds from
  * negative-hours deposit lines, overdraws refuse naming the balance, and the
- * payout itself accrues nothing further.
+ * a payout never replenishes its own bank.
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -168,6 +168,44 @@ test('a zero vacation replacement preserves supplied cash earnings without regen
       const movements = (await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
         and plan_id=${plan.id} and employee_party_id=${partyId}`)).rows;
       assert.equal(movements.length, 0);
+    }
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('banked wages retain their declared vacation eligibility without replenishing their own bank', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId } = await employee(fx, 'Deferred Wage Employee');
+    const payoutComponent = await earningComponent(fx, 'DEFERREDWAGE');
+    const accrualComponent = randomUUID();
+    await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,expense_account_id,liability_account_id)
+      values(${accrualComponent},${fx.orgId},'DEFERREDACCR','Deferred wage accrual','employer_contribution','CA',
+        ${fx.accounts.burdenExpense},${fx.accounts.otherPayable})`);
+    const bankId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans(id,org_id,code,name,unit,direction,accrual_method,accrual_value,accrual_component_id,payout_component_id,
+      liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${bankId},${fx.orgId},'DEFERRED','Deferred wages','money','accrue','percent_of_earnings','4',${accrualComponent},${payoutComponent},
+        ${fx.accounts.otherPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, bankId, partyId, '500', null);
+    await hours(fx, partyId, ['2026-07-13']);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
+      values(${fx.orgId},${run.documentId},${partyId},'line',${payoutComponent},'240')`);
+    for (const eligible of [true, false, true]) {
+      await db.execute(sql`update pay_components set vacationable=${eligible} where org_id=${fx.orgId} and id=${payoutComponent}`);
+      const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+      assert.deepEqual(result.errors, []);
+      const stub = (await db.execute<{ gross: string; vacation_accrued: string }>(sql`select gross::text,vacation_accrued::text
+        from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
+      assert.equal(stub.gross, '480.0000');
+      assert.equal(stub.vacation_accrued, eligible ? '19.2000' : '9.6000',
+        'vacation accrues on deferred wages precisely when their earning component declares eligibility');
+      assert.equal(await balanceOf(fx, partyId, bankId, '2026-07-21'), '269.6000',
+        'the wage bank accrues only on new regular wages, never on its own withdrawal');
+      const payouts = (await db.execute(sql`select amount::text from entitlement_ledger
+        where org_id=${fx.orgId} and plan_id=${bankId} and pay_run_document_id=${run.documentId} and kind='payout'`)).rows;
+      assert.deepEqual(payouts, [{ amount: '-240.0000' }], 'recalculation preserves one exact withdrawal');
     }
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
