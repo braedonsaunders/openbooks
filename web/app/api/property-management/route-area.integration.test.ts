@@ -15,8 +15,10 @@ const engineRoot = new URL('../../../../engine/', import.meta.url).href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmUnitBoundState: state });
 registerHooks({ resolve(specifier, context, next) {
-  // Bare @openbooks/engine/* resolves cross-checkout to main; pin the worktree copy.
-  if (specifier.startsWith('@openbooks/engine/')) {
+  // Bare @openbooks/engine/src/* resolves cross-checkout to main; pin the
+  // worktree copy. Package subpath exports (@openbooks/engine/money) keep
+  // their own resolution.
+  if (specifier.startsWith('@openbooks/engine/src/')) {
     return next(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context);
   }
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__pmUnitBoundState.user}' };
