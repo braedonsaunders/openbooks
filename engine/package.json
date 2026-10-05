@@ -55,6 +55,7 @@
     "./organization/segments": "./src/organization/segments.ts",
     "./organization/feature-state": "./src/organization/feature-state.ts",
     "./organization/scope": "./src/organization/subsidiary-scope.ts",
+    "./organization/aging-buckets": "./src/organization/aging-buckets.ts",
     "./organization/currencies": "./src/organization/currency-options.ts",
     "./hrm/compensation": "./src/hrm/public-compensation.ts",
     "./inventory/stock-locations": "./src/inventory/stock-locations.ts",
@@ -142,6 +143,7 @@
     "./tax-returns": "./src/tax-returns/public.ts",
     "./payroll/compensation-patterns": "./src/payroll/compensation-package-pattern.ts",
     "./testing/hrm": "./src/testing/public-hrm.ts",
-    "./platform/time-zone": "./src/platform/time-zone.ts"
+    "./platform/time-zone": "./src/platform/time-zone.ts",
+    "./payroll/business-calendars": "./src/payroll/business-calendars.ts"
   }
 }

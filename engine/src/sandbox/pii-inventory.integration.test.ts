@@ -1547,6 +1547,10 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "number_sequences.document_kind",
   "number_sequences.prefix",
   "order_line_cancellations.reason",
+  // Business-calendar configuration: an ISO country code and an optional
+  // region code. They identify no person; they describe the calendar.
+  "org_business_calendars.holiday_country",
+  "org_business_calendars.holiday_region",
   "org_nav_configs.config",
   "overhead_rates.category",
   "overhead_rates.method",
