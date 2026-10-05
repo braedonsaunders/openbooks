@@ -218,7 +218,7 @@ export function applyBurden(base: string, burdenRate: string): string {
 }
 
 /** The burden fraction: declared setting first, else the labor-costing wage-percentage components. */
-async function burdenRateFor(orgId: string): Promise<{ rate: string; source: string }> {
+export async function burdenRateFor(orgId: string): Promise<{ rate: string; source: string }> {
   const settings = await compensationSettings(orgId);
   if (settings.burdenRate !== null) {
     return { rate: requireBurdenRate(settings.burdenRate), source: "compensation_settings" };

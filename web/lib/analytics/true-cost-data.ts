@@ -186,7 +186,6 @@ export interface TrueCostProfile {
   color?: string | null;
   compositeMethod: CompositeMethod;
   baseLaborRate: number | string; // cascading base
-  fringeRate: number | string; // scenario fringe (0..1)
   categorySettings: Record<string, CategorySettings>;
   customCategories: CustomCategory[];
   baseOverrides: { squareFeet?: Record<string, number>; units?: Record<string, number>; custom?: Record<string, number> };
@@ -277,7 +276,6 @@ export interface TrueCostData {
     activeProfileId: string;
     compositeMethod: CompositeMethod;
     baseLaborRate: number | string;
-    fringeRate: number | string;
     categorySettings: Record<string, CategorySettings>;
     profiles: { id: string; name: string; color?: string | null }[];
     customCategories: CustomCategory[];
@@ -363,7 +361,6 @@ export const DEFAULT_PROFILE: TrueCostProfile = {
   // when the composite method needs one". A previously-saved numeric default
   // is an explicit operator value, not an assumption.
   baseLaborRate: "",
-  fringeRate: 0.25,
   categorySettings: {},
   customCategories: [],
   baseOverrides: {},
@@ -1715,7 +1712,6 @@ export async function trueCostData(
       activeProfileId: cfg.activeProfileId,
       compositeMethod: profile.compositeMethod,
       baseLaborRate: profile.baseLaborRate,
-      fringeRate: profile.fringeRate,
       categorySettings: profile.categorySettings,
       profiles: cfg.profiles.map((p) => ({ id: p.id, name: strings.displayProfileName(p.name), color: p.color })),
       customCategories: profile.customCategories,

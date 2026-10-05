@@ -81,7 +81,6 @@ function fixture(): TrueCostData {
       activeProfileId: 'p1',
       compositeMethod: 'simple',
       baseLaborRate: 50,
-      fringeRate: 0.2,
       categorySettings: {},
       profiles: [{ id: 'p1', name: 'Default' }],
       customCategories: [],
