@@ -30,13 +30,20 @@ async function seedPlanSubscription(orgId: string, customerId: string): Promise<
   return subscriptionId;
 }
 
-async function seedInvoice(orgId: string, customerId: string, currency: string, date: string): Promise<void> {
+async function seedInvoice(
+  orgId: string,
+  customerId: string,
+  currency: string,
+  date: string,
+  createdAt?: string,
+): Promise<void> {
   const documentId = randomUUID();
   await withBypassContext(() => db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status,
-                           subtotal, tax_total, total, custom)
+                           subtotal, tax_total, total, custom, created_at)
     values (${documentId}, ${orgId}, 'customer_invoice', ${`INV-${documentId.slice(0, 8)}`}, ${customerId},
-            ${date}, ${currency}, 'draft', '100', '0', '100', '{}'::jsonb)`));
+            ${date}, ${currency}, 'draft', '100', '0', '100', '{}'::jsonb,
+            ${createdAt ?? "2026-07-10T10:00:00Z"}::timestamptz)`));
 }
 
 test("setup currency follows the latest invoice, else the org base", { skip: !DB }, async () => {
@@ -51,6 +58,50 @@ test("setup currency follows the latest invoice, else the org base", { skip: !DB
     assert.equal(
       await withOrgContext(org.orgId, () => resolvePortalSetupCurrency(org.orgId, org.customerId)),
       "USD",
+    );
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("same-day invoices resolve to the latest recorded, deterministically", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await seedInvoice(org.orgId, org.customerId, "EUR", "2026-07-12", "2026-07-12T10:00:00Z");
+    await seedInvoice(org.orgId, org.customerId, "USD", "2026-07-12", "2026-07-12T11:00:00Z");
+    const first = await withOrgContext(org.orgId, () => resolvePortalSetupCurrency(org.orgId, org.customerId));
+    const second = await withOrgContext(org.orgId, () => resolvePortalSetupCurrency(org.orgId, org.customerId));
+    assert.equal(first, "USD");
+    assert.equal(second, first);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("another party's invoices never leak into setup currency", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await seedInvoice(org.orgId, org.customerId, "EUR", "2026-07-12");
+    assert.equal(
+      await withOrgContext(org.orgId, () => resolvePortalSetupCurrency(org.orgId, org.vendorId)),
+      "CAD",
+    );
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("an unknown organization is refused, never defaulted", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const unknownOrg = randomUUID();
+    await assert.rejects(
+      withOrgContext(unknownOrg, () => resolvePortalSetupCurrency(unknownOrg, org.customerId)),
+      (error: unknown) =>
+        error instanceof PortalRefusal &&
+        error.code === "not_found" &&
+        /no payment currency/i.test(error.message) &&
+        /new link from the portal sign-in/i.test(error.remedy ?? ""),
     );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
