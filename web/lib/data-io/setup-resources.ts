@@ -90,6 +90,10 @@ const SETUP_KIND_MAP: Record<SetupField['kind'], ResourceField['kind']> = {
   country: 'select',
   textarea: 'long_text',
   integer: 'number',
+  // Money travels as whole minor units, exactly like an integer: the
+  // majors/minors conversion lives in the drawer and the command, so row
+  // import and export neither reinterpret nor reprice the stored figure.
+  money: 'number',
   decimal: 'number',
   percent: 'percent',
   boolean: 'boolean',
