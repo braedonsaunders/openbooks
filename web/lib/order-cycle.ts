@@ -15,7 +15,7 @@ import {
 } from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { add, cmp, mulRatio, neg, sum } from '@openbooks/engine/src/money/money.ts'
-import { kitComponentQuantities, loadKitComponents } from '@openbooks/engine/src/inventory/kits.ts'
+import { kitComponentQuantities, loadKitComponents } from '@openbooks/engine/inventory'
 import { lineRequiresReceipt } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import {
   billableRemainderQuantityUnits,
