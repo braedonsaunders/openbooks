@@ -1,7 +1,7 @@
 import type { ReportEntity } from './entities'
 
-/** Scoped operational sources for the native analytics summary reports. */
-export const ANALYTICS_REPORT_ENTITIES: ReportEntity[] = [
+/** Scoped operational sources for native portfolio and control reports. */
+export const OPERATIONAL_REPORT_ENTITIES: ReportEntity[] = [
   {
     key: 'manufacturing_work_orders', label: 'Manufacturing work orders', category: 'inventory',
     description: 'Production order lifecycle by subsidiary. Counts describe orders, not quantities across different units.',

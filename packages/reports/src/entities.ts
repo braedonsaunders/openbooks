@@ -11,7 +11,7 @@
 // report modules register their own lists for shared catalog checks without
 // changing the core query map.
 
-import { ANALYTICS_REPORT_ENTITIES } from './analytics-entities'
+import { OPERATIONAL_REPORT_ENTITIES } from './operational-entities'
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
@@ -272,7 +272,7 @@ const SAAS_NORMALIZATION: ReportEntityNormalization = {
 const SAAS_BASE_NOUNS = { plural: 'reporting currencies', breakout: 'Reporting currency' } as const
 
 export const REPORT_ENTITIES: ReportEntity[] = [
-  ...ANALYTICS_REPORT_ENTITIES,
+  ...OPERATIONAL_REPORT_ENTITIES,
   {
     key: 'ledger_lines',
     label: 'Ledger lines',

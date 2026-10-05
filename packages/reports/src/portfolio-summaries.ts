@@ -3,8 +3,8 @@ import type { ReportCustomQuery, ReportMeasure } from './types'
 const count = (label: string, status?: string, field = 'status'): ReportMeasure => ({ fn: 'count', label, ...(status ? { filter: { combinator: 'and' as const, rules: [{ field, op: 'eq' as const, value: status }] } } : {}) })
 const summary = (entity: string, measures: ReportMeasure[]): ReportCustomQuery => ({ entity, periodField: null, mode: 'summarize', columns: [], breakouts: [], measures, filters: null, groupBy: null, limit: 1000 })
 
-/** These are ordinary built-in report plans, shared by Reports and Analytics. */
-export const ANALYTICS_SUMMARY_REPORTS = [
+/** Current-state portfolio and control reports belong to the native Reports catalog. */
+export const PORTFOLIO_SUMMARY_REPORTS = [
   { slug: 'analytics-allocation-controls', name: 'Allocation controls', description: 'Current allocation run controls: posted runs, pending approvals, failed calculations and total runs.', query: summary('allocation_runs', [count('Posted runs', 'posted'), count('Awaiting approval', 'pending_approval'), count('Failed runs', 'failed'), count('Allocation runs')]) },
   { slug: 'analytics-payroll-reconciliation', name: 'Payroll reconciliation', description: 'Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells.', query: summary('payroll_parallel_findings', [count('Differences', 'difference', 'classification'), count('Exact matches', 'match', 'classification'), count('Within tolerance', 'within_tolerance', 'classification'), count('Unattributed cells', 'unattributed', 'classification')]) },
   { slug: 'analytics-workforce-capacity', name: 'Workforce capacity', description: 'Current workforce establishment: planned, funded, filled and vacant full-time equivalents.', query: summary('hrm_positions', [ { fn: 'sum', column: 'planned_fte', label: 'Planned FTE' }, { fn: 'sum', column: 'funded_fte', label: 'Funded FTE' }, { fn: 'sum', column: 'filled_fte', label: 'Filled FTE' }, { fn: 'sum', column: 'vacant_fte', label: 'Vacant FTE' } ]) },

@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { currentUser } from "./auth";
+import { requestAuthzContext } from "./authz-context";
 import { can, resolveUserAuthz, type Authz } from "./authz-core";
 export { can, resolveUserAuthz, resolveAuthzByUserId, type Authz } from "./authz-core";
 import { accessDeniedHref } from "./gate-targets";
@@ -32,6 +33,8 @@ export {
  */
 
 export async function getAuthz(): Promise<Authz | null> {
+  const verified = requestAuthzContext();
+  if (verified) return verified;
   const user = await currentUser();
   if (!user) return null;
   return resolveUserAuthz(user);
