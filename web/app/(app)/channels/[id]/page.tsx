@@ -1,5 +1,5 @@
 import { ModuleView } from '../../../../components/viewspec/module-view'
-import { assertWorkspaceChannel, channelWorkspaceSpec, loadChannelWorkspace, resolveWorkspaceTab } from './view'
+import { channelWorkspaceSpec, loadChannelWorkspace } from './view'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +16,7 @@ export default async function ChannelWorkspacePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
-  await assertWorkspaceChannel(id)
   const sp = await searchParams
-  const data = await loadChannelWorkspace()
-  return <ModuleView spec={channelWorkspaceSpec(id, resolveWorkspaceTab(sp.tab), sp)} data={data} searchParams={sp} trusted />
+  const data = await loadChannelWorkspace(id, sp)
+  return <ModuleView spec={channelWorkspaceSpec(data)} data={data} searchParams={sp} trusted />
 }
