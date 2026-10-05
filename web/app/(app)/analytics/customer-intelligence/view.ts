@@ -61,11 +61,16 @@ export async function loadCustomerIntelligencePreview(sp: Record<string, string 
 
 export async function loadCustomerIntelligence(sp: Record<string, string | undefined>): Promise<CustomerIntelligenceData> {
   const { t, authz, period, strings } = await customerContext(sp)
-  const [data, profitability, projectsEnabled] = await Promise.all([
+  // The profitability tab's leak share divides by the loader's scoped,
+  // customer-attributed period total — passed in, never a second unscoped
+  // query that could divide scoped revenue by whole-org revenue.
+  const [data, projectsEnabled] = await Promise.all([
     customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
-    analyticsSection('customer-intelligence', ['lifetime', 'profitability']) ? customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds, strings) : Promise.resolve(null),
     isFeatureEnabled(authz.user.orgId, 'projects'),
   ])
+  const profitability = analyticsSection('customer-intelligence', ['lifetime', 'profitability'])
+    ? await customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds, strings, data.kpis.totalRevenue)
+    : null
 
   return {
     title: t('title'),

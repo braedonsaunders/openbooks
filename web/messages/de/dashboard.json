@@ -324,6 +324,7 @@
   },
   "concentrationHint": "{level} · Top-Anteil {share}",
   "atRiskCount": "{count, plural, one {# Kunde} other {# Kunden}}",
+  "concentrationNoRevenue": "Keine erfassten Kundenerlöse in {period}",
   "churnScore": "Abwanderungsscore {score}",
   "analytics": {
     "loading": "Die Werte sind noch nicht verfügbar.",

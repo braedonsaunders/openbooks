@@ -102,7 +102,13 @@ export async function loadCustomerWidgetMetrics(
       return out
     }
     if (wantConcentration) {
-      out.concentration = { available: true, value: concentrationOf(data.kpis) }
+      // Shares divide by the period total: with no recognized revenue there
+      // is no concentration to state, so the tile refuses instead of
+      // rendering an HHI of 0 that reads as "perfectly diversified".
+      const summary = concentrationOf(data.kpis)
+      out.concentration = summary === null
+        ? { available: false, reason: td('concentrationNoRevenue', { period: period.label }) }
+        : { available: true, value: summary }
     }
     if (wantAtRisk) {
       out.atRisk = {

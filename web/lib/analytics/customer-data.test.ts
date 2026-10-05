@@ -122,8 +122,13 @@ test('the at-risk list ranks the five highest churn scores, medium and low never
 })
 
 test('concentration reads the dashboard KPIs, never a recomputation', () => {
-  const kpis = { hhiScaled: 2450, hhiLevel: 'moderate', customersFor80Pct: 3, topCustomerShare: 42.5 } as CustomerData['kpis']
+  const kpis = { totalRevenue: '1000', hhiScaled: 2450, hhiLevel: 'moderate', customersFor80Pct: 3, topCustomerShare: 42.5 } as CustomerData['kpis']
   assert.deepEqual(concentrationOf(kpis), {
     hhi: 2450, level: 'moderate', customersFor80Pct: 3, topSharePct: 42.5,
   })
+})
+
+test('concentration is null without recognized revenue: no HHI of 0 that reads as diversified', () => {
+  const kpis = { totalRevenue: '0', hhiScaled: 0, hhiLevel: 'low', customersFor80Pct: 0, topCustomerShare: 0 } as CustomerData['kpis']
+  assert.equal(concentrationOf(kpis), null)
 })

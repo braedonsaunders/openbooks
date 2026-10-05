@@ -539,6 +539,14 @@ export async function customerProfitability(
   orgId: string,
   allowed: ReadonlySet<string> | null,
   strings: CustomerStrings = customerStrings(englishCatalogMessage, "en"),
+  /**
+   * The leak share's denominator: the loader's scoped, customer-attributed
+   * period total (CustomerData kpis.totalRevenue for the same org, scope and
+   * period). A second unscoped query here would divide scoped revenue by
+   * whole-org revenue and leak hidden subsidiaries' figures into the share —
+   * so the total is passed in, never re-derived.
+   */
+  periodTotal: string,
 ): Promise<Profitability> {
   // Job-costed margins join `projects`. When Projects is off that register is
   // not a live module — an empty result is not "no jobs this period".
@@ -629,35 +637,6 @@ export async function customerProfitability(
     c.totalRevenue = add(c.totalRevenue, revenue);
     c.totalCost = add(c.totalCost, costs);
   }
-
-  // The leak share divides by the period's recognized revenue across every
-  // customer — not just the project-tagged slice below. A leak is a share of
-  // the period, so the denominator reads the same income legs without the
-  // project filter, translated per posting day like every other flow.
-  const periodLegs = ((await db.execute(sql`
-    with ew as materialized (
-      select id, org_id, posting_date from journal_entries
-       where posting_date >= ${from} and posting_date <= ${to}
-         ${orgId ? sql`and org_id = ${orgId}` : sql``}
-         and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
-    )
-    select sub.base_currency as func,
-      e.posting_date::date as day,
-      -sum(case when a.type in ${REVENUE_TYPES} then l.amount else 0 end) as revenue
-    from ew e
-    join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
-    join accounts a on a.id = l.account_id and a.org_id = l.org_id
-    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-    where a.type in (${PNL_TYPES_SQL})
-      ${orgFilter}
-    group by sub.base_currency, e.posting_date::date
-  `))).rows as unknown as { func: string | null; day: string; revenue: CustomerSqlNumeric }[];
-  const periodCtx = await flowRates(orgId, periodLegs.map((leg) => ({
-    func: leg.func ?? null,
-    date: String(leg.day).slice(0, 10),
-  })));
-  const periodTotal = sum(periodLegs.map((leg) =>
-    mulDecimal(String(leg.revenue ?? 0), periodCtx.rateAt(leg.func ?? null, String(leg.day).slice(0, 10)))));
 
   // Profit tiers and the leak definition read the effective scoring config:
   // tiers and leaks are policy, never absolute amounts in the code.
@@ -921,9 +900,12 @@ export interface ConcentrationSummary {
 /**
  * The concentration figures the home dashboard's widgets render, read off
  * the dashboard's own KPIs rather than recomputed — one computation, every
- * surface.
+ * surface. Null when recognized revenue is not positive: shares divide by
+ * the period total, so with no revenue there is no concentration to state —
+ * an HHI of 0 would read as "perfectly diversified".
  */
-export function concentrationOf(kpis: CustomerData["kpis"]): ConcentrationSummary {
+export function concentrationOf(kpis: CustomerData["kpis"]): ConcentrationSummary | null {
+  if (cmp(kpis.totalRevenue, "0") <= 0) return null;
   return {
     hhi: kpis.hhiScaled,
     level: kpis.hhiLevel,
@@ -1109,7 +1091,7 @@ async function readCustomerData(
   const cohortActiveMonths = cfg.cohortActiveMonths!;
   const overdueInsightAt = cfg.overdueInsightCount!;
 
-  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, growthLedgerRows, cohortLedgerRows, profitData, dsoStats] = await Promise.all([
+  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, growthLedgerRows, cohortLedgerRows, dsoStats] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):
     // per-customer invoice count / INVOICED revenue / first-last dates /
     // recency / tenure. This is the billing-activity population the ledger
@@ -1386,7 +1368,6 @@ async function readCustomerData(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       group by 1, 2, 3
     `)),
-    preview || !analyticsSection('customer-intelligence', ['lifetime', 'profitability']) ? Promise.resolve(null) : customerProfitability(period, orgId, allowed),
     // The header "Avg DSO" is the ONE org DSO — the same settlement-weighted
     // trailing mean the cash cockpit, cashflow analytics, MCP cashflow tool,
     // and get_vitals read — never a second per-customer grain computed here.
@@ -1674,7 +1655,6 @@ async function readCustomerData(
   }
   // No invoices means no payment rate — never a 0% that reads as "paid nothing".
   const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : null;
-  const profitMap = new Map((profitData?.customers ?? []).map((c) => [c.customerId, c]));
 
   /* ---- assemble per-customer, CLV tiers by rank ---- */
   const enriched = base.map((c) => {
@@ -1705,6 +1685,13 @@ async function readCustomerData(
   /* ---- concentration () ---- */
   const totalRevenueExact = sum([...baseByParty.keys()].map((id) => ledgerByParty.get(id)?.recognized ?? "0"));
   const totalInvoicedExact = sum([...baseByParty.values()].map((customer) => customer.revenue));
+  // Job-costed margins join `projects` after the period total exists, so the
+  // leak share divides by the scoped, customer-attributed total above — one
+  // extra round trip after the legs it reads, instead of beside them.
+  const profitData = preview || !analyticsSection('customer-intelligence', ['lifetime', 'profitability'])
+    ? null
+    : await customerProfitability(period, orgId, allowed, strings, totalRevenueExact);
+  const profitMap = new Map((profitData?.customers ?? []).map((c) => [c.customerId, c]));
   const totalRevenuePositive = cmp(totalRevenueExact, "0") > 0;
   const byRevenue = [...enriched].sort((a, b) => cmp(b.c.revenue, a.c.revenue));
   const shareMap = new Map<string, { sharePct: number; risk: RiskLevel }>();
@@ -2083,15 +2070,18 @@ async function readCustomerData(
     : null;
   // Concentration health follows the configured per-level scores: a spread
   // book contributes near full marks, a concentrated one drags the portfolio.
+  // With no positive recognized revenue the shares — and the HHI built from
+  // them — do not exist, so the term drops out instead of awarding the
+  // low-concentration credit for an empty book.
   const concentrationHealth = hhiLevel === "high" ? concHealthHigh : hhiLevel === "moderate" ? concHealthModerate : concHealthLow;
   const intelTerms: { value: number; weight: number }[] = [{ value: championsScore, weight: intelChampions }];
   if (avgRetentionProbability !== null) intelTerms.push({ value: avgRetentionProbability, weight: intelRetention });
-  intelTerms.push({ value: concentrationHealth, weight: intelConcentration });
+  if (totalRevenuePositive) intelTerms.push({ value: concentrationHealth, weight: intelConcentration });
   if (paymentRate !== null) intelTerms.push({ value: paymentRate, weight: intelPayment });
-  // Terms with no data stay out; when no weighted term is left the portfolio
-  // has no intelligence score — null with a named remedy, never a 0 that
-  // reads as "scored worst".
-  const intelligenceScore = compositeScoreOf(intelTerms);
+  // Terms with no data stay out; with no customers — or billed customers but
+  // no recognized revenue — the portfolio has no intelligence score: null
+  // with a named remedy, never a number that grades an empty book.
+  const intelligenceScore = rows.length === 0 || !totalRevenuePositive ? null : compositeScoreOf(intelTerms);
   const intelligence: CustomerData["intelligence"] = intelligenceScore === null
     ? { score: null, reason: strings.intelligenceUnavailable() }
     : {

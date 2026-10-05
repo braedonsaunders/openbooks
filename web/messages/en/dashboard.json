@@ -324,6 +324,7 @@
   },
   "concentrationHint": "{level} · top {share}",
   "atRiskCount": "{count, plural, one {# customer} other {# customers}}",
+  "concentrationNoRevenue": "No recognized customer revenue in {period}",
   "churnScore": "churn score {score}",
   "analytics": {
     "loading": "Figures are not available yet.",

@@ -324,6 +324,7 @@
   },
   "concentrationHint": "{level} · maior {share}",
   "atRiskCount": "{count, plural, one {# cliente} other {# clientes}}",
+  "concentrationNoRevenue": "Sem receita reconhecida de clientes em {period}",
   "churnScore": "pontuação de evasão {score}",
   "analytics": {
     "loading": "Os números ainda não estão disponíveis.",

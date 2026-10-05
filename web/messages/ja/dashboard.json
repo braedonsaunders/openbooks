@@ -324,6 +324,7 @@
   },
   "concentrationHint": "{level}・上位 {share}",
   "atRiskCount": "{count, plural, one {# 社} other {# 社}}",
+  "concentrationNoRevenue": "{period}の認識済み顧客収益がありません",
   "churnScore": "離反スコア {score}",
   "analytics": {
     "loading": "数値はまだ利用できません。",
