@@ -3211,7 +3211,8 @@
       "average": "Moyenne",
       "dueDate": "Échéance",
       "history": "Historique",
-      "pushed": "Repoussé"
+      "pushed": "Repoussé",
+      "deferredFrom": "reporté depuis le {date}"
     },
     "netChange": "Variation nette",
     "pagination": {
@@ -3239,6 +3240,18 @@
     "tabs": {
       "apOutflows": "Sorties AP",
       "arInflows": "Entrées AR"
+    },
+    "breakdownTypes": {
+      "scheduled": "Planifié",
+      "sourceData": "Données source",
+      "sourceMonth": "Mois source",
+      "historical": "Historique",
+      "projection": "Projection",
+      "bankRegister": "Relevé bancaire",
+      "thisWeekApplied": "Cette semaine (appliqué)",
+      "formula": "Formule",
+      "info": "Info",
+      "note": "Note"
     }
   },
   "categoryManager": {

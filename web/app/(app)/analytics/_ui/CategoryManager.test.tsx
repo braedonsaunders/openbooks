@@ -22,6 +22,7 @@ const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/en")).default;
 const { CategoryManager } = await import("./CategoryManager");
 const { MoneyProvider } = await import("../../../../components/money-provider");
+const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -155,7 +156,9 @@ test("a new draft names its frequency explicitly instead of showing one and savi
       root.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
-            <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+            <BusinessDateProvider today="2026-09-01">
+              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+            </BusinessDateProvider>
           </MoneyProvider>
         </NextIntlClientProvider>,
       );
@@ -215,7 +218,9 @@ test("no subsidiary UI without visible subsidiaries", async () => {
       root.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
-            <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+            <BusinessDateProvider today="2026-09-01">
+              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+            </BusinessDateProvider>
           </MoneyProvider>
         </NextIntlClientProvider>,
       );

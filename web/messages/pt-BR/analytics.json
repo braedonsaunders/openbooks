@@ -3211,7 +3211,8 @@
       "average": "Média",
       "dueDate": "Vencimento",
       "history": "Histórico",
-      "pushed": "Adiado"
+      "pushed": "Adiado",
+      "deferredFrom": "adiado de {date}"
     },
     "netChange": "Variação líquida",
     "pagination": {
@@ -3239,6 +3240,18 @@
     "tabs": {
       "apOutflows": "Saídas de contas a pagar",
       "arInflows": "Entradas de contas a receber"
+    },
+    "breakdownTypes": {
+      "scheduled": "Agendado",
+      "sourceData": "Dados de origem",
+      "sourceMonth": "Mês de origem",
+      "historical": "Histórico",
+      "projection": "Projeção",
+      "bankRegister": "Extrato bancário",
+      "thisWeekApplied": "Esta semana (aplicado)",
+      "formula": "Fórmula",
+      "info": "Info",
+      "note": "Nota"
     }
   },
   "categoryManager": {

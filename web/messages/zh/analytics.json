@@ -3211,7 +3211,8 @@
       "average": "平均",
       "dueDate": "到期日",
       "history": "历史",
-      "pushed": "顺延"
+      "pushed": "顺延",
+      "deferredFrom": "自{date}起递延"
     },
     "netChange": "净变动",
     "pagination": {
@@ -3239,6 +3240,18 @@
     "tabs": {
       "apOutflows": "应付流出",
       "arInflows": "应收流入"
+    },
+    "breakdownTypes": {
+      "scheduled": "已计划",
+      "sourceData": "来源数据",
+      "sourceMonth": "来源月份",
+      "historical": "历史",
+      "projection": "预测",
+      "bankRegister": "银行登记",
+      "thisWeekApplied": "本周（已应用）",
+      "formula": "公式",
+      "info": "信息",
+      "note": "备注"
     }
   },
   "categoryManager": {

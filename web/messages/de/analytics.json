@@ -3211,7 +3211,8 @@
       "average": "Durchschnitt",
       "dueDate": "Fälligkeit",
       "history": "Historie",
-      "pushed": "Geschoben"
+      "pushed": "Geschoben",
+      "deferredFrom": "übertragen vom {date}"
     },
     "netChange": "Nettoänderung",
     "pagination": {
@@ -3239,6 +3240,18 @@
     "tabs": {
       "apOutflows": "AP-Abflüsse",
       "arInflows": "AR-Zuflüsse"
+    },
+    "breakdownTypes": {
+      "scheduled": "Geplant",
+      "sourceData": "Quelldaten",
+      "sourceMonth": "Quellmonat",
+      "historical": "Historisch",
+      "projection": "Prognose",
+      "bankRegister": "Bankregister",
+      "thisWeekApplied": "Diese Woche (angewendet)",
+      "formula": "Formel",
+      "info": "Info",
+      "note": "Hinweis"
     }
   },
   "categoryManager": {

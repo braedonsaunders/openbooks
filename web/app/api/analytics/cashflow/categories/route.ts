@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
@@ -257,13 +257,13 @@ async function clean(
     }
     // The persisted payment anchor pins the monthly/biweekly phase so moving
     // the forecast date never rephases the schedule. A writer that omits it
-    // gets today stamped (stable from then on); a malformed one refuses.
-    // The forecast also accepts legacy rows without it (they step from the
-    // horizon start, as before) so the backfill is the only migration path
-    // that needs to exist.
+    // gets the org business day stamped (stable from then on); a malformed
+    // one refuses. The forecast also accepts legacy rows without it (they
+    // step from the horizon start, as before) so the backfill is the only
+    // migration path that needs to exist.
     const rawAnchor = c.anchorDate;
     if (rawAnchor === undefined || rawAnchor === null || rawAnchor === "") {
-      out.anchorDate = new Date().toISOString().slice(0, 10);
+      out.anchorDate = await businessToday(orgId);
     } else if (typeof rawAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawAnchor) && !Number.isNaN(Date.parse(`${rawAnchor}T00:00:00Z`))) {
       const [y, m, d] = rawAnchor.split("-").map(Number);
       if (m! < 1 || m! > 12) return bad(GENERIC_CATEGORY_ERROR);

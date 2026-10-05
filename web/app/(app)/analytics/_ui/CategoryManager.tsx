@@ -7,6 +7,7 @@ import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
 import { Button, Select, cn } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { ForecastCategory, ForecastCategoryMethod } from '../../../../lib/cash/core'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { Panel } from './Panel'
@@ -100,6 +101,7 @@ export function CategoryManager({
   const t = useTranslations('analytics.categoryManager')
   const tForm = useTranslations('analytics.categoryManager.form')
   const tMethods = useTranslations('analytics.categoryManager.methods')
+  const tCommon = useTranslations('common')
   const [cats, setCats] = useState<ForecastCategory[]>(initialCategories)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -122,18 +124,30 @@ export function CategoryManager({
   const reload = async (): Promise<ForecastCategory[] | null> => {
     try {
       const r = await fetch('/api/analytics/cashflow/categories')
-      if (!r.ok) return null
+      // The status is checked first: a refused list load names its reason
+      // instead of silently keeping the last known list.
+      if (!r.ok) {
+        setMsg(await readApiErrorMessage(r, tCommon('feedback.loadFailed')))
+        return null
+      }
       const j = await r.json()
       applyRemote(j)
       const fresh = (j as { categories?: unknown }).categories
       return Array.isArray(fresh) ? fresh as ForecastCategory[] : null
-    } catch { return null /* keep the last known list */ }
+    } catch { return null /* keep the last known list on a network failure */ }
   }
   useEffect(() => {
     fetch('/api/analytics/cashflow/categories')
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) {
+          setMsg(await readApiErrorMessage(r, tCommon('feedback.loadFailed')))
+          return null
+        }
+        return r.json()
+      })
       .then((j) => { applyRemote(j) })
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const glAccounts = accountOptions.filter((a) => !a.type || !['asset_bank', 'liability_card'].includes(a.type))
@@ -195,6 +209,9 @@ export function CategoryManager({
   // Manual amounts and card thresholds are forecast (presentation currency)
   // amounts: label them with the currency code instead of a bare "$".
   const { currency: presentationCode } = useMoney()
+  // The org business day behind the schedule anchor default — never the
+  // browser UTC clock.
+  const businessToday = useBusinessToday()
   const openEditor = (idx: number) => {
     setEditIdx(idx)
     // A new draft names its frequency explicitly: the select shows Weekly
@@ -215,7 +232,7 @@ export function CategoryManager({
     // editor never set one (the API stamps it too, but the draft should show
     // the phase the forecast will use before it saves).
     if (clean.method === 'manual_recurring' && !clean.anchorDate) {
-      clean.anchorDate = new Date().toISOString().slice(0, 10)
+      clean.anchorDate = businessToday
     }
     if (draft.method === 'vendor_payment_history' || draft.method === 'vendor_recurring_average') {
       clean.partyName = vendorOptions.find((v) => v.id === (clean.partyIds?.[0] ?? clean.partyId))?.name

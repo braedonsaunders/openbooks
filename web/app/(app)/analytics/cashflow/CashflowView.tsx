@@ -87,6 +87,18 @@ export function CashflowView({ data: initialData }: { data: CashflowData }) {
   )
 }
 
+/**
+ * The locale's narrow week unit ("w" in en) behind the runway figure —
+ * never a hardcoded English suffix.
+ */
+function narrowWeekUnit(locale: string): string {
+  try {
+    return new Intl.NumberFormat(locale, { style: 'unit', unit: 'week', unitDisplay: 'narrow' }).formatToParts(1).find((p) => p.type === 'unit')?.value ?? 'w'
+  } catch {
+    return 'w'
+  }
+}
+
 /* ---------------------------------------------------------------- Overview */
 function OverviewTab({ data }: { data: CashflowData }) {
   const t = useTranslations('analytics.cashflow')
@@ -110,7 +122,7 @@ function OverviewTab({ data }: { data: CashflowData }) {
         <Vital icon={ShieldCheck} ring="from-sky-500 to-blue-500" label={t('vitals.arCoverage')} value={s.arCoverage === null ? '—' : `${formatExactRatio(s.arCoverage)}×`} hint={t('vitals.arHint')} />
         <Vital icon={RefreshCw} ring="from-teal-500 to-emerald-500" label={t('vitals.cashCycle')} value={`${s.dso ?? '—'} / ${s.dpo ?? '—'}`} hint={t('vitals.cashCycleHint')} split />
         <Vital icon={ArrowLeftRight} ring={compareMoney(s.netChange, '0.0000') >= 0 ? 'from-emerald-500 to-teal-500' : 'from-red-500 to-orange-500'} label={t('vitals.netFlow')} value={money(s.netChange)} hint={t('vitals.netFlowHint')} />
-        <Vital icon={Route} ring="from-indigo-500 to-violet-500" label={t('vitals.runway')} value={s.runwayWeeks === null ? '∞' : `${formatExactRatio(s.runwayWeeks, 1)}w`} hint={s.runwayStatus === 'critical' ? t('vitals.runwayCritical') : s.runwayStatus === 'caution' ? t('vitals.runwayCaution') : t('vitals.runwayHealthy')} status={s.runwayStatus} />
+        <Vital icon={Route} ring="from-indigo-500 to-violet-500" label={t('vitals.runway')} value={s.runwayWeeks === null ? '∞' : `${formatExactRatio(s.runwayWeeks, 1)}${narrowWeekUnit(locale)}`} hint={s.runwayStatus === 'critical' ? t('vitals.runwayCritical') : s.runwayStatus === 'caution' ? t('vitals.runwayCaution') : t('vitals.runwayHealthy')} status={s.runwayStatus} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -167,6 +179,9 @@ function AgingPanel({ title, side, accent, unplacedKind }: { title: string; side
 /* --------------------------------------------------------- Category Analysis */
 function CategoryTab({ data }: { data: CashflowData }) {
   const t = useTranslations('analytics.cashflow')
+  // Method names live with the category editor's catalog (one translated set
+  // for the method codes, reused here instead of a second copy).
+  const tMethods = useTranslations('analytics.categoryManager')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const [side, setSide] = useState<'ar' | 'ap'>('ap')
@@ -196,7 +211,7 @@ function CategoryTab({ data }: { data: CashflowData }) {
                     <span className={cn('mr-2 inline-block h-2 w-2 rounded-full', c.direction === 'inflow' ? 'bg-emerald-500' : 'bg-red-500')} />
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </SharedTableCell>
-                  <SharedTableCell className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{c.method.replace(/_/g, ' ')}</span></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{tMethods(`${c.method}.label`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{c.logic || '—'}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(divideMoney(c.total, String(Math.max(1, c.weekly.length))))}</SharedTableCell>
                   <SharedTableCell className={cn('px-4 py-2.5 text-right font-medium tabular-nums', c.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(c.total)}</SharedTableCell>
