@@ -3745,6 +3745,7 @@
       "customerSku": "客户商品编号",
       "paymentKind": "发放形式",
       "nonCashAccountId": "非现金福利结算账户",
+      "unitOfMeasure": "计量单位",
       "family": "计划类型",
       "legalEntityId": "法人实体",
       "deliveryMethod": "发放方式",
@@ -3920,6 +3921,7 @@
       "benefitFrequency": "衡量频率：按月、按季、按年、项目完成或手动。",
       "benefitPeriodBasis": "按季和按年项目注明日历或财年期间。",
       "paymentKind": "非现金福利保留已配置的税务处理，但不会额外以现金支付其价值。",
+      "unitOfMeasure": "该项目单位的计量内容。工时行计入所有工时基数——小时费率、福利工时基数、可保险工时和工时报告。数量行（趟次、餐补、激励单位）支付其金额，但永不计为工时。按小时计费的项目始终使用工时。",
       "nonCashAccountId": "请使用预付资产、供应商清算负债或费用备抵科目。工资核算借记福利费用并贷记此科目；向供应商的采购必须使用同一清算科目，以免重复计算费用。费用备抵科目（与费用科目不同）适用于成本已计入费用的福利，例如公司车辆的私人使用。",
       "zonedDateTime": "输入包含 Z 或明确时区偏移的 ISO 时间戳，例如 2026-10-01T09:00:00-04:00。偏移将原样保留。",
       "ianaTimezone": "输入 IANA 时区，例如 Asia/Shanghai。"
@@ -4506,6 +4508,10 @@
       "payPaymentKind": {
         "cash": "现金薪酬",
         "nonCash": "非现金福利"
+      },
+      "payUnitOfMeasure": {
+        "hours": "工时",
+        "quantity": "数量"
       },
       "retentionRegions": {
         "all": "所有区域",

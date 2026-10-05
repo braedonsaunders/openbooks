@@ -392,6 +392,7 @@
   },
   "runType": {
     "regular": "Normal",
+    "supplemental": "Folha complementar",
     "bonus": "Bônus fora do ciclo",
     "termination": "Acerto final"
   },
@@ -399,6 +400,7 @@
     "runType": "Tipo de folha",
     "runTypeHint": {
       "regular": "A folha normal do cronograma: salário, horas aprovadas, componentes e descontos recorrentes.",
+      "supplemental": "Segunda folha periódica dentro de um período já aberto — um pagamento de férias ou uma correção de horas tardia. Tributada pelo método periódico; confirme as datas do período, que não avançam automaticamente.",
       "bonus": "Pagamento fora do ciclo para bônus e comissões. Sem salário, horas ou descontos recorrentes; os proventos são tributados pelo método de bônus.",
       "termination": "Pagamento final para funcionários desligados. Inclui o pagamento do saldo de férias acumulado."
     },
@@ -1010,6 +1012,12 @@
       "title": "Pagamento de feriados legais",
       "description": "Calcula o pagamento de feriados legais e adicionais de feriado trabalhado a cada folha, pela fórmula declarada pela jurisdição do funcionário. Funcionários de jurisdição sem fórmula declarada são recusados nominalmente quando há feriado no período.",
       "enabled": "Calcular pagamento de feriados legais"
+    },
+    "supplementalTax": {
+      "title": "Folhas complementares",
+      "description": "Como o imposto de renda é calculado quando duas folhas periódicas compartilham um período de pagamento. Por padrão, cada folha é tributada como seu próprio pagamento periódico; o acumulado do período tributa a renda do período até a data como um único pagamento. As contribuições (CPP, EI e contrapartes) sempre usam a base acumulada do período.",
+      "periodCumulative": "Acumulado do período",
+      "perRun": "Cada folha como pagamento periódico próprio (padrão)"
     },
     "employerFacts": {
       "loading": "Carregando dados do empregador…",

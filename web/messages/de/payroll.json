@@ -392,6 +392,7 @@
   },
   "runType": {
     "regular": "Regulär",
+    "supplemental": "Ergänzungslauf",
     "bonus": "Außerplanmäßiger Bonus",
     "termination": "Schlussabrechnung"
   },
@@ -399,6 +400,7 @@
     "runType": "Laufart",
     "runTypeHint": {
       "regular": "Die normale Abrechnung des Plans: Gehalt, genehmigte Zeiten, wiederkehrende Bestandteile und Abzüge.",
+      "supplemental": "Zweiter periodischer Lauf innerhalb einer bereits geöffneten Periode — etwa eine Urlaubsauszahlung oder eine nachträgliche Stundenkorrektur. Nach der regulären Methode besteuert; prüfen Sie die Periodendaten, sie werden nicht automatisch fortgeschrieben.",
       "bonus": "Außerplanmäßige Zahlung für Boni und Provisionen. Kein Gehalt, keine Zeiten, keine wiederkehrenden Abzüge; Bezüge werden nach der Bonusmethode besteuert.",
       "termination": "Schlussabrechnung für austretende Mitarbeiter. Enthält die Auszahlung des angesammelten Urlaubsguthabens."
     },
@@ -1010,6 +1012,12 @@
       "title": "Feiertagsvergütung",
       "description": "Berechnen Sie Feiertagsvergütung und Feiertagsarbeitszuschläge auf jedem Lohnlauf, mit der Formel, die die Jurisdiktion des Mitarbeiters vorsieht. Mitarbeiter in einer Jurisdiktion ohne vorgesehene Formel werden namentlich abgewiesen, wenn ein Feiertag in die Periode fällt.",
       "enabled": "Feiertagsvergütung berechnen"
+    },
+    "supplementalTax": {
+      "title": "Ergänzungsläufe",
+      "description": "Wie die Einkommensteuer berechnet wird, wenn sich zwei periodische Läufe eine Abrechnungsperiode teilen. Standardmäßig wird jeder Lauf als eigene periodische Zahlung besteuert; periodenkumuliert besteuert stattdessen das bis dato angefallene Periodeneinkommen als eine Zahlung. Beiträge (CPP, EI und Gegenstücke) verwenden immer die periodenkumulierte Basis.",
+      "periodCumulative": "Periodenkumuliert",
+      "perRun": "Jeder Lauf als eigene periodische Zahlung (Standard)"
     },
     "employerFacts": {
       "loading": "Arbeitgeberangaben werden geladen…",

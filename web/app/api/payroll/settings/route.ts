@@ -54,6 +54,7 @@ const payrollSettingsSchema = z.looseObject({
   ...remittanceVendorFields,
   ...remittanceFrequencyFields,
   eftFallbackToCheque: z.boolean().optional(),
+  supplementalTaxMethod: z.enum(['period_cumulative', 'per_run']).optional(),
   wagesTo: z.enum(['expense', 'labor_clearing']).optional(),
   t4Transmitter: z.strictObject({
     bn: z.string().nullable().optional(),
@@ -414,6 +415,7 @@ export const PUT = defineRoute({
       ...declaredRemittanceVendorSettingsKeys(),
       ...declaredRemittanceFrequencySettingsKeys(),
       'eftFallbackToCheque',
+      'supplementalTaxMethod',
       'wagesTo',
       't4Transmitter',
       'stubPassword',
@@ -527,6 +529,12 @@ export const PUT = defineRoute({
         return NextResponse.json({ error: `invalid eftFallbackToCheque: must be true or false — got "${suppliedValue(body.eftFallbackToCheque)}"; pass true to fall back to a cheque when bank details are missing, or false to block the run instead` }, { status: 422 })
       }
       settings.eftFallbackToCheque = body.eftFallbackToCheque
+    }
+    if ('supplementalTaxMethod' in body) {
+      if (body.supplementalTaxMethod !== 'period_cumulative' && body.supplementalTaxMethod !== 'per_run') {
+        return NextResponse.json({ error: `invalid supplementalTaxMethod: must be "period_cumulative" or "per_run" — got "${suppliedValue(body.supplementalTaxMethod)}"; pass one of those values or omit supplementalTaxMethod to leave the setting unchanged` }, { status: 422 })
+      }
+      settings.supplementalTaxMethod = body.supplementalTaxMethod
     }
     if ('wagesTo' in body) {
       if (body.wagesTo !== 'expense' && body.wagesTo !== 'labor_clearing') {

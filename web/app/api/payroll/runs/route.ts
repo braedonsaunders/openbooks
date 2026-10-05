@@ -23,7 +23,7 @@ const requestBodySchema = z.strictObject({
   periodStart: optionalCalendarDate,
   periodEnd: optionalCalendarDate,
   payDate: optionalCalendarDate,
-  runType: z.enum(['regular', 'bonus', 'termination']).default('regular'),
+  runType: z.enum(['regular', 'bonus', 'termination', 'supplemental']).default('regular'),
   employeePartyIds: z.array(z.string().uuid()).default([]),
 }).refine((body) => body.runType !== 'termination' || body.employeePartyIds.length > 0, {
   message: 'a final pay run must name the employees it pays', path: ['employeePartyIds'],
@@ -76,7 +76,7 @@ export const POST = defineRoute({
     const body = parsedBody.data
     const payScheduleId = body.payScheduleId
     const requestedRunType = body.runType
-    const runType: PayRunType = requestedRunType === 'bonus' || requestedRunType === 'termination' ? requestedRunType : 'regular'
+    const runType: PayRunType = requestedRunType === 'bonus' || requestedRunType === 'termination' || requestedRunType === 'supplemental' ? requestedRunType : 'regular'
     const periodStart = body.periodStart
     const periodEnd = body.periodEnd
     const payDate = body.payDate

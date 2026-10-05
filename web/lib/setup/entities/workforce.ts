@@ -2,7 +2,7 @@
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { featureEnabled } from '@openbooks/engine/src/organization/feature-registry.ts'
 import { NON_CASH_OFFSET_ACCOUNT_TYPES } from '@openbooks/engine/src/payroll/non-cash-offset-types.ts'
-import { OVERHEAD_RATE_KINDS, OVERHEAD_RATE_METHODS, PAY_FREQUENCIES, PAY_COMPONENT_KINDS, PAY_COMPONENT_COUNTRIES, PAY_COMPONENT_BASES, PAY_SUPPLEMENTAL_WAGE_CATEGORIES, PAY_STATUTORY_EXEMPTION_CATEGORIES, PAY_TAX_TREATMENTS, PAY_PROTECTION_BASES, PAY_PROTECTED_BASES, PAYROLL_PROGRAM_TYPES, PAYROLL_REMITTER_TYPES, ENTITLEMENT_UNITS, ENTITLEMENT_DIRECTIONS, ENTITLEMENT_ACCRUAL_METHODS, ENTITLEMENT_CAP_BEHAVIORS } from '../options'
+import { OVERHEAD_RATE_KINDS, OVERHEAD_RATE_METHODS, PAY_FREQUENCIES, PAY_COMPONENT_KINDS, PAY_COMPONENT_COUNTRIES, PAY_COMPONENT_BASES, PAY_UNIT_OF_MEASURE, PAY_SUPPLEMENTAL_WAGE_CATEGORIES, PAY_STATUTORY_EXEMPTION_CATEGORIES, PAY_TAX_TREATMENTS, PAY_PROTECTION_BASES, PAY_PROTECTED_BASES, PAYROLL_PROGRAM_TYPES, PAYROLL_REMITTER_TYPES, ENTITLEMENT_UNITS, ENTITLEMENT_DIRECTIONS, ENTITLEMENT_ACCRUAL_METHODS, ENTITLEMENT_CAP_BEHAVIORS } from '../options'
 import { PAY_DERIVED_RULE_ENTITIES } from '../payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from '../payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from '../hrm-leave'
@@ -362,6 +362,14 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       // is the fallback for surfaces that render without resolving.
       { key: 'country', kind: 'select', options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-component-countries' },
       { key: 'basis', kind: 'select', keepDefault: true, defaultValue: 'fixed_amount', options: PAY_COMPONENT_BASES },
+      // What the component's units count. Hours lines feed every hours
+      // basis; quantity lines (trips, meals, incentive units) pay their
+      // amount but never count as hours. Per-hour components always use
+      // hours — the pay_components check refuses the other combination.
+      {
+        key: 'unitOfMeasure', kind: 'select', keepDefault: true, defaultValue: 'hours',
+        options: PAY_UNIT_OF_MEASURE, helpTextKey: 'fieldHelp.unitOfMeasure',
+      },
       { key: 'value', kind: 'decimal' },
       { key: 'taxable', kind: 'boolean', defaultValue: true },
       { key: 'pensionable', kind: 'boolean', defaultValue: true },

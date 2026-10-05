@@ -262,17 +262,19 @@ export async function PaydayTabSlot() {
   const authz = await getAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
-  const [paymentMethods, stubPassword, encryptionAvailable, bankProfiles] = await Promise.all([
+  const [paymentMethods, stubPassword, encryptionAvailable, bankProfiles, settings] = await Promise.all([
     payrollPaymentMethodSettings(orgId),
     stubPasswordPolicy(orgId),
     pdfEncryptionAvailable(),
     payrollBankProfiles(orgId),
+    payrollSettings(orgId),
   ])
   return (
     <PayrollPaydaySettings
       paymentMethods={paymentMethods}
       stubPassword={stubPassword}
       encryptionAvailable={encryptionAvailable}
+      supplementalTaxMethod={settings.supplementalTaxMethod}
       bankProfiles={bankProfiles.map((p) => ({
         id: p.id,
         name: p.name,

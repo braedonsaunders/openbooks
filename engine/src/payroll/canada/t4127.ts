@@ -143,6 +143,18 @@ export interface T4127Input {
   pensionableNonPeriodic?:string;
   insurableNonPeriodic?:string;
   qpipNonPeriodic?:string;
+  /**
+   * CPP/EI/QPIP actually withheld on THIS run, for the K2 credits and the F5
+   * deduction. A supplemental-period share prices contributions on the
+   * period-to-date base but taxes each run as its own periodic pay, so the
+   * credits price off this run's withheld share rather than the period
+   * total. Absent, each reads the computed amount and every formula below
+   * is byte-identical to the guide path.
+   */
+  cppWithheld?: string;
+  cpp2Withheld?: string;
+  eiWithheld?: string;
+  qpipWithheld?: string;
   ytd?: T4127Ytd;
 }
 
@@ -338,7 +350,14 @@ export function calculateT4127(input: T4127Input): T4127Result {
   }
 
   // ---- F5: enhanced-CPP income deduction and its periodic/bonus split ------
-  const F5 = r2(mulRatioCents(C, rate6(plan.addlRate), rate6(plan.totalRate)) + C2);
+  // The credit bases below price off what was actually withheld on this run
+  // (the supplemental-period share); every other caller leaves the overrides
+  // absent and prices off the computed amounts, exactly as the guide states.
+  const creditCpp = input.cppWithheld === undefined ? C : U(input.cppWithheld);
+  const creditCpp2 = input.cpp2Withheld === undefined ? C2 : U(input.cpp2Withheld);
+  const creditEi = input.eiWithheld === undefined ? EI : U(input.eiWithheld);
+  const creditQpip = input.qpipWithheld === undefined ? qpip : U(input.qpipWithheld);
+  const F5 = r2(mulRatioCents(creditCpp, rate6(plan.addlRate), rate6(plan.totalRate)) + creditCpp2);
   let F5A = F5;
   let F5B = ZERO;
   const pensionableBonus=input.pensionableNonPeriodic===undefined?bonus:U(input.pensionableNonPeriodic);
@@ -411,20 +430,20 @@ export function calculateT4127(input: T4127Input): T4127Result {
     // (D × base/total) + (PR × C × base/total): two parentheses, each rounded once.
     cppCreditBasis = bmin(
       maxBaseProrated,
-      baseShare(priorCpp, plan) + baseShare(mulInt(C, PR), plan),
+      baseShare(priorCpp, plan) + baseShare(mulInt(creditCpp, PR), plan),
     );
-    eiCreditBasis = bmin(eiMax, priorEi + mulInt(EI, PR));
+    eiCreditBasis = bmin(eiMax, priorEi + mulInt(creditEi, PR));
   } else {
     // (P × C × base/total): one parenthesis — multiply through, round once.
-    const maxReached = priorCpp + C >= maxTotalProrated && maxTotalProrated > ZERO;
+    const maxReached = priorCpp + creditCpp >= maxTotalProrated && maxTotalProrated > ZERO;
     cppCreditBasis = input.cppExempt || PM === 0
       ? ZERO
-      : maxReached ? maxBaseProrated : bmin(baseShare(mulInt(C, P), plan), maxBaseProrated);
-    const eiMaxReached = priorEi + EI >= eiMax;
-    eiCreditBasis = input.eiExempt ? ZERO : eiMaxReached ? eiMax : bmin(mulInt(EI, P), eiMax);
+      : maxReached ? maxBaseProrated : bmin(baseShare(mulInt(creditCpp, P), plan), maxBaseProrated);
+    const eiMaxReached = priorEi + creditEi >= eiMax;
+    eiCreditBasis = input.eiExempt ? ZERO : eiMaxReached ? eiMax : bmin(mulInt(creditEi, P), eiMax);
   }
   const projectedQpip=averaging?project((input.qpipInsurable===undefined?IE:U(input.qpipInsurable))-opt(input.qpipNonPeriodic)+U(averaging.qpipPeriodic))+U(averaging.qpipNonPeriodic):ZERO;
-  const qpipCreditBasis = isQuebec ? bmin(averaging?mulRateCents(max0(projectedQpip),rates.qpip.employeeRate):mulInt(qpip,P), U(rates.qpip.maxEmployee)) : ZERO;
+  const qpipCreditBasis = isQuebec ? bmin(averaging?mulRateCents(max0(projectedQpip),rates.qpip.employeeRate):mulInt(creditQpip,P), U(rates.qpip.maxEmployee)) : ZERO;
 
   function k2At(lowestRate: string): bigint {
     let credit = mulRateCents(cppCreditBasis, lowestRate) + mulRateCents(eiCreditBasis, lowestRate);

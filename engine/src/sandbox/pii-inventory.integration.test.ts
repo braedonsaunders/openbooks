@@ -1462,6 +1462,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pay_components.protection_base",
   "pay_components.system_key",
   "pay_components.tax_treatment",
+  "pay_components.unit_of_measure",
   "pay_derived_rules.code",
   "pay_derived_rules.costing_mode",
   "pay_derived_rules.excluded_job_titles",

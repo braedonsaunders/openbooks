@@ -43,13 +43,17 @@ export function nextPeriod(schedule: RunSchedule): { start: string; end: string;
 export function runPayload(
   scheduleId: string,
   shown: { start: string; end: string; payDate: string },
-  runType: 'regular' | 'bonus' | 'termination',
+  runType: 'regular' | 'bonus' | 'termination' | 'supplemental',
   paidEmployees: readonly string[],
   touched: boolean,
 ): Record<string, unknown> {
+  // A supplemental run pays inside an already-open period, so it always
+  // names its dates explicitly: the derived next period belongs to the week
+  // after, and the engine refuses a supplemental run without explicit dates.
+  const explicitDates = touched || runType === 'supplemental'
   return {
     payScheduleId: scheduleId,
-    ...(touched
+    ...(explicitDates
       ? { periodStart: shown.start, periodEnd: shown.end, payDate: shown.payDate }
       : {}),
     runType,
@@ -123,7 +127,7 @@ export function NewRunButton({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
-  const [runType, setRunType] = useState<'regular' | 'bonus' | 'termination'>('regular')
+  const [runType, setRunType] = useState<'regular' | 'bonus' | 'termination' | 'supplemental'>('regular')
   const [paidEmployees, setPaidEmployees] = useState<string[]>([])
   const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0]
   const derived = schedule ? nextPeriod(schedule) : { start: '', end: '', payDate: '' }
@@ -173,7 +177,11 @@ export function NewRunButton({
   // A final pay run without a named scope would pay and drain the whole
   // schedule; the engine refuses one, so the dialog never proposes one either.
   const unscopedFinalPay = runType === 'termination' && paidEmployees.length === 0
-  const invalid = !scheduleId || badWindow || notBegun || unscopedFinalPay
+  // A supplemental run belongs to an already-open period the dialog cannot
+  // derive (the derived dates are the week after), so the operator must
+  // confirm the dates; the engine refuses one without explicit dates.
+  const unconfirmedSupplemental = runType === 'supplemental' && !touched
+  const invalid = !scheduleId || badWindow || notBegun || unscopedFinalPay || unconfirmedSupplemental
 
   if (schedules.length === 0) return null
   return (
@@ -205,6 +213,7 @@ export function NewRunButton({
               onChange={(e) => setRunType(e.target.value as typeof runType)}
             >
               <option value="regular">{t('runType.regular')}</option>
+              <option value="supplemental">{t('runType.supplemental')}</option>
               <option value="bonus">{t('runType.bonus')}</option>
               <option value="termination">{t('runType.termination')}</option>
             </Select>

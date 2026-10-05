@@ -13,7 +13,8 @@ import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
 import { add, cmp, div, mulRatio, neg, sum } from "../money/money.ts";
 import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
-import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey } from "./packs.ts";
+import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey, type SupplementalTaxMethod } from "./packs.ts";
+import type { PayPeriodPriors } from "./period-priors.ts";
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
@@ -66,6 +67,14 @@ export async function calculateStub(
     /** Rolled-back re-derivation of a COMMITTED run; writes no ledger rows. */
     simulate: boolean;
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+    /**
+     * This employee's period-to-date priors from earlier runs of the same
+     * period and schedule (undefined for the period's first run), resolved
+     * once per run by the calculation driver.
+     */
+    periodPriors?: PayPeriodPriors;
+    /** The org's supplemental income-tax method, resolved once per run. */
+    supplementalTaxMethod?: SupplementalTaxMethod;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
@@ -616,6 +625,8 @@ export async function calculateStub(
       pushStatutory, storedCertificates, certificateFor, noteAdvisory, bool,
       assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
       employerLevies,
+      periodPriors: ctx.periodPriors,
+      supplementalTaxMethod: ctx.supplementalTaxMethod,
     });
     // Per-program period bases merge here, not inside the pack pass: the
     // generic layer accumulates every declared program's base from the

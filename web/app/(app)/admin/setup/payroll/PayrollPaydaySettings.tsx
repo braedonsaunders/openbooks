@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowUpRight, CheckCircle2, CircleAlert } from 'lucide-react'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
-import { Button, Input, Label } from '@openbooks/ui'
+import { Button, Input, Label, Select } from '@openbooks/ui'
 import type { StubPasswordPolicy } from './PayrollSetupWorkspace'
 
 /**
@@ -23,6 +23,8 @@ export function PayrollPaydaySettings(props: {
   stubPassword: StubPasswordPolicy
   encryptionAvailable: boolean
   bankProfiles: { id: string; name: string; format: string; configured: boolean }[]
+  /** Stored supplemental tax method, or null when the org never chose one (the pack default applies). */
+  supplementalTaxMethod: string | null
 }) {
   const t = useTranslations('payroll.settingsPage')
   const router = useRouter()
@@ -30,6 +32,8 @@ export function PayrollPaydaySettings(props: {
   const [eftFallbackToCheque, setEftFallbackToCheque] = useState(props.paymentMethods.eftFallbackToCheque)
   const [stubPasswordEnabled, setStubPasswordEnabled] = useState(props.stubPassword.enabled)
   const [stubPasswordExpression, setStubPasswordExpression] = useState(props.stubPassword.expression)
+  // Unset reads as the pack default (each run taxed as its own periodic pay).
+  const [supplementalTaxMethod, setSupplementalTaxMethod] = useState(props.supplementalTaxMethod ?? 'per_run')
 
   async function save() {
     setBusy(true)
@@ -40,6 +44,7 @@ export function PayrollPaydaySettings(props: {
         body: JSON.stringify({
           eftFallbackToCheque,
           stubPassword: { enabled: stubPasswordEnabled, expression: stubPasswordExpression },
+          supplementalTaxMethod,
         }),
       })
       // The status is checked before the body is parsed: a non-JSON error body
@@ -118,6 +123,27 @@ export function PayrollPaydaySettings(props: {
         >
           {t('payday.eftManage')} <ArrowUpRight size={13} aria-hidden />
         </Link>
+      </section>
+
+      {/* A period shared by two periodic runs needs one income-tax answer.
+          Contributions always use the period-to-date base; this setting picks
+          the income-tax method, and names its default in the help. */}
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('supplementalTax.title')}</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('supplementalTax.description')}</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ps-supplemental-tax">{t('supplementalTax.title')}</Label>
+          <Select
+            id="ps-supplemental-tax"
+            value={supplementalTaxMethod}
+            onChange={(e) => setSupplementalTaxMethod(e.target.value)}
+          >
+            <option value="period_cumulative">{t('supplementalTax.periodCumulative')}</option>
+            <option value="per_run">{t('supplementalTax.perRun')}</option>
+          </Select>
+        </div>
       </section>
 
       {/* Emailed stubs carry wage data. The password rule is the employer's

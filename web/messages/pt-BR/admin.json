@@ -3745,6 +3745,7 @@
       "customerSku": "Código de produto do cliente",
       "paymentKind": "Forma de entrega",
       "nonCashAccountId": "Conta de compensação de benefício não monetário",
+      "unitOfMeasure": "Unidade de medida",
       "family": "Família do programa",
       "legalEntityId": "Entidade legal",
       "deliveryMethod": "Entrega",
@@ -3920,6 +3921,7 @@
       "benefitFrequency": "Frequência de medição: mensal, trimestral, anual, conclusão do projeto ou manual.",
       "benefitPeriodBasis": "Programas trimestrais e anuais nomeiam períodos de calendário ou de exercício.",
       "paymentKind": "Os benefícios não monetários mantêm o tratamento tributário configurado, mas seu valor não é pago em dinheiro.",
+      "unitOfMeasure": "O que as unidades do componente contam. Linhas de horas alimentam toda base de horas — taxas por hora, bases de horas de benefícios, horas seguráveis e relatórios de horas. Linhas de quantidade (viagens, refeições, unidades de incentivo) pagam seu valor, mas nunca contam como horas. Componentes por hora sempre usam horas.",
       "nonCashAccountId": "Use um ativo pré-pago, um passivo de compensação com o fornecedor ou uma conta redutora de despesa. A folha debita a despesa do benefício e credita esta conta; compras do fornecedor devem usar a mesma conta de compensação para não contar a despesa duas vezes. Uma conta redutora de despesa (diferente da conta de despesa) serve para um benefício cujo custo já foi lançado como despesa, como o uso pessoal de um veículo da empresa.",
       "zonedDateTime": "Digite uma data e hora ISO com Z ou deslocamento explícito, como 2026-10-01T09:00:00-04:00. O deslocamento é preservado.",
       "ianaTimezone": "Digite um fuso horário IANA, como America/Sao_Paulo."
@@ -4506,6 +4508,10 @@
       "payPaymentKind": {
         "cash": "Remuneração em dinheiro",
         "nonCash": "Benefício não monetário"
+      },
+      "payUnitOfMeasure": {
+        "hours": "Horas",
+        "quantity": "Quantidade"
       },
       "retentionRegions": {
         "all": "Todas as regiões",

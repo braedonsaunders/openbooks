@@ -392,6 +392,7 @@
   },
   "runType": {
     "regular": "Ordinaire",
+    "supplemental": "Paie complémentaire",
     "bonus": "Prime hors cycle",
     "termination": "Solde de tout compte"
   },
@@ -399,6 +400,7 @@
     "runType": "Type de paie",
     "runTypeHint": {
       "regular": "La paie ordinaire du calendrier : salaires, temps approuvé, éléments et retenues récurrents.",
+      "supplemental": "Deuxième paie périodique dans une période déjà ouverte — un paiement de vacances ou une correction d'heures tardive. Imposée selon la méthode périodique; vérifiez les dates de la période, qui n'avancent pas automatiquement.",
       "bonus": "Paie hors cycle pour primes et commissions. Ni salaire, ni temps, ni retenues récurrentes; les gains sont imposés selon la méthode des primes.",
       "termination": "Solde de tout compte des employés partants. Comprend le paiement du solde de vacances accumulé."
     },
@@ -1010,6 +1012,12 @@
       "title": "Indemnité de jour férié",
       "description": "Calculez l’indemnité de jour férié et les primes de jour férié travaillé à chaque paie, selon la formule que prévoit la juridiction de l’employé. Les employés d’une juridiction sans formule prévue sont refusés par leur nom quand un jour férié tombe dans la période.",
       "enabled": "Calculer l’indemnité de jour férié"
+    },
+    "supplementalTax": {
+      "title": "Paies complémentaires",
+      "description": "Mode de calcul de l’impôt sur le revenu lorsque deux paies périodiques partagent une période de paie. Par défaut, chaque paie est imposée comme sa propre paie périodique; le cumul de période impose le revenu de la période à ce jour comme une seule paie. Les cotisations (RPC, AE et homologues) utilisent toujours la base cumulée de la période.",
+      "periodCumulative": "Cumul de période",
+      "perRun": "Chaque paie comme paie périodique propre (défaut)"
     },
     "employerFacts": {
       "loading": "Chargement des données employeur…",

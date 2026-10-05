@@ -38,6 +38,13 @@ export interface PayrollSettings {
    * declaration (engine/src/payroll/packs.ts), never to the CRA vendor.
    */
   rqRemittancePartyId: string | null;
+  /**
+   * Supplemental-period income-tax method (orgs.settings.payroll.
+   * supplementalTaxMethod), or null when the org never chose one — the
+   * pack's default applies. A stored value outside the
+   * vocabulary reads as null here; the calculation path refuses it by name.
+   */
+  supplementalTaxMethod: "period_cumulative" | "per_run" | null;
 }
 
 export async function payrollSettings(
@@ -69,6 +76,9 @@ export async function payrollSettings(
     wagesTo: p.wagesTo === "labor_clearing" ? "labor_clearing" : "expense",
     craRemittancePartyId: p.craRemittancePartyId ?? null,
     rqRemittancePartyId: p.rqRemittancePartyId ?? null,
+    supplementalTaxMethod: p.supplementalTaxMethod === "per_run"
+      ? "per_run"
+      : p.supplementalTaxMethod === "period_cumulative" ? "period_cumulative" : null,
   };
 }
 

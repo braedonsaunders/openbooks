@@ -84,6 +84,38 @@ export type PayrollRemittanceTreatment = "tax_authority" | "external" | "interna
  */
 export type PayrollRetroactiveTreatment = "non_periodic" | "periodic";
 
+/**
+ * How the pack's statutory engine taxes a supplemental-period share — a
+ * second periodic pay inside one period. Contributions (CPP/EI and their
+ * counterparts) are always computed on the period-to-date total minus what
+ * earlier runs of the period already withheld, so a per-period exemption
+ * applies once per period. Income tax has two jurisdictional answers:
+ *
+ * - `period_cumulative` — tax the period-to-date taxable income as one
+ *   periodic pay, minus tax already withheld in the period.
+ * - `per_run` — tax each run as its own periodic pay (T4127 Option 1 on the
+ *   run's income alone, annualized by P). The contribution credits and
+ *   deductions inside the tax formula price off what the run actually
+ *   withheld (the period-cumulative share), not a standalone recomputation.
+ *
+ * The org selects one in payroll settings; the pack declares which methods
+ * it implements and its default. The withheld keys name the stub-line
+ * system keys that already-withheld tax is read from, split the way the
+ * pack's engines split it (federal / provincial).
+ */
+export type SupplementalTaxMethod = "period_cumulative" | "per_run";
+
+export interface PayrollSupplementalPayTreatment {
+  /** Income-tax methods this pack implements for supplemental-period shares. */
+  taxMethods: readonly SupplementalTaxMethod[];
+  /** The method an org gets before it chooses one (stated in the setting). */
+  defaultTaxMethod: SupplementalTaxMethod;
+  /** Withheld system keys subtracted as already-withheld federal tax. */
+  federalTaxSystemKeys: readonly string[];
+  /** Withheld system keys subtracted as already-withheld provincial tax. */
+  provincialTaxSystemKeys: readonly string[];
+}
+
 /** A treatment's declared tax base, including jurisdiction-specific wage bases. */
 export type PayrollCoreTaxBaseKey = "income" | "nonPeriodic" | "pensionable" | "insurable";
 export type PayrollStateTaxBaseKey = `state:${string}:${"income" | "nonPeriodic"}`;
@@ -683,6 +715,15 @@ export interface PayrollCountryPack {
    * off-cycle payment most employees ever receive.
    */
   retroactivePayTreatment: PayrollRetroactiveTreatment;
+  /**
+   * How a SUPPLEMENTAL-period share is taxed here (see the type). OPTIONAL:
+   * absent means the pack has not answered the question, and the generic
+   * layer refuses supplemental runs (and regular runs with period priors)
+   * for it rather than applying another pack's answer. A pack declares the
+   * income-tax methods it implements and the withheld system keys each one
+   * subtracts as "tax already withheld in the period".
+   */
+  supplementalPayTreatment?: PayrollSupplementalPayTreatment;
   /** What the generic pensionable/insurable flags mean here. See the type. */
   contributoryBases: PayrollContributoryBases;
   /**

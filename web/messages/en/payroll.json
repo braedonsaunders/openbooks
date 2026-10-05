@@ -392,6 +392,7 @@
   },
   "runType": {
     "regular": "Regular",
+    "supplemental": "Supplemental",
     "bonus": "Off-cycle bonus",
     "termination": "Final pay"
   },
@@ -399,6 +400,7 @@
     "runType": "Run type",
     "runTypeHint": {
       "regular": "The schedule's normal payroll: salary, approved time, recurring components and deductions.",
+      "supplemental": "A second periodic run inside an already-open period — a vacation payout or a late-hours correction. Taxed with the periodic method; confirm the period dates, which do not advance automatically.",
       "bonus": "Off-cycle pay for bonuses and commissions. No salary, time or recurring deductions; earnings are taxed on the bonus method.",
       "termination": "Final pay for departing employees. Includes the accrued vacation balance as a payout."
     },
@@ -1010,6 +1012,12 @@
       "title": "Statutory holiday pay",
       "description": "Calculate statutory holiday pay and worked-holiday premiums on each pay run, using the formula the employee's jurisdiction declares. Employees in a jurisdiction with no declared formula are refused by name when a holiday falls in the period.",
       "enabled": "Calculate statutory holiday pay"
+    },
+    "supplementalTax": {
+      "title": "Supplemental runs",
+      "description": "How income tax is calculated when two periodic runs share one pay period. Each run is taxed as its own periodic pay by default; period-cumulative taxes the period-to-date income as one periodic pay instead. Contributions (CPP, EI and counterparts) always use the period-to-date base.",
+      "periodCumulative": "Period-cumulative",
+      "perRun": "Each run taxed as its own periodic pay (default)"
     },
     "employerFacts": {
       "loading": "Loading employer facts…",
