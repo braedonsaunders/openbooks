@@ -3,6 +3,7 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can } from "../authz";
 import { maySeeUnion } from "../approval-doorway";
 import { analyticsConfig } from "../analytics/config";
+import { ANALYTICS_CONFIG } from "../analytics/config-spec";
 import { cashPosition } from "../cash/cash-position";
 import { normalizeMoneyValue } from "../cash/core";
 import { agingByParty } from "../reports";
@@ -15,7 +16,9 @@ import { ApplicationError } from "./errors";
  * One snapshot, one set of numbers. Every figure here comes from the SAME
  * resolver the corresponding screen renders from (the Banking cash cockpit,
  * the aging report, the approvals worklist, the close workspace), so this
- * surface can never quote a number the app would disagree with.
+ * surface can never quote a number the app would disagree with. The cash
+ * section reads the org's configured default horizon — the same setting the
+ * cockpit opens on — so both quote the same runway for the same org.
  *
  * A section the actor may not read is returned as
  * { available: false, reason } — an absent value must say why it is absent,
@@ -28,14 +31,13 @@ function unavailable(permission: string): Unavailable {
   return { available: false, reason: `requires ${permission}` };
 }
 
-const CASH_HORIZON_WEEKS = 4;
-
 async function cashSection(context: ApplicationContext) {
   if (!can(context.authz, "banking.read")) return unavailable("banking.read");
   const cfg = await analyticsConfig(context.authz.user.orgId, "cashflow");
-  const position = await cashPosition(context.authz.user.orgId, CASH_HORIZON_WEEKS, {
+  const position = await cashPosition(context.authz.user.orgId, cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks, {
     weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
     restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+    runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
   }, undefined, undefined, context.authz.allowedSubsidiaryIds);
   return {
     available: true as const,

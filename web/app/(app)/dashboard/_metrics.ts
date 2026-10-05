@@ -24,8 +24,9 @@ import { combineTotals, PNL_TYPES, statementMatrix, sumSection } from '@/lib/sta
 import type { StatementValue } from '@/lib/statement-format'
 import { groupByCustomer, type CustomerReceivable } from '@/lib/cash/ar-position'
 import { groupByVendor, type VendorPayable } from '@/lib/cash/ap-position'
-import { cashPosition } from '@/lib/cash/cash-position'
+import { cashPosition, type ApSettings } from '@/lib/cash/cash-position'
 import { analyticsConfig } from '@/lib/analytics/config'
+import { ANALYTICS_CONFIG } from '@/lib/analytics/config-spec'
 import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopePredicate } from '@/lib/agents/work-item-subsidiary-scope'
 import {
   addDays,
@@ -143,7 +144,7 @@ export type DashboardMoneyReaders = {
   paymentStats: typeof paymentStats
   profitAndLoss: typeof dashboardConsolidatedProfitAndLoss
   cashPosition: typeof cashPosition
-  cashflowConfig: (orgId: string) => Promise<{ weeklyCap: string; restrictToSafe: boolean }>
+  cashflowConfig: (orgId: string) => Promise<ApSettings & { horizonWeeks: number }>
 }
 
 const canonicalMoneyReaders: DashboardMoneyReaders = {
@@ -152,11 +153,18 @@ const canonicalMoneyReaders: DashboardMoneyReaders = {
   paymentStats,
   profitAndLoss: dashboardConsolidatedProfitAndLoss,
   cashPosition,
-  // The org's AP capacity-scheduling knobs, exactly as the banking cash page
-  // and the analytics tools build them from the cashflow analytics config.
+  // The org's cashflow knobs, exactly as the banking cash page and the
+  // analytics tools build them from the cashflow analytics config: the AP
+  // capacity settings plus the configured default horizon and runway caution.
+  // Legacy config rows without the newer keys resolve on the spec defaults.
   cashflowConfig: async (orgId: string) => {
     const cfg = await analyticsConfig(orgId, 'cashflow')
-    return { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
+    return {
+      weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
+      restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+      runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+      horizonWeeks: cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+    }
   },
 }
 
@@ -633,9 +641,10 @@ export async function loadDashboardMetrics(
       : Promise.resolve(null),
     // Whole-company liquidity off cashPosition itself — not a re-derivation
     // from its primitives, so the tile and the banking cash page cannot
-    // diverge on runway, lowest point, or projected end. Same 8-week horizon
-    // the page opens on, same AP capacity settings, same subsidiary doorway
-    // (unrestricted callers also match root-owned rows, exactly as the
+    // diverge on runway, lowest point, or projected end. The org's configured
+    // default horizon, the same AP capacity settings, the same caution
+    // threshold, the same subsidiary doorway (unrestricted callers also match
+    // root-owned rows, exactly as the
     // page's includeNullSubsidiary). A blocked FX-rate pipeline refuses
     // inside with MissingRatesError — the page answers with its rates
     // banner, the tile with no-data; anything else throws.
@@ -643,7 +652,15 @@ export async function loadDashboardMetrics(
       ? readers
         .cashflowConfig(orgId)
         .then((settings) =>
-          readers.cashPosition(orgId, 8, settings, today, subIds, authz.allowedSubsidiaryIds, subIds === undefined),
+          readers.cashPosition(
+            orgId,
+            settings.horizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+            settings,
+            today,
+            subIds,
+            authz.allowedSubsidiaryIds,
+            subIds === undefined,
+          ),
         )
         .then((p) => ({
           weeks: p.runwayWeeks,

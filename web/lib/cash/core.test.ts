@@ -172,12 +172,13 @@ test("horizon normalizer accepts the cap range and fails closed to the fallback"
     import { CASH_HORIZON_PRESETS, MAX_CASH_HORIZON_WEEKS, normalizeCashHorizonWeeks } from "./web/lib/cash/core.ts";
 
     assert.deepEqual([...CASH_HORIZON_PRESETS], [4, 8, 13, 26]);
-    assert.equal(MAX_CASH_HORIZON_WEEKS, 26);
+    assert.equal(MAX_CASH_HORIZON_WEEKS, 52);
     assert.equal(normalizeCashHorizonWeeks(13, 8), 13);
     assert.equal(normalizeCashHorizonWeeks(26, 8), 26);
+    assert.equal(normalizeCashHorizonWeeks(52, 8), 52);
     assert.equal(normalizeCashHorizonWeeks("13", 8), 13);
     assert.equal(normalizeCashHorizonWeeks(12, 8), 12);
-    assert.equal(normalizeCashHorizonWeeks(27, 8), 8);
+    assert.equal(normalizeCashHorizonWeeks(53, 8), 8);
     assert.equal(normalizeCashHorizonWeeks(0, 8), 8);
     assert.equal(normalizeCashHorizonWeeks("soon", 4), 4);
     assert.equal(normalizeCashHorizonWeeks(undefined, 4), 4);

@@ -4,6 +4,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
+import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
 import { normalizeCashHorizonWeeks, normalizeMoneyValue, withoutWeekEntries, resolveAsOf } from '../../../../lib/cash/core'
 import { cashPosition, type CashPosition } from '../../../../lib/cash/cash-position'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
@@ -58,7 +59,13 @@ export async function loadBankingCash(
   const locale = await getLocale()
   const tBanking = await getTranslations('banking')
 
-  const horizon = normalizeCashHorizonWeeks(sp.horizon, 8)
+  // The cockpit opens on the org's configured default horizon when the request
+  // names none — the same setting the Analytics dashboard and tiles use.
+  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
+  const horizon = normalizeCashHorizonWeeks(
+    sp.horizon,
+    cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+  )
 
   // Subsidiary context (multi-subsidiary orgs): the whole cockpit — cash,
   // open items, SQL-backed forecast categories — scopes to the selected view.
@@ -83,8 +90,11 @@ export async function loadBankingCash(
     }
   }
 
-  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
-  const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
+  const apSettings = {
+    weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
+    restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+    runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+  }
   // Never run the position scope-less: a missing view inherits the caller's
   // full allowed set, which would silently widen a blocked-rate response.
   const [position, layoutPrefs] = await Promise.all([

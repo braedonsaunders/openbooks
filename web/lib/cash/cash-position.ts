@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { ANALYTICS_CONFIG } from "../analytics/config-spec";
 import {
   addDays,
   addMoney,
@@ -33,6 +34,12 @@ import {
 export interface ApSettings {
   weeklyCap: string;
   restrictToSafe: boolean;
+  /**
+   * Weeks of runway below which the status reads caution. Resolved from the
+   * cashflow config's runwayCautionWeeks by every caller that reads one;
+   * callers handing a legacy two-key object forecast on the spec default.
+   */
+  runwayCautionWeeks?: number;
 }
 
 export interface TimelineResult {
@@ -320,8 +327,13 @@ export async function cashPosition(
   const burnRate = n ? divideMoney(timeline.totalOutflows, String(n)) : ZERO_MONEY;
   const netBurn = subtractMoney(burnRate, n ? divideMoney(timeline.totalInflows, String(n)) : ZERO_MONEY);
   const runwayWeeks = compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0 ? divideMoney(startingCash, netBurn) : compareMoney(startingCash, ZERO_MONEY) > 0 ? null : ZERO_MONEY;
+  // One caution read: the caller's configured runwayCautionWeeks, or the spec
+  // default for a legacy two-key settings object.
+  const cautionWeeks = String(
+    apSettings.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+  );
   const runwayStatus: CashPosition["runwayStatus"] =
-    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, "8.0000") < 0 ? "caution" : "healthy";
+    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0 ? "caution" : "healthy";
   const projectedEnd = timeline.weeks.length ? timeline.weeks[timeline.weeks.length - 1]!.endingCash : startingCash;
 
   return {
