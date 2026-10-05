@@ -443,6 +443,82 @@ export function buildOpenApiSpec(
       },
     };
   }
+  // Sales orders take the full order in one call: customer (id or
+  // match-or-create), dates, currency, item/account lines with quantities
+  // and prices as decimal strings, discounts, tax codes, shipping lines,
+  // and the storefront dedupe pair. A content-free body still mints the
+  // empty draft. Lines can be replaced on the draft, then issued.
+  const fullOrderExample = {
+    customer: { id: "11111111-1111-4111-8111-111111111111" },
+    documentDate: "2026-07-15",
+    currency: "CAD",
+    lines: [{ itemCode: "WIDGET-1", quantity: "2", unitPrice: "19.99", discountPercent: "10" }],
+    shippingLines: [{ accountId: "22222222-2222-4222-8222-222222222222", description: "Freight", amount: "5.00" }],
+    externalRef: "SHOP-1001",
+    externalSource: "shopify",
+  };
+  const salesPost = paths["/api/v1/sales-orders"]?.post;
+  if (salesPost) {
+    salesPost.description =
+      "Full sales order in one call through the order drawer's writer, or an empty draft for a content-free body. Quantities and prices are decimal strings (ambiguous input is refused with the remedy); discounts apply at ledger precision. A duplicate (externalSource, externalRef) answers 409 with the existing id. The response carries the revision token for the lines and issue calls.";
+    salesPost.requestBody = {
+      required: true,
+      content: { "application/json": { schema: { type: "object", example: fullOrderExample } } },
+    };
+    salesPost.responses = {
+      ...salesPost.responses,
+      "409": { description: "Duplicate external reference (existingId in the body)" },
+    };
+  }
+  paths["/api/v1/sales-orders/{id}/lines"] = {
+    patch: {
+      summary: "Replace a draft order's lines",
+      description:
+        "Replace every line on a draft sales order through the drawer's line write. expectedUpdatedAt is the revision token from the create or last lines response; a stale token answers 409.",
+      tags: ["Orders"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              example: {
+                expectedUpdatedAt: "7",
+                lines: [{ itemCode: "WIDGET-1", quantity: "1", unitPrice: "10.00" }],
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": { description: "Order with replaced lines and the fresh revision token" },
+        "409": { description: "Stale revision token" },
+        "422": { description: "Validation error" },
+      },
+    },
+  };
+  paths["/api/v1/sales-orders/{id}/issue"] = {
+    post: {
+      ...idempotentPost(
+        "Issue a draft sales order",
+        "Same engine call as the drawer's Issue action: credit check, then approved. expectedUpdatedAt is the revision token from the create or last lines response.",
+        "Orders",
+      ),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+      responses: {
+        ...idempotentPost("", "", "Orders").responses,
+        "200": { description: "Approved order with the fresh revision token" },
+      },
+    },
+  };
   paths["/api/v1/field-tickets"] = {
     ...(paths["/api/v1/field-tickets"] ?? {}),
     post: {
@@ -1157,6 +1233,38 @@ export function buildOpenApiSpec(
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
       responses: { "200": { description: "Customers" } },
+    },
+  };
+  paths["/api/v1/customers/upsert"] = {
+    post: {
+      summary: "Upsert a customer",
+      description:
+        "Match a customer by id, external reference, email, or unambiguous name — creating one with a customer role and default billing address when nothing matches. Idempotent by construction (repeating the match keys returns the same party), so no Idempotency-Key header is required. Ambiguous name or email matches answer 409 naming the stronger key to send.",
+      tags: ["Parties"],
+      security: [{ BearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              example: {
+                externalRef: "CUST-4401",
+                externalSource: "shopify",
+                email: "buyer@example.com",
+                name: "Buyer Inc.",
+                address: { line1: "1 Market St", city: "Springfield", region: "IL", postalCode: "62701", country: "US" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": { description: "Matched customer" },
+        "201": { description: "Created customer" },
+        "409": { description: "Ambiguous match" },
+        "422": { description: "Validation error" },
+      },
     },
   };
   paths["/api/v1/vendors"] = {
