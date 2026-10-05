@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import {
   BYPASS_PREDICATE_CUTOFF_ORDINAL,
   INLINE_BYPASS_GUC,
-  INLINE_BYPASS_GUC_ALLOWLIST,
+  INLINE_BYPASS_GUC_SUPERSEDED,
   auditBypassPredicate,
   findInlineBypassTrust,
   hasInlineBypassTrust,
@@ -53,7 +53,7 @@ test('comments, the predicate call, and other GUCs pass', () => {
   }
 })
 
-test('only repaired immutable migrations are exempt from the forward bypass gate', () => {
+test('only post-cutoff migrations and the backstop are gated', () => {
   assert.equal(BYPASS_PREDICATE_CUTOFF_ORDINAL, 402)
   assert.equal(isGatedFile('schema/migrations/environments.sql'), true)
   assert.equal(isGatedFile('schema/migrations/generated/0403_next_policy.sql'), true)
@@ -65,10 +65,37 @@ test('only repaired immutable migrations are exempt from the forward bypass gate
   ]) {
     assert.equal(isGatedFile(history), false)
   }
-  // Pre-cutoff legacies are unscanned, not exempt: gating them would make
-  // the entries permanently stale.
-  assert.deepEqual([...INLINE_BYPASS_GUC_ALLOWLIST.keys()], ['0489_pay_component_department_expenses.sql', '0497_psp_automation.sql'])
-  assert.deepEqual(auditBypassPredicate().violations, [])
+})
+
+test('a superseded raw read passes only when the named later migration drops the policy', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bypass-supersede-'))
+  try {
+    const legacy = join(dir, '0450_legacy_policy.sql')
+    writeFileSync(legacy, `CREATE POLICY tenant_isolation ON public.t\n  USING (current_setting('app.bypass_rls', true) = 'on');\n`)
+    const later = join(dir, '0460_replace_policy.sql')
+    const claim = { by: '0460_replace_policy.sql', policies: [['tenant_isolation', 't']] }
+    const audit = () => auditBypassPredicate([legacy, later], new Map([['0450_legacy_policy.sql', claim]]))
+
+    writeFileSync(later, `DROP POLICY IF EXISTS tenant_isolation ON public.t;\n`)
+    assert.deepEqual(audit(), { violations: [], stale: [], unproven: [], gated: 2 })
+
+    // A later file that never drops the named policy proves nothing.
+    writeFileSync(later, `-- DROP POLICY IF EXISTS tenant_isolation ON public.t;\nDROP POLICY IF EXISTS org_isolation ON public.t;\n`)
+    assert.deepEqual(audit().unproven, ['0450_legacy_policy.sql: 0460_replace_policy.sql does not drop tenant_isolation on t'])
+
+    // Nor does a claim naming a migration that does not exist.
+    const missing = auditBypassPredicate([legacy], new Map([['0450_legacy_policy.sql', claim]]))
+    assert.deepEqual(missing.unproven, ['0450_legacy_policy.sql: superseding migration 0460_replace_policy.sql does not exist'])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('every repository supersession names a later migration that drops each policy', () => {
+  assert.ok(INLINE_BYPASS_GUC_SUPERSEDED.size > 0)
+  const { unproven, stale } = auditBypassPredicate()
+  assert.deepEqual(unproven, [])
+  assert.deepEqual(stale, [])
 })
 
 test('a post-cutoff file with line and wrapped reads fails with locations', () => {
