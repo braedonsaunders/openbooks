@@ -97,7 +97,9 @@
     "methodSeasonal": "Saisonal",
     "methodIntermittent": "Sporadisch",
     "methodAverage": "Mittelwert",
-    "defaulted": "Standardrichtlinie wird verwendet — je Artikel feinjustieren."
+    "defaulted": "Standardrichtlinie wird verwendet — je Artikel feinjustieren.",
+    "loadFailed": "Die Planungsrichtlinie konnte nicht geladen werden. Versuchen Sie es erneut, bevor Sie sie ändern.",
+    "integerInvalid": "{field} erfordert eine nicht negative ganze Zahl. Geben Sie eine ganze Zahl ein oder lassen Sie das Feld leer, um den Standardwert zu verwenden."
   },
   "itemTab": {
     "title": "Planung",

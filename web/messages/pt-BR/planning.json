@@ -97,7 +97,9 @@
     "methodSeasonal": "Sazonal",
     "methodIntermittent": "Intermitente",
     "methodAverage": "Média",
-    "defaulted": "Usando a política padrão — ajuste por item."
+    "defaulted": "Usando a política padrão — ajuste por item.",
+    "loadFailed": "Não foi possível carregar a política de planejamento. Tente novamente antes de alterá-la.",
+    "integerInvalid": "{field} exige um número inteiro não negativo. Digite um número inteiro ou deixe o campo vazio para usar o valor padrão."
   },
   "itemTab": {
     "title": "Planejamento",

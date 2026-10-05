@@ -97,7 +97,9 @@
     "methodSeasonal": "Seasonal",
     "methodIntermittent": "Intermittent",
     "methodAverage": "Average",
-    "defaulted": "Using the standard policy — set per-item values to tune it."
+    "defaulted": "Using the standard policy — set per-item values to tune it.",
+    "loadFailed": "Planning policy could not be loaded. Retry before changing it.",
+    "integerInvalid": "{field} needs a whole non-negative number. Enter a whole number or leave the field blank to use the standard value."
   },
   "itemTab": {
     "title": "Planning",
