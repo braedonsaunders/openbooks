@@ -79,7 +79,7 @@ test(
     try {
       await assert.rejects(
         withOrgContext(org.orgId, () => postEntry(db, { ...baseInput(org, key), lines })),
-        (error: unknown) => /exceeds the per-entry FX rounding bound/.test(errorText(error)),
+        (error: unknown) => /exceeds the per-entry FX rounding bound.*nothing was posted; correct the line exchange rates or functional amounts/.test(errorText(error)),
       );
       const remnant = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_entries
