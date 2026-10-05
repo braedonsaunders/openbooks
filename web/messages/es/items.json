@@ -265,7 +265,11 @@
     "onHand": "Existencias",
     "committed": "Comprometido",
     "available": "Disponible",
-    "unknownComponent": "Ya no está en el catálogo"
+    "unknownComponent": "Ya no está en el catálogo",
+    "effectiveRange": "Vigente {from} – {to}",
+    "effectiveFrom": "Vigente desde {from}",
+    "effectiveEnded": "Finalizado {to}",
+    "noCurrentRecipe": "Ningún componente está vigente hoy — las líneas siguientes son historial."
   },
   "costing": {
     "title": "Costeo de inventario",

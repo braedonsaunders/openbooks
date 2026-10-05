@@ -27,3 +27,19 @@ export function componentLabel(line: KitComponentIdentity): string {
 export function isComponentIdentityMissing(joinedId: string | null): boolean {
   return joinedId == null
 }
+
+export interface EffectiveWindow {
+  from: string | null
+  to: string | null
+}
+
+/** Which caption a recipe line's effectivity window needs. The overview
+ *  keeps every stored line including expired ones, so a bounded window
+ *  names its dates and only an unbounded line stays captionless — the
+ *  everyday reader never mistakes history for double consumption. */
+export function effectiveWindowKind(window: EffectiveWindow): 'range' | 'from' | 'ended' | 'evergreen' {
+  if (window.from && window.to) return 'range'
+  if (window.from) return 'from'
+  if (window.to) return 'ended'
+  return 'evergreen'
+}

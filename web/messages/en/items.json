@@ -378,7 +378,11 @@
     "onHand": "On hand",
     "committed": "Committed",
     "available": "Available",
-    "unknownComponent": "No longer in the catalog"
+    "unknownComponent": "No longer in the catalog",
+    "effectiveRange": "Effective {from} – {to}",
+    "effectiveFrom": "Effective from {from}",
+    "effectiveEnded": "Ended {to}",
+    "noCurrentRecipe": "No components are effective today — the lines below are history."
   },
   "families": {
     "title": "Product families",

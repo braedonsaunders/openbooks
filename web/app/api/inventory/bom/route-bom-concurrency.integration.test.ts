@@ -231,7 +231,7 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     const body = await detail.json() as {
       assemblyItemId: string;
       version: string;
-      components: { componentItemId: string; code: string | null; name: string | null; isActive: boolean | null }[];
+      components: { componentItemId: string; code: string | null; name: string | null; isActive: boolean | null; isCurrent: boolean }[];
       validItems: { id: string; code: string | null; name: string | null }[];
     };
     assert.equal(body.assemblyItemId, org.items.assembly);
@@ -239,6 +239,7 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     assert.equal(body.components[0]!.componentItemId, org.items.component);
     assert.equal(body.components[0]!.name, "Component");
     assert.equal(body.components[0]!.isActive, true);
+    assert.equal(body.components[0]!.isCurrent, true);
     assert.ok(body.validItems.some((item) => item.id === org.items.component && item.name === "Component"));
     // Deactivating the component removes it from the editor's eligible
     // choices, but the stored line still names it instead of falling back
@@ -281,6 +282,38 @@ test("GET names component lines from catalog identity and keeps inactive lines a
     const readerPut = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
     assert.equal(readerPut.status, 403);
     assert.equal((await readerPut.json() as { error: string }).error, "missing permission: admin.setup.manage");
+    // A line bounded entirely in the past reads back not current, under the
+    // same half-open window the kit explosion enforces. The component is
+    // reactivated first: the save gate only accepts active inventory items.
+    await db.execute(sql`update items set is_active = true where org_id = ${org.orgId} and id = ${org.items.component}`);
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const rereadForVersion = await GET(new Request(readerUrl));
+    const currentVersion = (await rereadForVersion.json() as { version: string }).version;
+    const dated = await PUT(putRequest({
+      assemblyItemId: org.items.assembly,
+      expectedVersion: currentVersion,
+      reason: "Window regression probe: one line bounded in the past.",
+      components: [{
+        componentItemId: org.items.component,
+        quantityPer: "2",
+        operationSeq: null,
+        scrapPct: null,
+        isByproduct: false,
+        effectiveFrom: "2000-01-01",
+        effectiveTo: "2001-01-01",
+      }],
+    }));
+    assert.equal(dated.status, 200);
+    const datedGet = await GET(new Request(readerUrl));
+    const datedBody = await datedGet.json() as {
+      components: { componentItemId: string; isCurrent: boolean }[];
+    };
+    assert.equal(datedBody.components.length, 1);
+    assert.equal(datedBody.components[0]!.isCurrent, false);
   } finally {
     await dropScratchOrg(org.orgId);
   }

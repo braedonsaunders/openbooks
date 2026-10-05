@@ -7,7 +7,7 @@ import { Badge, Button, DisclosureSection, EmptyState } from '@openbooks/ui'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { BomDrawer, type BomAssembly, type BomComponent } from '../inventory/BomWorkspace'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { componentLabel, isComponentIdentityMissing } from './kit-component-labels'
+import { componentLabel, effectiveWindowKind, isComponentIdentityMissing } from './kit-component-labels'
 
 interface KitAvailabilityComponent {
   itemId: string
@@ -40,6 +40,7 @@ interface KitBomDetail {
     name: string | null
     isActive: boolean | null
     identityMissing: boolean
+    isCurrent: boolean
   })[]
 }
 
@@ -91,7 +92,7 @@ export function KitComponentsTab({
       const bomBody = (await bomRes.json()) as {
         assemblyItemId?: string
         version?: string | null
-        components?: (BomComponent & { code?: string | null; name?: string | null; isActive?: boolean | null; joinedId?: string | null })[]
+        components?: (BomComponent & { code?: string | null; name?: string | null; isActive?: boolean | null; joinedId?: string | null; isCurrent?: boolean })[]
         validItems?: { id: string; code: string | null; name: string | null; unit: string | null }[]
       }
       // Identity comes with the line, not from the editor's eligible
@@ -111,6 +112,7 @@ export function KitComponentsTab({
             name: line.name ?? null,
           }),
           identityMissing: isComponentIdentityMissing(line.joinedId ?? null),
+          isCurrent: line.isCurrent ?? true,
         })),
       })
       setBomVersion(bomBody.version ?? null)
@@ -146,17 +148,21 @@ export function KitComponentsTab({
   }, [bom, bomVersion, itemLabel])
 
   const available = availability?.allLocations.kit?.available
+  // The summary counts the recipe effective today, never expired windows:
+  // history stays visible line by line below, each with its own window.
   const summary = useMemo(() => {
     if (loading || loadError || !bom) return null
     if (bom.components.length === 0) return t('kit.noRecipeSummary')
-    const parts = bom.components.map((line) => `${trimQty(line.quantityPer)} ${line.label}`)
-    return t('kit.recipeSummary', { count: bom.components.length, parts: parts.join(' + ') })
+    const current = bom.components.filter((line) => line.isCurrent)
+    if (current.length === 0) return t('kit.noCurrentRecipe')
+    const parts = current.map((line) => `${trimQty(line.quantityPer)} ${line.label}`)
+    return t('kit.recipeSummary', { count: current.length, parts: parts.join(' + ') })
   }, [bom, loading, loadError, t])
 
   // Rows key on the unique BOM line id, never the component: adjacent
   // effectivity windows repeat the same component, so component keys
   // duplicate and reconciliation clobbers one window with the other.
-  const columns = useMemo<LineGridColumn<{ id: string; componentItemId: string; label: string; quantityPer: string; isActive: boolean | null; identityMissing: boolean }>[]>(
+  const columns = useMemo<LineGridColumn<{ id: string; componentItemId: string; label: string; quantityPer: string; isActive: boolean | null; identityMissing: boolean; effectiveFrom: string | null; effectiveTo: string | null; caption: string | null }>[]>(
     () => [
       {
         key: 'label',
@@ -164,19 +170,29 @@ export function KitComponentsTab({
         width: 'minmax(200px,1fr)',
         type: 'readonly',
         // An inactive component stays on the recipe as evidence with its
-        // status beside its name; a line whose item row is gone keeps its
-        // short storage id with the notice naming what happened to it.
-        render: (row) => row.identityMissing ? (
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <span className="font-mono">{row.label}</span>
-            <Badge variant="outline">{t('kit.unknownComponent')}</Badge>
-          </span>
-        ) : row.isActive === false ? (
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <span>{row.label}</span>
-            <Badge variant="secondary">{tCommon('status.inactive')}</Badge>
-          </span>
-        ) : row.label,
+        // status beside its name; a line with no joined catalog row keeps
+        // its short storage id with the notice naming what happened to it.
+        // A bounded window captions its dates so history is never mistaken
+        // for double consumption.
+        render: (row) => {
+          const name = row.identityMissing ? (
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <span className="font-mono">{row.label}</span>
+              <Badge variant="outline">{t('kit.unknownComponent')}</Badge>
+            </span>
+          ) : row.isActive === false ? (
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <span>{row.label}</span>
+              <Badge variant="secondary">{tCommon('status.inactive')}</Badge>
+            </span>
+          ) : row.label
+          return (
+            <span>
+              <span>{name}</span>
+              {row.caption ? <span className="block text-xs text-slate-500 dark:text-slate-400">{row.caption}</span> : null}
+            </span>
+          )
+        },
       },
       {
         key: 'quantityPer',
@@ -256,16 +272,26 @@ export function KitComponentsTab({
         <>
           <LineGrid
             columns={columns}
-            rows={bom.components.map((line) => ({
-              id: line.id,
-              componentItemId: line.componentItemId,
-              label: line.label,
-              quantityPer: line.quantityPer,
-              isActive: line.isActive,
-              identityMissing: line.identityMissing,
-            }))}
+            rows={bom.components.map((line) => {
+              const kind = effectiveWindowKind({ from: line.effectiveFrom, to: line.effectiveTo })
+              let caption: string | null = null
+              if (kind === 'range' && line.effectiveFrom && line.effectiveTo) caption = t('kit.effectiveRange', { from: line.effectiveFrom, to: line.effectiveTo })
+              else if (kind === 'from' && line.effectiveFrom) caption = t('kit.effectiveFrom', { from: line.effectiveFrom })
+              else if (kind === 'ended' && line.effectiveTo) caption = t('kit.effectiveEnded', { to: line.effectiveTo })
+              return {
+                id: line.id,
+                componentItemId: line.componentItemId,
+                label: line.label,
+                quantityPer: line.quantityPer,
+                isActive: line.isActive,
+                identityMissing: line.identityMissing,
+                effectiveFrom: line.effectiveFrom,
+                effectiveTo: line.effectiveTo,
+                caption,
+              }
+            })}
             onRowsChange={() => undefined}
-            emptyRow={() => ({ id: '', componentItemId: '', label: '', quantityPer: '', isActive: null, identityMissing: false })}
+            emptyRow={() => ({ id: '', componentItemId: '', label: '', quantityPer: '', isActive: null, identityMissing: false, effectiveFrom: null, effectiveTo: null, caption: null })}
             getRowKey={(row) => row.id}
             readOnly
           />
