@@ -61,9 +61,9 @@ export function OverviewTab({ data }: { data: HealthData }) {
         </Panel>
         <div className="grid grid-cols-2 gap-3">
           <SparkCard label={t('trendRevenue')} points={sparkMoney('revenue')} last={fmtMoney(data.figures.revenue, { compact: true })} />
-          <SparkCard label={t('trendMargin')} points={sparkPct('grossMarginPct')} pct last={fmtRatio(grossMargin?.value, 'pct') ?? '—'} />
+          <SparkCard label={t('trendMargin')} points={sparkPct('grossMarginPct')} pct last={fmtRatio(grossMargin?.value ?? null, 'pct') ?? '—'} />
           <SparkCard label={t('trendOpinc')} points={sparkMoney('operatingIncome')} last={fmtMoney(data.figures.operatingIncome, { compact: true })} />
-          <SparkCard label={t('trendOpMargin')} points={sparkPct('operatingMarginPct')} pct last={fmtRatio(Object.values(data.ratios).flat().find((r) => r.id === 'operating_margin')?.value, 'pct') ?? '—'} />
+          <SparkCard label={t('trendOpMargin')} points={sparkPct('operatingMarginPct')} pct last={fmtRatio(Object.values(data.ratios).flat().find((r) => r.id === 'operating_margin')?.value ?? null, 'pct') ?? '—'} />
         </div>
       </div>
 
@@ -79,17 +79,25 @@ export function OverviewTab({ data }: { data: HealthData }) {
             </SharedTableRow>
           </SharedTableHeader>
           <SharedTableBody>
-            {data.pnlSummary.map((l) => (
+            {data.pnlSummary.map((l) => {
+              // Favorability, not sign: a COGS/OpEx/Other-Expense increase is bad.
+              const isCost = l.key === 'cogs' || l.key === 'opex' || l.key === 'otherExpense'
+              const rising = !l.change.startsWith('-') && !/^0(\.0+)?$/.test(l.change)
+              const falling = l.change.startsWith('-')
+              const good = isCost ? !rising : !falling
+              const changeCls = good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+              return (
               <SharedTableRow key={l.key} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                 <SharedTableCell className={cn('px-4 py-2', l.strong ? 'font-semibold text-slate-800 dark:text-slate-200' : 'text-slate-600 dark:text-slate-300')}>{l.label}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{fmtMoney(l.current, { compact: true })}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(l.prior, { compact: true })}</SharedTableCell>
-                <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', l.favorable ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(l.change, { compact: true })}</SharedTableCell>
+                <SharedTableCell className={cn('px-4 py-2 text-right font-medium tabular-nums', changeCls)}>{fmtMoney(l.change, { compact: true })}</SharedTableCell>
                 <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">
                   {fmtRatio(l.changePct, 'pct') ?? '—'}
                 </SharedTableCell>
               </SharedTableRow>
-            ))}
+              )
+            })}
           </SharedTableBody>
         </SharedTable>
       </Panel>
