@@ -28,8 +28,31 @@ describe('stored-value report entities', () => {
     assert.equal(movements.timeKey, 'entered_on')
     assert.ok(movements.latestOrderExpr, 'balance_after latest needs a chronological order')
     for (const column of movements.columns.filter((c) => c.kind === 'money')) {
-      assert.equal(column.txnCurrency, true, `${column.key} blends currencies without a flag`)
+      assert.ok(
+        (column.txnCurrency ?? false) !== (column.baseMoney ?? false),
+        `${column.key} must be exactly one of txnCurrency or baseMoney`,
+      )
     }
+    // The liability roll-forward ties in functional currency per entity: the
+    // movements price every entry both ways, and both entities scope by the
+    // owning subsidiary with its base currency exposed.
+    for (const key of ['stored_value_movements', 'stored_value_balances'] as const) {
+      const entity = REPORT_ENTITY_MAP[key]!
+      assert.deepEqual(entity.subsidiaryScope, { column: 'a.subsidiary_id' }, `${key} scopes by entity`)
+      assert.equal(entity.baseCurrencyColumn, 'base_currency', `${key} names the functional denomination`)
+      for (const columnKey of ['subsidiary', 'base_currency']) {
+        assert.ok(entity.columns.some((c) => c.key === columnKey), `${key} exposes ${columnKey}`)
+      }
+    }
+    const functionalAmount = movements.columns.find((c) => c.key === 'functional_amount')!
+    assert.equal(functionalAmount.kind, 'money')
+    assert.equal(functionalAmount.baseMoney, true)
+    assert.ok(movements.columns.some((c) => c.key === 'fx_rate' && c.kind === 'number'))
+    const functionalBalance = REPORT_ENTITY_MAP.stored_value_balances!.columns.find(
+      (c) => c.key === 'functional_balance',
+    )!
+    assert.equal(functionalBalance.kind, 'money')
+    assert.equal(functionalBalance.baseMoney, true)
     const balances = REPORT_ENTITY_MAP.stored_value_balances!
     assert.equal(balances.defaultPeriodField, null, 'a balance snapshot must not acquire a fiscal window')
   })
@@ -57,6 +80,26 @@ describe('stored-value report entities', () => {
     const compiled = compileCustomQuery(entity, query, ORG)
     assert.match(compiled.text, /WHERE e\.org_id = \$1/)
     assert.match(compiled.text, /stored_value_entries/)
+  })
+
+  it('compiles the functional tie: functional sums broken out by subsidiary and base currency', () => {
+    const entity = REPORT_ENTITY_MAP.stored_value_movements!
+    const query = validateCustomQuery({
+      entity: entity.key,
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'subsidiary' }, { column: 'base_currency' }],
+      measures: [
+        { fn: 'sum', column: 'functional_amount', label: 'Functional movement' },
+        { fn: 'count', label: 'Movements' },
+      ],
+      filters: null,
+      groupBy: null,
+      limit: 1000,
+    })
+    const compiled = compileCustomQuery(entity, query, ORG)
+    assert.match(compiled.text, /functional_amount_minor/)
+    assert.match(compiled.text, /sub\.base_currency/)
   })
 
   it('compiles unclaimed property: open balances by customer region and activity month', () => {

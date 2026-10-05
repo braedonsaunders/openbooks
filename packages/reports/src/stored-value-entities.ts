@@ -8,19 +8,21 @@ import type { ReportEntity } from './entities'
 // Amounts are ledger minor units at ten-thousandths precision; the money
 // expressions divide back to whole units in exact numeric arithmetic, the
 // same conversion the register list uses — the reports never see raw
-// integers and never blend currencies (every money column is txnCurrency
-// with the row's currency exposed for pinning or breakout).
+// integers and never blend currencies (card-currency columns are txnCurrency
+// with the row's currency exposed, functional columns are baseMoney with the
+// owning subsidiary's base currency exposed for pinning or breakout).
 const MINOR_TO_UNITS = (column: string): string => `(${column}::numeric / 10000)`
 
 const shared = {
   category: 'transactions',
   featureKey: 'storedValue',
   requiredPermission: 'stored_value.read',
-  // Neither table carries a subsidiary: stored value is issued and redeemed
-  // org-wide, so there is no legal-entity boundary to scope (precedent:
-  // custom-record entities declare an explicit null scope the same way).
-  subsidiaryScope: null,
+  // Every account belongs to the legal entity that owes the balance, so the
+  // close and the liability tie scope by it; functional columns aggregate in
+  // the owning subsidiary's base currency, never across entities.
+  subsidiaryScope: { column: 'a.subsidiary_id' },
   currencyColumn: 'currency',
+  baseCurrencyColumn: 'base_currency',
 } as const
 
 export const STORED_VALUE_REPORT_ENTITIES: ReportEntity[] = [
@@ -33,6 +35,7 @@ export const STORED_VALUE_REPORT_ENTITIES: ReportEntity[] = [
     from: `stored_value_entries e
       JOIN stored_value_accounts a ON a.id = e.account_id AND a.org_id = e.org_id
       JOIN stored_value_programs p ON p.id = a.program_id AND p.org_id = e.org_id
+      JOIN subsidiaries sub ON sub.id = a.subsidiary_id AND sub.org_id = e.org_id
       LEFT JOIN parties cust ON cust.id = a.customer_party_id AND cust.org_id = e.org_id`,
     orgColumn: 'e.org_id',
     timeKey: 'entered_on',
@@ -57,10 +60,17 @@ export const STORED_VALUE_REPORT_ENTITIES: ReportEntity[] = [
         expr: MINOR_TO_UNITS('e.amount_minor'), txnCurrency: true,
       },
       {
+        key: 'functional_amount', label: 'Amount (functional)', kind: 'money',
+        expr: MINOR_TO_UNITS('e.functional_amount_minor'), baseMoney: true,
+      },
+      { key: 'fx_rate', label: 'Rate', kind: 'number', expr: 'e.fx_rate' },
+      {
         key: 'balance_after', label: 'Account balance after', kind: 'money',
         expr: MINOR_TO_UNITS('e.balance_after'), txnCurrency: true, snapshot: true,
       },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'e.currency' },
+      { key: 'base_currency', label: 'Base currency', kind: 'text', expr: 'sub.base_currency' },
+      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
       { key: 'entered_on', label: 'Entered on', kind: 'date', expr: '(e.created_at::date)' },
       { key: 'reason', label: 'Reason', kind: 'text', expr: 'e.reason' },
       { key: 'document_id', label: 'Document key', kind: 'uuid', expr: 'e.document_id' },
@@ -74,6 +84,7 @@ export const STORED_VALUE_REPORT_ENTITIES: ReportEntity[] = [
       'One row per stored-value account with its open balance, customer region and last activity. Filter to open statuses and group by region and activity month for unclaimed-property (escheat) review.',
     from: `stored_value_accounts a
       JOIN stored_value_programs p ON p.id = a.program_id AND p.org_id = a.org_id
+      JOIN subsidiaries sub ON sub.id = a.subsidiary_id AND sub.org_id = a.org_id
       LEFT JOIN parties cust ON cust.id = a.customer_party_id AND cust.org_id = a.org_id`,
     orgColumn: 'a.org_id',
     // A balance snapshot must not acquire a fiscal window merely because it
@@ -103,7 +114,14 @@ export const STORED_VALUE_REPORT_ENTITIES: ReportEntity[] = [
         key: 'balance', label: 'Open balance', kind: 'money',
         expr: MINOR_TO_UNITS('a.balance_minor'), txnCurrency: true,
       },
+      {
+        key: 'functional_balance', label: 'Open balance (functional)', kind: 'money',
+        expr: `(select coalesce(sum(x.functional_amount_minor)::numeric / 10000, 0) from stored_value_entries x where x.org_id = a.org_id and x.account_id = a.id)`,
+        baseMoney: true,
+      },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'a.currency' },
+      { key: 'base_currency', label: 'Base currency', kind: 'text', expr: 'sub.base_currency' },
+      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
       { key: 'last_activity_on', label: 'Last activity', kind: 'date', expr: 'a.last_activity_on' },
       { key: 'expires_on', label: 'Expires on', kind: 'date', expr: 'a.expires_on' },
       { key: 'inactivity_months', label: 'Program inactivity threshold (months)', kind: 'number', expr: 'p.inactivity_months' },
