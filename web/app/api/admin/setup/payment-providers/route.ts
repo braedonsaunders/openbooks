@@ -31,6 +31,13 @@ const acceptanceConfigSchema = z.object({
   defaultBankAccountId: z.string().uuid().nullable().optional(), surchargeRuleId: z.string().uuid().nullable().optional(),
   publishableKey: z.string().nullable().optional(), apiKey: z.string().nullable().optional(), webhookSecret: z.string().nullable().optional(),
   settings: z.record(z.string(), z.json()).nullable().optional(),
+  // Refund/dispute automation half of the same row: the setup screen owns the
+  // policy and the posting accounts, so a save names them (explicit null
+  // clears a mapping) while an omitted field keeps the stored value.
+  refundPolicy: z.enum(["automatic", "review"]).nullable().optional(),
+  defaultDisputedFundsAccountId: z.string().uuid().nullable().optional(),
+  defaultChargebackLossAccountId: z.string().uuid().nullable().optional(),
+  defaultDisputeFeeAccountId: z.string().uuid().nullable().optional(),
 });
 const requestBodySchema = z.union([
   z.discriminatedUnion("action", [
@@ -106,14 +113,31 @@ async function legacyGET() {
   const accountScope = scope === null
     ? sql``
     : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`;
-  const [configs, banks, rules, incomeAccounts] = await Promise.all([
+  const [configs, automationConfigs, banks, rules, incomeAccounts, postingAccounts] = await Promise.all([
     db.execute(sql`
       select provider, display_name as "displayName", is_enabled as "isEnabled",
              acceptance_enabled as "acceptanceEnabled", default_bank_account_id as "defaultBankAccountId",
              publishable_key as "publishableKey", surcharge_rule_id as "surchargeRuleId", settings,
-             (secrets is not null) as "hasSecrets", last_error as "lastError"
+             (secrets is not null) as "hasSecrets", last_error as "lastError",
+             coalesce(refund_policy, 'automatic') as "refundPolicy",
+             default_disputed_funds_account_id as "defaultDisputedFundsAccountId",
+             default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
+             default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
         from psp_provider_configs
        where org_id = ${orgId} and provider in ('stripe', 'adyen', 'gocardless')
+       order by provider
+    `),
+    // PayPal and Shopify Payments never take hosted checkout: their rows
+    // carry only the settlement-automation half (policy, dispute accounts,
+    // pull state), saved through the settlements configuration endpoint.
+    db.execute(sql`
+      select provider, display_name as "displayName", is_enabled as "isEnabled",
+             refund_policy as "refundPolicy", pull_enabled as "pullEnabled",
+             default_disputed_funds_account_id as "defaultDisputedFundsAccountId",
+             default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
+             default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
+        from psp_provider_configs
+       where org_id = ${orgId} and provider in ('paypal', 'shopify_payments')
        order by provider
     `),
     db.execute(sql`
@@ -135,15 +159,33 @@ async function legacyGET() {
        ${accountScope}
        order by number nulls last, name
     `),
+    // Dispute posting accounts accept any postable account (clearing, loss,
+    // fee), so the automation pickers read the same population settlement
+    // posting validates against.
+    db.execute(sql`
+      select id, number, name from accounts
+       where org_id = ${orgId} and is_active and not is_summary
+       ${accountScope}
+       order by number nulls last, name
+    `),
   ]);
   // The config rows are org-wide, but their settlement-bank reference would
   // hand a restricted caller the exact account to target: mask references
-  // outside their scope (the picker above already hides those rows).
+  // outside their scope (the picker above already hides those rows). Dispute
+  // account references mask the same way.
+  const disputeAccountKeys = [
+    "defaultDisputedFundsAccountId",
+    "defaultChargebackLossAccountId",
+    "defaultDisputeFeeAccountId",
+  ] as const;
   let configRows = configs.rows as Array<Record<string, unknown>>;
+  let automationRows = automationConfigs.rows as Array<Record<string, unknown>>;
   let surchargeRows = rules.rows as Array<Record<string, unknown>>;
   if (scope !== null) {
     const referenced = [...new Set([
       ...configRows.map((c) => c.defaultBankAccountId),
+      ...configRows.flatMap((c) => disputeAccountKeys.map((key) => c[key])),
+      ...automationRows.flatMap((c) => disputeAccountKeys.map((key) => c[key])),
       ...surchargeRows.map((r) => r.feeIncomeAccountId),
     ].filter((id) => typeof id === "string"))] as string[];
     if (referenced.length > 0) {
@@ -154,11 +196,22 @@ async function legacyGET() {
       const visible = new Set(
         subs.rows.filter((r) => r.subsidiary_id === null || scope.has(r.subsidiary_id)).map((r) => r.id),
       );
-      configRows = configRows.map((c) =>
-        typeof c.defaultBankAccountId === "string" && !visible.has(c.defaultBankAccountId)
-          ? { ...c, defaultBankAccountId: null }
-          : c,
-      );
+      const maskDisputeAccounts = (row: Record<string, unknown>) => {
+        let masked = row;
+        for (const key of disputeAccountKeys) {
+          if (typeof masked[key] === "string" && !visible.has(masked[key] as string)) {
+            masked = { ...masked, [key]: null };
+          }
+        }
+        return masked;
+      };
+      configRows = configRows.map((c) => {
+        const masked = maskDisputeAccounts(c);
+        return typeof c.defaultBankAccountId === "string" && !visible.has(c.defaultBankAccountId)
+          ? { ...masked, defaultBankAccountId: null }
+          : masked;
+      });
+      automationRows = automationRows.map(maskDisputeAccounts);
       surchargeRows = surchargeRows.map((rule) =>
         typeof rule.feeIncomeAccountId === "string" && !visible.has(rule.feeIncomeAccountId)
           ? { ...rule, feeIncomeAccountId: null }
@@ -168,9 +221,11 @@ async function legacyGET() {
   }
   return NextResponse.json({
     configs: configRows,
+    automationConfigs: automationRows,
     bankAccounts: banks.rows,
     surchargeRules: surchargeRows,
     incomeAccounts: incomeAccounts.rows,
+    postingAccounts: postingAccounts.rows,
     featureEnabled: await isFeatureEnabled(orgId, "onlinePayments"),
   });
 }
@@ -513,6 +568,9 @@ export const POST = defineRoute({
     for (const [field, value] of [
       ["defaultBankAccountId", body.defaultBankAccountId],
       ["surchargeRuleId", body.surchargeRuleId],
+      ["defaultDisputedFundsAccountId", body.defaultDisputedFundsAccountId],
+      ["defaultChargebackLossAccountId", body.defaultChargebackLossAccountId],
+      ["defaultDisputeFeeAccountId", body.defaultDisputeFeeAccountId],
     ] as const) {
       if (value !== undefined && value !== null && (typeof value !== "string" || !isUuid(value))) {
         return NextResponse.json({ error: `${field} must be a valid UUID` }, { status: 400 });
@@ -537,6 +595,13 @@ export const POST = defineRoute({
         defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
         publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
         surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
+        // Automation fields travel through untouched: an omitted field stays
+        // undefined so the engine keeps the stored policy, while an explicit
+        // null clears a mapping the setup screen owns.
+        refundPolicy: body.refundPolicy,
+        defaultDisputedFundsAccountId: body.defaultDisputedFundsAccountId,
+        defaultChargebackLossAccountId: body.defaultChargebackLossAccountId,
+        defaultDisputeFeeAccountId: body.defaultDisputeFeeAccountId,
         settings,
         apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
         webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
