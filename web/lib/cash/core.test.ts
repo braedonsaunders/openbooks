@@ -33,7 +33,7 @@ test("formula TAX_RATE prices the enacted rate for the week, exactly", () => {
   // it at that seam — never the pure percent math under test.
   const source = `
     import assert from "node:assert/strict";
-    import { resolveFormulaTaxRate } from "./web/lib/cash/core.ts";
+    import { percentToFractionExact, resolveFormulaTaxRate, resolveFormulaTaxRateForCategory, FormulaTaxRefusal, toUnavailableCategory } from "./web/lib/cash/core.ts";
 
     const calls = [];
     const reader = async (orgId, subsidiaryId, onDate) => {
@@ -42,12 +42,12 @@ test("formula TAX_RATE prices the enacted rate for the week, exactly", () => {
       return { ratePercent: "25.0000", jurisdictions: ["federal"] };
     };
 
-    // A 25% enacted rate prices as the exact fraction 0.2500 — a float /100
+    // A 25% enacted rate prices as the exact fraction 0.25 — a float /100
     // would read 0.25000000000000006 territory and corrupt the formula.
-    assert.equal(await resolveFormulaTaxRate("org-1", "2026-08-31", null, reader), "0.2500");
+    assert.equal(await resolveFormulaTaxRate("org-1", "2026-08-31", null, reader), "0.25");
     assert.deepEqual(calls[0], ["org-1", null, "2026-08-31"]);
     // The category's subsidiary rides through for the entity stack.
-    assert.equal(await resolveFormulaTaxRate("org-1", "2026-08-31", "sub-9", reader), "0.2500");
+    assert.equal(await resolveFormulaTaxRate("org-1", "2026-08-31", "sub-9", reader), "0.25");
     assert.deepEqual(calls[1], ["org-1", "sub-9", "2026-08-31"]);
 
     // Nothing configured refuses by name with the remedy that exists.
@@ -55,7 +55,36 @@ test("formula TAX_RATE prices the enacted rate for the week, exactly", () => {
       resolveFormulaTaxRate("org-bare", "2026-08-31", null, reader),
       /no enacted income tax rate.*Setup → Taxes → Income tax rates/,
     );
-    console.log("cash TAX_RATE behavior passed: enacted 25% prices 0.2500 exactly; unconfigured refuses by name");
+
+    // A fractional rate keeps every digit: 21.125% is 0.21125, never the
+    // 4-decimal 0.2113 a money division rounds to.
+    assert.equal(percentToFractionExact("21.125"), "0.21125");
+    assert.equal(percentToFractionExact("25.0000"), "0.25");
+    assert.equal(percentToFractionExact("5"), "0.05");
+
+    // Per-subsidiary resolution: agreement prices the shared rate, a missing
+    // stack or a disagreement refuses the category by name (a scoped
+    // unavailable state, never a whole-forecast failure).
+    const cat = (subsidiaryIds) => ({ id: "cat-tax", name: "Taxed", direction: "outflow", method: "formula_expression", formula: "100 * {TAX_RATE}", amount: "0", enabled: true, subsidiaryIds });
+    const subReader = async (orgId, subsidiaryId, onDate) => {
+      if (subsidiaryId === "sub-missing") return null;
+      if (subsidiaryId === "sub-high") return { ratePercent: "30", jurisdictions: ["state"] };
+      return { ratePercent: "21.125", jurisdictions: ["federal"] };
+    };
+    assert.equal(await resolveFormulaTaxRateForCategory("org-1", cat(undefined), "2026-08-31", subReader), "0.21125");
+    assert.equal(await resolveFormulaTaxRateForCategory("org-1", cat(["sub-a", "sub-b"]), "2026-08-31", subReader), "0.21125");
+    await assert.rejects(
+      resolveFormulaTaxRateForCategory("org-1", cat(["sub-a", "sub-missing"]), "2026-08-31", subReader),
+      /formula category "Taxed" has no enacted income tax rate for subsidiary sub-missing/,
+    );
+    await assert.rejects(
+      resolveFormulaTaxRateForCategory("org-1", cat(["sub-a", "sub-high"]), "2026-08-31", subReader),
+      /formula category "Taxed" is attributed to subsidiaries with different enacted income tax rates/,
+    );
+    const taxRefused = toUnavailableCategory(cat(["sub-a"]), 2, new FormulaTaxRefusal("cat-tax", "Taxed", "has no enacted income tax rate for subsidiary sub-a on 2026-08-31"));
+    assert.equal(taxRefused.unavailable.code, "formula-tax-unconfigured");
+    assert.deepEqual(taxRefused.unavailable.params, { name: "Taxed" });
+    console.log("cash TAX_RATE behavior passed: enacted 25% prices 0.25 exactly; 21.125% keeps 0.21125; subsidiary agreement prices, missing and disagreement refuse the category");
   `;
   const result = spawnSync(
     process.execPath,

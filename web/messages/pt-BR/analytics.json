@@ -2095,7 +2095,8 @@
       "perWeek": "Por semana (méd.)",
       "horizonTotal": "Total do horizonte",
       "unavailableCardThreshold": "A categoria de cartão de crédito \"{name}\" não tem histórico de pagamentos nem limite de pagamento relevante — defina um no editor de categorias para que a previsão saiba quais pagamentos contam como o último pagamento",
-      "unavailableMissingRate": "Sem taxa de câmbio de {func}→{base} vigente em {date} ou antes — adicione uma em Setup → Taxas de Câmbio para converter o histórico"
+      "unavailableMissingRate": "Sem taxa de câmbio de {func}→{base} vigente em {date} ou antes — adicione uma em Setup → Taxas de Câmbio para converter o histórico",
+      "unavailableFormulaTax": "A categoria de fórmula \"{name}\" não tem uma alíquota utilizável — defina uma em Setup → Impostos → Alíquotas para que {TAX_RATE} seja calculado."
     },
     "toggle": {
       "outflowsAp": "Saídas (AP)",

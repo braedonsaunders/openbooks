@@ -11,5 +11,6 @@ export function categoryRefusalText(
 ): string | null {
   if (!c.unavailable) return null
   if (c.unavailable.code === 'card-threshold-missing') return t('catTable.unavailableCardThreshold', { name: c.name })
+  if (c.unavailable.code === 'formula-tax-unconfigured') return t('catTable.unavailableFormulaTax', { name: c.name })
   return t('catTable.unavailableMissingRate', c.unavailable.params)
 }

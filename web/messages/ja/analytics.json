@@ -2095,7 +2095,8 @@
       "perWeek": "週平均",
       "horizonTotal": "期間合計",
       "unavailableCardThreshold": "クレジットカードカテゴリ「{name}」には支払履歴も重要支払しきい値もありません — 最終支払とみなす支払を予測が判断できるよう、カテゴリエディタで設定してください",
-      "unavailableMissingRate": "{date}以前の{func}→{base}のスポットレートがありません — 履歴を換算できるよう、Setup → 為替レートで追加してください"
+      "unavailableMissingRate": "{date}以前の{func}→{base}のスポットレートがありません — 履歴を換算できるよう、Setup → 為替レートで追加してください",
+      "unavailableFormulaTax": "数式カテゴリ「{name}」に使用可能な法人税率がありません — {TAX_RATE} を計算できるよう、Setup → 税金 → 法人税率で設定してください。"
     },
     "toggle": {
       "outflowsAp": "流出 (AP)",
