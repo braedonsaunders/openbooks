@@ -1082,8 +1082,9 @@ export async function healthData(
  * unfavorable-beyond-tolerance statuses while sharing the neutral watch
  * band. The tolerance comes from the caller (the organization's configured
  * bands) — the rule keeps no starting percentages of its own. Band edges
- * compare exact decimals: a float product like 0.07*100 prints
- * 7.000000000000001, which would grade an exactly-on-band line as watch.
+ * cross-multiply exactly (|variance|*100 against tolerance*|budget|) with
+ * no intermediate ratio: decimalRatio rounds to 4dp first, so 7004/100000
+ * read 0.0700 and graded on-track against a 7% band it truly exceeds.
  * Exported for unit tests.
  */
 export function budgetLineStatus(
@@ -1094,11 +1095,11 @@ export function budgetLineStatus(
 ): BudgetRow["status"] {
   const favorable = type === "income" || type === "income_other" ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
   if (isZero(budget)) return "no-budget";
-  const ratio = decimalRatio(variance, abs(budget));
-  const magnitude = ratio === null ? null : abs(ratio);
-  if (magnitude === null) return favorable ? "on-track" : type === "income" || type === "income_other" ? "under" : "over";
-  if (favorable || cmp(magnitude, decimalRatio(String(tolerance.onTrack), "100")!) <= 0) return "on-track";
-  if (cmp(magnitude, decimalRatio(String(tolerance.watch), "100")!) <= 0) return "watch";
+  if (favorable) return "on-track";
+  const scaled = mulDecimal(abs(variance), "100");
+  const base = abs(budget);
+  if (cmp(scaled, mulDecimal(String(tolerance.onTrack), base)) <= 0) return "on-track";
+  if (cmp(scaled, mulDecimal(String(tolerance.watch), base)) <= 0) return "watch";
   return type === "income" || type === "income_other" ? "under" : "over";
 }
 
