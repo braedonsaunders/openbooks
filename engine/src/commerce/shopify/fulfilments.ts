@@ -25,7 +25,10 @@ function text(value: unknown): string | null {
 
 export interface ShopifyFulfillmentOrderLine {
   id: string;
-  quantity: number;
+  /** Units still fulfillable on an open fulfilment order. */
+  remainingQuantity: number;
+  /** The order's full line quantity, for closed orders that already hold it. */
+  totalQuantity: number;
   lineItemId: string | null;
   sku: string | null;
 }
@@ -47,7 +50,8 @@ interface FulfillmentOrdersData {
             edges: Array<{
               node: {
                 id: string;
-                quantity: number;
+                remainingQuantity: number;
+                totalQuantity: number;
                 lineItem: { id: string; sku: string | null } | null;
               };
             }>;
@@ -58,6 +62,10 @@ interface FulfillmentOrdersData {
   } | null;
 }
 
+// FulfillmentOrderLineItem carries no `quantity`: open orders expose what is
+// still fulfillable as remainingQuantity, and the full line as
+// totalQuantity, per
+// https://shopify.dev/docs/api/admin-graphql/latest/objects/FulfillmentOrderLineItem.
 const FULFILLMENT_ORDERS_QUERY = /* GraphQL */ `
   query ChannelFulfillmentOrders($orderId: ID!) {
     order(id: $orderId) {
@@ -70,7 +78,8 @@ const FULFILLMENT_ORDERS_QUERY = /* GraphQL */ `
               edges {
                 node {
                   id
-                  quantity
+                  remainingQuantity
+                  totalQuantity
                   lineItem {
                     id
                     sku
@@ -111,7 +120,8 @@ export async function fetchShopifyFulfillmentOrders(
     status: edge.node.status,
     lines: edge.node.lineItems.edges.map((line) => ({
       id: line.node.id,
-      quantity: line.node.quantity,
+      remainingQuantity: line.node.remainingQuantity,
+      totalQuantity: line.node.totalQuantity,
       lineItemId: line.node.lineItem?.id ?? null,
       sku: line.node.lineItem?.sku ?? null,
     })),
@@ -139,8 +149,14 @@ interface FulfillmentCreateData {
   } | null;
 }
 
+// fulfillmentCreate takes FulfillmentInput (FulfillmentV2Input belongs to
+// fulfillmentCreateV2); both carry lineItemsByFulfillmentOrder,
+// notifyCustomer and trackingInfo, per
+// https://shopify.dev/docs/api/admin-graphql/latest/mutations/fulfillmentCreate
+// and
+// https://shopify.dev/docs/api/admin-graphql/latest/input-objects/FulfillmentInput.
 const FULFILLMENT_CREATE_MUTATION = /* GraphQL */ `
-  mutation ChannelFulfillmentCreate($fulfillment: FulfillmentV2Input!) {
+  mutation ChannelFulfillmentCreate($fulfillment: FulfillmentInput!) {
     fulfillmentCreate(fulfillment: $fulfillment) {
       fulfillment {
         id

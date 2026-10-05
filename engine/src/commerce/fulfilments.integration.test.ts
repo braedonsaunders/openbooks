@@ -39,7 +39,7 @@ interface Fixture {
 }
 
 async function setup(org: ScratchOrg, actor: string, fulfilsOrders: boolean): Promise<Fixture> {
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, cashSales: true })}::jsonb, true) where id = ${org.orgId}`);
   const created = await withBypass(() => createChannel(org.orgId, actor, {
     kind: "shopify",
     name: "Test Shop",
@@ -360,7 +360,8 @@ function fakeShopifyTransport(calls: Array<{ query: string; variables: unknown }
                     edges: [{
                       node: {
                         id: "gid://shopify/FulfillmentOrderLineItem/1",
-                        quantity: 2,
+                        remainingQuantity: 2,
+                        totalQuantity: 2,
                         lineItem: { id: "gid://shopify/LineItem/11", sku: "TEE-RED-M" },
                       },
                     }],

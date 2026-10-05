@@ -259,7 +259,7 @@ async function finishShopifyConnect(
   transport?: typeof fetch,
 ): Promise<void> {
   const channel = await loadShopifyChannel(orgId, channelId);
-  const client = new ShopifyClient({ shopDomain: channel.shop, accessToken, transport });
+  const client = new ShopifyClient({ shopDomain: channel.shop, accessToken, transport, apiVersion: channel.settings.apiVersion });
   const shop = await client.shopIdentity();
   if (shop.myshopifyDomain.toLowerCase() !== channel.shop.toLowerCase()) {
     refuse(
@@ -608,7 +608,7 @@ export async function disconnectShopify(
   const channel = await loadShopifyChannel(orgId, channelId);
   let webhookWarning: string | null = null;
   try {
-    const client = new ShopifyClient({ shopDomain: channel.shop, accessToken: channel.accessToken, transport: options.transport });
+    const client = new ShopifyClient({ shopDomain: channel.shop, accessToken: channel.accessToken, transport: options.transport, apiVersion: channel.settings.apiVersion });
     const origin = process.env.OPENBOOKS_APP_URL ?? "";
     if (origin !== "") await removeShopifySubscriptions(client, webhookCallbackUrl(origin, channelId));
   } catch (error) {

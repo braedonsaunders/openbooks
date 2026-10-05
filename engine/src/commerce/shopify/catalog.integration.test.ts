@@ -25,7 +25,8 @@ interface FakeVariant {
   title: string;
   sku: string | null;
   barcode: string | null;
-  price: { amount: string; currencyCode: string };
+  /** Variant price is the Money scalar: a decimal string in shop currency. */
+  price: string;
   options: Record<string, string>;
 }
 
@@ -75,6 +76,11 @@ function fakeTransport(catalog: () => FakeProduct[]): typeof fetch {
       variables?: { after?: string | null };
     };
     const query = body.query ?? "";
+    // Shopify validates selections: Money is a scalar, and Product.options
+    // takes no arguments — either shape fails the whole query there.
+    if (query.includes("price {") || query.includes("compareAtPrice {") || query.includes("options(first:")) {
+      throw new Error(`Shopify would reject the catalog query shape: ${query.slice(0, 80)}`);
+    }
     if (query.includes("productsCount")) {
       return Response.json({ data: { productsCount: { count: catalog().length } } });
     }
@@ -105,33 +111,33 @@ function baseCatalog(): FakeProduct[] {
       id: "101",
       title: "Widget One",
       variants: [
-        { id: "1001", title: "Default", sku: "widget-1", barcode: null, price: { amount: "19.99", currencyCode: "USD" }, options: {} },
+        { id: "1001", title: "Default", sku: "widget-1", barcode: null, price: "19.99", options: {} },
       ],
     },
     {
       id: "102",
       title: "Gadget Two",
       variants: [
-        { id: "1002", title: "Default", sku: null, barcode: "012345678905", price: { amount: "9.50", currencyCode: "USD" }, options: {} },
+        { id: "1002", title: "Default", sku: null, barcode: "012345678905", price: "9.50", options: {} },
       ],
     },
     {
       id: "103",
       title: "Tee",
       variants: [
-        { id: "2001", title: "S / Red", sku: null, barcode: null, price: { amount: "29.99", currencyCode: "USD" }, options: { Size: "S", Color: "Red" } },
-        { id: "2002", title: "M / Red", sku: null, barcode: null, price: { amount: "29.99", currencyCode: "USD" }, options: { Size: "M", Color: "Red" } },
-        { id: "2003", title: "L / Red", sku: null, barcode: null, price: { amount: "29.99", currencyCode: "USD" }, options: { Size: "L", Color: "Red" } },
-        { id: "2004", title: "S / Blue", sku: null, barcode: null, price: { amount: "29.99", currencyCode: "USD" }, options: { Size: "S", Color: "Blue" } },
-        { id: "2005", title: "M / Blue", sku: null, barcode: null, price: { amount: "29.99", currencyCode: "USD" }, options: { Size: "M", Color: "Blue" } },
-        { id: "2006", title: "L / Blue", sku: null, barcode: null, price: { amount: "29.99", currencyCode: "USD" }, options: { Size: "L", Color: "Blue" } },
+        { id: "2001", title: "S / Red", sku: null, barcode: null, price: "29.99", options: { Size: "S", Color: "Red" } },
+        { id: "2002", title: "M / Red", sku: null, barcode: null, price: "29.99", options: { Size: "M", Color: "Red" } },
+        { id: "2003", title: "L / Red", sku: null, barcode: null, price: "29.99", options: { Size: "L", Color: "Red" } },
+        { id: "2004", title: "S / Blue", sku: null, barcode: null, price: "29.99", options: { Size: "S", Color: "Blue" } },
+        { id: "2005", title: "M / Blue", sku: null, barcode: null, price: "29.99", options: { Size: "M", Color: "Blue" } },
+        { id: "2006", title: "L / Blue", sku: null, barcode: null, price: "29.99", options: { Size: "L", Color: "Blue" } },
       ],
     },
     {
       id: "104",
       title: "Mystery Box",
       variants: [
-        { id: "1004", title: "Default", sku: "UNKNOWN-9", barcode: null, price: { amount: "1500", currencyCode: "JPY" }, options: {} },
+        { id: "1004", title: "Default", sku: "UNKNOWN-9", barcode: null, price: "1500", options: {} },
       ],
     },
   ];
@@ -219,11 +225,12 @@ test(
       // Lowercase shop SKU matched the uppercase item code.
       const widgetLink = await findLinkByExternalId(org.orgId, "variant", "1001");
       assert.ok(widgetLink, "SKU-matched variant links to the item");
-      // A zero-decimal currency converts without scaling.
+      // Variant prices arrive in shop currency (the Money scalar carries no
+      // currency of its own), so a whole-unit decimal scales to minor units.
       const queue = await listCatalogQueue(org.orgId, channelId, { status: "queued" });
       const mystery = queue.rows.find((row) => row.externalId === "1004");
-      assert.equal(mystery?.priceMinor, "1500");
-      assert.equal(mystery?.currency, "JPY");
+      assert.equal(mystery?.priceMinor, "150000");
+      assert.equal(mystery?.currency, "USD");
       const counts = await catalogQueueCounts(org.orgId, channelId);
       assert.deepEqual(counts, { queued: 9, matched: 4, ignored: 0 });
     } finally {

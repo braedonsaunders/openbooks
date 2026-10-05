@@ -740,6 +740,7 @@ async function postOutboundFulfilment(
     shopDomain: access.shop,
     accessToken: access.accessToken,
     ...(options.shopifyTransport ? { transport: options.shopifyTransport } : {}),
+    apiVersion: access.settings.apiVersion,
   });
   let wanted: OutboundShipmentLine[];
   // The fulfilment links to the sale it settles (or the shipment that
@@ -812,7 +813,7 @@ async function postOutboundFulfilment(
       for (const foLine of fo.lines) {
         if (need <= 0) break;
         if ((foLine.sku ?? "") !== want.sku) continue;
-        const take = Math.min(need, foLine.quantity);
+        const take = Math.min(need, foLine.remainingQuantity);
         if (take <= 0) continue;
         need -= take;
         const bucket = pushLines.find((entry) => entry.fulfillmentOrderId === fo.id);
@@ -824,7 +825,7 @@ async function postOutboundFulfilment(
       // Already fulfilled outside OpenBooks (a closed fulfilment order holds
       // the units): close the event instead of pushing twice.
       const closedQty = closed.reduce(
-        (sum, fo) => sum + fo.lines.filter((line) => (line.sku ?? "") === want.sku).reduce((lineSum, line) => lineSum + line.quantity, 0),
+        (sum, fo) => sum + fo.lines.filter((line) => (line.sku ?? "") === want.sku).reduce((lineSum, line) => lineSum + line.totalQuantity, 0),
         0,
       );
       if (need > closedQty) {

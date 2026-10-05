@@ -369,6 +369,7 @@ export async function pushInventoryPair(
     shopDomain: channel.shop,
     accessToken: channel.accessToken,
     transport: options.transport,
+    apiVersion: channel.settings.apiVersion,
   });
   const state = await readPushState(orgId, pair);
   const inventoryItemGid =
@@ -693,6 +694,7 @@ export async function resolveInventoryConflict(
       shopDomain: access.shop,
       accessToken: access.accessToken,
       transport: options.transport,
+      apiVersion: access.settings.apiVersion,
     });
     const state = await readPushState(orgId, pair);
     const inventoryItemGid =

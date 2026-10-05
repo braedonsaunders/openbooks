@@ -12,7 +12,14 @@ import { fetchWithConnectorRetry } from "./http-retry.ts";
  */
 
 /** The single Admin API version every Shopify call pins. Bump in one place. */
-export const SHOPIFY_API_VERSION = "2025-10";
+/**
+ * Pinned Admin API version for every Shopify call. Shopify versions are
+ * stable for twelve months and then go dark (2025-10 is unsupported and
+ * stops answering in October 2026), so this pin moves forward deliberately
+ * with the operation shapes below, never by accident.
+ * https://shopify.dev/docs/api/usage/versioning
+ */
+export const SHOPIFY_API_VERSION = "2026-10";
 
 /** Shop domains live here and nowhere else; anything else never gets a request. */
 export const SHOPIFY_SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
@@ -95,6 +102,12 @@ export interface ShopifyClientOptions {
   /** Bulk-operation status polls before refusing. */
   maxBulkPolls?: number;
   pollIntervalMs?: number;
+  /**
+   * Admin API version for this channel. Defaults to the pinned version; a
+   * channel's stored setting may hold it back during a deliberate rollout,
+   * but it must stay within Shopify's supported window.
+   */
+  apiVersion?: string | null;
 }
 
 const DEFAULT_SLEEP = (ms: number): Promise<void> =>
@@ -108,6 +121,7 @@ export class ShopifyClient {
   private readonly maxThrottleRetries: number;
   private readonly maxBulkPolls: number;
   private readonly pollIntervalMs: number;
+  private readonly apiVersion: string;
 
   constructor(options: ShopifyClientOptions) {
     this.shop = normalizeShopDomain(options.shopDomain);
@@ -122,10 +136,12 @@ export class ShopifyClient {
     this.maxThrottleRetries = options.maxThrottleRetries ?? 2;
     this.maxBulkPolls = options.maxBulkPolls ?? 150;
     this.pollIntervalMs = options.pollIntervalMs ?? 2000;
+    const override = typeof options.apiVersion === "string" ? options.apiVersion.trim() : "";
+    this.apiVersion = /^\d{4}-\d{2}$/.test(override) ? override : SHOPIFY_API_VERSION;
   }
 
   get endpoint(): string {
-    return `https://${this.shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+    return `https://${this.shop}/admin/api/${this.apiVersion}/graphql.json`;
   }
 
   private async postGraphql(body: Record<string, unknown>): Promise<Response> {

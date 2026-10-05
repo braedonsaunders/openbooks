@@ -89,16 +89,21 @@ type BalanceNode = {
   amount: { amount: string; currencyCode: string };
   fee?: { amount: string; currencyCode: string } | null;
   net?: { amount: string; currencyCode: string } | null;
-  sourceOrderId?: string | null;
+  associatedOrder?: { id?: string | null } | null;
 };
 
+// The balance transaction carries no order id scalar; the source order is
+// the associatedOrder reference, per
+// https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsBalanceTransaction
+// and
+// https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsAssociatedOrder.
 const PAYOUT_TRANSACTIONS_QUERY = `
   query ShopifyPayoutTransactions($payoutId: ID!, $first: Int!, $after: String) {
     node(id: $payoutId) {
       ... on ShopifyPaymentsPayout {
         id
         balanceTransactions(first: $first, after: $after) {
-          edges { cursor node { id type amount { amount currencyCode } fee { amount currencyCode } net { amount currencyCode } sourceOrderId } }
+          edges { cursor node { id type amount { amount currencyCode } fee { amount currencyCode } net { amount currencyCode } associatedOrder { id } } }
           pageInfo { hasNextPage endCursor }
         }
       }
@@ -160,6 +165,7 @@ export async function fetchShopifyPayouts(
       const amount = isRecord(row.amount) ? row.amount : null;
       const fee = isRecord(row.fee) ? row.fee : null;
       const netTxn = isRecord(row.net) ? row.net : null;
+      const associatedOrder = isRecord(row.associatedOrder) ? row.associatedOrder : null;
       transactions.push({
         id: typeof row.id === "string" ? row.id : null,
         type: typeof row.type === "string" ? row.type : "",
@@ -167,7 +173,8 @@ export async function fetchShopifyPayouts(
         fee: fee && typeof fee.amount === "string" ? fee.amount : null,
         net: netTxn && typeof netTxn.amount === "string" ? netTxn.amount : null,
         currency: amount && typeof amount.currencyCode === "string" ? amount.currencyCode : null,
-        sourceOrderId: typeof row.sourceOrderId === "string" ? row.sourceOrderId : null,
+        sourceOrderId:
+          associatedOrder && typeof associatedOrder.id === "string" ? associatedOrder.id : null,
       });
     }
     settlements.push(
@@ -247,6 +254,7 @@ export async function runDueShopifyPayoutPulls(
           shopDomain: access.shop,
           accessToken: access.accessToken,
           ...(transport ? { transport } : {}),
+          apiVersion: access.settings.apiVersion,
         });
         settlements.push(...await fetchShopifyPayouts(client, { sinceDate }));
       }
