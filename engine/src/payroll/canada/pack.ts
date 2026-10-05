@@ -16,6 +16,7 @@ import { RQ_REMITTANCE_SCHEDULE } from "./quebec/remittance.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./rates.ts";
 import { CA_EMPLOYEE_FACTS } from "./employee-facts.ts";
 import { CA_EMPLOYER_FACTS } from "./employer-facts.ts";
+import { CA_EMPLOYER_LEVY_PROGRAMS } from "./levy-programs.ts";
 import { provisionCaPayrollDefaults } from "./provision-defaults.ts";
 // HR-13: the CA pack's construction carve-outs (data, beside the pack).
 import { CA_CONSTRUCTION } from "./construction.ts";
@@ -128,28 +129,7 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // Employer levies assessed on their own earnings bases, never on gross
   // pay: a non-taxable allowance is not assessable, a taxable benefit is,
   // and each component declares its exclusions in program_exclusions.
-  employerLevyPrograms: [
-    {
-      key: "wcb",
-      label: "WCB/WSIB assessable earnings",
-      help: "Earnings assessable for workers' compensation premiums at the employee's class rate, to the class annual maximum.",
-    },
-    {
-      key: "eht",
-      label: "Employer health tax assessable earnings",
-      help: "Remuneration assessable for provincial employer health tax (Ontario EHT past the annual exemption).",
-    },
-    {
-      key: "hsf",
-      label: "Health Services Fund assessable earnings",
-      help: "Remuneration subject to the Québec Health Services Fund contribution (TP-1015.F-V s. 5).",
-    },
-    {
-      key: "cnt",
-      label: "Labour standards contribution assessable earnings",
-      help: "Remuneration subject to the Québec contribution related to labour standards (LE-39.0.2-V).",
-    },
-  ],
+  employerLevyPrograms: CA_EMPLOYER_LEVY_PROGRAMS,
   // T4127 factor U1: employee-paid dues reduce taxable income.
   employeeUnionDuesTaxTreatment: "union_dues",
   deductionTreatments: [

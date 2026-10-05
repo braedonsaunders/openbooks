@@ -296,6 +296,8 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
             entityKey: 'pay-component-department-expenses',
             sp: data.currentParams,
             basePath,
+            rowParam: 'departmentExpense',
+            paramPrefix: 'departmentExpense',
           }),
           when: f('onComponents'),
         },

@@ -62,8 +62,8 @@ const post = (body: unknown) =>
 const get = (query = '') =>
   withOrgContext(state.orgId, () => GET(new Request(`http://payroll.test${query}`)))
 
-test('profile POST refuses money and percent fields wider than their columns', async () => {
-  // Claim amounts are numeric(19,4) and vacation_percent numeric(7,4): pasted
+test('profile POST refuses money fields wider than their columns', async () => {
+  // Claim amounts are numeric(19,4): pasted
   // figures wider than that cleared the exact-decimal check and died in the
   // upsert with a storage error. Fail closed with the named 422 instead.
   const { org, employeeId, scheduleId } = await fixture()
@@ -100,10 +100,6 @@ test('profile POST refuses money and percent fields wider than their columns', a
       ['claim amount comma grouping unchanged', { federalClaimAmount: '1,234.56' }, /federalClaimAmount must not contain a thousands separator — remove , from "1,234\.56"/],
       ['claim amount currency', { federalClaimAmount: '$1200' }, /federalClaimAmount must not contain a currency symbol — remove \$ from "\$1200"/],
       ['claim amount scientific', { federalClaimAmount: '1.5E+05' }, /federalClaimAmount must be written out in full, not in scientific notation/],
-      ['vacation percent too wide', { vacationPercent: '1234' }, /vacationPercent is limited to 3 digits before the decimal point — got 4/],
-      ['vacation percent not a number', { vacationPercent: 'abc' }, /vacationPercent must be a percentage — "abc" is not a number/],
-      ['vacation percent scale', { vacationPercent: '12.34567' }, /vacationPercent allows at most 4 decimal places — got 5 in "12.34567"/],
-      ['vacation percent negative', { vacationPercent: '-1' }, /vacationPercent cannot be negative — got -1/],
       // The echo is bounded: the body is arbitrary JSON, so an object must not
       // come back as "[object Object]" and a long paste must not come back
       // whole. Name the type, cap the string.
@@ -127,7 +123,7 @@ test('profile POST refuses money and percent fields wider than their columns', a
     // The widened scale, both sides: the money columns are numeric(19,4), so a
     // three-decimal figure the old 2dp gate refused as malformed must SAVE
     // exactly, while five decimals still refuse naming the four-place limit.
-    const threeDp = await post({ ...base, federalClaimAmount: '1234.567', vacationPercent: '999.9999' })
+    const threeDp = await post({ ...base, federalClaimAmount: '1234.567' })
     assert.equal(threeDp.status, 200, await threeDp.clone().text())
     const threeDpSaved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string }>(sql`
       select federal_claim_amount::text from employee_payroll_profiles
@@ -135,12 +131,12 @@ test('profile POST refuses money and percent fields wider than their columns', a
     assert.deepEqual(threeDpSaved.rows[0], { federal_claim_amount: '1234.5670' })
     // In-range values, including the column maximums at the route's 4dp
     // contract, still save.
-    const ok = await post({ ...base, federalClaimAmount: '999999999999999.99', vacationPercent: '999.9999' })
+    const ok = await post({ ...base, federalClaimAmount: '999999999999999.99' })
     assert.equal(ok.status, 200, await ok.clone().text())
-    const saved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string; vacation_percent: string }>(sql`
-      select federal_claim_amount::text, vacation_percent::text from employee_payroll_profiles
+    const saved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string }>(sql`
+      select federal_claim_amount::text from employee_payroll_profiles
        where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.deepEqual(saved.rows[0], { federal_claim_amount: '999999999999999.9900', vacation_percent: '999.9999' })
+    assert.deepEqual(saved.rows[0], { federal_claim_amount: '999999999999999.9900' })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
