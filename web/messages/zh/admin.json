@@ -2891,6 +2891,11 @@
         "title": "汇率",
         "description": "你所在组织用于过账外币交易的每日汇率。"
       },
+      "fx-rate-age-policies": {
+        "title": "汇率时效政策",
+        "singular": "汇率时效政策",
+        "description": "外汇重估和合并对期间计价时可使用汇率的最长时效。没有生效的政策时，期末汇率和平均汇率均默认为 31 天。"
+      },
       "consolidated-fx-rates": {
         "title": "合并汇率",
         "description": "用于子公司合并的期间当前汇率、平均汇率和历史汇率。"
@@ -3673,6 +3678,7 @@
       "orderMultipleQty": "订货倍数",
       "scrapPctPlanned": "计划损耗率 (%)",
       "rateKind": "费率类型",
+      "maxAgeDays": "最长时效（天）",
       "rateBookId": "费率表",
       "customerId": "客户",
       "projectId": "项目",
@@ -3983,6 +3989,7 @@
       "stopSellingAtZero": "为零时停止销售"
     },
     "fieldHelp": {
+      "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
       "storedValueLiabilityAccount": "发行时贷记、兑换时借记的资产负债表科目。",
       "storedValueBreakageIncomeAccount": "确认断点或到期时贷记的收入科目。",
       "storedValueBreakagePolicy": "无从不确认断点；按比例随兑换确认；长期未动在不活跃期后确认休眠余额。",
@@ -4322,6 +4329,10 @@
       "endOfLife": {
         "fullyDepreciate": "全额折旧",
         "retainBalance": "保留余额"
+      },
+      "fxRateAgeKind": {
+        "closing": "期末（期末即期）",
+        "average": "期间平均"
       },
       "fxRateType": {
         "spot": "即期",
@@ -6052,6 +6063,14 @@
         "apiKey": "API 密钥",
         "keyPlaceholder": "粘贴服务商 API 密钥",
         "keyKeepPlaceholder": "留空以保留已保存的密钥",
+        "noRelaySecret": "无中继密钥",
+        "relaySecretGenerate": "生成中继密钥",
+        "relaySecretRotate": "轮换中继密钥",
+        "relaySecretRotateConfirm": "要轮换 {name} 的中继密钥吗？在发送方改用新密钥之前，使用当前密钥签名的跟踪推送将被拒绝。",
+        "relaySecretIssuedTitle": "{name} 的中继密钥",
+        "relaySecretIssuedHint": "请立即将此密钥配置到跟踪推送的发送方。它只显示一次；没有有效签名的跟踪推送将被拒绝。",
+        "relaySecretDismiss": "我已保存",
+        "relaySecretRotated": "已轮换 {name} 的中继密钥",
         "makeDefault": "新出货的默认账号",
         "updated": "账号已保存。",
         "connected": "账号已连接。",

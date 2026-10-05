@@ -2891,6 +2891,11 @@
         "title": "Taxas de Câmbio",
         "description": "As taxas diárias da sua organização usadas para lançar transações em moeda estrangeira."
       },
+      "fx-rate-age-policies": {
+        "title": "Políticas de antiguidade de taxas de câmbio",
+        "singular": "política de antiguidade de taxas de câmbio",
+        "description": "Antiguidade máxima de uma taxa de câmbio quando a reavaliação cambial e a consolidação valorizam um período. Sem política vigente, o padrão é de 31 dias para as taxas de fechamento e as médias."
+      },
       "consolidated-fx-rates": {
         "title": "Taxas de Câmbio Consolidadas",
         "description": "Taxas atual, média e histórica do período usadas para a consolidação de subsidiárias."
@@ -3673,6 +3678,7 @@
       "orderMultipleQty": "Múltiplo do pedido",
       "scrapPctPlanned": "Percentual de refugo planejado",
       "rateKind": "Tipo de taxa",
+      "maxAgeDays": "Antiguidade máxima (dias)",
       "rateBookId": "Tabela de tarifas",
       "customerId": "Cliente",
       "projectId": "Projeto",
@@ -3983,6 +3989,7 @@
       "stopSellingAtZero": "Parar de vender no zero"
     },
     "fieldHelp": {
+      "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
       "storedValueLiabilityAccount": "A conta do balanço creditada ao emitir valor e debitada no resgate.",
       "storedValueBreakageIncomeAccount": "A conta de receita creditada quando breakage ou expiração é reconhecida.",
       "storedValueBreakagePolicy": "Nenhuma nunca reconhece breakage; proporcional reconhece conforme os resgates; por inatividade reconhece saldos dormentes após a janela de inatividade.",
@@ -4322,6 +4329,10 @@
       "endOfLife": {
         "fullyDepreciate": "Depreciar totalmente",
         "retainBalance": "Reter saldo"
+      },
+      "fxRateAgeKind": {
+        "closing": "Fechamento (à vista no fim do período)",
+        "average": "Média do período"
       },
       "fxRateType": {
         "spot": "À vista",
@@ -6052,6 +6063,14 @@
         "apiKey": "Chave de API",
         "keyPlaceholder": "Cole a chave de API do provedor",
         "keyKeepPlaceholder": "Deixe em branco para manter a chave salva",
+        "noRelaySecret": "Sem segredo de retransmissão",
+        "relaySecretGenerate": "Gerar segredo de retransmissão",
+        "relaySecretRotate": "Renovar segredo de retransmissão",
+        "relaySecretRotateConfirm": "Renovar o segredo de retransmissão de {name}? Entregas de rastreamento assinadas com o segredo atual serão recusadas até que o remetente use o novo.",
+        "relaySecretIssuedTitle": "Segredo de retransmissão de {name}",
+        "relaySecretIssuedHint": "Configure agora o remetente das entregas de rastreamento com este segredo. Ele é exibido apenas uma vez; entregas sem assinatura válida são recusadas.",
+        "relaySecretDismiss": "Já salvei",
+        "relaySecretRotated": "Segredo de retransmissão renovado para {name}",
         "makeDefault": "Conta padrão para novos envios",
         "updated": "Conta salva.",
         "connected": "Conta conectada.",

@@ -23,7 +23,10 @@ const connectBody = z.object({
   makeDefault: z.boolean().optional(),
 })
 
-/** Connect (or reconnect) a carrier account; the key is sealed on the way in. */
+/**
+ * Connect (or reconnect) a carrier account; the key is sealed on the way in.
+ * A new account answers with its relay secret exactly once.
+ */
 export const POST = defineRoute({
   permission: 'shipping.manage',
   feature: 'shippingHub',

@@ -20,9 +20,12 @@ type Account = {
   status: string;
   isDefault: boolean;
   hasKey: boolean;
+  hasRelaySecret: boolean;
   lastError: string | null;
   lastCheckedAt: string | null;
 };
+
+type ConnectResponse = { connected?: { accountId: string; relaySecret: string | null } };
 
 const PROVIDERS: { key: ProviderKey; label: string }[] = [
   { key: "easypost", label: "EasyPost" },
@@ -64,6 +67,9 @@ export function ShippingAccountsClient() {
   const [mode, setMode] = useState<"test" | "live">("test");
   const [apiKey, setApiKey] = useState("");
   const [makeDefault, setMakeDefault] = useState(false);
+  // A relay secret is returned once, on connect or rotation; it is held here
+  // only until the operator confirms they configured the delivery sender.
+  const [issuedSecret, setIssuedSecret] = useState<{ name: string; secret: string } | null>(null);
   const { busy, refusal, execute } = useAppAction();
   const statusLabel = useStatusLabel();
 
@@ -110,9 +116,10 @@ export function ShippingAccountsClient() {
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const savedName = name.trim();
     await execute(
       () =>
-        fetchAction("/api/shipping/accounts", {
+        fetchAction<ConnectResponse>("/api/shipping/accounts", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -127,7 +134,8 @@ export function ShippingAccountsClient() {
       {
         fallbackMessage: t("accounts.errors.saveFailed"),
         successMessage: t(editingId ? "accounts.updated" : "accounts.connected"),
-        onOk: () => {
+        onOk: (data) => {
+          if (data?.connected?.relaySecret) setIssuedSecret({ name: savedName, secret: data.connected.relaySecret });
           cancelForm();
           void load();
         },
@@ -142,6 +150,22 @@ export function ShippingAccountsClient() {
         fallbackMessage: t("accounts.errors.testFailed"),
         successMessage: t("accounts.testOk", { name: account.name }),
         onOk: () => {
+          void load();
+        },
+      },
+    );
+  }
+
+  async function rotateRelaySecret(account: Account) {
+    if (account.hasRelaySecret && !(await confirmDialog(t("accounts.relaySecretRotateConfirm", { name: account.name })))) return;
+    await execute(
+      () =>
+        fetchAction<ConnectResponse>(`/api/shipping/accounts/${encodeURIComponent(account.id)}/relay-secret`, { method: "POST" }),
+      {
+        fallbackMessage: t("accounts.errors.saveFailed"),
+        successMessage: t("accounts.relaySecretRotated", { name: account.name }),
+        onOk: (data) => {
+          if (data?.connected?.relaySecret) setIssuedSecret({ name: account.name, secret: data.connected.relaySecret });
           void load();
         },
       },
@@ -178,6 +202,16 @@ export function ShippingAccountsClient() {
       </div>
 
       <ActionAlert error={refusal} fallbackMessage={t("accounts.errors.saveFailed")} />
+      {issuedSecret && (
+        <Card>
+          <CardContent className="space-y-2 pt-4" role="status">
+            <p className="font-medium text-slate-900 dark:text-slate-100">{t("accounts.relaySecretIssuedTitle", { name: issuedSecret.name })}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{t("accounts.relaySecretIssuedHint")}</p>
+            <code className="block break-all rounded-md bg-slate-100 px-3 py-2 font-mono text-sm text-slate-900 dark:bg-slate-900 dark:text-slate-100">{issuedSecret.secret}</code>
+            <Button variant="outline" size="sm" onClick={() => setIssuedSecret(null)}>{t("accounts.relaySecretDismiss")}</Button>
+          </CardContent>
+        </Card>
+      )}
       {error && (
         <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
           {error}
@@ -259,6 +293,7 @@ export function ShippingAccountsClient() {
                     <Badge variant="outline">{account.mode === "live" ? t("accounts.modeLive") : t("accounts.modeTest")}</Badge>
                     <Badge variant={statusVariant(account.status)}>{statusLabel(account.status)}</Badge>
                     {!account.hasKey && <Badge variant="warning">{t("accounts.noKey")}</Badge>}
+                    {!account.hasRelaySecret && <Badge variant="warning">{t("accounts.noRelaySecret")}</Badge>}
                   </div>
                   {account.lastError && (
                     <p className="mt-1 text-sm text-red-700 dark:text-red-300">{account.lastError}</p>
@@ -271,6 +306,11 @@ export function ShippingAccountsClient() {
                   <Button variant="outline" size="sm" disabled={busy} onClick={() => startEdit(account)}>
                     {tc("actions.edit")}
                   </Button>
+                  {account.status !== "disabled" && (
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => void rotateRelaySecret(account)}>
+                      {t(account.hasRelaySecret ? "accounts.relaySecretRotate" : "accounts.relaySecretGenerate")}
+                    </Button>
+                  )}
                   {account.status !== "disabled" && (
                     <Button variant="outline" size="sm" disabled={busy} onClick={() => void disconnect(account)}>
                       {t("accounts.disconnect")}

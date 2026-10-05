@@ -2888,6 +2888,11 @@
         "title": "Wechselkurse",
         "description": "Die täglichen Kurse Ihrer Organisation zur Buchung von Fremdwährungstransaktionen."
       },
+      "fx-rate-age-policies": {
+        "title": "Richtlinien zum Wechselkursalter",
+        "singular": "Richtlinie zum Wechselkursalter",
+        "description": "Wie alt ein Wechselkurs sein darf, wenn Fremdwährungsbewertung und Konsolidierung eine Periode bewerten. Ohne gültige Richtlinie gilt für Stichtags- und Durchschnittskurse jeweils ein Standard von 31 Tagen."
+      },
       "consolidated-fx-rates": {
         "title": "Konsolidierte Wechselkurse",
         "description": "Periodenaktuelle, durchschnittliche und historische Kurse für die Konsolidierung von Tochtergesellschaften."
@@ -3725,6 +3730,7 @@
       "pensionable": "Rentenversicherungspflichtig",
       "periodsPerYear": "Einzugsperioden pro Jahr",
       "rateKind": "Satzart",
+      "maxAgeDays": "Höchstalter (Tage)",
       "registrationNumber": "Registrierungsnummer",
       "remittancePartyId": "Abführungslieferant",
       "requiresAdditionalInsured": "Erfordert mitversicherten Zusatz",
@@ -4028,6 +4034,7 @@
       "stopSellingAtZero": "Verkauf bei Null stoppen"
     },
     "fieldHelp": {
+      "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
       "storedValueLiabilityAccount": "Das Bilanzkonto, das bei Ausgabe gutgeschrieben und bei Einlösung belastet wird.",
       "storedValueBreakageIncomeAccount": "Das Ertragskonto, dem anerkannte Breakage- oder Verfallbeträge gutgeschrieben werden.",
       "storedValueBreakagePolicy": "Keine erkennt nie Breakage; anteilig erkennt sie bei Einlösungen; bei Inaktivität werden ruhende Guthaben nach dem Inaktivitätszeitraum erfasst.",
@@ -4320,6 +4327,10 @@
         "three_year_average": "Dreijahresdurchschnitt (historisch)",
         "live": "Live (aus Ist-Kosten neu berechnet)",
         "standard": "Standard (effektiv datierte Karte)"
+      },
+      "fxRateAgeKind": {
+        "closing": "Stichtagskurs (Kassakurs zum Periodenende)",
+        "average": "Periodendurchschnitt"
       },
       "fxRateType": {
         "spot": "Kassakurs",
@@ -6052,6 +6063,14 @@
         "apiKey": "API-Schlüssel",
         "keyPlaceholder": "API-Schlüssel des Anbieters einfügen",
         "keyKeepPlaceholder": "Leer lassen, um den gespeicherten Schlüssel zu behalten",
+        "noRelaySecret": "Kein Relay-Secret",
+        "relaySecretGenerate": "Relay-Secret erzeugen",
+        "relaySecretRotate": "Relay-Secret erneuern",
+        "relaySecretRotateConfirm": "Relay-Secret für {name} erneuern? Mit dem aktuellen Secret signierte Tracking-Zustellungen werden abgelehnt, bis der Absender das neue verwendet.",
+        "relaySecretIssuedTitle": "Relay-Secret für {name}",
+        "relaySecretIssuedHint": "Hinterlegen Sie dieses Secret jetzt beim Absender der Tracking-Zustellungen. Es wird nur einmal angezeigt; Zustellungen ohne gültige Signatur werden abgelehnt.",
+        "relaySecretDismiss": "Ich habe es gespeichert",
+        "relaySecretRotated": "Relay-Secret für {name} erneuert",
         "makeDefault": "Standardkonto für neue Sendungen",
         "updated": "Konto gespeichert.",
         "connected": "Konto verbunden.",
