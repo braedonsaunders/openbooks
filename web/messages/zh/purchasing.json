@@ -1,6 +1,7 @@
 {
   "home": {
     "title": "采购",
+    "unknownVendor": "未知供应商",
     "description": "从采购到付款的工作区 — 采购承诺、账单、付款与供应商支出一站式管理。",
     "subsidiary": "子公司",
     "tabs": {

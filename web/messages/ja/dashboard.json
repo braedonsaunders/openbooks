@@ -273,6 +273,8 @@
   },
   "persona": {
     "reviewDue": "レビュー期限",
+    "unlimited": "無制限",
+    "reviewRange": "{from} → {to}",
     "attentionHrmItems": "対応待ちの人事項目",
     "attentionPayrollSetup": "給与設定に統制勘定が必要",
     "attentionBankLines": "未照合の銀行明細行",

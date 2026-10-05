@@ -1,6 +1,7 @@
 {
   "home": {
     "title": "Purchasing",
+    "unknownVendor": "Unknown vendor",
     "description": "Your buy-to-pay workspace — commitments, bills, payments, and vendor spend in one place.",
     "subsidiary": "Subsidiary",
     "tabs": {

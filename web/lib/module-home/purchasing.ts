@@ -100,47 +100,27 @@ function documentMovements(orgId: string, kinds: string[], from: string, through
  */
 async function openPoValueInOrgCurrency(
   orgId: string,
-  orgCurrency: string,
   asOf: string,
   rows: readonly OpenPoRow[],
+  /** Catalog fallback for orders whose party has no display name. */
+  unknownVendor: string,
 ): Promise<{ byParty: Map<string, { name: string; value: string; count: number }>; total: string }> {
-  const rates = new Map<string, string>()
+  // One shared rate context instead of a hand-rolled per-currency lookup:
+  // the same latest-dated-spot rule (inverse quotes included), with a
+  // missing rate failing closed naming the pair and date.
+  const fx = await flowRates(orgId, rows.map((row) => ({ func: String(row.currency ?? '').trim().toUpperCase() || null, date: asOf })))
   const byParty = new Map<string, { name: string; value: string; count: number }>()
   let total = '0.0000'
   for (const row of rows) {
-    const sourceCurrency = String(row.currency ?? '').trim().toUpperCase()
-    let converted = String(row.total ?? '0')
-    if (sourceCurrency && sourceCurrency !== orgCurrency) {
-      let rate = rates.get(sourceCurrency)
-      if (!rate) {
-        const candidates = await db.execute<{ rate: string }>(sql`
-          select rate::text from (
-            select rate, as_of, 0 as priority
-              from fx_rates
-             where org_id = ${orgId} and from_currency = ${sourceCurrency}
-               and to_currency = ${orgCurrency} and rate_type = 'spot'
-               and as_of <= ${asOf}
-            union all
-            select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority
-              from fx_rates
-             where org_id = ${orgId} and from_currency = ${orgCurrency}
-               and to_currency = ${sourceCurrency} and rate_type = 'spot'
-               and as_of <= ${asOf}
-          ) candidates
-          order by as_of desc, priority asc
-          limit 1
-        `)
-        rate = candidates.rows[0]?.rate
-        if (!rate) throw new Error(`no spot rate for open purchase orders ${sourceCurrency}→${orgCurrency} on or before ${asOf}`)
-        rates.set(sourceCurrency, rate)
-      }
-      converted = mulDecimal(converted, rate)
-    }
+    const converted = mulDecimal(
+      String(row.total ?? '0'),
+      fx.rateAt(String(row.currency ?? '').trim().toUpperCase() || null, asOf),
+    )
     total = add(total, converted)
     if (row.party_id) {
       const prior = byParty.get(row.party_id)
       byParty.set(row.party_id, {
-        name: prior?.name ?? row.name ?? 'Unspecified',
+        name: prior?.name ?? row.name ?? unknownVendor,
         value: add(prior?.value ?? '0.0000', converted),
         count: (prior?.count ?? 0) + 1,
       })
@@ -178,6 +158,9 @@ export async function purchasingHome(
     grants.expenses ? isFeatureEnabled(orgId, 'expenses') : false,
   ])
   const today = await businessToday(orgId)
+  // Vendor names fall back to the catalog, never a hardcoded 'Unspecified'.
+  const { getTranslations } = await import('next-intl/server')
+  const unknownVendor = (await getTranslations('purchasing'))('home.unknownVendor')
   const ago7 = addCalendarDays(today, -7)
   const ago30 = addCalendarDays(today, -30)
   const in7 = addCalendarDays(today, 7)
@@ -260,7 +243,7 @@ export async function purchasingHome(
     // transaction currencies.
     grants.ap && ordersOn
       ? db.execute<OpenPoRow>(sql`
-        select d.party_id, coalesce(p.display_name, 'Unspecified') as name,
+        select d.party_id, p.display_name as name,
                abs(d.total) as total, d.currency
           from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -300,7 +283,7 @@ export async function purchasingHome(
 
   const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
   if (ordersOn && !orgCurrency) throw new Error('organization currency is not configured')
-  const po = ordersOn ? await openPoValueInOrgCurrency(orgId, orgCurrency, today, poRowsRes.rows) : { byParty: new Map(), total: '0' }
+  const po = ordersOn ? await openPoValueInOrgCurrency(orgId, today, poRowsRes.rows, unknownVendor) : { byParty: new Map(), total: '0' }
 
   // Hero roster — vendor commitments merged from the SAME as-of open items
   // as the pulse with translated open POs, ranked by combined
@@ -319,7 +302,7 @@ export async function purchasingHome(
     if (it.partyId == null) continue
     const remaining = String(it.remaining)
     const cur = billedByParty.get(it.partyId) ?? {
-      name: String(it.partyName ?? 'Unspecified'),
+      name: String(it.partyName ?? unknownVendor),
       openBills: 0,
       billedOpen: '0',
       overdue: '0',

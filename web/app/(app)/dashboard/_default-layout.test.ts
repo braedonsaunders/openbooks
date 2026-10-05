@@ -48,6 +48,17 @@ test('only unchanged seeded role templates follow product defaults; edited layou
   }
   assert.equal(hasFinancialWorkspace(manager), false, 'general reports do not displace a people workspace')
   assert.ok(hasFinancialWorkspace({ ...manager, permissions: new Set(['gl.read']) }), 'ledger readers receive the financial workspace')
+  // Grants, never role names: an admin role key with only general reports
+  // confers nothing, while a payables approver qualifies by grant alone.
+  assert.equal(
+    hasFinancialWorkspace({ ...manager, user: { ...manager.user, roles: [{ key: 'admin', name: 'Admin' }] } }),
+    false,
+    'role names never confer the financial workspace',
+  )
+  assert.ok(
+    hasFinancialWorkspace({ ...manager, permissions: new Set(['ap.approve']) }),
+    'payables approvers receive the financial workspace by grant',
+  )
   const seed = structuredClone(DEFAULT_DASHBOARD_LAYOUTS.admin)
   assert.ok(isShippedRoleLayout('admin', seed))
   seed.widgets[0]!.w = 4
