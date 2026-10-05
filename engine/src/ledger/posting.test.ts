@@ -8,7 +8,7 @@ import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { controlLineIsOpenItem, RULES } from "./posting-rules.ts";
 import { glProjectionKey } from "./posting-projection.ts";
 import { postDocument } from "./posting-document.ts";
-import { PostingError, type PostingDocument, type PostingDocumentLine } from "../journal/posting-contracts.ts";
+import { PostingError, type PostingDeps, type PostingDocument, type PostingDocumentLine } from "../journal/posting-contracts.ts";
 
 const controlAccounts = new Set(["ar", "ap"]);
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -480,7 +480,7 @@ test("credit memos mirror their invoice and bill projections with reversed direc
   // The -1 direction is a mutation target: flipped to +1, a credit memo
   // posts its tax legs with invoice/bill signs while still balancing, so
   // only exact mirrored amounts catch it.
-  const deps = {
+  const deps: PostingDeps = {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [
       { taxCodeId: "standard", sequence: 1, collectedBy: "merchant", facilitatorName: null, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
@@ -542,7 +542,7 @@ test("taxable sales and purchases fail closed when no tax control account exists
     taxAmount: "13.0000",
     taxCodeId: "tax",
   } as unknown as PostingDocumentLine;
-  const deps = {
+  const deps: PostingDeps = {
     control: { ar: "ar", ap: "ap", bank: "bank" },
     taxComponentsByLine: new Map([["line", [{
       taxCodeId: "tax",
@@ -1000,7 +1000,7 @@ test("kernel projections are deterministic: the same input posts the same lines 
     taxAmount: "5.0000",
     taxCodeId: "tax",
   } as unknown as PostingDocumentLine;
-  const deps = {
+  const deps: PostingDeps = {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [{
       taxCodeId: "tax",
