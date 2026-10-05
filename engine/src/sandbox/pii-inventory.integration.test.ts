@@ -421,6 +421,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "close_reporting_packages.description",
   "close_reporting_packages.name",
   "close_reporting_packages.reports",
+  "collection_attempts.auth_url",
   "collection_attempts.currency",
   "collection_attempts.decline_code",
   "collection_attempts.decline_kind",
