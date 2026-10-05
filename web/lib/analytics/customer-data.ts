@@ -498,7 +498,7 @@ function emptyProfitability(): Profitability {
       totalRevenue: "0",
       totalCost: "0",
       totalGrossProfit: "0",
-      avgMarginPct: 0,
+      avgMarginPct: null,
       customerCount: 0,
       totalJobs: 0,
       fakeChampions: 0,
@@ -626,6 +626,35 @@ export async function customerProfitability(
     c.totalCost = add(c.totalCost, costs);
   }
 
+  // The leak share divides by the period's recognized revenue across every
+  // customer — not just the project-tagged slice below. A leak is a share of
+  // the period, so the denominator reads the same income legs without the
+  // project filter, translated per posting day like every other flow.
+  const periodLegs = ((await db.execute(sql`
+    with ew as materialized (
+      select id, org_id, posting_date from journal_entries
+       where posting_date >= ${from} and posting_date <= ${to}
+         ${orgId ? sql`and org_id = ${orgId}` : sql``}
+         and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
+    )
+    select sub.base_currency as func,
+      e.posting_date::date as day,
+      -sum(case when a.type in ${REVENUE_TYPES} then l.amount else 0 end) as revenue
+    from ew e
+    join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+    where a.type in (${PNL_TYPES_SQL})
+      ${orgFilter}
+    group by sub.base_currency, e.posting_date::date
+  `))).rows as unknown as { func: string | null; day: string; revenue: CustomerSqlNumeric }[];
+  const periodCtx = await flowRates(orgId, periodLegs.map((leg) => ({
+    func: leg.func ?? null,
+    date: String(leg.day).slice(0, 10),
+  })));
+  const periodTotal = sum(periodLegs.map((leg) =>
+    mulDecimal(String(leg.revenue ?? 0), periodCtx.rateAt(leg.func ?? null, String(leg.day).slice(0, 10)))));
+
   // Profit tiers and the leak definition read the effective scoring config:
   // tiers and leaks are policy, never absolute amounts in the code.
   const tierCutoffs: ProfitTierCutoffs = {
@@ -637,6 +666,8 @@ export async function customerProfitability(
     revenueSharePct: cfg.profitLeakRevenueSharePct!,
     marginTarget: cfg.profitLeakMarginTarget!,
   };
+  // The section total stays project-tagged (the universe this tab reports on);
+  // only the leak share divides by the whole period.
   const totalRevenue = sum([...byCustomer.values()].map((c) => c.totalRevenue));
   const tierBreakdown: Record<ProfitTier, number> = { high: 0, medium: 0, low: 0, marginal: 0, loss: 0 };
   const customers = [...byCustomer.values()].map((c) => {
@@ -644,7 +675,7 @@ export async function customerProfitability(
     c.marginPct = exactMarginPercent(c.grossProfit, c.totalRevenue);
     c.profitTier = profitTierOf(c.marginPct, c.grossProfit, tierCutoffs);
     c.isFakeChampion = isProfitLeak(
-      { revenue: c.totalRevenue, totalRevenue, marginPct: c.marginPct },
+      { revenue: c.totalRevenue, totalRevenue: periodTotal, marginPct: c.marginPct },
       leakCutoffs,
     );
     c.jobs.sort((a, b) => cmp(b.revenue, a.revenue));
@@ -1011,7 +1042,6 @@ async function readCustomerData(
   const momCapDown = cfg.growthMomCapDown!;
   const trendBand = cfg.growthTrendPct!;
   const trendWindow = cfg.growthTrendWindowMonths!;
-  const yoyWindow = cfg.growthYoyWindowMonths!;
   const cohortActiveMonths = cfg.cohortActiveMonths!;
   const overdueInsightAt = cfg.overdueInsightCount!;
 
@@ -1870,10 +1900,15 @@ async function readCustomerData(
   if (dsoStats === null) throw new Error(strings.paymentStatsUnavailable());
   const avgDaysToPay = dsoStats.globalAvg;
 
+  // Year-on-year compares the last 3 months against the same 3 months a year
+  // back: twelve months of offset plus the three-month window. A narrower
+  // window is not year-on-year, so this span is derived, never configured.
+  const yoyRecentMonths = 3;
+  const yoyWindow = 12 + yoyRecentMonths;
   let yoyGrowth: number | null = null;
   if (monthly.length >= yoyWindow) {
-    const recent3 = sum(monthly.slice(-3).map((m) => m.revenue));
-    const prior3 = sum(monthly.slice(-yoyWindow, -(yoyWindow - 3)).map((m) => m.revenue));
+    const recent3 = sum(monthly.slice(-yoyRecentMonths).map((m) => m.revenue));
+    const prior3 = sum(monthly.slice(-yoyWindow, -(yoyWindow - yoyRecentMonths)).map((m) => m.revenue));
     if (cmp(prior3, minRevenueThreshold) > 0) {
       const yoyText = evaluateAnalyticsRatio(add(recent3, neg(prior3)), prior3, "percent", 0);
       yoyGrowth = yoyText === null ? null : Number(yoyText);

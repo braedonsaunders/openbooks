@@ -1073,10 +1073,6 @@
           "label": "Wachstum — Trendfenster (Monate)",
           "help": "Monate je Seite beim Vergleich des aktuellen mit dem vorherigen Fenster"
         },
-        "growthYoyWindowMonths": {
-          "label": "Wachstum — Vorjahresfenster (Monate)",
-          "help": "Folgemonate je Seite des Vorjahresvergleichs"
-        },
         "cohortActiveMonths": {
           "label": "Kohorten — aktiv innerhalb (Monate)",
           "help": "Kunden mit Bestellung innerhalb dieser Monate zählen als aktiv"
@@ -1164,7 +1160,8 @@
       "good": "Gut",
       "loss": "Verlust",
       "low": "Niedrig",
-      "profit": "Gewinn"
+      "profit": "Gewinn",
+      "noRevenue": "Keine Erlöse im Zeitraum"
     },
     "metrics": {
       "avgDso": "Ø DSO",

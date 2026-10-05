@@ -1073,10 +1073,6 @@
           "label": "Crecimiento — ventana de tendencia (meses)",
           "help": "Meses por lado al comparar la ventana reciente con la anterior"
         },
-        "growthYoyWindowMonths": {
-          "label": "Crecimiento — ventana interanual (meses)",
-          "help": "Meses finales a cada lado de la comparación interanual"
-        },
         "cohortActiveMonths": {
           "label": "Cohortes — activo en (meses)",
           "help": "Un cliente con pedido en estos meses cuenta como activo"
@@ -1164,7 +1160,8 @@
       "good": "Bueno",
       "loss": "Pérdida",
       "low": "Bajo",
-      "profit": "Utilidad"
+      "profit": "Utilidad",
+      "noRevenue": "Sin ingresos en el período"
     },
     "metrics": {
       "avgDso": "DSO medio",

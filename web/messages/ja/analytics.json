@@ -1073,10 +1073,6 @@
           "label": "成長 — トレンド期間（月）",
           "help": "直近と前期を比較する片側の月数"
         },
-        "growthYoyWindowMonths": {
-          "label": "成長 — 前年比較の期間（月）",
-          "help": "前年比較の両側の末端月数"
-        },
         "cohortActiveMonths": {
           "label": "コホート — アクティブ期間（月）",
           "help": "この月数以内に注文した顧客はアクティブ"
@@ -1164,7 +1160,8 @@
       "good": "良好",
       "loss": "赤字",
       "low": "低い",
-      "profit": "黒字"
+      "profit": "黒字",
+      "noRevenue": "期間内に収益なし"
     },
     "metrics": {
       "avgDso": "平均DSO",

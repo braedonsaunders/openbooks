@@ -1073,10 +1073,6 @@
           "label": "Crescimento — janela de tendência (meses)",
           "help": "Meses por lado ao comparar a janela recente com a anterior"
         },
-        "growthYoyWindowMonths": {
-          "label": "Crescimento — janela anual (meses)",
-          "help": "Meses finais de cada lado da comparação anual"
-        },
         "cohortActiveMonths": {
           "label": "Coortes — ativo em (meses)",
           "help": "Um cliente com pedido nestes meses conta como ativo"
@@ -1164,7 +1160,8 @@
       "good": "Bom",
       "loss": "Prejuízo",
       "low": "Baixo",
-      "profit": "Lucro"
+      "profit": "Lucro",
+      "noRevenue": "Sem receita no período"
     },
     "metrics": {
       "avgDso": "DSO médio",
