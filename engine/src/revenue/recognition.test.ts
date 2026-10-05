@@ -74,12 +74,12 @@ test("fair value range: open-ended and missing bounds", () => {
   assert.equal(fairValueRangeFlag("500.0000", "1", "100.0000", null), null);
 });
 
-test("cost-to-cost fraction clamps to [0,1] and guards zero budgets", async () => {
+test("cost-to-cost fraction clamps to [0,1] and treats a missing estimate as unmeasurable, not zero", async () => {
   const { costToCostFraction } = await import("../projects/revenue.ts");
   assert.equal(costToCostFraction("1000", "250"), "0.2500");
   assert.equal(costToCostFraction("1000", "1500"), "1.0000");
-  assert.equal(costToCostFraction("0", "500"), "0.0000");
-  assert.equal(costToCostFraction("-5", "500"), "0.0000");
+  assert.equal(costToCostFraction("0", "500"), null);
+  assert.equal(costToCostFraction("-5", "500"), null);
   assert.equal(costToCostFraction("1000", "-20"), "0.0000");
 });
 

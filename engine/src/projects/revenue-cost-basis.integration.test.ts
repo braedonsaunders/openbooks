@@ -195,3 +195,30 @@ test("legacy owner resolves the unique root; authorized scope and manual progres
     assert.equal(manual.synced[0]?.overridden, true);
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+test("missing estimates or contract value refuse by name and leave a 50% schedule untouched", enabled, async () => {
+  const org = await createScratchOrg();
+  try {
+    const projectId = await projectFixture(org);
+    await cost(org, projectId, "500");
+    const measured = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+    assert.equal(measured.synced[0]?.percentComplete, "50.0000");
+    const before = await snapshot(org.orgId);
+
+    await db.execute(sql`update project_tasks set estimated_cost=null where project_id=${projectId}`);
+    const unestimated = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+    assert.deepEqual(unestimated.synced, []);
+    assert.deepEqual(unestimated.problems, [
+      "COST-POC (Cost POC project): cost-to-cost progress cannot be measured because the project's tasks carry no cost estimates — enter estimated costs on the project's Work breakdown tasks, or set a percent-complete override on the project's Financials & budget tab",
+    ]);
+    assert.deepEqual(await snapshot(org.orgId), before);
+
+    await db.execute(sql`update projects set contract_value=null where id=${projectId}`);
+    const unpriced = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+    assert.deepEqual(unpriced.synced, []);
+    assert.deepEqual(unpriced.problems, [
+      "COST-POC (Cost POC project): project revenue cannot be recognized without a contract value — set the Contract value on the project",
+    ]);
+    assert.deepEqual(await snapshot(org.orgId), before);
+  } finally { await dropScratchOrg(org.orgId); }
+});

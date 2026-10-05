@@ -62,17 +62,26 @@ export interface ProjectRevenueSyncResult {
   skipped: string | null;
 }
 
-/** Cost-to-cost completion fraction (0..1), exact and clamped. */
-export function costToCostFraction(budget: string, actual: string): string {
+/**
+ * Cost-to-cost completion fraction (0..1), exact and clamped. Null when there
+ * is no positive cost estimate: progress is then unmeasurable, not zero.
+ */
+export function costToCostFraction(budget: string, actual: string): string | null {
   const percent = costToCostPercent(budget, actual);
-  return mulRatio("1", toUnits(percent), toUnits("100"));
+  return percent === null ? null : mulRatio("1", toUnits(percent), toUnits("100"));
 }
 
-/** Exact cumulative completion percentage at ledger precision. */
-export function costToCostPercent(budget: string, actual: string): string {
+/**
+ * Exact cumulative completion percentage at ledger precision. Null when the
+ * estimate total is zero or negative: without an estimate the input method has
+ * no denominator, and reading that as 0% would rebuild a recognizing
+ * project's schedule to nothing and reverse revenue already earned.
+ */
+export function costToCostPercent(budget: string, actual: string): string | null {
   const exactBudget = normalizeMoney(budget);
   const exactActual = normalizeMoney(actual);
-  if (cmp(exactBudget, "0") <= 0 || cmp(exactActual, "0") <= 0) return "0.0000";
+  if (cmp(exactBudget, "0") <= 0) return null;
+  if (cmp(exactActual, "0") <= 0) return "0.0000";
   if (cmp(exactActual, exactBudget) >= 0) return "100.0000";
   return mulRatio("100", toUnits(exactActual), toUnits(exactBudget));
 }
@@ -216,7 +225,17 @@ export async function syncProjectRevenueContractsInTransaction(
   let ruleId: string | null = null;
 
   for (const p of projects.rows) {
-    if (cmp(p.contract_value, "0") === 0) continue; // nothing to recognize (yet)
+    // A project whose type recognizes revenue by percent complete is under
+    // recognition; without a positive contract value there is no transaction
+    // price to recognize against. Refuse by name rather than skipping, so the
+    // operator learns why the project earns nothing, and never rebuild an
+    // existing schedule from the missing value.
+    if (cmp(p.contract_value, "0") <= 0) {
+      result.problems.push(
+        `${p.code} (${p.name}): project revenue cannot be recognized without a contract value — set the Contract value on the project`,
+      );
+      continue;
+    }
     if (!p.customer_id) {
       result.problems.push(`${p.code}: project has no customer — cannot carry a revenue contract`);
       continue;
@@ -285,7 +304,17 @@ export async function syncProjectRevenueContractsInTransaction(
                      and e.book_id = ${primary.id}
                      and l.subsidiary_id = ${owner.id} and e.posting_date <= ${asOfDate}::date
                      and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`));
-      percent = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
+      const measured = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
+      if (measured === null) {
+        // Missing estimates leave progress unmeasurable. Refusing here keeps
+        // the existing obligation and schedules exactly as they were instead
+        // of re-planning recognized revenue back to 0%.
+        result.problems.push(
+          `${p.code} (${p.name}): cost-to-cost progress cannot be measured because the project's tasks carry no cost estimates — enter estimated costs on the project's Work breakdown tasks, or set a percent-complete override on the project's Financials & budget tab`,
+        );
+        continue;
+      }
+      percent = measured;
     }
 
     // Scope/estimate validation must finish before even the built-in rule is
