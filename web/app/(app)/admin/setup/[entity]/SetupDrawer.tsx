@@ -37,6 +37,8 @@ import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { formatDecimal } from '../../../../../lib/money-format'
 import { countryOptions } from '../../../../../lib/countries'
+import { timeZoneOptions } from '@/lib/zoned-date-time'
+import { ZonedDateTimeControl } from '@/components/zoned-date-time-control'
 
 type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number }
 
@@ -737,6 +739,7 @@ export function FieldControl({
   const locale = useLocale()
   const common = useTranslations('common')
   const countries = useMemo(() => countryOptions(locale), [locale])
+  const zones = useMemo(() => timeZoneOptions().map(zone => ({ value: zone, label: zone })), [])
   const label = (field.label ?? t(field.labelKey ?? `fields.${field.key}`))
   // Authored help renders as the `?` popover on the field label (FieldLabel);
   // without it the label falls back to its generic explanation. Inline text
@@ -762,6 +765,10 @@ export function FieldControl({
           : Array.isArray(value) ? value.join(', ') : value
 
 
+  if (field.kind === 'zonedDateTime' && field.timeZoneField) return <div className={wrap}>
+    <Label help={help}>{label}{requiredMark}</Label>
+    <ZonedDateTimeControl value={String(value ?? '')} zone={String(formValues[field.timeZoneField] ?? '')} onChange={onChange} label={label} readOnly={locked} />
+  </div>
   // Locked natural keys are shown read-only when editing.
   if (locked && field.kind !== 'object' && field.kind !== 'objectArray') {
     return (
@@ -953,6 +960,8 @@ export function FieldControl({
       </div>
     )
   }
+
+  if (field.kind === 'timeZone') return <div className={wrap}><Label help={help}>{label}{requiredMark}</Label><SearchSelect ariaLabel={label} options={zones} value={String(value ?? '')} onChange={onChange} placeholder={t('selectPlaceholder')} /></div>
 
   // Money fields hold operator majors in the form state (converted at init
   // and save); the control is the shared decimal input, never a minor-units box.

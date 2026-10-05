@@ -41,7 +41,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SELF = "scripts/check-ui-reuse.mjs";
@@ -209,6 +209,28 @@ export function loadRegisteredKeys(readFile = (file) => readFileSync(join(repoRo
   return new Set([...keys, ...prepared]);
 }
 
+/** A setup list is native only when both renderer and page layout resolve to the shared implementation. */
+function rendersSharedSetupList(path, text, stripped) {
+  const code = stripComments(text);
+  function renderedImport(symbol, target) {
+    const imports = /import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g;
+    for (const match of code.matchAll(imports)) {
+      const source = match[2];
+      const resolved = source.startsWith("@/") ? `web/${source.slice(2)}` : source.startsWith(".") ? posix.normalize(posix.join(posix.dirname(path), source)) : source;
+      if (resolved.replace(/\.tsx?$/, "") !== target) continue;
+      for (const binding of match[1].split(",")) {
+        const names = binding.trim().split(/\s+as\s+/);
+        if (names[0] !== symbol) continue;
+        const local = names[1] ?? names[0];
+        if (new RegExp(`<${local}(?=[\\s/>])`).test(stripped)) return true;
+      }
+    }
+    return false;
+  }
+  return renderedImport("SetupEntitySection", "web/app/(app)/admin/setup/[entity]/SetupEntitySection")
+    && renderedImport("ListPageLayout", "web/components/page-layout");
+}
+
 /** All violations in one file of comment/string-blanked source. */
 export function scanText(path, text, registeredKeys = new Set()) {
   const stripped = stripCode(text);
@@ -226,7 +248,7 @@ export function scanText(path, text, registeredKeys = new Set()) {
   if (/(^|\/)page\.tsx$/.test(path) && path.startsWith("web/app/(app)/")) {
     // A redirect-only route renders no user-facing surface to compose.
     const redirectOnly=/import\s*\{[^}]*\bredirect\b[^}]*\}\s*from\s*['"]next\/navigation['"]/.test(stripComments(text)) && /\bredirect\s*\(/.test(stripped) && !/<(?:[A-Za-z][\w.:-]*)(?=[\s/>])|<>/.test(stripped);
-    if (!redirectOnly && !/^\s*import\s[^;]*\bModuleView\b/m.test(stripped) && !/<(?:EntityListView|RecordListView)(?=[\s/>])/.test(stripped)) {
+    if (!redirectOnly && !rendersSharedSetupList(path, text, stripped) && !/^\s*import\s[^;]*\bModuleView\b/m.test(stripped) && !/<(?:EntityListView|RecordListView)(?=[\s/>])/.test(stripped)) {
       violations.push({ rule: "bespoke-page", path, line: 1 });
     }
   }

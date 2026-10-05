@@ -3474,6 +3474,21 @@
       "payroll-compensation-assignments": {
         "title": "员工分配",
         "description": "已批准的政策版本和批准范围内的员工专属值。"
+      },
+      "training-courses": {
+        "title": "培训",
+        "singular": "培训",
+        "description": "审批课程规则、安排培训并记录员工结果。"
+      },
+      "training-sessions": {
+        "title": "培训场次",
+        "singular": "培训场次",
+        "description": "审批课程规则、安排培训并记录员工结果。"
+      },
+      "training-participants": {
+        "title": "参与人员",
+        "singular": "参与人员",
+        "description": "审批课程规则、安排培训并记录员工结果。"
       }
     },
     "fields": {
@@ -6290,6 +6305,89 @@
       "serverUpgrade": "此服务器暂不提供薪酬方案。配置方案前，请联系管理员完成服务器升级。",
       "decisionUnconfirmed": "无法确认决定结果。重试前请重新加载此记录并检查当前状态。",
       "previewFailed": "无法加载预览。请重试。"
+    },
+    "training": {
+      "title": "培训",
+      "description": "审批课程规则、安排培训并记录员工结果。",
+      "newCourse": "新建课程版本",
+      "version": "版本",
+      "course": "课程版本",
+      "session": "培训场次",
+      "sessions": "培训场次",
+      "participants": "参与人员",
+      "employment": "员工雇佣关系",
+      "status": "状态",
+      "qualificationType": "授予资质",
+      "qualificationHint": "可选。通过后创建待核验资质，资质核验仍须单独完成。",
+      "attendanceThreshold": "最低出勤比例（%）",
+      "passingScore": "最低合格分数",
+      "scoreHint": "课程不设评分考核时留空。",
+      "courseIdentity": "课程和生效日期",
+      "courseIdentityHint": "后续规则使用相同课程代码和新的版本号。",
+      "completionPolicy": "完成条件",
+      "completionPolicyHint": "审批后固定出勤、考核和资质规则。",
+      "location": "地点",
+      "capacity": "参与人数上限",
+      "timeZone": "时区",
+      "startsAt": "开始时间",
+      "endsAt": "结束时间",
+      "startsOn": "开始日期",
+      "endsOn": "结束日期",
+      "reason": "原因",
+      "reasonHint": "记录规则、培训或结果变更的原因。",
+      "review": "审核与操作",
+      "reviewHint": "操作使用当前记录修订版，课程审批人必须独立于作者。",
+      "history": "历史",
+      "result": "出勤与考核",
+      "resultHint": "记录实际出勤和考核。资质核验单独进行，作废保留原始结果。",
+      "attendanceMinutes": "出勤分钟数",
+      "attendanceSeconds": "记录出勤时长（秒）",
+      "score": "考核分数",
+      "notes": "结果备注",
+      "evidence": "文件柜中的证书",
+      "feedback": "反馈",
+      "feedbackHint": "更正追加新的反馈记录，并保留旧记录。",
+      "rating": "评分（1–5）",
+      "comments": "意见",
+      "noActions": "当前状态没有可用操作。",
+      "unconfirmed": "变更未确认，请重新加载记录后重试。",
+      "recordedResult": "出勤：{seconds} 秒 · 分数：{score}",
+      "feedbackEntry": "{rating}/5 · {at}",
+      "statuses": {
+        "draft": "草稿",
+        "approved": "已审批",
+        "retired": "已停用",
+        "cancelled": "已取消",
+        "scheduled": "已安排",
+        "in_progress": "进行中",
+        "completed": "已完成",
+        "invited": "已邀请",
+        "accepted": "已接受",
+        "declined": "已拒绝",
+        "failed": "未通过",
+        "voided": "已作废"
+      },
+      "actions": {
+        "approve": "审批课程",
+        "retire": "停用课程",
+        "cancel": "取消",
+        "schedule": "发布场次",
+        "start": "开始培训",
+        "complete": "结束培训",
+        "accept": "接受邀请",
+        "decline": "拒绝邀请",
+        "result": "记录结果",
+        "void": "作废结果",
+        "feedback": "记录反馈"
+      }
+    },
+    "zonedTime": {
+      "date": "日期",
+      "time": "时间",
+      "chooseZone": "请先选择时区。",
+      "gap": "夏令时切换导致该本地时间不存在，请选择其他时间。",
+      "occurrence": "UTC 偏移量",
+      "repeated": "该时间出现两次，请选择 UTC 偏移量。"
     }
   },
   "flows": {

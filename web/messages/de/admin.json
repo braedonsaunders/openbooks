@@ -3519,6 +3519,21 @@
       "payroll-compensation-assignments": {
         "title": "Mitarbeiterzuordnungen",
         "description": "Genehmigte Richtlinienversionen und begrenzte mitarbeiterspezifische Werte."
+      },
+      "training-courses": {
+        "title": "Schulung",
+        "singular": "Schulung",
+        "description": "Kursregeln genehmigen, Termine planen und Ergebnisse erfassen."
+      },
+      "training-sessions": {
+        "title": "Termine",
+        "singular": "Termine",
+        "description": "Kursregeln genehmigen, Termine planen und Ergebnisse erfassen."
+      },
+      "training-participants": {
+        "title": "Teilnehmende",
+        "singular": "Teilnehmende",
+        "description": "Kursregeln genehmigen, Termine planen und Ergebnisse erfassen."
       }
     },
     "fields": {
@@ -6290,6 +6305,89 @@
       "serverUpgrade": "Vergütungspakete sind auf diesem Server nicht verfügbar. Bitten Sie einen Administrator, die Serveraktualisierung abzuschließen, bevor Sie Pakete konfigurieren.",
       "decisionUnconfirmed": "Die Entscheidung konnte nicht bestätigt werden. Laden Sie diesen Datensatz neu und prüfen Sie seinen aktuellen Zustand, bevor Sie es erneut versuchen.",
       "previewFailed": "Die Vorschau konnte nicht geladen werden. Versuchen Sie es erneut."
+    },
+    "training": {
+      "title": "Schulung",
+      "description": "Kursregeln genehmigen, Termine planen und Ergebnisse erfassen.",
+      "newCourse": "Neue Kursversion",
+      "version": "Version",
+      "course": "Kursversion",
+      "session": "Termin",
+      "sessions": "Termine",
+      "participants": "Teilnehmende",
+      "employment": "Beschäftigungsverhältnis",
+      "status": "Status",
+      "qualificationType": "Erteilte Qualifikation",
+      "qualificationHint": "Optional. Ein bestandenes Ergebnis erstellt einen Nachweis zur separaten Prüfung.",
+      "attendanceThreshold": "Mindestanwesenheit (%)",
+      "passingScore": "Mindestpunktzahl",
+      "scoreHint": "Leer lassen, wenn keine bewertete Prüfung vorgesehen ist.",
+      "courseIdentity": "Kurs und Gültigkeit",
+      "courseIdentityHint": "Für Nachfolgeregeln denselben Kurscode und eine neue Version verwenden.",
+      "completionPolicy": "Abschlussanforderungen",
+      "completionPolicyHint": "Die Genehmigung fixiert Anwesenheits-, Prüfungs- und Qualifikationsregeln.",
+      "location": "Ort",
+      "capacity": "Teilnehmerkapazität",
+      "timeZone": "Zeitzone",
+      "startsAt": "Beginn",
+      "endsAt": "Ende",
+      "startsOn": "Beginndatum",
+      "endsOn": "Enddatum",
+      "reason": "Begründung",
+      "reasonHint": "Begründung für diese Regel-, Termin- oder Ergebnisänderung angeben.",
+      "review": "Prüfung und Aktionen",
+      "reviewHint": "Aktionen verwenden den aktuellen Stand. Der Genehmigende muss vom Autor unabhängig sein.",
+      "history": "Historie",
+      "result": "Anwesenheit und Prüfung",
+      "resultHint": "Tatsächliche Anwesenheit und Prüfung erfassen. Nachweisprüfung bleibt separat; Aufhebung erhält das Original.",
+      "attendanceMinutes": "Anwesenheitsminuten",
+      "attendanceSeconds": "Erfasste Anwesenheit (Sekunden)",
+      "score": "Prüfungspunktzahl",
+      "notes": "Ergebnisnotizen",
+      "evidence": "Zertifikat aus der Dateiablage",
+      "feedback": "Rückmeldung",
+      "feedbackHint": "Korrekturen ergänzen einen Eintrag und bewahren frühere Einträge.",
+      "rating": "Bewertung (1–5)",
+      "comments": "Kommentare",
+      "noActions": "In diesem Status sind keine Aktionen verfügbar.",
+      "unconfirmed": "Die Änderung ist unbestätigt — Datensatz vor erneutem Versuch laden.",
+      "recordedResult": "Anwesenheit: {seconds} Sekunden · Punktzahl: {score}",
+      "feedbackEntry": "{rating}/5 · {at}",
+      "statuses": {
+        "draft": "Entwurf",
+        "approved": "Genehmigt",
+        "retired": "Stillgelegt",
+        "cancelled": "Storniert",
+        "scheduled": "Geplant",
+        "in_progress": "Laufend",
+        "completed": "Abgeschlossen",
+        "invited": "Eingeladen",
+        "accepted": "Angenommen",
+        "declined": "Abgelehnt",
+        "failed": "Nicht bestanden",
+        "voided": "Aufgehoben"
+      },
+      "actions": {
+        "approve": "Kurs genehmigen",
+        "retire": "Kurs stilllegen",
+        "cancel": "Stornieren",
+        "schedule": "Termin veröffentlichen",
+        "start": "Termin beginnen",
+        "complete": "Termin abschließen",
+        "accept": "Einladung annehmen",
+        "decline": "Einladung ablehnen",
+        "result": "Ergebnis erfassen",
+        "void": "Ergebnis aufheben",
+        "feedback": "Rückmeldung erfassen"
+      }
+    },
+    "zonedTime": {
+      "date": "Datum",
+      "time": "Uhrzeit",
+      "chooseZone": "Zuerst die Zeitzone wählen.",
+      "gap": "Diese Ortszeit existiert wegen der Zeitumstellung nicht — andere Uhrzeit wählen.",
+      "occurrence": "UTC-Abweichung",
+      "repeated": "Diese Stunde kommt zweimal vor — UTC-Abweichung wählen."
     }
   },
   "flows": {

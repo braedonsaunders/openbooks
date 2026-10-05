@@ -4,7 +4,7 @@ import { addMonthsClamped } from "../../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { lockActorCommandAuthority } from "../../organization/actor-command-authority.ts";
 import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
-import { loadOwnEmploymentIds, lockEmploymentsForScope } from "../authorization.ts";
+import { HrmAuthorizationError, loadOwnEmploymentIds, lockEmploymentsForScope } from "../authorization.ts";
 import { recordQualification, revokeQualification } from "../qualifications/qualifications.ts";
 import { HrmQualificationError } from "../qualifications/errors.ts";
 import { TrainingError, requireUuid, trainingInteger, trainingPolicy, trainingRequestHash, trainingResult, trainingSessionWindow, trainingText, trainingWindow, type TrainingPolicy } from "./policy.ts";
@@ -59,6 +59,7 @@ async function transaction<T>(input: TrainingActor, fn: () => Promise<T>): Promi
   actor(input);
   try { return await withOrgTransaction(input.orgId, () => withTransactionSavepoint(db, fn)); }
   catch (error) {
+    if (error instanceof HrmAuthorizationError) throw new ScopeNotFoundError();
     if (error instanceof HrmQualificationError) throw new TrainingError(error.message);
     const visited = new Set<object>();
     let item: unknown = error;

@@ -8,6 +8,7 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { CabinetFilePicker } from '@/components/cabinet-file-picker'
 
 /**
  * Qualification record and detail drawer. Opens blank for recording
@@ -92,10 +93,6 @@ export function QualificationDrawer({
   const employmentRequestId = useRef(0)
   const employmentsLoading = recordOpen && !employmentsReady
   const [evidenceFileId, setEvidenceFileId] = useState('')
-  const [evidenceQuery, setEvidenceQuery] = useState('')
-  const [evidenceFiles, setEvidenceFiles] = useState<{ value: string; label: string }[]>([])
-  const [evidenceError, setEvidenceError] = useState<string | null>(null)
-  const [evidenceLoading, setEvidenceLoading] = useState(false)
   const [status, setStatus] = useState<string | undefined>(undefined)
   // Loading is a fact about the state, not a second copy of it: the
   // drawer is loading while an id is open, its row has not arrived, and
@@ -104,42 +101,7 @@ export function QualificationDrawer({
   const [form, setForm] = useState({ employmentId: '', typeId: '', issuedOn: '', expiresOn: '', identifier: '', notes: '' })
   const selectedType = types.find((type) => type.id === form.typeId)
 
-  useEffect(() => {
-    if (!selectedType?.requiresEvidence || evidenceQuery.trim().length < 2) return
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      try {
-        const query = evidenceQuery.trim()
-        const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(query)}&perPage=20`)
-        if (!res.ok) {
-          if (!cancelled) setEvidenceError(t('qualifications.recordForm.evidenceSearchFailed'))
-          return
-        }
-        const payload = (await res.json().catch(() => ({}))) as { files?: unknown }
-        if (!Array.isArray(payload.files)) {
-          if (!cancelled) setEvidenceError(t('qualifications.recordForm.evidenceSearchFailed'))
-          return
-        }
-        if (!cancelled) {
-          setEvidenceFiles(payload.files.flatMap((file) => {
-            if (!file || typeof file !== 'object') return []
-            const row = file as { id?: unknown; name?: unknown }
-            return typeof row.id === 'string'
-              ? [{ value: row.id, label: typeof row.name === 'string' ? row.name : row.id }]
-              : []
-          }))
-        }
-      } catch {
-        if (!cancelled) setEvidenceError(t('qualifications.recordForm.evidenceSearchFailed'))
-      } finally {
-        if (!cancelled) setEvidenceLoading(false)
-      }
-    }, 250)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [evidenceQuery, selectedType?.requiresEvidence, t])
+
 
   // A half-typed record form is unsaved work: drawer-level dismiss asks
   // before abandoning it. Detail mode edits nothing in place (verify,
@@ -449,27 +411,7 @@ export function QualificationDrawer({
             <div>
               <Label htmlFor="q-evidence">{t('qualifications.recordForm.evidence')}</Label>
               <p className="mb-1 text-sm text-amber-700 dark:text-amber-300">{t('qualifications.recordForm.evidenceRequired')}</p>
-              <SearchSelect
-                id="q-evidence"
-                ariaLabel={t('qualifications.recordForm.evidence')}
-                value={evidenceFileId}
-                onChange={setEvidenceFileId}
-                options={evidenceFiles}
-                placeholder={t('qualifications.recordForm.evidencePlaceholder')}
-                searchPlaceholder={t('qualifications.recordForm.evidenceSearchPlaceholder')}
-                emptyLabel={t('qualifications.recordForm.evidenceSearchHint')}
-                statusMessage={evidenceError ?? (evidenceQuery.trim().length < 2 ? t('qualifications.recordForm.evidenceSearchHint') : undefined)}
-                statusTone={evidenceError ? 'error' : 'muted'}
-                loading={evidenceLoading}
-                remote
-                searchable
-                onSearchChange={(query) => {
-                  setEvidenceQuery(query)
-                  setEvidenceFiles([])
-                  setEvidenceError(null)
-                  setEvidenceLoading(Boolean(selectedType?.requiresEvidence && query.trim().length >= 2))
-                }}
-              />
+              <CabinetFilePicker id="q-evidence" value={evidenceFileId} onChange={setEvidenceFileId} label={t('qualifications.recordForm.evidence')} />
             </div>
           ) : null}
           <div className="grid grid-cols-2 gap-3">

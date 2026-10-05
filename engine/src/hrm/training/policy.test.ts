@@ -37,6 +37,7 @@ test("session instants distinguish repeated daylight-saving hours and derive the
 });
 
 test("unreadable or ambiguous session times never acquire a guessed time zone or a normalized calendar date", () => {
+  assert.throws(() => trainingSessionWindow("2026-01-09T10:00:00Z", "2026-01-09T11:00:00Z", "+03:00"), /choose an IANA time zone/);
   for (const start of ["2026-02-30T10:00:00Z", "2026-01-09T24:00:00Z", "2026-01-09T10:00:00", "2026-01-09T10:00:00+14:01", "2026-01-09T10:00:00.001Z"]) {
     assert.throws(() => trainingSessionWindow(start, "2026-01-09T11:00:00Z", "America/Toronto"), /Session time|Session times/);
   }

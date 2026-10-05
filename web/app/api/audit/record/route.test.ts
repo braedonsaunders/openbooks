@@ -35,6 +35,7 @@ stubModules({
         async execute(query) {
           state.reads++; const text = new PgDialect().sqlToQuery(query).sql
           if (['payroll_compensation_packages','payroll_compensation_versions','payroll_compensation_assignments'].some(table=>text.includes('from '+table))) return state.recordExists ? {rows:[{kind:'compensation',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
+          if (['hrm_training_courses','hrm_training_sessions','hrm_training_participants'].some(table=>text.includes('from "'+table+'"'))) return state.recordExists ? {rows:[{kind:'training',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
           if (text.includes('from documents')) {
             return state.recordExists
               ? { rows: [{ org_id: 'org-1', kind: 'vendor_bill', created_at: new Date(), created_by: null,
@@ -120,5 +121,25 @@ test('compensation audit requires payroll read and the enabled feature before di
     assert.equal(response.status, 200, await response.clone().text())
     const body = await response.json()
     assert.ok(Array.isArray(body.rows), table)
+  }
+})
+
+
+test('training audit hides existence before permission and feature checks and fences the legal employer', async () => {
+  for (const table of ['hrm_training_courses', 'hrm_training_sessions', 'hrm_training_participants']) {
+    for (const recordExists of [false, true]) {
+      for (const fixture of [{permissions: ['hrm.benefits.read'], featureOn: true}, {permissions: ['hrm.certifications.read'], featureOn: false}]) {
+        Object.assign(auditState, {...fixture, recordExists, hiddenEmployer: false, reads: 0})
+        assert.equal((await get(table, EXISTING_ID)).status, 404, table)
+        assert.equal(auditState.reads, 0, table)
+      }
+    }
+    Object.assign(auditState, {permissions: ['hrm.certifications.read'], featureOn: true, recordExists: true, hiddenEmployer: true, reads: 0})
+    assert.equal((await get(table, EXISTING_ID)).status, 404, table)
+    assert.equal(auditState.reads, 1, table)
+    auditState.hiddenEmployer = false
+    const response = await get(table, EXISTING_ID)
+    assert.equal(response.status, 200, await response.clone().text())
+    assert.ok(Array.isArray((await response.json()).rows), table)
   }
 })

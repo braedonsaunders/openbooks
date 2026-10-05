@@ -153,7 +153,8 @@
     "hrm-performance-succession": "继任计划",
     "hrm-performance-templates": "考核表单",
     "hrm-benefits-employees": "福利",
-    "hrm-benefits-delivery": "发放"
+    "hrm-benefits-delivery": "发放",
+    "hrm-training": "培训"
   },
   "groups": {
     "workforce": "员工队伍",
@@ -217,7 +218,8 @@
     "ap": "应付账款",
     "ar": "应收账款",
     "provisions": "预计负债及或有事项",
-    "stored-value": "储值"
+    "stored-value": "储值",
+    "hrm-training": "培训"
   },
   "localWorkspaces": {
     "collections-views": "应收催收",

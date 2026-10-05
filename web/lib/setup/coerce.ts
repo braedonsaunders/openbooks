@@ -76,6 +76,13 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
   const column = toSnake(field.key)
 
   switch (field.kind) {
+    case 'timeZone': {
+      if (!present) return { column, value: null }
+      if (typeof raw !== 'string') return { error: `${field.key} must be an IANA time zone` }
+      if (!/^[A-Za-z][A-Za-z0-9._+-]*(?:\/[A-Za-z0-9._+-]+)*$/.test(raw)) return { error: `${field.key} must be a known IANA time zone; choose it from the time zone picker` }
+      try { new Intl.DateTimeFormat('en', { timeZone: raw }).format(); return { column, value: raw } }
+      catch { return { error: `${field.key} must be a known IANA time zone; choose it from the time zone picker` } }
+    }
     case 'boolean': {
       if (!present && field.nullable) return { column, value: null }
       if (present) {

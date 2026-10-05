@@ -3519,6 +3519,21 @@
       "payroll-compensation-assignments": {
         "title": "従業員への割り当て",
         "description": "承認済みの方針の版と、承認された範囲内の従業員固有の値。"
+      },
+      "training-courses": {
+        "title": "研修",
+        "singular": "研修",
+        "description": "コースの方針を承認し、日程を計画して従業員の結果を記録します。"
+      },
+      "training-sessions": {
+        "title": "セッション",
+        "singular": "セッション",
+        "description": "コースの方針を承認し、日程を計画して従業員の結果を記録します。"
+      },
+      "training-participants": {
+        "title": "参加者",
+        "singular": "参加者",
+        "description": "コースの方針を承認し、日程を計画して従業員の結果を記録します。"
       }
     },
     "fields": {
@@ -6290,6 +6305,89 @@
       "serverUpgrade": "このサーバーでは報酬パッケージを利用できません。設定する前に、管理者にサーバーの更新完了を依頼してください。",
       "decisionUnconfirmed": "判断の結果を確認できませんでした。再試行する前に、このレコードを再読み込みして現在の状態を確認してください。",
       "previewFailed": "プレビューを読み込めませんでした。もう一度お試しください。"
+    },
+    "training": {
+      "title": "研修",
+      "description": "コースの方針を承認し、日程を計画して従業員の結果を記録します。",
+      "newCourse": "新しいコース版",
+      "version": "版",
+      "course": "コース版",
+      "session": "セッション",
+      "sessions": "セッション",
+      "participants": "参加者",
+      "employment": "従業員の雇用関係",
+      "status": "状態",
+      "qualificationType": "取得資格",
+      "qualificationHint": "任意。合格すると確認待ちの資格が作成されます。資格確認は別の手順です。",
+      "attendanceThreshold": "最低出席率（%）",
+      "passingScore": "最低合格点",
+      "scoreHint": "採点を行わないコースでは空欄にしてください。",
+      "courseIdentity": "コースと適用期間",
+      "courseIdentityHint": "後継方針には同じコースコードと新しい版番号を使用します。",
+      "completionPolicy": "修了要件",
+      "completionPolicyHint": "承認後は出席、評価、資格の方針が固定されます。",
+      "location": "場所",
+      "capacity": "定員",
+      "timeZone": "タイムゾーン",
+      "startsAt": "開始",
+      "endsAt": "終了",
+      "startsOn": "開始日",
+      "endsOn": "終了日",
+      "reason": "理由",
+      "reasonHint": "方針、日程、結果の変更理由を記録してください。",
+      "review": "確認と操作",
+      "reviewHint": "操作は現在の改訂版を使用します。承認者は作成者と異なる必要があります。",
+      "history": "履歴",
+      "result": "出席と評価",
+      "resultHint": "実際の出席と評価を記録します。資格確認は別途行い、無効化しても元の結果は保持されます。",
+      "attendanceMinutes": "出席時間（分）",
+      "attendanceSeconds": "記録された出席時間（秒）",
+      "score": "評価点",
+      "notes": "結果のメモ",
+      "evidence": "ファイルキャビネットの証明書",
+      "feedback": "フィードバック",
+      "feedbackHint": "訂正は新しい記録として追加され、以前の記録は保持されます。",
+      "rating": "評価（1～5）",
+      "comments": "コメント",
+      "noActions": "この状態で利用できる操作はありません。",
+      "unconfirmed": "変更は未確認です。再試行する前にレコードを再読み込みしてください。",
+      "recordedResult": "出席：{seconds} 秒 · 評価点：{score}",
+      "feedbackEntry": "{rating}/5 · {at}",
+      "statuses": {
+        "draft": "下書き",
+        "approved": "承認済み",
+        "retired": "廃止",
+        "cancelled": "取消済み",
+        "scheduled": "予定済み",
+        "in_progress": "進行中",
+        "completed": "完了",
+        "invited": "招待済み",
+        "accepted": "承諾済み",
+        "declined": "辞退済み",
+        "failed": "不合格",
+        "voided": "無効"
+      },
+      "actions": {
+        "approve": "コースを承認",
+        "retire": "コースを廃止",
+        "cancel": "取消",
+        "schedule": "セッションを公開",
+        "start": "セッションを開始",
+        "complete": "セッションを終了",
+        "accept": "招待を承諾",
+        "decline": "招待を辞退",
+        "result": "結果を記録",
+        "void": "結果を無効化",
+        "feedback": "フィードバックを記録"
+      }
+    },
+    "zonedTime": {
+      "date": "日付",
+      "time": "時刻",
+      "chooseZone": "最初にタイムゾーンを選択してください。",
+      "gap": "時計が進むため、この現地時刻は存在しません。別の時刻を選択してください。",
+      "occurrence": "UTCオフセット",
+      "repeated": "この時刻は2回発生します。UTCオフセットを選択してください。"
     }
   },
   "flows": {
