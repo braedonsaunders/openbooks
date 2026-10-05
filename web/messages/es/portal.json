@@ -95,6 +95,7 @@
     "check": "Consultar saldo",
     "yours": "Su crédito",
     "empty": "Sin crédito ni saldos prepagados.",
+    "noCurrency": "Moneda no registrada: importe oculto hasta que se corrija.",
     "storeCredit": "Crédito en tienda",
     "prepaid": "Uso prepagado"
   }
