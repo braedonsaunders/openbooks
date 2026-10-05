@@ -84,6 +84,13 @@
       "hint": "En servicio al cierre de cada mes, hasta hoy.",
       "series": "Plantilla"
     },
+    "workforce": {
+      "title": "Plantilla",
+      "today": "En servicio hoy",
+      "since": "Cierre de {month}",
+      "net": "Variación neta",
+      "mix": "Por departamento"
+    },
     "attention": {
       "title": "Requiere atención",
       "allClear": "Nada requiere atención.",

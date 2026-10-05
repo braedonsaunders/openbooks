@@ -7,7 +7,9 @@ import { CandidatePoolCreateDrawer } from '../../app/(app)/hrm/recruiting/Candid
 import type { ComponentProps } from 'react'
 import {
   HrmBenefitsPanel,
+  HrmHeadcountMix,
   HrmLeavePanel,
+  HrmPulse,
   HrmPendingRequests,
   HrmRecentChanges,
   HrmRecruitingPanel,
@@ -132,6 +134,27 @@ export const HRM_WIDGETS = {
       viewAllLabel={str(props, 'viewAllLabel') ?? ''}
       refusal={str(props, 'refusal') ?? null}
       notAvailable={str(props, 'notAvailable') ?? ''}
+    />
+  ),
+  /** A strip of loader-resolved figures side by side (the workforce pulse
+   *  atop the cockpit hero). */
+  'hrm-pulse': (props) => (
+    <HrmPulse
+      figures={(props.figures as ComponentProps<typeof HrmPulse>['figures']) ?? []}
+      href={str(props, 'href') ?? null}
+      cta={str(props, 'cta') ?? null}
+    />
+  ),
+  /** Headcount by department as share bars; the employer line renders only
+   *  for a multi-subsidiary org. */
+  'hrm-headcount-mix': (props) => (
+    <HrmHeadcountMix
+      rows={(props.rows as ComponentProps<typeof HrmHeadcountMix>['rows']) ?? []}
+      showEmployer={props.showEmployer === true}
+      title={str(props, 'title') ?? ''}
+      empty={str(props, 'empty') ?? ''}
+      totalLabel={str(props, 'totalLabel') ?? ''}
+      totalValue={str(props, 'totalValue') ?? ''}
     />
   ),
   'hrm-recent-changes': (props) => (

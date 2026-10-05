@@ -16,6 +16,7 @@ import { isFeatureEnabled } from '../features'
 import { isMultiSubsidiary, subsidiaryVisibleFilter } from '../subsidiaries'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../components/module-home/ui'
+import { countLabel, formatPercent01, monthYearLabel, viewerDateTime, viewerNumber } from '../format'
 import { loadQueueLabels } from './change-requests'
 import { loadLeavePanel, type LeavePanelData } from './leave'
 import { loadBenefitsPanel, type BenefitsPanelData } from './benefits'
@@ -42,6 +43,17 @@ export interface HrmHeadcountGroup {
   headcountLabel?: string
   /** Employee-directory drill-through for the row (departments board). */
   href?: string | null
+  /** Fraction of today's headcount, 0..1 — drives the share bar width only. */
+  share?: number
+  /** Locale-formatted share of today's headcount. */
+  shareLabel?: string
+}
+
+/** One figure of a cockpit pulse strip, already formatted for display. */
+export interface HrmPulseFigure {
+  label: string
+  value: string
+  tone?: 'neutral' | 'positive' | 'warning' | 'negative'
 }
 
 export interface PendingRequestItem {
@@ -160,6 +172,9 @@ export interface HrmHomeData {
   pendingValue: string
   pendingSub: string
   pendingAccent: 'amber' | 'emerald'
+  /** True while the change-request queue has something to decide or a
+   *  refusal to deliver; a clear queue collapses like the other modules. */
+  pendingHasActivity: boolean
   startingLabel: string
   startingValue: string
   startingSub: string
@@ -167,7 +182,10 @@ export interface HrmHomeData {
   onLeaveLabel: string | null
   onLeaveValue: string
   onLeaveSub: string
-  trendTitle: string
+  workforceTitle: string
+  /** Today, the first month end of the series, and the net change between them. */
+  workforcePulse: HrmPulseFigure[]
+  mixTitle: string
   trendHint: string
   trendSeriesName: string
   trendLabels: string[]
@@ -417,6 +435,26 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       timeZone: 'UTC',
     }),
   )
+  // The workforce pulse reads the same series the chart draws: today, the
+  // first month end, and the signed difference between them. Growth tones
+  // positive and decline tones as a warning — a smaller workforce is a fact
+  // to notice, not an error.
+  const firstPoint = trendData[0] ?? headcount.total
+  const netChange = headcount.total - firstPoint
+  const signedChange = viewerNumber(netChange, locale, { signDisplay: 'exceptZero' })
+  const firstMonth = monthYearLabel(new Date(`${trendDates[0]}T00:00:00Z`), locale, 'numeric')
+  const workforcePulse: HrmPulseFigure[] = [
+    { label: t('home.workforce.today'), value: countLabel(headcount.total, locale) },
+    { label: t('home.workforce.since', { month: firstMonth }), value: countLabel(firstPoint, locale) },
+    {
+      label: t('home.workforce.net'),
+      value:
+        firstPoint > 0
+          ? `${signedChange} (${viewerNumber(netChange / firstPoint, locale, { style: 'percent', maximumFractionDigits: 1, signDisplay: 'exceptZero' })})`
+          : signedChange,
+      tone: netChange > 0 ? 'positive' : netChange < 0 ? 'warning' : 'neutral',
+    },
+  ]
   // FTE is stored at four places (numeric(19,4)); the cockpit shows it as a
   // person-readable figure, at most two decimals in the viewer's locale.
   const fte = (value: string): string => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value))
@@ -543,13 +581,23 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // Recent employment changes: the last recorded aggregate change events
   // with their reasons — the same clearly-scoped shape (org predicate,
   // employer-scope filter, newest first, bounded).
+  // The recorded instant is UTC; it renders in the viewer's locale with the
+  // zone named, so nobody reads a server timestamp as local time.
+  const recordedOptions: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }
   const changeRows = changeResult.rows
   const recent: RecentChangeItem[] = changeRows.map((row) => ({
     name: row.name,
     partyId: row.partyId,
     kindLabel: changeKindLabel(t, row.kind),
     reason: row.reason,
-    recordedAt: row.recordedAt,
+    recordedAt: viewerDateTime(row.recordedAt, locale, 'UTC', recordedOptions),
   }))
 
   // Readiness: active employee parties with no employment record at all.
@@ -827,13 +875,16 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     pendingValue: pendingRefusal !== null ? '—' : String(pendingCount),
     pendingSub: t('overview.pending.sub'),
     pendingAccent: pendingCount > 0 ? 'amber' : 'emerald',
+    pendingHasActivity: pendingRefusal !== null || pending.length > 0,
     startingLabel: t('home.vitals.startingSoon'),
     startingValue: String(starts.length),
     startingSub: t('home.vitals.startingSoonSub', { count: ends.length }),
     onLeaveLabel: leavePanel ? t('home.vitals.onLeave') : null,
     onLeaveValue: String(leavePanel?.onLeaveToday.length ?? 0),
     onLeaveSub: t('home.vitals.onLeaveSub', { count: leavePending }),
-    trendTitle: t('home.trend.title'),
+    workforceTitle: t('home.workforce.title'),
+    workforcePulse,
+    mixTitle: t('home.workforce.mix'),
     trendHint: t('home.trend.hint'),
     trendSeriesName: t('home.trend.series'),
     trendLabels,
@@ -848,16 +899,21 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     unassigned: t('home.groups.unassigned'),
     groupsEmpty: t('home.groups.empty', { date: headcount.effectiveDate }),
     totalLabel: t('home.groups.total'),
-    groups: headcount.groups.map((group) => ({
-      id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ''}`,
-      subsidiary: group.employerSubsidiaryName,
-      department: group.departmentName,
-      departmentLabel: group.departmentName ?? t('home.groups.unassigned'),
-      headcount: group.headcount,
-      headcountLabel: group.headcount.toLocaleString(),
-    })),
+    // Largest department first, so the share bars read as a ranking.
+    groups: [...headcount.groups]
+      .sort((a, b) => b.headcount - a.headcount)
+      .map((group) => ({
+        id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ''}`,
+        subsidiary: group.employerSubsidiaryName,
+        department: group.departmentName,
+        departmentLabel: group.departmentName ?? t('home.groups.unassigned'),
+        headcount: group.headcount,
+        headcountLabel: countLabel(group.headcount, locale),
+        share: headcount.total > 0 ? group.headcount / headcount.total : 0,
+        shareLabel: formatPercent01(headcount.total > 0 ? group.headcount / headcount.total : 0, locale),
+      })),
     total: headcount.total,
-    totalValue: headcount.total.toLocaleString(),
+    totalValue: countLabel(headcount.total, locale),
     directoryTitle: t('home.directory.title'),
     directory,
     pendingTitle: t('overview.pending.title'),

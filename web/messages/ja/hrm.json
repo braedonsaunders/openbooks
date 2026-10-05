@@ -84,6 +84,13 @@
       "hint": "各月末時点の在籍者数（本日まで）。",
       "series": "人員数"
     },
+    "workforce": {
+      "title": "従業員構成",
+      "today": "本日の在籍者",
+      "since": "{month}末",
+      "net": "純増減",
+      "mix": "部門別"
+    },
     "attention": {
       "title": "要対応",
       "allClear": "対応が必要な項目はありません。",

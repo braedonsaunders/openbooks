@@ -84,6 +84,13 @@
       "hint": "Im Dienst zum jeweiligen Monatsende, bis heute.",
       "series": "Personalstand"
     },
+    "workforce": {
+      "title": "Belegschaft",
+      "today": "Heute im Dienst",
+      "since": "Ende {month}",
+      "net": "Nettoveränderung",
+      "mix": "Nach Abteilung"
+    },
     "attention": {
       "title": "Handlungsbedarf",
       "allClear": "Nichts erfordert Aufmerksamkeit.",

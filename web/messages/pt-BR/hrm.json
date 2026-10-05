@@ -84,6 +84,13 @@
       "hint": "Em serviço no fim de cada mês, até hoje.",
       "series": "Quadro de pessoal"
     },
+    "workforce": {
+      "title": "Força de trabalho",
+      "today": "Em serviço hoje",
+      "since": "Fim de {month}",
+      "net": "Variação líquida",
+      "mix": "Por departamento"
+    },
     "attention": {
       "title": "Precisa de atenção",
       "allClear": "Nada precisa de atenção.",

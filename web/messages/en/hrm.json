@@ -84,6 +84,13 @@
       "hint": "In service at each month end, through today.",
       "series": "Headcount"
     },
+    "workforce": {
+      "title": "Workforce",
+      "today": "In service today",
+      "since": "End of {month}",
+      "net": "Net change",
+      "mix": "By department"
+    },
     "attention": {
       "title": "Needs attention",
       "allClear": "Nothing needs attention.",
