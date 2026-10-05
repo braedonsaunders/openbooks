@@ -29,7 +29,7 @@ export type StoredValueEntryKind =
   | "reversal";
 export type StoredValueBreakagePolicy = "none" | "proportional" | "remote";
 
-export interface StoredValueProgramRow {
+export type StoredValueProgramRow = {
   id: string;
   orgId: string;
   name: string;
@@ -42,9 +42,9 @@ export interface StoredValueProgramRow {
   inactivityMonths: number;
   currency: string | null;
   isActive: boolean;
-}
+};
 
-export interface StoredValueAccountRow {
+export type StoredValueAccountRow = {
   id: string;
   orgId: string;
   programId: string;
@@ -61,7 +61,7 @@ export interface StoredValueAccountRow {
   lastActivityOn: string;
   sourceDocumentId: string | null;
   liabilityAccountId: string | null;
-}
+};
 
 /** Every public function below runs on the ambient tenant transaction (`db`). */
 
@@ -390,8 +390,16 @@ export async function insertStoredValueEntry(orgId: string, entry: EntryInsert):
  * RLS-unscoped or raced write into a refusal instead of silent success. When
  * several accounts lock in one unit of work, callers sort by id first.
  */
+type StoredValueAccountRaw = {
+  id: string; orgId: string; programId: string; kind: StoredValueKind;
+  codeHash: string; codeLast4: string; customerPartyId: string | null;
+  currency: string; status: StoredValueStatus; expiresOn: string | null;
+  lastActivityOn: string; sourceDocumentId: string | null; liabilityAccountId: string | null;
+  issuedMinorRaw: string; balanceMinorRaw: string; breakageRecognizedMinorRaw: string;
+};
+
 export async function lockStoredValueAccount(orgId: string, accountId: string): Promise<StoredValueAccountRow> {
-  const rows = (await db.execute<StoredValueAccountRow>(sql`
+  const rows = (await db.execute<StoredValueAccountRaw>(sql`
     select id, org_id as "orgId", program_id as "programId", kind, code_hash as "codeHash",
            code_last4 as "codeLast4", customer_party_id as "customerPartyId", currency,
            issued_minor::text as "issuedMinorRaw", balance_minor::text as "balanceMinorRaw",
@@ -401,9 +409,7 @@ export async function lockStoredValueAccount(orgId: string, accountId: string): 
       from stored_value_accounts
      where org_id = ${orgId} and id = ${accountId}
      for update
-  `)).rows as Array<Omit<StoredValueAccountRow, "issuedMinor" | "balanceMinor" | "breakageRecognizedMinor"> & {
-    issuedMinorRaw: string; balanceMinorRaw: string; breakageRecognizedMinorRaw: string;
-  }>;
+  `)).rows;
   const row = rows[0];
   if (!row) {
     const count = (await db.execute<{ n: number }>(sql`
