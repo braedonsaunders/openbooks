@@ -45,8 +45,8 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
       "CPP is 1,432.70 × 5.95% = 85.24565, rounded half-up to $85.25 — within the $4,230.45 maximum, and below the YMPE so no second-tier contribution.",
       "EI is 1,500.00 × 1.63% = $24.45 — within the $1,123.07 maximum.",
       "Employer CPP matches at $85.25; employer EI is 24.45 × 1.4 = $34.23.",
-      "The enhanced-CPP income deduction (F5) is 85.25 × 1.00/5.95 = $14.33, carried wholly against periodic pay.",
-      "Annual taxable income is (1,500.00 − 14.33) × 52 = $77,254.84; federal tax on it is $8,869.87 and Saskatchewan tax is $5,938.39; each leg rounds to the cent per period (8,869.87 / 52 = $170.57, 5,938.39 / 52 = $114.20), so the period withholding is $284.77.",
+      "The enhanced-CPP income deduction (F5) is 85.25 × 1.00/5.95 = 14.3277, carried at full precision and wholly against periodic pay (it reports as $14.33).",
+      "Annual taxable income is (1,500.00 − 14.3277) × 52 = 77,254.96; federal tax on it is 8,869.8967 and Saskatchewan tax is 5,938.40; only the deduction rounds, each leg to the cent per period (8,869.8967 / 52 = $170.57, 5,938.40 / 52 = $114.20), so the period withholding is $284.77.",
     ],
     expected: {
       values: {
@@ -202,7 +202,7 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
       "QPP is (1,500.00 − 67.30) × 6.30% = 90.2601, rounded to $90.26 — within the $4,479.30 maximum.",
       "EI at the Québec rate is 1,500.00 × 1.30% = $19.50; employer EI is 19.50 × 1.4 = $27.30.",
       "QPIP is 1,500.00 × 0.43% = $6.45; employer QPIP is 1,500.00 × 0.602% = $9.03.",
-      "The F5 deduction is 90.26 × 1.00/6.30 = $14.33, giving the same $77,254.84 annual income as the matching non-Québec pay.",
+      "The F5 deduction is 90.26 × 1.00/6.30 = 14.3270, carried at full precision into annual income, as for the matching non-Québec pay.",
       "The K2 credit basis annualizes the base share of QPP (90.26 × 52 = 4,693.52, base share $3,948.52) capped at the QPP base maximum of $3,768.30 — not the CPP cap — plus EI capped at the Québec maximum of $895.70 and QPIP of $335.40, for K2 of (3,768.30 + 895.70 + 335.40) × 14% = $699.92.",
       "Federal gross tax is $8,819.90; less the 16.5% abatement of $1,455.28, federal tax is $7,364.62.",
       "The period withholding is 7,364.62 / 52 = $141.63.",
