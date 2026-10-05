@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig, type ConfigValuesOf } from "./config";
-import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope } from "./fiscal-buckets";
+import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope, fiscalMonthlyBoxes } from "./fiscal-buckets";
 import { vendorStrings, type VendorStrings } from "./vendor-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 
@@ -422,13 +422,7 @@ export async function vendorData(
   });
 
   const monthly: MonthSpend[] = buckets.useFiscal
-    ? buckets.periods
-        .filter((p) => p.to >= startIso && p.from <= to)
-        .map((p) => ({
-          month: p.from,
-          label: bucketLabels.get(p.from) ?? p.name,
-          spend: spendByBucket.get(p.from) ?? zero,
-        }))
+    ? fiscalMonthlyBoxes(buckets.periods, startIso, to, spendByBucket, zero, bucketLabels, (ym) => strings.monthLabel(ym))
     : Array.from({ length: 12 }, (_, i) => {
         const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
         const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
