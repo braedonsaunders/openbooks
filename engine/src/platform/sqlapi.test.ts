@@ -16,6 +16,8 @@ class GovernedPoolHarness {
   /** Catalog functions the read role can still execute, as has_function_privilege reports them. */
   executableTextFunctions: string[] = [];
   sessionIntact = true;
+  /** Base relations the EXPLAIN plan reports. */
+  planRelations: string[] = ["accounts"];
 
   reset(): void {
     this.governedConnects = 0;
@@ -25,6 +27,7 @@ class GovernedPoolHarness {
     this.queries = [];
     this.executableTextFunctions = [];
     this.sessionIntact = true;
+    this.planRelations = ["accounts"];
   }
 
   async connectGovernedReadClient() {
@@ -35,6 +38,10 @@ class GovernedPoolHarness {
         const values = typeof textOrConfig === "string" ? params : textOrConfig.values;
         this.queries.push({ text, params: values });
         const normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
+        if (normalized.startsWith("explain")) {
+          const plan = [{ Plan: { "Node Type": "Nested Loop", Plans: this.planRelations.map((name) => ({ "Node Type": "Seq Scan", "Relation Name": name })) } }];
+          return { rows: [{ "QUERY PLAN": plan }], fields: [], rowCount: 1 };
+        }
         if (normalized.includes("from (select 42 as answer) __q") && normalized.includes("__ob_row_bytes")) {
           return {
             rows: [
@@ -241,6 +248,23 @@ test("runUserSql withholds the result and discards the connection when the state
   assert.equal(harness.discarded, 1);
 });
 
+test("payroll relations need payroll.read, however the query reaches them", async () => {
+  harness.reset();
+  harness.planRelations = ["accounts", "pay_stubs", "employee_pay_components", "pay_applications"];
+  await assert.rejects(
+    runUserSql("select * from v", { orgId: "00000000-0000-4000-8000-000000000001" }),
+    (error: unknown) => error instanceof UserSqlRefusal && error.status === 403
+      && /requires the payroll\.read permission: this query reads employee_pay_components, pay_stubs\./.test(error.message),
+  );
+  assert.equal(harness.queries.some(({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain")), false);
+
+  harness.reset();
+  harness.planRelations = ["pay_stubs"];
+  const granted = await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true });
+  assert.equal(granted.rowCount, 2);
+  assert.equal(harness.queries.some(({ text }) => text.startsWith("explain")), false);
+});
+
 test("query validation still sees statements after a dollar-quote closer hidden in a comment", () => {
   assert.throws(
     () => validateUserSql("select $x$ /* $x$ ) __q; set search_path to public; select 1 */"),
@@ -287,7 +311,7 @@ test("SQL API operations use only the isolated governed pool", async () => {
     2,
   );
   assert.ok(statements.includes("set local statement_timeout = 1234"));
-  const userQuery = harness.queries.find(({ text }) => text.includes("__ob_row_bytes"));
+  const userQuery = harness.queries.find(({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain"));
   assert.ok(userQuery, "governed user SQL must go through the measured wrapper");
   assert.match(userQuery!.text, /row_to_json/);
   assert.match(userQuery!.text, /limit \$1::pg_catalog\.int4/);

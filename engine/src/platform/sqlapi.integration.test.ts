@@ -222,6 +222,25 @@ test('the read role cannot execute SQL text, so console SQL cannot return to the
   }
 })
 
+test('payroll relations in the governed catalog need payroll.read, however the query reaches them', { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    for (const reader of [
+      'select count(*) as n from pay_stubs',
+      'with x as (select * from employee_pay_components) select count(*) as n from x',
+      'select count(*) as n from accounts a where exists (select 1 from employee_payroll_profiles p where p.org_id = a.org_id)',
+    ]) {
+      await assert.rejects(runUserSql(reader, { orgId: org.orgId }), /requires the payroll\.read permission: this query reads (employee_pay_components|employee_payroll_profiles|pay_stubs)/, reader)
+      const granted = await runUserSql(reader, { orgId: org.orgId, payrollRead: true })
+      assert.equal(granted.rowCount, 1)
+    }
+    // Relations outside payroll, including construction pay applications, stay open.
+    assert.equal((await runUserSql('select count(*) as n from pay_applications', { orgId: org.orgId })).rowCount, 1)
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('governed SQL stays available while the ordinary request pool is saturated', { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg())
   const heldClients: PoolClient[] = []

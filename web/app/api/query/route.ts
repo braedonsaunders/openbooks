@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { NextResponse } from "next/server";
 import { runUserSql, UserSqlRefusal, validateUserSql } from "@openbooks/engine/src/platform/sqlapi.ts";
 import { defineRoute } from '@/lib/api/route'
+import { can } from '@/lib/authz'
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";
 
 const queryBody = z.object({
@@ -55,6 +56,8 @@ export const POST = defineRoute({
       // An analyst console over a real ledger runs genuine aggregate scans;
       // ten seconds cancelled ordinary work on a large tenant.
       timeoutMs: 30_000,
+      // Payroll relations follow the payroll pages and report entities.
+      payrollRead: can(gate, 'payroll.read'),
     });
     return NextResponse.json(result);
   } catch (e) {
