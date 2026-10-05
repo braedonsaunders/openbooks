@@ -36,7 +36,7 @@ export async function loadWorkLocations(): Promise<WorkLocationsData> {
 const f = ref<WorkLocationsData>();
 export function workLocationsSpec(_data: WorkLocationsData): PageSpec {
   return page({
-    route: "/payroll/work-locations",
+    route: '/payroll/work-locations',
     layout: "list",
     header: [pageHeader({ title: f("title"), description: f("description") })],
     body: [widgetBlock("payroll-work-locations", {})],

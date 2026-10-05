@@ -27,7 +27,7 @@ export async function loadReviewTemplates(sp: Record<string, string | string[] |
 
 export function reviewTemplatesSpec(data: ReviewTemplatesData): PageSpec {
   return page({
-    route: data.basePath ?? '/admin/setup/review-templates',
+    route: '/admin/setup/review-templates',
     // The setup workspace renders its own shell; the index is one client
     // island (create dialog + navigation).
     layout: 'bare',

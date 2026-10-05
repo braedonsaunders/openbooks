@@ -19,11 +19,13 @@ const OUT = join(ROOT, 'web', 'lib', 'page-registry.ts')
 const views = findViews(APP_DIR).map((file) => describeView(file, readFileSync(file, 'utf8')))
 const seen = new Map()
 for (const view of views) {
-  if (seen.has(view.route)) {
-    throw new Error(`two pages declare route ${view.route}: ${seen.get(view.route)} and ${view.spec}`)
+  for (const mount of view.routes) {
+    if (seen.has(mount.route)) {
+      throw new Error(`two pages declare route ${mount.route}: ${seen.get(mount.route)} and ${view.spec}`)
+    }
+    seen.set(mount.route, view.spec)
   }
-  seen.set(view.route, view.spec)
 }
 views.sort((a, b) => a.route.localeCompare(b.route))
 writeFileSync(OUT, generate(views))
-console.log(`wrote ${relative(ROOT, OUT)} — ${views.length} routes`)
+console.log(`wrote ${relative(ROOT, OUT)} — ${seen.size} routes from ${views.length} views`)

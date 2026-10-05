@@ -55,7 +55,7 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
     ],
   };
   return page({
-    route: "/hrm/org-chart",
+    route: '/hrm/org-chart',
     layout: data.view === "directory" ? "list" : "bare",
     bodyClassName: "flex h-full min-h-0 flex-col",
     header: data.view === "directory" ? [

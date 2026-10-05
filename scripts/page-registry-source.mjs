@@ -59,16 +59,23 @@ function segmentsOf(route) {
  * Deliberately strict: an unparseable view is thrown rather than skipped,
  * because a silently skipped page is a page the registry claims does not
  * exist, and a MIS-parsed one is worse — it would call the loader with the
- * arguments in the wrong order and report a confidently wrong layout. Three
- * parameter shapes exist across the 165 pages and each is recognized by its
+ * arguments in the wrong order and report a confidently wrong layout. Four
+ * parameter shapes exist across the pages and each is recognized by its
  * TYPE; anything else stops the build.
  */
 export function describeView(file, source) {
   // The field may open the page() call on one line (`page({ route: ...`) or
   // stand on its own line; either way it is an object field, so the match
   // requires an opener or a line start before it — never a comment slash.
-  const route = /(?:^|[{,(])\s*route: '([^']+)'/m.exec(source)?.[1]
-  if (!route) throw new Error(`${file}: no literal \`route:\` field — a page without one cannot be customized`)
+  // A view rendered at several mounts declares `routes: [...]` instead; each
+  // entry must be a literal, for the same reason `route:` must be one.
+  const routesMatch = /(?:^|[{,(])\s*routes:\s*\[((?:\s*'[^']*'\s*,?)+)\s*\]/m.exec(source)
+  const routes = routesMatch
+    ? [...routesMatch[1].matchAll(/'([^']*)'/g)].map((match) => match[1])
+    : [/(?:^|[{,(])\s*route: '([^']+)'/m.exec(source)?.[1]]
+  if (routes.length === 0 || routes.some((route) => !route)) {
+    throw new Error(`${file}: no literal \`route:\` or \`routes:\` field — a page without one cannot be customized`)
+  }
 
   const loader = /^export (?:async )?function (load[A-Za-z0-9_]*)\s*\(([\s\S]*?)\)\s*(?::|\{)/m.exec(source)
   if (!loader) throw new Error(`${file}: no exported loader`)
@@ -82,48 +89,73 @@ export function describeView(file, source) {
   // Classify each parameter, keeping DECLARATION ORDER. Loaders disagree about
   // which comes first — `loadBankAccount(accountId, sp)` against
   // `loadRecordsList(sp, typeKey)` — so the call has to be built from the
-  // signature rather than from a convention none of them share.
-  const segments = segmentsOf(route)
-  let nextSegment = 0
-  const args = splitParams(loader[2]).map((param) => {
+  // signature rather than from a convention none of them share. Segment NAMES
+  // are assigned per route below: `/entities/[role]` is loaded by a parameter
+  // called `slug`, and the caller supplies what the url says, not what the
+  // author typed.
+  const kinds = splitParams(loader[2]).map((param) => {
     const type = param.slice(param.indexOf(':') + 1).trim()
     if (/^Record</.test(type)) return { kind: 'search-params' }
-    // A route segment. Its NAME comes from the route pattern, not from the
-    // parameter: `/entities/[role]` is loaded by a parameter called `slug`,
-    // and the caller supplies what the url says, not what the author typed.
-    if (/^string$/.test(type)) {
-      const name = segments[nextSegment++]
-      if (!name) throw new Error(`${file}: loader takes more segments than \`${route}\` has`)
-      return { kind: 'segment', name }
-    }
+    // A route segment.
+    if (/^string$/.test(type)) return { kind: 'segment' }
     // `params: { id: string }` — the Next.js shape, passed through whole.
     const object = /^\{\s*([A-Za-z0-9_]+)\s*:\s*string\s*\}$/.exec(type)
-    if (object) {
-      const name = segments[nextSegment++]
-      if (!name) throw new Error(`${file}: loader takes more segments than \`${route}\` has`)
-      return { kind: 'segment-object', name, key: object[1] }
+    if (object) return { kind: 'segment-object', key: object[1] }
+    // A trailing defaulted bag of all-optional flags, e.g.
+    // `options: { detailOnly?: boolean } = {}` — a view detail the registry
+    // cannot supply, so the generated call omits it and the default applies.
+    const bag = /^[A-Za-z0-9_]+\s*:\s*\{([^}]*)\}\s*=\s*\{[^}]*\}$/.exec(param)
+    if (
+      bag &&
+      bag[1]
+        .split(',')
+        .every((prop) => prop.trim() === '' || /^[A-Za-z0-9_]+\?\s*:/.test(prop.trim()))
+    ) {
+      return { kind: 'options' }
     }
     throw new Error(`${file}: unrecognized loader parameter \`${param}\``)
   })
+  if (kinds.some((kind, index) => kind.kind === 'options' && index !== kinds.length - 1)) {
+    throw new Error(`${file}: defaulted options parameter must be last`)
+  }
 
-  const required = args.flatMap((arg) => (arg.kind === 'search-params' ? [] : [arg.name]))
+  const mounts = routes.map((route) => {
+    const segments = segmentsOf(route)
+    let nextSegment = 0
+    const args = kinds.map((kind) => {
+      if (kind.kind === 'search-params' || kind.kind === 'options') return kind
+      const name = segments[nextSegment++]
+      if (!name) throw new Error(`${file}: loader takes more segments than \`${route}\` has`)
+      return { ...kind, name }
+    })
+    return {
+      route,
+      args,
+      segments: args.flatMap((arg) => (arg.kind === 'search-params' || arg.kind === 'options' ? [] : [arg.name])),
+      searchParams: args.some((arg) => arg.kind === 'search-params'),
+    }
+  })
   // Relative to web/lib/, without the extension — the specifier the generated
   // file will import.
   const specifier = relative(join(ROOT, 'web', 'lib'), file).replace(/\.ts$/, '').split(sep).join('/')
   return {
-    route,
+    route: routes[0],
+    routes: mounts,
     loader: loader[1],
     spec: spec[1],
     specTakesData,
-    args,
-    segments: required,
-    searchParams: args.some((arg) => arg.kind === 'search-params'),
+    args: mounts[0].args,
+    segments: mounts[0].segments,
+    searchParams: mounts[0].searchParams,
     specifier: specifier.startsWith('.') ? specifier : `./${specifier}`,
   }
 }
 
-function callArgs(view) {
-  return view.args
+function callArgs(args) {
+  // A defaulted options bag is never supplied: the loader's own default
+  // applies, so the registry renders the same view its page renders.
+  return args
+    .filter((arg) => arg.kind !== 'options')
     .map((arg) => {
       if (arg.kind === 'search-params') return 'input.searchParams ?? {}'
       if (arg.kind === 'segment') return `segment(input, '${arg.name}')`
@@ -133,26 +165,29 @@ function callArgs(view) {
 }
 
 export function generate(views) {
-  const entries = views.map((view) => {
-    // No parameter when the loader takes nothing: an unused binding in a
-    // generated file is lint debt nobody can fix at its source.
-    const param = view.args.length === 0 ? '()' : '(input)'
-    const specCall = view.specTakesData
-      ? `(data) => m.${view.spec}(data as never)`
-      : `() => m.${view.spec}()`
-    return `  '${view.route}': {
-    route: '${view.route}',
-    segments: [${view.segments.map((name) => `'${name}'`).join(', ')}],
-    searchParams: ${view.searchParams},
+  const entries = views.flatMap((view) =>
+    view.routes.map((mount) => {
+      // No parameter when the loader takes nothing callable: an unused
+      // binding in a generated file is lint debt nobody can fix at its source.
+      const supplied = mount.args.filter((arg) => arg.kind !== 'options')
+      const param = supplied.length === 0 ? '()' : '(input)'
+      const specCall = view.specTakesData
+        ? `(data) => m.${view.spec}(data as never)`
+        : `() => m.${view.spec}()`
+      return `  '${mount.route}': {
+    route: '${mount.route}',
+    segments: [${mount.segments.map((name) => `'${name}'`).join(', ')}],
+    searchParams: ${mount.searchParams},
     module: async () => {
       const m = await import('${view.specifier}')
       return {
-        load: ${param} => m.${view.loader}(${callArgs(view)}),
+        load: ${param} => m.${view.loader}(${callArgs(mount.args)}),
         spec: ${specCall},
       }
     },
   },`
-  })
+    }),
+  )
 
   return `// GENERATED by scripts/generate-page-registry.mjs — do not edit by hand.
 // Regenerate after adding, moving or renaming a page; web/lib/page-registry.test.ts

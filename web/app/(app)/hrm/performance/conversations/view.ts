@@ -127,7 +127,7 @@ export async function loadConversations(sp: Record<string, string | undefined>) 
 type Data = Awaited<ReturnType<typeof loadConversations>>
 export function conversationsSpec(data: Data): PageSpec {
   return page({
-    route,
+    route: '/hrm/performance/conversations',
     layout: 'list',
     header: [
       pageHeader({
