@@ -49,3 +49,14 @@ for (const [dashboard, raw] of Object.entries(ANALYTICS_CONFIG)) {
     assert.doesNotThrow(() => cleanConfigValues(dashboard as AnalyticsDashboard, spec.defaults))
   })
 }
+
+test('sentinel: set ladder rungs must ascend past unset rungs', () => {
+  const base = ANALYTICS_CONFIG.sentinel.defaults as Record<string, unknown>
+  assert.doesNotThrow(() =>
+    cleanConfigValues('sentinel', { ...base, moderateRiskAmount: '1000.0000', highRiskAmount: '', criticalRiskAmount: '25000.0000' }),
+  )
+  assert.throws(
+    () => cleanConfigValues('sentinel', { ...base, moderateRiskAmount: '50000.0000', highRiskAmount: '', criticalRiskAmount: '1000.0000' }),
+    /must be greater than/,
+  )
+})

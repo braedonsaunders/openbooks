@@ -1073,18 +1073,21 @@ export function cleanConfigValues(dashboard: AnalyticsDashboard, raw: unknown): 
   }
   const byKey = new Map(spec.fields.map((field) => [field.key, field]));
   for (const ladder of spec.ordered ?? []) {
-    for (let i = 1; i < ladder.length; i++) {
-      const lowField = byKey.get(ladder[i - 1]!)!;
-      const highField = byKey.get(ladder[i]!)!;
-      const low = comparable(out[lowField.key]!);
-      const high = comparable(out[highField.key]!);
-      if (low === null || high === null) continue;
-      if (compareDecimal(low, high) >= 0) {
+    // Unset rungs are skipped, but the rungs that ARE set must still ascend:
+    // moderate=50000 with high unset and critical=1000 would otherwise save a
+    // ladder whose higher level can never be reached.
+    let prev: { field: ConfigField; value: string } | null = null;
+    for (const key of ladder) {
+      const field = byKey.get(key!)!;
+      const value = comparable(out[field.key]!);
+      if (value === null) continue;
+      if (prev !== null && compareDecimal(prev.value, value) >= 0) {
         throw new InvalidConfigValue(
-          highField.key,
-          `threshold ${fieldName(highField)} (${high}) must be greater than ${fieldName(lowField)} (${low}) — otherwise the higher level can never be reached`,
+          field.key,
+          `threshold ${fieldName(field)} (${value}) must be greater than ${fieldName(prev.field)} (${prev.value}) — otherwise the higher level can never be reached`,
         );
       }
+      prev = { field, value };
     }
   }
   const weights = checkSumsTo(spec, out);
