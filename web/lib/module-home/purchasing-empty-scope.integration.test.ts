@@ -5,6 +5,15 @@ import test from 'node:test'
 
 registerHooks({
   resolve(specifier, _context, next) {
+    // purchasingHome translates its unknown-vendor fallback through
+    // next-intl: outside a request (here) the catalog resolves to the key
+    // itself — the money assertions below never read a name.
+    if (specifier === 'next-intl/server') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,' + encodeURIComponent('export async function getTranslations(){return (key) => key}'),
+      }
+    }
     return next(specifier)
   },
 })
@@ -70,7 +79,7 @@ test('purchasing cockpit denies every row to an empty subsidiary scope', { skip:
 
       const denied = await withBypass(() => purchasingHome(scratch.orgId, [], undefined, { ap: true, orders: true, expenses: true, parties: true }))
       assert.equal(toUnits(denied.spend30d), toUnits(0), 'empty scope reads no spend')
-      assert.equal(denied.apOutstanding, 0, 'empty scope reads no payables')
+      assert.equal(toUnits(denied.apOutstanding), toUnits(0), 'empty scope reads no payables')
       assert.deepEqual(denied.topExposure, [], 'empty scope exposes no vendor')
       assert.ok(
         denied.trend.every((w) => toUnits(w.spend) === 0n),
