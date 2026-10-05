@@ -12,7 +12,7 @@ import { PagedTable, type PagedColumn } from '../../../../components/paged-table
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 import { Badge, Button, Drawer, EmptyState, Input, Label, SearchSelect } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
-import { conflictsForLocation, resolveLocationSection } from './location-sections'
+import { conflictsForLocation, dedupeConflicts, resolveLocationSection } from './location-sections'
 
 interface LocationRow {
   id: string
@@ -84,6 +84,10 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
     { key: 'policies', label: t('locations.overrideTitle'), href: mergeHref(pathname, sp, { section: 'policies' }) },
   ]
   const [conflictLocation, setConflictLocation] = useState<LocationRow | null>(null)
+  // Reachability keys on the loaded conflict identity, never the narrower
+  // push-state count: an unlinked variant keeps its conflict listed with no
+  // state row, and a doubly-mapped stock location returns one row per mapping.
+  const openConflicts = dedupeConflicts(conflicts)
   const [rows, setRows] = useState<LocationRow[]>([])
   const [states, setStates] = useState<SyncState[]>([])
   const [conflicts, setConflicts] = useState<ConflictRow[]>([])
@@ -286,7 +290,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
   }
 
   async function resolveAll(resolution: 'pushed_openbooks' | 'accepted_shopify') {
-    const confirmed = await confirmDialog(t('locations.resolveAllConfirm', { count: conflicts.length }))
+    const confirmed = await confirmDialog(t('locations.resolveAllConfirm', { count: openConflicts.length }))
     if (!confirmed) return
     setBusy(true)
     try {
@@ -396,9 +400,9 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
               {t('actions.map')}
             </Button>
           ) : null}
-          {(stateFor(row)?.openConflicts ?? 0) > 0 ? (
+          {conflictsForLocation(openConflicts, row.stockLocationId).length > 0 ? (
             <Button size="sm" variant="ghost" onClick={() => reviewConflicts(row)}>
-              {t('locations.conflictBadge', { count: stateFor(row)?.openConflicts ?? 0 })}
+              {t('locations.conflictBadge', { count: conflictsForLocation(openConflicts, row.stockLocationId).length })}
             </Button>
           ) : null}
           {canManage && row.stockLocationId && row.syncInventory ? (
@@ -457,7 +461,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
 
   const visibleTabs = canManage ? sectionTabs : sectionTabs.filter((tab) => tab.key === 'mapped')
   const visibleSection = section === 'policies' && !canManage ? 'mapped' : section
-  const locationConflicts = conflictsForLocation(conflicts, conflictLocation?.stockLocationId ?? null)
+  const locationConflicts = conflictsForLocation(openConflicts, conflictLocation?.stockLocationId ?? null)
 
   function selectSection(key: string) {
     const tab = sectionTabs.find((entry) => entry.key === key)
@@ -475,11 +479,11 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
       {visibleSection === 'mapped' ? (
         <>
           <h2 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('locations.tabs.mapped')}</h2>
-          {conflicts.length > 0 ? (
+          {openConflicts.length > 0 ? (
             <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-sm font-medium text-amber-900 dark:text-amber-100">{t('locations.conflictsTitle', { count: conflicts.length })}</h2>
+                  <h2 className="text-sm font-medium text-amber-900 dark:text-amber-100">{t('locations.conflictsTitle', { count: openConflicts.length })}</h2>
                   <p className="text-xs text-amber-700 dark:text-amber-300">{t('locations.conflictsHint')}</p>
                 </div>
                 {canManage ? (
