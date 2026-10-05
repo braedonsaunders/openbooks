@@ -451,6 +451,26 @@ async function applicableRateRows(
   }));
 }
 
+/**
+ * The enacted income tax rate for one legal entity on a date: the org-wide
+ * rows stacked with the entity's own rows, exactly as a provision run
+ * measures it (subsidiaryId null = the root entity, org-wide rows only).
+ * Effective-dated and scope-aware by construction. Null when no rate is
+ * configured for that entity and date — a caller must refuse by name, never
+ * assume a rate.
+ */
+export async function enactedIncomeTaxRate(
+  orgId: string,
+  subsidiaryId: string | null,
+  onDate: string,
+): Promise<EnactedRate | null> {
+  const components = [
+    ...(await applicableRateRows(orgId, null, onDate)),
+    ...(subsidiaryId === null ? [] : await applicableRateRows(orgId, subsidiaryId, onDate)),
+  ];
+  return components.length === 0 ? null : stackEnactedRateComponents(components);
+}
+
 // ---------------------------------------------------------------------------
 // Source lineage — the fence that keeps a reviewed draft current
 // ---------------------------------------------------------------------------
