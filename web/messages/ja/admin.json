@@ -2396,7 +2396,9 @@
     "confirmDelete": "このレコードを削除しますか？この操作は取り消せません。",
     "validation": {
       "required": "{field}は必須です",
-      "invalidStructuredValue": "{field} に読み取れない保存済みレコードがあります。保存する前に設定を修正してください。"
+      "invalidStructuredValue": "{field} に読み取れない保存済みレコードがあります。保存する前に設定を修正してください。",
+      "moneyAmount": "{field} は {currency} の通常の金額で入力してください（例: 120.50）。補助単位ではなく、{currency} の小数桁数を超えないでください。",
+      "moneyUnknownCurrency": "{currency} では {field} の価格を設定できません。この通貨には対応する補助単位の精度がありません。"
     },
     "drawer": {
       "newTitle": "新規{name}",
@@ -4182,7 +4184,7 @@
       "ianaTimezone": "Asia/Tokyo などの IANA タイムゾーンを入力してください。",
       "contractCostPracticalExpedient": "オンの場合、受益期間が12か月以下のコストは資産化せず即時費用処理されます。",
       "contractCostCommensurate": "初回手数料に対するこの割合以上の更新手数料は、顧客ライフ基準でも償却を契約期間に限定します。",
-      "minorAmount": "通貨の補助単位の整数値。1000は米ドルで10.00を意味します。",
+      "majorAmount": "通常の通貨単位: 120.50 米ドル。",
       "shippingDefaultPreset": "出荷に梱包サイズがない場合に使用されます。",
       "shippingMarkup": "運送会社運賃への追加料金（ベーシスポイント）。100が1パーセントです。",
       "shippingCustomsDefaults": "国外への出荷に使う内容品の既定説明。"

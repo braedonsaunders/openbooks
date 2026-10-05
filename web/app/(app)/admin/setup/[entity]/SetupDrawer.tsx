@@ -32,11 +32,12 @@ import { setupFieldOptions, setupFieldVisible, setupOptionLabel, toSnake, type S
 import { setupDomainPayload } from '../../../../../lib/setup/domain-payload'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { coerceField, SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
+import { majorToMinor, minorToMajor } from '../../../../../lib/setup/money-fields'
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { formatDecimal } from '../../../../../lib/money-format'
 import { countryOptions } from '../../../../../lib/countries'
 
-type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string }
+type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number }
 
 /** Icons a registry `createChooser` card may name. */
 const CHOOSER_ICONS: Record<string, LucideIcon> = {
@@ -165,9 +166,31 @@ export function SetupDrawer({
   const idColumn = entity.idColumn ?? 'id'
   const closeHref = closeHrefProp ?? `/admin/setup/${entity.key}`
 
+  // Authoritative minor-unit precisions for money fields, from the currency
+  // options the server resolved beside the form — never a client guess.
+  const minorUnits: Record<string, number> = {}
+  for (const option of refOptions.currencies ?? []) {
+    if (typeof option.minorUnits === 'number') minorUnits[option.value] = option.minorUnits
+  }
   const [form, setForm] = useState<Record<string, unknown>>(() => {
     const init: Record<string, unknown> = {}
-    for (const f of entity.fields) init[f.key] = f.kind === 'multiref' ? members : initialValue(f, row)
+    for (const f of entity.fields) {
+      if (f.kind === 'multiref') {
+        init[f.key] = members
+        continue
+      }
+      const raw = initialValue(f, row)
+      // Money fields hold operator majors in the form; storage minors stay
+      // on the row. An unknown precision keeps the raw figure so the save
+      // path — never the display — refuses it by name.
+      if (f.kind === 'money' && row && raw !== '' && raw != null) {
+        const exponent = minorUnits[String(row[toSnake(f.currencyField ?? 'currency')] ?? '').toUpperCase()]
+        const major = exponent === undefined ? null : minorToMajor(raw as string | number, exponent)
+        init[f.key] = major ?? raw
+        continue
+      }
+      init[f.key] = raw
+    }
     return { ...init, ...initialValues, ...fixedValues }
   })
   // The pristine form advances after a successful save; Cancel restores
@@ -288,6 +311,26 @@ export function SetupDrawer({
         if ((field.kind === 'decimal' || field.kind === 'percent') && typeof body[field.key] === 'string') {
           body[field.key] = canonicalDecimal(body[field.key], field.decimalScale ?? SETUP_DECIMAL_SCALE) ?? body[field.key]
         }
+      }
+      // Money fields arrive as operator majors and post as storage minors:
+      // the sibling currency names the precision, an unknown one refuses by
+      // name, and over-precise or non-numeric text never rounds or coerces.
+      for (const field of entity.fields) {
+        if (field.kind !== 'money' || typeof body[field.key] !== 'string' || String(body[field.key]).trim() === '') continue
+        const currency = String(body[field.currencyField ?? 'currency'] ?? '').toUpperCase()
+        const exponent = minorUnits[currency]
+        const label = t(field.labelKey ?? `fields.${field.key}`)
+        if (exponent === undefined) {
+          const error = t('validation.moneyUnknownCurrency', { field: label, currency: currency || '—' })
+          setFieldError(error); toast.error(error); setBusy(false); return
+        }
+        const converted = majorToMinor(String(body[field.key]), exponent)
+        const minor = converted.ok ? Number(converted.minor) : NaN
+        if (!converted.ok || !Number.isSafeInteger(minor)) {
+          const error = t('validation.moneyAmount', { field: label, currency })
+          setFieldError(error); toast.error(error); setBusy(false); return
+        }
+        body[field.key] = minor
       }
       // A field the form stopped showing must not persist behind the UI: a pay
       // component switched from a deduction to an earning gives its protection
@@ -641,7 +684,7 @@ export function FieldControl({
     ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
     : selectedOption ? setupOptionLabel(selectedOption, t)
       : field.kind === 'boolean' && value !== null && value !== undefined && value !== '' ? common(value === true || value === 'true' ? 'labels.yes' : 'labels.no')
-        : ['decimal', 'percent', 'integer'].includes(field.kind) && value !== null && value !== undefined && value !== '' ? formatDecimal(locale, String(value), { maximumFractionDigits: field.decimalScale ?? SETUP_DECIMAL_SCALE })
+        : ['decimal', 'percent', 'integer', 'money'].includes(field.kind) && value !== null && value !== undefined && value !== '' ? formatDecimal(locale, String(value), { maximumFractionDigits: field.decimalScale ?? SETUP_DECIMAL_SCALE })
           : Array.isArray(value) ? value.join(', ') : value
 
 
@@ -837,7 +880,9 @@ export function FieldControl({
     )
   }
 
-  const numeric = field.kind === 'integer' || field.kind === 'decimal' || field.kind === 'percent'
+  // Money fields hold operator majors in the form state (converted at init
+  // and save); the control is the shared decimal input, never a minor-units box.
+  const numeric = field.kind === 'integer' || field.kind === 'decimal' || field.kind === 'percent' || field.kind === 'money'
   return (
     <div className={wrap}>
       <Label help={help}>{label}{requiredMark}</Label>

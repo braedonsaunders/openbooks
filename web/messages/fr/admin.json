@@ -2072,7 +2072,9 @@
     "confirmDelete": "Supprimer cet enregistrement ? Cette action est irréversible.",
     "validation": {
       "required": "{field} est obligatoire",
-      "invalidStructuredValue": "{field} contient un enregistrement illisible. Corrigez la configuration avant d’enregistrer."
+      "invalidStructuredValue": "{field} contient un enregistrement illisible. Corrigez la configuration avant d’enregistrer.",
+      "moneyAmount": "Saisissez {field} comme un montant normal en {currency}, par exemple 120,50 — pas en sous-unités, et sans plus de décimales que {currency} n’en compte.",
+      "moneyUnknownCurrency": "Impossible de tarifer {field} en {currency} : la devise n’a pas de précision de sous-unités prise en charge."
     },
     "drawer": {
       "newTitle": "Nouveau : {name}",
@@ -4062,7 +4064,7 @@
       "ianaTimezone": "Saisissez un fuseau horaire IANA, par exemple Europe/Paris.",
       "contractCostPracticalExpedient": "Quand elle est activée, les coûts dont la période d’avantage est de douze mois ou moins sont passés en charges aussitôt au lieu d’être capitalisés.",
       "contractCostCommensurate": "Une commission de renouvellement égale ou supérieure à cette part de la commission initiale limite l’amortissement à la durée du contrat, même en base de durée de vie client.",
-      "minorAmount": "Sous-unités entières de la devise : 1000 vaut 10,00 USD.",
+      "majorAmount": "Unités monétaires normales : 120,50 USD.",
       "shippingDefaultPreset": "Utilisé quand l’envoi n’a pas son propre format de colis.",
       "shippingMarkup": "Supplément ajouté au tarif du transporteur, en points de base. 100 vaut un pour cent.",
       "shippingCustomsDefaults": "Description de contenu par défaut pour les envois vers l’étranger."

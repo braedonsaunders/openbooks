@@ -2396,7 +2396,9 @@
     "confirmDelete": "Diesen Datensatz löschen? Dies kann nicht rückgängig gemacht werden.",
     "validation": {
       "required": "{field} ist erforderlich",
-      "invalidStructuredValue": "{field} enthält einen unlesbaren gespeicherten Datensatz. Korrigieren Sie die Konfiguration vor dem Speichern."
+      "invalidStructuredValue": "{field} enthält einen unlesbaren gespeicherten Datensatz. Korrigieren Sie die Konfiguration vor dem Speichern.",
+      "moneyAmount": "Geben Sie {field} als normalen {currency}-Betrag ein, zum Beispiel 120,50 — nicht in Nebeneinheiten und mit nicht mehr Nachkommastellen, als {currency} führt.",
+      "moneyUnknownCurrency": "{field} kann in {currency} nicht bepreist werden: Die Währung hat keine unterstützte Nebeneinheiten-Genauigkeit."
     },
     "drawer": {
       "newTitle": "Neu: {name}",
@@ -4182,7 +4184,7 @@
       "ianaTimezone": "Geben Sie eine IANA-Zeitzone ein, z. B. Europe/Berlin.",
       "contractCostPracticalExpedient": "Wenn aktiv, werden Kosten mit einem Nutzenzeitraum von zwölf Monaten oder weniger sofort aufgewandt statt aktiviert.",
       "contractCostCommensurate": "Eine Folgeprovision ab diesem Anteil der Erstprovision begrenzt die Abschreibung auf die Vertragslaufzeit, auch bei Kundenlaufzeit-Basis.",
-      "minorAmount": "Ganze Nebeneinheiten der Währung: 1000 bedeutet 10,00 USD.",
+      "majorAmount": "Normale Währungseinheiten: 120,50 USD.",
       "shippingDefaultPreset": "Wird verwendet, wenn eine Sendung keine eigene Paketgröße hat.",
       "shippingMarkup": "Zusätzlicher Aufschlag auf den Frachttarif, in Basispunkten. 100 entspricht einem Prozent.",
       "shippingCustomsDefaults": "Standard-Inhaltsbeschreibung für Sendungen ins Ausland."

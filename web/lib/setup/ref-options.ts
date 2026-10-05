@@ -5,7 +5,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
-export type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string }
+export type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number }
 
 /** Distinct ref sources declared anywhere in this entity's columns or fields. */
 export function refSources(entity: SetupEntity): SetupRefSource[] {
@@ -106,6 +106,14 @@ export async function loadEntityOptions(
   // without this branch the generic lookup below finds no entry and every
   // remittance-vendor listbox renders only None.
   if (source === 'vendors') return loadVendors(orgId, allowedSubsidiaryIds)
+  if (source === 'currencies') {
+    // Currency options carry their minor-unit precision so money fields can
+    // convert between operator majors and storage minors exactly, from the
+    // authoritative table rather than a client guess.
+    const options = (await db.execute(sql`
+      select code as value, name as label, minor_units as "minorUnits" from currencies order by code`))
+    return options.rows as RefOption[]
+  }
   if (source === 'accounting-periods') {
     const periods = (await db.execute(sql`
       select id as value, name as label from accounting_periods

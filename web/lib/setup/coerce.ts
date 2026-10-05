@@ -94,6 +94,17 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       if (field.max !== undefined && n > field.max) return { error: `${field.key} must be at most ${field.max}` }
       return { column, value: n }
     }
+    case 'money': {
+      // The drawer posts storage minors converted from operator majors, so
+      // the server guards the stored shape exactly like an integer: the
+      // major-unit grammar lives in the form, the minor-unit bounds here.
+      if (!present) return { column, value: null }
+      const n = typeof raw === 'number' || typeof raw === 'string' ? Number(raw) : NaN
+      if (!Number.isSafeInteger(n)) return { error: `${field.key} must be a whole number of minor units` }
+      if (field.min !== undefined && n < field.min) return { error: `${field.key} must be at least ${field.min}` }
+      if (field.max !== undefined && n > field.max) return { error: `${field.key} must be at most ${field.max}` }
+      return { column, value: n }
+    }
     case 'decimal':
     case 'percent': {
       if (!present) return { column, value: null }

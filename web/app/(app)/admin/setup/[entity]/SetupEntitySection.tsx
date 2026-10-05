@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { formatDecimal } from '../../../../../lib/money-format'
+import { minorToMajor } from '../../../../../lib/setup/money-fields'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   Badge,
@@ -50,6 +51,7 @@ export function renderCell(
   refLabels: Record<string, Map<string, string>>,
   t: (k: string) => string,
   locale: string,
+  minorUnits?: Record<string, number>,
 ) {
   const raw = row[toSnake(col.key)]
   const option = col.options?.find((candidate) => candidate.value === String(raw))
@@ -74,6 +76,17 @@ export function renderCell(
       if (raw == null || raw === '') return '—'
       // Locale-formatted, trailing zeros trimmed (1.7500 → 1.75, 40.0000 → 40).
       return formatDecimal(locale, String(raw), { maximumFractionDigits: 4 })
+    }
+    case 'money': {
+      if (raw == null || raw === '') return '—'
+      // Storage minors render as operator majors with the code beside them.
+      // An unknown precision names its units instead of guessing a figure.
+      const code = String(row[toSnake(col.currencyField ?? 'currency')] ?? '')
+      const exponent = code ? minorUnits?.[code.toUpperCase()] : undefined
+      if (exponent === undefined) return `${String(raw)} ${code}(minor units)`.trim()
+      const major = minorToMajor(raw as string | number, exponent)
+      if (major == null) return `${String(raw)} ${code}(minor units)`.trim()
+      return `${formatDecimal(locale, major, { maximumFractionDigits: exponent })} ${code}`.trim()
     }
     case 'date':
       return raw ? String(raw) : '—'
@@ -316,6 +329,12 @@ export async function SetupEntitySection({
     const scopedOptions = boundScope === undefined ? opts : opts.filter((option) => option.scopeValue == null || option.scopeValue === String(boundScope))
     refLabels[source] = new Map(scopedOptions.map((option) => [option.value, option.label]))
   }
+  // Authoritative precisions for money columns, from the currency options
+  // resolved beside the rows — the same map the drawer converts with.
+  const currencyMinorUnits: Record<string, number> = {}
+  for (const option of refOptions.currencies ?? []) {
+    if (typeof option.minorUnits === 'number') currencyMinorUnits[option.value] = option.minorUnits
+  }
 
   const open = openRow
     ? openRow === 'new'
@@ -514,11 +533,11 @@ export async function SetupEntitySection({
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {renderColumn?.(c, row) ??
-                          renderCell(c, row, refLabels, t, locale)}
+                          renderCell(c, row, refLabels, t, locale, currencyMinorUnits)}
                       </Link>
                     ) : (
                       (renderColumn?.(c, row) ??
-                      renderCell(c, row, refLabels, t, locale))
+                      renderCell(c, row, refLabels, t, locale, currencyMinorUnits))
                     )}
                   </TableCell>
                 ))}

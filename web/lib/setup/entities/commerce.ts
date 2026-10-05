@@ -102,14 +102,14 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     importVia: 'command',
     columns: [
       { key: 'spendDate', kind: 'date' },
-      { key: 'amountMinor', kind: 'number', labelKey: 'entities.channel-ad-spend.amount' },
+      { key: 'amountMinor', kind: 'money', labelKey: 'entities.channel-ad-spend.amount' },
       { key: 'currency', kind: 'text' },
       { key: 'source', kind: 'text' },
     ],
     fields: [
       { key: 'channelId', kind: 'ref', ref: 'sales-channels', required: true, lockedOnEdit: true },
       { key: 'spendDate', kind: 'date', required: true, lockedOnEdit: true },
-      { key: 'amountMinor', kind: 'integer', min: 0, required: true, labelKey: 'entities.channel-ad-spend.amount', helpTextKey: 'fieldHelp.minorAmount' },
+      { key: 'amountMinor', kind: 'money', min: 0, required: true, labelKey: 'entities.channel-ad-spend.amount', helpTextKey: 'fieldHelp.majorAmount' },
       { key: 'currency', kind: 'ref', ref: 'currencies', required: true },
       { key: 'source', kind: 'text', lockedOnEdit: true },
     ],

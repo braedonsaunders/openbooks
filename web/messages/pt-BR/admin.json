@@ -2147,7 +2147,9 @@
     "confirmDelete": "Excluir este registro? Esta ação não pode ser desfeita.",
     "validation": {
       "required": "{field} é obrigatório",
-      "invalidStructuredValue": "{field} contém um registro armazenado ilegível. Corrija a configuração antes de salvar."
+      "invalidStructuredValue": "{field} contém um registro armazenado ilegível. Corrija a configuração antes de salvar.",
+      "moneyAmount": "Informe {field} como um valor normal em {currency}, por exemplo 120,50 — não em unidades menores e sem mais casas decimais do que {currency} usa.",
+      "moneyUnknownCurrency": "Não é possível precificar {field} em {currency}: a moeda não tem precisão de unidades menores suportada."
     },
     "drawer": {
       "newTitle": "Novo {name}",
@@ -4137,7 +4139,7 @@
       "ianaTimezone": "Digite um fuso horário IANA, como America/Sao_Paulo.",
       "contractCostPracticalExpedient": "Quando ativado, custos cujo período de benefício é de doze meses ou menos vão direto a despesa em vez de serem capitalizados.",
       "contractCostCommensurate": "Uma comissão de renovação igual ou superior a esta parcela da comissão inicial limita a amortização ao prazo do contrato, mesmo sob base de vida do cliente.",
-      "minorAmount": "Unidades menores inteiras da moeda: 1000 significa 10,00 USD.",
+      "majorAmount": "Unidades monetárias normais: 120,50 USD.",
       "shippingDefaultPreset": "Usado quando o envio não tem tamanho de pacote próprio.",
       "shippingMarkup": "Cobrança extra sobre a tarifa da transportadora, em pontos-base. 100 é um por cento.",
       "shippingCustomsDefaults": "Descrição de conteúdo padrão para envios ao exterior."
