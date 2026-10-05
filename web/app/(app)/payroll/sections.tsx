@@ -257,6 +257,31 @@ export function shortDate(iso: string, locale: string): string {
   return shortDateLabel(new Date(iso + 'T00:00:00Z'), locale)
 }
 
+/** Translator callback the pay-period label takes, so tests pin the reader without the catalog. */
+export type PayPeriodsTranslator = (key: string, params?: Record<string, string | number>) => string
+
+/**
+ * The pay-period tile label names the current tax year of every installed
+ * pack: one pack names its year, several join their distinct years for the
+ * viewer's locale instead of pretending the latest covers the others. No
+ * current year (outside the reader's contract, which always returns at
+ * least its pack-less fallback) names no year rather than printing
+ * "undefined".
+ */
+export function payPeriodsLabel(
+  t: PayPeriodsTranslator,
+  locale: string,
+  taxYears: readonly { taxYear: number }[],
+): string {
+  const [only, ...rest] = taxYears
+  if (only !== undefined && rest.length === 0) return t('home.vitals.periodsRan', { year: only.taxYear })
+  if (taxYears.length === 0) return t('home.vitals.periodsRanNoYear')
+  const years = [...new Set(taxYears.map((pair) => pair.taxYear))].sort((a, b) => a - b)
+  return t('home.vitals.periodsRanYears', {
+    years: new Intl.ListFormat(locale, { type: 'conjunction' }).format(years.map((year) => String(year))),
+  })
+}
+
 export function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
