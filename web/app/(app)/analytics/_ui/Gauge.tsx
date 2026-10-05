@@ -40,11 +40,18 @@ export function Gauge({
   className?: string
   goodWhenHigh?: boolean
   ariaLabel?: string
-  /** Tone cut-offs for the 0–100 scale, from the caller's own configuration. */
-  bands: ScoreBands
+  /**
+   * Tone cut-offs for the 0–100 scale, from the caller's own configuration.
+   * Null renders the ring untoned (slate) for figures that carry no health
+   * claim — a cash-coverage ring, a generic preview — instead of grading
+   * them against a scale nobody configured.
+   */
+  bands: ScoreBands | null
 }) {
   const v = Math.min(100, Math.max(0, value))
-  const tone = scoreTone(goodWhenHigh ? v : 100 - v, bands)
+  const tone = bands === null
+    ? { hex: '#64748b', text: 'text-slate-500 dark:text-slate-400', ring: 'stroke-slate-400' }
+    : scoreTone(goodWhenHigh ? v : 100 - v, bands)
   const gradId = useId()
 
   const w = size
