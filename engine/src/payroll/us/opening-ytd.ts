@@ -20,3 +20,16 @@ export const US_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
     ceilingKey: "pensionableYtd",
   },
 ];
+
+/**
+ * Per-EIN carry-in keys (the pack's `accountOpeningBases`). Prior-provider
+ * FICA wages and FICA withheld are entered per EIN, and the per-EIN amount
+ * is the ONE carry-in every reader uses: the run's Social Security cap,
+ * Additional Medicare threshold and Massachusetts FICA subtraction
+ * (compute-statutory.ts) read it for the run's employer, and the W-2 lands
+ * it on the slip for that EIN (yearend.ts). The legacy employee-only columns
+ * they replace are still read where no per-EIN amount exists; the carry-in
+ * screen refuses a save that fills both, so no amount counts twice.
+ */
+export const US_FICA_WAGES_ACCOUNT_BASE = "us_w2_fica_wages";
+export const US_FICA_WITHHELD_ACCOUNT_BASE = "us_w2_fica_withheld";

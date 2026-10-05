@@ -11,6 +11,7 @@ import { seedPayrollComponents } from "../run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
 import { seedUsSuiAccount } from "../filing-test-fixtures.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
+import { saveOpeningBalances } from "../opening-balances.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { form941Worksheet, w2Slips } from "../yearend.ts";
 import { resolveUsSuiYtd, resolveUsSuiYtdForCoverage, usEmployeeYtd } from "./compute-statutory.ts";
@@ -525,6 +526,45 @@ test(
       assert.equal(factors?.SUTA, "0.0000");
       assert.equal(factors?.SS, "124.0000");
       assert.equal(factors?.FUTA, "12.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a per-EIN FICA carry-in reaches the Social Security cap and Additional Medicare for a state-account profile",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
+      const employee = await usEmployee(fx, "Mid-year adopter");
+      const einId = await seedEin(fx);
+      const ficaWages = (amount: string) => [{
+        programKey: "us_w2_fica_wages", filingAccountId: einId, region: null, insurableYtd: amount,
+      }];
+      // The refusal's remedy names the column the calculation reads.
+      await assert.rejects(
+        saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
+          employeePartyId: employee, amounts: { pensionableYtd: "199000" }, accountBases: ficaWages("199000"),
+        }] }),
+        /keep it in FICA wages per federal EIN for this filing account and set Pensionable \/ FICA wages to zero/,
+      );
+      await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
+        employeePartyId: employee, amounts: {}, accountBases: ficaWages("199000"),
+      }] });
+      const run = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+      });
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId })).errors, []);
+      const factors = await stubFactors(fx, run.documentId, employee);
+      // $199,000 carried in is past the 2026 $184,500 Social Security base:
+      // no Social Security either side, Medicare on the whole $2,000, and
+      // Additional Medicare on the $1,000 above $200,000.
+      assert.equal(factors?.SS, "0.0000");
+      assert.equal(factors?.MED, "29.0000");
+      assert.equal(factors?.MED2, "9.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

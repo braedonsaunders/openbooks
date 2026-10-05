@@ -515,10 +515,11 @@ export interface PayrollAccountOpeningBase {
    */
   requiresRegion: boolean;
   /**
-   * Legacy `payroll_opening_balances` text field this declaration replaces for
-   * W-2 reporting. While both carry amounts the carry-in screen refuses the
-   * save and names the replacement; once the legacy column reads zero the
-   * account rows are the only source and the legacy amount pays nothing.
+   * Legacy `payroll_opening_balances` text field this declaration replaces.
+   * The pack's statutory engine and its year-end slips read the account row
+   * for the employer's account and the legacy amount beside it, so the
+   * carry-in screen refuses a save where both hold amounts and names the
+   * account row as the place to keep it.
    */
   replacesLegacyField?: string;
 }
