@@ -148,3 +148,9 @@ test('guardReportEntity still allows a catalog entity that declares no extra per
   assert.equal(await canRunReportEntity(authz, { entity: open.key }), true)
   assert.equal(await guardReportEntity(authz, { entity: open.key }), null)
 })
+
+test('payroll capability definitions do not become visible with reports.read alone', async () => {
+  assert.equal(await canSeeReportDefinition(reportReader(), {
+    report_type: 'statement', query: null, statement: { kind: 'payroll-support' },
+  }), false)
+})

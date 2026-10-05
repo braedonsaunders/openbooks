@@ -46,6 +46,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   const t = await getTranslations('reports')
   const tc = await getTranslations('analytics.trueCost')
   const tw = await getTranslations('warehouse')
+  const tp = await getTranslations('payroll.supportReport')
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
@@ -285,11 +286,15 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
         card('resourcingEngagement', '/reports/resourcing/engagement', 'BriefcaseBusiness', 'list'),
       ],
     } satisfies HubGroup] : []),
-    ...(payrollDefinitions.length > 0 ? [{
+    ...(payrollDefinitions.length > 0 || (payrollEnabled && authz && can(authz, 'payroll.read')) ? [{
       key: 'payroll',
       label: t('hub.groups.payroll'),
       accent: 'emerald',
-      cards: definitionCards(payrollDefinitions, 'HandCoins', t('hub.cards.payrollDescription')),
+      cards: [
+        ...(payrollEnabled && authz && can(authz, 'payroll.read') ? [{ href: '/reports/payroll-support',
+          title: tp('title'), desc: tp('description'), icon: 'Globe', form: 'list' as const }] : []),
+        ...definitionCards(payrollDefinitions, 'HandCoins', t('hub.cards.payrollDescription')),
+      ],
     } satisfies HubGroup] : []),
     ...(hrmDefinitions.length > 0 ? [{
       key: 'hrm',
@@ -327,6 +332,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
             inventory: inventoryEnabled,
             warehousing: warehousingEnabled,
             resourcing: resourcingEnabled,
+            payroll: payrollEnabled && Boolean(authz && can(authz, 'payroll.read')),
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()

@@ -2440,6 +2440,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/payroll-support': {
+    route: '/reports/payroll-support',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/payroll-support/view')
+      return {
+        load: (input) => m.loadPayrollSupport(input.searchParams ?? {}),
+        spec: (data) => m.payrollSupportSpec(data as never),
+      }
+    },
+  },
   '/reports/availability': {
     route: '/reports/availability',
     segments: [],
