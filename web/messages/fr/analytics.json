@@ -1081,7 +1081,8 @@
     "title": "Performance fournisseurs",
     "backToHub": "Analyses",
     "labels": {
-      "unknownVendor": "Inconnu"
+      "unknownVendor": "Inconnu",
+      "unrated": "Non évalué"
     },
     "chart": {
       "spend": "Dépenses",
@@ -1185,13 +1186,100 @@
       "overview": "Vue d’ensemble",
       "payment": "Comportement de paiement",
       "scorecard": "Fiches",
-      "vendors": "Fournisseurs"
+      "vendors": "Fournisseurs",
+      "configuration": "Configuration"
     },
     "tier": {
       "core": "Cœur",
       "strategic": "Stratégique",
       "tactical": "Tactique",
       "tail": "Longue traîne"
+    },
+    "config": {
+      "fields": {
+        "engagementCapBills": {
+          "label": "Plafond d’activité (factures)",
+          "help": "Nombre de factures pour le score d’activité maximal"
+        },
+        "gradeA": {
+          "label": "Seuil du A",
+          "help": "Un score à partir de ce seuil obtient la note A"
+        },
+        "gradeB": {
+          "label": "Seuil du B",
+          "help": "Un score à partir de ce seuil obtient la note B"
+        },
+        "gradeC": {
+          "label": "Seuil du C",
+          "help": "Un score à partir de ce seuil obtient la note C"
+        },
+        "gradeD": {
+          "label": "Seuil du D",
+          "help": "Un score à partir de ce seuil obtient la note D"
+        },
+        "hhiCritical": {
+          "label": "Niveau critique HHI",
+          "help": "La concentration fournisseurs au-delà est élevée"
+        },
+        "hhiWarning": {
+          "label": "Niveau d’avertissement HHI",
+          "help": "La concentration fournisseurs au-delà est modérée"
+        },
+        "highPerformanceScore": {
+          "label": "Seuil de performance",
+          "help": "La santé des paiements à partir de ce seuil compte comme élevée dans la matrice"
+        },
+        "highSpendPercentile": {
+          "label": "Percentile de dépenses élevées",
+          "help": "Les dépenses à partir de ce percentile comptent comme élevées dans la matrice"
+        },
+        "neutralStabilityScore": {
+          "label": "Stabilité neutre",
+          "help": "Score de stabilité sans période antérieure de comparaison"
+        },
+        "onTimeGoodRate": {
+          "label": "Bon taux de ponctualité (%)",
+          "help": "Le paiement ponctuel à partir de ce seuil est sain"
+        },
+        "significanceCore": {
+          "label": "Importance cœur",
+          "help": "Points pour le niveau cœur"
+        },
+        "significanceStrategic": {
+          "label": "Importance stratégique",
+          "help": "Points pour le niveau stratégique"
+        },
+        "significanceTactical": {
+          "label": "Importance tactique",
+          "help": "Points pour le niveau tactique"
+        },
+        "significanceTail": {
+          "label": "Importance résiduelle",
+          "help": "Points pour le niveau résiduel"
+        },
+        "slowPayDays": {
+          "label": "Paiement lent (jours)",
+          "help": "Le délai moyen de paiement au-delà est lent"
+        },
+        "tierCorePct": {
+          "label": "Cœur (%)",
+          "help": "Les fournisseurs jusqu’à cette part forment le niveau cœur"
+        },
+        "tierStrategicPct": {
+          "label": "Stratégique (%)",
+          "help": "Les fournisseurs les mieux classés jusqu’à cette part forment le niveau stratégique"
+        },
+        "tierTacticalPct": {
+          "label": "Tactique (%)",
+          "help": "Les fournisseurs jusqu’à cette part forment le niveau tactique"
+        }
+      }
+    },
+    "payment": {
+      "undatedNote": "Hors {count} factures sans échéance ni conditions de paiement"
+    },
+    "matrix": {
+      "unratedNote": "{count} fournisseurs n’ont pas encore d’historique de paiement et ne sont pas tracés"
     }
   },
   "cashflow": {
@@ -2029,7 +2117,8 @@
       },
       "seasonalHigh": "Les dépenses élevées se concentrent généralement en {months}",
       "seasonalLow": "Les dépenses faibles se concentrent généralement en {months}",
-      "shadowItReason": "Les lignes de notes de frais ne portent ni commerçant ni fournisseur — seul le compte de charges et une description libre — il est donc impossible de tracer l'adoption virale de logiciels par les employés."
+      "shadowItReason": "Les lignes de notes de frais ne portent ni commerçant ni fournisseur — seul le compte de charges et une description libre — il est donc impossible de tracer l'adoption virale de logiciels par les employés.",
+      "fragmentationUnconfigured": "Renseignez le plafond de fragmentation dans Vélocité des dépenses → Configuration"
     },
     "banner": {
       "count": "{total} alertes au total",
@@ -2050,7 +2139,7 @@
     "config": {
       "anomalyThreshold": {
         "label": "Seuil d’anomalie",
-        "note": "Score Z des valeurs atypiques statistiques (critique à 3σ)"
+        "note": "Score Z des valeurs atypiques statistiques (critique à {critical}σ)"
       },
       "boilingFrog": {
         "label": "Grenouille bouillie",
@@ -2066,7 +2155,7 @@
           "label": "Mois grenouille bouillie"
         },
         "fragmentationAvgSize": {
-          "help": "Plafond de taille moyenne des transactions pour le détecteur de fragmentation",
+          "help": "Plafond de taille moyenne des transactions en {currency} pour le détecteur de fragmentation — vide signifie non configuré",
           "label": "Taille moyenne de fragmentation"
         },
         "fragmentationTxns": {
@@ -2084,6 +2173,310 @@
         "zombieMonths": {
           "help": "Totaux fournisseurs mensuels identiques pendant au moins ce nombre de mois",
           "label": "Mois zombies"
+        },
+        "accelMild": {
+          "label": "Accélération légère (%/mois)",
+          "help": "L’accélération au-delà est légère"
+        },
+        "accelStrong": {
+          "label": "Accélération forte (%/mois)",
+          "help": "L’accélération au-delà est forte"
+        },
+        "accountFilterChange": {
+          "label": "Filtre variation (%)",
+          "help": "Seuil des filtres hausses et baisses"
+        },
+        "accountFilterHighVel": {
+          "label": "Filtre vélocité (%/mois)",
+          "help": "Seuil du filtre vélocité élevée"
+        },
+        "alertBannerThreshold": {
+          "label": "Bannière d’alertes (nombre)",
+          "help": "Les nombres au-delà affichent la bannière critique"
+        },
+        "anomalyCriticalOffset": {
+          "label": "Décalage critique (σ)",
+          "help": "Les anomalies au-delà du seuil plus ce décalage sont critiques"
+        },
+        "boilingFrogCriticalCreep": {
+          "label": "Dérive critique (%)",
+          "help": "La dérive totale au-delà est critique"
+        },
+        "boilingFrogMinIncrease": {
+          "label": "Dérive minimale (%)",
+          "help": "La dérive totale à partir de ce seuil signale des comptes grenouille"
+        },
+        "boilingFrogMonotonicRatio": {
+          "label": "Ratio monotone (%)",
+          "help": "Part des mois de dérive pour signaler la grenouille"
+        },
+        "boilingFrogStepCap": {
+          "label": "Plafond de palier (%)",
+          "help": "Seules les hausses mensuelles jusqu’ici comptent comme dérive silencieuse"
+        },
+        "boilingFrogWarningCreep": {
+          "label": "Dérive d’avertissement (%)",
+          "help": "La dérive totale au-delà est un avertissement"
+        },
+        "categoryIncreaseThreshold": {
+          "label": "Hausse de catégorie (%)",
+          "help": "La croissance au-delà alimente le total des hausses"
+        },
+        "cliffCriticalGap": {
+          "label": "Écart critique (pp)",
+          "help": "L’écart de vélocité achats/ventes au-delà est critique"
+        },
+        "cliffCriticalHorizon": {
+          "label": "Horizon critique (mois)",
+          "help": "Horizon affiché avec une falaise critique"
+        },
+        "cliffCriticalPoints": {
+          "label": "Points critiques",
+          "help": "Déduction de santé avec falaise critique"
+        },
+        "cliffCriticalRatio": {
+          "label": "Ratio critique",
+          "help": "Le ratio achats/ventes au-delà est critique"
+        },
+        "cliffWarningGap": {
+          "label": "Écart d’avertissement (pp)",
+          "help": "L’écart de vélocité achats/ventes au-delà est un avertissement"
+        },
+        "cliffWarningHorizon": {
+          "label": "Horizon d’avertissement (mois)",
+          "help": "Horizon affiché avec une falaise d’avertissement"
+        },
+        "cliffWarningPoints": {
+          "label": "Points d’avertissement",
+          "help": "Déduction de santé avec falaise d’avertissement"
+        },
+        "cliffWarningRatio": {
+          "label": "Ratio d’avertissement",
+          "help": "Le ratio achats/ventes au-delà est un avertissement"
+        },
+        "concentrationHighShare": {
+          "label": "Part élevée (%)",
+          "help": "La part à risque au-delà est grave"
+        },
+        "concentrationShareThreshold": {
+          "label": "Part à risque (%)",
+          "help": "Les comptes au-delà avec une vélocité chaude sont des risques"
+        },
+        "concentrationTop1Warning": {
+          "label": "Avertissement compte top (%)",
+          "help": "Un compte top au-delà déclenche un avertissement"
+        },
+        "fragmentationHighTxns": {
+          "label": "Fragmentation élevée (trans./mois)",
+          "help": "Les transactions mensuelles au-delà sont graves"
+        },
+        "fragmentationUnitCap": {
+          "label": "Plafond de fragmentation",
+          "help": "Points maximaux pour fragmentation"
+        },
+        "fragmentationUnitWeight": {
+          "label": "Poids de fragmentation",
+          "help": "Points par catégorie fragmentée"
+        },
+        "healthCriticalAnomalyCap": {
+          "label": "Plafond critique",
+          "help": "Déduction maximale pour anomalies critiques"
+        },
+        "healthCriticalAnomalyUnit": {
+          "label": "Unité critique",
+          "help": "Déduction par anomalie critique"
+        },
+        "healthCriticalCap": {
+          "label": "Plafond critique",
+          "help": "Déduction maximale pour problèmes critiques"
+        },
+        "healthCriticalFrogCap": {
+          "label": "Plafond de dérive",
+          "help": "Déduction maximale pour dérive critique"
+        },
+        "healthCriticalFrogUnit": {
+          "label": "Unité de dérive",
+          "help": "Déduction par compte grenouille critique"
+        },
+        "healthCriticalZombieCap": {
+          "label": "Plafond zombie",
+          "help": "Déduction maximale pour zombies critiques"
+        },
+        "healthCriticalZombieUnit": {
+          "label": "Unité zombie",
+          "help": "Déduction par abonnement zombie critique"
+        },
+        "healthGradeA": {
+          "label": "Santé A",
+          "help": "La santé à partir de ce seuil obtient A"
+        },
+        "healthGradeB": {
+          "label": "Santé B",
+          "help": "La santé à partir de ce seuil obtient B"
+        },
+        "healthGradeC": {
+          "label": "Santé C",
+          "help": "La santé à partir de ce seuil obtient C"
+        },
+        "healthGradeD": {
+          "label": "Santé D",
+          "help": "La santé à partir de ce seuil obtient D"
+        },
+        "healthStructuralCap": {
+          "label": "Plafond structurel",
+          "help": "Déduction maximale pour risque structurel"
+        },
+        "healthVelocityCap": {
+          "label": "Plafond vélocité",
+          "help": "Déduction maximale pour vélocité chaude"
+        },
+        "healthVelocityUnit": {
+          "label": "Coût unitaire",
+          "help": "Déduction par compte à vélocité chaude"
+        },
+        "healthVelocityUnitCap": {
+          "label": "Plafond unitaire",
+          "help": "Déduction maximale de vélocité par groupe"
+        },
+        "healthWarningAnomalyCap": {
+          "label": "Plafond d’anomalies",
+          "help": "Déduction maximale pour anomalies non critiques"
+        },
+        "healthWarningAnomalyUnit": {
+          "label": "Unité d’anomalie",
+          "help": "Déduction par anomalie non critique"
+        },
+        "healthWarningCap": {
+          "label": "Plafond d’avertissements",
+          "help": "Déduction maximale pour avertissements"
+        },
+        "healthWarningFrogCap": {
+          "label": "Plafond de dérive",
+          "help": "Déduction maximale pour dérive non critique"
+        },
+        "healthWarningFrogUnit": {
+          "label": "Unité de dérive",
+          "help": "Déduction par compte grenouille non critique"
+        },
+        "healthWarningZombieCap": {
+          "label": "Plafond zombie",
+          "help": "Déduction maximale pour zombies non critiques"
+        },
+        "healthWarningZombieUnit": {
+          "label": "Unité zombie",
+          "help": "Déduction par abonnement zombie non critique"
+        },
+        "highVelocityAlert": {
+          "label": "Alerte vélocité élevée (%/mois)",
+          "help": "Les comptes au-delà déclenchent un signal de croissance"
+        },
+        "minBaseAmount": {
+          "label": "Base minimale",
+          "help": "Les séries sous ce montant en {currency} sont ignorées — vide signifie aucun minimum"
+        },
+        "opexRatioAlert": {
+          "label": "Alerte ratio OpEx (%)",
+          "help": "Les charges d’exploitation au-delà déclenchent un signal"
+        },
+        "projectionCapAccount": {
+          "label": "Plafond de projection, compte (%)",
+          "help": "La variation projetée par compte est plafonnée ici"
+        },
+        "projectionCapTotal": {
+          "label": "Plafond de projection, total (%)",
+          "help": "La variation projetée totale est plafonnée ici"
+        },
+        "savingsCriticalPoints": {
+          "label": "Points, critiques",
+          "help": "Déduction au dépassement du niveau critique"
+        },
+        "savingsHighPoints": {
+          "label": "Points, élevés",
+          "help": "Déduction au dépassement du niveau élevé"
+        },
+        "savingsLowPoints": {
+          "label": "Points, bas",
+          "help": "Déduction au dépassement du niveau bas"
+        },
+        "savingsMediumPoints": {
+          "label": "Points, moyens",
+          "help": "Déduction au dépassement du niveau moyen"
+        },
+        "savingsRatioCritical": {
+          "label": "Ratio d’économies, critique (%)",
+          "help": "Le ratio au-delà déduit des points critiques"
+        },
+        "savingsRatioHigh": {
+          "label": "Ratio d’économies, élevé (%)",
+          "help": "Le ratio au-delà déduit des points élevés"
+        },
+        "savingsRatioLow": {
+          "label": "Ratio d’économies, bas (%)",
+          "help": "Le ratio au-delà déduit des points bas"
+        },
+        "savingsRatioMedium": {
+          "label": "Ratio d’économies, moyen (%)",
+          "help": "Le ratio au-delà déduit des points moyens"
+        },
+        "savingsRatioWatch": {
+          "label": "Ratio d’économies, veille (%)",
+          "help": "Le ratio au-delà déduit des points de veille"
+        },
+        "savingsWatchPoints": {
+          "label": "Points, veille",
+          "help": "Déduction au dépassement du niveau de veille"
+        },
+        "seasonalBand": {
+          "label": "Bande saisonnière (%)",
+          "help": "L’écart mensuel au-delà marque une haute ou basse saison"
+        },
+        "seasonalCriticalDeviation": {
+          "label": "Saisonnier critique (%)",
+          "help": "L’écart absolu au-delà est une alerte saisonnière grave"
+        },
+        "spenderIncreaseThreshold": {
+          "label": "Hausse de dépensier (%)",
+          "help": "La croissance au-delà compte comme forte hausse"
+        },
+        "structuralTop1High": {
+          "label": "Part top élevée (%)",
+          "help": "Le compte top au-delà ajoute des points élevés"
+        },
+        "structuralTop1HighPoints": {
+          "label": "Points top (élevés)",
+          "help": "Points au dépassement du niveau élevé"
+        },
+        "structuralTop1Low": {
+          "label": "Part top basse (%)",
+          "help": "Le compte top au-delà ajoute des points bas"
+        },
+        "structuralTop1LowPoints": {
+          "label": "Points top (bas)",
+          "help": "Points au dépassement du niveau bas"
+        },
+        "structuralTop1Medium": {
+          "label": "Part top moyenne (%)",
+          "help": "Le compte top au-delà ajoute des points moyens"
+        },
+        "structuralTop1MediumPoints": {
+          "label": "Points top (moyens)",
+          "help": "Points au dépassement du niveau moyen"
+        },
+        "topVendorsCount": {
+          "label": "Fournisseurs top",
+          "help": "Fournisseurs du détail, classés par dépenses"
+        },
+        "typeImbalanceGap": {
+          "label": "Écart de types (pp)",
+          "help": "L’écart factures/frais au-delà déclenche un signal"
+        },
+        "zombieCriticalMonths": {
+          "label": "Zombie critique (mois)",
+          "help": "Les abonnements inchangés pendant ces mois sont critiques"
+        },
+        "zombieMaxDeviation": {
+          "label": "Écart zombie (%)",
+          "help": "Plus grande variation autour de la moyenne encore lue comme inchangée"
         }
       },
       "fragmentation": {
@@ -2102,7 +2495,8 @@
       "zombieWindow": {
         "label": "Fenêtre zombie",
         "note": "Totaux fournisseurs récurrents identiques (écart <1 %)"
-      }
+      },
+      "unsetMinimum": "Aucun minimum — chaque série est évaluée depuis son premier mois"
     },
     "csv": {
       "changePct": "Variation %",
@@ -2124,7 +2518,7 @@
     },
     "detectors": {
       "anomaly": {
-        "desc": "Valeurs atypiques statistiques (>2,5σ)",
+        "desc": "Valeurs atypiques statistiques (>{sigma}σ)",
         "label": "Anomalies",
         "sub": "critique"
       },

@@ -78,7 +78,13 @@
     "healthInsights": "Achados financeiros",
     "revenueTrend": "Tendência de receita e lucro",
     "marginTrend": "Tendência de margens",
-    "budgetVariance": "Orçado vs. realizado"
+    "budgetVariance": "Orçado vs. realizado",
+    "kpiVendorConcentration": "Concentração de fornecedores",
+    "kpiVendorPayment": "Desempenho de pagamentos",
+    "kpiSpendVelocity": "Velocidade de gastos",
+    "kpiVendorConcentrationHint": "Top 5: {share} · {period}",
+    "kpiVendorPaymentHint": "Média de {days} dias para pagar · {late} em atraso · {period}",
+    "kpiSpendVelocityHint": "{savings} de economia potencial · {period}"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -179,7 +185,10 @@
     "healthInsights": "Problemas, recomendações e anomalias que Saúde financeira encontrou no período.",
     "revenueTrend": "Receita, lucro bruto e resultado operacional mensais dos últimos meses.",
     "marginTrend": "Margens bruta e operacional mensais dos últimos meses.",
-    "budgetVariance": "O orçamento aprovado frente ao realizado do período, com as contas fora da meta."
+    "budgetVariance": "O orçamento aprovado frente ao realizado do período, com as contas fora da meta.",
+    "kpiVendorConcentration": "HHI de fornecedores e fatia top 5 do desempenho de fornecedores.",
+    "kpiVendorPayment": "Taxa de pagamento em dia e gasto pago em atraso do desempenho de fornecedores.",
+    "kpiSpendVelocity": "Alertas de gasto abertos e economia potencial da velocidade de gastos."
   },
   "grid": {
     "customizing": "Personalizando seu painel",

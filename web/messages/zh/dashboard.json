@@ -78,7 +78,13 @@
     "healthInsights": "财务发现",
     "revenueTrend": "收入与利润趋势",
     "marginTrend": "利润率趋势",
-    "budgetVariance": "预算与实际"
+    "budgetVariance": "预算与实际",
+    "kpiVendorConcentration": "供应商集中度",
+    "kpiVendorPayment": "供应商付款表现",
+    "kpiSpendVelocity": "支出增速",
+    "kpiVendorConcentrationHint": "前五大：{share} · {period}",
+    "kpiVendorPaymentHint": "平均付款{days}天 · 延迟{late} · {period}",
+    "kpiSpendVelocityHint": "潜在节约{savings} · {period}"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -179,7 +185,10 @@
     "healthInsights": "“财务健康”在本期发现的问题、建议和异常。",
     "revenueTrend": "最近各月的收入、毛利和营业利润。",
     "marginTrend": "最近各月的毛利率和营业利润率。",
-    "budgetVariance": "本期已批准预算与实际对比，以及偏离的科目。"
+    "budgetVariance": "本期已批准预算与实际对比，以及偏离的科目。",
+    "kpiVendorConcentration": "来自供应商绩效的供应商HHI与前五大支出占比。",
+    "kpiVendorPayment": "来自供应商绩效的准时付款率与延迟付款支出。",
+    "kpiSpendVelocity": "来自支出增速的未处理预警与节约潜力。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",

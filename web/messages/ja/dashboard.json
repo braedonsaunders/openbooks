@@ -78,7 +78,13 @@
     "healthInsights": "財務上の指摘",
     "revenueTrend": "売上・利益の推移",
     "marginTrend": "利益率の推移",
-    "budgetVariance": "予算対実績"
+    "budgetVariance": "予算対実績",
+    "kpiVendorConcentration": "仕入先集中度",
+    "kpiVendorPayment": "仕入先支払実績",
+    "kpiSpendVelocity": "支出速度",
+    "kpiVendorConcentrationHint": "上位5社：{share} · {period}",
+    "kpiVendorPaymentHint": "平均支払日数{days}日 · 遅延{late} · {period}",
+    "kpiSpendVelocityHint": "節約余地{savings} · {period}"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -179,7 +185,10 @@
     "healthInsights": "財務健全性が期間中に検出した問題・推奨事項・異常。",
     "revenueTrend": "直近の月次売上高、売上総利益、営業利益。",
     "marginTrend": "直近の月次売上総利益率と営業利益率。",
-    "budgetVariance": "期間の承認済み予算と実績、および乖離している勘定。"
+    "budgetVariance": "期間の承認済み予算と実績、および乖離している勘定。",
+    "kpiVendorConcentration": "仕入先実績のサプライヤーHHIと上位5社の支出占有率。",
+    "kpiVendorPayment": "仕入先実績の期日遵守率と遅延支払支出。",
+    "kpiSpendVelocity": "支出速度の未対応アラートと節約余地。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",
