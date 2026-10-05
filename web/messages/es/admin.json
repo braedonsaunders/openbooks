@@ -4068,7 +4068,9 @@
       "majorAmount": "Unidades monetarias normales: 120.50 USD.",
       "shippingDefaultPreset": "Se usa cuando el envío no tiene un tamaño de paquete propio.",
       "shippingMarkup": "Cargo adicional sobre la tarifa del transportista, en puntos básicos. 100 es un uno por ciento.",
-      "shippingCustomsDefaults": "Descripción de contenido predeterminada para envíos al extranjero."
+      "shippingCustomsDefaults": "Descripción de contenido predeterminada para envíos al extranjero.",
+      "payBandTarget": "Opcional. Introduzca un objetivo aprobado dentro del rango. Déjelo vacío si la política solo define el mínimo y el máximo; no se calcula un punto medio.",
+      "compensationCriteria": "Opcional hasta definir una base aprobada para evaluar trabajos de igual valor. Las evaluaciones de equidad salarial requieren criterios y ponderaciones definidos."
     },
     "options": {
       "storedValueKind": {

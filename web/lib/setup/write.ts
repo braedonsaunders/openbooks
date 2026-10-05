@@ -12,6 +12,8 @@ import { assertStockLocationDeletionAllowed, WarehouseRefusal } from '@openbooks
 import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
+import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
+import { decimalNullRefusal } from '../payroll-decimal-refusal'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
@@ -1810,9 +1812,8 @@ export async function validateEntityIntegrity(
     }
   }
   // HR-18 end
-  // HRM compensation architecture (0221, HR-12): levels carry at least
-  // one directive criterion with a positive weight (merged on edit so a
-  // partial slot edit keeps the untouched weights); the family, when
+  // Compensation levels may leave assessment criteria undeclared. Every
+  // declared weight remains positive and exact; the family, when
   // named, must be visible in this org. Bands order min <= target <=
   // max and scope to the level's own family — a band that prices a rung
   // against another family's ladder is refused by field name.
@@ -1826,15 +1827,15 @@ export async function validateEntityIntegrity(
       if (!current.rows[0]) return 'Job level not found'
       values = { ...(current.rows[0] as Record<string, unknown>), ...body }
     }
-    const criteria = values.equalValueCriteria
+    const criteria = values.equalValueCriteria ?? []
     const allowed = new Set(['skills', 'effort', 'responsibility', 'working_conditions'])
-    if (!Array.isArray(criteria) || criteria.length === 0) {
-      return 'Declare at least one equal-value criterion (skills, effort, responsibility, working_conditions) with a weight'
+    if (!Array.isArray(criteria)) {
+      return 'Equal-value criteria must be a list; leave the weights empty until the approved assessment basis is configured'
     }
     for (const entry of criteria) {
       const row = entry as Record<string, unknown>
       if (!row || !allowed.has(String(row.criterion))) return 'Each criterion names skills, effort, responsibility, or working_conditions'
-      if (typeof row.weight !== 'string' || !/^\d+(\.\d+)?$/.test(row.weight) || !(Number(row.weight) > 0)) {
+      if (typeof row.weight !== 'string' || canonicalDecimal(row.weight, Infinity) === null || compareDecimal(row.weight, '0') <= 0) {
         return 'Each criterion needs a positive weight'
       }
     }
@@ -1852,7 +1853,7 @@ export async function validateEntityIntegrity(
     let currencyValues = body
     if (rowId) {
       const current = await executor.execute(sql`
-        select currency, employer_subsidiary_id as "employerSubsidiaryId"
+        select currency, employer_subsidiary_id as "employerSubsidiaryId", min::text as min, target::text as target, max::text as max
           from hrm_pay_bands where id = ${rowId} and org_id = ${orgId}
       `)
       if (!current.rows[0]) return 'Pay band not found'
@@ -1862,14 +1863,21 @@ export async function validateEntityIntegrity(
     if (!(await organizationCurrencyAvailable(executor, orgId, String(currencyValues.currency ?? ''), currencyValues.employerSubsidiaryId ? String(currencyValues.employerSubsidiaryId) : null))) {
       return 'Choose an enabled currency for the pay band employer. Foreign currencies require Multi-currency in Company Settings → Features.'
     }
-    const min = body.min !== undefined ? Number(body.min) : null
-    const target = body.target !== undefined ? Number(body.target) : null
-    const max = body.max !== undefined ? Number(body.max) : null
-    if ((min !== null && !(min > 0)) || (target !== null && !(target > 0)) || (max !== null && !(max > 0))) {
-      return 'Band min, target and max are positive amounts'
+    const amounts: Record<string, string | null> = {}
+    for (const key of ['min', 'target', 'max']) {
+      const raw = currencyValues[key]
+      if (key === 'target' && (raw === undefined || raw === null || raw === '')) {
+        amounts[key] = null
+        continue
+      }
+      const exact = canonicalDecimal(raw, 4)
+      if (exact === null) return decimalNullRefusal(`Band ${key}`, 'an exact amount', raw, 4)
+      if (compareDecimal(exact, '0') <= 0) return `Band ${key} must be a positive amount`
+      amounts[key] = exact
     }
-    if (min !== null && target !== null && max !== null && !(min <= target && target <= max)) {
-      return 'Order the band min <= target <= max'
+    if (compareDecimal(amounts.min!, amounts.max!) > 0
+      || (amounts.target !== null && (compareDecimal(amounts.min!, amounts.target!) > 0 || compareDecimal(amounts.target!, amounts.max!) > 0))) {
+      return 'Order the band minimum <= maximum, with any approved target between them'
     }
     if (body.levelId) {
       const level = (await executor.execute(sql`

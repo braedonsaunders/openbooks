@@ -37,7 +37,7 @@ describe("normalizeHrmCompensationInput", () => {
     assert.ok(persisted.cols.every((col) => !col.column.endsWith('_weight')));
   });
 
-  test("empty slots fold to an empty criteria list (the write refuses it by name)", () => {
+  test("empty slots preserve an undeclared assessment basis", () => {
     assert.deepEqual(normalizeHrmCompensationInput("hrm-job-levels", { code: "IC3", skillsWeight: "" }), {
       code: "IC3",
       equalValueCriteria: [],

@@ -13,8 +13,8 @@ import type { SetupEntity } from './types'
  * registry.test.ts bars json-kind workforce fields): this fold runs
  * before buildRow so the slot keys never reach the column writer. The
  * criterion key set is closed (the directive's four), so four slots are
- * exact, never lossy. A level with every slot empty is refused by field
- * name before the write.
+ * exact, never lossy. Empty weights preserve an undeclared assessment basis; no weights are
+ * inferred from the level order.
  */
 
 export const EQUAL_VALUE_CRITERIA_SLOTS = [
@@ -98,7 +98,7 @@ export const JOB_LEVELS_ENTITY: SetupEntity = {
     { key: 'rank', kind: 'integer', required: true },
     // The four directive criteria as structured weight slots, folded
     // into equal_value_criteria before buildRow (see above).
-    { key: 'skillsWeight', kind: 'decimal' },
+    { key: 'skillsWeight', kind: 'decimal', helpTextKey: 'fieldHelp.compensationCriteria' },
     { key: 'effortWeight', kind: 'decimal' },
     { key: 'responsibilityWeight', kind: 'decimal' },
     { key: 'workingConditionsWeight', kind: 'decimal' },
@@ -143,7 +143,7 @@ export const PAY_BANDS_ENTITY: SetupEntity = {
       ],
     },
     { key: 'min', kind: 'decimal', required: true },
-    { key: 'target', kind: 'decimal', required: true },
+    { key: 'target', kind: 'decimal', helpTextKey: 'fieldHelp.payBandTarget' },
     { key: 'max', kind: 'decimal', required: true },
     { key: 'effectiveFrom', kind: 'date', required: true },
   ],

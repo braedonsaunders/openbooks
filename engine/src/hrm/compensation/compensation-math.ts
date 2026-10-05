@@ -32,7 +32,10 @@ function toExactDecimal(value: string, what: string): string {
 }
 
 /** compaRatio = rate / target, scaled to 10 decimal places. Refuses a non-positive target by name. */
-export function compaRatio(rate: string, target: string): string {
+export function compaRatio(rate: string, target: string | null): string {
+  if (target === null) {
+    throw new CompensationError("REFUSED", "This pay band has no target rate — configure an approved target on a new pay-band version in Compensation → Pay bands before calculating a compa-ratio.");
+  }
   const r = toExactDecimal(rate, "rate");
   const t = toExactDecimal(target, "band target");
   if (compareDecimal(t, "0") <= 0) {
@@ -54,13 +57,13 @@ export function compaRatio(rate: string, target: string): string {
 export function bandPlacement(
   rate: string,
   min: string,
-  target: string,
+  target: string | null,
   max: string,
-): { compaRatio: string; placement: "below_min" | "in_range" | "above_max" } {
+): { compaRatio: string | null; placement: "below_min" | "in_range" | "above_max" } {
   const r = toExactDecimal(rate, "rate");
   const lo = toExactDecimal(min, "band min");
   const hi = toExactDecimal(max, "band max");
-  const ratio = compaRatio(rate, target);
+  const ratio = target === null ? null : compaRatio(rate, target);
   if (compareDecimal(r, lo) < 0) return { compaRatio: ratio, placement: "below_min" };
   if (compareDecimal(r, hi) > 0) return { compaRatio: ratio, placement: "above_max" };
   return { compaRatio: ratio, placement: "in_range" };

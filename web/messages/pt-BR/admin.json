@@ -4143,7 +4143,9 @@
       "majorAmount": "Unidades monetárias normais: 120.50 USD.",
       "shippingDefaultPreset": "Usado quando o envio não tem tamanho de pacote próprio.",
       "shippingMarkup": "Cobrança extra sobre a tarifa da transportadora, em pontos-base. 100 é um por cento.",
-      "shippingCustomsDefaults": "Descrição de conteúdo padrão para envios ao exterior."
+      "shippingCustomsDefaults": "Descrição de conteúdo padrão para envios ao exterior.",
+      "payBandTarget": "Opcional. Informe uma meta aprovada dentro da faixa. Deixe em branco se a política definir apenas o mínimo e o máximo; nenhum ponto médio será presumido.",
+      "compensationCriteria": "Opcional até que uma base aprovada para avaliar trabalho de igual valor seja definida. As avaliações de equidade salarial exigem critérios e pesos declarados."
     },
     "options": {
       "storedValueKind": {

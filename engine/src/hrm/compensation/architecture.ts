@@ -165,10 +165,10 @@ function requireFamilyCode(code: unknown): string {
 }
 
 function requireCriteria(input: unknown): EqualValueCriterion[] {
-  if (!Array.isArray(input) || input.length === 0) {
+  if (!Array.isArray(input)) {
     throw new CompensationError(
       "REFUSED",
-      "a job level needs at least one equal-value criterion (skills, effort, responsibility, working_conditions) with a weight — the directive requires the criteria to be declared, never implied",
+      "equal-value criteria must be a list — leave it empty until the approved criteria and weights are configured on the job level",
     );
   }
   const allowed = ["skills", "effort", "responsibility", "working_conditions"] as const;

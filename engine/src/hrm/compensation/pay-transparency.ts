@@ -362,10 +362,14 @@ export async function computeGapSnapshot(query: {
         code: string;
         rank: number;
         family_id: string | null;
+        equal_value_criteria: unknown[];
       }>(sql`
-        select code, rank, family_id from hrm_job_levels
+        select code, rank, family_id, equal_value_criteria from hrm_job_levels
          where org_id = ${orgId} and id = ${position.level_id} and is_active`)).rows[0];
       if (!level) continue;
+      if (level.equal_value_criteria.length === 0) {
+        throw new CompensationError("REFUSED", `Job level ${level.code} has no approved equal-value criteria — configure its criteria and weights in Compensation → Job levels before generating a pay-equity assessment.`);
+      }
       // Payroll truth: the effective wage through the wage rate service.
       const wage = await resolveWage(orgId, employment.worker_party_id, query.asOf, {
         subsidiaryId: employment.employer_subsidiary_id,
