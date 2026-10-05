@@ -392,13 +392,14 @@ export function BillingRelationshipsSection({
               <Label>{t('group')}</Label>
               <Select
                 value={draft.group}
-                onChange={(group) => setDraft({ ...draft, group })}
-                options={[
-                  { value: '', label: t('groupNone') },
-                  ...eligibleGroups.map((g) => ({ value: g.id, label: `${g.code} · ${g.name}` })),
-                ]}
-                ariaLabel={t('group')}
-              />
+                onChange={(e) => setDraft({ ...draft, group: e.target.value })}
+                aria-label={t('group')}
+              >
+                <option value="">{t('groupNone')}</option>
+                {eligibleGroups.map((g) => (
+                  <option key={g.id} value={g.id}>{`${g.code} · ${g.name}`}</option>
+                ))}
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
