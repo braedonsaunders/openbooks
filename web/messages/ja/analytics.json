@@ -760,6 +760,302 @@
         "hhiWarning": {
           "help": "この値以上のハーフィンダール指数は集中の警告と判定されます",
           "label": "集中度：警告（HHI）"
+        },
+        "healthWeightRecency": {
+          "label": "健全性 — 最新度の重み（％）",
+          "help": "最新度サブスコア由来の健全性スコア配分"
+        },
+        "healthWeightFrequency": {
+          "label": "健全性 — 頻度の重み（％）",
+          "help": "頻度サブスコア由来の健全性スコア配分"
+        },
+        "healthWeightMonetary": {
+          "label": "健全性 — 金額の重み（％）",
+          "help": "金額サブスコア由来の健全性スコア配分"
+        },
+        "healthWeightPayment": {
+          "label": "健全性 — 入金の重み（％）",
+          "help": "入金サブスコア由来の健全性スコア配分"
+        },
+        "intelWeightChampions": {
+          "label": "総合 — 優良客の重み（％）",
+          "help": "優良客比率由来の総合スコア配分"
+        },
+        "intelWeightRetention": {
+          "label": "総合 — 維持率の重み（％）",
+          "help": "平均維持率由来の総合スコア配分"
+        },
+        "intelWeightConcentration": {
+          "label": "総合 — 集中度の重み（％）",
+          "help": "集中度由来の総合スコア配分"
+        },
+        "intelWeightPayment": {
+          "label": "総合 — 入金率の重み（％）",
+          "help": "入金率由来の総合スコア配分"
+        },
+        "gradeAPlus": {
+          "label": "評価 — A+の基準（スコア）",
+          "help": "この値以上はA+"
+        },
+        "gradeA": {
+          "label": "評価 — Aの基準（スコア）",
+          "help": "この値以上はA"
+        },
+        "gradeB": {
+          "label": "評価 — Bの基準（スコア）",
+          "help": "この値以上はB"
+        },
+        "gradeC": {
+          "label": "評価 — Cの基準（スコア）",
+          "help": "この値以上はC"
+        },
+        "gradeD": {
+          "label": "評価 — Dの基準（スコア）",
+          "help": "この値以上はD、未満はF"
+        },
+        "recencyGoodDays": {
+          "label": "最新度 — 良好の上限（日）",
+          "help": "この日数以下は5点"
+        },
+        "recencyWarningDays": {
+          "label": "最新度 — 注意の上限（日）",
+          "help": "この日数以下は3点"
+        },
+        "recencyCriticalDays": {
+          "label": "最新度 — 悪化の上限（日）",
+          "help": "この日数以下は2点、それ超は1点"
+        },
+        "churnHighDays": {
+          "label": "離反 — 長期未取引（日）",
+          "help": "これを超えると重大な非活動点を加算"
+        },
+        "churnMediumDays": {
+          "label": "離反 — 未取引（日）",
+          "help": "これを超えると高の非活動点を加算"
+        },
+        "churnInactiveLowDays": {
+          "label": "離反 — 短期未取引（日）",
+          "help": "これを超えると低の非活動点を加算"
+        },
+        "churnInactiveCriticalPoints": {
+          "label": "離反 — 長期未取引の点数",
+          "help": "長期未取引日数超の取引に加算する点数"
+        },
+        "churnInactiveHighPoints": {
+          "label": "離反 — 未取引の点数",
+          "help": "未取引日数超の取引に加算する点数"
+        },
+        "churnInactiveLowPoints": {
+          "label": "離反 — 短期未取引の点数",
+          "help": "短期未取引日数超の取引に加算する点数"
+        },
+        "churnCadenceHighMultiple": {
+          "label": "離反 — 購買周期の乱れ（倍）",
+          "help": "通常周期のこの倍数超で高の周期点を加算"
+        },
+        "churnCadenceLowMultiple": {
+          "label": "離反 — 購買周期の鈍化（倍）",
+          "help": "通常周期のこの倍数超で低の周期点を加算"
+        },
+        "churnCadenceHighPoints": {
+          "label": "離反 — 周期乱れの点数",
+          "help": "高の周期倍数超で加算する点数"
+        },
+        "churnCadenceLowPoints": {
+          "label": "離反 — 周期鈍化の点数",
+          "help": "低の周期倍数超で加算する点数"
+        },
+        "churnSingleMaxTxns": {
+          "label": "離反 — 単発取引の上限（件）",
+          "help": "この件数以下は単発取引点を加算"
+        },
+        "churnFewMaxTxns": {
+          "label": "離反 — 少頻度の上限（件）",
+          "help": "この件数以下は低頻度点を加算"
+        },
+        "churnSinglePoints": {
+          "label": "離反 — 単発取引の点数",
+          "help": "単発取引の顧客に加算する点数"
+        },
+        "churnFewPoints": {
+          "label": "離反 — 低頻度の点数",
+          "help": "低頻度の顧客に加算する点数"
+        },
+        "clvMinYears": {
+          "label": "CLV — 最短継続期間（年）",
+          "help": "これ未満の継続期間はこの年数で年換算"
+        },
+        "clvRetentionBase": {
+          "label": "CLV — 維持率の基準（％）",
+          "help": "経過減衰前の維持係数（％）"
+        },
+        "clvRetentionDecayDays": {
+          "label": "CLV — 維持率の減衰（日）",
+          "help": "維持率指数を割る経過日数"
+        },
+        "clvRetentionMinPct": {
+          "label": "CLV — 維持率の下限（％）",
+          "help": "維持率はこの％を下回らない"
+        },
+        "clvRetentionMaxPct": {
+          "label": "CLV — 維持率の上限（％）",
+          "help": "維持率はこの％を上回らない"
+        },
+        "tierPlatinumPct": {
+          "label": "ランク — プラチナ上位（％）",
+          "help": "プラチナとなる上位顧客の割合"
+        },
+        "tierGoldPct": {
+          "label": "ランク — ゴールド以上（％）",
+          "help": "ゴールド以上となる上位顧客の割合"
+        },
+        "tierSilverPct": {
+          "label": "ランク — シルバー以上（％）",
+          "help": "シルバー以上となる上位顧客の割合"
+        },
+        "concentrationCriticalShare": {
+          "label": "集中度 — 重大の基準（％）",
+          "help": "この売上比率以上は重大な集中"
+        },
+        "concentrationHighShare": {
+          "label": "集中度 — 高の基準（％）",
+          "help": "この売上比率以上は高い集中"
+        },
+        "concentrationMediumShare": {
+          "label": "集中度 — 中の基準（％）",
+          "help": "この売上比率以上は中程度の集中"
+        },
+        "concentrationCoverageShare": {
+          "label": "集中度 — カバー率（％）",
+          "help": "カバー顧客数に数える累積売上比率"
+        },
+        "topSharePct": {
+          "label": "集中度 — 上位区分（％）",
+          "help": "主要集中指標の上位顧客区分"
+        },
+        "frictionPointsPerCredit": {
+          "label": "摩擦 — クレジット1件の点数",
+          "help": "クレジット1件ごとの摩擦点数"
+        },
+        "frictionPenaltyCritical": {
+          "label": "摩擦 — 重大の減点",
+          "help": "重大な摩擦での健全性減点"
+        },
+        "frictionPenaltyHigh": {
+          "label": "摩擦 — 高の減点",
+          "help": "高い摩擦での健全性減点"
+        },
+        "frictionPenaltyMedium": {
+          "label": "摩擦 — 中の減点",
+          "help": "中程度の摩擦での健全性減点"
+        },
+        "frictionCriticalRate": {
+          "label": "摩擦 — 重大の基準（％）",
+          "help": "このクレジット率以上は重大"
+        },
+        "frictionHighRate": {
+          "label": "摩擦 — 高の基準（％）",
+          "help": "このクレジット率以上は高"
+        },
+        "frictionMediumRate": {
+          "label": "摩擦 — 中の基準（％）",
+          "help": "このクレジット率以上は中"
+        },
+        "paymentDsoHighDays": {
+          "label": "入金 — 遅いDSO（日）",
+          "help": "これを超えると高のDSO減点"
+        },
+        "paymentDsoHighPenalty": {
+          "label": "入金 — 遅いDSOの減点",
+          "help": "遅いDSO区分超で控除する点数"
+        },
+        "paymentDsoMediumDays": {
+          "label": "入金 — 遅延DSO（日）",
+          "help": "これを超えると中のDSO減点"
+        },
+        "paymentDsoMediumPenalty": {
+          "label": "入金 — 遅延DSOの減点",
+          "help": "遅延DSO区分超で控除する点数"
+        },
+        "paymentDsoLowDays": {
+          "label": "入金 — やや遅いDSO（日）",
+          "help": "これを超えると低のDSO減点"
+        },
+        "paymentDsoLowPenalty": {
+          "label": "入金 — やや遅いDSOの減点",
+          "help": "やや遅いDSO区分超で控除する点数"
+        },
+        "paymentOverduePerInvoice": {
+          "label": "入金 — 延滞1件の点数",
+          "help": "延滞請求1件ごとの減点"
+        },
+        "paymentOverdueCap": {
+          "label": "入金 — 延滞減点の上限",
+          "help": "延滞請求の減点上限"
+        },
+        "paymentRatingExcellent": {
+          "label": "入金 — 優良の基準（スコア）",
+          "help": "この値以上は優良"
+        },
+        "paymentRatingGood": {
+          "label": "入金 — 良好の基準（スコア）",
+          "help": "この値以上は良好"
+        },
+        "paymentRatingFair": {
+          "label": "入金 — 普通の基準（スコア）",
+          "help": "この値以上は普通、未満は不良"
+        },
+        "profitHighMargin": {
+          "label": "利益 — 高の基準（％）",
+          "help": "この利益率以上は高"
+        },
+        "profitMediumMargin": {
+          "label": "利益 — 中の基準（％）",
+          "help": "この利益率以上は中"
+        },
+        "profitLowMargin": {
+          "label": "利益 — 低の基準（％）",
+          "help": "この利益率以上は低、0以上は限界"
+        },
+        "profitLeakMarginTarget": {
+          "label": "利益漏れ — 利益率（％）",
+          "help": "漏れ候補はこの目標を下回る利益率"
+        },
+        "profitLeakRevenueSharePct": {
+          "label": "利益漏れ — 売上比率（％）",
+          "help": "漏れ候補は期間売上のこの比率以上を占める"
+        },
+        "nurtureMinHealth": {
+          "label": "育成 — 健全性の基準（スコア）",
+          "help": "育成候補はこの値以上"
+        },
+        "nurtureClvPercentile": {
+          "label": "育成 — CLVパーセンタイル",
+          "help": "育成候補はこのCLVパーセンタイル以上"
+        },
+        "growthMaturityFloorPct": {
+          "label": "成長 — 成熟の下限（％）",
+          "help": "中央値のこの割合未満の月は立上期"
+        },
+        "growthMomCapUp": {
+          "label": "成長 — MoM上限（％）",
+          "help": "月次成長率はこの値を上回らない"
+        },
+        "growthMomCapDown": {
+          "label": "成長 — MoM下限（％）",
+          "help": "月次減少率はこの値未満にならない"
+        },
+        "growthTrendPct": {
+          "label": "成長 — トレンド幅（％）",
+          "help": "これを超える期間比較は増加・減少と判定"
+        },
+        "growthYoyWindowMonths": {
+          "label": "成長 — 前年比較の期間（月）",
+          "help": "前年比較の両側の末端月数"
+        },
+        "overdueInsightCount": {
+          "label": "通知 — 延滞の件数（件）",
+          "help": "この件数超の延滞で支払通知を表示"
         }
       }
     },
