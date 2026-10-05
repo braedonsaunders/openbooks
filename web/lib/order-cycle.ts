@@ -71,6 +71,7 @@ type OrderConvertLineRow = Record<string, unknown> & {
   tax_code_id: string | null
   tax_group_id: string | null
   tax_amount: string
+  marketplace_facilitator: string | null
   department_id: string | null
   project_id: string | null
   location_id: string | null
@@ -190,6 +191,7 @@ export async function createOrderDraft(
       insert into documents (id, org_id, kind, document_number, document_date, currency, subsidiary_id, subtotal, tax_total, total, created_by)
       values (${draftId}, ${orgId}, ${kind}, ${documentNumber}, ${today},
               ${baseCurrency}, ${subsidiaryId}, '0', '0', '0', ${userId})
+      -- A concurrent draft-ID collision raises the explicit draft conflict below.
       on conflict (id) do nothing
       returning id
     `))
@@ -1609,7 +1611,7 @@ export async function convertOrder(
 
     const lines = (await tx.execute<OrderConvertLineRow>(sql`
       select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description, dl.quantity, dl.unit,
-             dl.unit_price, dl.amount, dl.tax_code_id, dl.tax_group_id, dl.tax_amount,
+             dl.unit_price, dl.amount, dl.tax_code_id, dl.tax_group_id, dl.tax_amount, dl.marketplace_facilitator,
              dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
              dl.stock_location_id, dl.is_billable, dl.quantity_billed, dl.quantity_fulfilled,
              dl.quantity_cancelled, dl.price_basis,
@@ -1757,11 +1759,11 @@ export async function convertOrder(
       const coveredQty = fromQuantityUnits(r.units)
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-              quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
+              quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, marketplace_facilitator, department_id, project_id,
               location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by, price_basis)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${convertedAccountOf(l)}, ${l.description},
               ${coveredQty}, ${l.unit}, ${l.unit_price}, ${amount},
-              ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
+              ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.marketplace_facilitator}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable},
               ${JSON.stringify({
                 // A bill line drawn from a purchase-order line keeps that
@@ -1901,7 +1903,7 @@ export async function convertOrder(
       await tx.execute(sql`
         insert into crm_opportunity_documents (org_id, opportunity_id, document_id, created_by, updated_by)
         values (${orgId}, ${opportunityLink.rows[0].opportunity_id}, ${newId}, ${userId}, ${userId})
-        on conflict (document_id) do nothing`)
+        `)
     }
     if (doc.party_id && ['sales_order', 'customer_invoice', 'customer_credit', 'customer_payment'].includes(target.kind)) {
       const promotion = await promoteCrmAccount(tx, {

@@ -12,6 +12,8 @@ const {
 import type { ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 const { convertOrder } = await import("./order-cycle.ts");
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { loadTaxProfileConfig, persistLineTaxComponents } = await import("@openbooks/engine/src/tax/persist.ts");
+const { computeLineTaxes } = await import("@openbooks/engine/src/tax/tax.ts");
 
 async function seedOrderWithoutLineAccount(
   org: ScratchOrg,
@@ -20,6 +22,16 @@ async function seedOrderWithoutLineAccount(
   number: string,
 ): Promise<string> {
   const id = randomUUID();
+  const taxCodeId = randomUUID();
+  const marketplaceClearing = randomUUID();
+  await db.execute(sql`insert into accounts (id, org_id, number, name, type)
+    values (${marketplaceClearing}, ${org.orgId}, '1155', 'Marketplace clearing', 'asset_receivable')`);
+  await db.execute(sql`insert into tax_codes (id, org_id, code, name, applies_to, collected_account_id)
+    values (${taxCodeId}, ${org.orgId}, 'MARKET-TAX', 'Marketplace tax', 'sale', ${org.accounts.taxOutput})`);
+  await db.execute(sql`insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
+    values (${org.orgId}, ${taxCodeId}, '10', '2020-01-01')`);
+  await db.execute(sql`insert into marketplace_facilitators (org_id, name, clearing_account_id, collection_mode, states)
+    values (${org.orgId}, 'Marketplace A', ${marketplaceClearing}, 'gross', '{}')`);
   await db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -27,20 +39,22 @@ async function seedOrderWithoutLineAccount(
        created_by, updated_by)
     values (
       ${id}, ${org.orgId}, 'sales_order', ${number}, ${org.customerId},
-      ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', '1000', '0', '1000',
+      ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', '1000', '100', '1100',
       ${actorId}, ${actorId}
     )
   `);
-  await db.execute(sql`
+  const line = (await db.execute<{ id: string }>(sql`
     insert into document_lines
       (org_id, document_id, line_number, item_id, account_id, quantity,
        quantity_billed, quantity_fulfilled, unit_price, amount,
-       tax_input_amount, tax_amount, created_by, updated_by)
+       tax_input_amount, tax_amount, tax_code_id, marketplace_facilitator, created_by, updated_by)
     values (
       ${org.orgId}, ${id}, 1, ${itemId}, null, '10',
-      '0', '0', '100', '1000', '1000', '0', ${actorId}, ${actorId}
+      '0', '0', '100', '1000', '1000', '100', ${taxCodeId}, 'Marketplace A', ${actorId}, ${actorId}
     )
-  `);
+    returning id`)).rows[0]!;
+  const tax = computeLineTaxes('1000', await loadTaxProfileConfig(org.orgId, { taxCodeId, taxGroupId: null }, org.date));
+  await persistLineTaxComponents(org.orgId, line.id, tax.components, actorId);
   await db.execute(sql`
     update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
      where id = ${id} and org_id = ${org.orgId}
@@ -54,7 +68,7 @@ async function seedOrderWithoutLineAccount(
  * has no resolvable account"). The convert must carry item income accounts
  * onto lines that have none, and the converted invoice must post end to end.
  */
-test("sales-order conversion inherits the item income account onto account-less lines", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("sales-order conversion preserves income accounts and marketplace tax evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Order Converter", "admin"));
@@ -64,10 +78,16 @@ test("sales-order conversion inherits the item income account onto account-less 
     });
 
     const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
-    const lines = (await withBypassContext(() => db.execute<{ account_id: string | null }>(sql`
-      select account_id from document_lines where org_id = ${org.orgId} and document_id = ${converted.id} order by line_number`))).rows;
+    const lines = (await withBypassContext(() => db.execute<{ account_id: string | null; marketplace_facilitator: string | null }>(sql`
+      select account_id, marketplace_facilitator from document_lines where org_id = ${org.orgId} and document_id = ${converted.id} order by line_number`))).rows;
     assert.equal(lines.length, 1);
     assert.equal(lines[0]!.account_id, org.accounts.revenue);
+    assert.equal(lines[0]!.marketplace_facilitator, 'Marketplace A');
+    const evidence = (await withBypassContext(() => db.execute<{ collected_by: string; facilitator_name: string; tax_amount: string }>(sql`
+      select c.collected_by, c.facilitator_name, c.tax_amount::text from document_line_tax_components c
+      join document_lines l on l.org_id = c.org_id and l.id = c.document_line_id
+      where l.org_id = ${org.orgId} and l.document_id = ${converted.id}`))).rows;
+    assert.deepEqual(evidence, [{ collected_by: 'marketplace', facilitator_name: 'Marketplace A', tax_amount: '100.0000' }]);
 
     await withBypassContext(async () => {
       await db.execute(sql`update documents set status = 'approved' where id = ${converted.id} and org_id = ${org.orgId}`);
@@ -75,6 +95,10 @@ test("sales-order conversion inherits the item income account onto account-less 
     });
     const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`select status from documents where id = ${converted.id}`))).rows[0]!.status;
     assert.equal(status, "posted");
+    const taxLiability = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
+      where e.org_id = ${org.orgId} and e.source_document_id = ${converted.id} and l.account_id = ${org.accounts.taxOutput}`))).rows[0]!.n;
+    assert.equal(taxLiability, 0, 'marketplace tax must remain outside the merchant tax liability');
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
 
