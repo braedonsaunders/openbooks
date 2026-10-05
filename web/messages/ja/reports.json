@@ -975,6 +975,10 @@
         "label": "Sales quota attainment",
         "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
       },
+      "cash_tenders": {
+        "label": "現金販売の支払手段",
+        "description": "代金引換販売の決済内訳 — 支払手段ごと1行に方法・決済口座またはストアドバリューカード・金額を記載 — 期間別・方法別・口座別。"
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "福利厚生の給与入力",
         "description": "月次保障額、従業員控除、雇用主拠出および関連する給与計算。"
@@ -1422,6 +1426,8 @@
       "entitlement_balances": {
         "employee": "従業員",
         "employee_id": "従業員（ID）",
+        "employer": "法定雇用主",
+        "employment_id": "雇用（ID）",
         "plan": "プラン",
         "plan_code": "プランコード",
         "plan_id": "プラン（ID）",
@@ -2374,6 +2380,22 @@
         "amount": "Target amount",
         "actual": "Actual",
         "attainment": "Attainment percent"
+      },
+      "cash_tenders": {
+        "document_date": "書類日付",
+        "document_number": "書類番号",
+        "document_kind": "書類種別",
+        "document_status": "書類ステータス",
+        "customer": "顧客",
+        "method": "方法",
+        "method_label": "方法名",
+        "account": "口座",
+        "account_number": "勘定番号",
+        "stored_value_last4": "カード下4桁",
+        "currency": "通貨",
+        "amount": "金額",
+        "reference": "参照番号",
+        "external_ref": "プロバイダー参照"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "保障開始日",

@@ -975,6 +975,10 @@
         "label": "Sales quota attainment",
         "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
       },
+      "cash_tenders": {
+        "label": "现销支付手段",
+        "description": "现销款项如何结算 — 每个支付手段一行，含方式、结算账户或储值卡及金额 — 按期间、方式和账户。"
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "福利工资输入",
         "description": "每月保障金额、员工扣款、雇主供款及对应的工资批次。"
@@ -1422,6 +1426,8 @@
       "entitlement_balances": {
         "employee": "员工",
         "employee_id": "员工（ID）",
+        "employer": "法定雇主",
+        "employment_id": "雇佣关系（ID）",
         "plan": "福利计划",
         "plan_code": "福利计划代码",
         "plan_id": "福利计划（ID）",
@@ -2374,6 +2380,22 @@
         "amount": "Target amount",
         "actual": "Actual",
         "attainment": "Attainment percent"
+      },
+      "cash_tenders": {
+        "document_date": "单据日期",
+        "document_number": "单据号",
+        "document_kind": "单据类型",
+        "document_status": "单据状态",
+        "customer": "客户",
+        "method": "方式",
+        "method_label": "方式说明",
+        "account": "账户",
+        "account_number": "科目编号",
+        "stored_value_last4": "储值卡后四位",
+        "currency": "币种",
+        "amount": "金额",
+        "reference": "参考号",
+        "external_ref": "服务商参考号"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "保障开始日期",

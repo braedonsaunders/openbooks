@@ -975,6 +975,10 @@
         "label": "Sales quota attainment",
         "description": "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency."
       },
+      "cash_tenders": {
+        "label": "Medios de pago (ventas al contado)",
+        "description": "Cómo se liquidaron las ventas al contado — una fila por medio de pago con su método, cuenta de liquidación o tarjeta de valor almacenado, y el importe — por período, método y cuenta."
+      },
       "hrm_benefit_payroll_inputs": {
         "label": "Entradas de nómina de beneficios",
         "description": "Importes mensuales de cobertura, deducciones del empleado, aportaciones del empleador y nóminas asociadas."
@@ -1422,6 +1426,8 @@
       "entitlement_balances": {
         "employee": "Empleado",
         "employee_id": "Empleado (id)",
+        "employer": "Empleador legal",
+        "employment_id": "Empleo (id)",
         "plan": "Plan",
         "plan_code": "Código de plan",
         "plan_id": "Plan (id)",
@@ -2374,6 +2380,22 @@
         "amount": "Target amount",
         "actual": "Actual",
         "attainment": "Attainment percent"
+      },
+      "cash_tenders": {
+        "document_date": "Fecha del documento",
+        "document_number": "N.º de documento",
+        "document_kind": "Tipo de documento",
+        "document_status": "Estado del documento",
+        "customer": "Cliente",
+        "method": "Método",
+        "method_label": "Etiqueta del método",
+        "account": "Cuenta",
+        "account_number": "N.º de cuenta",
+        "stored_value_last4": "Tarjeta (últimos 4)",
+        "currency": "Moneda",
+        "amount": "Importe",
+        "reference": "N.º de referencia",
+        "external_ref": "Referencia del proveedor"
       },
       "hrm_benefit_payroll_inputs": {
         "coverage_from": "Inicio de cobertura",
