@@ -60,7 +60,9 @@ export function FinancialHealthView({
             size={132}
             thickness={12}
             showTicks={false}
-            bands={data.benchmarks.labels}
+            // No score is no verdict: null bands render the ring untoned
+            // instead of grading a stand-in 0 against the configured scale.
+            bands={data.overallScore === null ? null : data.benchmarks.labels}
           />
         </div>
         <KpiCard

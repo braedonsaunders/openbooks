@@ -243,7 +243,9 @@ export async function loadAccounting(): Promise<AccountingData> {
     heroHint: period.label,
     gaugeValue: health?.overallScore ?? 0,
     gaugeLabel: health?.scoreLabel ? t(`home.score.${health.scoreLabel}`) : t('home.score.unscored'),
-    gaugeBands: health ? health.benchmarks.labels : null,
+    // An unscored organization carries no verdict: null bands keep the hero
+    // ring untoned instead of grading the stand-in 0 as poor.
+    gaugeBands: health?.overallScore == null ? null : health.benchmarks.labels,
     categories: (health?.categoryScores ?? [])
       .filter((c): c is { key: typeof c.key; score: number } => c.score !== null)
       .map((c) => ({
