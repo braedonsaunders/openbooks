@@ -3429,6 +3429,11 @@
         "singular": "プロモーション",
         "description": "売上伝票の明細に適用する割引コードとキャンペーンです。"
       },
+      "stored-value-programs": {
+        "title": "プログラム",
+        "singular": "プログラム",
+        "description": "ギフトカードとストアクレジットのプログラム：負債勘定、ブレークポリシー、有効期限。"
+      },
       "restocking-fee-policies": {
         "title": "再入庫手数料",
         "singular": "再入庫手数料",
@@ -3971,6 +3976,12 @@
       "customsDefaults": "通関の初期値"
     },
     "fieldHelp": {
+      "storedValueLiabilityAccount": "発行時に貸方記入し、利用時に借方記入する貸借対照表勘定。",
+      "storedValueBreakageIncomeAccount": "ブレークまたは失効を認識したときに貸方記入する収益勘定。",
+      "storedValueBreakagePolicy": "なしはブレークを認識しません。比例配分は利用に応じて認識し、非アクティブ時は休眠残高を認識します。",
+      "storedValueBreakageRate": "一切利用されないと予想される発行済価値の割合を、0から1の10進小数で入力（例 0.10）。",
+      "storedValueExpiryMonths": "発行後、法律で認められる場合に未利用価値が失効するまでの月数。失効なしは空欄。",
+      "storedValueInactivityMonths": "非アクティブ時ポリシーの残高をブレークとして認識するまでの無活動月数。",
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
       "putawayItem": "空欄にするとすべての品目に適用されます。",
       "putawayCapacity": "格納先に置ける品目の上限数量。バルクゾーンでは必須です。固定棚で空欄にすると上限なしになります。",
@@ -4102,6 +4113,15 @@
       "shippingCustomsDefaults": "国外への出荷に使う内容品の既定説明。"
     },
     "options": {
+      "storedValueKind": {
+        "giftCard": "ギフトカード",
+        "storeCredit": "ストアクレジット"
+      },
+      "breakagePolicy": {
+        "none": "なし",
+        "proportional": "比例配分",
+        "remote": "非アクティブ時"
+      },
       "usageAggregation": {
         "sum": "合計",
         "count": "件数",
@@ -5800,6 +5820,18 @@
       "retryOffsetsHelp": "失敗した引き落としの何日後に再試行するか。一覧を使い切ると下記の最終処理が適用されます。",
       "finalAction": "リトライを使い切った場合",
       "finalActionHelp": "利用停止は請求を止めますが契約は残り、後の支払い成功で再開します。解約はサブスクリプションを終了します。"
+    },
+    "storedValueProgramFields": {
+      "description": "未利用残高を計上する場所と、失効またはブレーク収益計上のタイミングを設定します。",
+      "details": "プログラムの詳細",
+      "liability": "負債勘定",
+      "breakage": "ブレークと失効",
+      "liabilityAccount": "負債勘定",
+      "breakageIncomeAccount": "ブレーク収益勘定",
+      "breakagePolicy": "ブレークポリシー",
+      "breakageRate": "予想ブレーク率",
+      "expiryMonths": "有効期限（か月）",
+      "inactivityMonths": "非アクティブ期間（か月）"
     },
     "no": "いいえ",
     "payComponentChooser": {

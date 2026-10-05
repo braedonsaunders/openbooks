@@ -3309,6 +3309,11 @@
         "singular": "Promotion",
         "description": "Codes de réduction et campagnes appliqués aux lignes de vente."
       },
+      "stored-value-programs": {
+        "title": "Programmes",
+        "singular": "Programme",
+        "description": "Programmes de cartes cadeaux et d’avoirs : compte de passif, règle de breakage et expiration."
+      },
       "restocking-fee-policies": {
         "title": "Frais de restockage",
         "singular": "Frais de restockage",
@@ -3851,6 +3856,12 @@
       "customsDefaults": "Réglages de douane"
     },
     "fieldHelp": {
+      "storedValueLiabilityAccount": "Le compte de bilan crédité à l’émission et débité au rachat.",
+      "storedValueBreakageIncomeAccount": "Le compte de produits crédité lorsque le breakage ou l’expiration est constaté.",
+      "storedValueBreakagePolicy": "Aucune ne constate jamais de breakage ; proportionnelle le constate au fil des rachats ; sur inactivité constate les soldes dormants après la fenêtre d’inactivité.",
+      "storedValueBreakageRate": "La part de la valeur émise qui ne sera sans doute jamais rachetée, en décimal entre 0 et 1 (par exemple 0,10).",
+      "storedValueExpiryMonths": "Mois entiers après l’émission avant expiration de la valeur non rachetée, là où c’est légal. Vide pour aucune expiration.",
+      "storedValueInactivityMonths": "Mois sans activité avant de constater en breakage un solde de la règle sur inactivité.",
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
       "putawayItem": "Laissez vide pour appliquer la règle à tous les articles.",
       "putawayCapacity": "Quantité maximale de l’article dans la cible. Obligatoire pour une zone de vrac ; laissez vide sur un emplacement fixe pour ne pas fixer de limite.",
@@ -3982,6 +3993,15 @@
       "shippingCustomsDefaults": "Description de contenu par défaut pour les envois vers l’étranger."
     },
     "options": {
+      "storedValueKind": {
+        "giftCard": "Carte cadeau",
+        "storeCredit": "Avoir"
+      },
+      "breakagePolicy": {
+        "none": "Aucune",
+        "proportional": "Proportionnelle",
+        "remote": "Sur inactivité"
+      },
       "usageAggregation": {
         "sum": "Somme",
         "count": "Nombre",
@@ -5800,6 +5820,18 @@
       "retryOffsetsHelp": "Jours après chaque prélèvement échoué avant de réessayer. Une fois la liste épuisée, l’action finale ci-dessous s’applique.",
       "finalAction": "Quand les relances sont épuisées",
       "finalActionHelp": "Suspendre arrête la facturation mais conserve le contrat ; un paiement ultérieur le reprend. Résilier met fin à l’abonnement."
+    },
+    "storedValueProgramFields": {
+      "description": "Configurez où sont suivis les soldes non utilisés et quand ils expirent ou deviennent des produits de breakage.",
+      "details": "Détails du programme",
+      "liability": "Comptes de passif",
+      "breakage": "Breakage et expiration",
+      "liabilityAccount": "Compte de passif",
+      "breakageIncomeAccount": "Compte de produits de breakage",
+      "breakagePolicy": "Règle de breakage",
+      "breakageRate": "Taux de breakage attendu",
+      "expiryMonths": "Expiration (mois)",
+      "inactivityMonths": "Période d’inactivité (mois)"
     },
     "no": "Non",
     "payComponentChooser": {

@@ -3354,6 +3354,11 @@
         "singular": "Promoção",
         "description": "Códigos de desconto e campanhas aplicados às linhas de venda."
       },
+      "stored-value-programs": {
+        "title": "Programas",
+        "singular": "Programa",
+        "description": "Programas de vale-presente e crédito: conta do passivo, política de breakage e expiração."
+      },
       "restocking-fee-policies": {
         "title": "Taxas de reestocagem",
         "singular": "Taxa de reestocagem",
@@ -3896,6 +3901,12 @@
       "customsDefaults": "Padrões de alfândega"
     },
     "fieldHelp": {
+      "storedValueLiabilityAccount": "A conta do balanço creditada ao emitir valor e debitada no resgate.",
+      "storedValueBreakageIncomeAccount": "A conta de receita creditada quando breakage ou expiração é reconhecida.",
+      "storedValueBreakagePolicy": "Nenhuma nunca reconhece breakage; proporcional reconhece conforme os resgates; por inatividade reconhece saldos dormentes após a janela de inatividade.",
+      "storedValueBreakageRate": "A parcela do valor emitido que não deve ser resgatada, como decimal entre 0 e 1 (por exemplo 0,10).",
+      "storedValueExpiryMonths": "Meses inteiros após a emissão antes que o valor não resgatado expire, onde legal. Vazio para sem expiração.",
+      "storedValueInactivityMonths": "Meses sem atividade antes de reconhecer como breakage um saldo da política por inatividade.",
       "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
       "putawayItem": "Deixe em branco para aplicar a regra a todos os itens.",
       "putawayCapacity": "O máximo que o destino pode conter do item. Obrigatório em uma zona a granel; deixe em branco em uma posição fixa para não haver limite.",
@@ -4027,6 +4038,15 @@
       "shippingCustomsDefaults": "Descrição de conteúdo padrão para envios ao exterior."
     },
     "options": {
+      "storedValueKind": {
+        "giftCard": "Vale-presente",
+        "storeCredit": "Crédito em loja"
+      },
+      "breakagePolicy": {
+        "none": "Nenhuma",
+        "proportional": "Proporcional",
+        "remote": "Por inatividade"
+      },
       "usageAggregation": {
         "sum": "Soma",
         "count": "Contagem",
@@ -5800,6 +5820,18 @@
       "retryOffsetsHelp": "Dias após cada cobrança com falha para tentar de novo. Ao esgotar a lista, aplica-se a ação final abaixo.",
       "finalAction": "Quando as tentativas se esgotarem",
       "finalActionHelp": "Suspender interrompe o faturamento, mas mantém o contrato; um pagamento posterior o retoma. Cancelar encerra a assinatura."
+    },
+    "storedValueProgramFields": {
+      "description": "Configure onde os saldos não resgatados ficam e quando expiram ou viram receita de breakage.",
+      "details": "Detalhes do programa",
+      "liability": "Contas do passivo",
+      "breakage": "Breakage e expiração",
+      "liabilityAccount": "Conta do passivo",
+      "breakageIncomeAccount": "Conta de receita de breakage",
+      "breakagePolicy": "Política de breakage",
+      "breakageRate": "Taxa de breakage esperada",
+      "expiryMonths": "Expiração (meses)",
+      "inactivityMonths": "Janela de inatividade (meses)"
     },
     "no": "Não",
     "payComponentChooser": {

@@ -37,6 +37,7 @@
     "budget_scenario": "Budget",
     "revenue_contract": "Revenue contract",
     "contract_cost_asset": "Contract cost asset",
+    "stored_value_account": "Stored value account",
     "equipment_unit": "Equipment unit",
     "resourcing_assignment": "Resource assignment",
     "resourcing_request": "Resource request",

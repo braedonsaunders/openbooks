@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "Tarjetas regalo y crédito",
+    "description": "Tarjetas regalo y crédito en tienda, registrados como pasivo hasta su canje.",
+    "emptyTitle": "Aún no hay saldo",
+    "emptyDescription": "Vende una tarjeta regalo o reembolsa como crédito, y cada código aparece aquí con su saldo.",
+    "emptyAction": "Vender una tarjeta regalo"
+  },
+  "labels": {
+    "code": "Código",
+    "kind": "Tipo",
+    "customer": "Cliente",
+    "program": "Programa",
+    "balance": "Saldo",
+    "issued": "Emitido",
+    "expires": "Vence",
+    "status": "Estado",
+    "lastActivity": "Última actividad",
+    "amount": "Importe",
+    "entryKind": "Movimiento",
+    "reason": "Motivo",
+    "journal": "Asiento",
+    "document": "Documento",
+    "breakageRecognized": "Deterioro reconocido",
+    "liabilityAccount": "Cuenta de pasivo",
+    "breakageIncomeAccount": "Cuenta de ingresos por deterioro",
+    "breakagePolicy": "Política de deterioro",
+    "breakageRate": "Tasa de deterioro esperada",
+    "expiryMonths": "Caducidad (meses)",
+    "inactivityMonths": "Ventana de inactividad (meses)",
+    "currency": "Moneda",
+    "isActive": "Activo",
+    "name": "Nombre del programa",
+    "debitAccount": "Cuenta receptora",
+    "offsetAccount": "Contrapartida",
+    "postingDate": "Fecha contable",
+    "newBalance": "Nuevo saldo"
+  },
+  "status": {
+    "active": "Activo",
+    "frozen": "Bloqueado",
+    "closed": "Cerrado",
+    "expired": "Caducado"
+  },
+  "kind": {
+    "gift_card": "Tarjeta regalo",
+    "store_credit": "Crédito en tienda"
+  },
+  "entryKind": {
+    "issue": "Emitido",
+    "redeem": "Canjeado",
+    "adjust": "Ajustado",
+    "expire": "Caducado",
+    "breakage": "Quiebre",
+    "reversal": "Revertido"
+  },
+  "breakagePolicy": {
+    "none": "Ninguna",
+    "proportional": "Proporcional",
+    "remote": "Remoto"
+  },
+  "kpi": {
+    "outstanding": "Pasivo pendiente",
+    "issuedThisPeriod": "Emitido en el período",
+    "redeemedThisPeriod": "Canjeado en el período",
+    "breakageRecognized": "Deterioro reconocido"
+  },
+  "drawer": {
+    "ledgerTitle": "Movimientos",
+    "ledgerDescription": "Cada movimiento del saldo, del más reciente al más antiguo. Los movimientos son inmutables; las correcciones son reversiones.",
+    "adjust": "Ajustar saldo",
+    "adjustDescription": "Corrige el saldo fuera de cualquier documento. El motivo es obligatorio y se conserva como evidencia.",
+    "adjustAmount": "Importe de corrección (con signo)",
+    "adjustReason": "Motivo de la corrección",
+    "freeze": "Bloquear",
+    "unfreeze": "Desbloquear",
+    "close": "Cerrar",
+    "closeConfirm": "¿Cerrar esta cuenta? No tiene saldo.",
+    "programSection": "Programa",
+    "accountSection": "Cuenta",
+    "noExpiry": "No caduca",
+    "sourceDocument": "Documento de origen"
+  },
+  "issue": {
+    "title": "Emitir saldo",
+    "description": "Crea un código con un saldo inicial. El código se muestra una sola vez: cópialo o envíalo ahora.",
+    "codeShownOnce": "Esta es la única vez que se muestra este código. Cópialo ahora.",
+    "codeCopied": "Código copiado",
+    "programLabel": "Programa",
+    "amountLabel": "Importe",
+    "customerLabel": "Cliente (solo crédito en tienda)",
+    "expiresLabel": "Vence el (opcional)",
+    "submit": "Emitir",
+    "cancel": "Cancelar"
+  },
+  "programs": {
+    "title": "Programas de saldo",
+    "description": "Programas de tarjetas regalo y crédito: su cuenta de pasivo, política de deterioro y caducidad.",
+    "emptyAction": "Nuevo programa"
+  },
+  "payment": {
+    "tenderLabel": "Saldo",
+    "tenderPlaceholder": "Introduce el código de la tarjeta",
+    "apply": "Aplicar",
+    "appliedBalance": "Disponible",
+    "unknownCode": "Código no encontrado; revísalo e inténtalo de nuevo",
+    "overTender": "Los saldos superan el total del recibo",
+    "remove": "Quitar",
+    "tenderedOf": "Canjeado {tendered} de {total}"
+  },
+  "customer": {
+    "tabLabel": "Crédito en tienda",
+    "emptyDescription": "Aún no hay crédito para este cliente.",
+    "balanceLabel": "Disponible",
+    "viewAll": "Ver en el registro de valor"
+  },
+  "reports": {
+    "rollforwardTitle": "Evolución del pasivo por saldo",
+    "rollforwardDescription": "Saldos de apertura, emisión, canje, deterioro, caducidad, ajustes y cierre por programa y período.",
+    "unclaimedTitle": "Saldos no reclamados",
+    "unclaimedDescription": "Saldos inactivos por cliente y antigüedad para revisión de bienes no reclamados."
+  }
+}

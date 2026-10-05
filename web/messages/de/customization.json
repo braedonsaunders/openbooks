@@ -33,6 +33,7 @@
     "budget_scenario": "Budget",
     "revenue_contract": "Erlösvertrag",
     "contract_cost_asset": "Vertragskostenanlage",
+    "stored_value_account": "Guthabenkonto",
     "equipment_unit": "Geräteeinheit",
     "resourcing_assignment": "Ressourcenzuweisung",
     "resourcing_request": "Ressourcenanfrage",

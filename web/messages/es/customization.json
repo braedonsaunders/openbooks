@@ -36,6 +36,7 @@
     "budget_scenario": "Presupuesto",
     "revenue_contract": "Contrato de ingresos",
     "contract_cost_asset": "Activo de costo de contrato",
+    "stored_value_account": "Cuenta de saldo",
     "equipment_unit": "Unidad de equipo",
     "resourcing_assignment": "Asignación de recursos",
     "resourcing_request": "Solicitud de recursos",

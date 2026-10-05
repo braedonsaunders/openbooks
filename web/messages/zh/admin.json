@@ -3354,6 +3354,11 @@
         "singular": "促销",
         "description": "应用于销售单据行项目的折扣码和促销活动。"
       },
+      "stored-value-programs": {
+        "title": "计划",
+        "singular": "计划",
+        "description": "礼品卡和储值计划：负债科目、断点政策和有效期。"
+      },
       "restocking-fee-policies": {
         "title": "重新入库费用",
         "singular": "重新入库费用",
@@ -3896,6 +3901,12 @@
       "customsDefaults": "报关默认值"
     },
     "fieldHelp": {
+      "storedValueLiabilityAccount": "发行时贷记、兑换时借记的资产负债表科目。",
+      "storedValueBreakageIncomeAccount": "确认断点或到期时贷记的收入科目。",
+      "storedValueBreakagePolicy": "无从不确认断点；按比例随兑换确认；长期未动在不活跃期后确认休眠余额。",
+      "storedValueBreakageRate": "预计永不兑换的已发行价值份额，以0到1之间的小数表示（例如0.10）。",
+      "storedValueExpiryMonths": "发行后未兑换价值到期前的整月数（在合法地区）。不到期则留空。",
+      "storedValueInactivityMonths": "长期未动政策余额确认为断点前的无活动月数。",
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
       "putawayItem": "留空则规则适用于所有物料。",
       "putawayCapacity": "目标位置可存放该物料的最大数量。批量区必填；固定库位留空表示不限。",
@@ -4027,6 +4038,15 @@
       "shippingCustomsDefaults": "发往国外的出货默认内容说明。"
     },
     "options": {
+      "storedValueKind": {
+        "giftCard": "礼品卡",
+        "storeCredit": "储值余额"
+      },
+      "breakagePolicy": {
+        "none": "无",
+        "proportional": "按比例",
+        "remote": "长期未动"
+      },
       "usageAggregation": {
         "sum": "求和",
         "count": "计数",
@@ -5800,6 +5820,18 @@
       "retryOffsetsHelp": "每次扣款失败后间隔多少天重试。用完列表后将执行下面的最终处理。",
       "finalAction": "重试用尽时",
       "finalActionHelp": "暂停会停止开票但保留合同，之后付款成功即恢复。取消将终止订阅。"
+    },
+    "storedValueProgramFields": {
+      "description": "配置未兑换余额的存放位置，以及到期或确认为断点收入的时间。",
+      "details": "计划详情",
+      "liability": "负债科目",
+      "breakage": "断点与到期",
+      "liabilityAccount": "负债科目",
+      "breakageIncomeAccount": "断点收入科目",
+      "breakagePolicy": "断点政策",
+      "breakageRate": "预计断点率",
+      "expiryMonths": "有效期（月）",
+      "inactivityMonths": "不活跃期（月）"
     },
     "no": "否",
     "payComponentChooser": {

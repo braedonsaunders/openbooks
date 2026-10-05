@@ -1,0 +1,123 @@
+{
+  "list": {
+    "title": "Vales e créditos",
+    "description": "Cartões-presente e créditos em loja, registrados no passivo até o resgate.",
+    "emptyTitle": "Nenhum saldo ainda",
+    "emptyDescription": "Venda um cartão-presente ou reembolse como crédito, e cada código aparece aqui com seu saldo.",
+    "emptyAction": "Vender um cartão-presente"
+  },
+  "labels": {
+    "code": "Código",
+    "kind": "Tipo",
+    "customer": "Cliente",
+    "program": "Programa",
+    "balance": "Saldo",
+    "issued": "Emitido",
+    "expires": "Expira em",
+    "status": "Status",
+    "lastActivity": "Última atividade",
+    "amount": "Valor",
+    "entryKind": "Movimento",
+    "reason": "Motivo",
+    "journal": "Lançamento",
+    "document": "Documento",
+    "breakageRecognized": "Breakage reconhecido",
+    "liabilityAccount": "Conta de passivo",
+    "breakageIncomeAccount": "Conta de receita de breakage",
+    "breakagePolicy": "Política de breakage",
+    "breakageRate": "Taxa de breakage esperada",
+    "expiryMonths": "Expiração (meses)",
+    "inactivityMonths": "Janela de inatividade (meses)",
+    "currency": "Moeda",
+    "isActive": "Ativo",
+    "name": "Nome do programa",
+    "debitAccount": "Conta recebedora",
+    "offsetAccount": "Contrapartida",
+    "postingDate": "Data contábil",
+    "newBalance": "Novo saldo"
+  },
+  "status": {
+    "active": "Ativo",
+    "frozen": "Bloqueado",
+    "closed": "Encerrado",
+    "expired": "Expirado"
+  },
+  "kind": {
+    "gift_card": "Cartão-presente",
+    "store_credit": "Crédito em loja"
+  },
+  "entryKind": {
+    "issue": "Emitido",
+    "redeem": "Resgatado",
+    "adjust": "Ajustado",
+    "expire": "Expirado",
+    "breakage": "Quebra",
+    "reversal": "Revertido"
+  },
+  "breakagePolicy": {
+    "none": "Nenhuma",
+    "proportional": "Proporcional",
+    "remote": "Remoto"
+  },
+  "kpi": {
+    "outstanding": "Passivo em aberto",
+    "issuedThisPeriod": "Emitido no período",
+    "redeemedThisPeriod": "Resgatado no período",
+    "breakageRecognized": "Breakage reconhecido"
+  },
+  "drawer": {
+    "ledgerTitle": "Movimentos",
+    "ledgerDescription": "Cada movimento do saldo, do mais recente ao mais antigo. Movimentos são imutáveis; correções são reversões.",
+    "adjust": "Ajustar saldo",
+    "adjustDescription": "Corrige o saldo fora de qualquer documento. O motivo é obrigatório e fica como evidência.",
+    "adjustAmount": "Valor da correção (com sinal)",
+    "adjustReason": "Motivo da correção",
+    "freeze": "Bloquear",
+    "unfreeze": "Desbloquear",
+    "close": "Encerrar",
+    "closeConfirm": "Encerrar esta conta? Ela não tem saldo.",
+    "programSection": "Programa",
+    "accountSection": "Conta",
+    "noExpiry": "Não expira",
+    "sourceDocument": "Documento de origem"
+  },
+  "issue": {
+    "title": "Emitir saldo",
+    "description": "Cria um código com saldo inicial. O código aparece uma única vez: copie ou envie agora.",
+    "codeShownOnce": "Esta é a única vez que este código aparece. Copie agora.",
+    "codeCopied": "Código copiado",
+    "programLabel": "Programa",
+    "amountLabel": "Valor",
+    "customerLabel": "Cliente (somente crédito em loja)",
+    "expiresLabel": "Expira em (opcional)",
+    "submit": "Emitir",
+    "cancel": "Cancelar"
+  },
+  "programs": {
+    "title": "Programas de saldo",
+    "description": "Programas de cartões-presente e créditos: conta de passivo, política de breakage e expiração.",
+    "emptyAction": "Novo programa"
+  },
+  "payment": {
+    "tenderLabel": "Saldo",
+    "tenderPlaceholder": "Digite o código do cartão",
+    "apply": "Aplicar",
+    "appliedBalance": "Disponível",
+    "unknownCode": "Código não encontrado; confira e tente de novo",
+    "overTender": "Os saldos excedem o total do recebimento",
+    "remove": "Remover",
+    "tenderedOf": "Resgatado {tendered} de {total}"
+  },
+  "customer": {
+    "tabLabel": "Crédito em loja",
+    "emptyDescription": "Nenhum crédito para este cliente ainda.",
+    "balanceLabel": "Disponível",
+    "viewAll": "Ver no registro de valor"
+  },
+  "reports": {
+    "rollforwardTitle": "Evolução do passivo de saldo",
+    "rollforwardDescription": "Saldos de abertura, emissão, resgate, breakage, expiração, ajustes e encerramento por programa e período.",
+    "unclaimedTitle": "Saldos não reclamados",
+    "unclaimedDescription": "Saldos inativos por cliente e idade para revisão de bens não reclamados."
+  }
+}
