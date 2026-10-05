@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { validateIdentifierUnit } from '@openbooks/engine/src/inventory/item-identifiers.ts'
 import { validateCustomerItemRef } from '@openbooks/engine/src/sales/customer-item-refs.ts'
+import { validateMarketplaceFacilitatorWrite as validateMarketplaceFacilitator } from '@openbooks/engine/src/tax/marketplace-facilitators.ts'
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { BENEFIT_CONTRIBUTION_ENTITIES } from '../hrm-benefit-contributions'
 import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
@@ -35,6 +36,18 @@ const validateCustomerItemRefWrite: SetupEntityValidationHook = async ({ orgId, 
   if (customerId && itemId) await validateCustomerItemRef(executor, orgId, customerId, itemId)
 }
 
+// The facilitator invariant (suitable clearing account, no tax-control
+// double-use) lives in the engine beside the posting boundary; the hook only
+// adapts its refusal to the Setup write contract (an error string).
+const validateMarketplaceFacilitatorWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
+  try {
+    await validateMarketplaceFacilitator(executor, orgId, body as Record<string, unknown>, rowId)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : 'That marketplace facilitator could not be saved'
+  }
+}
+
 const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> = {
   ...Object.fromEntries(BENEFIT_CONTRIBUTION_ENTITIES.map((entity) => [entity.key, validateContributionWrite])),
   [PAYROLL_SERVICE_CREDITS_ENTITY.key]: validateServiceCredit,
@@ -42,6 +55,7 @@ const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> =
   'entitlement-service-tiers': validateServiceTier,
   'item-identifiers': validateIdentifierWrite,
   'customer-item-refs': validateCustomerItemRefWrite,
+  'marketplace-facilitators': validateMarketplaceFacilitatorWrite,
 }
 
 /** Attach entity-owned validation to the shared setup write pipeline. */
