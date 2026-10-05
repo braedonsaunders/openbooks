@@ -2,7 +2,9 @@ import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { registeredChannelKinds } from "@openbooks/engine/src/commerce/adapters.ts";
 import { createChannel, listChannels } from "@openbooks/engine/src/commerce/channels.ts";
+import { channelAttention } from "@openbooks/engine/src/commerce/inbound.ts";
 
 export const runtime = "nodejs";
 
@@ -22,7 +24,16 @@ export const GET = defineRoute({
   feature: "salesChannels",
   handler: async ({ authz: gate }) => {
     const channels = await listChannels(gate.user.orgId);
-    return NextResponse.json({ channels });
+    const attention = await channelAttention(gate.user.orgId);
+    return NextResponse.json({
+      channels: channels.map((channel) => ({
+        ...channel,
+        attention: attention[channel.id] ?? { failed: 0, dead: 0, lastReceivedAt: null },
+      })),
+      // Installed storefront connectors. Empty until a connector pack lands;
+      // the home renders its teaching empty state instead of a dead button.
+      kinds: registeredChannelKinds(),
+    });
   },
 });
 

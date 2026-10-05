@@ -3280,6 +3280,21 @@
         "singular": "Item identifier",
         "description": "Exact GTIN, UPC, EAN and internal values used to identify items during scanning."
       },
+            "channel-account-maps": {
+        "title": "Channel posting accounts",
+        "singular": "Channel posting account",
+        "description": "Which ledger account each channel posts to, per gateway and tax jurisdiction, with effective dates."
+      },
+      "channel-locations": {
+        "title": "Channel locations",
+        "singular": "Channel location",
+        "description": "Which stock location fulfils each storefront location, and whether it syncs inventory."
+      },
+      "external-links": {
+        "title": "External IDs",
+        "singular": "External ID",
+        "description": "Storefront and provider identities pinned to items and customers."
+      },
       "customer-item-refs": {
         "title": "Customer part numbers",
         "singular": "Customer part number",
@@ -3898,7 +3913,18 @@
       "markupBps": "Markup",
       "defaultInsurance": "Default insurance",
       "defaultSignature": "Default signature",
-      "customsDefaults": "Customs defaults"
+      "customsDefaults": "Customs defaults",
+      "channelId": "Channel",
+      "externalLocationId": "Storefront location ID",
+      "externalName": "Storefront name",
+      "syncInventory": "Sync inventory",
+      "fulfilsOrders": "Fulfils orders",
+      "provider": "Provider",
+      "objectType": "Record type",
+      "externalId": "External ID",
+      "externalAccount": "External account",
+      "lastSyncedAt": "Last synced",
+      "nativeId": "OpenBooks record"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "The balance-sheet account credited when value is issued and debited on redemption.",
@@ -4053,6 +4079,16 @@
         "max": "Maximum",
         "last": "Last value",
         "uniqueCount": "Distinct values"
+      },
+            "channelAccountRole": {
+        "gateway_clearing": "Gateway clearing",
+        "revenue": "Revenue",
+        "discount": "Discounts",
+        "shipping_income": "Shipping income",
+        "gift_card_liability": "Gift card liability",
+        "sales_tax_liability": "Sales tax liability",
+        "rounding": "Rounding",
+        "refund_clearing": "Refund clearing"
       },
       "usageRatingPlanStatus": {
         "active": "Active",

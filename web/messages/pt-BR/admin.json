@@ -3280,6 +3280,21 @@
         "singular": "Identificador de item",
         "description": "Valores GTIN, UPC, EAN e internos exatos para identificar itens durante a leitura."
       },
+            "channel-account-maps": {
+        "title": "Contas contábeis do canal",
+        "singular": "Conta contábil do canal",
+        "description": "Em qual conta do razão cada canal contabiliza, por gateway e jurisdição fiscal, com datas de vigência."
+      },
+      "channel-locations": {
+        "title": "Locais do canal",
+        "singular": "Local do canal",
+        "description": "Qual local de estoque atende cada local de loja e se sincroniza o estoque."
+      },
+      "external-links": {
+        "title": "IDs externos",
+        "singular": "ID externo",
+        "description": "Identidades de loja e provedor vinculadas a itens e clientes."
+      },
       "customer-item-refs": {
         "title": "Códigos de produto do cliente",
         "singular": "Código de produto do cliente",
@@ -3898,7 +3913,18 @@
       "markupBps": "Acréscimo",
       "defaultInsurance": "Seguro padrão",
       "defaultSignature": "Assinatura padrão",
-      "customsDefaults": "Padrões de alfândega"
+      "customsDefaults": "Padrões de alfândega",
+      "channelId": "Canal",
+      "externalLocationId": "ID do local da loja",
+      "externalName": "Nome da loja",
+      "syncInventory": "Sincronizar estoque",
+      "fulfilsOrders": "Atende pedidos",
+      "provider": "Provedor",
+      "objectType": "Tipo de registro",
+      "externalId": "ID externo",
+      "externalAccount": "Conta externa",
+      "lastSyncedAt": "Última sincronização",
+      "nativeId": "Registro do OpenBooks"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "A conta do balanço creditada ao emitir valor e debitada no resgate.",
@@ -4053,6 +4079,16 @@
         "max": "Máximo",
         "last": "Último valor",
         "uniqueCount": "Valores distintos"
+      },
+            "channelAccountRole": {
+        "gateway_clearing": "Compensação de gateway",
+        "revenue": "Receita",
+        "discount": "Descontos",
+        "shipping_income": "Receita de frete",
+        "gift_card_liability": "Passivo de vale-presentes",
+        "sales_tax_liability": "Passivo de imposto sobre vendas",
+        "rounding": "Arredondamento",
+        "refund_clearing": "Compensação de reembolsos"
       },
       "usageRatingPlanStatus": {
         "active": "Ativo",

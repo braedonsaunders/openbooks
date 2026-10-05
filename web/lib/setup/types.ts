@@ -236,15 +236,20 @@ export interface SetupFilter {
  * the command's own strict schema. Generic CRUD refuses command-owned
  * entities before body parsing with a remedy naming the command endpoint.
  */
-export type SetupCommandName = 'setFramework' | 'setFundPair' | 'setFunctionalMapping'
+export type SetupCommandName =
+  | 'setFramework'
+  | 'setFundPair'
+  | 'setFunctionalMapping'
+  | 'upsertChannelAccountMap'
+  | 'upsertChannelLocation'
 
 export interface SetupCommandDescriptor {
-  /** Exhaustive dispatch key — exactly one of the three nonprofit commands. */
+  /** Exhaustive dispatch key — one literal per domain command, dispatched in the command route. */
   name: SetupCommandName
-  /** Mutation grant the command endpoint enforces (least-privilege funds pair). */
-  permission: 'funds.manage'
+  /** Mutation grant the command endpoint enforces (least privilege per domain). */
+  permission: 'funds.manage' | 'channels.manage'
   /** Authoritative Company Settings → Features key enforced server-side. */
-  feature: 'fundAccounting' | 'functionalExpenses'
+  feature: 'fundAccounting' | 'functionalExpenses' | 'salesChannels'
 }
 
 /**

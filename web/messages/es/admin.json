@@ -3235,6 +3235,21 @@
         "singular": "Identificador de artículo",
         "description": "Valores GTIN, UPC, EAN e internos exactos para identificar artículos al escanear."
       },
+            "channel-account-maps": {
+        "title": "Cuentas contables del canal",
+        "singular": "Cuenta contable del canal",
+        "description": "A qué cuenta del libro mayor contabiliza cada canal, por pasarela y jurisdicción fiscal, con fechas de vigencia."
+      },
+      "channel-locations": {
+        "title": "Ubicaciones del canal",
+        "singular": "Ubicación del canal",
+        "description": "Qué ubicación de existencias atiende cada ubicación de tienda y si sincroniza inventario."
+      },
+      "external-links": {
+        "title": "ID externos",
+        "singular": "ID externo",
+        "description": "Identidades de tienda y proveedor vinculadas a artículos y clientes."
+      },
       "customer-item-refs": {
         "title": "Números de pieza del cliente",
         "singular": "Número de pieza del cliente",
@@ -3853,7 +3868,18 @@
       "markupBps": "Recargo",
       "defaultInsurance": "Seguro predeterminado",
       "defaultSignature": "Firma predeterminada",
-      "customsDefaults": "Valores de aduana"
+      "customsDefaults": "Valores de aduana",
+      "channelId": "Canal",
+      "externalLocationId": "ID de ubicación de la tienda",
+      "externalName": "Nombre de la tienda",
+      "syncInventory": "Sincronizar inventario",
+      "fulfilsOrders": "Prepara pedidos",
+      "provider": "Proveedor",
+      "objectType": "Tipo de registro",
+      "externalId": "ID externo",
+      "externalAccount": "Cuenta externa",
+      "lastSyncedAt": "Última sincronización",
+      "nativeId": "Registro de OpenBooks"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "La cuenta del balance que se acredita al emitir valor y se debita al canjear.",
@@ -4008,6 +4034,16 @@
         "max": "Máximo",
         "last": "Último valor",
         "uniqueCount": "Valores distintos"
+      },
+            "channelAccountRole": {
+        "gateway_clearing": "Compensación de pasarela",
+        "revenue": "Ingresos",
+        "discount": "Descuentos",
+        "shipping_income": "Ingresos por envío",
+        "gift_card_liability": "Pasivo por tarjetas regalo",
+        "sales_tax_liability": "Pasivo por impuesto sobre ventas",
+        "rounding": "Redondeo",
+        "refund_clearing": "Compensación de reembolsos"
       },
       "usageRatingPlanStatus": {
         "active": "Activo",

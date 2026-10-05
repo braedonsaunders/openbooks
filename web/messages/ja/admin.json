@@ -3355,6 +3355,21 @@
         "singular": "商品識別子",
         "description": "スキャン時に商品を識別するためのGTIN、UPC、EAN、内部値を登録します。"
       },
+            "channel-account-maps": {
+        "title": "チャネルの転記勘定",
+        "singular": "チャネルの転記勘定",
+        "description": "各チャネルがどの台帳勘定に転記するか。ゲートウェイ・税管轄ごと、有効日付き。"
+      },
+      "channel-locations": {
+        "title": "チャネルの拠点",
+        "singular": "チャネルの拠点",
+        "description": "各ストア拠点をどの在庫拠点が担当し、在庫を同期するかどうか。"
+      },
+      "external-links": {
+        "title": "外部ID",
+        "singular": "外部ID",
+        "description": "品目と得意先にひも付くストア・プロバイダのID。"
+      },
       "customer-item-refs": {
         "title": "顧客品番",
         "singular": "顧客品番",
@@ -3973,7 +3988,18 @@
       "markupBps": "割増",
       "defaultInsurance": "既定の保険",
       "defaultSignature": "既定の署名",
-      "customsDefaults": "通関の初期値"
+      "customsDefaults": "通関の初期値",
+      "channelId": "チャネル",
+      "externalLocationId": "ストアのロケーションID",
+      "externalName": "ストア名",
+      "syncInventory": "在庫を同期",
+      "fulfilsOrders": "注文を発送",
+      "provider": "プロバイダー",
+      "objectType": "レコード種別",
+      "externalId": "外部ID",
+      "externalAccount": "外部アカウント",
+      "lastSyncedAt": "最終同期",
+      "nativeId": "OpenBooksレコード"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "発行時に貸方記入し、利用時に借方記入する貸借対照表勘定。",
@@ -4128,6 +4154,16 @@
         "max": "最大値",
         "last": "最後の値",
         "uniqueCount": "異なる値"
+      },
+            "channelAccountRole": {
+        "gateway_clearing": "ゲートウェイクリアリング",
+        "revenue": "売上",
+        "discount": "値引き",
+        "shipping_income": "配送料収入",
+        "gift_card_liability": "ギフトカード負債",
+        "sales_tax_liability": "売上税負債",
+        "rounding": "端数調整",
+        "refund_clearing": "返金クリアリング"
       },
       "usageRatingPlanStatus": {
         "active": "有効",

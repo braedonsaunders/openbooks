@@ -3355,6 +3355,21 @@
         "singular": "Artikelkennung",
         "description": "Exakte GTIN-, UPC-, EAN- und interne Werte zur Identifizierung von Artikeln beim Scannen."
       },
+            "channel-account-maps": {
+        "title": "Konten für Kanalbuchungen",
+        "singular": "Konto für Kanalbuchungen",
+        "description": "Auf welches Ledgerkonto jeder Kanal bucht, pro Gateway und Steuerzuständigkeit, mit Gültigkeitsdaten."
+      },
+      "channel-locations": {
+        "title": "Kanalstandorte",
+        "singular": "Kanalstandort",
+        "description": "Welcher Lagerort jeden Storefront-Standort erfüllt und ob er Bestände synchronisiert."
+      },
+      "external-links": {
+        "title": "Externe IDs",
+        "singular": "Externe ID",
+        "description": "Storefront- und Anbieter-Identitäten, die Artikeln und Kunden zugeordnet sind."
+      },
       "customer-item-refs": {
         "title": "Kundenteilenummern",
         "singular": "Kundenteilenummer",
@@ -3973,7 +3988,18 @@
       "markupBps": "Aufschlag",
       "defaultInsurance": "Standardversicherung",
       "defaultSignature": "Standardunterschrift",
-      "customsDefaults": "Zollvorgaben"
+      "customsDefaults": "Zollvorgaben",
+      "channelId": "Kanal",
+      "externalLocationId": "Standort-ID des Storefronts",
+      "externalName": "Name des Storefronts",
+      "syncInventory": "Bestand synchronisieren",
+      "fulfilsOrders": "Bestellungen erfüllen",
+      "provider": "Anbieter",
+      "objectType": "Datensatztyp",
+      "externalId": "Externe ID",
+      "externalAccount": "Externes Konto",
+      "lastSyncedAt": "Zuletzt synchronisiert",
+      "nativeId": "OpenBooks-Datensatz"
     },
     "fieldHelp": {
       "storedValueLiabilityAccount": "Das Bilanzkonto, das bei Ausgabe gutgeschrieben und bei Einlösung belastet wird.",
@@ -4128,6 +4154,16 @@
         "max": "Maximum",
         "last": "Letzter Wert",
         "uniqueCount": "Unterschiedliche Werte"
+      },
+            "channelAccountRole": {
+        "gateway_clearing": "Gateway-Verrechnung",
+        "revenue": "Umsatz",
+        "discount": "Rabatte",
+        "shipping_income": "Versanderlöse",
+        "gift_card_liability": "Gutscheinverbindlichkeit",
+        "sales_tax_liability": "Umsatzsteuerverbindlichkeit",
+        "rounding": "Rundung",
+        "refund_clearing": "Erstattungsverrechnung"
       },
       "usageRatingPlanStatus": {
         "active": "Aktiv",

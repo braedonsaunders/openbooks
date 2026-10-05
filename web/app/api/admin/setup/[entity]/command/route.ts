@@ -13,6 +13,9 @@ import type { SetupCommandName } from "@/lib/setup/types";
 import { setFramework } from "@openbooks/engine/src/nonprofit/frameworks.ts";
 import { setFundPair } from "@openbooks/engine/src/nonprofit/funds.ts";
 import { setFunctionalMapping } from "@openbooks/engine/src/nonprofit/functional.ts";
+import { CHANNEL_ACCOUNT_ROLES } from "@openbooks/engine/src/commerce/contracts.ts";
+import { upsertAccountMap } from "@openbooks/engine/src/commerce/account-maps.ts";
+import { upsertChannelLocation } from "@openbooks/engine/src/commerce/locations.ts";
 
 export const runtime = "nodejs";
 
@@ -54,6 +57,23 @@ const functionalMappingBody = z.strictObject({
   effectiveFrom: z.string(),
   effectiveTo: z.string().nullish(),
   reason: z.string(),
+});
+
+const channelAccountMapBody = z.strictObject({
+  channelId: z.string().uuid(),
+  role: z.enum(CHANNEL_ACCOUNT_ROLES),
+  key: z.string().max(120).nullish(),
+  accountId: z.string().uuid(),
+  effectiveFrom: z.string(),
+});
+
+const channelLocationBody = z.strictObject({
+  channelId: z.string().uuid(),
+  externalLocationId: z.string().min(1).max(120),
+  externalName: z.string().min(1).max(200),
+  stockLocationId: z.string().uuid().nullish(),
+  syncInventory: z.boolean().nullish(),
+  fulfilsOrders: z.boolean().nullish(),
 });
 
 /** Domain refusals keep typed status with message, code, remedy, and field. */
@@ -106,6 +126,29 @@ async function runCommandBody(
       if (!parsed.success) throw invalidCommandBody();
       return setFunctionalMapping({ orgId, actorId, ...parsed.data });
     }
+    case "upsertChannelAccountMap": {
+      const parsed = channelAccountMapBody.safeParse(raw);
+      if (!parsed.success) throw invalidCommandBody();
+      return upsertAccountMap(orgId, actorId, {
+        channelId: parsed.data.channelId,
+        role: parsed.data.role,
+        key: parsed.data.key ?? "",
+        accountId: parsed.data.accountId,
+        effectiveFrom: parsed.data.effectiveFrom,
+      });
+    }
+    case "upsertChannelLocation": {
+      const parsed = channelLocationBody.safeParse(raw);
+      if (!parsed.success) throw invalidCommandBody();
+      return upsertChannelLocation(orgId, actorId, {
+        channelId: parsed.data.channelId,
+        externalLocationId: parsed.data.externalLocationId,
+        externalName: parsed.data.externalName,
+        stockLocationId: parsed.data.stockLocationId ?? null,
+        syncInventory: parsed.data.syncInventory ?? undefined,
+        fulfilsOrders: parsed.data.fulfilsOrders ?? undefined,
+      });
+    }
   }
 }
 
@@ -154,9 +197,9 @@ async function handler(request: Request, params: { entity: string }, authz: Auth
   if (!featureEnabled(await resolvedFeatureState(authz.user.orgId), entity.command.feature)) {
     return notFound("setup entity");
   }
-  // The static gate already enforced funds.manage, but the type admits only
-  // that one permission — so the descriptor is re-asserted here from the
-  // declaration itself, never a parallel map, before anything is parsed.
+  // The static gate already enforced one command grant, but the descriptor
+  // names the entity's own — so it is re-asserted here from the declaration
+  // itself, never a parallel map, before anything is parsed.
   if (!can(authz, entity.command.permission)) return permissionRefusal(entity.command.permission);
   // Creates are upserts keyed by the caller's idempotency key, mirroring the
   // generic route's anti-double-submit contract; row identity stays
@@ -173,15 +216,23 @@ async function handler(request: Request, params: { entity: string }, authz: Auth
   return runCommand(authz, params.entity, entity.command, requestId, parsed.data as Record<string, unknown>);
 }
 
+/** Every grant a command descriptor may name. The handler re-asserts the entity's own. */
+const COMMAND_PERMISSIONS = ["funds.manage", "channels.manage"] as const;
+
 export const POST = defineRoute({
   authorize: async () => {
-    // funds.manage gates before params and body: the 403 names the grant and
-    // where an admin restores it, so the operator never guesses.
+    // A command grant gates before params and body: the 403 names the grants
+    // and where an admin restores them, so the operator never guesses.
     const authz = await getAuthz();
     if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    // Static pre-gate: the descriptor type admits no permission other than
-    // funds.manage, so this names the only grant the handler re-asserts.
-    if (!can(authz, "funds.manage")) return permissionRefusal("funds.manage");
+    // Static pre-gate: the descriptor type admits only the grants above, and
+    // the handler re-asserts the entity's own before anything is parsed.
+    if (!COMMAND_PERMISSIONS.some((permission) => can(authz, permission))) {
+      return NextResponse.json(
+        { error: `missing permission: ${COMMAND_PERMISSIONS.join(" or ")} — ask an administrator to grant it in Admin → Users & Roles`, code: "forbidden" },
+        { status: 403 },
+      );
+    }
     return authz;
   },
   feature: { none: "This endpoint has no single route-wide feature gate; the descriptor's authoritative feature is checked per entity in the handler." },
