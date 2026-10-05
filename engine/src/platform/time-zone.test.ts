@@ -60,6 +60,7 @@ test("the picker list offers UTC first, then sorted canonical names", () => {
 test("civil date-times resolve in their named zone without interpreting local input as UTC", () => {
   assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "America/Toronto").toISOString(), "2026-07-01T13:30:00.000Z");
   assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "UTC").toISOString(), "2026-07-01T09:30:00.000Z");
+  assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "+05:30").toISOString(), "2026-07-01T04:00:00.000Z");
 });
 
 test("civil date-time conversion refuses nonexistent and repeated daylight-saving times", () => {
