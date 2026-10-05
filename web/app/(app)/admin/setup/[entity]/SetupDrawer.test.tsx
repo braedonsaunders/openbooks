@@ -380,8 +380,8 @@ test('retention scope shows native region choices and country chips without a JS
   const region = { applies_to: 'countries', countries: ['CA', 'US'] }
   const ui = await mountDrawer(t, { id: 'rule', name: 'Retention', region_scope: region, basis: 'inactivity', retain_months: 24, action: 'anonymize' }, () => Response.json({ id: 'rule' }), 'hrm-retention-rules')
   assert.equal(document.querySelectorAll('textarea').length, 0)
-  assert.ok(document.body.textContent?.includes('CA'))
-  assert.ok(document.body.textContent?.includes('US'))
+  assert.ok(document.body.textContent?.includes('Canada'))
+  assert.ok(document.body.textContent?.includes('United States'))
   await clickSave(false)
   assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).regionScope, region)
 })
@@ -413,4 +413,33 @@ for (const target of ['plan', 'component'] as const) {
   await act(async () => { [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Cancel')!.click(); await tick() })
   assert.equal(document.querySelector('[role="dialog"]'), dialog)
   assert.equal(document.querySelector('input[aria-label="Name"]'), null)
+})
+
+
+test('each nested drawer stays above its parent and Escape closes only the deepest record', async (t) => {
+  const { Drawer } = await import('@openbooks/ui')
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  const closed: string[] = []
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <Drawer open title="Program" onClose={() => closed.push('program')}>
+        <Drawer open stacked title="Contribution" onClose={() => closed.push('contribution')}>
+          <Drawer open stacked title="Counted component" onClose={() => closed.push('component')}>
+            <button type="button">Create counted component</button>
+          </Drawer>
+        </Drawer>
+      </Drawer>
+    </NextIntlClientProvider>)
+    await tick()
+  })
+  const layers = [...document.querySelectorAll<HTMLElement>('[data-drawer-depth]')]
+    .sort((a, b) => Number(a.dataset.drawerDepth) - Number(b.dataset.drawerDepth))
+  assert.equal(layers.length, 3)
+  assert.ok(Number(layers[1]!.style.zIndex) > Number(layers[0]!.style.zIndex), 'the contribution must stay above its program')
+  assert.ok(Number(layers[2]!.style.zIndex) > Number(layers[1]!.style.zIndex), 'the counted-component editor must remain clickable above its contribution')
+  await act(async () => document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+  assert.deepEqual(closed, ['component'], 'closing a nested record must preserve both parents')
 })

@@ -1,3 +1,4 @@
+import { clearSetupChildren, setupNavigationKeys } from '../../../../../lib/setup/navigation'
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
@@ -93,8 +94,9 @@ export function renderCell(
 }
 
 /** Shared child-tab composition for standalone setup and rehomed workspaces. */
-export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, canManage, allowedSubsidiaryIds, features, t, mutationBasePath }: {
+export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, canManage, allowedSubsidiaryIds, features, t, mutationBasePath, navigationPrefix }: {
   mutationBasePath?: string
+  navigationPrefix?: string
   entity: SetupEntity
   row: Record<string, unknown> | null
   orgId: string
@@ -107,6 +109,7 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
   t: (key: string) => string
 }) {
   if (!row) return []
+  const navigation = setupNavigationKeys(navigationPrefix)
   return (entity.recordChildren ?? setupChildEntities(entity.key))
     .filter((child) => resolveSetupEntityGate(child, features).enabled)
     .map((child) => {
@@ -114,7 +117,7 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
       return {
         key: child.key,
         label: t(child.titleKey ?? `entities.${child.key}.title`),
-        content: pickString(sp.setupTab) === child.key ? (
+        content: pickString(sp[navigation.tab]) === child.key ? (
           <SetupEntitySection
             entity={{ ...child, ...(entity.readOnly ? { readOnly: true } : {}), columns: child.columns.filter((column) => column.key !== binding.fieldKey) }}
             orgId={orgId}
@@ -124,8 +127,8 @@ export function setupRecordTabs({ entity, row, orgId, actorId, sp, basePath, can
             canManage={canManage}
             allowedSubsidiaryIds={allowedSubsidiaryIds}
             parent={{ recordKey: entity.key, value: String(row[binding.valueKey ?? entity.idColumn ?? 'id']) }}
-            rowParam="childRow"
-            paramPrefix="child"
+            rowParam={navigation.childRow}
+            paramPrefix={navigation.childPrefix}
             stacked
             mutationBasePath={mutationBasePath}
           />
@@ -235,10 +238,17 @@ export async function SetupEntitySection({
   const list = paramPrefix ? parsePrefixedListParams(sp, paramPrefix, listOptions) : parseListParams(sp, listOptions)
   const parentScope = setupParentScope(entity, parent)
   const children = entity.recordChildren ?? setupChildEntities(entity.key)
-  const closeHref = mergeHref(basePath, sp, {
-    [rowParam]: undefined,
-    ...(children.length ? { setupTab: undefined, childRow: undefined, childQ: undefined, childPage: undefined, childShowInactive: undefined } : {}),
-  })
+  const closeParams = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    const scalar = pickString(value)
+    if (scalar !== undefined) closeParams.set(key, scalar)
+  }
+  closeParams.delete(rowParam)
+  if (children.length) {
+    closeParams.delete(setupNavigationKeys(paramPrefix).tab)
+    clearSetupChildren(closeParams, paramPrefix)
+  }
+  const closeHref = mergeHref(basePath, Object.fromEntries(closeParams), {})
 
   const searchColumns = entity.columns.map(
     (column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`,
@@ -309,6 +319,7 @@ export async function SetupEntitySection({
 
   const features = children.length ? await resolvedFeatureState(orgId) : {}
   const childTabs = setupRecordTabs({
+    navigationPrefix: paramPrefix,
     entity, row: open?.row ?? null, orgId, actorId, sp, basePath,
     canManage, allowedSubsidiaryIds, features, t, mutationBasePath,
   })
@@ -518,6 +529,7 @@ export async function SetupEntitySection({
         <SetupDrawer
           key={`${entity.key}:${String(open.row?.[idColumn] ?? 'new')}`}
           entity={drawerEntity}
+          navigationPrefix={paramPrefix}
           row={open.row}
           members={[]}
           refOptions={refOptions}
@@ -534,6 +546,7 @@ export async function SetupEntitySection({
         <SetupDrawer
           key={`${entity.key}:${String(open.row?.[idColumn] ?? 'new')}`}
           entity={drawerEntity}
+          navigationPrefix={paramPrefix}
           row={open.row}
           members={[]}
           refOptions={refOptions}

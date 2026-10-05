@@ -10,6 +10,7 @@ import { NetInvestmentButton } from '@/app/(app)/accounting/changes/NetInvestmen
 
 import { LossOfControlButton } from '@/app/(app)/accounting/changes/LossOfControlButton'
 import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
+import { setupNavigationKeys, setupTabParams } from '../../../../../lib/setup/navigation'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -129,6 +130,7 @@ export function SetupDrawer({
   stacked = false,
   mutationBasePath = '/api/admin/setup',
   onSaved,
+  navigationPrefix,
 }: {
   entity: SetupEntity
   row: Record<string, unknown> | null
@@ -146,6 +148,8 @@ export function SetupDrawer({
   stacked?: boolean
   /** Refresh the host record after a successful native save. */
   onSaved?: () => void
+  /** Scope nested tabs independently from their owning record. */
+  navigationPrefix?: string
   /** Host-specific authorized adapter, sharing native setup commands. */
   mutationBasePath?: string
 }) {
@@ -203,25 +207,14 @@ export function SetupDrawer({
     setForm((current) => ({ ...current, ...choice.values }))
     setChoosing(false)
   }
+  const tabParam = setupNavigationKeys(navigationPrefix).tab
   const recordTabs = nestedTab ? [nestedTab, ...nestedTabs] : nestedTabs
-  const activeNestedTab = !creating ? recordTabs.find((tab) => searchParams.get('setupTab') === tab.key) : undefined
+  const activeNestedTab = !creating ? recordTabs.find((tab) => searchParams.get(tabParam) === tab.key) : undefined
   const nestedTabActive = activeNestedTab !== undefined
-  const activeRuleTab = !creating ? ruleTabs.find(tab => searchParams.get('setupTab') === tab.key) : undefined
+  const activeRuleTab = !creating ? ruleTabs.find(tab => searchParams.get(tabParam) === tab.key) : undefined
 
   function selectTab(key: 'details' | string) {
-    const next = new URLSearchParams(searchParams.toString())
-    if (key !== next.get('setupTab')) {
-      for (const param of ['childRow', 'childQ', 'childPage', 'childShowInactive']) next.delete(param)
-    }
-    if (key === 'details') {
-      next.delete('setupTab')
-      next.delete('boxRow')
-      next.delete('rateRow')
-      next.delete('valueRow')
-      next.delete('childRow')
-    } else {
-      next.set('setupTab', key)
-    }
+    const next = setupTabParams(new URLSearchParams(searchParams.toString()), key, navigationPrefix)
     const query = next.toString()
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
   }

@@ -40,7 +40,7 @@ export const BENEFIT_CONTRIBUTION_ENTITIES: SetupEntity[] = [
     // Counted earning components behind a per-hour selected-components rule.
     // One row per (rule, component); the write validator refuses non-earning
     // components and duplicates, and plan activation refuses an empty list.
-    ...common, key: 'benefit-contribution-rule-components', table: 'hrm_benefit_contribution_rule_components', parentRecords: [{ entityKey: 'benefit-contribution-rules', fieldKey: 'ruleId' }],
+    ...common, key: 'benefit-contribution-rule-components', singularTitleKey: 'entities.benefit-contribution-rule-components.singular', table: 'hrm_benefit_contribution_rule_components', parentRecords: [{ entityKey: 'benefit-contribution-rules', fieldKey: 'ruleId' }],
     hasActive: false, orderBy: 'id',
     columns: [{ key: 'ruleId', labelKey: 'benefitContributions.fields.ruleId', kind: 'ref', ref: 'benefit-contribution-rules' }, { key: 'payComponentId', labelKey: 'benefitContributions.fields.payComponentId', kind: 'ref', ref: 'pay-components' }],
     fields: [planField,

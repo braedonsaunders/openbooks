@@ -8,6 +8,9 @@ stubModules({
   navigation: true, intl: true, features: true, authz: true,
   extra: {
     'server-only': 'export {}',
+    '../authz': 'export async function getAuthz() { return { user: { id: "actor", orgId: "11111111-1111-4111-8111-111111111111" } } }',
+    '@openbooks/engine/hrm/benefits': 'export async function benefitCurrencyOptions() { return [] }',
+
     '@openbooks/engine/src/platform/db.ts': 'export const db = { execute(query) { return globalThis.__setupParentExecute(query) } }; export function ambientTenantOrgId() { return null }; export function withBypassContext(fn) { return fn() }; export function currentRequestOrgResolver() { return null }; export function registerRequestOrgResolver() {}',
   },
 })
@@ -83,7 +86,7 @@ test('nested setup lists, edit selection and new values stay bound to the owning
 })
 
 
-test('a host-owned unified list mounts only the native editor and preserves its mutation adapter on pricing tiers', async () => {
+test('a host-owned unified list mounts only the native editor and preserves its mutation adapter on contribution rules', async () => {
   const entity = SETUP_ENTITY_BY_KEY.get('benefit-plans')!
   const queries: string[] = []
   Object.assign(globalThis, { __setupParentExecute: (query: SQL) => { queries.push(dialect.sqlToQuery(query).sql); return Promise.resolve({ rows: [] }) } })
@@ -94,12 +97,26 @@ test('a host-owned unified list mounts only the native editor and preserves its 
   assert.equal(all.filter((item) => item.type === SetupDrawer).length, 1)
   assert.equal(all.find((item) => item.type === SetupDrawer)?.props.mutationBasePath, '/api/hrm/benefit-plan-configuration')
   assert.ok(!queries.some((query) => /from hrm_benefit_plans/.test(query)), 'the editor does not append or query a second plan list')
-  const tabs = setupRecordTabs({ entity, row: { id: 'plan-id' }, orgId: 'org', sp: { setupTab: 'benefit-plan-levels' },
+  const tabs = setupRecordTabs({ entity, row: { id: 'plan-id' }, orgId: 'org', sp: { setupTab: 'benefit-contribution-rules' },
     basePath: '/hrm/benefits', canManage: true, allowedSubsidiaryIds: null, features: { hrm: true }, t: (key) => key,
     mutationBasePath: '/api/hrm/benefit-plan-configuration' })
-  const levels = tabs.find((tab) => tab.key === 'benefit-plan-levels')?.content
+  const levels = tabs.find((tab) => tab.key === 'benefit-contribution-rules')?.content
   assert.ok(React.isValidElement<Record<string, unknown>>(levels))
   assert.equal(levels.props.mutationBasePath, '/api/hrm/benefit-plan-configuration')
   assert.deepEqual(levels.props.parent, { recordKey: 'benefit-plans', value: 'plan-id' })
   assert.equal(levels.props.basePath, '/hrm/benefits')
+})
+
+
+test('contribution children use their own URL state while retaining the benefit program', async () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('benefit-contribution-rules')!
+  const tabs = setupRecordTabs({ entity, row: { id: 'rule-id' }, orgId: 'org',
+    sp: { program: 'plan-id', setupTab: 'benefit-contribution-rules', childRow: 'rule-id', childTab: 'benefit-contribution-rule-components' },
+    navigationPrefix: 'child', basePath: '/hrm/benefits', canManage: true,
+    allowedSubsidiaryIds: null, features: { hrm: true }, t: key => key })
+  const counted = tabs.find(tab => tab.key === 'benefit-contribution-rule-components')?.content
+  assert.ok(React.isValidElement<Record<string, unknown>>(counted), 'the selected child tab must render its native setup list')
+  assert.equal(counted.props.rowParam, 'childChildRow')
+  assert.equal(counted.props.paramPrefix, 'childChild')
+  assert.deepEqual(counted.props.parent, { recordKey: 'benefit-contribution-rules', value: 'rule-id' })
 })

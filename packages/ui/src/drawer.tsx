@@ -15,8 +15,8 @@ import { cn } from './utils'
 //   sticky-bars  : z-30
 //   drawer/modal : z-50     — Drawer, WizardShell
 //   floating UI  : z-[60]   — Popover, SearchSelect dropdown, confirm dialog.
-//                          Body-portaled so it always sits above the drawer
-//                          or wizard it was opened from (z-50) and below toasts (z-70).
+//                          Menus escape scrolling content. Native modal dropdowns
+//                          remain inside their owning dialog to stay interactive.
 //   toast        : z-70
 
 export type DrawerSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
@@ -30,6 +30,8 @@ const SIZE_CLASS: Record<DrawerSize, string> = {
   '2xl': 'w-full sm:max-w-6xl',
   full: 'w-full',
 }
+
+const DrawerDepthContext = React.createContext(0)
 
 let openDrawerCount = 0
 let originalBodyOverflow: string | null = null
@@ -91,6 +93,11 @@ export function Drawer({
 }) {
   const t = useTranslations('common.actions')
   const mounted = useHydrated()
+  const parentDepth = React.useContext(DrawerDepthContext)
+  const depth = stacked ? Math.max(1, parentDepth + 1) : 0
+  const hasDeeperDrawer = React.useCallback(() =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-drawer-depth]'))
+      .some(node => Number(node.dataset.drawerDepth) > depth), [depth])
 
   // The dialog's accessible name is its own heading: aria-labelledby points at
   // the h2 below. A drawer opened without usable title text never ships as an
@@ -118,7 +125,7 @@ export function Drawer({
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
       if (document.querySelector('[data-ui-overlay]')) return
-      if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
+      if (hasDeeperDrawer()) return
       onClose()
     }
     document.addEventListener('keydown', onKey)
@@ -133,7 +140,7 @@ export function Drawer({
         originalBodyOverflow = null
       }
     }
-  }, [open, onClose, stacked])
+  }, [open, onClose, stacked, hasDeeperDrawer])
 
   // Focus management: on open, remember the previously focused element and move
   // focus into the dialog; trap Tab within the panel; restore focus on close.
@@ -145,7 +152,7 @@ export function Drawer({
 
     // Defer the initial focus until the panel has mounted for this open cycle.
     const focusTimer = window.setTimeout(() => {
-      if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
+      if (hasDeeperDrawer()) return
       const panel = panelRef.current
       if (!panel) return
       const first = Array.from(panel.querySelectorAll<HTMLElement>(focusablesSelector)).find(
@@ -156,7 +163,7 @@ export function Drawer({
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Tab') return
-      if (!stacked && document.querySelector('[data-drawer-layer="nested"]')) return
+      if (hasDeeperDrawer()) return
       const panel = panelRef.current
       if (!panel) return
       const focusables = Array.from(panel.querySelectorAll<HTMLElement>(focusablesSelector)).filter(
@@ -190,7 +197,7 @@ export function Drawer({
         previouslyFocused.focus()
       }
     }
-  }, [open, stacked])
+  }, [open, stacked, hasDeeperDrawer])
 
   if (typeof document === 'undefined') return null
 
@@ -201,11 +208,14 @@ export function Drawer({
   // and never slides on-screen, leaving the panel + close button off the right
   // edge. See the off-screen-drawer bug.
   return createPortal(
+    <DrawerDepthContext.Provider value={depth}>
     <AnimatePresence onExitComplete={onExitComplete}>
       {mounted && open ? (
         <div
           key="drawer"
           data-drawer-layer={stacked ? 'nested' : 'base'}
+          data-drawer-depth={depth}
+          style={{ zIndex: depth === 0 ? 50 : 54 + depth }}
           className={cn(
             // Drawers are bottom-anchored and stop beneath the persistent app
             // header. Because this boundary lives on the shared portal layer,
@@ -346,7 +356,8 @@ export function Drawer({
           </motion.aside>
         </div>
       ) : null}
-    </AnimatePresence>,
+    </AnimatePresence>
+    </DrawerDepthContext.Provider>,
     document.body,
   )
 }
