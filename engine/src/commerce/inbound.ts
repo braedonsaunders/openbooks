@@ -347,3 +347,35 @@ export async function listInboundEvents(orgId: string, channelId: string, limit 
 export async function runCommerceInboundScan(): Promise<void> {
   await processPendingEvents(100);
 }
+
+export interface ChannelAttention {
+  failed: number;
+  dead: number;
+  lastReceivedAt: string | null;
+}
+
+/**
+ * One row per channel that has deliveries: failed and dead counts plus the
+ * newest delivery time. The Channels home merges this into its tiles and
+ * cards; channels with no deliveries yet simply have no entry.
+ */
+export async function channelAttention(orgId: string): Promise<Record<string, ChannelAttention>> {
+  const rows = (await withOrgContext(orgId, () => db.execute<{
+    channel_id: string;
+    failed: string;
+    dead: string;
+    last_received_at: string | null;
+  }>(sql`
+    select channel_id,
+           count(*) filter (where status = 'failed') as failed,
+           count(*) filter (where status = 'dead') as dead,
+           max(received_at) as last_received_at
+      from integration_inbound_events
+     where org_id = ${orgId}
+     group by channel_id`))).rows;
+  const out: Record<string, ChannelAttention> = {};
+  for (const row of rows) {
+    out[row.channel_id] = { failed: Number(row.failed), dead: Number(row.dead), lastReceivedAt: row.last_received_at };
+  }
+  return out;
+}
