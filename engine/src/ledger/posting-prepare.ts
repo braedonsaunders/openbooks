@@ -25,7 +25,7 @@ import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/docum
 import { assertBillPostingAllowed, ComplianceError } from "../compliance/compliance.ts";
 
 import { type KernelLine, type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
-import { validateTaxControlAccounts } from "./posting-tax-policy.ts";
+import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import { RULES } from "./posting-rules.ts";
 import { assertFinalKernelBalance, assertCreditMemoDirection } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
@@ -101,6 +101,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       taxComponentsByLine: await resolveTaxComponents(db, doc.id, doc.orgId),
     };
   }
+  deps = await resolveMarketplaceClearingForDocument(db, doc, deps);
   try {deps = { ...deps, agencyByLine: await resolveAgencyPosting(db, doc.orgId, doc.id) }} catch(error) {if(error instanceof AgencyError)throw new PostingError(error.message);throw error}
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = {

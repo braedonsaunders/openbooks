@@ -25,6 +25,7 @@ import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsi
 import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 
 /**
  * Machine-readable void refusal reasons (F-t06-021). The human message
@@ -1247,6 +1248,13 @@ export async function completeRequestedDocumentVoid(
           reversalEntryId,
           reason: String(doc.void_reason),
         });
+      }
+      // A voided sale must void its provider transaction too: mark the
+      // commit rows here, inside the void transaction, so the void can
+      // never commit while the provider still shows the sale as live. The
+      // tax_provider_commit scan performs the provider void call.
+      if (PROVIDER_COMMIT_KINDS[String(doc.kind)]) {
+        await requestProviderVoidTx(tx, { orgId, documentId });
       }
       return {
         reversalEntryId,

@@ -139,6 +139,8 @@ export async function resolveTaxComponents(
     document_line_id: string;
     tax_code_id: string;
     sequence: number;
+    collected_by: "merchant" | "marketplace";
+    facilitator_name: string | null;
     rate_percent: string;
     taxable_amount: string;
     tax_amount: string;
@@ -153,7 +155,9 @@ export async function resolveTaxComponents(
     withholding_account_id: string | null;
     recoverable_percent: string | null;
   }>(sql`
-    select c.document_line_id, c.tax_code_id, c.sequence, c.rate_percent::text,
+    select c.document_line_id, c.tax_code_id, c.sequence,
+           c.collected_by, c.facilitator_name,
+           c.rate_percent::text,
            c.taxable_amount::text, c.tax_amount::text,
            c.recoverable_amount::text, c.nonrecoverable_amount::text,
            c.calculation_type, c.price_includes_tax, c.compound_on_previous,
@@ -179,6 +183,8 @@ export async function resolveTaxComponents(
     components.push({
       taxCodeId: String(row.tax_code_id),
       sequence: Number(row.sequence),
+      collectedBy: row.collected_by,
+      facilitatorName: row.facilitator_name,
       ratePercent: String(row.rate_percent),
       taxableAmount: String(row.taxable_amount),
       taxAmount: String(row.tax_amount),

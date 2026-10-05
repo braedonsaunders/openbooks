@@ -1,10 +1,11 @@
 import { sql } from 'drizzle-orm'
 import { db } from '../platform/db.ts'
-import { add, cmp, mulRate, normalizeDecimal, roundMoney } from '../money/money.ts'
+import { add, cmp, mulRate, neg, normalizeDecimal, roundMoney } from '../money/money.ts'
 import { IncomeTaxProvisionError, spotRateToPresentation } from './income-tax-provision.ts'
 import { TaxRequestValidationError } from '../tax/request-validation.ts'
 import { uuidArray } from '../organization/subsidiaries.ts'
 import { evaluateUsNexus, thresholdForState, US_NEXUS_MEASUREMENT_MONTHS, type NexusEvaluation, type StateNexusThreshold, type StateSales } from '../tax/us-nexus.ts'
+import { marketplaceNexusRuleFor, readAllMarketplaceNexusRules } from '../tax/marketplace-facilitators.ts'
 
 /** Role-derived subsidiary visibility; null/undefined means unrestricted. */
 export type UsNexusSubsidiaryScope = ReadonlySet<string> | null | undefined
@@ -125,6 +126,20 @@ async function resolveEntityScope(
  * translated at the declared policy rate — reported back as `translation`
  * evidence — and fails closed when rate coverage is missing.
  */
+/** How marketplace-facilitated sales treated one state's threshold. */
+export interface UsNexusMarketplaceInfo {
+  /** Marketplace-attributed sales in the working currency. */
+  marketplaceSalesUsd: string
+  /** Whether the state's rule counts them toward the threshold. */
+  included: boolean
+  /** True when no verified rule exists: the state needs operator review. */
+  needsReview: boolean
+  /** The cited source of a verified rule, else empty. */
+  source: string
+}
+
+export type UsNexusStateEvaluation = NexusEvaluation & { marketplace: UsNexusMarketplaceInfo }
+
 export interface UsNexusResult {
   from: string
   to: string
@@ -139,7 +154,7 @@ export interface UsNexusResult {
   currency: string
   /** The filing entity measured, or null for the org-wide ledger. */
   subsidiaryIds: string[] | null
-  states: NexusEvaluation[]
+  states: UsNexusStateEvaluation[]
   /** Posted US sales that could not be attributed to a state (no captured destination). */
   unattributed: { salesUsd: string; txnCount: number }
   /** Threshold-translation evidence; null when thresholds applied directly (USD). */
@@ -176,6 +191,7 @@ export async function computeUsNexusStatus(
     fx_rate: string
     base_currency: string
     amount: string
+    marketplace_amount: string
     is_invoice: number
     as_of: string
   }>(sql`
@@ -185,10 +201,19 @@ export async function computeUsNexusStatus(
            d.fx_rate::text as fx_rate,
            o.base_currency,
            (case when d.kind = 'customer_credit' then -d.subtotal else d.subtotal end)::text as amount,
+           -- Marketplace-facilitated lines, signed like the header: states
+           -- whose rule excludes facilitator sales measure without them.
+           coalesce(m.marketplace_amount, '0') as marketplace_amount,
            case when d.kind = 'customer_invoice' then 1 else 0 end as is_invoice,
            coalesce(d.posting_date, d.document_date)::text as as_of
       from documents d
       join orgs o on o.id = d.org_id
+      left join lateral (
+        select sum(case when d.kind = 'customer_credit' then -dl.amount else dl.amount end)::text as marketplace_amount
+          from document_lines dl
+         where dl.org_id = d.org_id and dl.document_id = d.id
+           and dl.marketplace_facilitator is not null
+      ) m on true
       -- Quote evidence for rows posted before the ship-to stamp existed
       -- (0265): the destination the line's tax was actually computed for,
       -- first line wins — the same read order the backfill and the posting
@@ -221,7 +246,7 @@ export async function computeUsNexusStatus(
        )
   `))
 
-  const byState = new Map<string, { sales: string; txnCount: number }>()
+  const byState = new Map<string, { sales: string; marketplace: string; txnCount: number }>()
   const rateCache = new Map<string, Promise<string>>()
 
   const rateToTarget = (fromCurrency: string, asOf: string): Promise<string> => {
@@ -244,35 +269,73 @@ export async function computeUsNexusStatus(
     return lookup
   }
 
-  for (const row of rows.rows) {
-    let converted: string
-    if (row.currency === target) {
-      converted = row.amount
+  // The marketplace share converts exactly like the header: same currency,
+  // same rate, same date — so excluding it is pure subtraction, never a
+  // second conversion that could drift from the measured figure.
+  const convert = async (amount: string, row: { currency: string; base_currency: string; fx_rate: string; as_of: string }): Promise<string> => {
+    if (row.currency === target) return amount
     // A stored rate is authoritative only when it differs from the column
     // default at the column's own ten-decimal scale. The numeric(19,10) value
     // reads back as '1.0000000000', so a raw string comparison against '1'
     // treated every unstamped legacy rate as a real 1:1 peg and converted at
     // 1.0 instead of resolving the rate below — the same default-vs-set
     // distinction the posting kernel draws before honouring a header rate.
-    } else if (row.base_currency === target && row.fx_rate && normalizeDecimal(row.fx_rate, 10) !== '1.0000000000') {
-      converted = mulRate(row.amount, row.fx_rate)
-    } else {
-      converted = mulRate(row.amount, await rateToTarget(row.currency, row.as_of))
+    if (row.base_currency === target && row.fx_rate && normalizeDecimal(row.fx_rate, 10) !== '1.0000000000') {
+      return mulRate(amount, row.fx_rate)
     }
+    return mulRate(amount, await rateToTarget(row.currency, row.as_of))
+  }
+
+  for (const row of rows.rows) {
+    const converted = await convert(row.amount, row)
+    const convertedMarketplace = await convert(row.marketplace_amount, row)
     const key = row.state.trim()
-    const prev = byState.get(key) ?? { sales: '0', txnCount: 0 }
+    const prev = byState.get(key) ?? { sales: '0', marketplace: '0', txnCount: 0 }
     byState.set(key, {
       sales: add(prev.sales, converted),
+      marketplace: add(prev.marketplace, convertedMarketplace),
       txnCount: prev.txnCount + Number(row.is_invoice),
     })
   }
 
+  // Verified per-state rules govern; unlisted states default to included
+  // pending review. States whose rule excludes facilitator sales measure
+  // without the marketplace share; the share is still reported per state so
+  // the operator sees what was set aside and which states need review.
+  const seededRules = await readAllMarketplaceNexusRules()
+  const marketplaceInfo = new Map<string, UsNexusMarketplaceInfo>()
   const attributed: StateSales[] = []
   let unattributed = { salesUsd: '0', txnCount: 0 }
   for (const [state, agg] of byState) {
-    if (state) attributed.push({ state: state.toUpperCase(), salesUsd: agg.sales, txnCount: agg.txnCount })
-    else unattributed = { salesUsd: agg.sales, txnCount: agg.txnCount }
+    if (!state) {
+      unattributed = { salesUsd: agg.sales, txnCount: agg.txnCount }
+      continue
+    }
+    const upper = state.toUpperCase()
+    const rule = marketplaceNexusRuleFor(upper, seededRules)
+    marketplaceInfo.set(upper, {
+      marketplaceSalesUsd: agg.marketplace,
+      included: rule.includeInThreshold,
+      needsReview: rule.needsReview,
+      source: rule.source,
+    })
+    attributed.push({
+      state: upper,
+      salesUsd: rule.includeInThreshold ? agg.sales : add(agg.sales, neg(agg.marketplace)),
+      txnCount: agg.txnCount,
+    })
   }
+
+  const withMarketplace = (evaluations: NexusEvaluation[]): UsNexusStateEvaluation[] =>
+    evaluations.map((evaluation) => ({
+      ...evaluation,
+      marketplace: marketplaceInfo.get(evaluation.state) ?? {
+        marketplaceSalesUsd: '0',
+        included: true,
+        needsReview: true,
+        source: '',
+      },
+    }))
 
   // Thresholds are USD reference data. In the USD working currency they apply
   // directly (the historical path — no lookup, no evidence object). Otherwise
@@ -280,7 +343,7 @@ export async function computeUsNexusStatus(
   // the coarse whole-dollar figures round to cents for the numeric threshold
   // field while the measured sales keep full ledger precision.
   if (target === 'USD') {
-    return { from, to, measuredFrom, measuredTo: to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: evaluateUsNexus(attributed, { asOf: to }), unattributed, translation: null }
+    return { from, to, measuredFrom, measuredTo: to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: withMarketplace(evaluateUsNexus(attributed, { asOf: to })), unattributed, translation: null }
   }
   let policyRate: string
   let policyAsOf: string
@@ -311,7 +374,7 @@ export async function computeUsNexusStatus(
     measuredTo: to,
     currency: target,
     subsidiaryIds: entity.subsidiaryIds,
-    states: evaluateUsNexus(attributed, { thresholds }),
+    states: withMarketplace(evaluateUsNexus(attributed, { thresholds })),
     unattributed,
     translation: { rateType, rateDate, rateAsOf: policyAsOf, usdToCurrencyRate: policyRate },
   }

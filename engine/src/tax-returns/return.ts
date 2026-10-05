@@ -868,7 +868,11 @@ function labelFor(reg: { registrationNumber: string | null; jurisdictionCode: st
  * historical logic unchanged: tax_collected/tax_paid match the immutable
  * component-account evidence first (then-current mapping for legacy/manual
  * journals), tax_amount sums every tax line for the code, and taxable_base
- * boxes convert each document line at its posted header rate. The scope only
+ * boxes convert each document line at its posted header rate. Facilitator-
+ * collected tax never enters a due box: the collected/paid match requires a
+ * merchant component and tax_amount excludes clearing-posted lines, while
+ * marketplace_tax/marketplace_sales boxes report the facilitator share from
+ * component evidence for the deduction lines states require. The scope only
  * adds subsidiary predicates — journal_lines.subsidiary_id is NOT NULL and
  * every line's subsidiary belongs to the org, so an all-subsidiaries scope
  * reads exactly the historical row set.
@@ -936,6 +940,11 @@ async function sumReturnGlRaw(
                 where dl.document_id = e.source_document_id
                   and dl.org_id = l.org_id
                   and c.tax_code_id = l.tax_code_id
+                  -- Facilitator-collected tax posts to the clearing account,
+                  -- never the merchant liability: it must not match a due
+                  -- box even when the component carries no collected
+                  -- account snapshot (the legacy null-account fallback).
+                  and c.collected_by = 'merchant'
                   and (
                     ${src.basis === "tax_collected" ? sql`c.collected_account_id = l.account_id` : sql`c.paid_account_id = l.account_id`}
                     or (
@@ -964,7 +973,42 @@ async function sumReturnGlRaw(
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
-           ${journalActivity}`));
+           ${journalActivity}
+           -- Clearing-posted facilitator tax is not merchant tax: exclude
+           -- lines the source document attributes to a facilitator.
+           and not exists (
+             select 1
+               from document_lines mdl
+               join document_line_tax_components mc
+                 on mc.document_line_id = mdl.id and mc.org_id = mdl.org_id
+               join marketplace_facilitators mf
+                 on mf.org_id = mdl.org_id and mf.name = mc.facilitator_name
+              where mdl.document_id = e.source_document_id
+                and mdl.org_id = l.org_id
+                and mc.tax_code_id = l.tax_code_id
+                and mc.collected_by = 'marketplace'
+                and mf.clearing_account_id = l.account_id
+           )`));
+      total = r.rows[0]?.total ?? "0";
+    } else if (src.basis === "marketplace_tax" || src.basis === "marketplace_sales") {
+      // The facilitator share states deduct: marketplace-collected component
+      // tax, and the taxable sales it was collected on. Read from the
+      // immutable component evidence (posted sales documents only), with
+      // credits netting like the taxable_base box below.
+      const valueCol = src.basis === "marketplace_tax"
+        ? sql`case when d.kind = 'customer_credit' then -mc.tax_amount else mc.tax_amount end`
+        : sql`round(((case when d.kind = 'customer_credit' then -mdl.amount else mdl.amount end) * d.fx_rate)::numeric, 4)`;
+      const r = (await runner.execute<{ total: string }>(sql`
+        select coalesce(sum(${valueCol}), 0)::text as total
+          from document_line_tax_components mc
+          join document_lines mdl on mdl.id = mc.document_line_id and mdl.org_id = mc.org_id
+          join documents d on d.id = mdl.document_id and d.org_id = mdl.org_id
+         where mc.org_id = ${orgId} and mc.tax_code_id = ${src.taxCodeId}
+           and mc.collected_by = 'marketplace'
+           and d.status = 'posted'
+           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
+           and d.kind in ('customer_invoice', 'customer_credit')
+           ${docScope}`));
       total = r.rows[0]?.total ?? "0";
     } else {
       continue; // taxable_base sources are summed once per box below.

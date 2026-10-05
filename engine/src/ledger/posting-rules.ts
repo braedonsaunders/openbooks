@@ -179,7 +179,7 @@ export function settlementOf(line: Pick<DocLine, "lineNumber" | "settlementType"
  */
 function personalReceivableAmount(line: DocLine, deps: PostingDeps): Money {
   let recoverable = "0";
-  for (const c of componentsForLine(line, deps)) {
+  for (const c of componentsForLine(line, deps, false)) {
     if (c.calculationType !== "standard") {
       throw new PostingError(
         `personal expense line ${line.lineNumber} cannot carry ${c.calculationType} tax`,
@@ -193,7 +193,7 @@ function personalReceivableAmount(line: DocLine, deps: PostingDeps): Money {
 /** Expense/inventory basis includes only the nonrecoverable purchase tax. */
 function purchaseBaseAmount(line: DocLine, deps: PostingDeps): Money {
   const nonrecoverable = sumMoney(
-    componentsForLine(line, deps)
+    componentsForLine(line, deps, false)
       .filter((c) => c.calculationType !== "withholding")
       .map((c) => c.nonrecoverableAmount),
   );
@@ -216,7 +216,7 @@ function purchaseTaxLines(
 ): KernelLine[] {
   const out: KernelLine[] = [];
   for (const line of lines) {
-    for (const component of componentsForLine(line, deps)) {
+    for (const component of componentsForLine(line, deps, false)) {
       const common = {
         taxCodeId: component.taxCodeId,
         partyId: line.partyId ?? doc.partyId,
@@ -252,7 +252,14 @@ function purchaseTaxLines(
   return out;
 }
 
-/** Sales tax projection: standard output liability, withholding receivable. */
+/**
+ * Sales tax projection: standard output liability, withholding receivable,
+ * and marketplace clearing. Facilitator-collected tax never touches the
+ * merchant's liability: gross documents (the marketplace tax is inside the
+ * charged total) credit the facilitator's clearing account — the
+ * marketplace settles it through the payout — while net documents (shown
+ * for reporting only) emit no leg at all.
+ */
 function salesTaxLines(
   doc: Doc,
   lines: DocLine[],
@@ -261,12 +268,32 @@ function salesTaxLines(
 ): KernelLine[] {
   const out: KernelLine[] = [];
   for (const line of lines) {
-    for (const component of componentsForLine(line, deps)) {
+    for (const component of componentsForLine(line, deps, true)) {
       const common = {
         taxCodeId: component.taxCodeId,
         partyId: line.partyId ?? doc.partyId,
         ...taxControlDims(doc, line),
       };
+      if (component.collectedBy === "marketplace") {
+        if (component.calculationType !== "standard") {
+          throw new PostingError(
+            `line ${line.lineNumber} carries marketplace-collected ${component.calculationType} tax — only standard output tax can be marketplace-collected`,
+          );
+        }
+        const clearing = deps.marketplaceClearingByName?.get(component.facilitatorName ?? "");
+        if (!clearing) {
+          throw new PostingError(
+            `line ${line.lineNumber} names marketplace facilitator "${component.facilitatorName ?? ""}" with no clearing account — configure the facilitator in Setup → Taxes → Marketplace facilitators`,
+          );
+        }
+        if (clearing.mode === "net") continue;
+        out.push({
+          ...common,
+          accountId: clearing.accountId,
+          amount: signed(neg(component.taxAmount), direction),
+        });
+        continue;
+      }
       if (component.calculationType === "reverse_charge") continue;
       if (component.calculationType === "withholding") {
         out.push({

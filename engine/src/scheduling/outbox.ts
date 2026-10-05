@@ -87,6 +87,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "autopay_collection",
   "webhook_delivery",
   "usage_rating",
+  "tax_provider_commit",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -646,6 +647,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       noticeKind: "stored_value_breakage_scan_failed",
       href: "/stored-value",
       remedy: "Review stored-value programs and account configuration in Stored value; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "tax_provider_commit") {
+    const { runTaxProviderCommitScan } = await import("../tax/provider-commit.ts");
+    const result = await runTaxProviderCommitScan();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "tax provider commit",
+      noticeKind: "tax_provider_commit_scan_failed",
+      href: "/admin/setup/tax-setup",
+      remedy: "Review the tax provider setup and the failed rows in Setup → Taxes; the scan retries automatically.",
       problems,
       unattributed: [],
     });
