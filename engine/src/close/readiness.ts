@@ -298,36 +298,47 @@ export async function readinessChecks(
       // run evaluates this complete-group assertion; filtering its ledger would
       // manufacture a residual by omitting the counterparty.
       // Intercompany residuals are measured the way runAutoElimination
-      // measures them: every subsidiary's flagged activity translated into the
-      // elimination subsidiary's currency through the period's consolidated
-      // rates (average for flows, current for balances), with the elimination
-      // subsidiary's own lines included at par — so a group that eliminates
-      // cleanly reads zero per account, whatever functional currencies its
-      // entities keep. A foreign entity with no consolidated rate cannot be
-      // measured at all; that is counted separately, never as a residual.
+      // eliminates them: balance-sheet accounts as cumulative balances through
+      // this period translated at the period's current rate, flow accounts as
+      // this period's activity at its average rate, each (account,
+      // subsidiary) total translated once into the elimination subsidiary's
+      // currency, with the elimination subsidiary's own lines included at
+      // par — so a group that eliminates cleanly reads zero per account,
+      // whatever functional currencies its entities keep and however the
+      // rate has moved since earlier eliminations. A foreign entity with no
+      // consolidated rate cannot be measured at all; that is counted
+      // separately, never as a residual.
       scoped && ctx.system_blueprint ? Promise.resolve({ rows: [{ count: 0, missing_rates: 0 }] }) : db.execute(sql`
       select count(*) filter (where residual <> 0 and not coalesce(missing_rate, false)) as count,
              count(*) filter (where missing_rate) as missing_rates
         from (
-        select a.id,
-               sum(round(l.amount * case
-                 when s.base_currency = ${ctx.elimination_currency} then 1
-                 when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-                   then consolidated.average_rate
-                 else consolidated.current_rate
-               end, 4)) as residual,
-               bool_or(s.base_currency <> ${ctx.elimination_currency} and consolidated.id is null) as missing_rate
-          from journal_lines l
-          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-          join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.eliminate
-          join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
-          left join consolidated_fx_rates consolidated
-            on consolidated.org_id = e.org_id
-           and consolidated.period_id = e.period_id
-           and consolidated.from_currency = s.base_currency
-           and consolidated.to_currency = ${ctx.elimination_currency}
-         where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
-         group by a.id
+        select account_id, sum(translated) as residual, bool_or(missing_rate) as missing_rate
+          from (
+          select a.id as account_id,
+                 round(sum(l.amount) * max(case
+                   when s.base_currency = ${ctx.elimination_currency} then 1
+                   when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+                     then consolidated.average_rate
+                   else consolidated.current_rate
+                 end), 4) as translated,
+                 bool_or(s.base_currency <> ${ctx.elimination_currency} and consolidated.id is null) as missing_rate
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+            join accounting_periods p on p.id = e.period_id and p.org_id = e.org_id
+            join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.eliminate
+            join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
+            left join consolidated_fx_rates consolidated
+              on consolidated.org_id = e.org_id
+             and consolidated.period_id = ${ctx.period_id}
+             and consolidated.from_currency = s.base_currency
+             and consolidated.to_currency = ${ctx.elimination_currency}
+           where e.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
+             and (e.period_id = ${ctx.period_id}
+                  or (a.type not in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+                      and p.ends_on < ${ctx.ends_on}::date))
+           group by a.id, l.subsidiary_id
+          ) by_subsidiary
+         group by account_id
       ) residuals`),
       db.execute(sql`
       select coalesce(rules->>'amount', '10000.0000') as amount,

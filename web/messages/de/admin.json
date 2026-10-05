@@ -848,6 +848,10 @@
           "label": "Realisierter Währungsgewinn/-verlust",
           "hint": "Hier werden Kursdifferenzen aus der Begleichung von Fremdwährungszahlungen gebucht"
         },
+        "translationAdjustment": {
+          "label": "Währungsumrechnungsdifferenz",
+          "hint": "Eigenkapitalrücklage für Umrechnungsdifferenzen, wenn konzerninterne Salden zum Stichtagskurs der Periode neu umgerechnet werden"
+        },
         "laborWip": {
           "label": "Arbeits-WIP / -Kosten",
           "hint": "Genehmigte Arbeitskosten werden hier belastet (pro Projekt)"

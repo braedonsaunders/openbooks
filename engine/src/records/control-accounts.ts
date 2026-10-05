@@ -36,6 +36,11 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   employeeReceivable: ["asset_receivable", "asset_current_other"],
   fxUnrealizedGainLoss: ["income", "income_other", "expense", "expense_other"],
   fxRealizedGainLoss: ["income", "income_other", "expense", "expense_other"],
+  // Cumulative translation adjustment: the equity reserve consolidation
+  // books when intercompany balances eliminated at earlier rates are
+  // retranslated at the period's current rate. Equity only — translation
+  // differences never pass through profit or loss.
+  translationAdjustment: ["equity"],
   retainagePayable: [
     "liability_payable",
     "liability_current_other",

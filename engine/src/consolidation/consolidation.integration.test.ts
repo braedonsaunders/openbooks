@@ -20,6 +20,7 @@ import {
   dropScratchOrg,
   seedApprovalFlow,
   seedFlowActors,
+  seedPostingAccount,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 
@@ -459,6 +460,69 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
        where org_id = ${org.orgId} and subsidiary_id = ${eliminationSubsidiaryId}
          and origin = 'intercompany' and status in ('posted', 'reversed')`));
     assert.equal(afterFailure.rows[0]!.n, 3);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("intercompany balances stay eliminated when the rate moves between periods", { skip: !DB }, async () => {
+  // A USD subsidiary's 100 USD due-from is eliminated at 1.30 in July. In
+  // August the rate is 1.40 and nothing new is booked: the balance sheet
+  // translates the due-from at 140, so the August run must eliminate the
+  // further 10 and route it to the translation adjustment — not leave 10
+  // un-eliminated, and not refuse because the period has no activity.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const usd = randomUUID();
+    const elimination = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usd}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb),
+             (${elimination}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
+    await db.execute(sql`update accounts set eliminate = true where id in (${org.accounts.ar}, ${org.accounts.ap})`);
+    const august = (await db.execute<{ id: string }>(sql`
+      insert into accounting_periods (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on)
+      select org_id, fiscal_calendar_id, 2026, 8, '2026-08', '2026-08-01', '2026-08-31'
+        from accounting_periods where id = ${org.periodId}
+      returning id`)).rows[0]!.id;
+    await db.execute(sql`
+      insert into consolidated_fx_rates (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
+      values (${org.orgId}, ${org.periodId}, 'USD', 'CAD', '1.3000000000', '1.3000000000', '1.3000000000', 'manual'),
+             (${org.orgId}, ${august}, 'USD', 'CAD', '1.4000000000', '1.3500000000', '1.3000000000', 'manual')`);
+    const [cadEntry, usdEntry] = [randomUUID(), randomUUID()];
+    await db.execute(sql`
+      insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${cadEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'IC-CAD', ${org.date}, ${org.periodId}, 'Owes US Co', 'draft', 'manual'),
+             (${usdEntry}, ${org.orgId}, ${org.bookId}, ${usd}, 'IC-USD', ${org.date}, ${org.periodId}, 'Owed by parent', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+      values (${org.orgId}, ${cadEntry}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, '-130.0000', 'CAD', '-130.0000', '1'),
+             (${org.orgId}, ${cadEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '130.0000', 'CAD', '130.0000', '1'),
+             (${org.orgId}, ${usdEntry}, 1, ${org.accounts.ar}, ${usd}, '100.0000', 'USD', '100.0000', '1'),
+             (${org.orgId}, ${usdEntry}, 2, ${org.accounts.bank}, ${usd}, '-100.0000', 'USD', '-100.0000', '1')`);
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id in (${cadEntry}, ${usdEntry})`);
+    await runAutoElimination(org.orgId, org.periodId, actorId);
+
+    // Unconfigured, the translation difference is refused by name.
+    await assert.rejects(runAutoElimination(org.orgId, august, actorId),
+      /translation difference of 10\.0000 CAD — choose the Translation adjustment account under Company Settings → Control accounts/);
+    const cta = await seedPostingAccount(org.orgId, "3900", "Translation adjustment", "equity");
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{controlAccounts,translationAdjustment}', to_jsonb(${cta}::text), true)
+       where id = ${org.orgId}`);
+    await runAutoElimination(org.orgId, august, actorId);
+    // Consolidated at August's rate: each IC account's translated balance
+    // plus every standing elimination is zero, and the 10 sits in equity.
+    const consolidated = (await db.execute<{ account_id: string; amount: string }>(sql`
+      select l.account_id, sum(case when l.subsidiary_id = ${usd} then round(l.amount * 1.4, 4) else l.amount end)::text as amount
+        from journal_lines l join journal_entries e on e.id = l.entry_id
+       where e.org_id = ${org.orgId} and e.status in ('posted', 'reversed')
+         and l.account_id in (${org.accounts.ar}, ${org.accounts.ap}, ${cta})
+       group by l.account_id`)).rows;
+    assert.deepEqual(new Map(consolidated.map((row) => [row.account_id, row.amount])), new Map([
+      [org.accounts.ar, "0.0000"], [org.accounts.ap, "0.0000"], [cta, "10.0000"],
+    ]));
   } finally {
     await dropScratchOrg(org.orgId);
   }

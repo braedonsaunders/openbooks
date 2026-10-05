@@ -849,6 +849,10 @@
           "label": "Realized FX gain/loss",
           "hint": "Where settlement-rate differences from foreign-currency payment applications are booked"
         },
+        "translationAdjustment": {
+          "label": "Translation adjustment",
+          "hint": "Equity reserve for the translation difference when intercompany balances are retranslated at the period's closing rate"
+        },
         "retainageReceivable": {
           "label": "Retainage receivable",
           "hint": "Customer progress-billing retainage held until release"
