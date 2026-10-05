@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@openbooks/ui'
+import { RecordTabs } from '@/components/module-home/record-tabs'
 import { useAppAction } from '@/lib/use-app-action'
 import { createMoneyFormatter } from '@/lib/money-format'
 import type { ShippingAccountOption } from '../../_fulfillment/types'
@@ -75,6 +76,7 @@ export function BulkBuyClient({
   const t = useTranslations('fulfillment')
   const locale = useLocale()
   const { busy, refusal, execute, refuse } = useAppAction()
+  const [activeTab, setActiveTab] = useState<'shipments' | 'rates' | 'labels'>('shipments')
   const [candidates, setCandidates] = useState<CandidateView[] | null>(null)
   const [candidatesError, setCandidatesError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -87,7 +89,7 @@ export function BulkBuyClient({
 
   const moneyFor = useCallback((currency: string) => createMoneyFormatter(locale, currency), [locale])
 
-  const loadCandidates = useCallback(async () => {
+  const loadCandidates = useCallback(async (keepPurchase = false) => {
     const result = await fetchAction<{ candidates: CandidateView[] }>('/api/shipping/bulk', { cache: 'no-store' })
     if (!result.ok) {
       setCandidatesError(result.error.displayMessage(t('shipping.bulk.fail.candidates')))
@@ -98,14 +100,24 @@ export function BulkBuyClient({
     setCandidates(result.data.candidates)
     setSelected(new Set(result.data.candidates.map((candidate) => candidate.shipmentId)))
     setPreview(null)
-    setBought(null)
-    setMerged(null)
+    if (!keepPurchase) {
+      setBought(null)
+      setMerged(null)
+      setActiveTab('shipments')
+    }
   }, [t])
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadCandidates(), 0)
     return () => window.clearTimeout(timer)
   }, [loadCandidates])
+
+  function invalidatePreview() {
+    setPreview(null)
+    setBought(null)
+    setMerged(null)
+    setActiveTab('shipments')
+  }
 
   function toggle(shipmentId: string) {
     setSelected((current) => {
@@ -168,7 +180,7 @@ export function BulkBuyClient({
         }),
       {
         fallbackMessage: t('shipping.bulk.fail.preview'),
-        onOk: (result) => setPreview(result.rows),
+        onOk: (result) => { setPreview(result.rows); setActiveTab('rates') },
       },
     )
   }
@@ -194,7 +206,8 @@ export function BulkBuyClient({
         onOk: (result) => {
           setBought(result.rows)
           setMerged(result.merged)
-          void loadCandidates()
+          setActiveTab('labels')
+          void loadCandidates(true)
         },
       },
     )
@@ -209,6 +222,17 @@ export function BulkBuyClient({
         </p>
       ) : null}
 
+      <RecordTabs
+        label={t('shipping.bulk.preview')}
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { key: 'shipments', label: t('shipping.bulk.tabs.shipments') },
+          { key: 'rates', label: t('shipping.bulk.tabs.rates'), disabled: preview === null },
+          { key: 'labels', label: t('shipping.bulk.tabs.labels'), disabled: bought === null },
+        ]}
+      >
+        {activeTab === 'shipments' ? <>
       {candidates === null ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('shipping.bulk.loading')}</p>
       ) : candidates.length === 0 ? (
@@ -222,7 +246,7 @@ export function BulkBuyClient({
           <div className="grid gap-3 sm:grid-cols-4">
             <div className="space-y-1.5">
               <Label htmlFor="bulk-account">{t('shipping.rateAccount')}</Label>
-              <Select id="bulk-account" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+              <Select id="bulk-account" value={accountId} onChange={(event) => { setAccountId(event.target.value); invalidatePreview() }}>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name} · {account.provider === 'shippo' ? 'Shippo' : 'EasyPost'}
@@ -232,7 +256,7 @@ export function BulkBuyClient({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bulk-rule">{t('shipping.bulk.rule')}</Label>
-              <Select id="bulk-rule" value={rule} onChange={(event) => setRule(event.target.value as Rule)}>
+              <Select id="bulk-rule" value={rule} onChange={(event) => { setRule(event.target.value as Rule); invalidatePreview() }}>
                 <option value="cheapest">{t('shipping.bulk.rules.cheapest')}</option>
                 <option value="fastest">{t('shipping.bulk.rules.fastest')}</option>
                 <option value="cheapest_by_date">{t('shipping.bulk.rules.cheapest_by_date')}</option>
@@ -241,7 +265,7 @@ export function BulkBuyClient({
             {rule === 'cheapest_by_date' ? (
               <div className="space-y-1.5">
                 <Label htmlFor="bulk-date">{t('shipping.bulk.promisedDate')}</Label>
-                <Input id="bulk-date" type="date" value={promisedDate} onChange={(event) => setPromisedDate(event.target.value)} />
+                <Input id="bulk-date" type="date" value={promisedDate} onChange={(event) => { setPromisedDate(event.target.value); invalidatePreview() }} />
               </div>
             ) : null}
             <div className="flex items-end gap-2">
@@ -290,7 +314,10 @@ export function BulkBuyClient({
             </Table>
           </div>
 
-          {preview ? (
+        </>
+      )}
+        </> : null}
+          {activeTab === 'rates' && preview ? (
             <section aria-label={t('shipping.bulk.previewTitle')} className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {t('shipping.bulk.previewTitle', { ready: readyRows.length, failed: failedRows.length })}
@@ -355,7 +382,7 @@ export function BulkBuyClient({
             </section>
           ) : null}
 
-          {bought ? (
+          {activeTab === 'labels' && bought ? (
             <section aria-label={t('shipping.bulk.resultTitle')} className="space-y-3">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('shipping.bulk.resultTitle')}</h3>
               {merged ? (
@@ -383,8 +410,7 @@ export function BulkBuyClient({
               </ul>
             </section>
           ) : null}
-        </>
-      )}
+      </RecordTabs>
     </div>
   )
 }

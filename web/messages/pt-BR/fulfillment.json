@@ -239,6 +239,11 @@
         "buy": "Não foi possível comprar as etiquetas.",
         "nothingSelected": "Selecione ao menos um envio primeiro.",
         "dateRequired": "Escolha a data em que as etiquetas devem chegar."
+      },
+      "tabs": {
+        "shipments": "Remessas",
+        "rates": "Tarifas",
+        "labels": "Etiquetas compradas"
       }
     }
   }

@@ -239,6 +239,11 @@
         "buy": "Labels could not be bought.",
         "nothingSelected": "Select at least one shipment first.",
         "dateRequired": "Pick the date the labels must arrive by."
+      },
+      "tabs": {
+        "shipments": "Shipments",
+        "rates": "Rates",
+        "labels": "Purchased labels"
       }
     }
   }

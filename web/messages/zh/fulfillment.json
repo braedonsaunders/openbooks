@@ -239,6 +239,11 @@
         "buy": "无法购买面单。",
         "nothingSelected": "请至少选择一个出货。",
         "dateRequired": "请选择面单的最晚到达日期。"
+      },
+      "tabs": {
+        "shipments": "发货",
+        "rates": "运费",
+        "labels": "已购买标签"
       }
     }
   }

@@ -239,6 +239,11 @@
         "buy": "Etiketten konnten nicht gekauft werden.",
         "nothingSelected": "Erst mindestens eine Sendung wählen.",
         "dateRequired": "Das Datum wählen, bis zu dem die Etiketten ankommen müssen."
+      },
+      "tabs": {
+        "shipments": "Sendungen",
+        "rates": "Tarife",
+        "labels": "Gekaufte Versandetiketten"
       }
     }
   }
