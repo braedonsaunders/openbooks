@@ -180,8 +180,8 @@
       },
       "prediction": {
         "label": "Prévision de la date d’encaissement",
-        "value": "Statistique → Échéance → Moyenne globale",
-        "note": "Délai moyen par client (+½σ de marge), au plus tôt à la date d’échéance"
+        "value": "Statistique → Moyenne globale → Échéance",
+        "note": "Délai moyen par client (+½σ de marge), au plus tôt à la date d'échéance — sans aucun historique, l'échéance elle-même s'applique"
       },
       "overduePush": {
         "label": "Report de retard",
@@ -196,7 +196,7 @@
       "dso": {
         "label": "Délai moyen d’encaissement (DSO)",
         "value": "{dso} j",
-        "note": "Valeur de repli pour un client sans historique de paiement"
+        "note": "Vide sans historique de paiement — la prévision utilise les échéances"
       },
       "recurring": "Les encaissements récurrents (subventions, loyers reçus, abonnements) rejoignent la prévision sous forme de catégories — configurez-les dans le <cashCockpit>cockpit de trésorerie</cashCockpit>.",
       "documentation": "Lire le guide des comptes clients"

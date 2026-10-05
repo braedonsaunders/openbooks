@@ -22,7 +22,8 @@ export function ArCollectionsInfoDrawer({
   onClose: () => void;
   title: string;
   description: string;
-  dso: number;
+  /** Mean days to settle (null = no payment history anywhere). */
+  dso: number | null;
 }) {
   const t = useTranslations("ar.cockpit.model");
   const items: { label: string; value: string; note: string }[] = [
@@ -48,7 +49,7 @@ export function ArCollectionsInfoDrawer({
     },
     {
       label: t("dso.label"),
-      value: t("dso.value", { dso }),
+      value: dso === null ? "—" : t("dso.value", { dso }),
       note: t("dso.note"),
     },
   ];

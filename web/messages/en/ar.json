@@ -180,8 +180,8 @@
       },
       "prediction": {
         "label": "Collection-date prediction",
-        "value": "Statistical → Due date → Global average",
-        "note": "Per-customer average collection days (+½σ buffer), floored at the due date"
+        "value": "Statistical → Global average → Due date",
+        "note": "Per-customer average collection days (+½σ buffer), floored at the due date — with no history anywhere, the due date itself"
       },
       "overduePush": {
         "label": "Overdue push",
@@ -196,7 +196,7 @@
       "dso": {
         "label": "Average days to collect (DSO)",
         "value": "{dso}d",
-        "note": "Fallback used when a customer has no payment history"
+        "note": "Empty with no payment history — the forecast uses due dates instead"
       },
       "recurring": "Recurring inflows (grants, rent received, subscriptions) join the forecast as categories — configure them in the <cashCockpit>Cash cockpit</cashCockpit>.",
       "documentation": "Read the accounts-receivable guide"

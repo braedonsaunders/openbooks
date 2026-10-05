@@ -146,14 +146,26 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
 
         <Card className="p-4">
           <div className="text-xs font-medium text-slate-500">{t('dso')}</div>
-          <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {paymentMetrics.dso} <span className="text-sm font-normal text-slate-500">{t('days')}</span>
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            {paymentMetrics.partyAvgDaysToPay !== null
-              ? t('customerAvg', { customer: paymentMetrics.partyAvgDaysToPay, org: paymentMetrics.orgAvgDaysToPay })
-              : t('orgBenchmark', { org: paymentMetrics.orgAvgDaysToPay })}
-          </div>
+          {/* No payment history anywhere leaves the figure unknown — never 0,
+            which would read as "settles today". */}
+          {paymentMetrics.dso === null ? (
+            <div className="mt-1 text-2xl font-bold text-slate-400 dark:text-slate-500">
+              {tc('labels.unknownValue')}
+            </div>
+          ) : (
+            <>
+              <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                {paymentMetrics.dso} <span className="text-sm font-normal text-slate-500">{t('days')}</span>
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                {paymentMetrics.partyAvgDaysToPay !== null && paymentMetrics.orgAvgDaysToPay !== null
+                  ? t('customerAvg', { customer: paymentMetrics.partyAvgDaysToPay, org: paymentMetrics.orgAvgDaysToPay })
+                  : paymentMetrics.orgAvgDaysToPay !== null
+                    ? t('orgBenchmark', { org: paymentMetrics.orgAvgDaysToPay })
+                    : null}
+              </div>
+            </>
+          )}
         </Card>
 
         <Card className="p-4">

@@ -180,8 +180,8 @@
       },
       "prediction": {
         "label": "Previsão da data de recebimento",
-        "value": "Estatístico → Vencimento → Média global",
-        "note": "Média de dias de recebimento por cliente (+½σ de margem), nunca antes do vencimento"
+        "value": "Estatístico → Média global → Vencimento",
+        "note": "Média de dias de recebimento por cliente (+½σ de margem), nunca antes do vencimento — sem nenhum histórico vale o próprio vencimento"
       },
       "overduePush": {
         "label": "Adiamento por atraso",
@@ -196,7 +196,7 @@
       "dso": {
         "label": "Média de dias para receber (DSO)",
         "value": "{dso} d",
-        "note": "Valor alternativo quando o cliente não tem histórico de pagamentos"
+        "note": "Vazio sem histórico de pagamentos — a previsão usa os vencimentos"
       },
       "recurring": "Entradas recorrentes (subsídios, aluguéis recebidos e assinaturas) entram na previsão como categorias — configure-as no <cashCockpit>painel de caixa</cashCockpit>.",
       "documentation": "Ler o guia de contas a receber"
