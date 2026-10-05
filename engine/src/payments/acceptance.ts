@@ -54,6 +54,9 @@ export interface ProviderSecrets {
   publishableKey?: string;
   /** Adyen: merchant account code. GoCardless: creditor id (optional). */
   merchantAccount?: string;
+  /** Adyen Recurring API base for stored-detail disable (a pal host, never
+   *  the Checkout apiBase above — the two resolvers admit different hosts). */
+  recurringApiBase?: string;
   /** Allowlisted provider API base (sandbox/test by default; set a published
    *  live provider URL in production). */
   apiBase?: string;
@@ -78,6 +81,18 @@ export interface CheckoutSession {
 export interface WebhookEvent {
   /** Provider object id (session / pspReference / payment id). */
   externalRef: string;
+  /** True when the delivery completes a stored-method setup (setup session,
+   *  mandate, recurring contract) rather than a payment. The autopay engine
+   *  claims these; the payment-attempt path never sees them. */
+  setupCompleted?: boolean;
+  /** Provider setup object (setup intent, mandate, recurring detail). */
+  setupRef?: string | null;
+  /** Provider customer the setup belongs to (when the provider reports it). */
+  setupCustomerRef?: string | null;
+  /** True when a refund event is a provider chargeback/dispute rather than a
+   *  voluntary refund. Persisted onto the attempt so autopay never
+   *  auto-charges an invoice under dispute. */
+  dispute?: boolean;
   /** A second provider id the attempt may be keyed under — GoCardless stores
    *  the billing request id at checkout while payment events reference the
    *  payment id, so resolution must try both. */
@@ -102,7 +117,7 @@ export type WebhookVerification =
   /** Every actionable event in the authenticated delivery, in provider order. */
   | { signatureValid: true; events: WebhookEvent[] };
 
-type FetchFn = (url: string, init: {
+export type FetchFn = (url: string, init: {
   method: string;
   headers: Record<string, string>;
   body?: string;
@@ -207,12 +222,50 @@ export function normalizeAcceptanceProviderSettings(
   settings: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const normalized = { ...settings };
-  if (!Object.prototype.hasOwnProperty.call(settings, "apiBase")) return normalized;
-  if (typeof settings.apiBase !== "string" || settings.apiBase.trim() === "") {
-    throw invalidProviderEndpoint(provider);
+  if (Object.prototype.hasOwnProperty.call(settings, "apiBase")) {
+    if (typeof settings.apiBase !== "string" || settings.apiBase.trim() === "") {
+      throw invalidProviderEndpoint(provider);
+    }
+    normalized.apiBase = resolveAcceptanceProviderApiBase(provider, settings.apiBase.trim());
   }
-  normalized.apiBase = resolveAcceptanceProviderApiBase(provider, settings.apiBase.trim());
+  if (provider === "adyen" && Object.prototype.hasOwnProperty.call(settings, "recurringApiBase")) {
+    if (typeof settings.recurringApiBase !== "string" || settings.recurringApiBase.trim() === "") {
+      throw invalidProviderEndpoint(provider);
+    }
+    normalized.recurringApiBase = resolveAdyenRecurringApiBase(settings.recurringApiBase.trim());
+  }
   return normalized;
+}
+
+/** Adyen Recurring API base (stored-detail disable). The Checkout resolver
+ *  above only admits checkout hosts, so this separate resolver admits the
+ *  documented pal hosts in the same strict shape (https, no user/port/path). */
+export function resolveAdyenRecurringApiBase(configuredApiBase?: string): string {
+  const candidate = configuredApiBase ?? "https://pal-test.adyen.com/pal/servlet/Recurring/v68";
+  let endpoint: URL;
+  try {
+    endpoint = new URL(candidate);
+  } catch {
+    throw invalidProviderEndpoint("adyen");
+  }
+  if (
+    endpoint.protocol !== "https:" ||
+    endpoint.username !== "" ||
+    endpoint.password !== "" ||
+    endpoint.port !== "" ||
+    endpoint.search !== "" ||
+    endpoint.hash !== ""
+  ) {
+    throw invalidProviderEndpoint("adyen");
+  }
+  const host = endpoint.hostname.toLowerCase();
+  const path = endpoint.pathname.replace(/\/+$/, "");
+  const testEndpoint = host === "pal-test.adyen.com" && /^\/pal\/servlet\/Recurring\/v\d+$/.test(path);
+  const liveEndpoint =
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-pal-live\.adyenpayments\.com$/.test(host) &&
+    /^\/pal\/servlet\/Recurring\/v\d+$/.test(path);
+  if (!testEndpoint && !liveEndpoint) throw invalidProviderEndpoint("adyen");
+  return `${endpoint.origin}${path}`;
 }
 
 /** Currencies with no minor unit (provider amount = major units as-is). */
@@ -304,9 +357,57 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
+export interface SetupSessionRequest {
+  /** Our pending method row id: stored as the provider session's client
+   *  reference / metadata so completion maps back to exactly one row. */
+  linkToken: string;
+  description: string;
+  currency: string;
+  /** Absolute URL the provider returns the customer to (our /pay/{token} page). */
+  returnUrl: string;
+  /** Existing provider customer to attach the method to, when linked. */
+  providerCustomerId?: string | null;
+}
+
+export interface SetupSession {
+  redirectUrl: string;
+  /** Provider setup object id (session / billing request / payment link). The
+   *  pending method row holds it until completion replaces it with the real
+   *  method id. */
+  externalRef: string;
+  providerCustomerId?: string | null;
+}
+
+export interface OffSessionChargeRequest {
+  providerCustomerId?: string | null;
+  providerMethodId: string;
+  /** Major-unit money string, exact 4dp. */
+  amount: string;
+  currency: string;
+  description: string;
+  /** The collection attempt id: charges are idempotent per attempt. */
+  idempotencyKey: string;
+}
+
+export type OffSessionChargeOutcome =
+  | { status: "succeeded"; providerRef: string }
+  | { status: "processing"; providerRef: string }
+  | { status: "failed"; providerRef: string | null; declineCode: string | null };
+
+export interface DetachMethodRequest {
+  providerCustomerId?: string | null;
+  providerMethodId: string;
+}
+
 export interface PaymentProviderAdapter {
   key: AcceptanceProvider;
   createCheckout(secrets: ProviderSecrets, req: CheckoutRequest, fetchFn?: FetchFn): Promise<CheckoutSession>;
+  /** Hosted setup session that tokenizes a method without charging it. */
+  createSetupSession(secrets: ProviderSecrets, req: SetupSessionRequest, fetchFn?: FetchFn): Promise<SetupSession>;
+  /** Merchant-initiated charge against a stored method (autopay attempt). */
+  chargeOffSession(secrets: ProviderSecrets, req: OffSessionChargeRequest, fetchFn?: FetchFn): Promise<OffSessionChargeOutcome>;
+  /** Release a stored method at the provider (local row flips separately). */
+  detachMethod(secrets: ProviderSecrets, req: DetachMethodRequest, fetchFn?: FetchFn): Promise<void>;
   /** Verify and normalize a complete delivery without conflating authentication
    *  with whether this service handles any of its event types. A signature-
    *  valid item whose fields cannot be normalized exactly is isolated — logged
@@ -338,6 +439,20 @@ function normalizeStripeNotification(event: unknown): WebhookEvent | null {
   const metadata = isJsonRecord(obj.metadata) ? obj.metadata.link_token : undefined;
   const linkToken = stringLinkToken(obj.client_reference_id) ?? stringLinkToken(metadata);
   const type = root.type;
+  if (type === "checkout.session.completed" && obj.mode === "setup") {
+    // A stored-method setup checkout completed: no money moved. The autopay
+    // engine claims it by the client reference (our pending method row id)
+    // and reads the method off the setup intent.
+    return {
+      externalRef: String(obj.id ?? ""),
+      setupCompleted: true,
+      setupRef: obj.setup_intent ? String(obj.setup_intent) : null,
+      setupCustomerRef: obj.customer ? String(obj.customer) : null,
+      linkToken,
+      status: "succeeded",
+      raw: root,
+    };
+  }
   if (
     type === "checkout.session.completed" ||
     type === "checkout.session.async_payment_succeeded"
@@ -394,6 +509,9 @@ function normalizeStripeNotification(event: unknown): WebhookEvent | null {
       externalRef: String(obj.payment_intent ?? obj.id ?? ""),
       intentRef: intent,
       status: "refunded",
+      // A dispute is not a voluntary refund: autopay must never auto-charge
+      // an invoice whose collection is under dispute.
+      dispute: type === "charge.dispute.created",
       raw: root,
     };
   }
@@ -484,6 +602,93 @@ const stripeAdapter: PaymentProviderAdapter = {
     }
     return { redirectUrl: json.url, externalRef: json.id };
   },
+  async createSetupSession(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("stripe secret key is not configured");
+    const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
+    const auth = { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" };
+    let customerId = req.providerCustomerId ?? null;
+    if (!customerId) {
+      const customerParams = new URLSearchParams();
+      customerParams.set("description", req.description.slice(0, 250));
+      customerParams.set("metadata[link_token]", req.linkToken);
+      const customerRes = await fetchFn(`${base}/v1/customers`, {
+        method: "POST",
+        redirect: "error",
+        headers: auth,
+        body: customerParams.toString(),
+      });
+      const customer = await fetchJsonBody(customerRes);
+      if (customerRes.status >= 400 || typeof customer.id !== "string" || !customer.id) {
+        throw new PaymentAcceptanceError(`stripe customer create failed: ${jsonObject(customer.error).message ?? customerRes.status}`);
+      }
+      customerId = customer.id;
+    }
+    const params = new URLSearchParams();
+    params.set("mode", "setup");
+    params.set("customer", customerId);
+    params.set("success_url", `${req.returnUrl}?setup=success`);
+    params.set("cancel_url", req.returnUrl);
+    params.set("client_reference_id", req.linkToken);
+    params.set("metadata[link_token]", req.linkToken);
+    const res = await fetchFn(`${base}/v1/checkout/sessions`, {
+      method: "POST",
+      redirect: "error",
+      headers: auth,
+      body: params.toString(),
+    });
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) throw new PaymentAcceptanceError(`stripe setup session failed: ${jsonObject(json.error).message ?? res.status}`);
+    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+      throw new PaymentAcceptanceError("stripe setup session returned no url");
+    }
+    return { redirectUrl: json.url, externalRef: json.id, providerCustomerId: customerId };
+  },
+  async chargeOffSession(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("stripe secret key is not configured");
+    const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
+    const params = new URLSearchParams();
+    params.set("amount", toMinorUnits(req.amount, req.currency));
+    params.set("currency", req.currency.toLowerCase());
+    if (req.providerCustomerId) params.set("customer", req.providerCustomerId);
+    params.set("payment_method", req.providerMethodId);
+    params.set("off_session", "true");
+    params.set("confirm", "true");
+    params.set("description", req.description.slice(0, 250));
+    const res = await fetchFn(`${base}/v1/payment_intents`, {
+      method: "POST",
+      redirect: "error",
+      headers: {
+        authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`,
+        "content-type": "application/x-www-form-urlencoded",
+        "Idempotency-Key": req.idempotencyKey,
+      },
+      body: params.toString(),
+    });
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) {
+      const err = jsonObject(json.error);
+      const code = typeof err.decline_code === "string" ? err.decline_code : typeof err.code === "string" ? err.code : null;
+      return { status: "failed", providerRef: typeof json.id === "string" ? json.id : null, declineCode: code };
+    }
+    const id = typeof json.id === "string" ? json.id : "";
+    if (json.status === "succeeded") return { status: "succeeded", providerRef: id };
+    if (json.status === "processing") return { status: "processing", providerRef: id };
+    const lastError = jsonObject(json.last_payment_error);
+    const code = typeof lastError.decline_code === "string" ? lastError.decline_code : typeof lastError.code === "string" ? lastError.code : "payment_intent_requires_action";
+    return { status: "failed", providerRef: id || null, declineCode: code };
+  },
+  async detachMethod(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("stripe secret key is not configured");
+    const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
+    const res = await fetchFn(`${base}/v1/payment_methods/${encodeURIComponent(req.providerMethodId)}/detach`, {
+      method: "POST",
+      redirect: "error",
+      headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },
+    });
+    if (res.status === 404) return; // already detached: removal stays idempotent
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) throw new PaymentAcceptanceError(`stripe detach failed: ${jsonObject(json.error).message ?? res.status}`);
+  },
   verifyWebhookDelivery: verifyStripeWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
     return verifyStripeWebhookDelivery(headers, rawBody, secrets).events[0] ?? null;
@@ -541,6 +746,22 @@ function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: 
   const amount = isJsonRecord(item.amount) ? item.amount : undefined;
   const amountValue = amount?.value;
   const amountCurrency = amount?.currency;
+  if (eventCode === "RECURRING_CONTRACT") {
+    // A stored payment detail was created from the setup link: the method is
+    // ready for ContAuth charges. Claimed by the autopay engine.
+    const shopperRef = isJsonRecord(item.additionalData)
+      ? adyenScalarString((item.additionalData as Record<string, unknown>).shopperReference)
+      : null;
+    return {
+      externalRef: String(item.pspReference ?? ""),
+      setupCompleted: true,
+      setupRef: String(item.pspReference ?? ""),
+      setupCustomerRef: shopperRef,
+      linkToken,
+      status: "succeeded",
+      raw: payload,
+    };
+  }
   if (eventCode === "AUTHORISATION" && successFlag === "true") {
     return {
       externalRef: String(item.pspReference ?? ""),
@@ -654,6 +875,92 @@ const adyenAdapter: PaymentProviderAdapter = {
     }
     return { redirectUrl: json.url, externalRef: json.id };
   },
+  async createSetupSession(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
+    if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
+    // Tokenization-only payment link (€0 authorisation): the shopper saves a
+    // method without moving money, stored for later ContAuth charges.
+    const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
+    const res = await fetchFn(`${base}/paymentLinks`, {
+      method: "POST",
+      redirect: "error",
+      headers: { "x-api-key": secrets.apiKey, "content-type": "application/json" },
+      body: JSON.stringify({
+        merchantAccount: secrets.merchantAccount,
+        reference: req.linkToken,
+        amount: { currency: req.currency.toUpperCase(), value: 0 },
+        description: req.description.slice(0, 250),
+        shopperReference: req.providerCustomerId ?? req.linkToken,
+        shopperInteraction: "ContAuth",
+        recurringProcessingModel: "Subscription",
+        storePaymentMethodMode: "enabled",
+      }),
+    });
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) throw new PaymentAcceptanceError(`adyen setup link failed: ${json.message ?? res.status}`);
+    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+      throw new PaymentAcceptanceError("adyen setup link returned no url");
+    }
+    return { redirectUrl: json.url, externalRef: json.id, providerCustomerId: req.providerCustomerId ?? req.linkToken };
+  },
+  async chargeOffSession(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
+    if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
+    if (!req.providerCustomerId) {
+      return { status: "failed", providerRef: null, declineCode: "missing_shopper_reference" };
+    }
+    const amountValue = Number(toAdyenMinorUnits(req.amount, req.currency));
+    if (!Number.isSafeInteger(amountValue)) throw new PaymentAcceptanceError("adyen amount exceeds the safe integer range");
+    const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
+    const res = await fetchFn(`${base}/payments`, {
+      method: "POST",
+      redirect: "error",
+      headers: { "x-api-key": secrets.apiKey, "content-type": "application/json", "Idempotency-Key": req.idempotencyKey },
+      body: JSON.stringify({
+        merchantAccount: secrets.merchantAccount,
+        reference: req.idempotencyKey,
+        amount: { currency: req.currency.toUpperCase(), value: amountValue },
+        paymentMethod: { storedPaymentMethodId: req.providerMethodId },
+        shopperReference: req.providerCustomerId,
+        shopperInteraction: "ContAuth",
+        recurringProcessingModel: "Subscription",
+      }),
+    });
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) {
+      const message = typeof json.message === "string" ? json.message : null;
+      return { status: "failed", providerRef: null, declineCode: message ?? `http_${res.status}` };
+    }
+    const pspReference = typeof json.pspReference === "string" ? json.pspReference : "";
+    if (json.resultCode === "Authorised") return { status: "succeeded", providerRef: pspReference };
+    if (json.resultCode === "Received" || json.resultCode === "Pending") return { status: "processing", providerRef: pspReference };
+    const refusal = typeof json.refusalReason === "string" ? json.refusalReason : typeof json.resultCode === "string" ? json.resultCode : null;
+    return { status: "failed", providerRef: pspReference || null, declineCode: refusal };
+  },
+  async detachMethod(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
+    if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
+    if (!req.providerCustomerId) throw new PaymentAcceptanceError("adyen stored method has no shopper reference; remove it locally instead");
+    // Stored details disable through the Recurring API (a different host from
+    // Checkout): an unknown detail reference means the method is already
+    // gone, so removal stays idempotent.
+    const res = await fetchFn(`${resolveAdyenRecurringApiBase(secrets.recurringApiBase)}/disable`, {
+      method: "POST",
+      redirect: "error",
+      headers: { "x-api-key": secrets.apiKey, "content-type": "application/json" },
+      body: JSON.stringify({
+        merchantAccount: secrets.merchantAccount,
+        shopperReference: req.providerCustomerId,
+        recurringDetailReference: req.providerMethodId,
+      }),
+    });
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) {
+      const message = typeof json.message === "string" ? json.message : null;
+      if (res.status === 422 && message?.includes("Unknown")) return;
+      throw new PaymentAcceptanceError(`adyen stored method disable failed: ${message ?? res.status}`);
+    }
+  },
   verifyWebhookDelivery: verifyAdyenWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
     return verifyAdyenWebhookDelivery(headers, rawBody, secrets).events[0] ?? null;
@@ -696,6 +1003,36 @@ function verifyGoCardlessWebhookDelivery(
         alternateExternalRef: alternateRef,
         linkToken: null,
         status: event.action === "failed" ? "failed" : "refunded",
+        // A chargeback is a dispute, not a voluntary refund: autopay must
+        // never auto-charge an invoice whose collection is under dispute.
+        dispute: event.action === "charged_back",
+        raw: payload,
+      });
+    } else if (event?.resource_type === "mandates" && (event.action === "created" || event.action === "active")) {
+      // A bank-debit mandate was authorised: the stored method is ready. The
+      // autopay engine claims it; mandate failures arrive as cancelled and
+      // stay unhandled here.
+      const mandateId = String(event?.links?.mandate ?? "");
+      events.push({
+        externalRef: mandateId,
+        setupCompleted: true,
+        setupRef: mandateId,
+        setupCustomerRef: event?.links?.customer ? String(event.links.customer) : null,
+        linkToken: null,
+        status: "succeeded",
+        raw: payload,
+      });
+    } else if (event?.resource_type === "billing_requests" && event.action === "fulfilled") {
+      // A mandate-setup billing request completed: the pending row holds
+      // this id, so completion verifies the mandate off the request itself.
+      const setupBrId = String(event?.links?.billing_request ?? "");
+      events.push({
+        externalRef: setupBrId,
+        setupCompleted: true,
+        setupRef: setupBrId,
+        setupCustomerRef: null,
+        linkToken: null,
+        status: "succeeded",
         raw: payload,
       });
     } else if (event?.resource_type === "billing_requests" && event.action === "cancelled") {
@@ -751,6 +1088,97 @@ const gocardlessAdapter: PaymentProviderAdapter = {
     }
     return { redirectUrl: url, externalRef: brId };
   },
+  async createSetupSession(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
+    const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
+    const headers = { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" };
+    // Mandate-only billing request: the payer authorises direct debit without
+    // any immediate charge. The pending method row holds the billing request
+    // id until the mandate webhook (or the return-URL verification) replaces
+    // it with the real mandate id.
+    const brRes = await fetchFn(`${base}/billing_requests`, {
+      method: "POST",
+      redirect: "error",
+      headers,
+      body: JSON.stringify({
+        billing_requests: {
+          mandate_request: { currency: req.currency.toUpperCase() },
+          metadata: { link_token: req.linkToken },
+        },
+      }),
+    });
+    const br = await fetchJsonBody(brRes);
+    const brId = jsonObject(br.billing_requests).id;
+    if (brRes.status >= 400 || typeof brId !== "string" || !brId) {
+      throw new PaymentAcceptanceError(`gocardless mandate request failed: ${jsonObject(br.error).message ?? brRes.status}`);
+    }
+    const flowRes = await fetchFn(`${base}/billing_request_flows`, {
+      method: "POST",
+      redirect: "error",
+      headers,
+      body: JSON.stringify({
+        billing_request_flows: {
+          redirect_uri: `${req.returnUrl}?setup=success`,
+          exit_uri: req.returnUrl,
+          links: { billing_request: brId },
+        },
+      }),
+    });
+    const flow = await fetchJsonBody(flowRes);
+    const url = jsonObject(flow.billing_request_flows).authorisation_url;
+    if (flowRes.status >= 400 || typeof url !== "string" || !url) {
+      throw new PaymentAcceptanceError(`gocardless mandate flow failed: ${jsonObject(flow.error).message ?? flowRes.status}`);
+    }
+    return { redirectUrl: url, externalRef: brId };
+  },
+  async chargeOffSession(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
+    const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
+    const res = await fetchFn(`${base}/payments`, {
+      method: "POST",
+      redirect: "error",
+      headers: {
+        authorization: `Bearer ${secrets.apiKey}`,
+        "content-type": "application/json",
+        "GoCardless-Version": "2015-07-06",
+        "Idempotency-Key": req.idempotencyKey,
+      },
+      body: JSON.stringify({
+        payments: {
+          amount: toMinorUnits(req.amount, req.currency),
+          currency: req.currency.toUpperCase(),
+          links: { mandate: req.providerMethodId },
+          reference: req.description.slice(0, 10),
+        },
+      }),
+    });
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) {
+      const code = jsonObject(json.error).code;
+      return { status: "failed", providerRef: null, declineCode: typeof code === "string" ? code : null };
+    }
+    const payment = jsonObject(json.payments);
+    const id = typeof payment.id === "string" ? payment.id : "";
+    // Bank debit settles asynchronously: creation only starts the collection,
+    // the payment webhook settles the attempt when funds arrive or fail.
+    if (payment.status === "failed" || payment.status === "cancelled") {
+      return { status: "failed", providerRef: id || null, declineCode: typeof payment.status === "string" ? payment.status : null };
+    }
+    return { status: "processing", providerRef: id };
+  },
+  async detachMethod(secrets, req, fetchFn = defaultFetch) {
+    if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
+    const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
+    const res = await fetchFn(`${base}/mandates/${encodeURIComponent(req.providerMethodId)}/actions/cancel`, {
+      method: "POST",
+      redirect: "error",
+      headers: { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" },
+      body: JSON.stringify({}),
+    });
+    if (res.status === 404) return; // already cancelled: removal stays idempotent
+    const json = await fetchJsonBody(res);
+    if (res.status >= 400) throw new PaymentAcceptanceError(`gocardless mandate cancel failed: ${jsonObject(json.error).message ?? res.status}`);
+  },
   verifyWebhookDelivery: verifyGoCardlessWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
     return verifyGoCardlessWebhookDelivery(headers, rawBody, secrets).events[0] ?? null;
@@ -766,7 +1194,7 @@ export const ACCEPTANCE_ADAPTERS: Record<AcceptanceProvider, PaymentProviderAdap
 // ---------------------------------------------------------------------------
 // Config + surcharge resolution
 // ---------------------------------------------------------------------------
-type ProviderConfigRow = {
+export type ProviderConfigRow = {
   id: string;
   provider: AcceptanceProvider;
   display_name: string;
@@ -794,6 +1222,7 @@ export function configSecrets(config: ProviderConfigRow, orgId: string): Provide
     publishableKey: config.publishable_key ?? undefined,
     merchantAccount: typeof settings.merchantAccount === "string" ? settings.merchantAccount : undefined,
     apiBase: typeof settings.apiBase === "string" ? settings.apiBase : undefined,
+    recurringApiBase: typeof settings.recurringApiBase === "string" ? settings.recurringApiBase : undefined,
   };
 }
 
@@ -1861,6 +2290,13 @@ async function processWebhookEvent(
   provider: AcceptanceProvider,
   event: WebhookEvent,
 ): Promise<WebhookEventOutcome> {
+  // Stored-method setups never touch payment attempts: the autopay engine
+  // claims them first, and an unclaimed one stays unknown (a 200 the
+  // provider retries) rather than mis-settling as a payment.
+  if (event.setupCompleted) {
+    const { recordProviderSetupMethod } = await import("./autopay.ts");
+    return await recordProviderSetupMethod(orgId, provider, event);
+  }
   // Resolve the attempt: by provider object id, by its alternate id (e.g.
   // GoCardless billing request vs payment id), by an intent id persisted from
   // the completed session, then by link token. Absent refs are bound as real
@@ -1907,6 +2343,14 @@ async function processWebhookEvent(
   }
   const found = attempt.rows[0];
   if (!found) {
+    // Automatic collection settles against collection attempts, not payment
+    // attempts: offer async-debit and off-session results to autopay before
+    // the refund-first logic below.
+    if (event.status === "succeeded" || event.status === "processing" || event.status === "failed" || event.status === "refunded") {
+      const { settleCollectionAttemptEvent } = await import("./autopay.ts");
+      const collectionOutcome = await settleCollectionAttemptEvent(orgId, provider, event);
+      if (collectionOutcome !== null) return collectionOutcome;
+    }
     // Refund-first: a chargeback that beat its settlement event cannot resolve
     // — the intent id is only persisted onto the attempt from the completed
     // session — so park it as a pending-clawback marker instead of dropping it
@@ -1987,6 +2431,7 @@ async function processWebhookEvent(
   // Evidence merged into every claim: the intent id lets later refund/dispute
   // events match this attempt even though checkout stored the session id.
   const merge: Record<string, unknown> = { webhook: true, status: event.status };
+  if (event.dispute) merge.dispute = true;
   if (event.intentRef) merge.paymentIntent = event.intentRef;
   if (event.paidAmount != null) merge.paidAmount = event.paidAmount;
   if (event.paidCurrency != null) merge.paidCurrency = event.paidCurrency.toUpperCase();
