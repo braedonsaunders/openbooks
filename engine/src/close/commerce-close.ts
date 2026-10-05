@@ -421,6 +421,9 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
 
 type StoredValueTieRow = {
   account_id: string | null;
+  subsidiary_id: string | null;
+  subsidiary_name: string | null;
+  functional_currency: string | null;
   number: string | null;
   name: string | null;
   subledger: string | null;
@@ -430,85 +433,104 @@ type StoredValueTieRow = {
 
 type StoredValueBreakdownRow = {
   account_id: string | null;
+  subsidiary_id: string | null;
   side: string;
   currency: string;
   amount: string | null;
 };
 
 /**
- * Stored-value liability roll-forward: outstanding card and credit balances
- * per liability account tie to the ledger legs on that account. Both sides
- * sum at par in ledger decimals — card balances are ten-thousandths (the
- * journal posts them through fromUnits), journal legs through their
- * transaction amounts — because that is how the postings are written (a
- * foreign-currency card posts its legs in the subsidiary currency at par,
- * with no FX conversion). Every subledger movement carries a matching
- * par-valued leg, so the account total ties whatever currencies the cards
- * were sold in; a stray manual journal with no card behind it breaks it. A
- * card with no resolvable liability account fails closed rather than
- * reading zero.
+ * Stored-value liability roll-forward: the functional carrying value behind
+ * each liability account ties to the functional ledger legs on that account,
+ * per legal entity. Both sides are ten-thousandths of the owning
+ * subsidiary's base currency — the subledger through each entry's priced
+ * functional amount, the ledger through its functional line amounts (the
+ * journal posts them through fromUnits) — so a foreign-currency card ties
+ * at its carrying value instead of at par, and each entity's outstanding
+ * debt is measured in the currency it owes. A close scoped to some
+ * subsidiaries reads only those entities' cards and legs, the way the
+ * payout and clearing checks do; an empty scope reads every entity. A card
+ * with no resolvable liability account fails closed rather than reading
+ * zero.
  */
 async function storedValueCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
+  const subsidiaryIds = scope.subsidiaryIds ?? [];
   const rows = (
     await db.execute<StoredValueTieRow>(sql`
       with subledger as (
-        -- Stored-value minor units are ten-thousandths (the journal posts
-        -- them through fromUnits), not currency cents: the divisor is always
-        -- 10^4, whatever currency the card was sold in.
+        -- The functional carrying total: every entry priced into the owing
+        -- subsidiary's base currency at its own rate sums to what the
+        -- ledger must carry, whatever currencies the cards were sold in.
         select coalesce(a.liability_account_id, p.liability_account_id) as account_id,
-               sum(a.balance_minor / 10000::numeric)::numeric as subtotal
-          from stored_value_accounts a
+               a.subsidiary_id as subsidiary_id,
+               sum(e.functional_amount_minor / 10000::numeric)::numeric as subtotal
+          from stored_value_entries e
+          join stored_value_accounts a on a.org_id = e.org_id and a.id = e.account_id
           join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
-         where a.org_id = ${orgId}
-         group by coalesce(a.liability_account_id, p.liability_account_id)
+         where e.org_id = ${orgId}
+           and (${subsidiaryIds.length === 0} or a.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+         group by coalesce(a.liability_account_id, p.liability_account_id), a.subsidiary_id
       ),
       ledger as (
-        select l.account_id, coalesce(sum(l.txn_amount), 0)::numeric as ledger_sum
+        select l.account_id, l.subsidiary_id, coalesce(sum(l.amount), 0)::numeric as ledger_sum
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
          where l.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
            and l.posting_date <= ${scope.endsOn}::date
            and l.account_id in (select account_id from subledger where account_id is not null)
-         group by l.account_id
+           and (${subsidiaryIds.length === 0} or l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+         group by l.account_id, l.subsidiary_id
       )
-      select coalesce(s.account_id, g.account_id)::text as account_id, a.number, a.name,
+      select coalesce(s.account_id, g.account_id)::text as account_id,
+             coalesce(s.subsidiary_id, g.subsidiary_id)::text as subsidiary_id,
+             sub.name as subsidiary_name, sub.base_currency as functional_currency,
+             a.number, a.name,
              round(coalesce(s.subtotal, 0), 4)::text as subledger,
              round(coalesce(g.ledger_sum, 0), 4)::text as ledger,
              case when s.account_id is null and g.account_id is null then null
                   else round(coalesce(g.ledger_sum, 0) + coalesce(s.subtotal, 0), 4)::text end as gap
         from (select * from subledger) s
         full outer join ledger g on g.account_id = s.account_id
+          and g.subsidiary_id is not distinct from s.subsidiary_id
         left join accounts a on a.org_id = ${orgId} and a.id = coalesce(s.account_id, g.account_id)
+        left join subsidiaries sub on sub.org_id = ${orgId} and sub.id = coalesce(s.subsidiary_id, g.subsidiary_id)
        where coalesce(s.subtotal, 0) <> 0 or coalesce(g.ledger_sum, 0) <> 0 or s.account_id is null
-       order by a.number nulls last, a.name`)
+       order by sub.name nulls last, a.number nulls last, a.name`)
   ).rows;
-  // A null gap means the tie is unmeasurable (no liability account, or a
-  // currency the registry cannot convert) — it fails closed.
+  // A null gap means the tie is unmeasurable (no liability account) — it
+  // fails closed.
   const gaps = rows.filter((row) => row.gap === null || Number(row.gap) !== 0);
   let breakdown: StoredValueBreakdownRow[] = [];
   if (gaps.length > 0) {
     const accountIds = gaps.map((row) => row.account_id).filter((id): id is string => id !== null);
+    const gapSubs = gaps.map((row) => row.subsidiary_id).filter((id): id is string => id !== null);
     breakdown = (
       await db.execute<StoredValueBreakdownRow>(sql`
-        (select s.account_id::text as account_id, 'subledger' as side, s.currency as currency,
+        (select s.account_id::text as account_id, s.subsidiary_id::text as subsidiary_id,
+                'subledger' as side, s.currency as currency,
                 round(sum(s.balance_minor / 10000::numeric), 4)::text as amount
            from (select coalesce(a.liability_account_id, p.liability_account_id) as account_id,
+                        a.subsidiary_id as subsidiary_id,
                         a.currency as currency, a.balance_minor as balance_minor
                    from stored_value_accounts a
                    join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
-                  where a.org_id = ${orgId}) s
+                  where a.org_id = ${orgId}
+                    and (${subsidiaryIds.length === 0} or a.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) s
           where s.account_id = any(${`{${accountIds.join(",")}}`}::uuid[])
-          group by s.account_id, s.currency)
+            and (s.subsidiary_id = any(${`{${gapSubs.join(",")}}`}::uuid[]) or ${gapSubs.length === 0})
+          group by s.account_id, s.subsidiary_id, s.currency)
         union all
-        (select l.account_id::text as account_id, 'ledger' as side, l.currency as currency,
+        (select l.account_id::text as account_id, l.subsidiary_id::text as subsidiary_id,
+                'ledger' as side, l.currency as currency,
                 round(coalesce(sum(l.txn_amount), 0), 4)::text as amount
            from journal_lines l
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           where l.org_id = ${orgId} and e.book_id = ${scope.bookId} and e.status in ('posted', 'reversed')
             and l.posting_date <= ${scope.endsOn}::date
             and l.account_id = any(${`{${accountIds.join(",")}}`}::uuid[])
-          group by l.account_id, l.currency)
-        order by account_id, side, currency`)
+            and (${subsidiaryIds.length === 0} or l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
+          group by l.account_id, l.subsidiary_id, l.currency)
+        order by account_id, subsidiary_id, side, currency`)
     ).rows;
   }
   return {
@@ -522,13 +544,17 @@ async function storedValueCheck(orgId: string, scope: CommerceCloseScope): Promi
     details: {
       ties: gaps.map((row) => ({
         accountId: row.account_id,
+        subsidiaryId: row.subsidiary_id,
+        subsidiaryName: row.subsidiary_name,
+        functionalCurrency: row.functional_currency,
         number: row.number,
         name: row.name,
         subledger: row.subledger,
         ledger: row.ledger,
         gap: row.gap,
         breakdown: breakdown
-          .filter((line) => line.account_id === row.account_id)
+          .filter((line) => line.account_id === row.account_id
+            && (line.subsidiary_id ?? null) === (row.subsidiary_id ?? null))
           .map((line) => ({ side: line.side, currency: line.currency, amount: line.amount })),
         remedyHref: "/stored-value",
       })),
