@@ -41,6 +41,7 @@
  * half-up to the Cent (kaufmännisch). No floating point on money.
  */
 import { toUnits, fromUnits } from "../../money/money.ts";
+import { inclusiveCalendarDays, parseIsoDate } from "../../platform/civil-date.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
@@ -107,6 +108,57 @@ function shareHalfUp(baseCents: bigint, milliPercent: bigint): bigint {
 
 function minBigInt(a: bigint, b: bigint): bigint {
   return a < b ? a : b;
+}
+
+/**
+ * SV-Tage for the pay period: a month the employee was employed throughout
+ * counts 30 days, a part month counts its actual calendar days of
+ * employment. The contribution ceiling is 1/360 of the annual ceiling per
+ * SV-Tag (SGB V §223 Abs. 2–3, applied alike to every branch), so a
+ * mid-month hire or leaver is assessed only up to the prorated ceiling.
+ */
+export function deSvTage(input: {
+  periodStart: string | null | undefined;
+  periodEnd: string | null | undefined;
+  hiredOn: string | null | undefined;
+  terminatedOn: string | null | undefined;
+}): number {
+  const { periodStart, periodEnd } = input;
+  if (!periodStart || !periodEnd) {
+    throw new DePayrollRefusal(
+      "DE 2026 engine needs the pay period's start and end dates to count the SV-Tage that prorate "
+      + "the contribution ceilings — the run carries none.",
+    );
+  }
+  const hiredOn = input.hiredOn ? String(input.hiredOn).slice(0, 10) : "";
+  if (hiredOn === "") {
+    throw new DePayrollRefusal(
+      "DE 2026 engine needs the employee's hire date: a part month's contribution ceilings are "
+      + "prorated by the days employed (SV-Tage), and an unknown start would assess a mid-month "
+      + "hire against the full monthly ceiling. Record the hire date on the employee record before "
+      + "calculating.",
+    );
+  }
+  parseIsoDate(hiredOn);
+  const terminatedOn = input.terminatedOn ? String(input.terminatedOn).slice(0, 10) : "";
+  if (terminatedOn !== "") parseIsoDate(terminatedOn);
+  const start = hiredOn > periodStart ? hiredOn : periodStart;
+  const end = terminatedOn !== "" && terminatedOn < periodEnd ? terminatedOn : periodEnd;
+  if (start === periodStart && end === periodEnd) return 30;
+  if (end < start) {
+    throw new DePayrollRefusal(
+      `DE 2026 engine: the employee was not employed in the pay period ${periodStart} to ${periodEnd} `
+      + `(hired ${hiredOn}${terminatedOn !== "" ? `, left ${terminatedOn}` : ""}) — correct the employment `
+      + "dates or remove the employee from this run.",
+    );
+  }
+  return Math.min(30, inclusiveCalendarDays(start, end));
+}
+
+/** A ceiling for the period: annual × SV-Tage / 360, half-up to the cent. */
+function periodCeilingCents(annualEuros: number, svTage: number): bigint {
+  const annualCents = BigInt(annualEuros) * 100n;
+  return (annualCents * BigInt(svTage) * 2n + 360n) / 720n;
 }
 
 export interface DeResolvedRates {
@@ -257,11 +309,22 @@ export function computeDeStatutoryWithRates(
   // (§168 SGB VI); AV 2,6 hälftig (§§341/346 SGB III); PV 3,6 + 0,6
   // Kinderlosenzuschlag − 0,25/Kind, Sachsen ±0,5 from an equal half (§§55/58 SGB XI) —
   // all transcribed in DE_2026_RATES / DE_2026_CEILINGS with quotes.
+  // A part month (mid-month hire or leaver) assesses each branch only up to
+  // the ceiling prorated by its SV-Tage; a full month is exactly the
+  // published monthly ceiling (annual × 30 / 360).
+  const svTage = deSvTage({
+    periodStart: ctx.run["period_start"],
+    periodEnd: ctx.run["period_end"],
+    hiredOn: ctx.emp["hired_on"],
+    terminatedOn: ctx.emp["terminated_on"],
+  });
   const pensionable = centsOf(ctx.pensionable);
   const insurable = centsOf(ctx.insurable);
-  const kvBase = minBigInt(insurable, toUnits(String(DE_2026_CEILINGS.kvPbbgMonthly)) / 100n);
-  const rvBase = minBigInt(pensionable, toUnits(String(DE_2026_CEILINGS.rvBbgMonthly)) / 100n);
-  const avBase = minBigInt(insurable, toUnits(String(DE_2026_CEILINGS.rvBbgMonthly)) / 100n);
+  const kvCeiling = periodCeilingCents(DE_2026_CEILINGS.kvPbbgAnnual, svTage);
+  const rvCeiling = periodCeilingCents(DE_2026_CEILINGS.rvBbgAnnual, svTage);
+  const kvBase = minBigInt(insurable, kvCeiling);
+  const rvBase = minBigInt(pensionable, rvCeiling);
+  const avBase = minBigInt(insurable, rvCeiling);
   const kvzHundredths = BigInt(Math.round(rates.kvz * 100));
   const kvHalfMilli = (BigInt(Math.round(DE_2026_RATES.kv * 100)) + kvzHundredths) * 5n;
   const kvW = shareHalfUp(kvBase, kvHalfMilli);

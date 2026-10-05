@@ -13,7 +13,7 @@ import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { buildResolution } from "../statutory-rates.ts";
 import {
-  computeDeStatutory, computeDeStatutoryWithRates, DePayrollRefusal,
+  computeDeStatutory, computeDeStatutoryWithRates, DePayrollRefusal, deSvTage,
 } from "./compute-statutory.ts";
 import { computePapLaufend2026 } from "./pap.ts";
 import { DE_PACK_RATES } from "./rates.ts";
@@ -28,6 +28,8 @@ function fakeCtx(overrides: {
   nonPeriodic?: string;
   elstam?: Record<string, string | null> | null;
   pv?: Record<string, string | null> | null;
+  run?: Record<string, string>;
+  emp?: Record<string, string | null>;
 }): { ctx: PayrollStatutoryComputeContext; pushed: Pushed[] } {
   const pushed: Pushed[] = [];
   const elstam = overrides.elstam === undefined
@@ -56,8 +58,8 @@ function fakeCtx(overrides: {
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Emp",
-    run: {},
-    emp: {},
+    run: overrides.run ?? { period_start: "2026-03-01", period_end: "2026-03-31", pay_date: "2026-03-31" },
+    emp: overrides.emp ?? { hired_on: "2020-01-01", terminated_on: null },
     filingAccountId: null,
     deduction: () => "0",
     pushStatutory: (systemKey: string, kind: "deduction" | "employer_contribution" | "credit", _desc: string, amount: string, sequence: number) => {
@@ -149,6 +151,28 @@ test("ceilings cap the SV base; KiSt elected at 9% outside BY/BW", () => {
   assert.equal(result.KIST, expectedKist);
   assert.ok(Number(result.KIST) > 0, "confession set: KiSt accrues");
   assert.equal(line(pushed, "kirchenlohnsteuer", "deduction"), result.KIST);
+});
+
+test("a part month prorates every ceiling by its SV-Tage", () => {
+  // Hired 16 March: 16 SV-Tage. KV/PV ceiling 69,750 × 16 / 360 = 3,100.00;
+  // RV/AV ceiling 101,400 × 16 / 360 = 4,506.67. On €5,000: KV 3,100 × 8.75%
+  // = 271.25 (437.50 on the full-month ceiling); RV 4,506.67 × 9.3% = 419.12;
+  // AV 4,506.67 × 1.3% = 58.59; PV 3,100 × 2.4% / 1.8% = 74.40 / 55.80.
+  const hire = fakeCtx({ income: "5000.00", emp: { hired_on: "2026-03-16", terminated_on: null } });
+  const hired = computeDeStatutoryWithRates(hire.ctx, { kvz: 2.9 });
+  assert.deepEqual(
+    [hired.KV_W, hired.RV_W, hired.AV_W, hired.PV_W, hired.PV_ER],
+    ["271.2500", "419.1200", "58.5900", "74.4000", "55.8000"],
+  );
+  // A leaver on 10 March (10 SV-Tage) and a whole month (30 SV-Tage, the
+  // published monthly ceiling 5,812.50) bound the same rule.
+  assert.equal(deSvTage({ periodStart: "2026-03-01", periodEnd: "2026-03-31", hiredOn: "2019-05-01", terminatedOn: "2026-03-10" }), 10);
+  assert.equal(computeDeStatutoryWithRates(fakeCtx({ income: "7000.00" }).ctx, { kvz: 2.9 }).KV_W, "508.5900");
+  // An unknown hire date refuses by name instead of assuming a full month.
+  assert.throws(
+    () => computeDeStatutoryWithRates(fakeCtx({ emp: { hired_on: null, terminated_on: null } }).ctx, { kvz: 2.9 }),
+    /needs the employee's hire date.*Record the hire date on the employee record/s,
+  );
 });
 
 test("Sachsen PV split and BY KiSt at 8%", () => {
