@@ -31,6 +31,7 @@ export const REVENUE_CONTRACT_BUILT_IN_EXPR: Record<string, SQL> = {
   starts_on: sql`rc.starts_on`,
   ends_on: sql`rc.ends_on`,
   status: sql`rc.status`,
+  scope: sql`rc.scope`,
 }
 
 export const REVENUE_CONTRACT_SORTS: Record<string, SQL> = {
@@ -49,6 +50,13 @@ function revenueContractFilterPredicate(clause: FilterClause): SQL | null {
   if (clause.key === 'status') {
     if (clause.operator === 'eq') return sql`rc.status = ${value}`
     if (clause.operator === 'ne') return sql`rc.status <> ${value}`
+  }
+  // Unknown scopes match nothing rather than everything: a stored value the
+  // registry no longer offers must not silently list every contract.
+  if (clause.key === 'scope') {
+    if (!['invoice', 'order', 'subscription'].includes(value)) return sql`false`
+    if (clause.operator === 'eq') return sql`rc.scope = ${value}`
+    if (clause.operator === 'ne') return sql`rc.scope <> ${value}`
   }
   if (clause.key === 'customer_id') {
     const refused = uuidOrFalse(value)
@@ -85,6 +93,10 @@ export function revenueContractWhere(view: ListViewConfig, adhoc: EntityAdhoc, o
     if (predicate) parts.push(sql`and ${predicate}`)
   }
   if (adhoc.filters?.status) parts.push(sql`and rc.status = ${adhoc.filters.status}`)
+  if (adhoc.filters?.scope) {
+    if (!['invoice', 'order', 'subscription'].includes(adhoc.filters.scope)) parts.push(sql`and false`)
+    else parts.push(sql`and rc.scope = ${adhoc.filters.scope}`)
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (rc.contract_number ilike ${query} or revenue_customer.display_name ilike ${query} or rc.memo ilike ${query})`)

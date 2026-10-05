@@ -119,6 +119,7 @@ export async function updateCompanySettings(
     timeZone?: unknown;
     reportPdfStyle?: unknown;
     fairValueRangePolicy?: unknown;
+    contractCreation?: unknown;
     saasMetrics?: unknown;
     requireVendorBillApproval?: unknown;
     requireStockCountReview?: unknown;
@@ -134,6 +135,14 @@ export async function updateCompanySettings(
     return { status: 404, body: { error: "not_found" } };
   }
   if (body.saasMetrics !== undefined && !(await isFeatureEnabled(orgId, "saasMetrics"))) {
+    return { status: 404, body: { error: "not_found" } };
+  }
+  // Contract creation belongs to scoped revenue contracts; without the
+  // switch the choice has no surface and the write is refused, never stored.
+  if (
+    body.contractCreation !== undefined &&
+    !(await isFeatureEnabled(orgId, "revenueContracts"))
+  ) {
     return { status: 404, body: { error: "not_found" } };
   }
 
@@ -471,6 +480,28 @@ export async function updateCompanySettings(
           fairValueRangePolicy: body.fairValueRangePolicy,
         };
         changes.fairValueRangePolicy = [curPolicy, body.fairValueRangePolicy];
+        settingsChanged = true;
+      }
+    }
+    // --- contract creation (scoped revenue contracts: first billing | booking) ---
+    // When scoped contracts turn off the stored choice stays, so turning them
+    // back on restores the same booking behavior instead of a blank control.
+    if (body.contractCreation !== undefined) {
+      if (
+        body.contractCreation !== "first_billing" &&
+        body.contractCreation !== "booking"
+      ) {
+        return { status: 400, body: { error: "contractCreation must be 'first_billing' or 'booking'" } };
+      }
+      const curRevenue = (settings.revenue ?? {}) as Record<string, unknown>;
+      const curCreation =
+        curRevenue.contractCreation === "booking" ? "booking" : "first_billing";
+      if (body.contractCreation !== curCreation) {
+        nextSettings.revenue = {
+          ...curRevenue,
+          contractCreation: body.contractCreation,
+        };
+        changes.contractCreation = [curCreation, body.contractCreation];
         settingsChanged = true;
       }
     }

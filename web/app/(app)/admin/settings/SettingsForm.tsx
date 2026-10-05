@@ -42,6 +42,7 @@ type Initial = {
   defaultLocale: Locale
   reportPdfStyle: 'formal' | 'modern'
   fairValueRangePolicy: 'warn' | 'off'
+  contractCreation: 'first_billing' | 'booking'
   saasMetrics?: {
     evergreenBookingMonths: string
     billingsUsePreTaxSubtotal: boolean
@@ -66,6 +67,7 @@ export function SettingsForm({
   timeZones,
   multiSubsidiary = false,
   revenueRecognition = false,
+  revenueContracts = false,
   saasMetricsEnabled = false,
   vendorBillFlowConfigured,
 }: {
@@ -81,6 +83,9 @@ export function SettingsForm({
   /** Company Settings → Features. The fair-value range policy is Revenue
    *  Recognition configuration; hide and omit it when that switch is off. */
   revenueRecognition?: boolean
+  /** Scoped revenue contracts (one contract across several invoices). The
+   *  contract-creation choice belongs to it and stays stored while off. */
+  revenueContracts?: boolean
   /** SaaS metrics definitions belong to the gated feature and stay stored when it is disabled. */
   saasMetricsEnabled?: boolean
   /** Whether an enabled vendor-bill approval flow exists. The loader always
@@ -141,16 +146,18 @@ export function SettingsForm({
       return
     }
     setSaving(true)
-    const { fairValueRangePolicy, saasMetrics, ...rest } = form
+    const { fairValueRangePolicy, contractCreation, saasMetrics, ...rest } = form
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       // The vendor-bill approval requirement is a plain org boolean with no
       // feature fence — it always travels. The fair-value policy stays gated
-      // on Revenue Recognition above.
+      // on Revenue Recognition above, and contract creation on scoped revenue
+      // contracts; either off omits its field so the stored choice survives.
       body: JSON.stringify({
         ...rest,
         ...(revenueRecognition ? { fairValueRangePolicy } : {}),
+        ...(revenueContracts ? { contractCreation } : {}),
         ...(saasMetricsEnabled ? { saasMetrics } : {}),
       }),
     })
@@ -378,6 +385,21 @@ export function SettingsForm({
               <option value="off">{t('revenue.fairValueRangePolicy.off')}</option>
             </Select>
           </div>
+          {revenueContracts ? (
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="contractCreation" help={t('revenue.contractCreation.hint')}>{t('revenue.contractCreation.label')}</FieldLabel>
+              <Select
+                id="contractCreation"
+                value={form.contractCreation}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, contractCreation: e.target.value === 'booking' ? 'booking' : 'first_billing' }))
+                }
+              >
+                <option value="first_billing">{t('revenue.contractCreation.firstBilling')}</option>
+                <option value="booking">{t('revenue.contractCreation.booking')}</option>
+              </Select>
+            </div>
+          ) : null}
         </CardContent>
       </Card> : null}
 

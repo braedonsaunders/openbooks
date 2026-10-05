@@ -18,7 +18,7 @@ import { SampleCompanyPicker } from '../../../../../components/sample-company-pi
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, saasMetricsEnabled, vendorBillFlowConfigured] = ((await Promise.all([
+  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, revenueContracts, saasMetricsEnabled, vendorBillFlowConfigured] = ((await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
@@ -29,6 +29,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
     db.execute(sql`select code, name from currencies order by code`),
     subsidiaryFeatureEnabled(orgId),
     isFeatureEnabled(orgId, 'revenueRecognition'),
+    isFeatureEnabled(orgId, 'revenueContracts'),
     isFeatureEnabled(orgId, 'saasMetrics'),
     hasVendorBillApprovalFlow(orgId),
   ])))
@@ -68,6 +69,10 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             (settings.revenue as Record<string, unknown> | undefined)?.fairValueRangePolicy === 'off'
               ? 'off'
               : 'warn',
+          contractCreation:
+            (settings.revenue as Record<string, unknown> | undefined)?.contractCreation === 'booking'
+              ? 'booking'
+              : 'first_billing',
           saasMetrics: (() => {
             const definitions = settings.saasMetrics as Record<string, unknown> | undefined
             return {
@@ -94,6 +99,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         timeZones={listCanonicalTimeZones()}
         multiSubsidiary={multiSubsidiary}
         revenueRecognition={revenueRecognition}
+        revenueContracts={revenueContracts}
         saasMetricsEnabled={saasMetricsEnabled}
         vendorBillFlowConfigured={vendorBillFlowConfigured}
       />

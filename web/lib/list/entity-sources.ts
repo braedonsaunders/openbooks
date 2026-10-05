@@ -1013,7 +1013,7 @@ const SOURCES: Record<string, EntityListSource> = {
     sorts: REVENUE_CONTRACT_SORTS,
     defaultSort: sql`rc.contract_number`,
     statusExpr: sql`rc.status`,
-    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'scope', filterKey: 'scope' }],
     where: revenueContractWhere,
     drawerParam: 'contract',
     basePath: '/revenue',
