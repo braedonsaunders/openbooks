@@ -377,11 +377,14 @@ async function planMerge(
   // its own subsidiary, so merging across subsidiaries would silently fold
   // one legal entity's postings, budgets, and billings into another's.
   // Refuse with the remedy: set both projects to the same subsidiary first.
-  // Sits after the idempotent no-op above so re-running a finished pair
-  // stays a no-op.
+  // The header control refuses that move for a project with posted history
+  // in another subsidiary, so the refusal says what to do then: close the
+  // duplicate rather than merging it. Sits after the idempotent no-op above
+  // so re-running a finished pair stays a no-op.
   if (survivor.subsidiary_id !== duplicate.subsidiary_id) {
     throw new ProjectMergeError(
-      "cannot merge projects from different subsidiaries; set both projects to the same subsidiary first",
+      "cannot merge projects from different subsidiaries; set both projects to the same subsidiary first, " +
+        "or, if posted history keeps a project in its subsidiary, close the duplicate instead of merging it",
     );
   }
   // Billing identity reconciles before references move: the survivor's

@@ -62,6 +62,7 @@
     "./payroll/non-cash-offsets": "./src/payroll/non-cash-offset-types.ts",
     "./payroll/assigned-components": "./src/payroll/public-assigned-components.ts",
     "./money/quantity": "./src/money/quantity.ts",
+    "./budgets/dimensions": "./src/nonprofit/budget-dimensions.ts",
     "./consolidation": "./src/consolidation/public.ts",
     "./tax/contracts": "./src/tax/public-contracts.ts",
     "./navigation": "./src/navigation/public.ts",

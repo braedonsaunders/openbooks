@@ -79,6 +79,7 @@ function moneyOrNull(v: unknown): string | null | 'invalid' {
 const HEADER_CONTROL_KEYS: Record<Exclude<ProjectHeaderControlCode, 'project_not_found'>, string> = {
   contract_value_controlled: 'projectContractValueControlled',
   contract_value_controlled_type_changed: 'projectContractValueControlledTypeChanged',
+  subsidiary_has_posted_history: 'projectSubsidiaryHasPostedHistory',
 }
 
 /** The refusal in the caller's language; the engine's English copy is the
@@ -329,11 +330,12 @@ export const PATCH = defineRoute({
       )
       return
     }
-    // Contract value carries billed history: the shared engine control
-    // locks this row and refuses a contract-value edit once billing has
-    // begun, on this transaction and before the write below.
+    // Contract value and subsidiary carry billed and posted history: the
+    // shared engine control locks this row and refuses a contract-value
+    // edit once billing has begun and a subsidiary move that would strand
+    // posted history, on this transaction and before the write below.
     try {
-      await assertProjectHeaderChangeAllowed(db, user.orgId, id, { contractValue })
+      await assertProjectHeaderChangeAllowed(db, user.orgId, id, { contractValue, subsidiaryId })
     } catch (error) {
       if (!(error instanceof ProjectHeaderControlError)) throw error
       if (error.code === 'project_not_found') {
