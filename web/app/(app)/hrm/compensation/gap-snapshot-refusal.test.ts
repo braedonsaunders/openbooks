@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import React, { Children, isValidElement, type ReactNode } from "react";
 
-// Compensation home and equity loaders must surface a refused
+// The equity loader must surface a refused
 // latestGapSnapshot read (a scoped reader cannot read org-wide frozen
 // aggregates) as data with the named remedy intact — never a zero
 // joint-flag count or an empty page pretending the read succeeded.
 // Genuinely absent snapshots keep the empty state; unexpected DB/system
 // failures propagate.
+// The architecture Overview reads authorized wage and configuration facts;
+// it does not request a frozen organization-wide pay-gap aggregate.
 //
 // The seams below stub I/O only (feature switches, group tabs, the engine
 // snapshot query and its sibling list reads, the translations loader backed
@@ -84,7 +87,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function latestGapSnapshot() { const s = globalThis.__f17Gap; if (s && s.error) throw s.error; return s ? s.snapshot : null; }",
+        url: "data:text/javascript,export async function latestGapSnapshot() { globalThis.__compensationGapReads = (globalThis.__compensationGapReads ?? 0) + 1; const s = globalThis.__f17Gap; if (s && s.error) throw s.error; return s ? s.snapshot : null; }",
       };
     }
     if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
@@ -105,7 +108,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function listPayBands() { return []; } export async function compaRatioFor() { return null; }",
+        url: "data:text/javascript,export async function listPayBands() { return globalThis.__compensationOverview.bands; } export async function compaRatioFor() { return null; }",
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/band-headcounts.ts") {
@@ -119,7 +122,14 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export async function listJobLevels() { return []; } export async function compensationSettings() { return { comparisonAttributeKey: null, gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
+        url: "data:text/javascript,export async function listJobLevels() { return globalThis.__compensationOverview.levels; } export async function compensationSettings() { return { comparisonAttributeKey: null, gapThresholdPct: '5', responseDays: null, fteRounding: 'up_to_whole', burdenRate: null }; }",
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/hrm/compensation") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function listJobFamilies() { return globalThis.__compensationOverview.families; } export async function listPayBandVersions() { return globalThis.__compensationOverview.versions; } export async function compensationWageSummary(input) { const value = globalThis.__compensationOverview; value.wageInput = input; if (value.error) throw value.error; return value.wages; }",
       };
     }
     if (owned && specifier === "@openbooks/engine/src/hrm/compensation/headcount-plans.ts") {
@@ -147,7 +157,27 @@ const { CompensationError } = await import(
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
 
 const gap = globalThis as Record<string, unknown>;
-const authz = { user: { orgId: "org-f17", id: "actor-f17" } } as never;
+Object.assign(globalThis, { React });
+const identity = { orgId: "019f655b-2900-7000-8000-000000000001", id: "019f655b-2900-7000-8000-000000000002" };
+const authz = { user: identity, allowedSubsidiaryIds: null } as never;
+const scopedAuthz = { user: identity, allowedSubsidiaryIds: new Set(["019f655b-2900-7000-8000-000000000003"]) } as never;
+
+function overviewFixture(empty = false) {
+  const value = {
+    bands: empty ? [] : [{ id: "band" }],
+    families: empty ? [] : [{ id: "family-a" }, { id: "family-b" }],
+    levels: empty ? [] : [{ id: "level-a" }, { id: "level-b" }, { id: "level-c" }],
+    versions: empty ? [] : [{ id: "version-a" }, { id: "version-b" }],
+    wages: { asOf: "2026-09-22", workers: empty ? 0 : 7, covered: empty ? 0 : 5,
+      missing: empty ? 0 : 1, ambiguous: empty ? 0 : 1,
+      groups: empty ? [] : [{ basis: "hour", currency: "CAD", workers: 5, average: "34.5000", min: "34.5000", max: "34.5000" }] },
+    error: null as Error | null,
+    wageInput: null as unknown,
+  };
+  gap.__compensationOverview = value;
+  gap.__compensationGapReads = 0;
+  return value;
+}
 
 // The read refusal for a subsidiary-restricted role: it cannot read an
 // org-wide frozen aggregate.
@@ -204,7 +234,7 @@ function validSnapshot() {
 
 test("equity surfaces a refused snapshot read with the named remedy, not an empty page", async () => {
   gap.__f17Gap = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
-  const data = await loadEquity(authz);
+  const data = await loadEquity(scopedAuthz);
   assert.ok(data, "the equity loader still resolves");
   assert.equal(data.hasSnapshot, false, "no snapshot is claimed");
   assert.deepEqual(data.tiles, [], "no metric tiles pretend to measure");
@@ -250,88 +280,95 @@ test("equity propagates an unexpected system failure instead of an empty page", 
   await assert.rejects(loadEquity(authz), /connection terminated/, "the failure reaches the caller, never a null snapshot");
 });
 
-test("home shows unavailable — never zero — for a refused joint-flag total", async () => {
+test("the architecture overview never requests a frozen aggregate unavailable to a scoped reader", async () => {
+  const facts = overviewFixture();
   gap.__f17Gap = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
-  const data = await loadCompensationHome(authz);
+  const data = await loadCompensationHome(scopedAuthz);
   assert.ok(data, "the home loader still resolves");
-  assert.ok(data.refusal, "the refusal travels as data");
-  assert.equal(data.refusal.title, "Compensation", "the banner reuses the existing page title");
-  assert.equal(data.refusal.message, SCOPE_REFUSAL, "the remedy arrives verbatim");
-  const joint = data.tiles[3];
-  assert.equal(joint?.label, "Joint assessment flags", "the flag tile stays in place");
-  assert.equal(joint?.value, "—", "hidden flags read unavailable, never numeric zero");
-  assert.equal(joint?.tone, "default", "no warning fires on an unknown count");
+  assert.equal(gap.__compensationGapReads, 0, "the scoped architecture cockpit does not request an organization-wide frozen aggregate");
+  assert.equal(data.refusal, null, "an unrelated aggregate refusal is not represented as a failed architecture read");
+  assert.deepEqual(data.overview?.wages, facts.wages, "the overview retains authorized native wage facts");
+  assert.deepEqual(facts.wageInput, { orgId: identity.orgId, actorId: identity.id }, "the native wage reader resolves scope from the attributable actor");
+  assert.ok(data.tiles.every((tile) => tile.label !== "Joint assessment flags"), "the cockpit makes no unrequested equity claim");
 });
 
-test("home still counts zero flags when the snapshot is genuinely absent", async () => {
+test("the architecture overview preserves genuine empty native registers without inventing equity measurements", async () => {
+  overviewFixture(true);
   gap.__f17Gap = { snapshot: null };
   const data = await loadCompensationHome(authz);
   assert.equal(data?.refusal, null, "absence is not a refusal");
-  assert.equal(data?.tiles[3]?.value, "0", "a genuinely absent snapshot still counts zero");
+  assert.deepEqual(data?.tiles.map((tile) => tile.value), ["0", "0", "0", "0"], "zero is supported by the empty worker, family, level and band registers");
+  assert.deepEqual(data?.wageTiles, [], "no average is invented without a wage population");
+  assert.equal(gap.__compensationGapReads, 0);
 });
 
-test("home counts joint flags from a valid snapshot", async () => {
+test("the architecture overview measures current wage and architecture facts independently of pay equity", async () => {
+  overviewFixture();
   gap.__f17Gap = { snapshot: validSnapshot() };
   const data = await loadCompensationHome(authz);
   assert.equal(data?.refusal, null, "success carries no refusal");
-  assert.equal(data?.tiles[3]?.value, "2", "both joint-assessment flags count");
-  assert.equal(data?.tiles[3]?.tone, "warning", "flags raise the warning tone");
+  assert.deepEqual(data?.tiles.map((tile) => tile.value), ["7", "2", "3", "1"]);
+  assert.equal(data?.overview?.bandVersions, 2, "effective-date history remains separate from the current band count");
+  assert.equal(data?.wageTiles[0]?.value, "34.50 CAD", "actual wage basis and currency are retained without annualization or FX");
+  assert.equal(data?.overview?.wages.missing, 1, "missing wages remain visible rather than becoming nil wages");
+  assert.equal(data?.overview?.wages.ambiguous, 1, "overlapping wage facts remain visible rather than being guessed");
+  assert.equal(gap.__compensationGapReads, 0);
 });
 
-test("home propagates an unexpected system failure instead of a zero tile", async () => {
-  gap.__f17Gap = { error: new Error("db went away") };
-  await assert.rejects(loadCompensationHome(authz), /db went away/, "the failure reaches the caller, never a zero tile");
-});
-
-// The refusal rendering the pin test above asserted statically (which
-// empty-state block shape, which title key, no swallowed snapshot read)
-// stays covered behaviourally by 'the computed refusal reaches the
-// operator surface in both specs' and 'genuine no-snapshot equity keeps
-// its table distinct from a refusal', which run both specs and assert on
-// their output.
-
-interface SpecBlock {
-  kind?: string;
-  widget?: string;
-  props?: { title?: unknown; description?: unknown };
-  when?: unknown;
-  blocks?: SpecBlock[];
-}
-
-function bodyOf(spec: unknown): SpecBlock[] {
-  return (spec as { body: SpecBlock[] }).body;
-}
-
-test("the computed refusal reaches the operator surface in both specs", async () => {
-  const { compensationSpec } = await import("./view.ts");
-  const { equitySpec } = await import("./equity/view.ts");
-  gap.__f17Gap = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
-  const home = await loadCompensationHome(authz);
-  const homeSpec = compensationSpec(home!);
-  assert.match(JSON.stringify(homeSpec), /empty-state/, "the home spec carries the empty-state block");
-  assert.ok(JSON.stringify(homeSpec).includes(SCOPE_REFUSAL), "the home spec embeds the named remedy");
-  const equity = await loadEquity(authz);
-  const refusedBody = bodyOf(equitySpec(equity!));
-  const refusedBanner = refusedBody.find((block) => block.widget === "empty-state");
-  assert.ok(refusedBanner, "the refused equity spec carries the empty-state block");
-  assert.equal(refusedBanner.props?.title, "Pay equity", "the banner reuses the page title");
-  assert.equal(refusedBanner.props?.description, SCOPE_REFUSAL, "the banner embeds the named remedy");
-  assert.deepEqual(refusedBanner.when, { $: "refusal" }, "the banner renders only while refused");
-  for (const block of refusedBody.filter((candidate) => candidate.kind === "grid" || candidate.kind === "panel")) {
-    assert.deepEqual(block.when, { $: "hasContent" }, `the refused ${block.kind} suppresses on missing content`);
+test("the architecture overview raises refused or failed native wage reads instead of substituting zero", async () => {
+  for (const error of [new Error("db went away"), new HrmAuthorizationError("Ask an administrator for compensation access to this employer.")]) {
+    overviewFixture().error = error;
+    await assert.rejects(loadCompensationHome(authz), (actual) => actual === error, "the exact native failure reaches the caller, never a zero-population summary");
   }
-  assert.equal(equity!.hasContent, false, "refused data hides the grid and table at render");
+});
+
+// The view specification forwards the full payload to the native workspace.
+// Exercise that workspace's actual refusal branch, including suppression of
+// aggregate rows and metrics, rather than assuming an older block layout.
+
+function elementsOfType(node: ReactNode, type: unknown): React.ReactElement<Record<string, unknown>>[] {
+  return Children.toArray(node).flatMap((child) => {
+    if (!isValidElement<Record<string, unknown>>(child)) return [];
+    return [
+      ...(child.type === type ? [child] : []),
+      ...elementsOfType(child.props.children as ReactNode, type),
+    ];
+  });
+}
+
+test("the computed equity refusal reaches the native workspace and suppresses its metrics and table", async () => {
+  const { equitySpec } = await import("./equity/view.ts");
+  const { EquityWorkspace } = await import("./equity/EquityWorkspace");
+  const { EmptyState } = await import("@openbooks/ui");
+  const { RegisteredListTable } = await import("../../../../components/registered-list-table");
+  const { KpiStrip } = await import("../../../../components/kpi-strip");
+  gap.__f17Gap = { error: new CompensationError("REFUSED", SCOPE_REFUSAL) };
+  const equity = await loadEquity(authz);
+  assert.ok(equity);
+  const spec = equitySpec(equity) as { body?: { widget?: string; props?: { data?: unknown } }[] };
+  assert.equal(spec.body?.find((block) => block.widget === "hrm-comp-equity-workspace")?.props?.data, equity, "the spec forwards the complete refused data to its native renderer");
+  const body = EquityWorkspace({ data: equity });
+  const [banner] = elementsOfType(body, EmptyState);
+  assert.ok(banner, "the real native workspace renders the refusal");
+  assert.equal(banner.props.title, "Pay equity");
+  assert.equal(banner.props.description, SCOPE_REFUSAL, "the actual rendered banner receives the full remedy");
+  assert.deepEqual(elementsOfType(body, RegisteredListTable), [], "the refused workspace exposes no aggregate category rows");
+  assert.deepEqual(elementsOfType(body, KpiStrip), [], "the refused workspace exposes no aggregate metric tiles");
 });
 
 test("genuine no-snapshot equity keeps its table distinct from a refusal", async () => {
-  const { equitySpec } = await import("./equity/view.ts");
+  const { EquityWorkspace } = await import("./equity/EquityWorkspace");
+  const { RegisteredListTable } = await import("../../../../components/registered-list-table");
+  const { EmptyState } = await import("@openbooks/ui");
   gap.__f17Gap = { snapshot: null };
   const equity = await loadEquity(authz);
-  assert.equal(equity!.hasContent, true, "genuine emptiness keeps content");
-  const emptyBody = bodyOf(equitySpec(equity!));
-  const banner = emptyBody.find((block) => block.widget === "empty-state");
-  assert.deepEqual(banner?.when, { $: "refusal" }, "the banner stays hidden without a refusal");
-  const categories = emptyBody.find((block) => block.blocks?.some((child) => child.widget === "registered-record-list"));
-  assert.ok(categories, "the genuine empty state still renders its categories collection");
-  assert.deepEqual(categories.when, { $: "hasContent" }, "the categories render because content holds");
+  assert.ok(equity);
+  assert.equal(equity.hasContent, true, "genuine emptiness keeps content");
+  const body = EquityWorkspace({ data: equity });
+  const [categories] = elementsOfType(body, RegisteredListTable);
+  assert.ok(categories, "the actual workspace retains the shared category register");
+  assert.deepEqual(categories.props.rows, []);
+  assert.equal(categories.props.source, "hrm_compensation_equity");
+  const [empty] = elementsOfType(categories.props.empty as ReactNode, EmptyState);
+  assert.equal(empty?.props.title, "No snapshot yet", "genuine absence retains its precise empty state, separate from an access refusal");
 });
