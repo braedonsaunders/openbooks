@@ -311,6 +311,7 @@ export function ItemRatesEditor({
         </Card>
       ) : null}
 
+      {!editing ? (
       <PagedTable
         rows={data?.versions ?? []}
         rowKey={(version) => version.id}
@@ -326,6 +327,7 @@ export function ItemRatesEditor({
           { key: 'rates', header: t('rates'), cell: (version) => version.tiers.map((tier) => `${tier.unitName}: ${money(tier.billRate)}`).join(' · ') },
         ]}
       />
+      ) : null}
     </section>
   )
 }
