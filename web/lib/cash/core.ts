@@ -749,11 +749,20 @@ const daysInMonthUTC = (d: Date): number => daysInCivilMonth(d.getUTCFullYear(),
 
 /**
  * Spread one month's amount across a forecast week using the ACTUAL calendar
- * month the week starts in (month days ÷ 7) — never the fixed 4.345-week
+ * month the week starts in (7 ÷ month days) — never the fixed 4.345-week
  * average, which prices January like February. One exact-decimal rounding.
  */
 export const spreadMonthlyOverWeek = (monthly: Money, weekStartIso: string): Money =>
-  divideMoney(multiplyMoney(monthly, String(daysInMonthUTC(parseISO(weekStartIso)))), "7");
+  divideMoney(multiplyMoney(monthly, "7"), String(daysInMonthUTC(parseISO(weekStartIso))));
+
+/**
+ * The inverse direction: place one week's amount as a whole month's worth in
+ * a monthly-placement week (month days ÷ 7). Used where the forecast lands a
+ * weekly average on a month boundary — never where a monthly figure spreads
+ * across weeks.
+ */
+export const spreadWeeklyOverMonth = (weekly: Money, weekStartIso: string): Money =>
+  divideMoney(multiplyMoney(weekly, String(daysInMonthUTC(parseISO(weekStartIso)))), "7");
 
 /**
  * Fiscal quarter flags for one forecast week, for formula {QUARTER}/
@@ -1172,8 +1181,8 @@ export async function categoryWeekly(
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     weekStarts.forEach((k, i) => {
       const actual = weeklyHistory[k] ?? ZERO_MONEY;
-      // A monthly placement spreads the week's own calendar month across it.
-      const forecastAmount = isSet(cat.expectedWeek) ? spreadMonthlyOverWeek(weeklyAvg, k) : weeklyAvg;
+      // A monthly placement lands the week's average as a whole month's worth.
+      const forecastAmount = isSet(cat.expectedWeek) ? spreadWeeklyOverMonth(weeklyAvg, k) : weeklyAvg;
       const amount = compareMoney(actual, ZERO_MONEY) > 0 ? actual : forecastAmount;
       const factor = getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek);
       weeklyExact[i] = multiplyMoney(amount, String(factor));
