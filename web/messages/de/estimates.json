@@ -98,6 +98,8 @@
     "expiryNote": "Der Link läuft am {date} ab und funktioniert einmal.",
     "sign": "Angebot signieren",
     "signing": "Wird signiert…",
-    "decline": "Ablehnen"
+    "decline": "Ablehnen",
+    "pageTitle": "Prüfen und signieren",
+    "pageNote": "Mit der Unterschrift werden Ihr Name, der Zeitpunkt und die exakten Angebotsbedingungen erfasst."
   }
 }

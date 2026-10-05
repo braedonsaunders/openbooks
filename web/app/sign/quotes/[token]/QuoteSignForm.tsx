@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { createMoneyFormatter } from '@/lib/money-format'
 
 /**
@@ -40,14 +40,26 @@ interface QuoteLine {
 /**
  * House money formatting on the exact decimal strings: the formatter keeps
  * numeric strings out of binary floats, so a quoted total renders exactly
- * what the engine priced.
+ * what the engine priced, in the viewer's locale.
  */
-function money(amount: string, currency: string): string {
-  return createMoneyFormatter('en', currency).money(amount, { currency })
+function money(amount: string, currency: string, locale: string): string {
+  return createMoneyFormatter(locale, currency).money(amount, { currency })
 }
+
+const START_RULE_KEYS = {
+  quote_date: 'quoteCash.startQuoteDate',
+  next_month: 'quoteCash.startNextMonth',
+  custom: 'quoteCash.startCustom',
+} as const
+
+const BILLING_TIMING_KEYS = {
+  advance: 'quoteCash.timingAdvance',
+  arrears: 'quoteCash.timingArrears',
+} as const
 
 export function QuoteSignForm({ token }: { token: string }) {
   const t = useTranslations('estimates')
+  const locale = useLocale()
   const [quote, setQuote] = useState<QuoteLine | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -174,7 +186,7 @@ export function QuoteSignForm({ token }: { token: string }) {
     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div>
         <p className="text-xs uppercase tracking-wide text-slate-500">{t('quoteSign.quoteEyebrow', { number: quote.quoteNumber })}</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums">{money(quote.tcv, quote.currency)}</p>
+        <p className="mt-1 text-2xl font-semibold tabular-nums">{money(quote.tcv, quote.currency, locale)}</p>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           {t('quoteSign.quotedLine', { count: quote.terms.length, date: quote.documentDate })}
         </p>
@@ -183,17 +195,29 @@ export function QuoteSignForm({ token }: { token: string }) {
         {quote.terms.map((term, i) => (
           <li key={i} className="p-3 text-sm">
             <p className="font-medium">
-              {term.planName} · {term.termMonths} months
+              {term.planName} · {t('quoteCash.termMonths', { count: term.termMonths })}
             </p>
             <p className="mt-1 text-xs tabular-nums text-slate-500">
               {term.periods.map((p, j) => (
                 <span key={j} className="mr-3">
-                  {money(p.unitPrice, quote.currency)} × {p.quantity} = {money(p.periodAmount, quote.currency)}
+                  {t('quoteCash.periodLine', {
+                    price: money(p.unitPrice, quote.currency, locale),
+                    qty: p.quantity,
+                    amount: money(p.periodAmount, quote.currency, locale),
+                  })}
                 </span>
               ))}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              {t('quoteSign.startsBilled', { start: term.startRule.replaceAll('_', ' '), timing: term.billingTiming })}
+              {t('quoteSign.startsBilled', {
+                start: t(
+                  (START_RULE_KEYS as Record<string, string>)[term.startRule] ?? 'quoteCash.startRule',
+                ),
+                timing: t(
+                  (BILLING_TIMING_KEYS as Record<string, string>)[term.billingTiming] ??
+                    'quoteCash.billingTiming',
+                ),
+              })}
             </p>
           </li>
         ))}

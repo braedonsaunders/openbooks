@@ -98,6 +98,8 @@
     "expiryNote": "链接将于 {date} 过期，仅可使用一次。",
     "sign": "签署此报价",
     "signing": "签署中…",
-    "decline": "拒绝"
+    "decline": "拒绝",
+    "pageTitle": "审阅并签署",
+    "pageNote": "签署将记录您的姓名、时间以及确切的报价条款。"
   }
 }

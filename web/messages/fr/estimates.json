@@ -98,6 +98,8 @@
     "expiryNote": "Le lien expire le {date} et fonctionne une fois.",
     "sign": "Signer ce devis",
     "signing": "Signature…",
-    "decline": "Refuser"
+    "decline": "Refuser",
+    "pageTitle": "Vérifier et signer",
+    "pageNote": "La signature enregistre votre nom, l'heure et les conditions exactes du devis."
   }
 }

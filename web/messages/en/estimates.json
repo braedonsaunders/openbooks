@@ -98,6 +98,8 @@
     "sign": "Sign this quote",
     "signing": "Signing…",
     "decline": "Decline",
-    "signedActiveBody": "Your signature is recorded and your subscription is now active."
+    "signedActiveBody": "Your signature is recorded and your subscription is now active.",
+    "pageTitle": "Review and sign",
+    "pageNote": "Signing records your name, the time, and the exact quoted terms."
   }
 }
