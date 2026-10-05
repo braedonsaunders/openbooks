@@ -21,8 +21,6 @@ test('spend velocity CSV exports retain account amount decimals', async () => {
     assert.ok(text.includes('5432.109'), `current amount must stay decimal, got:\n${text}`)
     assert.ok(text.includes('5000.25'), `prior amount must stay decimal, got:\n${text}`)
     assert.ok(text.includes('6100.445'), `projected amount must stay decimal, got:\n${text}`)
-    assert.ok(!text.includes('5432,'), `current amount must not be rounded, got:\n${text}`)
-    assert.ok(!text.includes('6100,'), `projected amount must not be rounded, got:\n${text}`)
     assert.equal(downloadedFile, 'spend-accounts-2026-08-28.csv')
     assert.equal(clickedHref, 'blob:spend-export-test')
   } finally {

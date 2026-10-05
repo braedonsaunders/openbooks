@@ -70,39 +70,6 @@ test("vendor payment analytics counts an installment bill once and uses final se
   }
 });
 
-test("vendor spend excludes parties without a vendor role", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await withBypass(async () => {
-      await db.execute(sql`
-        insert into vendor_roles (id, org_id, party_id)
-        values (${randomUUID()}, ${org.orgId}, ${org.vendorId})`);
-      const entryId = randomUUID();
-      await db.execute(sql`
-        insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'NON-VENDOR-SPEND', '2026-07-10', ${org.periodId}, 'draft', 'manual')`);
-      await db.execute(sql`
-        insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate)
-        values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.customerId}, '500', 'CAD', '500', '1'),
-               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.customerId}, '-500', 'CAD', '-500', '1')`);
-      await db.execute(sql`
-        update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
-    });
-    const data = await withOrgContext(org.orgId, () => vendorData(
-      { from: "2026-07-01", to: "2026-07-31", label: "July 2026" },
-      org.orgId,
-      null,
-    ));
-    assert.equal(
-      data.rows.find((candidate) => candidate.id === org.customerId),
-      undefined,
-      "expense lines against a customer must not read as vendor spend",
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
-
 test("terms-based due dates judge on-time and undated bills are counted, not scored", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
@@ -209,12 +176,29 @@ test("terms-based due dates judge on-time and undated bills are counted, not sco
                (${randomUUID()}, ${org.orgId}, ${creditEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${refundVendor}, false, '250', 'CAD', '250', 1)`);
       await db.execute(sql`
         update journal_entries set status = 'posted', posted_at = now() where id = ${creditEntry}`);
+      // Expense lines against a party without a vendor role are not vendor
+      // spend, even beside real vendor activity.
+      const customerEntry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${customerEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'NON-VENDOR-SPEND', '2026-07-10', ${org.periodId}, 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${randomUUID()}, ${org.orgId}, ${customerEntry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.customerId}, false, '500', 'CAD', '500', 1),
+               (${randomUUID()}, ${org.orgId}, ${customerEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.customerId}, false, '-500', 'CAD', '-500', 1)`);
+      await db.execute(sql`
+        update journal_entries set status = 'posted', posted_at = now() where id = ${customerEntry}`);
     });
     const data = await withOrgContext(org.orgId, () => vendorData(
       { from: "2026-07-01", to: "2026-07-31", label: "July 2026" },
       org.orgId,
       null,
     ));
+    assert.equal(
+      data.rows.find((candidate) => candidate.id === org.customerId),
+      undefined,
+      "expense lines against a customer must not read as vendor spend",
+    );
     const termsRow = data.rows.find((candidate) => candidate.id === termsVendor);
     assert.ok(termsRow, "the terms vendor must be present");
     assert.equal(termsRow.paidBills, 1);
