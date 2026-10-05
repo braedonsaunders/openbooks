@@ -74,50 +74,99 @@ async function adapterCharge(
 // Decline classification (pure)
 // ---------------------------------------------------------------------------
 
+export type DeclineClass = "hard" | "soft" | "insufficient_funds" | "needs_authentication";
+
+/**
+ * Compare provider decline codes across naming habits: Stripe sends
+ * snake_case (`authentication_required`), Adyen sends titled phrases
+ * (`Authentication Required`), so classification strips case and every
+ * non-alphanumeric before matching. Pure.
+ */
+export function normalizeDeclineCode(declineCode: string): string {
+  return declineCode.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 /**
  * Provider decline codes that must never retry: the instrument is gone
- * (stolen/lost card, closed account) or the mandate is dead, so another
- * charge can only fail the same way. Everything unrecognized retries as
- * soft — a new code fails open toward collection, and the schedule bounds
- * the attempts.
+ * (stolen/lost/expired card, closed account) or the mandate is dead, so
+ * another charge can only fail the same way and the customer must supply
+ * new payment details. Entries are normalized (see normalizeDeclineCode).
  */
 const HARD_DECLINE_CODES: ReadonlySet<string> = new Set([
   // Stripe card errors that never clear on retry.
-  "lost_card",
-  "stolen_card",
-  "card_closed",
-  "account_closed",
-  "invalid_account",
-  "revocation_of_authorization",
+  "lostcard",
+  "stolencard",
+  "expiredcard",
+  "cardclosed",
+  "pickupcard",
+  "restrictedcard",
+  "accountclosed",
+  "invalidaccount",
+  "incorrectnumber",
+  "invalidexpirymonth",
+  "invalidexpiryyear",
+  "revocationofauthorization",
+  "revocationofallauthorizations",
   "fraudulent",
   // GoCardless bank-debit terminal states.
-  "closed_account",
-  "invalid_account_holder_name",
-  "invalid_bank_account",
-  "direct_debit_not_enabled",
-  "mandate_cancelled",
-  "mandate_expired",
-  "mandate_failed",
+  "closedaccount",
+  "invalidaccountholdername",
+  "invalidbankaccount",
+  "directdebitnotenabled",
+  "mandatecancelled",
+  "mandateexpired",
+  "mandatefailed",
   "cancelled",
+  "customerapprovaldenied",
   // Adyen refusal reasons that never clear on retry.
-  "CancelOrRefund",
-  "Blocked Card",
-  "Stolen Card",
-  "Lost Card",
-  "Invalid Card Number",
-  "Invalid Account",
-  "Closed Account",
-  "No Account",
-  "Referral",
-  "Fraud",
+  "cancelorrefund",
+  "blockedcard",
+  "stolencard",
+  "lostcard",
+  "expiredcard",
+  "invalidcardnumber",
+  "invalidaccount",
+  "closedaccount",
+  "noaccount",
+  "referral",
+  "fraud",
   // Autopay's own terminal markers (missing linkage, not a provider retry).
-  "missing_shopper_reference",
+  "missingshopperreference",
 ]);
 
-/** Classify a provider decline code, or null when nothing declined. Pure. */
-export function classifyDecline(declineCode: string | null | undefined): "hard" | "soft" | null {
+/**
+ * Declines that clear when money arrives: the instrument is fine but empty.
+ * These retry near typical paydays instead of on the generic cadence.
+ */
+const INSUFFICIENT_FUNDS_CODES: ReadonlySet<string> = new Set([
+  "insufficientfunds",
+  "balanceinsufficient",
+  "notenoughbalance",
+]);
+
+/**
+ * Declines that clear when the customer proves it is them: 3DS and
+ * issuer-mandated authentication. These never retry automatically — the
+ * customer gets an authentication link instead.
+ */
+const NEEDS_AUTHENTICATION_CODES: ReadonlySet<string> = new Set([
+  "authenticationrequired",
+  "authenticationfailed",
+  "threedsrequired",
+]);
+
+/**
+ * Classify a provider decline code, or null when nothing declined. Pure.
+ * Everything unrecognized retries as soft — a new code fails open toward
+ * collection, and the schedule bounds the attempts.
+ */
+export function classifyDecline(declineCode: string | null | undefined): DeclineClass | null {
   if (declineCode == null || declineCode === "") return null;
-  return HARD_DECLINE_CODES.has(declineCode) ? "hard" : "soft";
+  const code = normalizeDeclineCode(declineCode);
+  if (HARD_DECLINE_CODES.has(code)) return "hard";
+  if (INSUFFICIENT_FUNDS_CODES.has(code)) return "insufficient_funds";
+  if (NEEDS_AUTHENTICATION_CODES.has(code)) return "needs_authentication";
+  return "soft";
 }
 
 // ---------------------------------------------------------------------------
@@ -130,8 +179,28 @@ export interface AutopayPolicy {
   policyId: string;
   policyName: string;
   retryOffsetsDays: number[];
+  insufficientFundsOffsetsDays: number[];
   finalAction: AutopayFinalAction;
   gracePeriodDays: number;
+  expiryNoticeDays: number;
+}
+
+/**
+ * The retry ladder a decline class runs on: soft declines use the generic
+ * cadence, insufficient-funds declines use the payday-adjacent ladder, and
+ * hard or authentication-required declines run no ladder at all — the first
+ * waits for new payment details, the second for the customer. Pure.
+ */
+export function retryLadderForClass(policy: AutopayPolicy, declineClass: DeclineClass): number[] {
+  switch (declineClass) {
+    case "soft":
+      return policy.retryOffsetsDays;
+    case "insufficient_funds":
+      return policy.insufficientFundsOffsetsDays;
+    case "hard":
+    case "needs_authentication":
+      return [];
+  }
 }
 
 /**
@@ -158,6 +227,18 @@ export function parseFinalAction(value: unknown): AutopayFinalAction {
 }
 
 /**
+ * Validate the pre-expiry outreach window from the policy write boundary:
+ * whole days, at least a day out, bounded so a misconfigured window cannot
+ * notify a year ahead. Pure — throws AutopayError naming the fix.
+ */
+export function parseExpiryNoticeDays(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 90) {
+    throw new AutopayError(`pre-expiry notice window ${JSON.stringify(value)} is not a whole day between 1 and 90; fix it in Setup → Collections`);
+  }
+  return value;
+}
+
+/**
  * The autopay policy for an org: the latest-updated active customer-invoice
  * dunning policy, which is also where the operator edits the retry schedule.
  * Refuses by name when no active policy exists — retrying without a schedule
@@ -168,13 +249,17 @@ export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy
     policyId: string;
     policyName: string;
     retryOffsets: unknown;
+    insufficientFundsOffsets: unknown;
     finalAction: unknown;
     gracePeriodDays: number;
+    expiryNoticeDays: unknown;
   }>(sql`
     select id as "policyId", name as "policyName",
            autopay_retry_offsets_days as "retryOffsets",
+           autopay_insufficient_funds_offsets_days as "insufficientFundsOffsets",
            autopay_final_action as "finalAction",
-           grace_period_days as "gracePeriodDays"
+           grace_period_days as "gracePeriodDays",
+           autopay_expiry_notice_days as "expiryNoticeDays"
       from dunning_policies
      where org_id = ${orgId} and is_active and applies_to_kind = 'customer_invoice'
      order by updated_at desc limit 1
@@ -187,8 +272,10 @@ export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy
     policyId: policy.policyId,
     policyName: policy.policyName,
     retryOffsetsDays: parseRetryOffsetsDays(policy.retryOffsets),
+    insufficientFundsOffsetsDays: parseRetryOffsetsDays(policy.insufficientFundsOffsets),
     finalAction: parseFinalAction(policy.finalAction),
     gracePeriodDays: policy.gracePeriodDays,
+    expiryNoticeDays: parseExpiryNoticeDays(policy.expiryNoticeDays),
   };
 }
 
@@ -811,31 +898,41 @@ export async function cancelEnrollment(orgId: string, enrollmentId: string, acto
  */
 export async function saveAutopayPolicy(
   orgId: string,
-  input: { policyId: string; retryOffsetsDays: unknown; finalAction: unknown; actorId?: string | null },
+  input: { policyId: string; retryOffsetsDays: unknown; insufficientFundsOffsetsDays?: unknown; expiryNoticeDays?: unknown; finalAction: unknown; actorId?: string | null },
 ): Promise<AutopayPolicy> {
   const offsets = parseRetryOffsetsDays(input.retryOffsetsDays);
+  const insufficientOffsets = input.insufficientFundsOffsetsDays === undefined
+    ? null
+    : parseRetryOffsetsDays(input.insufficientFundsOffsetsDays);
+  const expiryNoticeDays = input.expiryNoticeDays === undefined ? null : parseExpiryNoticeDays(input.expiryNoticeDays);
   const finalAction = parseFinalAction(input.finalAction);
-  const offsetsList = offsets.length > 0
-    ? sql`ARRAY[${sql.join(offsets.map((offset) => sql`${offset}`), sql`, `)}]`
+  const offsetsList = (list: number[]) => list.length > 0
+    ? sql`ARRAY[${sql.join(list.map((offset) => sql`${offset}`), sql`, `)}]`
     : sql`'{}'::integer[]`;
   return withOrg(orgId, async () => {
     await requireAutopayFeature(orgId);
-    const updated = (await db.execute<{ id: string; name: string; grace_period_days: number }>(sql`
+    const updated = (await db.execute<{ id: string; name: string; grace_period_days: number; insufficient_funds_offsets: unknown; expiry_notice_days: number }>(sql`
       update dunning_policies
-         set autopay_retry_offsets_days = ${offsetsList},
+         set autopay_retry_offsets_days = ${offsetsList(offsets)},
+             autopay_insufficient_funds_offsets_days = coalesce(${insufficientOffsets === null ? sql`null::integer[]` : offsetsList(insufficientOffsets)}, autopay_insufficient_funds_offsets_days),
+             autopay_expiry_notice_days = coalesce(${expiryNoticeDays}, autopay_expiry_notice_days),
              autopay_final_action = ${finalAction},
              updated_at = now(), updated_by = ${input.actorId ?? null}
        where id = ${input.policyId} and org_id = ${orgId}
-       returning id, name, grace_period_days as "grace_period_days"
+       returning id, name, grace_period_days as "grace_period_days",
+                 autopay_insufficient_funds_offsets_days as "insufficient_funds_offsets",
+                 autopay_expiry_notice_days as "expiry_notice_days"
     `));
     const row = updated.rows[0];
     if (!row) throw new AutopayError("collection policy not found");
+    const resolvedInsufficient = insufficientOffsets ?? parseRetryOffsetsDays(row.insufficient_funds_offsets);
+    const resolvedExpiry = expiryNoticeDays ?? parseExpiryNoticeDays(row.expiry_notice_days);
     await auditAutopay(orgId, "dunning_policies", row.id, {
       event: "autopay_policy_saved",
-      after: { retryOffsetsDays: offsets, finalAction },
+      after: { retryOffsetsDays: offsets, insufficientFundsOffsetsDays: resolvedInsufficient, expiryNoticeDays: resolvedExpiry, finalAction },
       reason: "Operator changed the autopay retry schedule or final action.",
     }, input.actorId ?? null);
-    return { policyId: row.id, policyName: row.name, retryOffsetsDays: offsets, finalAction, gracePeriodDays: row.grace_period_days };
+    return { policyId: row.id, policyName: row.name, retryOffsetsDays: offsets, insufficientFundsOffsetsDays: resolvedInsufficient, finalAction, gracePeriodDays: row.grace_period_days, expiryNoticeDays: resolvedExpiry };
   });
 }
 
@@ -975,7 +1072,7 @@ export async function runAutopayCollectionForOrg(
         join documents d on d.id = a.invoice_id and d.org_id = a.org_id
         join autopay_enrollments e on e.id = a.enrollment_id and e.org_id = a.org_id and e.status = 'active'
         join customer_payment_methods m on m.id = a.payment_method_id and m.org_id = a.org_id and m.status = 'active'
-       where a.org_id = ${orgId} and a.status = 'failed' and a.decline_kind = 'soft'
+       where a.org_id = ${orgId} and a.status = 'failed' and a.decline_kind in ('soft', 'insufficient_funds')
          and a.next_retry_on is not null and a.next_retry_on <= ${today}::date
          and not exists (
            select 1 from collection_attempts later
@@ -1168,7 +1265,7 @@ export async function retryAttemptNow(
        limit 1
     `)).rows[0];
     if (!attempt) throw new AutopayError("only a failed attempt can be retried; this one already settled or never failed");
-    if (attempt.decline_kind !== "soft") {
+    if (attempt.decline_kind === "hard") {
       throw new AutopayError("this decline will not clear on retry; ask the customer to update the payment method instead");
     }
     const candidate = (await db.execute<CollectionCandidate>(sql`
@@ -1237,6 +1334,21 @@ async function uncollectibleReason(
   return null;
 }
 
+/**
+ * The operator-facing remedy for a terminal decline: hard declines need new
+ * payment details, authentication-required declines need the customer to
+ * verify, and an exhausted ladder has nothing left to try. Pure.
+ */
+export function terminalDeclineDetail(kind: DeclineClass, declineCode: string | null): string {
+  if (kind === "hard") {
+    return `declined (${declineCode ?? "unknown reason"}) — no retry; ask the customer to update the payment method`;
+  }
+  if (kind === "needs_authentication") {
+    return `declined (${declineCode ?? "unknown reason"}) — send the customer the authentication link to verify the payment`;
+  }
+  return `final retry declined${declineCode ? ` (${declineCode})` : ""}`;
+}
+
 /** Record a provider decline: schedule the next retry or run the final action. */
 async function recordDecline(
   orgId: string,
@@ -1247,14 +1359,17 @@ async function recordDecline(
   policy: AutopayPolicy,
   declineCode: string | null,
   result: AutopayRunResult,
+  opts?: { authUrl?: string | null },
 ): Promise<void> {
   const kind = classifyDecline(declineCode) ?? "soft";
-  if (kind === "soft" && position < policy.retryOffsetsDays.length) {
-    const nextRetryOn = addCalendarDays(today, policy.retryOffsetsDays[position]!);
+  const ladder = retryLadderForClass(policy, kind);
+  const authUrl = opts?.authUrl ?? null;
+  if (position < ladder.length) {
+    const nextRetryOn = addCalendarDays(today, ladder[position]!);
     const updated = (await db.execute<{ id: string }>(sql`
       update collection_attempts
-         set status = 'failed', decline_code = ${declineCode}, decline_kind = 'soft',
-             next_retry_on = ${nextRetryOn}::date, updated_at = now()
+         set status = 'failed', decline_code = ${declineCode}, decline_kind = ${kind},
+             next_retry_on = ${nextRetryOn}::date, auth_url = ${authUrl}, updated_at = now()
        where id = ${attemptId} and org_id = ${orgId} and status = 'initiated'
        returning id
     `));
@@ -1265,14 +1380,16 @@ async function recordDecline(
       invoiceId: candidate.invoiceId,
       attemptId,
       status: "failed",
-      detail: `declined${declineCode ? ` (${declineCode})` : ""}; retrying ${nextRetryOn}`,
+      detail: kind === "insufficient_funds"
+        ? `declined for insufficient funds${declineCode ? ` (${declineCode})` : ""}; retrying ${nextRetryOn} near payday`
+        : `declined${declineCode ? ` (${declineCode})` : ""}; retrying ${nextRetryOn}`,
     });
     return;
   }
   const updated = (await db.execute<{ id: string }>(sql`
     update collection_attempts
        set status = 'failed', decline_code = ${declineCode}, decline_kind = ${kind},
-           next_retry_on = null, updated_at = now()
+           next_retry_on = null, auth_url = ${authUrl}, updated_at = now()
      where id = ${attemptId} and org_id = ${orgId} and status = 'initiated'
      returning id
   `));
@@ -1282,15 +1399,11 @@ async function recordDecline(
     invoiceId: candidate.invoiceId,
     attemptId,
     status: "failed",
-    detail: kind === "hard"
-      ? `declined (${declineCode ?? "unknown reason"}) — no retry; update the payment method`
-      : `final retry declined${declineCode ? ` (${declineCode})` : ""}`,
+    detail: terminalDeclineDetail(kind, declineCode),
   });
-  if (position >= policy.retryOffsetsDays.length || kind === "hard") {
-    const acted = await applyFinalAction(orgId, candidate, policy, null);
-    result.suspended += acted.suspended;
-    result.canceled += acted.canceled;
-  }
+  const acted = await applyFinalAction(orgId, candidate, policy, null);
+  result.suspended += acted.suspended;
+  result.canceled += acted.canceled;
 }
 
 // ---------------------------------------------------------------------------
@@ -1659,11 +1772,12 @@ export async function settleCollectionAttemptEvent(
         subscriptionId: found.subscription_id,
       };
       const kind = classifyDecline((event.raw as Record<string, unknown> | undefined)?.declineCode as string | null) ?? "soft";
-      if (kind === "soft" && position < policy.retryOffsetsDays.length) {
-        const nextRetryOn = addCalendarDays(today, policy.retryOffsetsDays[position]!);
+      const ladder = retryLadderForClass(policy, kind);
+      if (position < ladder.length) {
+        const nextRetryOn = addCalendarDays(today, ladder[position]!);
         await db.execute(sql`
           update collection_attempts
-             set status = 'failed', decline_code = 'provider_reported', decline_kind = 'soft',
+             set status = 'failed', decline_code = 'provider_reported', decline_kind = ${kind},
                  next_retry_on = ${nextRetryOn}::date, provider_ref = ${event.externalRef}, updated_at = now()
            where id = ${found.id} and org_id = ${orgId}
         `);
