@@ -5,6 +5,7 @@ import {
   AutopayError,
   removeMethod,
   setDefaultMethod,
+  setMethodFallbackPriority,
 } from '@openbooks/engine/payments/autopay'
 import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
@@ -12,20 +13,27 @@ import { guardPaymentMethodScope } from '@/lib/autopay-scope'
 
 export const runtime = 'nodejs'
 
-const patchBody = z.object({ isDefault: z.literal(true) })
+const patchBody = z.union([
+  z.object({ isDefault: z.literal(true) }),
+  z.object({ fallbackPriority: z.number().int().min(0).max(999) }),
+])
 
-/** Make a method the default charge target. */
+/** Make a method the default charge target, or order it in the backup chain. */
 export const PATCH = defineRoute({
   permission: 'payment_methods.manage',
   feature: 'autopay',
   body: patchBody,
-  handler: async ({ authz, params: routeParams }) => {
+  handler: async ({ authz, body, params: routeParams }) => {
     const { id } = (routeParams ?? {}) as { id?: string }
     if (!id || !isUuid(id)) return NextResponse.json({ error: 'method id is required' }, { status: 400 })
     const outOfScope = await guardPaymentMethodScope(authz, id)
     if (outOfScope) return outOfScope
     try {
-      await setDefaultMethod(authz.user.orgId, id, authz.user.id)
+      if ('fallbackPriority' in body) {
+        await setMethodFallbackPriority(authz.user.orgId, id, body.fallbackPriority, authz.user.id)
+      } else {
+        await setDefaultMethod(authz.user.orgId, id, authz.user.id)
+      }
       return NextResponse.json({ ok: true })
     } catch (e) {
       if (e instanceof AutopayError) return apiErrorResponse(e, { safeStatus: 422 })

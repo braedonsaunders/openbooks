@@ -15,9 +15,11 @@ import {
   AutopayError,
   classifyDecline,
   enrollAutopay,
+  listPaymentMethods,
   parseFinalAction,
   parseRetryOffsetsDays,
   runAutopayCollectionForOrg,
+  setMethodFallbackPriority,
   type ChargeFn,
 } from "./autopay.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
@@ -486,6 +488,50 @@ test("enrollment refuses duplicates and everything refuses while the gate is off
     const result = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: fake.charge });
     assert.equal(result.charged, 0);
     assert.equal(fake.calls.length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("backup methods order by fallback priority with creation time breaking ties", { skip: !DB }, async () => {
+  const { org, userId } = await seedAutopayOrg();
+  try {
+    const seedBackup = async (providerMethodId: string): Promise<string> => {
+      const rows = (await db.execute<{ id: string }>(sql`
+        insert into customer_payment_methods
+          (org_id, party_id, provider, provider_customer_id, provider_method_id,
+           brand, last4, exp_month, exp_year, is_default, status, created_by, updated_by)
+        values (${org.orgId}, ${org.customerId}, 'stripe', 'cus_test', ${providerMethodId},
+                'visa', '4242', 12, 2030, false, 'active', ${userId}, ${userId})
+        returning id`)).rows;
+      return rows[0]!.id;
+    };
+    // Charge order, as the collector reads it: the default first, then
+    // active backups by priority with creation time breaking ties.
+    const chargeOrder = async (): Promise<string[]> => {
+      const methods = await listPaymentMethods(org.orgId, org.customerId);
+      return methods
+        .filter((method) => !method.isDefault && method.status === "active")
+        .sort((a, b) => a.fallbackPriority - b.fallbackPriority || (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))
+        .map((method) => method.id);
+    };
+    const older = await seedBackup("pm_older");
+    const newer = await seedBackup("pm_newer");
+    assert.deepEqual(await chargeOrder(), [older, newer]);
+    // Moving the older card behind the newer one sticks.
+    await setMethodFallbackPriority(org.orgId, older, 1, userId);
+    assert.deepEqual(await chargeOrder(), [newer, older]);
+    const stored = (await listPaymentMethods(org.orgId, org.customerId)).find((method) => method.id === older)!;
+    assert.equal(stored.fallbackPriority, 1);
+    // Out-of-range priorities and unknown methods refuse by name.
+    await assert.rejects(
+      setMethodFallbackPriority(org.orgId, older, 1000, userId),
+      (error: unknown) => error instanceof AutopayError && /whole number between 0 and 999/.test(error.message),
+    );
+    await assert.rejects(
+      setMethodFallbackPriority(org.orgId, randomUUID(), 0, userId),
+      (error: unknown) => error instanceof AutopayError && /not found/.test(error.message),
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

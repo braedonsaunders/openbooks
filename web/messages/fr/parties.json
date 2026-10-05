@@ -97,7 +97,12 @@
       "updateFailed": "Le réglage n'a pas pu être modifié.",
       "paused": "En pause",
       "subscriptionScope": "Abonnement {name}",
-      "customerScope": "Toutes les factures de ce client"
+      "customerScope": "Toutes les factures de ce client",
+      "backupPosition": "Secours {n}",
+      "backupDescription": "Si le mode par défaut est refusé, les modes de secours sont débités dans l'ordre affiché.",
+      "moveUp": "Avancer dans l'ordre de secours",
+      "moveDown": "Reculer dans l'ordre de secours",
+      "reorderFailed": "L'ordre de secours n'a pas pu être modifié."
     },
     "wages": {
       "title": "Taux de rémunération",

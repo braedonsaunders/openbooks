@@ -97,7 +97,12 @@
       "updateFailed": "The autopay setting could not be changed.",
       "paused": "Paused",
       "subscriptionScope": "Subscription {name}",
-      "customerScope": "All invoices for this customer"
+      "customerScope": "All invoices for this customer",
+      "backupPosition": "Backup {n}",
+      "backupDescription": "If the default method declines, backup methods are charged in the order shown.",
+      "moveUp": "Move earlier in the backup order",
+      "moveDown": "Move later in the backup order",
+      "reorderFailed": "The backup order could not be changed."
     },
     "wages": {
       "title": "Wage rates",

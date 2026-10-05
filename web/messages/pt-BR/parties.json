@@ -100,7 +100,12 @@
       "updateFailed": "Não foi possível alterar a configuração.",
       "paused": "Em pausa",
       "subscriptionScope": "Assinatura {name}",
-      "customerScope": "Todas as faturas deste cliente"
+      "customerScope": "Todas as faturas deste cliente",
+      "backupPosition": "Reserva {n}",
+      "backupDescription": "Se o método padrão for recusado, os métodos de reserva serão cobrados na ordem exibida.",
+      "moveUp": "Mover para antes na ordem de reserva",
+      "moveDown": "Mover para depois na ordem de reserva",
+      "reorderFailed": "Não foi possível alterar a ordem de reserva."
     },
     "wages": {
       "title": "Taxas salariais",

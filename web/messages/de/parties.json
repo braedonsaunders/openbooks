@@ -100,7 +100,12 @@
       "updateFailed": "Die Einstellung konnte nicht geändert werden.",
       "paused": "Pausiert",
       "subscriptionScope": "Abonnement {name}",
-      "customerScope": "Alle Rechnungen dieses Kunden"
+      "customerScope": "Alle Rechnungen dieses Kunden",
+      "backupPosition": "Ersatz {n}",
+      "backupDescription": "Wenn die Standardmethode ablehnt, werden Ersatzmethoden in der angezeigten Reihenfolge belastet.",
+      "moveUp": "In der Ersatzreihenfolge nach oben verschieben",
+      "moveDown": "In der Ersatzreihenfolge nach unten verschieben",
+      "reorderFailed": "Die Ersatzreihenfolge konnte nicht geändert werden."
     },
     "wages": {
       "title": "Lohnsätze",

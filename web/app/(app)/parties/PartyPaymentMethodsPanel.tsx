@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { CreditCard } from 'lucide-react'
+import { ChevronDown, ChevronUp, CreditCard } from 'lucide-react'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Badge, Button, DisclosureSection, Input, Label, Select } from '@openbooks/ui'
 import { Switch } from '../../../components/switch'
@@ -22,6 +22,8 @@ interface StoredMethodRow {
   expYear: number | null
   mandateReference: string | null
   isDefault: boolean
+  fallbackPriority: number
+  createdAt: string
   status: string
 }
 
@@ -128,6 +130,33 @@ export function PartyPaymentMethodsPanel({
     })
   }
 
+  async function moveBackup(methodId: string, direction: -1 | 1) {
+    const ordered = [...backups]
+    const at = ordered.findIndex((method) => method.id === methodId)
+    const swap = at + direction
+    if (at < 0 || swap < 0 || swap >= ordered.length) return
+    const moved = ordered[at]!
+    ordered[at] = ordered[swap]!
+    ordered[swap] = moved
+    // Renumber the chain in its new order so equal priorities can never hide
+    // a move; only rows whose value changes are written.
+    const updates = ordered
+      .map((method, index) => ({ method, index }))
+      .filter(({ method, index }) => method.fallbackPriority !== index)
+    await execute(async () => {
+      for (const { method, index } of updates) {
+        await fetchAction(`/api/autopay/methods/${method.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fallbackPriority: index }),
+        })
+      }
+    }, {
+      fallbackMessage: t('reorderFailed'),
+    })
+    refresh()
+  }
+
   async function remove(method: StoredMethodRow) {
     const confirmed = await confirmDialog({
       title: t('removeTitle'),
@@ -196,6 +225,13 @@ export function PartyPaymentMethodsPanel({
   const customerEnrollment = enrollments?.find((row) => row.subscriptionId === null)
   const subscriptionEnrollments = enrollments?.filter((row) => row.subscriptionId !== null) ?? []
   const defaultMethod = methods?.find((method) => method.isDefault && method.status === 'active')
+  // The backup chain in charge order: the default always charges first, then
+  // active backups by priority with creation time breaking ties — the same
+  // order the collection run uses, so what the operator sees is what charges.
+  const backups = (methods ?? [])
+    .filter((method) => !method.isDefault && method.status === 'active')
+    .sort((a, b) => a.fallbackPriority - b.fallbackPriority || (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))
+  const backupRank = new Map(backups.map((method, index) => [method.id, index]))
 
   return (
     <section className="space-y-4">
@@ -246,9 +282,36 @@ export function PartyPaymentMethodsPanel({
                     </p>
                   </div>
                   {method.isDefault ? <Badge variant="default">{t('defaultBadge')}</Badge> : null}
+                  {backupRank.has(method.id) ? (
+                    <Badge variant="secondary">{t('backupPosition', { n: (backupRank.get(method.id) ?? 0) + 1 })}</Badge>
+                  ) : null}
                   <Badge variant={method.status === 'active' ? 'success' : 'secondary'}>
                     {method.status === 'active' ? t('active') : t('awaitingCustomer')}
                   </Badge>
+                  {canManageMethods && backupRank.has(method.id) ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy || (backupRank.get(method.id) ?? 0) === 0}
+                        onClick={() => void moveBackup(method.id, -1)}
+                        aria-label={t('moveUp')}
+                        title={t('moveUp')}
+                      >
+                        <ChevronUp size={14} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy || (backupRank.get(method.id) ?? 0) === backups.length - 1}
+                        onClick={() => void moveBackup(method.id, 1)}
+                        aria-label={t('moveDown')}
+                        title={t('moveDown')}
+                      >
+                        <ChevronDown size={14} />
+                      </Button>
+                    </>
+                  ) : null}
                   {canManageMethods && !method.isDefault && method.status === 'active' ? (
                     <Button variant="outline" size="sm" disabled={busy} onClick={() => void setDefault(method.id)}>
                       {t('setDefault')}
@@ -263,6 +326,9 @@ export function PartyPaymentMethodsPanel({
               ))}
             </ul>
           )}
+          {backups.length > 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('backupDescription')}</p>
+          ) : null}
           {canManageMethods ? (
             <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('sendHint')}</p>

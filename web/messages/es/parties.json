@@ -97,7 +97,12 @@
       "updateFailed": "No se pudo cambiar el ajuste.",
       "paused": "En pausa",
       "subscriptionScope": "Suscripción {name}",
-      "customerScope": "Todas las facturas de este cliente"
+      "customerScope": "Todas las facturas de este cliente",
+      "backupPosition": "Respaldo {n}",
+      "backupDescription": "Si el método predeterminado es rechazado, los métodos de respaldo se cobran en el orden mostrado.",
+      "moveUp": "Mover antes en el orden de respaldo",
+      "moveDown": "Mover después en el orden de respaldo",
+      "reorderFailed": "No se pudo cambiar el orden de respaldo."
     },
     "wages": {
       "title": "Tarifas salariales",
