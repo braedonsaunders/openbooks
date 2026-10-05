@@ -108,7 +108,7 @@ export async function portalHome(orgId: string, partyId: string, runner: SqlExec
     select s.id, s.status, s.quantity::text as quantity, s.price_override::text as "priceOverride",
            s.start_on::text as "startOn", s.next_bill_on::text as "nextBillOn",
            p.name as "planName", p.amount::text as "planAmount",
-           coalesce(p.currency, '') as "planCurrency", p.interval as "planInterval",
+           coalesce(p.currency_code, '') as "planCurrency", p.interval as "planInterval",
            p.interval_count as "planIntervalCount"
       from subscriptions s
       join subscription_plans p on p.org_id = s.org_id and p.id = s.plan_id
