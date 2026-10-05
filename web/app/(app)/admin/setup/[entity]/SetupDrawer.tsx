@@ -33,7 +33,8 @@ import { setupDomainPayload } from '../../../../../lib/setup/domain-payload'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { coerceField, SETUP_DECIMAL_SCALE } from '../../../../../lib/setup/coerce'
 import { majorToMinor, minorToMajor } from '../../../../../lib/setup/money-fields'
-import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { formatDecimal } from '../../../../../lib/money-format'
 import { countryOptions } from '../../../../../lib/countries'
 
@@ -172,6 +173,34 @@ export function SetupDrawer({
   for (const option of refOptions.currencies ?? []) {
     if (typeof option.minorUnits === 'number') minorUnits[option.value] = option.minorUnits
   }
+  // A stored minor that cannot be read as majors is never shown as
+  // majors: showing 12050 where 120.50 belongs would bank a 100x figure the
+  // moment the operator saves. Such a field opens blank and locked with the
+  // stored figure named as minor units, and only deliberate re-entry in a
+  // known currency unlocks it.
+  const moneyLabel = (f: SetupField) => t(f.labelKey ?? `fields.${f.key}`)
+  const initialMoneyLocks: Record<string, string> = {}
+  const initialMoneyMajors: Record<string, string> = {}
+  if (row) {
+    for (const f of entity.fields) {
+      if (f.kind !== 'money') continue
+      const raw = initialValue(f, row)
+      if (raw === '' || raw == null) continue
+      const currency = String(row[toSnake(f.currencyField ?? 'currency')] ?? '').toUpperCase()
+      const exponent = minorUnits[currency]
+      const major = exponent === undefined ? null : minorToMajor(raw as string | number, exponent)
+      if (major == null) {
+        initialMoneyLocks[f.key] = t('validation.moneyUnknownPrecision', {
+          field: moneyLabel(f),
+          raw: String(raw),
+          currency: currency || '—',
+        })
+      } else {
+        initialMoneyMajors[f.key] = major
+      }
+    }
+  }
+  const [moneyLocked, setMoneyLocked] = useState(initialMoneyLocks)
   const [form, setForm] = useState<Record<string, unknown>>(() => {
     const init: Record<string, unknown> = {}
     for (const f of entity.fields) {
@@ -179,17 +208,13 @@ export function SetupDrawer({
         init[f.key] = members
         continue
       }
-      const raw = initialValue(f, row)
       // Money fields hold operator majors in the form; storage minors stay
-      // on the row. An unknown precision keeps the raw figure so the save
-      // path — never the display — refuses it by name.
-      if (f.kind === 'money' && row && raw !== '' && raw != null) {
-        const exponent = minorUnits[String(row[toSnake(f.currencyField ?? 'currency')] ?? '').toUpperCase()]
-        const major = exponent === undefined ? null : minorToMajor(raw as string | number, exponent)
-        init[f.key] = major ?? raw
+      // on the row. A locked field opens blank (see above), never as minors.
+      if (f.kind === 'money') {
+        init[f.key] = initialMoneyLocks[f.key] ? '' : (initialMoneyMajors[f.key] ?? initialValue(f, row))
         continue
       }
-      init[f.key] = raw
+      init[f.key] = initialValue(f, row)
     }
     return { ...init, ...initialValues, ...fixedValues }
   })
@@ -212,6 +237,14 @@ export function SetupDrawer({
     : t(`entities.${entity.key}.title`)
   const set = (key: string, value: unknown) => {
     setFieldError(null)
+    // Deliberate re-entry unlocks a precision-locked money field; anything
+    // else keeps its lock until the operator types a fresh amount.
+    setMoneyLocked((current) => {
+      if (!(key in current)) return current
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
     setForm((current) => {
       const next = { ...current, [key]: value }
       for (const field of entity.fields) {
@@ -297,6 +330,41 @@ export function SetupDrawer({
     const timer = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS)
     try {
       let body: Record<string, unknown> = { ...form, ...fixedValues }
+      // Money fields arrive as operator majors and post as storage minors, so
+      // the conversion runs before the domain payload: the shared coerce
+      // grammar reads whole minor units and would refuse a majors figure.
+      // The sibling currency names the precision; anything the shared
+      // decimal grammar refuses renders the engine classifier's precise
+      // remedy, and nothing rounds or coerces.
+      for (const field of entity.fields) {
+        if (field.kind !== 'money') continue
+        // The precision lock is checked before the empty skip: a locked
+        // field opens blank, so an untouched save would otherwise sail past
+        // the guard and clear the stored amount instead of refusing.
+        if (moneyLocked[field.key]) {
+          const error = moneyLocked[field.key]
+          setFieldError(error); toast.error(error); setBusy(false); return
+        }
+        if (typeof body[field.key] !== 'string' || String(body[field.key]).trim() === '') continue
+        const currency = String(body[field.currencyField ?? 'currency'] ?? '').toUpperCase()
+        const exponent = minorUnits[currency]
+        const label = t(field.labelKey ?? `fields.${field.key}`)
+        if (exponent === undefined) {
+          const error = t('validation.moneyUnknownCurrency', { field: label, currency: currency || '—' })
+          setFieldError(error); toast.error(error); setBusy(false); return
+        }
+        const minorText = majorToMinor(String(body[field.key]), exponent)
+        const minor = minorText == null ? NaN : Number(minorText)
+        if (minorText == null) {
+          const error = moneyRefusal(label, String(body[field.key]), 'an amount', exponent)
+          setFieldError(error); toast.error(error); setBusy(false); return
+        }
+        if (minor < 0 || !Number.isSafeInteger(minor)) {
+          const error = t('validation.moneyAmount', { field: label, currency })
+          setFieldError(error); toast.error(error); setBusy(false); return
+        }
+        body[field.key] = minor
+      }
       if (entity.mutationPath) {
         const payload = setupDomainPayload(entity, body)
         if (!payload.ok) { setFieldError(payload.error); toast.error(payload.error); return }
@@ -311,26 +379,6 @@ export function SetupDrawer({
         if ((field.kind === 'decimal' || field.kind === 'percent') && typeof body[field.key] === 'string') {
           body[field.key] = canonicalDecimal(body[field.key], field.decimalScale ?? SETUP_DECIMAL_SCALE) ?? body[field.key]
         }
-      }
-      // Money fields arrive as operator majors and post as storage minors:
-      // the sibling currency names the precision, an unknown one refuses by
-      // name, and over-precise or non-numeric text never rounds or coerces.
-      for (const field of entity.fields) {
-        if (field.kind !== 'money' || typeof body[field.key] !== 'string' || String(body[field.key]).trim() === '') continue
-        const currency = String(body[field.currencyField ?? 'currency'] ?? '').toUpperCase()
-        const exponent = minorUnits[currency]
-        const label = t(field.labelKey ?? `fields.${field.key}`)
-        if (exponent === undefined) {
-          const error = t('validation.moneyUnknownCurrency', { field: label, currency: currency || '—' })
-          setFieldError(error); toast.error(error); setBusy(false); return
-        }
-        const converted = majorToMinor(String(body[field.key]), exponent)
-        const minor = converted.ok ? Number(converted.minor) : NaN
-        if (!converted.ok || !Number.isSafeInteger(minor)) {
-          const error = t('validation.moneyAmount', { field: label, currency })
-          setFieldError(error); toast.error(error); setBusy(false); return
-        }
-        body[field.key] = minor
       }
       // A field the form stopped showing must not persist behind the UI: a pay
       // component switched from a deduction to an earning gives its protection
@@ -547,7 +595,7 @@ export function SetupDrawer({
         if (!fields.length) return null
         return <InspectorPanel key={section.titleKey} title={t(section.titleKey)} description={section.descriptionKey ? t(section.descriptionKey) : undefined}>
           <div className="grid gap-5 sm:grid-cols-2">
-            {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={!editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} formValues={form} t={t} />)}
+            {fields.map((field) => <FieldControl key={field.key} field={field} value={form[field.key]} onChange={(value) => set(field.key, value)} creating={creating} forceLocked={!editing || Boolean(entity.readOnly) || Object.hasOwn(fixedValues ?? {}, field.key)} refOptions={field.ref ? (refOptions[field.ref] ?? []) : []} formValues={form} t={t} moneyLocked={moneyLocked[field.key]} />)}
           </div>
         </InspectorPanel>
       })}
@@ -568,6 +616,7 @@ export function SetupDrawer({
               refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
               formValues={form}
               t={t}
+              moneyLocked={moneyLocked[field.key]}
             />
           </Fragment>
         ))}
@@ -649,6 +698,7 @@ export function FieldControl({
   refOptions,
   formValues,
   t,
+  moneyLocked,
 }: {
   field: SetupField
   value: unknown
@@ -659,6 +709,8 @@ export function FieldControl({
   /** Live drawer values, so a scoped select follows its scope field. */
   formValues: Record<string, unknown>
   t: ReturnType<typeof useTranslations>
+  /** Precision-lock remedy for a money field; the input opens blank until deliberate re-entry. */
+  moneyLocked?: string | null
 }) {
   const locale = useLocale()
   const common = useTranslations('common')
@@ -883,6 +935,20 @@ export function FieldControl({
   // Money fields hold operator majors in the form state (converted at init
   // and save); the control is the shared decimal input, never a minor-units box.
   const numeric = field.kind === 'integer' || field.kind === 'decimal' || field.kind === 'percent' || field.kind === 'money'
+  if (field.kind === 'money' && moneyLocked) {
+    // Blank and editable, never disabled: typing a deliberate fresh amount
+    // is the re-entry that clears the lock. Saving untouched still refuses
+    // (the save loop checks the lock before its empty skip). Read-only stays
+    // read-only: the `locked` early return above owns forceLocked and
+    // lockedOnEdit, so this branch only renders for an editable field.
+    return (
+      <div className={wrap}>
+        <Label help={help}>{label}{requiredMark}</Label>
+        <Input aria-label={label} type="text" inputMode="decimal" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
+        <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">{moneyLocked}</p>
+      </div>
+    )
+  }
   return (
     <div className={wrap}>
       <Label help={help}>{label}{requiredMark}</Label>

@@ -2149,8 +2149,10 @@
       "required": "{field} is required",
       "invalidStructuredValue": "{field} contains an unreadable stored record. Correct the configuration before saving.",
       "moneyAmount": "Enter {field} as a normal {currency} amount, for example 120.50 — not in minor units, and with no more fraction digits than {currency} prices.",
-      "moneyUnknownCurrency": "Cannot price {field} in {currency}: the currency has no supported minor-unit precision."
+      "moneyUnknownCurrency": "Cannot price {field} in {currency}: the currency has no supported minor-unit precision.",
+      "moneyUnknownPrecision": "The saved {field} ({raw} minor units) cannot be shown in {currency}: enter the amount again."
     },
+    "moneyMinorUnitsNote": "minor units",
     "drawer": {
       "newTitle": "New {name}",
       "editTitle": "Edit {name}",
@@ -3326,7 +3328,7 @@
         "title": "Channel ad spend",
         "singular": "Channel ad spend",
         "description": "Daily marketing spend per storefront channel; the day's order margins restate with it.",
-        "amount": "Spend (minor units)"
+        "amount": "Spend"
       },
       "channel-account-maps": {
         "title": "Channel posting accounts",

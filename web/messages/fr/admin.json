@@ -2074,8 +2074,10 @@
       "required": "{field} est obligatoire",
       "invalidStructuredValue": "{field} contient un enregistrement illisible. Corrigez la configuration avant d’enregistrer.",
       "moneyAmount": "Saisissez {field} comme un montant normal en {currency}, par exemple 120,50 — pas en sous-unités, et sans plus de décimales que {currency} n’en compte.",
-      "moneyUnknownCurrency": "Impossible de tarifer {field} en {currency} : la devise n’a pas de précision de sous-unités prise en charge."
+      "moneyUnknownCurrency": "Impossible de tarifer {field} en {currency} : la devise n’a pas de précision de sous-unités prise en charge.",
+      "moneyUnknownPrecision": "La valeur enregistrée de {field} ({raw} sous-unités) ne peut pas s’afficher en {currency} : saisissez de nouveau le montant."
     },
+    "moneyMinorUnitsNote": "sous-unités",
     "drawer": {
       "newTitle": "Nouveau : {name}",
       "editTitle": "Modifier : {name}",
@@ -3251,7 +3253,7 @@
         "title": "Dépenses publicitaires des canaux",
         "singular": "Dépense publicitaire du canal",
         "description": "Dépenses marketing quotidiennes par canal de vente ; les marges du jour sont recalculées en conséquence.",
-        "amount": "Dépense (plus petite unité)"
+        "amount": "Dépense"
       },
       "channel-account-maps": {
         "title": "Comptes comptables du canal",

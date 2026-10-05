@@ -83,10 +83,11 @@ export function renderCell(
       // An unknown precision names its units instead of guessing a figure.
       const code = String(row[toSnake(col.currencyField ?? 'currency')] ?? '')
       const exponent = code ? minorUnits?.[code.toUpperCase()] : undefined
-      if (exponent === undefined) return `${String(raw)} ${code}(minor units)`.trim()
+      const minorNote = t('moneyMinorUnitsNote')
+      if (exponent === undefined) return `${String(raw)} ${code} (${minorNote})`.trim()
       const major = minorToMajor(raw as string | number, exponent)
-      if (major == null) return `${String(raw)} ${code}(minor units)`.trim()
-      return `${formatDecimal(locale, major, { maximumFractionDigits: exponent })} ${code}`.trim()
+      if (major == null) return `${String(raw)} ${code} (${minorNote})`.trim()
+      return `${formatDecimal(locale, major, { minimumFractionDigits: exponent, maximumFractionDigits: exponent })} ${code}`.trim()
     }
     case 'date':
       return raw ? String(raw) : '—'

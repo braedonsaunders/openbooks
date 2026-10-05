@@ -2398,8 +2398,10 @@
       "required": "{field}は必須です",
       "invalidStructuredValue": "{field} に読み取れない保存済みレコードがあります。保存する前に設定を修正してください。",
       "moneyAmount": "{field} は {currency} の通常の金額で入力してください（例: 120.50）。補助単位ではなく、{currency} の小数桁数を超えないでください。",
-      "moneyUnknownCurrency": "{currency} では {field} の価格を設定できません。この通貨には対応する補助単位の精度がありません。"
+      "moneyUnknownCurrency": "{currency} では {field} の価格を設定できません。この通貨には対応する補助単位の精度がありません。",
+      "moneyUnknownPrecision": "保存済みの{field}（{raw}補助単位）を{currency}で表示できません。金額を再入力してください。"
     },
+    "moneyMinorUnitsNote": "補助単位",
     "drawer": {
       "newTitle": "新規{name}",
       "editTitle": "{name}を編集",
@@ -3371,7 +3373,7 @@
         "title": "チャネル広告費",
         "singular": "チャネル広告費",
         "description": "販売チャネルごとの日次マーケティング費用。その日の注文マージンはこの値で再計算されます。",
-        "amount": "支出額（最小単位）"
+        "amount": "支出額"
       },
       "channel-account-maps": {
         "title": "チャネルの転記勘定",

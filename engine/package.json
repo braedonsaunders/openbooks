@@ -106,6 +106,7 @@
     "./hrm/benefits": "./src/hrm/public-benefits.ts",
     "./money": "./src/money/public.ts",
     "./money/decimal": "./src/money/exact-decimal.ts",
+    "./money/decimal-refusal": "./src/money/decimal-refusal.ts",
     "./reports": "./src/reports/public.ts",
     "./hrm/benefits/calculation": "./src/hrm/public-benefit-calculation.ts",
     "./banking/csv": "./src/banking/public-csv.ts",
