@@ -164,7 +164,8 @@ export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: 
   const [cell, setCell] = useState<CellRef | null>(null)
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
-  const under = k.gap < 0
+  const under = k.gap != null && k.gap < 0
+  const noAbsorption = k.burdenApplied == null || k.gap == null
 
   return (
     <div className="space-y-5">
@@ -177,8 +178,8 @@ export function TrueCostView({ data: initialData, mode = 'analytics' }: { data: 
             tone={k.compositeRateChangePct != null && k.compositeRateChangePct > 0 ? 'negative' : 'neutral'}
           />
           <KpiCard icon={Package} accent="red" label={t('hero.totalOverhead')} value={money(k.totalOverhead)} sub={t('hero.accountsCount', { count: k.overheadAccounts })} />
-          <KpiCard icon={Coins} accent="emerald" label={t('hero.overheadApplied')} value={money(k.burdenApplied)} sub={t('hero.recovered')} tone="positive" />
-          <KpiCard icon={Scale} accent={under ? 'red' : 'emerald'} label={t('hero.absorption')} value={`${k.gap < 0 ? '−' : '+'}${money(Math.abs(k.gap))}`} sub={under ? t('hero.underAbsorbed') : t('hero.overAbsorbed')} tone={under ? 'negative' : 'positive'} />
+          <KpiCard icon={Coins} accent="emerald" label={t('hero.overheadApplied')} value={k.burdenApplied == null ? '—' : money(k.burdenApplied)} sub={k.burdenApplied == null ? t('hero.notAvailable') : t('hero.recovered')} tone={k.burdenApplied == null ? 'neutral' : 'positive'} />
+          <KpiCard icon={Scale} accent={noAbsorption ? 'slate' : under ? 'red' : 'emerald'} label={t('hero.absorption')} value={k.gap == null ? '—' : `${k.gap < 0 ? '−' : '+'}${money(Math.abs(k.gap))}`} sub={k.gap == null ? t('hero.notAvailable') : under ? t('hero.underAbsorbed') : t('hero.overAbsorbed')} tone={noAbsorption ? 'neutral' : under ? 'negative' : 'positive'} />
           <KpiCard icon={Clock} accent="amber" label={t('hero.billedHours')} value={whole(k.billedHours)} sub={t('hero.utilizationPct', { pct: percent(k.utilization * 100) })} />
         </div>
       ) : null}
@@ -701,13 +702,13 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const k = data.kpis
-  const gap = Math.abs(Math.min(0, k.gap)) // the shortfall to recover
+  const gap = Math.abs(Math.min(0, k.gap ?? 0)) // the shortfall to recover
   const [rateAdj, setRateAdj] = useState(0)
   const [hoursAdj, setHoursAdj] = useState(0)
   const [costAdj, setCostAdj] = useState(0)
   const [utilAdj, setUtilAdj] = useState(0)
   const [months, setMonths] = useState(6)
-  const under = k.gap < 0
+  const under = k.gap != null && k.gap < 0
 
   const model = useMemo(() => {
     const utilGain = Math.min(1 - k.utilization, utilAdj / 100)
@@ -717,16 +718,16 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
     const viaHours = remaining * (hoursAdj / 100)
     const viaCost = remaining * (costAdj / 100)
     const recovered = utilRecovery + viaRate + viaHours + viaCost
-    const newGap = Math.min(0, k.gap) + recovered
+    const newGap = Math.min(0, k.gap ?? 0) + recovered
     const rateBump = k.billedHours > 0 ? viaRate / k.billedHours : 0
     const extraHours = k.compositeRate > 0 ? viaHours / k.compositeRate : 0
     const costCutPct = k.totalOverhead > 0 ? (viaCost / k.totalOverhead) * 100 : 0
-    const newAbsorption = k.totalOverhead > 0 ? ((k.burdenApplied + recovered) / k.totalOverhead) * 100 : 100
+    const newAbsorption = k.totalOverhead > 0 ? (((k.burdenApplied ?? 0) + recovered) / k.totalOverhead) * 100 : 100
     return { recovered, newGap, rateBump, extraHours, costCutPct, newAbsorption, utilRecovery, coverage: gap > 0 ? (recovered / gap) * 100 : 100 }
   }, [k, gap, rateAdj, hoursAdj, costAdj, utilAdj])
 
   const applyPreset = (key: PresetKey) => { const set = PRESET_MIX[key]; setRateAdj(set.rate); setHoursAdj(set.hours); setCostAdj(set.cost); setUtilAdj(set.util) }
-  const chargedRate = k.billedHours > 0 ? k.burdenApplied / k.billedHours : 0
+  const chargedRate = k.billedHours > 0 && k.burdenApplied != null ? k.burdenApplied / k.billedHours : 0
 
   const levers: { labelKey: string; descKey: string; icon: typeof DollarSign; value: number; set: (n: number) => void; max: number; suffix: string; impact: string }[] = [
     { labelKey: 'absorption.leverRaiseLabel', descKey: 'absorption.leverRaiseDesc', icon: DollarSign, value: rateAdj, set: setRateAdj, max: 100, suffix: t('absorption.suffixOfGap'), impact: t('absorption.impactRate', { value: rate(model.rateBump) }) },
@@ -735,13 +736,23 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
     { labelKey: 'absorption.leverUtilLabel', descKey: 'absorption.leverUtilDesc', icon: Percent, value: utilAdj, set: setUtilAdj, max: Math.max(1, Math.round((1 - k.utilization) * 100)), suffix: t('absorption.suffixPpGained'), impact: t('absorption.impactUtil', { value: money(model.utilRecovery) }) },
   ]
 
+  // No applied postings, no comparison: the tab names the missing mechanism
+  // and its remedy instead of planning against a modelled shortfall.
+  if (data.absorptionUnavailable) {
+    return (
+      <div className="space-y-5">
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>{data.absorptionUnavailable}</span></p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={GaugeIcon} accent="sky" label={t('absorption.avgChargedRate')} value={rate(chargedRate)} sub={t('absorption.breakEven', { rate: rate(k.compositeRate) })} />
-        <KpiCard icon={Percent} accent="violet" label={t('hero.absorption')} value={percent(k.absorptionPct, 1)} sub={under ? t('hero.underAbsorbed') : t('hero.overAbsorbed')} tone={under ? 'negative' : 'positive'} />
-        <KpiCard icon={under ? AlertTriangle : CheckCircle2} accent={under ? 'red' : 'emerald'} label={t('absorption.gap')} value={`${k.gap >= 0 ? '+' : '−'}${money(Math.abs(k.gap))}`} sub={t('absorption.gapMath', { hours: Math.round(k.billedHours), depts: data.departments.length })} tone={under ? 'negative' : 'positive'} />
-        <KpiCard icon={under ? TrendingDown : TrendingUp} accent={under ? 'red' : 'emerald'} label={t('absorption.gapPerHour')} value={`${k.gapPerHour >= 0 ? '+' : '−'}${rate(Math.abs(k.gapPerHour))}`} sub={t('absorption.perBilledHour')} tone={under ? 'negative' : 'positive'} />
+        <KpiCard icon={Percent} accent="violet" label={t('hero.absorption')} value={k.absorptionPct == null ? '—' : percent(k.absorptionPct, 1)} sub={k.absorptionPct == null ? t('hero.notAvailable') : under ? t('hero.underAbsorbed') : t('hero.overAbsorbed')} tone={k.absorptionPct == null ? 'neutral' : under ? 'negative' : 'positive'} />
+        <KpiCard icon={under ? AlertTriangle : CheckCircle2} accent={under ? 'red' : 'emerald'} label={t('absorption.gap')} value={k.gap == null ? '—' : `${k.gap >= 0 ? '+' : '−'}${money(Math.abs(k.gap))}`} sub={k.gap == null ? t('hero.notAvailable') : t('absorption.gapMath', { hours: Math.round(k.billedHours), depts: data.departments.length })} tone={under ? 'negative' : 'positive'} />
+        <KpiCard icon={under ? TrendingDown : TrendingUp} accent={under ? 'red' : 'emerald'} label={t('absorption.gapPerHour')} value={k.gapPerHour == null ? '—' : `${k.gapPerHour >= 0 ? '+' : '−'}${rate(Math.abs(k.gapPerHour))}`} sub={k.gapPerHour == null ? t('hero.notAvailable') : t('absorption.perBilledHour')} tone={under ? 'negative' : 'positive'} />
       </div>
 
       {!under ? (
@@ -833,8 +844,8 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
               <SharedTable className="w-full text-sm">
                 <SharedTableBody>
                   {data.departments.map((d) => {
-                    const contribution = k.gapPerHour * d.billedHours
-                    const pct = Math.abs(k.gap) > 0 ? (Math.abs(contribution) / Math.abs(k.gap)) * 100 : 0
+                    const contribution = (k.gapPerHour ?? 0) * d.billedHours
+                    const pct = Math.abs(k.gap ?? 0) > 0 ? (Math.abs(contribution) / Math.abs(k.gap ?? 0)) * 100 : 0
                     return (
                       <SharedTableRow key={d.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                         <SharedTableCell className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
@@ -1225,7 +1236,7 @@ function ConfigTab({ data }: { data: TrueCostData }) {
     { label: t('config.itemBases'), value: t('config.basesValue', { count: ALLOCATION_BASE_KEYS.length }), note: t('config.noteBases') },
     { label: t('config.itemNonBillable'), value: t('config.nonBillableIncluded'), note: t('config.noteNonBillable') },
     { label: t('config.itemDirectLabour'), value: t('config.directExcluded'), note: t('config.noteDirect') },
-    { label: t('config.itemAbsorptionModel'), value: data.hasBurdenGL ? t('config.glApplied') : t('config.utilizationOnly'), note: data.hasBurdenGL ? t('config.noteAbsorptionGl') : t('config.noteAbsorptionUtil') },
+    { label: t('config.itemAbsorptionModel'), value: data.hasBurdenGL ? t('config.glApplied') : t('hero.notAvailable'), note: data.hasBurdenGL ? t('config.noteAbsorptionGl') : (data.absorptionUnavailable ?? t('hero.notAvailable')) },
     { label: t('config.itemLabourRates'), value: t('config.labourRatesValue', { count: data.labor.count }), note: t('config.noteLabourRates', { min: rate(data.labor.min), max: rate(data.labor.max), weighted: rate(data.labor.weighted) }) },
   ]
   return (

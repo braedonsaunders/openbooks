@@ -113,6 +113,42 @@ test('true cost reads applied overhead from the configured account and origin', 
 })
 
 /**
+ * With no applied postings there is nothing to compare against actuals:
+ * applied, gap and absorption refuse by name instead of modelling
+ * overhead × utilization (0 here) or falling back to 100%. The reason names
+ * the missing mechanism and its remedy.
+ */
+test('true cost refuses absorption by name with no applied postings', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const dept = randomUUID()
+  const emp = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${emp}, ${org.orgId}, 'Refusal Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(data.hasBurdenGL, false)
+      assert.equal(data.kpis.burdenApplied, null)
+      assert.equal(data.kpis.gap, null)
+      assert.equal(data.kpis.gapPerHour, null)
+      assert.equal(data.kpis.absorptionPct, null)
+      assert.ok(
+        data.absorptionUnavailable?.includes('Setup → Overhead'),
+        `refusal must name the remedy, got: ${data.absorptionUnavailable}`,
+      )
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
  * Labour dollars are the configured cost_pool / direct_labor account set
  * (rule plus pin) — the same classification that excludes direct labour from
  * burden. The 1000 on the name-matching `Wages and Salaries` account is

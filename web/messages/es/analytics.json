@@ -2219,7 +2219,9 @@
       "timeCategory": "Tiempo no facturable",
       "unknownEmployee": "Desconocido",
       "defaultProfile": "Predeterminado",
-      "formulaError": "Resultado de fórmula no válido"
+      "formulaError": "Resultado de fórmula no válido",
+      "absorptionNoAccount": "No hay ninguna cuenta de aplicación de costos indirectos configurada — configure una en Setup → Overhead.",
+      "absorptionNoPostings": "La cuenta de aplicación de costos indirectos configurada no tiene asientos aplicados en este período."
     },
     "formats": {
       "perHour": "{amount}/h"
@@ -2245,7 +2247,8 @@
       "underAbsorbed": "▲ Subabsorbido",
       "overAbsorbed": "Sobreabsorbido",
       "billedHours": "Horas facturadas",
-      "utilizationPct": "{pct} de utilización"
+      "utilizationPct": "{pct} de utilización",
+      "notAvailable": "No disponible"
     },
     "summary": {
       "compositeRate": "Tasa compuesta de gastos generales",
@@ -2553,9 +2556,7 @@
       "directExcluded": "Excluida",
       "noteDirect": "El costo de sueldos y salarios facturables (dimensión `cost_pool`) es directo, nunca una carga; COGS es un costo directo",
       "glApplied": "Aplicado según GL",
-      "utilizationOnly": "Utilización",
-      "noteAbsorptionGl": "A partir de los asientos de la cuenta GL de carga de gastos generales",
-      "noteAbsorptionUtil": "La cuenta configurada de carga de gastos generales no tiene asientos; la carga aplicada usa gastos generales × utilización hasta que haya asientos reales disponibles",
+      "noteAbsorptionGl": "Asientos aplicados en la cuenta de aplicación de costos indirectos configurada",
       "labourRatesValue": "{count, plural, one {# empleado} other {# empleados}}",
       "noteLabourRates": "Tasas de costo por entrada, {min}–{max}, ponderado {weighted}",
       "howIntro": "Todas las tasas de este panel se calculan en tiempo real a partir del libro mayor:",

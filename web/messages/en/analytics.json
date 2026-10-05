@@ -2219,7 +2219,9 @@
       "timeCategory": "Non-Billable Time",
       "unknownEmployee": "Unknown",
       "defaultProfile": "Default",
-      "formulaError": "Invalid formula result"
+      "formulaError": "Invalid formula result",
+      "absorptionNoAccount": "No overhead application account is configured — set one in Setup → Overhead.",
+      "absorptionNoPostings": "The configured overhead application account has no applied postings in this period."
     },
     "formats": {
       "perHour": "{amount}/hr"
@@ -2245,7 +2247,8 @@
       "underAbsorbed": "▲ Under-absorbed",
       "overAbsorbed": "Over-absorbed",
       "billedHours": "Billed Hours",
-      "utilizationPct": "{pct} utilization"
+      "utilizationPct": "{pct} utilization",
+      "notAvailable": "Not available"
     },
     "summary": {
       "compositeRate": "Composite Overhead Rate",
@@ -2553,9 +2556,7 @@
       "directExcluded": "Excluded",
       "noteDirect": "Billable wage/salary cost (cost_pool dimension) is direct, never burden; COGS is direct cost",
       "glApplied": "GL applied",
-      "utilizationOnly": "Utilization",
-      "noteAbsorptionGl": "From the Overhead Burden GL account postings",
-      "noteAbsorptionUtil": "The configured overhead burden account has no postings — applied burden uses overhead × utilization until actual postings are available",
+      "noteAbsorptionGl": "Applied postings on the configured overhead application account",
       "labourRatesValue": "{count, plural, one {# employee} other {# employees}}",
       "noteLabourRates": "Per-entry cost rates, {min}–{max}, weighted {weighted}",
       "howIntro": "Every rate on this dashboard is computed live from your ledger:",

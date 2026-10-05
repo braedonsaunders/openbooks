@@ -2219,7 +2219,9 @@
       "timeCategory": "Nicht abrechenbare Zeit",
       "unknownEmployee": "Unbekannt",
       "defaultProfile": "Standard",
-      "formulaError": "Ungültiges Formelergebnis"
+      "formulaError": "Ungültiges Formelergebnis",
+      "absorptionNoAccount": "Kein Overhead-Anwendungskonto konfiguriert — richten Sie eines unter Setup → Overhead ein.",
+      "absorptionNoPostings": "Das konfigurierte Overhead-Anwendungskonto enthält in diesem Zeitraum keine angewendeten Buchungen."
     },
     "formats": {
       "perHour": "{amount}/Std."
@@ -2245,7 +2247,8 @@
       "underAbsorbed": "▲ Unterdeckung",
       "overAbsorbed": "Überdeckung",
       "billedHours": "Verrechnete Stunden",
-      "utilizationPct": "{pct} Auslastung"
+      "utilizationPct": "{pct} Auslastung",
+      "notAvailable": "Nicht verfügbar"
     },
     "summary": {
       "compositeRate": "Gesamter Gemeinkostensatz",
@@ -2553,9 +2556,7 @@
       "directExcluded": "Ausgeschlossen",
       "noteDirect": "Verrechenbare Lohn- und Gehaltskosten (Dimension cost_pool) sind direkt und nie Gemeinkosten; Umsatzkosten sind direkte Kosten",
       "glApplied": "Sachkontobasiert",
-      "utilizationOnly": "Auslastung",
-      "noteAbsorptionGl": "Aus den Buchungen des Gemeinkosten-Verrechnungskontos",
-      "noteAbsorptionUtil": "Das konfigurierte Gemeinkosten-Verrechnungskonto enthält keine Buchungen — bis tatsächliche Buchungen vorliegen, basiert die Deckung auf Gemeinkosten × Auslastung",
+      "noteAbsorptionGl": "Angewendete Buchungen auf dem konfigurierten Overhead-Anwendungskonto",
       "labourRatesValue": "{count, plural, one {# beschäftigte Person} other {# Beschäftigte}}",
       "noteLabourRates": "Kostensätze je Eintrag, {min}–{max}, gewichtet {weighted}",
       "howIntro": "Jeder Satz in diesem Dashboard wird live aus Ihrem Hauptbuch berechnet:",

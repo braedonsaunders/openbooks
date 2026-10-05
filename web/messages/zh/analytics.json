@@ -2219,7 +2219,9 @@
       "timeCategory": "不可计费时间",
       "unknownEmployee": "未知",
       "defaultProfile": "默认",
-      "formulaError": "公式结果无效"
+      "formulaError": "公式结果无效",
+      "absorptionNoAccount": "未配置间接费用应用科目 — 请在 Setup → Overhead 中设置。",
+      "absorptionNoPostings": "配置的间接费用应用科目在本期间没有已应用分录。"
     },
     "formats": {
       "perHour": "{amount}/小时"
@@ -2245,7 +2247,8 @@
       "underAbsorbed": "▲ 吸收不足",
       "overAbsorbed": "吸收过度",
       "billedHours": "可计费工时",
-      "utilizationPct": "利用率 {pct}"
+      "utilizationPct": "利用率 {pct}",
+      "notAvailable": "不可用"
     },
     "summary": {
       "compositeRate": "综合间接费用费率",
@@ -2553,9 +2556,7 @@
       "directExcluded": "已排除",
       "noteDirect": "可计费的工资/薪资成本（`cost_pool` 维度）属于直接成本，不计入间接费用负担；销货成本属于直接成本",
       "glApplied": "GL 实际分摊",
-      "utilizationOnly": "利用率",
-      "noteAbsorptionGl": "取自间接费用负担 GL 科目的过账记录",
-      "noteAbsorptionUtil": "如果已配置的间接费用负担科目没有过账记录，则在实际过账可用之前，按间接费用 × 利用率计算已分摊负担",
+      "noteAbsorptionGl": "配置的间接费用应用科目中的已应用分录",
       "labourRatesValue": "{count, plural, one {# 名员工} other {# 名员工}}",
       "noteLabourRates": "每条记录的成本费率（{min}–{max}），加权平均 {weighted}",
       "howIntro": "此仪表板上的所有费率均根据总账实时计算:",

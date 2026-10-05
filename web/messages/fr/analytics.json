@@ -2219,7 +2219,9 @@
       "timeCategory": "Temps non facturable",
       "unknownEmployee": "Inconnu",
       "defaultProfile": "Par défaut",
-      "formulaError": "Résultat de formule invalide"
+      "formulaError": "Résultat de formule invalide",
+      "absorptionNoAccount": "Aucun compte d’application des frais généraux configuré — configurez-en un dans Setup → Overhead.",
+      "absorptionNoPostings": "Le compte d’application des frais généraux configuré ne contient aucune écriture appliquée sur cette période."
     },
     "formats": {
       "perHour": "{amount}/h"
@@ -2245,7 +2247,8 @@
       "underAbsorbed": "▲ Sous-couverture",
       "overAbsorbed": "Surcouverture",
       "billedHours": "Heures facturées",
-      "utilizationPct": "{pct} d’utilisation"
+      "utilizationPct": "{pct} d’utilisation",
+      "notAvailable": "Non disponible"
     },
     "summary": {
       "compositeRate": "Taux global des charges indirectes",
@@ -2553,9 +2556,7 @@
       "directExcluded": "Exclue",
       "noteDirect": "La rémunération facturable (dimension cost_pool) est un coût direct, jamais une charge indirecte ; le coût des ventes est un coût direct",
       "glApplied": "Imputation comptable",
-      "utilizationOnly": "Utilisation",
-      "noteAbsorptionGl": "D’après les écritures du compte d’imputation des charges indirectes",
-      "noteAbsorptionUtil": "Le compte d’imputation des charges indirectes configuré ne contient aucune écriture — jusqu’à la disponibilité d’écritures réelles, la couverture repose sur les charges indirectes × l’utilisation",
+      "noteAbsorptionGl": "Écritures appliquées sur le compte d’application des frais généraux configuré",
       "labourRatesValue": "{count, plural, one {# salarié} other {# salariés}}",
       "noteLabourRates": "Taux de coût par saisie, {min}–{max}, pondéré {weighted}",
       "howIntro": "Chaque taux de ce tableau de bord est calculé en temps réel à partir de votre grand livre :",

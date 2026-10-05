@@ -2219,7 +2219,9 @@
       "timeCategory": "Tempo não faturável",
       "unknownEmployee": "Desconhecido",
       "defaultProfile": "Padrão",
-      "formulaError": "Resultado de fórmula inválido"
+      "formulaError": "Resultado de fórmula inválido",
+      "absorptionNoAccount": "Nenhuma conta de aplicação de custos indiretos configurada — configure uma em Setup → Overhead.",
+      "absorptionNoPostings": "A conta de aplicação de custos indiretos configurada não possui lançamentos aplicados neste período."
     },
     "formats": {
       "perHour": "{amount}/h"
@@ -2245,7 +2247,8 @@
       "underAbsorbed": "▲ Subabsorvido",
       "overAbsorbed": "Superabsorvido",
       "billedHours": "Horas faturadas",
-      "utilizationPct": "{pct} de utilização"
+      "utilizationPct": "{pct} de utilização",
+      "notAvailable": "Indisponível"
     },
     "summary": {
       "compositeRate": "Taxa composta de custos indiretos",
@@ -2553,9 +2556,7 @@
       "directExcluded": "Excluída",
       "noteDirect": "O custo faturável de salários e remunerações (dimensão `cost_pool`) é direto, nunca um encargo; COGS é um custo direto",
       "glApplied": "Aplicado conforme o GL",
-      "utilizationOnly": "Utilização",
-      "noteAbsorptionGl": "A partir dos lançamentos da conta GL de aplicação de custos indiretos",
-      "noteAbsorptionUtil": "A conta configurada de aplicação de custos indiretos não tem lançamentos; o encargo aplicado usa custos indiretos × utilização até que haja lançamentos reais disponíveis",
+      "noteAbsorptionGl": "Lançamentos aplicados na conta de aplicação de custos indiretos configurada",
       "labourRatesValue": "{count, plural, one {# funcionário} other {# funcionários}}",
       "noteLabourRates": "Taxas de custo por apontamento, {min}–{max}, ponderada {weighted}",
       "howIntro": "Todas as taxas deste painel são calculadas em tempo real a partir do razão contábil:",

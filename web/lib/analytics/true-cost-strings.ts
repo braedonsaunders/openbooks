@@ -28,6 +28,10 @@ export interface TrueCostStrings {
   timeCategoryName: string;
   /** Formula-category evaluation failure note. */
   formulaError: string;
+  /** Absorption refused: no overhead application account is configured. */
+  absorptionNoAccount: string;
+  /** Absorption refused: the configured account has no applied postings. */
+  absorptionNoPostings: string;
   /** `utilPct` is pre-rendered (legacy toFixed(0)); `hours` is round2. */
   scenarioHire(count: number, utilPct: string, hours: number): string;
   /** `savings` is pre-formatted money; `hours` is round2. */
@@ -51,6 +55,8 @@ export function trueCostStrings(t: CatalogMessageFn, locale: string): TrueCostSt
     displayProfileName: (name) => (name === "Default" ? t("trueCost.labels.defaultProfile") : name),
     timeCategoryName: t("trueCost.labels.timeCategory"),
     formulaError: t("trueCost.labels.formulaError"),
+    absorptionNoAccount: t("trueCost.labels.absorptionNoAccount"),
+    absorptionNoPostings: t("trueCost.labels.absorptionNoPostings"),
     scenarioHire: (count, utilPct, hours) =>
       t("trueCost.scenarios.hire", { count, util: utilPct, hours }),
     scenarioTerminate: (count, savings, hours) =>
