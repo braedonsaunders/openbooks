@@ -114,15 +114,17 @@ function SparkCard({ label, points, last, pct }: { label: string; points: (numbe
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
       <p className={cn('mt-0.5 text-lg font-bold tabular-nums', up ? 'text-slate-800 dark:text-slate-100' : 'text-red-600 dark:text-red-400')}>{last}</p>
-      <TrendChart labels={points.map((_, i) => String(i))} height={52} hideAxes series={[{ name: label, data: points, color: up ? '#0d9488' : '#ef4444', pct: pct ?? false }]} />
+      <TrendChart labels={points.map((_, i) => String(i))} height={52} series={[{ name: label, data: points, color: up ? '#0d9488' : '#ef4444', pct: pct ?? false }]} />
     </div>
   )
 }
 
 function InsightList({ insights, t }: { insights: Insight[]; t: (key: string) => string }) {
+  // The groups are the severity scale itself: issues, recommendations,
+  // anomalies. Each finding carries its translated title and detail.
   const groups: Array<{ key: 'issues' | 'recs' | 'anomalies'; items: Insight[] }> = [
-    { key: 'issues', items: insights.filter((i) => i.severity === 'critical' || i.severity === 'warn') },
-    { key: 'recs', items: insights.filter((i) => i.severity === 'info') },
+    { key: 'issues', items: insights.filter((i) => i.severity === 'issue') },
+    { key: 'recs', items: insights.filter((i) => i.severity === 'rec') },
     { key: 'anomalies', items: insights.filter((i) => i.severity === 'anomaly') },
   ]
   return (
@@ -135,8 +137,10 @@ function InsightList({ insights, t }: { insights: Insight[]; t: (key: string) =>
             <ul className="space-y-2">
               {g.items.map((ins, i) => (
                 <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
-                  <SeverityBadge severity={ins.severity} t={t} />
-                  <span className="text-slate-600 dark:text-slate-300">{ins.text}</span>
+                  <span>
+                    <span className="block font-semibold text-slate-700 dark:text-slate-200">{ins.title}</span>
+                    <span className="block text-slate-600 dark:text-slate-300">{ins.detail}</span>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -145,16 +149,4 @@ function InsightList({ insights, t }: { insights: Insight[]; t: (key: string) =>
       ))}
     </div>
   )
-}
-
-function SeverityBadge({ severity, t }: { severity: Insight['severity']; t: (key: string) => string }) {
-  const cls =
-    severity === 'critical'
-      ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
-      : severity === 'warn'
-        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-        : severity === 'anomaly'
-          ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300'
-          : 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300'
-  return <span className={cn('mt-0.5 shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold', cls)}>{t(`severity.${severity}`)}</span>
 }

@@ -17,7 +17,7 @@ const state = { cadence: "quarterly" };
 Object.assign(globalThis, { __healthFiscal: state });
 const { PgDialect } = await import("drizzle-orm/pg-core");
 const dialect = new PgDialect();
-Object.assign(globalThis, { __healthFiscalQuery: (query: Parameters<PgDialect["sqlToQuery"]>[0]) => dialect.sqlToQuery(query).sql });
+Object.assign(globalThis, { __healthFiscalQuery: (query: Parameters<InstanceType<typeof PgDialect>["sqlToQuery"]>[0]) => dialect.sqlToQuery(query).sql });
 
 const mocks: Record<string, string> = {
   "server-only": "export {}",
