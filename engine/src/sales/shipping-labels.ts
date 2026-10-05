@@ -31,7 +31,6 @@ export type ShippingRefusalCode =
   | "secret_missing"
   | "weight_missing"
   | "address_missing"
-  | "address_invalid"
   | "customs_missing"
   | "currency_unsupported"
   | "provider_failed"
@@ -213,6 +212,7 @@ interface ShipmentForRating {
   documentNumber: string;
   subsidiaryId: string;
   warehouseId: string;
+  currency: string;
   orderId: string | null;
   orderNumber: string | null;
   shipTo: CarrierAddress;
@@ -1413,7 +1413,11 @@ export async function refreshLabelTracking(
   try {
     state = await adapter.getTracker(
       { apiKey: account.apiKey, baseUrl: input.baseUrl, transport: input.transport },
-      { carrier: label.carrier, trackingNumber: label.tracking_number, providerShipmentId: label.provider_shipment_id },
+      {
+        carrier: label.carrier,
+        trackingNumber: label.tracking_number ?? undefined,
+        providerShipmentId: label.provider_shipment_id,
+      },
     );
   } catch (error) {
     if (error instanceof Error && error.name === "CarrierError") {
@@ -1529,7 +1533,7 @@ export async function handleTrackerDelivery(
   return { status: "ok", labelId: applied.labelId, trackingStatus: applied.trackingStatus, changed: applied.changed };
 }
 
-interface TrackedLabel {
+type TrackedLabel = {
   id: string;
   account_id: string;
   provider: string;
@@ -1538,7 +1542,7 @@ interface TrackedLabel {
   tracking_number: string | null;
   tracking_status: string;
   events: { id: string | null; status: string; detail: string | null; occurredAt: string | null }[];
-}
+};
 
 /** Resolve the label a tracker delivery belongs to, locking it for the update. */
 async function findLabelForTracker(

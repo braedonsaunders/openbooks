@@ -216,7 +216,7 @@ test("rate shopping ranks live rates and buying is idempotent with a balanced co
       getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl) })));
     assert.equal(quote.cached, false);
     assert.equal(quote.rates.length, 3);
-    const [ground, priority, express] = quote.rates as [
+    const [ground, priority, express] = quote.rates as unknown as [
       { providerRateId: string; badges: string[] },
       { providerRateId: string; badges: string[] },
       { providerRateId: string; badges: string[] },

@@ -49,6 +49,8 @@ export interface CarrierCustomsItem {
   valueCurrency: string;
   hsCode: string | null;
   originCountry: string | null;
+  /** Kilograms per unit, exact decimal string; null when unknown. */
+  netWeightKg?: string | null;
 }
 
 export interface CarrierRateRequest {
