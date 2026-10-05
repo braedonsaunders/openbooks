@@ -100,6 +100,7 @@
     "./sales/orders": "./src/sales/public-orders.ts",
     "./sales/promotions": "./src/sales/public-promotions.ts",
     "./sales/restocking-fees": "./src/sales/public-restocking-fees.ts",
+    "./sales/currency-precision": "./src/sales/public-currency-precision.ts",
     "./crm/sales": "./src/crm/public-sales.ts",
     "./crm/sales/contracts": "./src/crm/public-sales-contracts.ts",
     "./reports/definitions": "./src/reports/public-definitions.ts",
