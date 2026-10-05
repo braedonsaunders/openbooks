@@ -329,7 +329,7 @@ export async function verifyDemoScenarios(orgId: string, industryKey: string): P
     const cash = (await db.execute<{ ready: boolean }>(sql`
       select count(*)=2 and coalesce(sum(l.amount),0)=99500.00 as ready
       from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-      where l.org_id=${orgId} and l.account_id=${demoRecordId(orgId, "accounts", "bank")} and e.status='posted'
+      where l.org_id=${orgId} and l.account_id=${demoRecordId(orgId, "accounts", "bank")} and e.status='posted' -- Live entries only: the readiness probe asserts the live demonstration journals; reversed history does not satisfy it
     `)).rows[0];
     if (cash?.ready !== true) missing.push("posted demonstration cash and bank-charge journals");
     if (features.inventory) for (const key of ["component", "finished"]) {

@@ -189,7 +189,7 @@ async function reversalBasis(tx:SqlExecutor,orgId:string,actorId:string,sourceCh
   if((await tx.execute(sql`select 1 from consolidation_control_losses where org_id=${orgId} and interest_id=${record.interest_id} and reversed_by_change_id is null`)).rows.length)
     throw new NetInvestmentError('This reserve supports an approved disposal — correct that loss-of-control event in Accounting changes before reversing the underlying OCI assessment')
   const lines=record.journal_entry_id ? (await tx.execute<{account_id:string;amount:string;currency:string}>(sql`select account_id,amount::text,currency from journal_lines where org_id=${orgId} and entry_id=${record.journal_entry_id} order by line_number for share`)).rows : []
-  if(record.journal_entry_id && !(await tx.execute(sql`select 1 from journal_entries e where e.org_id=${orgId} and e.id=${record.journal_entry_id} and e.status='posted'
+  if(record.journal_entry_id && !(await tx.execute(sql`select 1 from journal_entries e where e.org_id=${orgId} and e.id=${record.journal_entry_id} and e.status='posted' -- Live entries only: a reversed assessment authorizes no second reversal, so the guard reads the live journal
     and not exists(select 1 from journal_entries reversal where reversal.org_id=e.org_id and reversal.reverses_entry_id=e.id and reversal.status in ('posted','reversed')) for update of e`)).rows.length)
     throw new NetInvestmentError('The source assessment journal is already reversed — review its recorded correction before proposing another reversal')
   const sources=(await tx.execute<{source_line_id:string}>(sql`select source_line_id from net_investment_sources where org_id=${orgId} and change_id=${sourceChangeId} order by source_line_id for update`)).rows
