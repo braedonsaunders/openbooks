@@ -280,6 +280,7 @@ export async function replayEvent(
   actor: string,
   eventId: string,
   reason: unknown,
+  channelId: string | null = null,
 ): Promise<InboundEventRow> {
   const why = typeof reason === "string" && reason.trim() !== "" ? reason.trim() : null;
   if (!why) {
@@ -295,13 +296,18 @@ export async function replayEvent(
     if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
       refuse("feature_off", "Sales Channels is turned off for this organization.", "Enable Sales Channels in Company Settings → Features.");
     }
+    // A channel-scoped caller names the channel up front, so one channel's
+    // activity screen cannot requeue another channel's delivery.
     const before = (await db.execute<EventDbRow>(sql`
       select ${EVENT_COLUMNS} from integration_inbound_events
-       where org_id = ${orgId} and id = ${eventId}`)).rows[0];
+       where org_id = ${orgId} and id = ${eventId}
+         and (${channelId}::uuid is null or channel_id = ${channelId})`)).rows[0];
     if (!before) {
       refuse(
         "inbound_event_not_found",
-        "The inbound event does not belong to this organization.",
+        channelId
+          ? "The inbound event does not belong to this channel."
+          : "The inbound event does not belong to this organization.",
         "Choose an event from this organization's channel activity.",
         "eventId",
       );
