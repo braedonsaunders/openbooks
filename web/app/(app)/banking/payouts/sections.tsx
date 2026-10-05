@@ -31,6 +31,7 @@ import type {
   PayoutTile,
   PayoutsStrings,
 } from './view'
+import { adjustmentCurrency } from './adjustment-currency'
 
 /**
  * Banking → Payouts workspace: one state graph for the cockpit and the
@@ -171,6 +172,9 @@ function PayoutsDrawer({
   // Drawer amounts arrive as raw major-unit strings from the detail API;
   // the house formatter renders them exactly like the workspace tiles.
   const { money } = useMoney()
+  // Parameterized sentences translate with their variables at the call
+  // site, never pre-rendered on the server without them.
+  const t = useTranslations('banking.payouts')
 
   // One shell for the whole record lifecycle: the Drawer stays mounted
   // through loading, refusal and retry — only its body changes. The fetch
@@ -269,9 +273,16 @@ function PayoutsDrawer({
   }, [batchId, load, onChanged, strings])
 
   const markAdjustment = useCallback(async (lineId: string, lineKind: string, lineAmount: string, lineCurrency: string | null) => {
+    // No guessed currency: without a line or batch currency there is no
+    // honest figure to confirm, so the adjustment refuses with a remedy.
+    const currency = adjustmentCurrency(lineCurrency, detail?.batch.currency)
+    if (!currency) {
+      toast.error(t('adjustMissingCurrency', { kind: lineKind }))
+      return
+    }
     const confirmed = await confirmDialog({
       title: strings.adjustConfirmTitle,
-      message: strings.adjustConfirmMessage.replace('{kind}', lineKind).replace('{amount}', money(lineAmount, { currency: lineCurrency ?? detail?.batch.currency ?? 'USD' })),
+      message: t('adjustConfirmMessage', { kind: lineKind, amount: money(lineAmount, { currency }) }),
       confirmLabel: strings.adjustLabel,
       tone: 'default',
     })
@@ -286,7 +297,7 @@ function PayoutsDrawer({
     toast.success(strings.adjustedToast)
     onChanged()
     await load()
-  }, [batchId, detail?.batch.currency, load, money, onChanged, strings])
+  }, [batchId, detail?.batch.currency, load, money, onChanged, strings, t])
 
   const searchDocs = useCallback(async (query: string) => {
     if (query.trim() === '') {
@@ -317,7 +328,7 @@ function PayoutsDrawer({
   }, [verdicts])
 
   const title = detail
-    ? strings.drawerTitle.replace('{ref}', detail.batch.externalRef).replace('{provider}', detail.batch.provider)
+    ? t('drawerTitle', { ref: detail.batch.externalRef, provider: detail.batch.provider })
     : strings.batchesTitle
 
   return (
@@ -479,6 +490,7 @@ function PayoutsDrawer({
 export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
   const { canReconcile, queue, batches, reportHref, queueAllHref, strings, emptyTitle, emptyDescription } = props
   const router = useRouter()
+  const t = useTranslations('banking.payouts')
   // The drawer opens from the `payout` URL parameter (deep-linkable, one
   // shell per record) but reads it once on mount: no Suspense boundary is
   // needed and closing always clears the parameter again.
@@ -507,7 +519,7 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
     if (accrualDate.trim() === '') return
     const confirmed = await confirmDialog({
       title: strings.accrueLabel,
-      message: strings.accrueConfirmMessage.replace('{date}', accrualDate.trim()),
+      message: t('accrueConfirmMessage', { date: accrualDate.trim() }),
       confirmLabel: strings.accrueLabel,
       tone: 'default',
     })
@@ -521,14 +533,15 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
     }
     const run = result.data as { accrued: unknown[]; reversed: unknown[]; skipped: unknown[] }
     setAccrueResult(
-      strings.accrueResultMessage
-        .replace('{accrued}', String(run.accrued.length))
-        .replace('{reversed}', String(run.reversed.length))
-        .replace('{skipped}', String(run.skipped.length)),
+      t('accrueResultMessage', {
+        accrued: String(run.accrued.length),
+        reversed: String(run.reversed.length),
+        skipped: String(run.skipped.length),
+      }),
     )
     toast.success(strings.accruedToast)
     refresh()
-  }, [accrualDate, refresh, strings])
+  }, [accrualDate, refresh, strings, t])
 
   const statusTone = useCallback((status: string): 'success' | 'secondary' | 'warning' | 'destructive' | 'default' | 'outline' => {
     if (status === 'posted') return 'success'

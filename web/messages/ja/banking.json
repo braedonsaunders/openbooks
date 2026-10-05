@@ -1118,6 +1118,7 @@
     "accruedToast": "引当処理が完了しました",
     "adjustConfirmTitle": "調整として計上しますか?",
     "adjustConfirmMessage": "{kind}の明細{amount}はプロバイダー調整となり、バッチが再集計されます。記帳済みバッチは振替できません。",
+    "adjustMissingCurrency": "{kind}の明細に通貨がないため、調整額を表示できません。ペイアウトを再読み込みしてもう一度お試しください。",
     "accrueConfirmMessage": "{date}時点で未紐付けの記帳済みペイアウトを引当て、翌日に戻しますか?",
     "accrueResultMessage": "{accrued}件引当 · {reversed}件戻し · {skipped}件スキップ",
     "drawerTitle": "{provider}のペイアウト {ref}",

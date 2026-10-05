@@ -1118,6 +1118,7 @@
     "accruedToast": "Provision calculée",
     "adjustConfirmTitle": "Marquer en ajustement ?",
     "adjustConfirmMessage": "La ligne {kind} de {amount} devient un ajustement du prestataire, et le lot est re-totalisé. Un lot comptabilisé ne peut pas être reclassé.",
+    "adjustMissingCurrency": "La ligne {kind} n'a pas de devise : le montant de l'ajustement ne peut pas être affiché. Rechargez le versement et réessayez.",
     "accrueConfirmMessage": "Provisionner les versements comptabilisés non rattachés au {date}, avec extourne le lendemain ?",
     "accrueResultMessage": "{accrued} provisionnés · {reversed} extournés · {skipped} ignorés",
     "drawerTitle": "Versement {provider} {ref}",

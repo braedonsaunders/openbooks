@@ -1118,6 +1118,7 @@
     "accruedToast": "Provisão calculada",
     "adjustConfirmTitle": "Marcar como ajuste?",
     "adjustConfirmMessage": "A linha {kind} de {amount} vira um ajuste do provedor e o lote é recalculado. Um lote lançado não pode ser reclassificado.",
+    "adjustMissingCurrency": "A linha {kind} não tem moeda, por isso o valor do ajuste não pode ser exibido. Recarregue o pagamento e tente novamente.",
     "accrueConfirmMessage": "Provisionar os repasses lançados sem vínculo em {date}, com reversão no dia seguinte?",
     "accrueResultMessage": "{accrued} provisionados · {reversed} revertidos · {skipped} ignorados",
     "drawerTitle": "Repasse {provider} {ref}",

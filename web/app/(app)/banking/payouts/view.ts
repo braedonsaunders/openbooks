@@ -75,10 +75,6 @@ export interface PayoutsStrings {
   adjustedToast: string
   accruedToast: string
   adjustConfirmTitle: string
-  adjustConfirmMessage: string
-  accrueConfirmMessage: string
-  accrueResultMessage: string
-  drawerTitle: string
   tiedLabel: string
   untiedLabel: string
   untiedHint: string
@@ -286,10 +282,6 @@ export async function loadPayouts(
       adjustedToast: t('adjustedToast'),
       accruedToast: t('accruedToast'),
       adjustConfirmTitle: t('adjustConfirmTitle'),
-      adjustConfirmMessage: t('adjustConfirmMessage'),
-      accrueConfirmMessage: t('accrueConfirmMessage'),
-      accrueResultMessage: t('accrueResultMessage'),
-      drawerTitle: t('drawerTitle'),
       tiedLabel: t('tiedLabel'),
       untiedLabel: t('untiedLabel'),
       untiedHint: t('untiedHint'),
