@@ -57,7 +57,7 @@ async function setTrueCostProfile(orgId: string, patch: Record<string, unknown>)
   await db.execute(sql`update orgs set settings=${JSON.stringify(next)}::jsonb where id=${orgId}`);
 }
 
-test('auto-publish derives a repeating-decimal rate exactly (finding 6.5)',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+test('auto-publish derives a repeating-decimal rate exactly',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
   const {org,department}=await seedOverheadOrg({
     expenses:[{number:'6601',name:'Office rent',amount:'100',dept:true}],
     hours:['1','1','1'],
@@ -68,7 +68,7 @@ test('auto-publish derives a repeating-decimal rate exactly (finding 6.5)',{skip
   }finally{await dropScratchOrg(org.orgId);}
 });
 
-test('auto-publish honors a stepped tier instead of simple division (finding 6.6)',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+test('auto-publish honors a stepped tier instead of simple division',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
   const seeded=await seedOverheadOrg({
     expenses:[{number:'6601',name:'Office rent',amount:'100',dept:true}],
     hours:['4'],
@@ -82,7 +82,7 @@ test('auto-publish honors a stepped tier instead of simple division (finding 6.6
   }finally{await dropScratchOrg(seeded.org.orgId);}
 });
 
-test('auto-publish blends departments by the weighted composite (finding 6.6)',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+test('auto-publish blends departments by the weighted composite',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
   const seeded=await seedOverheadOrg({
     expenses:[{number:'6601',name:'Office rent',amount:'100',dept:true},{number:'6602',name:'Insurance',amount:'60',dept:true}],
     hours:['4'],

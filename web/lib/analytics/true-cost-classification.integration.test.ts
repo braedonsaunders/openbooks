@@ -611,6 +611,10 @@ test('true cost counts headcount once per department across currencies', { skip:
       values (${emp}, ${org.orgId}, 'employee', 'Headcount Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
     await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
       values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', true, ${dept}, null, null, null, '{}'::jsonb)`)
+    // USD is seeded by the currency-registry migration; the insert only
+    // backfills it on databases seeded before that migration. A conflict is
+    // therefore expected and benign: the row must exist, and we must never
+    // overwrite the canonical name or minor units.
     await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`)
