@@ -23,6 +23,7 @@ import {
   type PreviousRun,
 } from '../../../lib/module-home/payroll'
 import {
+  payPeriodsLabel,
   shortDate,
   type PayrollChecklistBannerProps,
   type PayrollManageLinksProps,
@@ -189,13 +190,8 @@ export async function loadPayroll(
     employeesLabel: t('home.vitals.employees'),
     employeesValue: home.activeEmployees.toLocaleString(locale),
     employeesSub: t('home.vitals.employeesSub'),
-    // One pack → "Pay periods 2027"; several packs with differing years
-    // name each year instead of pretending the latest covers the others.
-    periodsLabel: home.taxYears.length === 1
-      ? t('home.vitals.periodsRan', { year: home.taxYears[0].taxYear })
-      : t('home.vitals.periodsRanYears', {
-          years: [...new Set(home.taxYears.map((pair) => pair.taxYear))].sort((a, b) => a - b).join(', '),
-        }),
+    // The label names the year of every installed pack; see payPeriodsLabel.
+    periodsLabel: payPeriodsLabel((key, params) => t(key, params), locale, home.taxYears),
     periodsValue: home.defaultPeriodsPerYear
       ? t('home.vitals.periodsOf', { ran: home.runsThisYear, total: home.defaultPeriodsPerYear })
       : home.runsThisYear.toLocaleString(locale),
