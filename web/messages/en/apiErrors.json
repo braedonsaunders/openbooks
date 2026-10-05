@@ -1,3 +1,5 @@
 {
-  "internalError": "An unexpected error occurred. Please try again. If the problem continues, contact support with request ID {requestId}."
+  "internalError": "An unexpected error occurred. Please try again. If the problem continues, contact support with request ID {requestId}.",
+  "projectContractValueControlled": "After billing begins, contract value must change through an approved change order. Record a change order under Change orders on the project’s Billing tab and have a different user approve it; approval moves the contract value.",
+  "projectContractValueControlledTypeChanged": "After billing begins, contract value must change through an approved change order, but this project’s type no longer bills by applications for payment, so change orders are unavailable. Switch the project back to a project type that bills by applications for payment, then record and approve a change order on its Billing tab."
 }
