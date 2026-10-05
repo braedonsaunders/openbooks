@@ -102,6 +102,7 @@ function narrowWeekUnit(locale: string): string {
 /* ---------------------------------------------------------------- Overview */
 function OverviewTab({ data }: { data: CashflowData }) {
   const t = useTranslations('analytics.cashflow')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = useCallback((n: string | number) => fmtMoney(n, { compact: true }), [fmtMoney])
   const tCharts = useTranslations('analytics.charts')
@@ -177,7 +178,7 @@ function AgingPanel({ title, side, accent, unplacedKind }: { title: string; side
 }
 
 /* --------------------------------------------------------- Category Analysis */
-function CategoryTab({ data }: { data: CashflowData }) {
+export function CategoryTab({ data }: { data: CashflowData }) {
   const t = useTranslations('analytics.cashflow')
   // Method names live with the category editor's catalog (one translated set
   // for the method codes, reused here instead of a second copy).
@@ -211,7 +212,7 @@ function CategoryTab({ data }: { data: CashflowData }) {
                     <span className={cn('mr-2 inline-block h-2 w-2 rounded-full', c.direction === 'inflow' ? 'bg-emerald-500' : 'bg-red-500')} />
                     <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                   </SharedTableCell>
-                  <SharedTableCell className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{tMethods(`${c.method}.label`)}</span></SharedTableCell>
+                  <SharedTableCell className="px-4 py-2.5"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{tMethods(`methods.${c.method}.label`)}</span></SharedTableCell>
                   <SharedTableCell className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{c.logic || '—'}</SharedTableCell>
                   <SharedTableCell className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(divideMoney(c.total, String(Math.max(1, c.weekly.length))))}</SharedTableCell>
                   <SharedTableCell className={cn('px-4 py-2.5 text-right font-medium tabular-nums', c.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(c.total)}</SharedTableCell>

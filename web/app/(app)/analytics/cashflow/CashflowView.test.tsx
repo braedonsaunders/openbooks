@@ -26,7 +26,7 @@ Object.assign(globalThis, { React })
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/fr')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
-const { CashflowView } = await import('./CashflowView')
+const { CashflowView, CategoryTab } = await import('./CashflowView')
 const { HorizonControl } = await import('./HorizonControl')
 
 function renderFr(ui: ReactElement): string {
@@ -125,6 +125,27 @@ test('unplaced items are named with their count and total, never silently exclud
 test('the settlement figure is labelled as an average, not a cycle', () => {
   const html = renderFr(<CashflowView data={fixture()} />)
   assert.match(html, /Jours moyens de règlement/, 'the figure carries its French average-days label')
+})
+
+test('the category method pill shows the translated method label', () => {
+  const data = fixture()
+  data.categories = [
+    {
+      id: 'cat-rent',
+      name: 'Rent',
+      direction: 'outflow',
+      method: 'gl_history_average',
+      weekly: ['100.0000'],
+      total: '100.0000',
+      logic: '',
+      meta: { method: 'GL Average' },
+      breakdown: [],
+    },
+  ]
+  const html = renderFr(<CategoryTab data={data} />)
+  assert.match(html, /Moyenne historique du grand livre/, 'the pill carries the French method label')
+  assert.doesNotMatch(html, /GL History Average/, 'the English method label is gone')
+  assert.doesNotMatch(html, /gl_history_average\.label/, 'the missing-message key must not leak')
 })
 
 test('the horizon selector renders from the catalog', () => {

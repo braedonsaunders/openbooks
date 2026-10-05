@@ -472,7 +472,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
 
   const tone = cat.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
   const methodTone = CAT_METHOD_TONE[cat.method] ?? 'text-slate-600 dark:text-slate-300'
-  const methodLabel = tMethods(`${cat.method}.label`)
+  const methodLabel = tMethods(`methods.${cat.method}.label`)
   const breakdownType = useCallback((type: string) => {
     const key = BREAKDOWN_TYPE_KEYS[type]
     return key === undefined ? type : t(`breakdownTypes.${key}`)
