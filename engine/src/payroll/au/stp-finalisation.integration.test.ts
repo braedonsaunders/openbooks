@@ -111,13 +111,13 @@ test(
                     stsl_debt: "false",
                   })}::jsonb, ${actorId}, ${actorId})`);
         // SG prices only the remaining headroom under the annual maximum
-        // contributions base: July opens the financial year, so verified
-        // qualifying YTD is zero — an undeclared YTD refuses by name.
+        // contributions base: July opens the financial year, so the opening
+        // carry-in is zero — an undeclared carry-in refuses by name.
         await db.execute(sql`
           insert into employee_tax_certificates (id, org_id, employee_party_id, country, certificate_key,
                                                  answers, created_by, updated_by)
           values (${randomUUID()}, ${org.orgId}, ${employeeId}, 'AU', 'au_sg_administration',
-                  '{"qualifying_ytd": "0"}'::jsonb, ${actorId}, ${actorId})`);
+                  '{"opening_qualifying_ytd": "0"}'::jsonb, ${actorId}, ${actorId})`);
         return employeeId;
       };
       const sydneyId = await seedEmployee("Sydney Worker", "NSW");

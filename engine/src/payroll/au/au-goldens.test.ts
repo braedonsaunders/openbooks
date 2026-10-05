@@ -225,6 +225,8 @@ test("2027 refusals name every untranscribed scale and cap", () => {
 function stubCtx(overrides: Record<string, unknown> = {}) {
   const pushed: Array<{ key: string; amount: string; sequence: number }> = [];
   const ctx = {
+    tx: { execute: async () => ({ rows: [{ qualifying: "0.0000" }] }) },
+    orgId: "org", subsidiaryId: "employer", employeePartyId: "emp", documentId: "doc",
     taxYear: 2027,
     income: "5000",
     pensionable: "5000",
@@ -240,7 +242,7 @@ function stubCtx(overrides: Record<string, unknown> = {}) {
       effectiveFrom: null,
       answers: {
         tax_file_number: "123456782", residency: "australian_resident", working_holiday_maker: "false",
-        tax_free_threshold: "true", stsl_debt: "false", qualifying_ytd: "0",
+        tax_free_threshold: "true", stsl_debt: "false", opening_qualifying_ytd: "0",
       },
       missing: [],
     }),
@@ -260,6 +262,38 @@ test("2027 computeStatutory pushes PAYG deduction and SG employer accrual", asyn
     { key: "payg_withholding", amount: "810.0000", sequence: 110 },
     { key: "super_guarantee", amount: "600.0000", sequence: 210 },
   ]);
+});
+
+test("SG stops at the maximum contributions base using this employer's committed runs", async () => {
+  // $400,000 a year, monthly $33,333.33. Eight committed months put
+  // $266,666.64 of qualifying earnings on the stubs; the $270,830 base
+  // leaves $4,163.36 of headroom, so month nine accrues 12% × 4,163.36 =
+  // $499.60 and month ten nothing. A declared opening carry-in counts too.
+  const sg = async (committed: string, opening: string): Promise<string | undefined> => {
+    const { ctx, pushed } = stubCtx({
+      income: "33333.33",
+      pensionable: "33333.33",
+      reducedBases: reduceTaxBases(
+        [],
+        { income: "33333.33", nonPeriodic: "0.0000", pensionable: "33333.33", insurable: "0.0000" },
+        AU_PAYROLL_PACK.deductionTreatments,
+      ),
+      tx: { execute: async () => ({ rows: [{ qualifying: committed }] }) },
+      certificateFor: () => ({
+        certificate: {}, onFile: true, effectiveFrom: null, missing: [],
+        answers: {
+          tax_file_number: "123456782", residency: "australian_resident", working_holiday_maker: "false",
+          tax_free_threshold: "true", stsl_debt: "false", opening_qualifying_ytd: opening,
+        },
+      }),
+    });
+    await computeAuStatutory(ctx);
+    return pushed.find((line) => line.key === "super_guarantee")?.amount;
+  };
+  assert.equal(await sg("0.0000", "0"), "4000.0000"); // 12% × 33,333.33 = 3,999.9996 → 4,000.00
+  assert.equal(await sg("266666.6400", "0"), "499.6000");
+  assert.equal(await sg("299999.9700", "0"), "0.0000");
+  assert.equal(await sg("166666.6400", "100000.00"), "499.6000");
 });
 
 test("computeStatutory refuses untranscribed tax years by name", async () => {
