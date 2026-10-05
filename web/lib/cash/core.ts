@@ -1204,7 +1204,7 @@ export async function categoryWeekly(
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 12));
     const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
-    const r = (await analyticsQuery(sql`
+    const r = (await analyticsQuery<{ month: string; func: string | null; paid: string; late: string }>(sql`
       -- documents.total is transaction-currency denominated: translate at the
       -- document FX rate into functional currency before adding, exactly like
       -- the purchasing paid values do. The functional leg is carried (with
@@ -1291,7 +1291,7 @@ export async function categoryWeekly(
       orgId,
       r.rows.map((x) => ({ func: x.func, date: String(x.day), amount: normalizeMoneyValue(String(x.paid)) })),
     );
-    const balR = (await analyticsQuery(sql`
+    const balR = (await analyticsQuery<{ func: string | null; bal: string }>(sql`
       select sub.base_currency as func, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
