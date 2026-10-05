@@ -41,10 +41,11 @@ test('favorable and near lines stay on-track, the middle band stays watch', () =
 })
 
 test('a line exactly on a band edge keeps the nearer status', () => {
-  // 7% against a 7% on-track band: a float product (0.07*100) prints
-  // 7.000000000000001 and would misgrade this as watch — the exact
-  // comparison keeps it on-track.
+  // 7% against a 7% on-track band stays on-track, and 7004/100000 (0.07004)
+  // reads watch: a 4dp-rounded ratio would print 0.0700 and misgrade it as
+  // on-track, so the edges cross-multiply with no intermediate ratio.
   assert.equal(budgetLineStatus('expense', '7000', '100000', { onTrack: 7, watch: 25 }), 'on-track')
+  assert.equal(budgetLineStatus('expense', '7004', '100000', { onTrack: 7, watch: 25 }), 'watch')
   assert.equal(budgetLineStatus('expense', '25000', '100000', { onTrack: 7, watch: 25 }), 'watch')
   assert.equal(budgetLineStatus('expense', '25010', '100000', { onTrack: 7, watch: 25 }), 'over')
   assert.equal(budgetLineStatus('income', '-25000', '100000', { onTrack: 7, watch: 25 }), 'watch')
