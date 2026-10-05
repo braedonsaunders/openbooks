@@ -1,0 +1,1 @@
+Replaces one trigger function body to admit a wider set of non-cash offset account types. No table, column or row changes; every existing pay component already satisfies the narrower rule and so satisfies the wider one.
