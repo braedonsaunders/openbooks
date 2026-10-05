@@ -10,9 +10,11 @@ import { postChannelOrder } from "./order-posting.ts";
 import { setPostingPolicy } from "./posting-policies.ts";
 import { upsertChannelLocation } from "./locations.ts";
 import {
+  getChannelMarginSummary,
   getOrderEconomics,
   recomputeOrderEconomics,
   recomputePendingOrderEconomics,
+  recordChannelAdSpend,
 } from "./economics.ts";
 import type { ChannelOrder } from "./contracts.ts";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
@@ -323,6 +325,58 @@ test("a fee estimate gives way to settled fees without double counting", { skip:
     const settled = await withBypass(() => getOrderEconomics(org.orgId, secondId));
     assert.equal(sumBy(settled.facts, "processor_fee"), -200n);
     assert.equal(settled.facts.filter((row) => row.component === "processor_fee" && row.estimated).length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("imported daily ad spend allocates to CM3 and shows in the summary", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const channelId = await setup(org, actor);
+    const orderId = await postPaidOrder(org, actor, channelId, "2007");
+    // A day's export from the ad platform lands against the order's day.
+    const { spendId } = await withBypass(() => recordChannelAdSpend(org.orgId, actor, {
+      channelId,
+      spendDate: "2026-07-15",
+      amountMinor: 68000n,
+      currency: "CAD",
+      source: "platform-export",
+    }));
+    assert.ok(typeof spendId === "string" && spendId.length > 0);
+    await withBypass(() => recomputeOrderEconomics(org.orgId, actor, orderId));
+    const economics = await withBypass(() => getOrderEconomics(org.orgId, orderId));
+    assert.equal(sumBy(economics.facts, "ad_spend"), -68000n);
+    assert.equal(economics.cm3, economics.cm2 - 68000n);
+    // The fixture order predates the trailing month, so the summary reads the full window.
+    const summary = await withBypass(() => getChannelMarginSummary(org.orgId, 90));
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0]!.orders, 1);
+    assert.equal(summary[0]!.revenueMinor, 6300n);
+    assert.equal(summary[0]!.adSpendMinor, 68000n);
+    // Re-importing the same source replaces its figure instead of doubling it.
+    await withBypass(() => recordChannelAdSpend(org.orgId, actor, {
+      channelId,
+      spendDate: "2026-07-15",
+      amountMinor: 34000n,
+      currency: "CAD",
+      source: "platform-export",
+    }));
+    await withBypass(() => recomputeOrderEconomics(org.orgId, actor, orderId));
+    const reimported = await withBypass(() => getOrderEconomics(org.orgId, orderId));
+    assert.equal(sumBy(reimported.facts, "ad_spend"), -34000n);
+    // A spend that is not a calendar day refuses with its remedy.
+    await assert.rejects(
+      withBypass(() => recordChannelAdSpend(org.orgId, actor, {
+        channelId,
+        spendDate: "15-07-2026",
+        amountMinor: 100n,
+        currency: "CAD",
+        source: "platform-export",
+      })),
+      /calendar day/,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

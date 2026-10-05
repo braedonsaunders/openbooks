@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useViewerFormat } from "@/lib/viewer-format";
+import { createMoneyFormatter, minorToMajorText } from "@/lib/money-format";
 import { toast } from "sonner";
 import Link from "next/link";
 import { Layers, Pause, Play, Plug, Unplug } from "lucide-react";
@@ -46,6 +47,17 @@ interface Payload {
   kinds: string[];
 }
 
+interface MarginChannel {
+  channelId: string;
+  channelName: string;
+  currency: string;
+  orders: number;
+  revenueMinor: string;
+  cm2Minor: string;
+  estimatedOrders: number;
+  adSpendMinor: string;
+}
+
 const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
   active: "success",
   paused: "outline",
@@ -56,11 +68,13 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "dest
 
 export function ChannelsConsole() {
   const router = useRouter();
+  const locale = useLocale();
   const { dateTime } = useViewerFormat();
   const fmt = (ts: string | null) => (ts ? dateTime(new Date(ts)) : "—");
   const t = useTranslations("channels");
   const tCommon = useTranslations("common");
   const [data, setData] = useState<Payload | null>(null);
+  const [margin, setMargin] = useState<MarginChannel[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -86,6 +100,18 @@ export function ChannelsConsole() {
         setLoading(false);
       });
   }, [t]);
+
+  // Trailing order margin loads beside the channels: a margin failure hides
+  // the panel, never the console.
+  useEffect(() => {
+    fetch("/api/channels/economics/summary?days=30")
+      .then(async (res) => {
+        if (!res.ok) return;
+        const payload = (await res.json()) as { channels: MarginChannel[] };
+        setMargin(payload.channels);
+      })
+      .catch(() => {});
+  }, []);
 
   // Kinds with a guided connect flow leave the generic drawer for
   // their wizard: OAuth and the match review cannot run inside a
@@ -306,6 +332,57 @@ export function ChannelsConsole() {
               })}
             </ul>
           </CockpitPanel>
+          {margin ? (
+            <CockpitPanel
+              title={t("home.marginTitle")}
+              hint={t("home.marginHint")}
+              actions={
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/reports">{t("home.marginReport")}</Link>
+                </Button>
+              }
+            >
+              {margin.length === 0 ? (
+                <p className="text-sm text-slate-500">{t("home.marginEmpty")}</p>
+              ) : (
+                <ul className="space-y-3">
+                  {margin.map((row) => {
+                    const money = createMoneyFormatter(locale, row.currency);
+                    const formatted = (minor: string) =>
+                      money.money(minorToMajorText(minor), { currency: row.currency });
+                    const revenue = BigInt(row.revenueMinor);
+                    const cm2 = BigInt(row.cm2Minor);
+                    const pct = revenue > 0n ? Number((cm2 * 10000n) / revenue) / 100 : null;
+                    return (
+                      <li key={`${row.channelId}|${row.currency}`} className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{row.channelName}</p>
+                          <p className="text-sm text-slate-500">
+                            {t("home.marginMeta", {
+                              orders: row.orders,
+                              revenue: formatted(row.revenueMinor),
+                              adSpend: formatted(row.adSpendMinor),
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {row.estimatedOrders > 0 ? (
+                            <Badge variant="warning">
+                              {t("home.marginEstimated", { count: row.estimatedOrders })}
+                            </Badge>
+                          ) : null}
+                          <span className="font-mono text-sm font-semibold">{formatted(row.cm2Minor)}</span>
+                          {pct != null ? (
+                            <Badge variant="secondary">{t("home.marginPct", { pct: pct.toFixed(2) })}</Badge>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CockpitPanel>
+          ) : null}
           <DisclosureSection title={t("home.advancedTitle")} summary={t("home.advancedSummary")}>
             <p className="text-sm text-slate-500">{t("home.advancedBody")}</p>
           </DisclosureSection>

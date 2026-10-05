@@ -1026,6 +1026,10 @@
       "channel_sales": {
         "label": "Ventes du canal",
         "description": "Commandes de la boutique par canal, jour, article, emplacement et encaissement — une ligne par ligne de commande avec son statut comptable et sa pièce."
+      },
+      "order_economics": {
+        "label": "Marge de la commande",
+        "description": "Faits de marge sur coût variable enregistrés par ligne de commande du canal, la marge en mesures de formule."
       }
     },
     "columns": {
@@ -2547,6 +2551,23 @@
         "location": "Emplacement",
         "posting_status": "Statut comptable",
         "document_number": "Document"
+      },
+      "order_economics": {
+        "channel": "Canal",
+        "ordered_day": "Jour de commande",
+        "order_number": "Commande",
+        "customer": "Client",
+        "customer_cohort": "Cohorte client",
+        "region": "Région",
+        "country": "Pays",
+        "sku": "Code article",
+        "promotion": "Promotion",
+        "line": "Ligne de commande",
+        "component": "Composante du coût",
+        "source": "Source du coût",
+        "costing": "État du coût",
+        "currency": "Devise",
+        "amount": "Montant"
       }
     },
     "enumValues": {
@@ -2645,7 +2666,29 @@
       "pending": "En attente",
       "summarized": "En récapitulatif",
       "exception": "À traiter",
-      "excluded": "Exclue"
+      "excluded": "Exclue",
+      "new": "Nouveau",
+      "returning": "Récurrent",
+      "unidentified": "Non identifié",
+      "net_revenue": "Chiffre d’affaires net",
+      "cogs": "Coût des ventes",
+      "processor_fee": "Frais de paiement",
+      "shipping_label": "Étiquettes d’expédition",
+      "marketplace_fee": "Frais de la place de marché",
+      "stored_value_funding": "Financement en avoir",
+      "returns": "Retours",
+      "restocking_fee": "Produit de restockage",
+      "ad_spend": "Dépenses publicitaires",
+      "posting": "Comptabilisation",
+      "fulfilment": "Expédition",
+      "label": "Étiquette",
+      "payout": "Versement",
+      "refund": "Remboursement",
+      "estimate": "Estimation",
+      "import": "Importation",
+      "manual": "Manuel",
+      "settled": "Réglé",
+      "estimated": "Estimé"
     }
   },
   "operators": {

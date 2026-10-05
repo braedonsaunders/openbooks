@@ -1026,6 +1026,10 @@
       "channel_sales": {
         "label": "Kanalverkäufe",
         "description": "Storefront-Bestellungen nach Kanal, Tag, Artikel, Standort und Zahlung — eine Zeile pro Bestellposition mit Buchungsstatus und Beleg."
+      },
+      "order_economics": {
+        "label": "Auftragsmarge",
+        "description": "Gespeicherte Deckungsbeitragsfakten je Kanalauftragszeile, die Marge als Formelkennzahlen."
       }
     },
     "columns": {
@@ -2547,6 +2551,23 @@
         "location": "Standort",
         "posting_status": "Buchungsstatus",
         "document_number": "Beleg"
+      },
+      "order_economics": {
+        "channel": "Kanal",
+        "ordered_day": "Bestelltag",
+        "order_number": "Auftrag",
+        "customer": "Kunde",
+        "customer_cohort": "Kundenkohorte",
+        "region": "Region",
+        "country": "Land",
+        "sku": "Artikelnummer",
+        "promotion": "Aktion",
+        "line": "Auftragszeile",
+        "component": "Kostenkomponente",
+        "source": "Kostenquelle",
+        "costing": "Kostenstand",
+        "currency": "Währung",
+        "amount": "Betrag"
       }
     },
     "enumValues": {
@@ -2645,7 +2666,29 @@
       "pending": "Offen",
       "summarized": "In Tagessumme",
       "exception": "Handlungsbedarf",
-      "excluded": "Ausgeschlossen"
+      "excluded": "Ausgeschlossen",
+      "new": "Neu",
+      "returning": "Bestandskunde",
+      "unidentified": "Unbekannt",
+      "net_revenue": "Nettoumsatz",
+      "cogs": "Wareneinsatz",
+      "processor_fee": "Zahlungsgebühren",
+      "shipping_label": "Versandetiketten",
+      "marketplace_fee": "Marktplatzgebühren",
+      "stored_value_funding": "Guthabenfinanzierung",
+      "returns": "Retouren",
+      "restocking_fee": "Wiedereinlagerungsertrag",
+      "ad_spend": "Werbeausgaben",
+      "posting": "Buchung",
+      "fulfilment": "Versand",
+      "label": "Etikett",
+      "payout": "Auszahlung",
+      "refund": "Erstattung",
+      "estimate": "Schätzung",
+      "import": "Import",
+      "manual": "Manuell",
+      "settled": "Abgerechnet",
+      "estimated": "Geschätzt"
     }
   },
   "operators": {

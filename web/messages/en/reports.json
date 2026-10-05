@@ -1026,6 +1026,10 @@
       "channel_sales": {
         "label": "Channel sales",
         "description": "Storefront orders by channel, day, item, location and tender — one row per order line with the order's posting status and document."
+      },
+      "order_economics": {
+        "label": "Order economics",
+        "description": "Stored contribution-margin facts per channel order line, with margin as formula measures."
       }
     },
     "columns": {
@@ -2547,6 +2551,23 @@
         "location": "Location",
         "posting_status": "Posting status",
         "document_number": "Document"
+      },
+      "order_economics": {
+        "channel": "Channel",
+        "ordered_day": "Ordered day",
+        "order_number": "Order",
+        "customer": "Customer",
+        "customer_cohort": "Customer cohort",
+        "region": "Region",
+        "country": "Country",
+        "sku": "Item code",
+        "promotion": "Promotion",
+        "line": "Order line",
+        "component": "Cost component",
+        "source": "Cost source",
+        "costing": "Costing",
+        "currency": "Currency",
+        "amount": "Amount"
       }
     },
     "enumValues": {
@@ -2645,7 +2666,29 @@
       "pending": "Pending",
       "summarized": "In daily summary",
       "exception": "Needs attention",
-      "excluded": "Excluded"
+      "excluded": "Excluded",
+      "new": "New",
+      "returning": "Returning",
+      "unidentified": "Unidentified",
+      "net_revenue": "Net revenue",
+      "cogs": "Cost of goods",
+      "processor_fee": "Processor fees",
+      "shipping_label": "Shipping labels",
+      "marketplace_fee": "Marketplace fees",
+      "stored_value_funding": "Stored-value funding",
+      "returns": "Returns",
+      "restocking_fee": "Restocking income",
+      "ad_spend": "Ad spend",
+      "posting": "Posting",
+      "fulfilment": "Fulfilment",
+      "label": "Label",
+      "payout": "Payout",
+      "refund": "Refund",
+      "estimate": "Estimate",
+      "import": "Import",
+      "manual": "Manual",
+      "settled": "Settled",
+      "estimated": "Estimated"
     }
   },
   "operators": {

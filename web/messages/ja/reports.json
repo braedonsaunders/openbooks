@@ -1026,6 +1026,10 @@
       "channel_sales": {
         "label": "チャネル売上",
         "description": "チャネル・日・品目・ロケーション・入金方法別のストアフロント注文 — 注文明細ごとに転記ステータスと伝票を表示する1行。"
+      },
+      "order_economics": {
+        "label": "受注の采算",
+        "description": "チャネル受注明細ごとの貢献利益ファクトを保存し、マージンを数式メジャーで表示します。"
       }
     },
     "columns": {
@@ -2547,6 +2551,23 @@
         "location": "ロケーション",
         "posting_status": "転記ステータス",
         "document_number": "伝票"
+      },
+      "order_economics": {
+        "channel": "チャネル",
+        "ordered_day": "受注日",
+        "order_number": "受注",
+        "customer": "顧客",
+        "customer_cohort": "顧客コホート",
+        "region": "地域",
+        "country": "国",
+        "sku": "商品コード",
+        "promotion": "プロモーション",
+        "line": "受注明細",
+        "component": "コスト内訳",
+        "source": "コスト取得元",
+        "costing": "コスト状態",
+        "currency": "通貨",
+        "amount": "金額"
       }
     },
     "enumValues": {
@@ -2645,7 +2666,29 @@
       "pending": "保留中",
       "summarized": "日次サマリーに含む",
       "exception": "要対応",
-      "excluded": "除外"
+      "excluded": "除外",
+      "new": "新規",
+      "returning": "リピーター",
+      "unidentified": "不明",
+      "net_revenue": "純売上",
+      "cogs": "売上原価",
+      "processor_fee": "決済手数料",
+      "shipping_label": "配送ラベル",
+      "marketplace_fee": "マーケットプレイス手数料",
+      "stored_value_funding": "保有価値充当",
+      "returns": "返品",
+      "restocking_fee": "再入庫収益",
+      "ad_spend": "広告費",
+      "posting": "記帳",
+      "fulfilment": "発送",
+      "label": "ラベル",
+      "payout": "支払い",
+      "refund": "返金",
+      "estimate": "見積もり",
+      "import": "インポート",
+      "manual": "手動",
+      "settled": "確定済み",
+      "estimated": "見積もり"
     }
   },
   "operators": {

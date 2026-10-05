@@ -89,3 +89,12 @@ export { getPostingPolicy, listPostingPolicies, setPostingPolicy } from "./posti
 export type { ChannelPostingPolicy } from "./posting-policies.ts";
 export { replayChannelExceptions } from "./exceptions.ts";
 export { postChannelOrder } from "./order-posting.ts";
+export {
+  decimalToMinorUnits,
+  getChannelMarginSummary,
+  getOrderEconomics,
+  minorUnitsForCurrency,
+  recomputeOrderEconomics,
+  recordChannelAdSpend,
+} from "./economics.ts";
+export type { ChannelMarginSummary, EconomicsFact, OrderEconomics } from "./economics.ts";
