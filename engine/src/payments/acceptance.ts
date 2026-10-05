@@ -860,7 +860,51 @@ interface AdyenNotificationItem extends Record<string, unknown> {
   amount?: unknown;
   eventCode?: unknown;
   success?: unknown;
+  paymentMethod?: unknown;
   additionalData?: unknown;
+}
+
+/**
+ * Stored-card detail on a recurring-contract notification, present when the
+ * merchant enables Adyen's "include card info for recurring contract"
+ * additional setting. `cardSummary` is the last four digits,
+ * `expiryDate` is month/year (`3/2030`, `03/2030`), and
+ * `recurring.recurringDetailReference` is Adyen's stable id for the stored
+ * card: unlike the notification's pspReference it does not change when the
+ * account updater reissues the card, so refreshes and the disable call key
+ * on it. Returns null when the notice names no stored detail; throws to the
+ * caller's per-item quarantine when it names one with unreadable content,
+ * because a coerced expiry would mistarget the stored method.
+ */
+function adyenRecurringCardDetail(item: AdyenNotificationItem): {
+  detailReference: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+} | null {
+  const additionalData = isJsonRecord(item.additionalData) ? item.additionalData : null;
+  if (!additionalData) return null;
+  const detailReference = adyenScalarString(additionalData["recurring.recurringDetailReference"]);
+  if (!detailReference) return null;
+  const rawSummary = adyenScalarString(additionalData.cardSummary);
+  const rawExpiry = adyenScalarString(additionalData.expiryDate);
+  const rawBrand = adyenScalarString(additionalData.paymentMethodVariant)
+    ?? adyenScalarString(item.paymentMethod);
+  if (!rawSummary && !rawExpiry && !rawBrand) return null;
+  let expMonth: number | null = null;
+  let expYear: number | null = null;
+  if (rawExpiry) {
+    const match = /^(\d{1,2})\/(\d{4})$/.exec(rawExpiry.trim());
+    const month = match ? Number(match[1]) : NaN;
+    const year = match ? Number(match[2]) : NaN;
+    if (!match || !Number.isInteger(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
+      throw new PaymentAcceptanceError(`adyen card detail carries an unreadable expiry ${JSON.stringify(rawExpiry)}`);
+    }
+    expMonth = month;
+    expYear = year;
+  }
+  return { detailReference, brand: rawBrand, last4: rawSummary, expMonth, expYear };
 }
 
 function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: AdyenNotificationItem): WebhookEvent | null {
@@ -872,15 +916,29 @@ function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: 
   const amountCurrency = amount?.currency;
   if (eventCode === "RECURRING_CONTRACT") {
     // A stored payment detail was created from the setup link: the method is
-    // ready for ContAuth charges. Claimed by the autopay engine.
+    // ready for ContAuth charges. Claimed by the autopay engine. The same
+    // notice carries the stored card's detail reference with fresh card
+    // fields when the account updater reissued it ("card updated"), so the
+    // notice doubles as the updater event and the router tries the refresh
+    // before the setup claim.
     const shopperRef = isJsonRecord(item.additionalData)
       ? adyenScalarString((item.additionalData as Record<string, unknown>).shopperReference)
       : null;
+    const card = adyenRecurringCardDetail(item);
     return {
       externalRef: String(item.pspReference ?? ""),
       setupCompleted: true,
-      setupRef: String(item.pspReference ?? ""),
+      setupRef: card?.detailReference ?? String(item.pspReference ?? ""),
       setupCustomerRef: shopperRef,
+      cardUpdaterRefresh: card
+        ? {
+          providerMethodId: card.detailReference,
+          brand: card.brand,
+          last4: card.last4,
+          expMonth: card.expMonth,
+          expYear: card.expYear,
+        }
+        : null,
       linkToken,
       status: "succeeded",
       raw: payload,
@@ -2505,9 +2563,14 @@ async function processWebhookEvent(
   // Card updater refreshes never touch payment attempts: the autopay engine
   // claims them first by stored method id, and an unknown method stays
   // unknown (a 200 the provider may retry) rather than mis-settling money.
+  // A recurring-contract notice carrying card detail is either an update to
+  // an already-stored card or the first notice for a new setup: the refresh
+  // runs first, and only an unknown method falls through to the setup claim
+  // below instead of stranding a new method as unknown.
   if (event.cardUpdaterRefresh) {
     const { recordCardUpdaterEvent } = await import("./autopay.ts");
-    return await recordCardUpdaterEvent(orgId, provider, event.cardUpdaterRefresh);
+    const outcome = await recordCardUpdaterEvent(orgId, provider, event.cardUpdaterRefresh);
+    if (outcome !== "unknown_method" || !event.setupCompleted) return outcome;
   }
   // Stored-method setups never touch payment attempts: the autopay engine
   // claims them first, and an unclaimed one stays unknown (a 200 the
