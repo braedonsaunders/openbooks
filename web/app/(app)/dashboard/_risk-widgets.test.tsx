@@ -37,7 +37,9 @@ function riskData() {
 
 function unconfiguredData() {
   return {
-    forensicRisk: { available: false, reason: 'No approval amount limits in Flows' },
+    // The real exchange-coverage refusal text (MissingExchangeRateError):
+    // the refused tile must carry the refusal verbatim, not a paraphrase.
+    forensicRisk: { available: false, reason: 'no spot rate for USD→CAD on or before 2026-07-01' },
     duplicatePayments: { available: false, reason: 'Set the duplicate minimum in Sentinel \u2192 Configuration' },
   } as unknown as DashboardMetrics
 }
@@ -95,7 +97,7 @@ test('forensic-risk tile names skipped detectors and refuses without coverage', 
   )
   try {
     assert.ok(refused.host.innerHTML.includes('Forensic risk'), 'the tile keeps its title with no coverage')
-    assert.ok(refused.host.innerHTML.includes('No approval amount limits in Flows'), 'the refusal reaches the operator')
+    assert.ok(refused.host.innerHTML.includes('no spot rate for USD→CAD on or before 2026-07-01'), 'the refusal reaches the operator')
     assert.ok(!refused.host.innerHTML.includes('>0<'), 'a refused scope never renders a zero score that reads as a fact')
   } finally {
     await refused.unmount()

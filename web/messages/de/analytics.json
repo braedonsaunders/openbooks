@@ -3918,6 +3918,8 @@
     "scoring": {
       "title": "Bewertungsmodell",
       "note": "Festes Schweregradmodell: Wie jedes Signal in 0–100 Punkte umgerechnet wird. Erkennungsschwellen oben bleiben konfigurierbar.",
+      "bandsTitle": "Score-Bänder",
+      "bandsNote": "Feste Methode: Ein Score bedeutet dieselbe Schwere auf Anzeige, Kacheln und diesem Panel. Bänder sind nicht konfigurierbar.",
       "trap": "Schwellenfallen",
       "duplicate": "Duplikate",
       "weekend": "Wochenendbuchungen",
