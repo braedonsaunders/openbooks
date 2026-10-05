@@ -217,6 +217,8 @@ function setupImportRefusal(entity: SetupEntity): string {
       return 'dunning-policies cannot be imported row by row; maintain collection policies in Collections (Policies view), which validates the complete record.'
     case 'quote-to-cash-policy':
       return 'quote-to-cash-policy cannot be imported; edit the quote-to-cash policy in Setup, which validates the complete record.'
+    case 'customer-portal':
+      return 'customer-portal cannot be imported; edit the customer portal settings in Setup, which validates the complete record.'
     default:
       // Fail closed for whatever the registry gains next: name the owning
       // endpoint rather than inventing a screen.

@@ -32,7 +32,7 @@ test('command-owned setup entities stay importable and bar sealed configuration'
   assert.deepEqual(commanded, ['channel-account-maps', 'channel-locations'])
   const barred = SETUP_ENTITIES.filter((entity) => entity.importVia === 'none').map((entity) => entity.key)
   assert.ok(barred.length > 0, 'the refusal test below is vacuous without a barred entity')
-  for (const key of ['nonprofit-frameworks', 'fund-pairs', 'functional-mappings', 'dunning-policies', 'quote-to-cash-policy']) {
+  for (const key of ['nonprofit-frameworks', 'fund-pairs', 'functional-mappings', 'dunning-policies', 'quote-to-cash-policy', 'customer-portal']) {
     assert.ok(barred.includes(key), `${key} must stay barred from import`)
   }
   const maps = SETUP_ENTITY_BY_KEY.get('channel-account-maps')
