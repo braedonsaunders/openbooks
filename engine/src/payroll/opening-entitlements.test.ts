@@ -288,12 +288,23 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
       });
+      const opening = (await db.execute<{ before: Record<string, unknown> }>(sql`
+        select to_jsonb(l) || jsonb_build_object('amount', l.amount::text, 'hours', l.hours::text) as before from entitlement_ledger l
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`)).rows[0]!.before;
       const cleared = await saveEntitlementOpenings({
         orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+        note: "Correct source employee identity before payroll consumes this opening",
         rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "0" } }],
       });
       assert.equal(cleared.deleted, 1);
       assert.equal((await entitlementOpenings(fx.orgId)).entered, 0);
+      const evidence = (await db.execute<{ actor_id: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`
+        select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='entitlement_ledger'
+          and action='delete' and row_id=${fx.vacationPlanId} order by at desc limit 1`)).rows[0]!;
+      assert.equal(evidence.actor_id, fx.actorId);
+      assert.deepEqual(evidence.changes.before, [opening], "clearing preserves the exact previous amount, date and source evidence");
+      assert.equal(evidence.changes.after, null);
+      assert.equal(evidence.changes.reason, "Correct source employee identity before payroll consumes this opening");
 
       // An 'owe' balance entered positive would be a CREDIT the employee never
       // had. Refused with the number to enter instead, never silently negated.

@@ -158,8 +158,9 @@ export async function saveEntitlementOpenings(input: {
     `));
     const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
 
-    const existing = (await tx.execute<{ plan_id: string; employee_party_id: string; amount: string }>(sql`
-      select plan_id, employee_party_id, amount::text as amount
+    const existing = (await tx.execute<{ plan_id: string; employee_party_id: string; amount: string; before: Record<string, unknown> }>(sql`
+      select plan_id, employee_party_id, amount::text as amount,
+        to_jsonb(entitlement_ledger) || jsonb_build_object('amount', amount::text, 'hours', hours::text) as before
         from entitlement_ledger
        where org_id = ${input.orgId} and kind = 'opening'
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.rows.map((row) => row.employeePartyId))}::jsonb)::uuid)
@@ -289,18 +290,20 @@ export async function saveEntitlementOpenings(input: {
     for (const row of planned) {
       for (const [planId, amount] of row.amounts) {
         const stored = storedKeys.has(`${planId}:${row.employeePartyId}`);
+        const before = existing.rows.filter(entry => entry.plan_id === planId && entry.employee_party_id === row.employeePartyId).map(entry => entry.before);
         if (stored) {
           // The trigger permits this exactly while no committed run has read it.
-          await tx.execute(sql`
+          const deleted = (await tx.execute(sql`
             delete from entitlement_ledger
              where org_id = ${input.orgId} and plan_id = ${planId}
-               and employee_party_id = ${row.employeePartyId} and kind = 'opening'`);
+               and employee_party_id = ${row.employeePartyId} and kind = 'opening' returning id`)).rows;
+          if (deleted.length !== before.length) throw new PayrollError('The bank opening changed while it was being replaced — reload the bank carry-ins and try again');
         }
         if (amount === null) {
           result.deleted++;
           await auditEntitlementOpening(tx, {
             orgId: input.orgId, actorId: input.actorId, action: "delete",
-            changes: { planId, employeePartyId: row.employeePartyId },
+            changes: { planId, employeePartyId: row.employeePartyId, before, after: null, reason: input.note ?? 'Clear unconsumed adoption carry-in' },
           });
           continue;
         }
@@ -325,7 +328,7 @@ export async function saveEntitlementOpenings(input: {
         await auditEntitlementOpening(tx, {
           orgId: input.orgId, actorId: input.actorId,
           action: stored ? "update" : "insert",
-          changes: { planId, employeePartyId: row.employeePartyId, movementDate, after: amount },
+          changes: { planId, employeePartyId: row.employeePartyId, movementDate, before, after: amount, reason: input.note ?? 'Mid-year adoption carry-in' },
         });
       }
     }
