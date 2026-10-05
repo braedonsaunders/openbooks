@@ -4,7 +4,7 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { extendCost, receiveStandard, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { InventoryError, type Runner } from "./contracts.ts";
+import { InventoryCostBasisError, InventoryError, type Runner } from "./contracts.ts";
 import { emitAvailabilityChanged } from "../webhooks/emit.ts";
 import { normalizeMovementIdempotencyKey } from "./action-idempotency.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
@@ -170,6 +170,10 @@ export async function receiveInventory(
       )!;
     } else if (input.unitCost !== undefined) {
       layerUnitCost = input.unitCost;
+    } else if (profile.costingMethod === "standard" && profile.standardCost != null) {
+      // A standard-cost item carries every unit at its configured standard,
+      // so the standard is the explicit basis for an uncosted receipt.
+      layerUnitCost = profile.standardCost;
     } else {
       const onHand = await getOnHandWith(
         tx,
@@ -178,7 +182,19 @@ export async function receiveInventory(
         input.stockLocationId,
         { subsidiaryId: input.subsidiaryId },
       );
-      layerUnitCost = isZero(onHand.unitCost) ? "0" : onHand.unitCost;
+      // With nothing valued on hand there is no average to carry: a receipt
+      // at zero would put found stock on the books for nothing and make its
+      // later sale cost nothing. Refuse and ask for the cost instead.
+      if (isZero(onHand.unitCost)) {
+        const item = (await tx.execute<{ label: string }>(sql`
+          select coalesce(nullif(btrim(code), ''), name) as label from items
+           where org_id = ${orgId} and id = ${input.itemId}`)).rows[0];
+        throw new InventoryCostBasisError(
+          `item ${item?.label ?? input.itemId} has no cost basis at this stock location — nothing valued is on hand to average — so the ${input.quantity} received needs a unit cost; enter the unit cost of the received quantity`,
+          item?.label ?? input.itemId,
+        );
+      }
+      layerUnitCost = onHand.unitCost;
     }
     let inventoryValue: string;
     let variance = "0";
@@ -697,7 +713,7 @@ export interface AdjustInput {
   date: string;
   /** Stable identity for the adjustment effect, used when a caller must replay after a later transaction fails. */
   idempotencyKey?: string | null;
-  /** unit cost for a positive adjustment (defaults to current on-hand cost). */
+  /** unit cost for a positive adjustment; defaults to the on-hand average (or the standard for a standard-cost item) and refuses when neither exists. */
   unitCost?: string;
   lotId?: string | null;
   serialId?: string | null;

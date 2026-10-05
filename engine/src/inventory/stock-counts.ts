@@ -6,7 +6,7 @@ import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts
 import { adjustInventory } from "./movements.ts";
 import { loadSubsidiaryContext, uuidArray } from "../organization/subsidiaries.ts";
 import { assertInventoryFeature } from "./profile-policy.ts";
-import { InventoryError, type Runner } from "./contracts.ts";
+import { InventoryCostBasisError, InventoryError, type Runner } from "./contracts.ts";
 import { getOnHandWith, lockInventoryPosition, primaryBookId } from "./position.ts";
 import {
   assertCountedNonNegative,
@@ -501,6 +501,14 @@ export async function postStockCount(
   orgId: string,
   actorId: string | null,
   countId: string,
+  options: {
+    /**
+     * Unit cost per count line id for found (positive-variance) quantities.
+     * Required for an item with nothing valued on hand to average; when
+     * given it prices the found units instead of the on-hand average.
+     */
+    foundUnitCosts?: Record<string, string>;
+  } = {},
 ): Promise<PostStockCountResult> {
   // The checks, adjustments, stamps and status flip below must commit as one
   // atomic unit. Nested db.transaction calls join the caller's pinned unit;
@@ -657,11 +665,13 @@ export async function postStockCount(
     }
     let movementId: string;
     let entryId: string | null;
+    const foundUnitCost = cmp(variance, "0") > 0 ? options.foundUnitCosts?.[line.id] : undefined;
     try {
       const posted = await adjustInventory(orgId, actorId, {
         itemId: line.itemId,
         stockLocationId: line.stockLocationId,
         quantityDelta: variance,
+        unitCost: foundUnitCost,
         subsidiaryId: prepared.count.subsidiaryId,
         date: prepared.count.countedOn,
         lotId: line.lotId,
@@ -672,6 +682,11 @@ export async function postStockCount(
       movementId = posted.movementId;
       entryId = posted.entryId;
     } catch (error) {
+      if (error instanceof InventoryCostBasisError) {
+        throw new InventoryError(
+          `cannot post: the count found ${variance} of item ${error.itemLabel}, which has no cost basis at this stock location — enter the unit cost of the found quantity on that count line and post again (nothing posted: the whole post rolls back together)`,
+        );
+      }
       if (error instanceof InventoryError && /closed/i.test(error.message)) {
         throw new InventoryError(
           `count date ${prepared.count.countedOn} falls in a closed period — reopen the period, or move the count date to an open period and post again (nothing posted: the whole post rolls back together)`,

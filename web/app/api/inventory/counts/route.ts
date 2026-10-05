@@ -51,7 +51,11 @@ const stockCountBody = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submit'), idempotencyKey: z.string(), countId: uuidId }),
   z.object({ action: z.literal('return'), idempotencyKey: z.string(), countId: uuidId }),
   z.object({ action: z.literal('setDate'), idempotencyKey: z.string(), countId: uuidId, date: isoDate() }),
-  z.object({ action: z.literal('post'), idempotencyKey: z.string().optional(), countId: uuidId }),
+  z.object({
+    action: z.literal('post'), idempotencyKey: z.string().optional(), countId: uuidId,
+    // Unit cost per count line for found quantities of items with no average.
+    foundUnitCosts: z.record(uuidId, exactMoney()).optional(),
+  }),
   z.object({ action: z.literal('cancel'), idempotencyKey: z.string(), countId: uuidId }),
 ])
 
@@ -306,8 +310,8 @@ export const POST = defineRoute({
           return executeIdempotentInventoryAction(user.orgId, user.id, {
             operation: 'inventory.stock-count.post',
             idempotencyKey: body.idempotencyKey ?? `stock-count-post:${countId}`,
-            request: { countId },
-            execute: () => postStockCount(user.orgId, user.id, countId),
+            request: { countId, foundUnitCosts: body.foundUnitCosts ?? {} },
+            execute: () => postStockCount(user.orgId, user.id, countId, { foundUnitCosts: body.foundUnitCosts }),
           })
         })
         return NextResponse.json({ ok: true, replayed, ...res })

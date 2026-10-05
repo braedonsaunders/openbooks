@@ -212,7 +212,8 @@
       "lot": "ロット",
       "expected": "予定数",
       "counted": "実数",
-      "movement": "調整"
+      "movement": "調整",
+      "foundUnitCost": "発見分の単価"
     },
     "statusNames": {
       "draft": "下書き",

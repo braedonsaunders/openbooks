@@ -25,6 +25,13 @@ export class InventoryError extends Error {}
  * to 403: it is an authorization-boundary refusal, not a validation miss.
  */
 export class InventoryOwnershipError extends InventoryError {}
+/**
+ * A receipt without a unit cost found no average to carry it at. Callers that
+ * collect costs (stock counts) catch it to name their own remedy.
+ */
+export class InventoryCostBasisError extends InventoryError {
+  constructor(message: string, readonly itemLabel: string) { super(message); }
+}
 /** A record is absent or outside the actor's organization/subsidiary scope. */
 export class InventoryNotFoundError extends InventoryError {}
 

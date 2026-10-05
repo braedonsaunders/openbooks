@@ -212,7 +212,8 @@
       "lot": "Lot",
       "expected": "Quantité attendue",
       "counted": "Quantité comptée",
-      "movement": "Ajustement"
+      "movement": "Ajustement",
+      "foundUnitCost": "Coût unitaire du surplus"
     },
     "statusNames": {
       "draft": "Brouillon",

@@ -603,6 +603,11 @@ function CreateCountDrawer({
   )
 }
 
+/** A positive count variance (found stock), read from its exact decimal string. */
+function isFound(variance: string | null | undefined): boolean {
+  return variance != null && !variance.trim().startsWith('-') && /[1-9]/.test(variance)
+}
+
 function CountDetailBody({
   detail,
   itemOptions,
@@ -624,6 +629,10 @@ function CountDetailBody({
   const [busy, setBusy] = useState(false)
   const [postError, setPostError] = useState<string | null>(null)
   const [counted, setCounted] = useState<Record<string, string>>({})
+  // Unit cost for found (positive-variance) quantities, sent with Post. An
+  // item with nothing valued on hand has no average, so the post refuses
+  // that line until its cost is entered here.
+  const [foundCosts, setFoundCosts] = useState<Record<string, string>>({})
   // Remount per count/status/date (parent key) resets these; no effect.
   const [countDate, setCountDate] = useState(detail.header.countedOn)
   // ONE retry identity per intended count step (record, submit, post, …): a
@@ -734,6 +743,24 @@ function CountDetailBody({
       cell: (l) => <span className="tabular-nums">{l.variance ?? '—'}</span>,
     },
     {
+      key: 'foundUnitCost',
+      header: t('counts.columns.foundUnitCost'),
+      align: 'right',
+      cell: (l) =>
+        header.status === 'review' && canPost && !l.adjustmentMovementId && isFound(l.variance) ? (
+          <Input
+            disabled={busy}
+            inputMode="decimal"
+            aria-label={t('counts.columns.foundUnitCost')}
+            className="w-24 text-right tabular-nums"
+            value={foundCosts[l.id] ?? ''}
+            onChange={(e) => setFoundCosts((prev) => ({ ...prev, [l.id]: e.target.value }))}
+          />
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
       key: 'movement',
       header: t('counts.columns.movement'),
       cell: (l) =>
@@ -787,7 +814,12 @@ function CountDetailBody({
               <Button
                 size="sm"
                 disabled={busy}
-                onClick={() => void run(t('counts.actions.post'), { action: 'post' })}
+                onClick={() => {
+                  const foundUnitCosts = Object.fromEntries(
+                    Object.entries(foundCosts).map(([lineId, cost]) => [lineId, cost.trim()]).filter(([, cost]) => cost !== ''),
+                  )
+                  void run(t('counts.actions.post'), Object.keys(foundUnitCosts).length ? { action: 'post', foundUnitCosts } : { action: 'post' })
+                }}
               >
                 {t('counts.actions.post')}
               </Button>

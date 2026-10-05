@@ -340,3 +340,32 @@ test("a failing post rolls every variance back and keeps the count in review", a
   }
 });
 
+
+test("found stock with nothing on hand to average refuses until its unit cost is entered", async () => {
+  const org = await createScratchOrg();
+  try {
+    // Nothing on hand: the count finds 10 units with no average to carry
+    // them at. Booking them at zero would make their later sale cost zero.
+    const { countId, lineId } = await openCountedReview(org, "10");
+    const movementsBefore = await movementCount(org.orgId);
+    await assert.rejects(
+      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId)),
+      (e: unknown) => {
+        assert.ok(e instanceof InventoryError);
+        assert.match((e as Error).message, /found 10\.0000 of item .+ which has no cost basis/);
+        assert.match((e as Error).message, /enter the unit cost of the found quantity on that count line/);
+        return true;
+      },
+    );
+    assert.equal(await countStatus(org.orgId, countId), "review");
+    assert.equal(await movementCount(org.orgId), movementsBefore);
+
+    const result = await withOrgTransaction(org.orgId, () =>
+      postStockCount(org.orgId, null, countId, { foundUnitCosts: { [lineId]: "4.25" } }));
+    const movement = (await db.execute<{ total_value: string }>(sql`
+      select total_value::text from inventory_movements where org_id = ${org.orgId} and id = ${result.lines[0]!.movementId}`)).rows[0]!;
+    assert.equal(movement.total_value, "42.5000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
