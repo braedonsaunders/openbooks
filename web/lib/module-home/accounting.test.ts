@@ -102,6 +102,7 @@ test('unrestricted Accounting home remains tenant-wide', async () => {
   const home = await accountingHome('org-1', null, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
   assert.equal(home.draftJournals, 2)
   assert.equal(home.badges.assets, 3)
+  assert.equal(home.closeUnavailable, null, 'unrestricted callers get the run, not a refusal')
   assert.ok(state.calls.every((query) => !query.includes('and false')))
   assert.ok(state.calls.some((query) => query.includes('from close_runs')))
 })
@@ -116,6 +117,9 @@ test('restricted Accounting home scopes legal-entity metrics and fails closed fo
   assert.match(all, /f\.subsidiary_id = any/)
   assert.ok(!/(?<![\w])a\.subsidiary_id is null/.test(state.calls.find((query) => query.includes('from ai_work_items')) ?? ''), 'shared accounts fail closed in restricted work-item counts')
   assert.ok(state.calls.find((query) => query.includes('from close_runs'))?.includes('and false'))
+  // Restricted callers refuse by name — like the dashboard — instead of
+  // reporting "no close run".
+  assert.ok(home.closeUnavailable?.includes('organization-wide'), `the refusal names its scope: ${home.closeUnavailable}`)
   assert.match(all, /from budget_scenarios[\s\S]*budget_lines[\s\S]*not exists/)
   assert.match(all, /from ai_work_items[\s\S]*subject_type[\s\S]*subsidiary_id/)
 })
