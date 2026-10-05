@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { mutatePayRunAdjustment } from "./run-adjustments.ts";
 import { createPayRun } from "./run-lifecycle.ts";
+import { recurringBenefitsRunSource } from "./benefit-plan-inputs.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
@@ -213,8 +214,9 @@ test("pay-run adjustment mutations serialize with commit and reject every post-c
       `);
       signalLocked();
       await release;
+      const benefitSource = await recurringBenefitsRunSource(tx, fixture.orgId, fixture.documentId);
       await tx.execute(sql`
-        update pay_runs set run_status = 'committed'
+        update pay_runs set run_status = 'committed', benefit_source_snapshot = ${JSON.stringify(benefitSource)}::jsonb
          where org_id = ${fixture.orgId} and document_id = ${fixture.documentId}
       `);
     });

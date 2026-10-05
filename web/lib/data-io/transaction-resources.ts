@@ -94,9 +94,10 @@ export function transactionDescriptor(cfg: DocKindConfig): ResourceDescriptor {
     iconKey: cfg.family === 'ar' ? 'clipboard-check' : cfg.family === 'bank' ? 'building' : 'clipboard',
     readPermission: readPermission(cfg.kind),
     writePermission: createPermission(cfg.kind),
-    supportsImport: true,
+    // Payroll's ledger projection is machine-built from reviewed payroll inputs.
+    supportsImport: cfg.kind !== 'pay_run',
     naturalKey: 'documentNumber',
-    canPost: true,
+    canPost: cfg.kind !== 'pay_run',
     postPermission: postPermission(cfg.kind),
   }
 }
@@ -315,6 +316,9 @@ export function transactionResource(
       return { fields: cols, columns, rows }
     },
     async write(rows, _mode, ctx) {
+      if (cfg.kind === 'pay_run') {
+        throw new Error('Pay runs cannot be imported as ledger documents — import Pay run component inputs, then calculate and review the run in Payroll')
+      }
       return writeTransactions(cfg, rows, ctx)
     },
   }

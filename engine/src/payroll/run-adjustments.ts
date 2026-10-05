@@ -166,14 +166,29 @@ function excludeStrangerRefusal(displayName: string | null | undefined, employee
  * and commit. Every successful change invalidates the calculated snapshot so
  * a caller cannot commit stubs that no longer represent the inputs.
  */
-export async function mutatePayRunAdjustment(input: {
+type PayRunAdjustmentInput = {
   orgId: string;
   documentId: string;
   actorId: string;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   mutation: PayRunAdjustmentMutation;
-}): Promise<{ changed: boolean; replayed: boolean }> {
+};
+
+export async function mutatePayRunAdjustment(input: PayRunAdjustmentInput): Promise<{ changed: boolean; replayed: boolean }> {
+  return executePayRunAdjustment(input, false);
+}
+
+/** Validate an imported line through the writer's guards without changing inputs or calculated stubs. */
+export async function preflightPayRunAdjustment(
+  input: PayRunAdjustmentInput & { mutation: Extract<PayRunAdjustmentMutation, { action: "add" }> },
+): Promise<{ replayed: boolean }> {
+  const result = await executePayRunAdjustment(input, true);
+  return { replayed: result.replayed };
+}
+
+async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnly: boolean): Promise<{ changed: boolean; replayed: boolean }> {
   const { orgId, documentId, actorId, mutation } = input;
+  if (validateOnly && mutation.action !== "add") throw new PayrollError("adjustment preflight only supports adding a line");
   return db.transaction(async (tx) => {
     const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; document_status: string; subsidiary_id: string | null }>(sql`
       select r.run_status, r.pay_schedule_id, d.status as document_status, d.subsidiary_id
@@ -293,6 +308,7 @@ export async function mutatePayRunAdjustment(input: {
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
+      if (validateOnly) return { changed: false, replayed: false };
       if (key != null) {
         await tx.execute(sql`
           insert into pay_run_adjustments
