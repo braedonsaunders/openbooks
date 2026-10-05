@@ -786,7 +786,7 @@ test(
           sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${original} and account_id=${f.accounts.goodwill!} order by line_number limit 1`,
         )
       ).rows[0]!;
-      await post(
+      const reversal = await post(
         f,
         f.elimination,
         "2026-07-17",
@@ -810,23 +810,29 @@ test(
         f.interest,
         null,
       );
+      // The reversal entry stays 'posted' but only cancels its original, so
+      // its negated lines are no more evidence than the original's.
+      const reversalLines = (await db.execute<{ id: string; amount: string }>(
+        sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${reversal} order by line_number`,
+      )).rows;
       assert.ok(
-        open.adjustmentLines.every((l) => l.id !== line.id),
-        "a fully reversed line is not outstanding evidence and must not be offered",
+        open.adjustmentLines.every((l) => l.id !== line.id && !reversalLines.some((r) => r.id === l.id)),
+        "neither the reversed line nor its reversal is outstanding evidence to offer",
       );
-      await assert.rejects(
-        proposeLossOfControl(
-          f.org.orgId,
-          f.interest,
-          f.actors.submitterId,
-          input(f, {
-            additionalConsolidationLines: [
-              { lineId: line.id, amount: line.amount },
-            ],
-          }),
-        ),
-        (e) => /manually attributed elimination line/.test(deepest(e)),
-      );
+      for (const candidate of [line, reversalLines[0]!])
+        await assert.rejects(
+          proposeLossOfControl(
+            f.org.orgId,
+            f.interest,
+            f.actors.submitterId,
+            input(f, {
+              additionalConsolidationLines: [
+                { lineId: candidate.id, amount: candidate.amount },
+              ],
+            }),
+          ),
+          (e) => /manually attributed elimination line/.test(deepest(e)),
+        );
     }),
 );
 test(
