@@ -2,7 +2,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { portalOrderTracking } from '@openbooks/engine/portal'
 import { db, withOrgContext } from '@openbooks/engine/platform/database'
 import { portalPage } from '@/lib/portal/pages'
-import { minorDisplay } from '@/lib/portal/display'
+import { currencyMinorDisplay } from '@/lib/portal/display'
 import { PortalEmpty, PortalShell } from '@/components/portal/portal-shell'
 
 export const runtime = 'nodejs'
@@ -23,7 +23,9 @@ export default async function PortalOrdersPage({ params }: { params: Promise<{ t
         <p className="mt-4"><PortalEmpty>{t('orders.empty')}</PortalEmpty></p>
       ) : (
         <ul className="mt-4 space-y-3">
-          {home.orders.map((order) => (
+          {home.orders.map((order) => {
+            const amount = currencyMinorDisplay(order.totalMinor, order.currency, locale, order.minorUnits)
+            return (
             <li key={order.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
               <div className="flex items-center justify-between">
                 <div>
@@ -33,7 +35,7 @@ export default async function PortalOrdersPage({ params }: { params: Promise<{ t
                   </p>
                 </div>
                 <p className="font-semibold tabular-nums text-slate-900 dark:text-white">
-                  {minorDisplay(order.totalMinor, order.currency, locale)}
+                  {amount ?? t('orders.amountUnavailable', { currency: order.currency })}
                 </p>
               </div>
               {(tracking.get(order.id) ?? []).length > 0 ? (
@@ -46,7 +48,8 @@ export default async function PortalOrdersPage({ params }: { params: Promise<{ t
                 </ul>
               ) : null}
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </PortalShell>

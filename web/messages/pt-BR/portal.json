@@ -70,7 +70,8 @@
     "title": "Pedidos",
     "empty": "Sem pedidos ainda.",
     "fulfilment": "Envio: {status}",
-    "noTrackingNumber": "Rastreio ainda não informado"
+    "noTrackingNumber": "Rastreio ainda não informado",
+    "amountUnavailable": "O valor do pedido em {currency} está indisponível. Entre em contato com seu fornecedor para verificar o valor registrado e a precisão da moeda."
   },
   "returns": {
     "title": "Devoluções",

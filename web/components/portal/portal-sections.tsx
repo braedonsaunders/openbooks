@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { portalAction, ActionError } from './portal-client'
+import { minorDisplay } from '@/lib/portal/display'
 
 const inputClass =
   'mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white'
@@ -238,6 +240,8 @@ export function GiftCardForm({
   sessionToken: string
   labels: { code: string; check: string }
 }) {
+  const locale = useLocale()
+  const t = useTranslations('storedValue')
   const [code, setCode] = useState('')
   const [result, setResult] = useState<{ kind: string; balanceMinor: string; currency: string; status: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -268,7 +272,7 @@ export function GiftCardForm({
       <button type="submit" disabled={busy} className={buttonClass}>{labels.check}</button>
       {result ? (
         <p className="text-sm text-slate-700 dark:text-slate-200">
-          {result.kind} · {result.balanceMinor} {result.currency} · {result.status}
+          {t(`kind.${result.kind}`)} · {minorDisplay(result.balanceMinor, result.currency, locale)} · {t(`status.${result.status}`)}
         </p>
       ) : null}
       <ActionError message={error} />

@@ -70,7 +70,8 @@
     "title": "订单",
     "empty": "暂无订单。",
     "fulfilment": "履约：{status}",
-    "noTrackingNumber": "暂无追踪单号"
+    "noTrackingNumber": "暂无追踪单号",
+    "amountUnavailable": "无法显示 {currency} 订单金额。请联系供应商，核实记录的金额和货币小数位数。"
   },
   "returns": {
     "title": "退货",

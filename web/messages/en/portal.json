@@ -70,7 +70,8 @@
     "title": "Orders",
     "empty": "No orders yet.",
     "fulfilment": "Fulfilment: {status}",
-    "noTrackingNumber": "Tracking not shared yet"
+    "noTrackingNumber": "Tracking not shared yet",
+    "amountUnavailable": "The {currency} order amount is unavailable. Contact your supplier to verify the recorded amount and currency precision."
   },
   "returns": {
     "title": "Returns",
