@@ -1073,6 +1073,10 @@
           "label": "Wachstum — Trendfenster (Monate)",
           "help": "Monate je Seite beim Vergleich des aktuellen mit dem vorherigen Fenster"
         },
+        "yoyRecentMonths": {
+          "label": "Wachstum — Vorjahresfenster (Monate)",
+          "help": "Aktuelle Monate im Vergleich zu denselben Monaten des Vorjahres"
+        },
         "cohortActiveMonths": {
           "label": "Kohorten — aktiv innerhalb (Monate)",
           "help": "Kunden mit Bestellung innerhalb dieser Monate zählen als aktiv"
@@ -1113,6 +1117,7 @@
       "payment": "Zahlung",
       "projectedClv": "Prognostizierter CLV",
       "recommendation": "Empfehlung",
+      "download": "CSV exportieren",
       "segment": "Segment"
     },
     "customersCount": "{count} Kunden",
@@ -1207,7 +1212,7 @@
       "atRiskCustomers": "Gefährdete Kunden ({count})",
       "atRiskHint": "Abwanderungswert: Aktualität 0–{recMax} (>{highDays} T/>{medDays} T/>{lowDays} T) + Frequenzrückgang 0–{cadMax} ({highX}×/{lowX}× eigener Schnitt) + geringe Bindung 0–{engMax} (≤{singleTxns}/≤{fewTxns} Aufträge)",
       "clvRanking": "Lebenszeitwert-Ranking",
-      "cohortHint": "Nach Jahr des Erstauftrags · aktiv = Bestellung in den letzten {months} Monaten",
+      "cohortHint": "Nach Geschäftsjahr des Erstauftrags · aktiv = Bestellung in den letzten {months} Monaten",
       "cohortRetention": "Kohortenbindung",
       "customerHealth": "Kundengesundheit ({count})",
       "customerHealthHint": "Gewichtet {recency} % Aktualität · {frequency} % Häufigkeit · {monetary} % Umsatz · {payment} % Zahlungsverhalten, abzüglich Reibung",
@@ -1325,7 +1330,7 @@
     },
     "sources": {
       "cohortsBold": "Kohorten:",
-      "cohortsTail": " Lebenszeit-Rechnungshistorie nach Jahr des Erstauftrags gruppiert; aktiv = Bestellung in den letzten 6 Monaten.",
+      "cohortsTail": " Lebenszeit-Rechnungshistorie nach Geschäftsjahr des Erstauftrags gruppiert; aktiv = Bestellung in den letzten 6 Monaten.",
       "frictionBold": "Friktion:",
       "frictionTail": " nur Gutschriften — dieses Hauptbuch kennt keine Retourengenehmigungen, die Retourenkomponente ist daher immer 0.",
       "intelligenceBold": "Intelligenzwert:",
@@ -1431,7 +1436,8 @@
     "txnsCount": "{count} Buch.",
     "errors": {
       "paymentStatsUnavailable": "Die Kundenzahlungsstatistik wurde nicht geladen. Laden Sie dieses Dashboard erneut.",
-      "scoringWeightsInvalid": "Die Gewichtungen {keys} ergeben {actual} statt {total} — bitte in der Konfiguration dieses Dashboards korrigieren.",
+      "scoringWeightsInvalid": "Die Gewichtungen {keys} ergeben {actual} statt {total} — bitte unter Kundenintelligenz → Konfiguration korrigieren.",
+      "scoringWeightsUnreadable": "Die Gewichtungen {keys} sind nicht alle Zahlen — bitte unter Kundenintelligenz → Konfiguration korrigieren.",
       "intelligenceUnavailable": "Keine Kundensignale werden unter den konfigurierten Gewichtungen bewertet — bitte in der Konfiguration dieses Dashboards korrigieren."
     },
     "rating": {

@@ -1073,6 +1073,10 @@
           "label": "Croissance — fenêtre de tendance (mois)",
           "help": "Mois par côté pour comparer la fenêtre récente à la précédente"
         },
+        "yoyRecentMonths": {
+          "label": "Croissance — fenêtre en glissement annuel (mois)",
+          "help": "Mois récents comparés aux mêmes mois de l’année précédente"
+        },
         "cohortActiveMonths": {
           "label": "Cohortes — actif sous (mois)",
           "help": "Un client commandé sous ce délai compte comme actif"
@@ -1113,6 +1117,7 @@
       "payment": "Paiement",
       "projectedClv": "CLV projetée",
       "recommendation": "Recommandation",
+      "download": "Exporter CSV",
       "segment": "Segment"
     },
     "customersCount": "{count} clients",
@@ -1207,7 +1212,7 @@
       "atRiskCustomers": "Clients à risque ({count})",
       "atRiskHint": "Score d’attrition : ancienneté 0–{recMax} (>{highDays} j/>{medDays} j/>{lowDays} j) + baisse de cadence 0–{cadMax} ({highX}×/{lowX}× la moyenne propre) + faible engagement 0–{engMax} (≤{singleTxns}/≤{fewTxns} commandes)",
       "clvRanking": "Classement par valeur à vie",
-      "cohortHint": "Par année de première commande · actif = a commandé dans les {months} derniers mois",
+      "cohortHint": "Par année fiscale de première commande · actif = a commandé dans les {months} derniers mois",
       "cohortRetention": "Rétention par cohorte",
       "customerHealth": "Santé client ({count})",
       "customerHealthHint": "Pondéré {recency} % récence · {frequency} % fréquence · {monetary} % valeur · {payment} % paiements, moins la friction",
@@ -1325,7 +1330,7 @@
     },
     "sources": {
       "cohortsBold": "Cohortes :",
-      "cohortsTail": " historique des factures à vie regroupé par année de première commande ; actif = a commandé dans les 6 derniers mois.",
+      "cohortsTail": " historique des factures à vie regroupé par année fiscale de première commande ; actif = a commandé dans les 6 derniers mois.",
       "frictionBold": "Friction :",
       "frictionTail": " avoirs uniquement — ce grand livre ne contient aucun document d’autorisation de retour, la composante retours est donc toujours à 0.",
       "intelligenceBold": "Score d’intelligence :",
@@ -1431,7 +1436,8 @@
     "txnsCount": "{count} trans.",
     "errors": {
       "paymentStatsUnavailable": "Les statistiques de paiement client n’ont pas été chargées. Rechargez ce tableau de bord.",
-      "scoringWeightsInvalid": "Les pondérations {keys} totalisent {actual} au lieu de {total} : corrigez-les dans la Configuration de ce tableau.",
+      "scoringWeightsInvalid": "Les pondérations {keys} totalisent {actual} au lieu de {total} : corrigez-les dans Intelligence client → Configuration.",
+      "scoringWeightsUnreadable": "Les pondérations {keys} ne sont pas toutes des nombres : corrigez-les dans Intelligence client → Configuration.",
       "intelligenceUnavailable": "Aucun indicateur d’intelligence client n’est noté avec les pondérations configurées : corrigez-les dans la Configuration de ce tableau."
     },
     "rating": {

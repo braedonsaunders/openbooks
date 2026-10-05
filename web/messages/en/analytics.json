@@ -770,7 +770,7 @@
       "atRiskHint": "Churn score: recency 0–{recMax} (>{highDays}d/>{medDays}d/>{lowDays}d) + cadence decline 0–{cadMax} ({highX}×/{lowX}× own average) + low engagement 0–{engMax} (≤{singleTxns}/≤{fewTxns} orders)",
       "monthlyRevenueTrend": "Monthly Revenue Trend",
       "cohortRetention": "Cohort Retention",
-      "cohortHint": "By first-order year · active = ordered in the last {months} months",
+      "cohortHint": "By first-order fiscal year · active = ordered in the last {months} months",
       "monthlyDetails": "Monthly Details",
       "monthlyDetailsHint": "MoM growth capped +{up}/−{down}%; '—' marks ramp-up from an immature month",
       "customerProfitability": "Customer Profitability",
@@ -838,6 +838,7 @@
       "grade": "Grade",
       "projectedClv": "Projected CLV",
       "segment": "Segment",
+      "download": "Export CSV",
       "churn": "Churn",
       "payment": "Payment",
       "recommendation": "Recommendation"
@@ -1144,7 +1145,7 @@
         },
         "topSharePct": {
           "label": "Concentration — top slice (%)",
-          "help": "Top customer share in the headline concentration figure"
+          "help": "Top slice of customers (percent of count) in the headline concentration figure"
         },
         "concentrationHealthHigh": {
           "label": "Concentration — high health (score)",
@@ -1286,6 +1287,10 @@
           "label": "Growth — trend window (months)",
           "help": "Months per side when comparing the recent window against the prior one"
         },
+        "yoyRecentMonths": {
+          "label": "Growth — year-on-year window (months)",
+          "help": "Recent months compared against the same months a year back"
+        },
         "cohortActiveMonths": {
           "label": "Cohorts — active within (months)",
           "help": "A customer ordered within this many months counts as active"
@@ -1366,7 +1371,7 @@
       "newCustomersBold": "New customers:",
       "newCustomersTail": " no earlier invoice or sales order, lifetime, before the month of first activity.",
       "cohortsBold": "Cohorts:",
-      "cohortsTail": " lifetime invoice history grouped by first-order year; active = ordered within the last 6 months.",
+      "cohortsTail": " lifetime invoice history grouped by first-order fiscal year; active = ordered within the last 6 months.",
       "profitabilityBold": "Profitability:",
       "profitabilityTail": " project-tagged GL lines rolled job → customer; customers without project-tagged activity show no margin (never estimated).",
       "intelligenceBold": "Intelligence score:",
@@ -1431,7 +1436,8 @@
     },
     "errors": {
       "paymentStatsUnavailable": "Customer payment statistics did not load. Reload this dashboard to retry.",
-      "scoringWeightsInvalid": "Score weights {keys} sum to {actual}, not {total} — open Configuration on this dashboard and correct them.",
+      "scoringWeightsInvalid": "Score weights {keys} sum to {actual}, not {total} — open Customer Intelligence → Configuration and correct them.",
+      "scoringWeightsUnreadable": "Score weights {keys} are not all numbers — open Customer Intelligence → Configuration and correct them.",
       "intelligenceUnavailable": "No customer intelligence inputs are scored under the configured weights — open Configuration on this dashboard and correct them."
     },
     "rating": {

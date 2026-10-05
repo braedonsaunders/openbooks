@@ -2,6 +2,8 @@ import "server-only";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { fiscalStartMonth } from "../fiscal";
+import { fiscalYearOf } from "@openbooks/reports";
 import { statementBookExpr } from "../gl-summary";
 import { REVENUE_TYPES } from "../reports/statements";
 import { getMoneyFormatter } from '../money-server'
@@ -16,7 +18,7 @@ import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, neg, sum } from "@openbooks/engine/money";
-import { exactMarginPercent, exactProfit } from "./customer-profitability-money";
+import { compareAtRiskCustomers, exactMarginPercent, exactProfit } from "./customer-profitability-money";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 
@@ -286,7 +288,7 @@ export interface CustomerData {
    * translated reason when no term carried weight — never a 0 that reads as
    * "scored worst".
    */
-  intelligence: { score: number; label: string; grade: string } | { score: null; reason: string };
+  intelligence: { score: number; label: string; grade: string; championSaturation: number } | { score: null; reason: string };
   kpis: {
     totalCustomers: number;
     /**
@@ -311,6 +313,8 @@ export interface CustomerData {
     /** Null with no payment history: the engine reports no average instead of an invented one. */
     avgDaysToPay: number | null;
     top10PctShare: number;
+    /** Share of the five largest customers, 0–100: the home concentration tile states this. */
+    top5SharePct: number;
     hhiScaled: number; // 0–10000
     hhiLevel: "high" | "moderate" | "low";
     customersFor80Pct: number;
@@ -527,8 +531,9 @@ export function weightsRefusal(
 ): string | null {
   const violation = checkSumsTo(ANALYTICS_CONFIG.customerIntelligence, cfg);
   if (!violation) return null;
+  if (violation.unreadable) return strings.scoringWeightsUnreadable([...violation.keys]);
   return strings.scoringWeightsInvalid(
-    violation.keys.join(", "),
+    [...violation.keys],
     violation.total,
     Math.round(violation.actual * 100) / 100,
   );
@@ -856,8 +861,20 @@ function customerDocumentMovements(
 }
 
 /* ------------------------------------------------------------------- main */
+/** A top-five at-risk row for the home dashboard's list: the engine's own churn rank. */
+export interface CustomerAtRiskPreview {
+  id: string;
+  name: string;
+  churnLevel: "critical" | "high";
+  churnScore: number;
+  /** Trailing recognized revenue, an exact decimal string in presentation currency. */
+  revenue: string;
+}
+
 export interface CustomerSummary {
-  kpis: Pick<CustomerData['kpis'], 'totalCustomers' | 'atRiskCount'> & { totalRevenue: string; totalInvoiced: string };
+  kpis: Pick<CustomerData['kpis'], 'totalCustomers' | 'atRiskCount' | 'hhiScaled' | 'hhiLevel' | 'customersFor80Pct' | 'top5SharePct'> & { totalRevenue: string; totalInvoiced: string; atRiskRevenue: string };
+  /** The five highest churn scores by the shared at-risk comparator. */
+  atRisk: CustomerAtRiskPreview[];
   growth: Pick<CustomerData['growth'], 'monthly'>;
   /**
    * Set when a hand-edited weight group no longer sums to 100: the figures
@@ -882,9 +899,7 @@ export function atRiskCustomersOf(rows: CustomerRow[]): CustomerRow[] {
  * one ranking, every surface.
  */
 export function rankAtRiskCustomers(rows: CustomerRow[]): CustomerRow[] {
-  return [...atRiskCustomersOf(rows)]
-    .sort((a, b) => b.churnScore - a.churnScore || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-    .slice(0, 5);
+  return [...atRiskCustomersOf(rows)].sort(compareAtRiskCustomers).slice(0, 5);
 }
 
 export interface ConcentrationSummary {
@@ -893,8 +908,8 @@ export interface ConcentrationSummary {
   level: CustomerData["kpis"]["hhiLevel"];
   /** Customers covering 80% of period revenue, the same count the dashboard shows. */
   customersFor80Pct: number;
-  /** Share of the largest customer, 0–100, the same figure the dashboard shows. */
-  topSharePct: number;
+  /** Share of the five largest customers, 0–100, computed once in the loader. */
+  top5SharePct: number;
 }
 
 /**
@@ -910,7 +925,7 @@ export function concentrationOf(kpis: CustomerData["kpis"]): ConcentrationSummar
     hhi: kpis.hhiScaled,
     level: kpis.hhiLevel,
     customersFor80Pct: kpis.customersFor80Pct,
-    topSharePct: kpis.topCustomerShare,
+    top5SharePct: kpis.top5SharePct,
   };
 }
 
@@ -947,13 +962,17 @@ async function readCustomerData(
   const today = await businessToday(orgId);
   const ref = to < today ? to : today;
 
-  // The scoring model (defaults reproduce the standard scoring exactly).
+  // The scoring model ships with the standard scoring as its defaults, but
+  // every band the tiles render reads the live config: editing the grade
+  // ladder moves the health bands with it, so the defaults reproduce the
+  // standard scoring only until someone reconfigures them.
   const cfg = await analyticsConfig(orgId, "customerIntelligence");
   const refusal = weightsRefusal(cfg, strings);
   if (refusal) {
     if (preview) {
       return {
-        kpis: { totalCustomers: 0, totalRevenue: "0", totalInvoiced: "0", atRiskCount: 0 },
+        kpis: { totalCustomers: 0, totalRevenue: "0", totalInvoiced: "0", atRiskCount: 0, atRiskRevenue: "0", hhiScaled: 0, hhiLevel: "low", customersFor80Pct: 0, topCustomerShare: 0, top5SharePct: 0 },
+        atRisk: [],
         growth: { monthly: [] },
         weightsError: refusal,
       };
@@ -980,6 +999,7 @@ async function readCustomerData(
         hhiLevel: "low",
         customersFor80Pct: 0,
         topCustomerShare: 0,
+        top5SharePct: 0,
         monthlyGrowth: 0,
         yoyGrowth: null,
         newCustomers: 0,
@@ -1088,6 +1108,7 @@ async function readCustomerData(
   const momCapDown = cfg.growthMomCapDown!;
   const trendBand = cfg.growthTrendPct!;
   const trendWindow = cfg.growthTrendWindowMonths!;
+  const yoyRecentMonths = cfg.yoyRecentMonths!;
   const cohortActiveMonths = cfg.cohortActiveMonths!;
   const overdueInsightAt = cfg.overdueInsightCount!;
 
@@ -1548,8 +1569,11 @@ async function readCustomerData(
     // divisor. The retention curve is statistical by nature; it rounds once
     // to the integer retention factor, and the projection multiplies exact legs.
     const activeMonths = c.first && c.last ? wholeMonthsBetween(c.first, c.last) : 0;
-    const yearsActive = Math.max(clvMinYears, activeMonths / 12);
-    const annualValue = div(c.invoicedRevenue, yearsActive.toFixed(10));
+    // Whole months against a whole-month floor: invoiced × 12 ÷ months is
+    // the same annualization as invoiced ÷ years, without the binary dust
+    // a months/12 float divisor leaves in the quotient.
+    const activeOrFloorMonths = Math.max(clvMinYears * 12, activeMonths);
+    const annualValue = div(mulDecimal(c.invoicedRevenue, "12"), String(activeOrFloorMonths));
     const recency = c.recency ?? Number.MAX_SAFE_INTEGER;
     const retention = Math.max(clvMin, Math.min(clvMax, clvBase * Math.exp(-recency / clvDecay)));
     const retentionFactor = Math.round(retention * 100);
@@ -1569,9 +1593,14 @@ async function readCustomerData(
     else if (recency > churnHighDays) { score += churnCriticalPts; factors.push(strings.churnInactive(recency)); }
     else if (recency > churnMediumDays) { score += churnHighPts; factors.push(strings.churnDeclining); }
     else if (recency > churnLowDays) score += churnLowPts;
+    // The cadence terms measure against the customer's own order rhythm, and
+    // the population is customers billed in the period: with fewer than two
+    // orders no rhythm exists, so a single invoice can never read
+    // "past its usual cycle" no matter how small the average divides out.
+    const hasCadence = c.txns >= 2;
     const avgDaysBetween = c.tenure / Math.max(1, c.txns);
-    const stale = recency === null || recency > avgDaysBetween * churnCadenceHighX;
-    const slowing = recency !== null && recency > avgDaysBetween * churnCadenceLowX;
+    const stale = hasCadence && (recency === null || recency > avgDaysBetween * churnCadenceHighX);
+    const slowing = hasCadence && recency !== null && recency > avgDaysBetween * churnCadenceLowX;
     if (stale) { score += churnCadenceHighPts; factors.push(strings.churnBelowPattern); }
     else if (slowing) score += churnCadenceLowPts;
     if (c.txns <= churnSingleTxns) { score += churnSinglePts; factors.push(strings.churnSingle); }
@@ -1729,6 +1758,18 @@ async function readCustomerData(
     : "0";
   if (top10ShareText === null) throw new Error("TOP_CUSTOMER_REVENUE_SHARE_UNDEFINED");
   const top10Share = Number(top10ShareText);
+  // The home tile states the top-five share the brief names: the same exact
+  // ratio off the same revenue rank, never a second computation downstream.
+  const top5ShareText = totalRevenuePositive
+    ? evaluateAnalyticsRatio(
+      sum(byRevenue.slice(0, 5).map((e) => e.c.revenue)),
+      totalRevenueExact,
+      "percent",
+      0,
+    )
+    : "0";
+  if (top5ShareText === null) throw new Error("TOP5_CUSTOMER_REVENUE_SHARE_UNDEFINED");
+  const top5Share = Number(top5ShareText);
 
   // Nurture cut: the configured percentile of the CLV distribution — a
   // relative bar that moves with the book, never an absolute amount.
@@ -1785,7 +1826,7 @@ async function readCustomerData(
       detail = strings.recOnboard;
     } else if (leakMargin !== null) {
       recommendation = "reprice";
-      detail = strings.recReprice(leakMargin.toFixed(1));
+      detail = strings.recReprice(leakMargin);
     } else if (healthScore === null || healthScore < gradeD) {
       // The review floor follows the shared grade ladder (below D), and an
       // unscored customer — no term left to score — lands here too.
@@ -1900,7 +1941,7 @@ async function readCustomerData(
       mulDecimal(String(r.recognized ?? 0), glCtx.rateAt(r.func ?? null, String(r.day).slice(0, 10)))));
   }
   const gInvoiced = gRevenue;
-  const gRows = [...new Set([...gInvoiced.keys(), ...gRecognized.keys(), ...gCounts.keys()])]
+  const sparseRows = [...new Set([...gInvoiced.keys(), ...gRecognized.keys(), ...gCounts.keys()])]
     .sort((a, b) => a.localeCompare(b))
     .map((month) => ({
       month,
@@ -1908,6 +1949,18 @@ async function readCustomerData(
       revenue: gRecognized.get(month) ?? "0",
       counts: gCounts.get(month),
     }));
+  // The windows below index by position, so the series must be dense: fill
+  // every month between the first and last activity with zeros. Skipping
+  // quiet months would slide year-on-year pairs off their calendar alignment
+  // and let a gap read as growth.
+  const gByMonth = new Map(sparseRows.map((r) => [r.month, r]));
+  const gRows: typeof sparseRows = [];
+  if (sparseRows.length > 0) {
+    const lastMonth = sparseRows[sparseRows.length - 1]!.month;
+    for (let m = sparseRows[0]!.month; m <= lastMonth; m = addMonthsClamped(`${m}-01`, 1).slice(0, 7)) {
+      gRows.push(gByMonth.get(m) ?? { month: m, invoiced: "0", revenue: "0", counts: undefined });
+    }
+  }
   const revenues = gRows.map((r) => r.revenue).sort(cmp);
   const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : "0";
   const minRevenueThreshold = mulDecimal(medianRevenue, String(maturityFloor));
@@ -1937,13 +1990,30 @@ async function readCustomerData(
       isMature,
     };
   });
+  // The home dashboard's widgets read this summary, never the full load:
+  // churn and concentration off the same base the dashboard scores, without
+  // lifetime cohorts, settlement detail, project profitability, DSO
+  // statistics or the intelligence composite.
+  const previewScored = base.map((customer) => {
+    const churn = churnOf(customer);
+    return { id: customer.id, name: strings.displayCustomerName(customer.name), churnLevel: churn.level, churnScore: churn.score, revenue: customer.revenue };
+  });
+  const previewRisky = previewScored
+    .filter((r): r is typeof r & { churnLevel: "critical" | "high" } => r.churnLevel === "critical" || r.churnLevel === "high");
+  const previewAtRisk = [...previewRisky].sort(compareAtRiskCustomers).slice(0, 5);
   if (preview) return {
     kpis: {
       totalCustomers: base.length,
       totalRevenue: totalRevenueExact,
       totalInvoiced: totalInvoicedExact,
-      atRiskCount: base.filter((customer) => ["critical", "high"].includes(churnOf(customer).level)).length,
+      atRiskCount: previewRisky.length,
+      atRiskRevenue: sum(previewRisky.map((r) => r.revenue)),
+      hhiScaled,
+      hhiLevel,
+      customersFor80Pct,
+      topCustomerShare,
     },
+    atRisk: previewAtRisk,
     growth: { monthly },
     weightsError: null,
   };
@@ -1953,11 +2023,12 @@ async function readCustomerData(
   if (dsoStats === null) throw new Error(strings.paymentStatsUnavailable());
   const avgDaysToPay = dsoStats.globalAvg;
 
-  // Year-on-year compares the last 3 months against the same 3 months a year
-  // back: twelve months of offset plus the three-month window. A narrower
-  // window is not year-on-year, so this span is derived, never configured.
-  const yoyRecentMonths = 3;
-  const yoyWindow = 12 + yoyRecentMonths;
+  // Year-on-year compares the configured recent-months window against the
+  // same months a year back: twelve calendar months of offset plus the
+  // window. The window is explicit configuration (Growth group), never a
+  // bare constant, so an operator can see and change what "YoY" spans.
+  const monthsPerYear = 12;
+  const yoyWindow = monthsPerYear + yoyRecentMonths;
   let yoyGrowth: number | null = null;
   if (monthly.length >= yoyWindow) {
     const recent3 = sum(monthly.slice(-yoyRecentMonths).map((m) => m.revenue));
@@ -2031,8 +2102,12 @@ async function readCustomerData(
   }
   const cohortMap = new Map<string, Cohort>();
   let lifetimeCustomers = 0, lifetimeActive = 0;
+  // Cohorts group by the org's fiscal year of first order, never the
+  // calendar slice: a January-start book matches either way, but any other
+  // fiscal calendar would silently mis-cohort its boundary customers.
+  const cohortFyStart = await fiscalStartMonth(orgId);
   for (const p of cohortByParty.values()) {
-    const year = p.first.slice(0, 4);
+    const year = String(fiscalYearOf(p.first.slice(0, 10), cohortFyStart));
     const isActive = p.last >= activeCut;
     lifetimeCustomers++;
     if (isActive) lifetimeActive++;
@@ -2089,6 +2164,9 @@ async function readCustomerData(
       ...strings.intelligenceScore(intelligenceScore, {
         aPlus: gradeAPlus, a: gradeA, b: gradeB, c: gradeC, d: gradeD,
       }),
+      // The champions term's saturation point travels with the score: the
+      // sources note states it, never re-derives it from the tier config.
+      championSaturation,
     };
 
   /* ---- aggregates + insights ---- */
@@ -2107,7 +2185,7 @@ async function readCustomerData(
   if (championsStat.count > 0)
     insights.push({ type: "success", category: "segmentation", ...strings.champions(championsStat.count, fmtM(championsStat.totalRevenue)), impact: "high" });
   if (hhiLevel === "high")
-    insights.push({ type: "alert", category: "concentration", ...strings.concentration(topCustomerShare.toFixed(1), hhiScaled), impact: "high" });
+    insights.push({ type: "alert", category: "concentration", ...strings.concentration(topCustomerShare, hhiScaled), impact: "high" });
   if (trend === "declining")
     insights.push({ type: "warning", category: "growth", ...strings.declining(avgMonthlyGrowth), impact: "high" });
   else if (trend === "growing")
@@ -2134,6 +2212,7 @@ async function readCustomerData(
       paymentRate,
       avgDaysToPay,
       top10PctShare: top10Share,
+      top5SharePct: top5Share,
       hhiScaled,
       hhiLevel,
       customersFor80Pct,

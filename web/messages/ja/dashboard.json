@@ -322,7 +322,9 @@
     "moderate": "中",
     "high": "高"
   },
-  "concentrationHint": "{level}・上位 {share}",
+  "concentrationHint": "{level}・上位5社 {share}・{period}",
+  "hhiValue": "HHI {value}",
+  "atRiskRevenueHint": "直近収益（{period}）",
   "atRiskCount": "{count, plural, one {# 社} other {# 社}}",
   "concentrationNoRevenue": "{period}の認識済み顧客収益がありません",
   "churnScore": "離反スコア {score}",

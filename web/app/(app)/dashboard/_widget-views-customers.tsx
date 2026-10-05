@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import Link from 'next/link'
 import { AlertTriangle, Layers, Users } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import { useViewerFormat } from '@/lib/viewer-format'
@@ -40,15 +41,15 @@ function ConcentrationTile({ concentration }: { concentration: WidgetCardProps['
   if (concentration === null || !concentration.available) {
     return <MetricTile icon={<Layers size={15} />} label={t('widgets.customerConcentration')} value="—" href={HREF} tone="slate" hint={concentration?.available === false ? concentration.reason : undefined} />
   }
-  const { hhi, level, topSharePct } = concentration.value
+  const { hhi, level, top5SharePct, period } = concentration.value
   return (
     <MetricTile
       icon={<Layers size={15} />}
       label={t('widgets.customerConcentration')}
-      value={`HHI ${number(hhi, { maximumFractionDigits: 0 })}`}
+      value={t('hhiValue', { value: number(hhi, { maximumFractionDigits: 0 }) })}
       href={HREF}
       tone={CONCENTRATION_TONE[level]}
-      hint={t('concentrationHint', { level: t(`concentrationLevels.${level}`), share: number(topSharePct / 100, { style: 'percent', maximumFractionDigits: 1 }) })}
+      hint={t('concentrationHint', { level: t(`concentrationLevels.${level}`), share: number(top5SharePct / 100, { style: 'percent', maximumFractionDigits: 0 }), period })}
     />
   )
 }
@@ -61,7 +62,7 @@ function AtRiskTile({ atRisk }: { atRisk: WidgetCardProps['data']['atRisk'] }) {
   if (atRisk === null || !atRisk.available) {
     return <MetricTile icon={<Users size={15} />} label={t('widgets.customersAtRisk')} value="—" href={HREF} tone="slate" hint={atRisk?.available === false ? atRisk.reason : undefined} />
   }
-  const { count, revenue } = atRisk.value
+  const { count, revenue, period } = atRisk.value
   return (
     <MetricTile
       icon={<Users size={15} />}
@@ -69,7 +70,7 @@ function AtRiskTile({ atRisk }: { atRisk: WidgetCardProps['data']['atRisk'] }) {
       value={t('atRiskCount', { count })}
       href={HREF}
       tone={count > 0 ? 'amber' : 'emerald'}
-      hint={money(revenue)}
+      hint={`${money(revenue)} · ${t('atRiskRevenueHint', { period })}`}
     />
   )
 }
@@ -89,7 +90,9 @@ function AtRiskList({ list }: { list: WidgetCardProps['data']['atRiskCustomers']
           {list.value.map((customer) => (
             <li key={customer.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{customer.name}</div>
+                <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                  <Link href={`/entities/customers?party=${customer.id}`} className="hover:underline">{customer.name}</Link>
+                </div>
                 <div className="truncate text-xs text-slate-500 dark:text-slate-400">
                   {tc(`risk.${customer.churnLevel}`)} · {t('churnScore', { score: customer.churnScore })}
                 </div>

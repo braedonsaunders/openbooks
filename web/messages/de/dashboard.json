@@ -322,7 +322,9 @@
     "moderate": "Mittel",
     "high": "Hoch"
   },
-  "concentrationHint": "{level} · Top-Anteil {share}",
+  "concentrationHint": "{level} · Top 5 {share} · {period}",
+  "hhiValue": "HHI {value}",
+  "atRiskRevenueHint": "Laufender Umsatz, {period}",
   "atRiskCount": "{count, plural, one {# Kunde} other {# Kunden}}",
   "concentrationNoRevenue": "Keine erfassten Kundenerlöse in {period}",
   "churnScore": "Abwanderungsscore {score}",

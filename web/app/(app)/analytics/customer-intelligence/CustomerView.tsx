@@ -46,6 +46,7 @@ import type {
   Profitability,
   ProfitTier,
 } from '../../../../lib/analytics/customer-data'
+import { compareAtRiskCustomers } from '../../../../lib/analytics/customer-profitability-money'
 import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
@@ -471,7 +472,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
               onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('table.invoiced'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore ?? '', r.healthGrade ?? '', r.revenue, r.invoicedRevenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), t(`rating.${r.paymentRating}`), t(`rec.${r.recommendation}`)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
-              <Download size={11} /> CSV
+              <Download size={11} /> {t('csv.download')}
             </button>
           </span>
         }
@@ -789,8 +790,9 @@ function ChurnTab({ data }: { data: CustomerData }) {
   const money = (n: MoneyValue) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
   const k = data.kpis
-  // List critical, high, and medium risk customers in the at-risk table.
-  const atRisk = data.rows.filter((r) => r.churnLevel !== 'low').sort((a, b) => b.churnScore - a.churnScore || cmp(b.revenue, a.revenue))
+  // List critical, high, and medium risk customers in the at-risk table, in
+  // the engine's at-risk order — the same comparator the home tile ranks by.
+  const atRisk = data.rows.filter((r) => r.churnLevel !== 'low').sort(compareAtRiskCustomers)
   const totalPages = Math.max(1, Math.ceil(atRisk.length / 25))
   const pageNo = Math.min(page, totalPages)
   const pageRows = atRisk.slice((pageNo - 1) * 25, pageNo * 25)
@@ -1193,7 +1195,7 @@ function ConfigurationTab({ data, canEdit }: { data: CustomerData; canEdit: bool
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.profitabilityBold')}</span>{t('sources.profitabilityTail')}</li>
           <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.intelligenceBold')}</span> {data.intelligence.score === null ? data.intelligence.reason : t('sources.intelligenceTail', {
             champions: data.config.intelWeightChampions,
-            saturation: data.config.tierPlatinumPct * 2,
+            saturation: data.intelligence.championSaturation,
             retention: data.config.intelWeightRetention,
             concentration: data.config.intelWeightConcentration,
             payment: data.config.intelWeightPayment,

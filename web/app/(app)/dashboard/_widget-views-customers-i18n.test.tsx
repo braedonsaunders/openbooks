@@ -24,14 +24,14 @@ function concentrationData() {
   return {
     concentration: {
       available: true,
-      value: { hhi: 1840, level: 'moderate', customersFor80Pct: 4, topSharePct: 46 },
+      value: { hhi: 1840, level: 'moderate', customersFor80Pct: 4, top5SharePct: 46, period: 'Q2 2026' },
     },
   } as unknown as DashboardMetrics
 }
 
 function atRiskData() {
   return {
-    atRisk: { available: true, value: { count: 2, revenue: '12500.00' } },
+    atRisk: { available: true, value: { count: 2, revenue: '12500.00', period: 'Q2 2026' } },
   } as unknown as DashboardMetrics
 }
 
@@ -56,9 +56,11 @@ test('customer concentration renders the HHI with its level and top share', asyn
   )
   try {
     const html = host.innerHTML
-    assert.ok(html.includes('1,840'), 'the HHI figure renders grouped in the viewer locale')
+    assert.ok(html.includes('HHI 1,840'), 'the HHI figure renders named and grouped in the viewer locale')
     assert.ok(html.includes('Moderate'), 'the level resolves through dashboard.concentrationLevels')
+    assert.ok(html.includes('top 5'), 'the tile states the top-five share the brief names')
     assert.ok(html.includes('46%'), 'the top share renders as a percent')
+    assert.ok(html.includes('Q2 2026'), 'the tile labels the period beside the figure')
     assert.ok(!html.includes('concentrationLevels'), 'no raw catalog path renders')
   } finally {
     await unmount()
@@ -93,6 +95,7 @@ test('customers at risk renders the count with its trailing revenue', async () =
     const html = host.innerHTML
     assert.ok(html.includes('2 customers'), 'the count runs the catalog plural rule')
     assert.ok(html.includes('12,500'), 'the trailing revenue renders as money, not a raw string')
+    assert.ok(html.includes('Trailing revenue, Q2 2026'), 'the hint names the trailing period')
   } finally {
     await unmount()
   }
@@ -111,6 +114,7 @@ test('the at-risk list renders each customer with score and revenue', async () =
     assert.ok(html.includes('Critical'), 'the churn level resolves through analytics.customer risk copy')
     assert.ok(html.includes('churn score 95'), 'the churn score renders beside its level')
     assert.ok(html.includes('10,000'), 'the trailing revenue renders as money')
+    assert.ok(html.includes('/entities/customers?party=c1'), 'each row links to its customer')
     assert.ok(!html.includes('risk.critical'), 'no raw catalog path renders')
   } finally {
     await unmount()
@@ -128,6 +132,7 @@ test('the at-risk list names an empty book instead of rendering nothing', async 
   try {
     assert.ok(host.innerHTML.length > 0, 'the card shell still renders')
     assert.ok(!host.innerHTML.includes('<li'), 'no rows render for an empty book')
+    assert.ok(host.innerHTML.includes('All clear.'), 'the empty book states its named all-clear')
   } finally {
     await unmount()
   }

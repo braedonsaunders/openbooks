@@ -38,8 +38,17 @@ test('the ladder follows configuration, not literals', () => {
 })
 
 test('a broken weight group is refused by name with the remedy', () => {
-  const message = strings.scoringWeightsInvalid('healthWeightRecency, healthWeightPayment', 100, 94)
-  assert.ok(message.includes('healthWeightRecency'))
+  const message = strings.scoringWeightsInvalid(['healthWeightRecency', 'healthWeightPayment'], 100, 94)
+  assert.ok(message.includes('Health — recency weight (%)'), 'the refusal carries the translated editor label')
+  assert.ok(message.includes('Health — payment weight (%)'), 'every broken key is named by its label')
+  assert.ok(!message.includes('healthWeightRecency'), 'no raw storage key reaches the operator')
   assert.ok(message.includes('94'))
-  assert.ok(/Configuration/i.test(message))
+  assert.ok(message.includes('Customer Intelligence → Configuration'), 'the remedy names the dashboard that owns it')
+})
+
+test('an unreadable weight is refused by name with the remedy', () => {
+  const message = strings.scoringWeightsUnreadable(['healthWeightRecency', 'noSuchKey'])
+  assert.ok(message.includes('Health — recency weight (%)'), 'known keys render by label')
+  assert.ok(message.includes('noSuchKey'), 'an unknown key renders raw rather than dropping the refusal')
+  assert.ok(message.includes('Customer Intelligence → Configuration'))
 })

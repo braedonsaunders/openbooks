@@ -322,7 +322,9 @@
     "moderate": "Moderada",
     "high": "Alta"
   },
-  "concentrationHint": "{level} · cuota líder {share}",
+  "concentrationHint": "{level} · 5 mayores {share} · {period}",
+  "hhiValue": "HHI {value}",
+  "atRiskRevenueHint": "Ingresos recientes, {period}",
   "atRiskCount": "{count, plural, one {# cliente} other {# clientes}}",
   "concentrationNoRevenue": "Sin ingresos reconocidos de clientes en {period}",
   "churnScore": "puntuación de fuga {score}",
