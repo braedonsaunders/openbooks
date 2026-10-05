@@ -25,7 +25,7 @@ export interface PayPeriodPriors {
   insurable: string;
   /**
    * Every stub factor key summed over the employee's earlier period stubs
-   * (C, C2, EI, QPIP, I, B, F, F3, F5B, …). The generic layer transports;
+   * (earnings bases, withheld amounts and tax deductions). The generic layer transports;
    * each pack reads the keys its own engine traced.
    */
   factors: Record<string, string>;

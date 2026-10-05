@@ -209,6 +209,23 @@ export async function seedPayrollComponents(
   await ensurePackSlotRoleAccounts(db, orgId, actorId, country);
   await seedVacationEntitlementPlan(orgId, actorId, country);
   await seedAlternateDayEntitlementPlan(orgId, actorId, country);
+  await provisionPayrollPackDefaults(orgId, actorId, [country]);
+}
+
+/** Apply declared setup defaults only for the organization's installed packs. */
+export async function provisionPayrollPackDefaults(
+  orgId: string, actorId: string | null = null, countries?: readonly string[],
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const org = (await tx.execute<{ countries: string[] | null }>(sql`
+      select settings#>'{payroll,countries}' as countries from orgs
+       where id = ${orgId} for update
+    `)).rows[0];
+    if (!org) throw new PayrollError("payroll organization not found — defaults were not applied");
+    for (const country of countries ?? org.countries ?? []) {
+      await payrollPack(country).provisionDefaults?.({ tx, orgId, actorId });
+    }
+  });
 }
 
 /**

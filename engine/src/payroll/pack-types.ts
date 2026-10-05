@@ -21,13 +21,12 @@ import type { PayrollTaxYearSupport } from "./tax-years.ts"
  *
  * - `earnings` — assessed on gross / pensionable / insurable earnings or on
  *   hours. Protection only ever changes DEDUCTIONS, so an earnings-assessed
- *   amount is invariant across passes and is computed exactly once: WCB/WSIB,
- *   EHT, FUTA, SUTA, employer FICA, employer CPP/EI/QPIP — and also EMPLOYEE
- *   CPP, CPP2, EI and QPIP, which T4127 computes from pensionable income (PI)
- *   and insurable earnings (IE) and which no factor-F/F2/U1 deduction reduces.
+ *   amount is invariant across passes and is computed exactly once: employer
+ *   levies and employee or employer social contributions whose assessment
+ *   bases are unaffected by protected deductions.
  * - `taxable_income` — assessed on income AFTER pre-tax deductions, so a
  *   pre-tax protected order moves it and it must be re-derived on every pass.
- *   Income tax (CRA factors A → T) and US FIT only.
+ *   Income-tax components declare this assessment basis in their pack.
  *
  * Getting this wrong is silent money: a levy wrongly declared `earnings` goes
  * stale against the deductions actually taken, and one wrongly declared
@@ -86,15 +85,14 @@ export type PayrollRetroactiveTreatment = "non_periodic" | "periodic";
 
 /**
  * How the pack's statutory engine taxes a supplemental-period share — a
- * second periodic pay inside one period. Contributions (CPP/EI and their
- * counterparts) are always computed on the period-to-date total minus what
+ * second periodic pay inside one period. Social contributions are always computed on the period-to-date total minus what
  * earlier runs of the period already withheld, so a per-period exemption
  * applies once per period. Income tax has two jurisdictional answers:
  *
  * - `period_cumulative` — tax the period-to-date taxable income as one
  *   periodic pay, minus tax already withheld in the period.
- * - `per_run` — tax each run as its own periodic pay (T4127 Option 1 on the
- *   run's income alone, annualized by P). The contribution credits and
+ * - `per_run` — tax each run as its own periodic pay on the
+ *   run's income alone, annualized by the number of periods. The contribution credits and
  *   deductions inside the tax formula price off what the run actually
  *   withheld (the period-cumulative share), not a standalone recomputation.
  *
@@ -668,6 +666,12 @@ export interface EmployeeIdentifierVerdict {
 
 export interface PayrollCountryPack {
   country: PayrollCountry;
+  /** Idempotent, audited setup data owned by this pack, applied in a transaction. */
+  provisionDefaults?: (input: {
+    tx: Pick<typeof db, "execute">;
+    orgId: string;
+    actorId: string | null;
+  }) => Promise<void>;
   /**
    * The country's name, in English, for any surface that shows a pack to a
    * person. REQUIRED, and deliberately data rather than copy.
