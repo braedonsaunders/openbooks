@@ -14,9 +14,10 @@ const fiscalPeriods = [
 /**
  * Comparison windows: equal-length calendar shifts without declared
  * periods; whole-period runs on boundary-aligned windows; the same elapsed
- * length at the prior run's end for period-to-date windows; calendar shifts
- * where no declared run precedes. A partial current window must never
- * compare its short span against whole prior periods.
+ * length at the same day offset inside the preceding run for misaligned
+ * windows (the run's start plus the days elapsed into the current run);
+ * calendar shifts where no declared run precedes. A partial current window
+ * must never compare its short span against whole prior periods.
  */
 test("comparison windows snap, anchor, or shift by declared coverage", () => {
   const cases: Array<{ name: string; from: string; to: string; periods?: typeof fiscalPeriods; want: object }> = [
@@ -44,17 +45,26 @@ test("comparison windows snap, anchor, or shift by declared coverage", () => {
       from: "2026-03-30",
       to: "2026-04-10",
       periods: fiscalPeriods,
-      want: { periodDays: 12, priorFrom: "2026-03-18", priorTo: "2026-03-29", twoBackFrom: "2026-03-06", twoBackTo: "2026-03-17" },
+      want: { periodDays: 12, priorFrom: "2026-03-02", priorTo: "2026-03-13", twoBackFrom: "2026-02-18", twoBackTo: "2026-03-01" },
+    },
+    {
+      name: "two-period run with one declared period behind",
+      from: "2026-03-02",
+      to: "2026-04-26",
+      periods: fiscalPeriods,
+      want: { periodDays: 56, priorFrom: "2026-01-05", priorTo: "2026-03-01", twoBackFrom: "2025-11-10", twoBackTo: "2026-01-04" },
+    },
+    {
+      name: "mid-period window with no preceding run",
+      from: "2026-03-10",
+      to: "2026-04-10",
+      periods: fiscalPeriods,
+      want: { periodDays: 32, priorFrom: "2026-02-06", priorTo: "2026-03-09", twoBackFrom: "2026-01-05", twoBackTo: "2026-02-05" },
     },
   ];
   for (const c of cases) {
     assert.deepEqual(getSpendVelocityComparisonWindows(c.from, c.to, c.periods ?? []), c.want, c.name);
   }
-  // A two-period run with only one declared period behind it keeps the
-  // calendar behaviour rather than comparing a period and a half; a
-  // mid-period window with no preceding run does the same.
-  assert.equal(getSpendVelocityComparisonWindows("2026-03-02", "2026-04-26", fiscalPeriods).priorFrom, "2026-01-05");
-  assert.equal(getSpendVelocityComparisonWindows("2026-03-10", "2026-04-10", fiscalPeriods).priorFrom, "2026-02-06");
 });
 
 test("measured series score velocity, acceleration and trend from disjoint halves", () => {

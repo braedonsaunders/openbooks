@@ -336,8 +336,9 @@ export interface SpendVelocityComparisonWindows {
  * Whole declared periods compare only when the window sits exactly on
  * period boundaries: a period-to-date, custom or partial window must never
  * compare its short span against whole prior periods. A misaligned window
- * takes the same elapsed length anchored to the end of the preceding
- * declared run; with no declared coverage behind it, windows shift by the
+ * takes the same elapsed length at the same day offset inside the preceding
+ * run — anchored at the prior run's start plus the days elapsed into the
+ * current run. With no declared coverage behind it, windows shift by the
  * inclusive day count so they stay equal in length either way.
  */
 export function getSpendVelocityComparisonWindows(
@@ -347,6 +348,7 @@ export function getSpendVelocityComparisonWindows(
 ): SpendVelocityComparisonWindows {
   const day = (iso: string): number => new Date(iso + "T00:00:00Z").getTime();
   const ymd = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+  const fwd = (iso: string, days: number): string => ymd(day(iso) + days * 86_400_000);
   const spanDays = (a: string, b: string): number => Math.round((day(b) - day(a)) / 86_400_000) + 1;
   const back = (iso: string, days: number): string => ymd(day(iso) - days * 86_400_000);
   const ordered = [...periods].sort((a, b) => a.from.localeCompare(b.from));
@@ -359,9 +361,10 @@ export function getSpendVelocityComparisonWindows(
     return { from: run[0]!.from, to: run[run.length - 1]!.to };
   };
   // One step back from an inclusive window: whole periods when the window
-  // sits on period boundaries, the same elapsed length at the prior run's
-  // end when it does not, day-shifted when declared coverage runs out. An
-  // anchored or shifted window continues contiguously instead of
+  // sits on period boundaries; otherwise the same elapsed length at the
+  // same day offset inside the preceding run (the run's start plus the days
+  // elapsed into the current run); day-shifted when declared coverage runs
+  // out. An anchored or shifted window continues contiguously instead of
   // re-anchoring, so the three windows never leave gaps between them.
   const stepBack = (cfrom: string, cto: string): { from: string; to: string; snapped: boolean } => {
     const length = spanDays(cfrom, cto);
@@ -375,9 +378,11 @@ export function getSpendVelocityComparisonWindows(
       const run = runBefore(cfrom, overlapping.length);
       if (run) return { ...run, snapped: true };
     } else if (overlapping.length > 0) {
+      const offset = spanDays(overlapping[0]!.from, cfrom) - 1;
       const run = runBefore(cfrom, overlapping.length);
-      if (run && spanDays(run.from, run.to) >= length) {
-        return { from: back(run.to, length - 1), to: run.to, snapped: false };
+      if (run && offset >= 0 && spanDays(run.from, run.to) >= offset + length) {
+        const anchored = fwd(run.from, offset);
+        return { from: anchored, to: fwd(anchored, length - 1), snapped: false };
       }
     }
     return dayShifted;
