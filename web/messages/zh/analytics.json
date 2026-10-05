@@ -1093,6 +1093,18 @@
           "label": "摩擦 — 中线（分）",
           "help": "达到该分数即为中度"
         }
+      },
+      "groups": {
+        "scores": "评分与权重",
+        "grades": "等级阶梯",
+        "recency": "近期性分段",
+        "churn": "流失与流速",
+        "payment": "回款及时性",
+        "clv": "生命周期价值与层级",
+        "concentration": "集中度",
+        "friction": "摩擦",
+        "profit": "盈利能力",
+        "growth": "增长、同期群与洞察"
       }
     },
     "csv": {

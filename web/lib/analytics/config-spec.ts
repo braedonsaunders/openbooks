@@ -415,6 +415,18 @@ export const ANALYTICS_CONFIG = {
         total: 100,
       },
     ],
+    groups: [
+      { labelKey: "analytics.customer.config.groups.scores", fields: ["healthWeightRecency", "healthWeightFrequency", "healthWeightMonetary", "healthWeightPayment", "intelWeightChampions", "intelWeightRetention", "intelWeightConcentration", "intelWeightPayment"] },
+      { labelKey: "analytics.customer.config.groups.grades", fields: ["gradeAPlus", "gradeA", "gradeB", "gradeC", "gradeD"] },
+      { labelKey: "analytics.customer.config.groups.recency", fields: ["recencyGoodDays", "recencyWarningDays", "recencyCriticalDays"] },
+      { labelKey: "analytics.customer.config.groups.churn", fields: ["churnCriticalScore", "churnHighScore", "churnMediumScore", "churnHighDays", "churnMediumDays", "churnInactiveLowDays", "churnInactiveHighPoints", "churnInactiveCriticalPoints", "churnInactiveLowPoints", "churnCadenceHighMultiple", "churnCadenceLowMultiple", "churnCadenceHighPoints", "churnCadenceLowPoints", "churnSingleMaxTxns", "churnFewMaxTxns", "churnSinglePoints", "churnFewPoints", "velocityUrgencyHighMultiple", "velocityDueSoonDays"] },
+      { labelKey: "analytics.customer.config.groups.payment", fields: ["paymentDsoHighDays", "paymentDsoHighPenalty", "paymentDsoMediumDays", "paymentDsoMediumPenalty", "paymentDsoLowDays", "paymentDsoLowPenalty", "paymentOverduePerInvoice", "paymentOverdueCap", "paymentRatingExcellent", "paymentRatingGood", "paymentRatingFair"] },
+      { labelKey: "analytics.customer.config.groups.clv", fields: ["clvMinYears", "clvYears", "clvRetentionBase", "clvRetentionDecayDays", "clvRetentionMinPct", "clvRetentionMaxPct", "tierPlatinumPct", "tierGoldPct", "tierSilverPct", "nurtureMinHealth", "nurtureClvPercentile"] },
+      { labelKey: "analytics.customer.config.groups.concentration", fields: ["hhiWarning", "hhiCritical", "concentrationCriticalShare", "concentrationHighShare", "concentrationMediumShare", "concentrationCoverageShare", "topSharePct", "concentrationHealthHigh", "concentrationHealthModerate", "concentrationHealthLow"] },
+      { labelKey: "analytics.customer.config.groups.friction", fields: ["frictionPointsPerCredit", "frictionCriticalPoints", "frictionHighPoints", "frictionMediumPoints", "frictionPenaltyCritical", "frictionPenaltyHigh", "frictionPenaltyMedium", "frictionCriticalRate", "frictionHighRate", "frictionMediumRate"] },
+      { labelKey: "analytics.customer.config.groups.profit", fields: ["profitHighMargin", "profitMediumMargin", "profitLowMargin", "profitLeakMarginTarget", "profitLeakRevenueSharePct"] },
+      { labelKey: "analytics.customer.config.groups.growth", fields: ["growthMaturityFloorPct", "growthMomCapUp", "growthMomCapDown", "growthTrendPct", "growthTrendWindowMonths", "cohortActiveMonths", "overdueInsightCount"] },
+    ],
   },
   utilization: {
     slug: "utilization",

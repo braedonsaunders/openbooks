@@ -1093,6 +1093,18 @@
           "label": "摩擦 — 中の基準（点）",
           "help": "この点数以上は中"
         }
+      },
+      "groups": {
+        "scores": "スコアと重み",
+        "grades": "グレード段階",
+        "recency": "レセンシー区分",
+        "churn": "離反と流速",
+        "payment": "入金タイミング",
+        "clv": "生涯価値と階層",
+        "concentration": "集中度",
+        "friction": "フリクション",
+        "profit": "収益性",
+        "growth": "成長・コホート・示唆"
       }
     },
     "csv": {

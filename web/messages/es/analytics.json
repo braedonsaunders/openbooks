@@ -1093,6 +1093,18 @@
           "label": "Fricción — media desde (puntos)",
           "help": "Los puntos iguales o superiores indican fricción media"
         }
+      },
+      "groups": {
+        "scores": "Puntuaciones y ponderaciones",
+        "grades": "Escala de notas",
+        "recency": "Bandas de antigüedad",
+        "churn": "Fuga y ritmo",
+        "payment": "Tiempos de pago",
+        "clv": "Valor de vida y niveles",
+        "concentration": "Concentración",
+        "friction": "Fricción",
+        "profit": "Rentabilidad",
+        "growth": "Crecimiento, cohortes e ideas"
       }
     },
     "csv": {

@@ -1306,6 +1306,18 @@
           "label": "Friction — medium at (points)",
           "help": "Credit point totals at or above this read as medium"
         }
+      },
+      "groups": {
+        "scores": "Scores & weights",
+        "grades": "Grade ladder",
+        "recency": "Recency bands",
+        "churn": "Churn & velocity",
+        "payment": "Payment timing",
+        "clv": "Lifetime value & tiers",
+        "concentration": "Concentration",
+        "friction": "Friction",
+        "profit": "Profitability",
+        "growth": "Growth, cohorts & insights"
       }
     },
     "scoring": {
