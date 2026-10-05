@@ -680,10 +680,9 @@ export const POST = defineRoute({
       // refusal before parsing, so the message always reaches the operator.
       if (e instanceof CommerceError) {
         if (e.code === "payout_batch_missing") return notFound("record");
-        return NextResponse.json(
-          { error: e.message, code: e.code, remedy: e.remedy },
-          { status: e.status },
-        );
+        return apiErrorResponse(e, {
+          details: { code: e.code, remedy: e.remedy },
+        });
       }
       if (e instanceof PspSettlementConflictError) {
         return apiErrorResponse(e, {
