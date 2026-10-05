@@ -53,6 +53,7 @@ export function PagedTable<T>({
   rowLabel,
   rowRole,
   rowSelected,
+  contained = false,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -84,6 +85,7 @@ export function PagedTable<T>({
   rowLabel?: (row: T) => string
   rowRole?: 'link' | 'button'
   rowSelected?: (row: T) => boolean
+  contained?: boolean
 }) {
   const external = source ? preparedListSource(source).mode !== 'loaded' : false
   searchable = searchable && !external
@@ -168,18 +170,19 @@ export function PagedTable<T>({
   if (rows.length === 0) {
     if (!(emptyAsRow ?? Boolean(source))) return <>{empty}</>
     return (
-      <div className="space-y-3">
-        {toolbar}
-        <ListTable rows={[]} columns={columns} rowKey={rowKey} empty={empty} leading={leading} footer={footer} />
+      <div className={contained ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-3'}>
+        {toolbar && contained ? <div className="shrink-0">{toolbar}</div> : toolbar}
+        <ListTable rows={[]} columns={columns} rowKey={rowKey} empty={empty} leading={leading} footer={footer} contained={contained} />
       </div>
     )
   }
 
   return (
-    <div className="space-y-3">
-      {toolbar}
+    <div className={contained ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-3'}>
+      {toolbar && contained ? <div className="shrink-0">{toolbar}</div> : toolbar}
       <ListTable
         rows={view}
+        contained={contained}
         columns={columns}
         rowKey={(row, index) => rowKey(row, start + index)}
         empty={empty}
@@ -223,7 +226,7 @@ export function PagedTable<T>({
         }
       />
       {!external && filtered.length > pageSize ? (
-        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <div className="flex shrink-0 items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>
             {tp.rich('showing', {
               from: start + 1,

@@ -38,6 +38,7 @@ export function ServerPagedTable<T>({
   dirParamKey = 'dir',
   showPerPage = true,
   paging = true,
+  contained = false,
 }: {
   rows: T[]
   columns: ServerPagedColumn<T>[]
@@ -61,15 +62,16 @@ export function ServerPagedTable<T>({
   dirParamKey?: string
   showPerPage?: boolean
   /** The enclosing source may place its shared pager beside other controls. */
+  contained?: boolean
   paging?: boolean
 }) {
   if (source && preparedListSource(source).mode === 'loaded') {
     throw new Error('A fully loaded record list must use PagedTable: ' + source)
   }
   return (
-    <div className="space-y-3">
+    <div className={contained ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-3'}>
       {toolbar || showPerPage ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {toolbar}
           {showPerPage ? (
             <PerPageSelect
@@ -82,8 +84,9 @@ export function ServerPagedTable<T>({
           ) : null}
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className={contained ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900' : 'overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'}>
         <ListTable
+          contained={contained}
           rows={rows}
           columns={columns}
           rowKey={rowKey}
