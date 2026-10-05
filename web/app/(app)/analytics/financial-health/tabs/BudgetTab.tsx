@@ -11,7 +11,8 @@ import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { exportCsv } from '../../_ui/exportCsv'
-import { useAnalyticsMoney, fmtPct, ratioNumber } from '../../_ui/format'
+import { useAnalyticsMoney, useRatioFormat, ratioNumber } from '../../_ui/format'
+import { decimalRatio } from '../../../../../lib/reports/decimals'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 
 const STATUS_STYLE: Record<BudgetRow['status'], string> = {
@@ -41,6 +42,7 @@ const PAGE = 30
 function RealBudget({ data }: { data: HealthData }) {
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
+  const fmtRatio = useRatioFormat()
   const t = useTranslations('analytics.financialHealth.budget')
   const tb = useTranslations('budgets')
   const b = data.budget
@@ -67,7 +69,9 @@ function RealBudget({ data }: { data: HealthData }) {
   // The header counts genuine cost overruns only — revenue
   // shortfalls carry the "under" status and never inflate this figure.
   const overCount = counts.over
-  const coverage = b.rows.length ? budgeted.length / b.rows.length : 0
+  // Coverage is a count ratio priced exactly; with no lines there is
+  // nothing to cover, so the tile reads unavailable instead of zero.
+  const coverage = b.rows.length ? decimalRatio(String(budgeted.length), String(b.rows.length)) : null
   const statusLabel = (status: BudgetRow['status']) => t(`status.${status}`)
 
   return (
@@ -89,7 +93,7 @@ function RealBudget({ data }: { data: HealthData }) {
         <KpiCard icon={ClipboardList} accent="teal" label={t('totalBudget')} value={fmtMoney(b.totals.budget, { compact: true })} sub={t('budgetedAccounts', { count: budgeted.length })} />
         <KpiCard icon={ClipboardList} accent="sky" label={t('totalActual')} value={fmtMoney(b.totals.actual, { compact: true })} sub={t('normalizedIncome')} />
         <KpiCard icon={ClipboardList} accent={overCount > 0 ? 'red' : 'emerald'} label={t('overBudget')} value={String(overCount)} sub={t('onWatch', { count: counts.watch })} tone={overCount > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={ClipboardList} accent="violet" label={t('coverage')} value={fmtPct(coverage)} sub={t('coverageSub')} />
+        <KpiCard icon={ClipboardList} accent="violet" label={t('coverage')} value={coverage === null ? '—' : (fmtRatio(coverage, 'pct') ?? '—')} sub={t('coverageSub')} />
       </div>
       <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('toleranceNote', { onTrack: b.tolerance.onTrack, watch: b.tolerance.watch })}</p>
 

@@ -183,7 +183,8 @@ export function ForecastTab({ data }: { data: HealthData }) {
   const totalForecast = result.values.reduce((a, b) => a + b, 0)
   const endValue = result.values[horizon - 1]!
   const lastActual = series[N - 1]!
-  const growth = lastActual !== 0 ? (endValue - lastActual) / Math.abs(lastActual) : 0
+  // No base to grow from means no growth rate — never a 0% stand-in.
+  const growth = lastActual !== 0 ? (endValue - lastActual) / Math.abs(lastActual) : null
   // Attached to every forecast surface below: the first out-of-domain month
   // and the translated metric name for the caveat copy.
   const breachMonth = breach.breached ? futLabels[breach.firstIndex]! : ''
@@ -221,7 +222,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
           <div className="mt-3 grid grid-cols-3 gap-3 text-center">
             <Stat label={t('total', { count: horizon })} value={fmtMoney(totalForecast, { compact: true })} />
             <Stat label={t('monthN', { count: horizon })} value={fmtMoney(endValue, { compact: true })} />
-            <Stat label={t('growth')} value={breach.breached ? `${fmtFloat(growth * 100, 1)}% *` : `${fmtFloat(growth * 100, 1)}%`} tone={growth >= 0 ? 'pos' : 'neg'} />
+            <Stat label={t('growth')} value={growth === null ? '—' : breach.breached ? `${fmtFloat(growth * 100, 1)}% *` : `${fmtFloat(growth * 100, 1)}%`} tone={growth === null ? undefined : growth >= 0 ? 'pos' : 'neg'} />
           </div>
           {breach.breached ? (
             <p className="mt-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">

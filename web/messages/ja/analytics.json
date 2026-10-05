@@ -265,7 +265,6 @@
       "growth": "前年比 {pct}",
       "grossProfit": "売上総利益: {amount}",
       "opex": "販管費: {amount}",
-      "perMonth": "月あたり",
       "noPriorYear": "前年同期間の売上なし",
       "forPeriod": "当期間に必要な売上高",
       "noBreakeven": "正の売上総利益率が必要です"
@@ -886,6 +885,115 @@
         "none": "有利子負債なし — 負債資本倍率はゼロとなります。",
         "confirmNone": "有利子負債はありません"
       }
+    },
+    "overview": {
+      "trendRevenue": "収益推移",
+      "revTab": "収益",
+      "marginTab": "マージン",
+      "series": {
+        "revenue": "収益",
+        "grossProfit": "粗利益",
+        "operatingIncome": "営業利益",
+        "grossMargin": "粗利益率",
+        "operatingMargin": "営業利益率"
+      },
+      "trendMargin": "マージン推移",
+      "trendOpinc": "営業利益推移",
+      "trendOpMargin": "営業利益率",
+      "perfTrend": "業績推移",
+      "table": {
+        "item": "項目",
+        "current": "当期",
+        "prior": "前期",
+        "change": "増減",
+        "changePct": "増減率"
+      },
+      "groups": {
+        "issues": "課題",
+        "recs": "推奨事項",
+        "anomalies": "異常"
+      },
+      "empty": "指摘事項はありません。",
+      "severity": {
+        "critical": "重大",
+        "warn": "要注意",
+        "anomaly": "異常",
+        "info": "情報"
+      }
+    },
+    "segments": {
+      "kpi": {
+        "revenue": "収益",
+        "operatingIncome": "営業利益",
+        "bestMargin": "最高マージン",
+        "concentration": "集中度"
+      },
+      "kpiSub": {
+        "rows": "{count, plural, =1 {1セグメント} other {#セグメント}}"
+      },
+      "hhi": {
+        "high": "集中",
+        "mid": "やや集中",
+        "low": "分散"
+      },
+      "title": "セグメント業績",
+      "dim": {
+        "department": "部門別",
+        "class": "クラス別",
+        "location": "拠点別"
+      },
+      "table": {
+        "segment": "セグメント",
+        "revenue": "収益",
+        "share": "構成比",
+        "grossMargin": "粗利益率",
+        "opMargin": "営業利益率",
+        "yoy": "前年比"
+      },
+      "empty": "セグメントデータがありません。",
+      "chart": {
+        "revenueBy": "セグメント別収益",
+        "marginsBy": "セグメント別マージン",
+        "grossProfit": "粗利益",
+        "operatingIncome": "営業利益"
+      }
+    },
+    "drivers": {
+      "kpi": {
+        "topRevenue": "収益の最大要因",
+        "topCost": "費用の最大要因"
+      },
+      "kpiSub": {
+        "vsPrior": "前期比"
+      },
+      "movers": "変動上位（絶対値）",
+      "revenueTitle": "収益の要因",
+      "costTitle": "費用の要因",
+      "table": {
+        "driver": "要因",
+        "current": "当期",
+        "change": "増減",
+        "changePct": "増減率",
+        "share": "Δ構成比"
+      },
+      "emptyRevenue": "収益の要因がありません。",
+      "emptyCost": "費用の要因がありません。"
+    },
+    "items": {
+      "kpi": {
+        "topGainer": "最大増加",
+        "topDecliner": "最大減少"
+      },
+      "movers": "変動上位（絶対値）",
+      "detail": "勘定明細",
+      "table": {
+        "account": "勘定",
+        "current": "当期",
+        "change": "増減",
+        "changePct": "増減率",
+        "share": "Δ構成比"
+      },
+      "empty": "明細がまだありません。"
     }
   },
   "customer": {

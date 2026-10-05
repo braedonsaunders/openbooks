@@ -265,7 +265,6 @@
       "growth": "Interanual {pct}",
       "grossProfit": "MB: {amount}",
       "opex": "Gastos: {amount}",
-      "perMonth": "por mes",
       "noPriorYear": "Sin ingresos en el mismo período del año anterior",
       "forPeriod": "Ingresos necesarios en este período",
       "noBreakeven": "Requiere un margen bruto positivo"
@@ -886,6 +885,115 @@
         "none": "Sin deuda con intereses: la deuda sobre patrimonio es cero.",
         "confirmNone": "No tenemos deuda con intereses"
       }
+    },
+    "overview": {
+      "trendRevenue": "Tendencia de ingresos",
+      "revTab": "Ingresos",
+      "marginTab": "Márgenes",
+      "series": {
+        "revenue": "Ingresos",
+        "grossProfit": "Margen bruto",
+        "operatingIncome": "Resultado operativo",
+        "grossMargin": "Margen bruto",
+        "operatingMargin": "Margen operativo"
+      },
+      "trendMargin": "Tendencia de márgenes",
+      "trendOpinc": "Tendencia operativa",
+      "trendOpMargin": "Margen operativo",
+      "perfTrend": "Tendencia del rendimiento",
+      "table": {
+        "item": "Partida",
+        "current": "Actual",
+        "prior": "Año anterior",
+        "change": "Cambio",
+        "changePct": "Cambio %"
+      },
+      "groups": {
+        "issues": "Problemas",
+        "recs": "Recomendaciones",
+        "anomalies": "Anomalías"
+      },
+      "empty": "Nada señalado.",
+      "severity": {
+        "critical": "Crítico",
+        "warn": "Vigilar",
+        "anomaly": "Anomalía",
+        "info": "Información"
+      }
+    },
+    "segments": {
+      "kpi": {
+        "revenue": "Ingresos",
+        "operatingIncome": "Resultado operativo",
+        "bestMargin": "Mejor margen",
+        "concentration": "Concentración"
+      },
+      "kpiSub": {
+        "rows": "{count, plural, =1 {1 segmento} other {# segmentos}}"
+      },
+      "hhi": {
+        "high": "Concentrada",
+        "mid": "Moderada",
+        "low": "No concentrada"
+      },
+      "title": "Rendimiento por segmento",
+      "dim": {
+        "department": "Por departamento",
+        "class": "Por clase",
+        "location": "Por ubicación"
+      },
+      "table": {
+        "segment": "Segmento",
+        "revenue": "Ingresos",
+        "share": "Parte",
+        "grossMargin": "Margen bruto",
+        "opMargin": "Margen operativo",
+        "yoy": "Interanual"
+      },
+      "empty": "Sin datos por segmento.",
+      "chart": {
+        "revenueBy": "Ingresos por segmento",
+        "marginsBy": "Márgenes por segmento",
+        "grossProfit": "Margen bruto",
+        "operatingIncome": "Resultado operativo"
+      }
+    },
+    "drivers": {
+      "kpi": {
+        "topRevenue": "Principal impulsor de ingresos",
+        "topCost": "Principal impulsor de costes"
+      },
+      "kpiSub": {
+        "vsPrior": "vs. año anterior"
+      },
+      "movers": "Mayores movimientos (abs.)",
+      "revenueTitle": "Impulsores de ingresos",
+      "costTitle": "Impulsores de costes",
+      "table": {
+        "driver": "Impulsor",
+        "current": "Actual",
+        "change": "Cambio",
+        "changePct": "Cambio %",
+        "share": "Parte de Δ"
+      },
+      "emptyRevenue": "Sin impulsores de ingresos.",
+      "emptyCost": "Sin impulsores de costes."
+    },
+    "items": {
+      "kpi": {
+        "topGainer": "Mayor ganancia",
+        "topDecliner": "Mayor pérdida"
+      },
+      "movers": "Mayores movimientos (abs.)",
+      "detail": "Detalle de cuentas",
+      "table": {
+        "account": "Cuenta",
+        "current": "Actual",
+        "change": "Cambio",
+        "changePct": "Cambio %",
+        "share": "Parte de Δ"
+      },
+      "empty": "Aún no hay partidas."
     }
   },
   "customer": {

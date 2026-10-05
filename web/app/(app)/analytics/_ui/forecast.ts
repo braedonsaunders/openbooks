@@ -239,7 +239,9 @@ export function forecastSeasonal(data: number[], horizon: number, period: number
 
 export function forecastMovingAvg(data: number[], horizon: number, z = 1.645): ForecastResult {
   const n = data.length
-  const windowSize = Math.min(6, Math.floor(n / 2)) || 1
+  // A moving window always spans at least one point; the floor keeps the
+  // loop meaningful on the shortest admissible series, never a figure.
+  const windowSize = Math.max(1, Math.min(6, Math.floor(n / 2)))
   const ma: number[] = []
   for (let i = 0; i < n; i++) {
     const start = Math.max(0, i - windowSize + 1)

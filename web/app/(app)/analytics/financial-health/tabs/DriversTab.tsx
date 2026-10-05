@@ -1,73 +1,89 @@
 'use client'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
-import { Search, TrendingUp, TrendingDown } from 'lucide-react'
-import { cn } from '@openbooks/ui'
-import type { HealthData, DriverRow } from '../../../../../lib/analytics/health-data'
+import { useMemo } from 'react'
+import { TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react'
+import { useLocale, useTranslations } from 'next-intl'
+import { cn, EmptyState } from '@openbooks/ui'
+import type { HealthData } from '../../../../../lib/analytics/health-data'
+import { cmp } from '@openbooks/engine/money'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { DivergingBar } from '../../_ui/charts'
-import { useAnalyticsMoney, fmtPct, toChartNumber } from '../../_ui/format'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
+import { useAnalyticsMoney, toChartNumber } from '../../_ui/format'
 
-export function DriversTab({ data, onDrill }: { data: HealthData; onDrill: (id: string, name: string) => void }) {
+export function DriversTab({ data }: { data: HealthData }) {
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
-  const rev = data.drivers.revenue
-  const cost = data.drivers.cost
-  const revNet = sum(rev.map((d) => d.change))
-  const costNet = sum(cost.map((d) => d.change))
+  const t = useTranslations('analytics.financialHealth.drivers')
+  const pctN = (n: number) =>
+    new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(n)
+
+  const topRev = useMemo(() => data.drivers.revenue.slice(0, 8), [data.drivers.revenue])
+  const topCost = useMemo(() => data.drivers.cost.slice(0, 8), [data.drivers.cost])
+  const top = useMemo(() => {
+    const all = [...data.drivers.revenue, ...data.drivers.cost]
+    return all.sort((a, b) => Math.abs(toChartNumber(b.change)) - Math.abs(toChartNumber(a.change))).slice(0, 10)
+  }, [data.drivers])
+  const best = data.drivers.revenue[0]
+  const worst = data.drivers.cost[0]
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={TrendingUp} accent={cmp(revNet, '0') >= 0 ? 'emerald' : 'red'} label="Revenue Movement" value={fmtMoney(revNet, { compact: true })} sub="net YoY change" tone={cmp(revNet, '0') >= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={TrendingDown} accent={cmp(costNet, '0') <= 0 ? 'emerald' : 'red'} label="Cost Movement" value={fmtMoney(costNet, { compact: true })} sub="net YoY change" tone={cmp(costNet, '0') <= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={Search} accent="teal" label="Top Rev Driver" value={rev[0] ? fmtMoney(rev[0].change, { compact: true }) : '—'} sub={rev[0]?.name ?? '—'} />
-        <KpiCard icon={Search} accent="violet" label="Top Cost Driver" value={cost[0] ? fmtMoney(cost[0].change, { compact: true }) : '—'} sub={cost[0]?.name ?? '—'} />
+        <KpiCard icon={TrendingUp} accent="emerald" label={t('kpi.topRevenue')} value={best ? fmtMoney(best.change) : '—'} sub={best ? `${best.name} · ${t('kpiSub.vsPrior')}` : '—'} tone="positive" />
+        <KpiCard icon={TrendingDown} accent="red" label={t('kpi.topCost')} value={worst ? fmtMoney(worst.change) : '—'} sub={worst ? `${worst.name} · ${t('kpiSub.vsPrior')}` : '—'} tone="negative" />
+        <div className="col-span-2">
+          <Panel title={t('movers')} icon={ArrowLeftRight}>
+            <DivergingBar labels={top.map((d) => d.name)} values={top.map((d) => toChartNumber(d.change))} height={Math.max(180, top.length * 26)} />
+          </Panel>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DriverPanel title="Revenue Drivers" icon={TrendingUp} rows={rev} onDrill={onDrill} />
-        <DriverPanel title="Cost Drivers" icon={TrendingDown} rows={cost} onDrill={onDrill} />
+        <DriverTable title={t('revenueTitle')} icon={TrendingUp} rows={topRev} empty={t('emptyRevenue')} fmtMoney={fmtMoney} pctN={pctN} t={t} />
+        <DriverTable title={t('costTitle')} icon={TrendingDown} rows={topCost} empty={t('emptyCost')} fmtMoney={fmtMoney} pctN={pctN} t={t} />
       </div>
     </div>
   )
 }
 
-function DriverPanel({ title, icon: Icon, rows, onDrill }: { title: string; icon: typeof Search; rows: DriverRow[]; onDrill: (id: string, name: string) => void }) {
-  const fmtMoney = useAnalyticsMoney()
-  const top = rows.slice(0, 8)
+function DriverTable({ title, icon: Icon, rows, empty, fmtMoney, pctN, t }: {
+  title: string
+  icon: typeof TrendingUp
+  rows: HealthData['drivers']['revenue']
+  empty: string
+  fmtMoney: ReturnType<typeof useAnalyticsMoney>
+  pctN: (n: number) => string
+  t: (key: string) => string
+}) {
   return (
     <Panel title={title} icon={Icon}>
-      {top.length === 0 ? (
-        <p className="py-6 text-center text-xs text-slate-400">No movement.</p>
+      {rows.length === 0 ? (
+        <EmptyState icon={<Icon size={28} />} title={empty} description={undefined} />
       ) : (
-        <>
-          <DivergingBar labels={top.map((d) => d.name)} values={top.map((d) => toChartNumber(d.change))} height={Math.max(180, top.length * 26)} />
-          <SharedTable className="mt-3 w-full text-sm">
-            <SharedTableHeader>
-              <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="py-1.5 text-left font-medium">Account</SharedTableHead>
-                <SharedTableHead className="py-1.5 text-right font-medium">Current</SharedTableHead>
-                <SharedTableHead className="py-1.5 text-right font-medium">Δ</SharedTableHead>
-                <SharedTableHead className="py-1.5 text-right font-medium">Δ %</SharedTableHead>
-                <SharedTableHead className="py-1.5 text-right font-medium">Contrib.</SharedTableHead>
+        <SharedTable className="w-full text-sm">
+          <SharedTableHeader>
+            <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+              <SharedTableHead className="py-1.5 text-left font-medium">{t('table.driver')}</SharedTableHead>
+              <SharedTableHead className="py-1.5 text-right font-medium">{t('table.current')}</SharedTableHead>
+              <SharedTableHead className="py-1.5 text-right font-medium">{t('table.change')}</SharedTableHead>
+              <SharedTableHead className="py-1.5 text-right font-medium">{t('table.changePct')}</SharedTableHead>
+              <SharedTableHead className="py-1.5 text-right font-medium">{t('table.share')}</SharedTableHead>
+            </SharedTableRow>
+          </SharedTableHeader>
+          <SharedTableBody>
+            {rows.map((d) => (
+              <SharedTableRow key={d.name} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                <SharedTableCell className="max-w-44 truncate py-1.5 pr-2 text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</SharedTableCell>
+                <SharedTableCell className={cn('py-1.5 text-right font-medium tabular-nums', cmp(d.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.changePct === null ? '—' : pctN(d.changePct)}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{pctN(d.contribution)}</SharedTableCell>
               </SharedTableRow>
-            </SharedTableHeader>
-            <SharedTableBody>
-              {top.map((d) => (
-                <InteractiveTableRow key={d.id} onClick={() => onDrill(d.id, d.name)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30" noAnimate>
-                  <SharedTableCell className="py-1.5 text-slate-700 dark:text-slate-300">{d.name}</SharedTableCell>
-                  <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(d.current, { compact: true })}</SharedTableCell>
-                  <SharedTableCell className={cn('py-1.5 text-right tabular-nums', cmp(d.change, '0') >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{fmtMoney(d.change, { compact: true })}</SharedTableCell>
-                  <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{d.changePct === null ? '—' : fmtPct(d.changePct)}</SharedTableCell>
-                  <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400 dark:text-slate-500">{fmtPct(d.contribution)}</SharedTableCell>
-                </InteractiveTableRow>
-              ))}
-            </SharedTableBody>
-          </SharedTable>
-        </>
+            ))}
+          </SharedTableBody>
+        </SharedTable>
       )}
     </Panel>
   )
