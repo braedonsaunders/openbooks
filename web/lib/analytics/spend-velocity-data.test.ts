@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { getSpendVelocityComparisonWindows, moneyCagr, monthsToCliffFor, velocityAndAcceleration } = await import(
+const { getSpendVelocityComparisonWindows, moneyCagr, monthsToCliffFor, priorYearCapFor, velocityAndAcceleration } = await import(
   "./spend-velocity-data.ts"
 );
 
@@ -65,6 +65,27 @@ test("comparison windows snap, anchor, or shift by declared coverage", () => {
   for (const c of cases) {
     assert.deepEqual(getSpendVelocityComparisonWindows(c.from, c.to, c.periods ?? []), c.want, c.name);
   }
+});
+
+/**
+ * Prior-year cap: a report ending mid-bucket compares period-to-date with
+ * period-to-date — the matched prior bucket caps at the same elapsed day
+ * offset. A boundary-ending report or an unmatched last bucket needs no cap.
+ */
+test("a period-to-date report caps the matched prior-year bucket at the same offset", () => {
+  const withPrior = [
+    { fiscalYear: 2025, periodNumber: 3, name: "P3-25", from: "2025-03-31", to: "2025-04-27" },
+    ...fiscalPeriods,
+  ];
+  // Eleven days into P3 (03-30..04-10) caps prior P3 eleven days in (03-31..04-11).
+  assert.deepEqual(priorYearCapFor(withPrior, true, "2026-04-10"), { bucket: "2025-03-31", date: "2025-04-11" });
+  // A report ending on the bucket boundary compares whole with whole.
+  assert.equal(priorYearCapFor(withPrior, true, "2026-04-26"), null);
+  // P2 has no prior-year match in this calendar: YoY stays unknown, no cap.
+  assert.equal(priorYearCapFor(fiscalPeriods, true, "2026-03-10"), null);
+  // Calendar mode caps the same month a year earlier at the same day offset.
+  assert.deepEqual(priorYearCapFor([], false, "2026-04-10"), { bucket: "2025-04", date: "2025-04-10" });
+  assert.equal(priorYearCapFor([], false, "2026-04-30"), null);
 });
 
 test("measured series score velocity, acceleration and trend from disjoint halves", () => {

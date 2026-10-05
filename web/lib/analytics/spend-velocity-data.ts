@@ -13,7 +13,7 @@ import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expe
 import { spendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { getMoneyFormatter } from '../money-server'
-import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.ts';
+import { addCalendarDays, addMonthsClamped, calendarDaysBetween, endOfMonth } from '@openbooks/engine/src/platform/business-date.ts';
 import { toChartNumber } from "../chart-number";
 
 /**
@@ -187,7 +187,7 @@ export interface SpendVelocityData {
   };
   shadowIT: { available: false; reason: string };
   commitmentCliff: {
-    summary: { poVelocity: number | null; soVelocity: number | null; velocityGap: number | null; ratio: number | null; status: "healthy" | "warning" | "critical"; monthsToCliff: number | null; totalPO: string; totalSO: string; configured: boolean; reason: string };
+    summary: { poVelocity: number | null; soVelocity: number | null; velocityGap: number | null; ratio: number | null; status: "healthy" | "warning" | "critical" | "unknown"; monthsToCliff: number | null; totalPO: string; totalSO: string; configured: boolean; reason: string };
     months: { month: string; poAmount: string; soAmount: string }[];
   };
   revenue: { hasData: boolean; totalRevenue: string; opexRatio: number };
@@ -429,6 +429,42 @@ interface ComparisonRow extends Record<string, unknown> {
   func: string | null; late_cur: string | null; late_prior: string | null; late_two: string | null;
 }
 
+/**
+ * The prior-year cap for a like-for-like YoY: when the report ends
+ * mid-bucket, the current last bucket is period-to-date, so the matched
+ * prior-year bucket (the same period number one fiscal year back, or the
+ * same calendar month a year earlier) caps at the same elapsed day offset
+ * instead of comparing a partial span against a whole period. Null when the
+ * report ends on a bucket boundary or the last bucket has no matched prior
+ * period — the caller then queries the whole prior window.
+ */
+export function priorYearCapFor(
+  periods: FiscalPeriod[],
+  useFiscal: boolean,
+  to: string,
+): { bucket: string; date: string } | null {
+  let start: string;
+  let end: string;
+  let priorKey: string | null;
+  let priorStart: string | null;
+  if (useFiscal) {
+    const current = periods.find((p) => p.from <= to && p.to >= to);
+    if (!current) return null;
+    const prior = periods.find((p) => p.fiscalYear === current.fiscalYear - 1 && p.periodNumber === current.periodNumber) ?? null;
+    start = current.from;
+    end = current.to;
+    priorKey = prior?.from ?? null;
+    priorStart = prior?.from ?? null;
+  } else {
+    start = `${to.slice(0, 7)}-01`;
+    end = endOfMonth(to);
+    priorStart = addMonthsClamped(start, -12);
+    priorKey = priorStart.slice(0, 7);
+  }
+  if (!(end > to) || !priorKey || !priorStart) return null;
+  return { bucket: priorKey, date: addCalendarDays(priorStart, calendarDaysBetween(start, to)) };
+}
+
 // ---- main -------------------------------------------------------------------
 
 export async function spendVelocityData(
@@ -471,6 +507,11 @@ export async function spendVelocityData(
   const fiscalPy = buckets.useFiscal ? priorYearWindow(buckets.periods, from, to) : null;
   const pyFrom = fiscalPy ? fiscalPy.from : calendarPy.from;
   const pyTo = fiscalPy ? fiscalPy.to : calendarPy.to;
+  const yoyCap = priorYearCapFor(buckets.periods, buckets.useFiscal, to);
+  // An empty bucket key matches nothing, and a cap at the window end changes
+  // nothing: without a partial last bucket the predicate below is a no-op.
+  const pyCapBucket = yoyCap?.bucket ?? "";
+  const pyCapDate = yoyCap?.date ?? pyTo;
 
   const spendKindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
   // The spend base: expense/COGS journal lines sourced from spend documents,
@@ -544,12 +585,15 @@ export async function spendVelocityData(
       group by 1, 2, 3, 4, sub.base_currency
     `),
     // 3. Prior-YEAR buckets for YoY, keyed by the full bucket identity so a
-    // window longer than twelve months can never collide two Januarys.
+    // window longer than twelve months can never collide two Januarys. The
+    // matched prior bucket caps at the same elapsed offset when the report
+    // ends mid-bucket (period-to-date compares with period-to-date).
     (analyticsSection('spend-velocity', ['overview','trends']) ? analyticsQuery<PriorYearRow>(sql`
       select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket, sum(l.amount) as total_amount,
         array_agg(distinct d.id) as doc_ids, sub.base_currency as func,
         max(l.posting_date)::text as late
       ${spendBaseWithSubs(pyFrom, pyTo)}
+      and (${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} != ${pyCapBucket} or e.posting_date <= ${pyCapDate})
       group by 1, sub.base_currency
     `) : Promise.resolve({ rows: [] as PriorYearRow[] })),
     // 4. PO vs SO monthly (commitment cliff). Unposted document totals are
@@ -1071,10 +1115,15 @@ export async function spendVelocityData(
   // No sales-order base means the coverage ratio is unknown, never a
   // healthy-looking zero.
   const ratio = hasSales ? Math.round(toChartNumber(div(totalPO, totalSO)) * 100) / 100 : null;
-  let status: "healthy" | "warning" | "critical" = "healthy";
+  let status: "healthy" | "warning" | "critical" | "unknown" = "healthy";
   let monthsToCliff: number | null = null;
   const gap = velocityGap;
-  if ((gap !== null && gap > C.cliffCriticalGap) || (ratio !== null && ratio > C.cliffCriticalRatio)) {
+  if (!hasSales) {
+    // No sales-order base means coverage is unknowable: the cliff reports
+    // itself unknown by name instead of a healthy-looking default, and the
+    // score and alert count omit it like the other unconfigured detectors.
+    status = "unknown";
+  } else if ((gap !== null && gap > C.cliffCriticalGap) || (ratio !== null && ratio > C.cliffCriticalRatio)) {
     status = "critical";
     if (gap !== null && ratio !== null) monthsToCliff = monthsToCliffFor(gap, ratio, C.cliffCriticalRatio);
   } else if ((gap !== null && gap > C.cliffWarningGap) || (ratio !== null && ratio > C.cliffWarningRatio)) {
@@ -1084,7 +1133,8 @@ export async function spendVelocityData(
   const commitmentCliff: SpendVelocityData["commitmentCliff"] = {
     summary: {
       poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO, totalSO,
-      configured: cliffConfigured, reason: cliffConfigured ? "" : strings.cliffUnconfigured,
+      configured: cliffConfigured,
+      reason: !cliffConfigured ? strings.cliffUnconfigured : !hasSales ? strings.cliffNoSalesBase : "",
     },
     months: cliffSeries,
   };
@@ -1315,7 +1365,7 @@ export async function spendVelocityData(
   // the summary names them and the view shows their reasons as a caveat.
   const unconfiguredDetectors: ("fragmentation" | "cliff")[] = [
     ...(fragmentation.summary.configured ? [] : ["fragmentation" as const]),
-    ...(cliffConfigured ? [] : ["cliff" as const]),
+    ...(!cliffConfigured || commitmentCliff.summary.status === "unknown" ? ["cliff" as const] : []),
   ];
 
   // ---- insights ---------------------------------------------------------------------------------
@@ -1338,14 +1388,17 @@ export async function spendVelocityData(
   if (zombies.summary.count > 0 && zombies.summary.totalAnnualCost !== null) insights.push({ type: "info", ...strings.zombies(zombies.summary.count, fmtK(zombies.summary.totalAnnualCost)) });
   if (fragmentation.summary.fragmentedCategories > 0) insights.push({ type: "warning", ...strings.fragmentation(fragmentation.summary.fragmentedCategories) });
   if (revenue.hasData && revenue.opexRatio > C.opexRatioAlert) insights.push({ type: "alert", ...strings.opexRatio(revenue.opexRatio) });
-  if (commitmentCliff.summary.status !== "healthy") {
+  if (commitmentCliff.summary.status === "critical" || commitmentCliff.summary.status === "warning") {
     const c = commitmentCliff.summary;
+    const cliffTarget = c.status === "critical" ? C.cliffCriticalRatio : C.cliffWarningRatio;
     const cliffText = strings.cliff(c.poVelocity, c.soVelocity, c.velocityGap, c.ratio);
     insights.push({
       type: c.status === "critical" ? "alert" : "warning",
       title: cliffText.title,
       message: cliffText.message,
-      action: strings.cliffAction(c.monthsToCliff),
+      // A breached ratio with no measurable horizon is pressure now, not a
+      // monitoring note: render breached instead of the fallback copy.
+      action: strings.cliffAction(c.monthsToCliff ?? (c.ratio !== null && c.ratio >= cliffTarget ? 0 : null)),
     });
   }
 
