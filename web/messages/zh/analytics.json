@@ -1151,6 +1151,10 @@
       "transactional": {
         "desc": "支出小且合作少——自动化/整合",
         "label": "交易型"
+      },
+      "unrated": {
+        "label": "未评级",
+        "desc": "尚无付款记录 — 结算账单后评级"
       }
     },
     "sub": {
@@ -2698,6 +2702,10 @@
     },
     "unit": {
       "months": "个月"
+    },
+    "labels": {
+      "unknownParty": "未知",
+      "accountFallback": "科目{id}"
     }
   },
   "sentinel": {
