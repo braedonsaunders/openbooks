@@ -1056,6 +1056,18 @@
         "overdueInsightCount": {
           "label": "通知 — 延滞の件数（件）",
           "help": "この件数超の延滞で支払通知を表示"
+        },
+        "frictionCriticalPoints": {
+          "label": "摩擦 — 重大の基準（点）",
+          "help": "この点数以上は重大"
+        },
+        "frictionHighPoints": {
+          "label": "摩擦 — 高の基準（点）",
+          "help": "この点数以上は高"
+        },
+        "frictionMediumPoints": {
+          "label": "摩擦 — 中の基準（点）",
+          "help": "この点数以上は中"
         }
       }
     },
@@ -1140,7 +1152,9 @@
       "ofRevenue": "売上比",
       "paidInFull": "全額支払済請求書",
       "perCustomer": "社あたり",
-      "retentionProb": "平均維持確率"
+      "retentionProb": "平均維持確率",
+      "noPaymentHistory": "支払履歴がまだありません",
+      "noRetentionData": "期間内に顧客がいません"
     },
     "overdueBanner": {
       "count": "{count}件の延滞請求書",
@@ -1159,7 +1173,7 @@
       "cohortHint": "初回発注年別 · アクティブ＝過去6か月以内に発注",
       "cohortRetention": "コホート維持率",
       "customerHealth": "得意先健全性（{count}）",
-      "customerHealthHint": "加重：レセンシー25% · 頻度25% · 金額30% · 支払20%、摩擦ペナルティを減算",
+      "customerHealthHint": "加重：最新度{recency}％・頻度{frequency}％・金額{monetary}％・入金{payment}％から摩擦分を減点",
       "customerProfitability": "得意先収益性",
       "customersBySegment": "セグメント別得意先（{count}）",
       "dataSources": "データソースと算出方法",
@@ -1183,7 +1197,8 @@
       "segmentMix": "セグメント構成",
       "segmentPerformance": "セグメント実績",
       "tierDistribution": "CLV階層分布",
-      "topByRevenue": "売上上位得意先"
+      "topByRevenue": "売上上位得意先",
+      "healthNoPaymentNote": "支払データなしで採点した顧客が{count}社"
     },
     "profitTier": {
       "high": "高",
@@ -1307,12 +1322,12 @@
       "revenue": "売上",
       "invoiced": "期間内の総請求額",
       "rfmChampions": "RFMチャンピオン層",
-      "score40to59": "スコア40–59",
-      "score80Plus": "スコア80以上",
-      "scoreBelow40": "スコア40未満",
       "threeYearProjection": "3年予測",
       "trend": "トレンド：{trend}",
-      "weightedRfm": "加重R/F/M/支払"
+      "weightedRfm": "加重R/F/M/支払",
+      "scoreHigh": "スコア≥{cutoff}",
+      "scoreMid": "スコア{low}–{high}",
+      "scoreLow": "スコア<{cutoff}"
     },
     "table": {
       "active": "アクティブ",
@@ -1377,7 +1392,8 @@
     },
     "txnsCount": "{count}件の取引",
     "errors": {
-      "paymentStatsUnavailable": "顧客の支払統計を読み込めませんでした。このダッシュボードを再読み込みしてください。"
+      "paymentStatsUnavailable": "顧客の支払統計を読み込めませんでした。このダッシュボードを再読み込みしてください。",
+      "scoringWeightsInvalid": "重み{keys}の合計が{actual}で{total}になりません。このダッシュボードの設定で修正してください。"
     }
   },
   "vendor": {

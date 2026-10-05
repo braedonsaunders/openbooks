@@ -1056,6 +1056,18 @@
         "overdueInsightCount": {
           "label": "提示 — 逾期超（张）",
           "help": "逾期发票超出该数即提示回款"
+        },
+        "frictionCriticalPoints": {
+          "label": "摩擦 — 严重线（分）",
+          "help": "达到该分数即为严重"
+        },
+        "frictionHighPoints": {
+          "label": "摩擦 — 高线（分）",
+          "help": "达到该分数即为高度"
+        },
+        "frictionMediumPoints": {
+          "label": "摩擦 — 中线（分）",
+          "help": "达到该分数即为中度"
         }
       }
     },
@@ -1140,7 +1152,9 @@
       "ofRevenue": "占营收比",
       "paidInFull": "已全额支付的发票",
       "perCustomer": "单客户",
-      "retentionProb": "平均留存概率"
+      "retentionProb": "平均留存概率",
+      "noPaymentHistory": "暂无付款历史",
+      "noRetentionData": "本期暂无客户"
     },
     "overdueBanner": {
       "count": "{count}张逾期发票",
@@ -1159,7 +1173,7 @@
       "cohortHint": "按首次下单年份 · 活跃=近6个月内下过单",
       "cohortRetention": "同期群留存",
       "customerHealth": "客户健康度（{count}）",
-      "customerHealthHint": "加权：近期性25% · 频率25% · 金额30% · 回款20%，再扣减摩擦罚分",
+      "customerHealthHint": "加权：近度{recency}％・频度{frequency}％・金额{monetary}％・回款{payment}％并扣除摩擦分",
       "customerProfitability": "客户盈利能力",
       "customersBySegment": "按细分划分客户（{count}）",
       "dataSources": "数据来源与推导",
@@ -1183,7 +1197,8 @@
       "segmentMix": "细分组分",
       "segmentPerformance": "细分表现",
       "tierDistribution": "CLV层级分布",
-      "topByRevenue": "按营收排名的客户"
+      "topByRevenue": "按营收排名的客户",
+      "healthNoPaymentNote": "有{count}位客户在无付款数据下评分"
     },
     "profitTier": {
       "high": "高",
@@ -1307,12 +1322,12 @@
       "revenue": "营收",
       "invoiced": "本期开票总额",
       "rfmChampions": "RFM冠军客群",
-      "score40to59": "评分40–59",
-      "score80Plus": "评分≥80",
-      "scoreBelow40": "评分<40",
       "threeYearProjection": "3年预测",
       "trend": "趋势：{trend}",
-      "weightedRfm": "加权R/F/M/回款"
+      "weightedRfm": "加权R/F/M/回款",
+      "scoreHigh": "评分≥{cutoff}",
+      "scoreMid": "评分{low}–{high}",
+      "scoreLow": "评分<{cutoff}"
     },
     "table": {
       "active": "活跃",
@@ -1377,7 +1392,8 @@
     },
     "txnsCount": "{count}笔交易",
     "errors": {
-      "paymentStatsUnavailable": "未能加载客户付款统计信息。请重新加载此仪表板。"
+      "paymentStatsUnavailable": "未能加载客户付款统计信息。请重新加载此仪表板。",
+      "scoringWeightsInvalid": "权重{keys}合计为{actual}而非{total}，请在此仪表板的配置中修正。"
     }
   },
   "vendor": {

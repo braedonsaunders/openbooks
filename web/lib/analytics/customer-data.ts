@@ -8,8 +8,8 @@ import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/platform/database";
-import { analyticsConfig } from "./config";
-import type { ConfigValuesOf } from "./config-spec";
+import { ANALYTICS_CONFIG, analyticsConfig } from "./config";
+import { checkSumsTo, type ConfigValuesOf } from "./config-spec";
 import { customerStrings, type CustomerStrings } from "./customer-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { paymentStats } from "../cash/core";
@@ -43,44 +43,42 @@ import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
  *    segments, tiers, monthly trend, cohorts) is recognized.
  *  - Base metrics: per-customer invoice count / invoiced + recognized revenue /
  *    avg invoice value / first-last dates / recency / tenure.
- *  - RFM: R from fixed day thresholds (≤30→5, ≤90→3, ≤180→2, else 1); F/M from
- *    33rd/66th percentile cuts ({1,3,5} scores); 8 behavioural segments
+ *  - RFM: R from configured day bands; F/M from 33rd/66th percentile cuts
+ *    ({1,3,5} scores); 8 behavioural segments
  *    (champions/loyal/new/potential/hibernating/lost/at-risk/regular).
- *  - CLV: annual value = avgTxnValue × (txnCount / max(0.25, tenureYears));
- *    retention = clamp(0.95·e^(−daysSinceLast/120), 0.10–0.95); projected CLV =
- *    annual × 3y × retention; percentile tiers top10/30/60 → platinum/gold/silver.
- *  - Churn: composite 0–100 (recency 40/25/10 at >120/>60/>30d; personal-cadence
- *    decline 30/15 at 2×/1.5×; engagement 30/15 at ≤1/≤3 txns), levels ≥70
- *    critical / ≥50 high / ≥30 medium, retention probability = 100 − score.
- *  - Friction: credits×2 (+returns×3 — no return-auth kind in this ledger, so
- *    returns are always 0, stated in the UI); levels ≥10pts|≥20% critical,
- *    ≥5|≥10% high, ≥2|≥5% medium.
+ *  - CLV: annual value = invoiced ÷ annualized tenure (floor configured);
+ *    retention = clamp(base·e^(−daysSinceLast/decay), min–max); projected CLV =
+ *    annual × clvYears × retention; configured percentile tiers.
+ *  - Churn: composite 0–100 from configured inactivity points, cadence
+ *    multiples and engagement bands; levels from the configured churn cut-offs,
+ *    retention probability = 100 − score.
+ *  - Friction: credits×points-per-credit (+returns×3 — no return-auth kind in
+ *    this ledger, so returns are always 0, stated in the UI); configured
+ *    point and issue-rate bands.
  *  - Velocity: avg days between orders (tenure/(txns−1)); overdue vs cadence;
  *    urgency critical >1× / high >0.5× / medium >0 / due-soon ≤7d.
  *  - Payment: paid = fully-applied invoices; days-to-pay = final application
- *    date − invoice date (the closedate−trandate); score 100 −40/−20/−10
- *    by DSO >60/>30/>15 − min(40, overdue×10); ratings 80/60/40.
+ *    date − invoice date (the closedate−trandate); score 100 minus the
+ *    configured DSO-band and overdue penalties; configured ratings.
  *  - Growth: monthly revenue/customers/new-customers with median-based mature
- *    months (10% floor), MoM capped +200/−80, YoY = last-3mo vs months −15..−12,
- *    trend = recent-6 vs prior-6 ±10%.
+ *    months (configured floor), capped MoM, YoY = last-3mo vs the matching
+ *    window a year back, trend = recent-6 vs prior-6 in a configured band.
  *  - Cohorts: lifetime by first-order year; active = ordered in last 6 months.
- *  - Health: weighted (R25/F25/M30/Payment20 as 20×score) − friction penalty
- *    (25/15/8), grades A+≥90 A≥80 B≥70 C≥60 D≥50 F, 7-priority recommendation.
- *  - Intelligence score: 0.3×min(100, champions%×5) + 0.3×avgRetentionProb +
- *    0.2×concentrationHealth(90/60/30) + 0.2×paymentRate.
+ *  - Health: RFM sub-scores weighted by the configured health weights minus
+ *    the configured friction penalty; a missing payment term drops out and
+ *    the rest re-normalise. Graded on the shared A+/A/B/C/D/F ladder.
+ *  - Intelligence score: champions share, average retention, concentration
+ *    health and payment rate weighted by the configured intelligence
+ *    weights, with missing terms dropped. Same shared ladder.
  */
 
 /* --------------------------------------------------------------- constants */
-// Default values (Lib_CustomerValue_Data.js).
-const W_RECENCY = 0.25;
-const W_FREQUENCY = 0.25;
-const W_MONETARY = 0.3;
-const W_PAYMENT = 0.2;
-const RECENCY_GOOD = 30;
-const RECENCY_WARNING = 90;
-const RECENCY_CRITICAL = 180;
-const CHURN_HIGH_DAYS = 120;
-const CHURN_MEDIUM_DAYS = 60;
+// The scoring model lives in ANALYTICS_CONFIG.customerIntelligence: every
+// weight, band and cut-off below is read from the effective org config at
+// load time, so the Configuration tab edits the live model. The one value
+// that stays a constant is the calendar year used to annualize tenure — a
+// unit conversion, not an organization policy.
+const DAYS_PER_YEAR = 365;
 
 /**
  * The formal P&L universe (and its cost side) as SQL `IN` fragments — the
@@ -220,7 +218,9 @@ export interface CustomerRow {
   healthGrade: "A+" | "A" | "B" | "C" | "D" | "F";
   recommendation: Recommendation;
   recommendationDetail: string;
-  scoreBreakdown: { recency: number; frequency: number; monetary: number; payment: number; frictionPenalty: number };
+  /** True when the customer has no payment history: the payment term was dropped. */
+  scoredWithoutPayment: boolean;
+  scoreBreakdown: { recency: number; frequency: number; monetary: number; payment: number | null; frictionPenalty: number };
 }
 
 export interface SegmentStat {
@@ -285,8 +285,10 @@ export interface CustomerData {
     champions: number;
     atRiskCount: number;
     atRiskRevenue: string;
-    retentionRate: number; // avg retention probability
-    paymentRate: number;
+    /** Null with no scored customers: no average exists. */
+    retentionRate: number | null; // avg retention probability
+    /** Null with no invoices: never a 0% that reads as "paid nothing". */
+    paymentRate: number | null;
     avgDaysToPay: number;
     top10PctShare: number;
     hhiScaled: number; // 0–10000
@@ -479,6 +481,28 @@ function emptyProfitability(): Profitability {
   };
 }
 
+/**
+ * Fail closed on hand-edited weight groups: the write path refuses a broken
+ * sum, but a hand-edited settings blob bypasses it — a dashboard running on
+ * partial weights would silently rescale every grade. The message names the
+ * Configuration tab as the remedy.
+ */
+function requireValidWeights(
+  cfg: ConfigValuesOf<"customerIntelligence">,
+  strings: CustomerStrings,
+): void {
+  const violation = checkSumsTo(ANALYTICS_CONFIG.customerIntelligence, cfg);
+  if (violation) {
+    throw new Error(
+      strings.scoringWeightsInvalid(
+        violation.keys.join(", "),
+        violation.total,
+        Math.round(violation.actual * 100) / 100,
+      ),
+    );
+  }
+}
+
 export async function customerProfitability(
   period: { from: string; to: string },
   orgId: string,
@@ -573,6 +597,7 @@ export async function customerProfitability(
   // Profit tiers and the leak definition read the effective scoring config:
   // tiers and leaks are policy, never absolute amounts in the code.
   const cfg = await analyticsConfig(orgId, "customerIntelligence");
+  requireValidWeights(cfg, strings);
   const tierCutoffs: ProfitTierCutoffs = {
     high: cfg.profitHighMargin!,
     medium: cfg.profitMediumMargin!,
@@ -709,8 +734,9 @@ async function readCustomerData(
   const today = await businessToday(orgId);
   const ref = to < today ? to : today;
 
-  // Per-org tunable thresholds (defaults reproduce the standard scoring exactly).
+  // The scoring model (defaults reproduce the standard scoring exactly).
   const cfg = await analyticsConfig(orgId, "customerIntelligence");
+  requireValidWeights(cfg, strings);
   // mergeConfig always materializes every default key for the dashboard.
   const churnCritical = cfg.churnCriticalScore!;
   const churnHigh = cfg.churnHighScore!;
@@ -718,6 +744,78 @@ async function readCustomerData(
   const hhiWarning = cfg.hhiWarning!;
   const hhiCritical = cfg.hhiCritical!;
   const clvYears = cfg.clvYears!;
+  const weightRecency = cfg.healthWeightRecency!;
+  const weightFrequency = cfg.healthWeightFrequency!;
+  const weightMonetary = cfg.healthWeightMonetary!;
+  const weightPayment = cfg.healthWeightPayment!;
+  const intelChampions = cfg.intelWeightChampions!;
+  const intelRetention = cfg.intelWeightRetention!;
+  const intelConcentration = cfg.intelWeightConcentration!;
+  const intelPayment = cfg.intelWeightPayment!;
+  const gradeAPlus = cfg.gradeAPlus!;
+  const gradeA = cfg.gradeA!;
+  const gradeB = cfg.gradeB!;
+  const gradeC = cfg.gradeC!;
+  const gradeD = cfg.gradeD!;
+  const recencyGood = cfg.recencyGoodDays!;
+  const recencyWarning = cfg.recencyWarningDays!;
+  const recencyCritical = cfg.recencyCriticalDays!;
+  const churnHighDays = cfg.churnHighDays!;
+  const churnMediumDays = cfg.churnMediumDays!;
+  const churnLowDays = cfg.churnInactiveLowDays!;
+  const churnCriticalPts = cfg.churnInactiveCriticalPoints!;
+  const churnHighPts = cfg.churnInactiveHighPoints!;
+  const churnLowPts = cfg.churnInactiveLowPoints!;
+  const churnCadenceHighX = cfg.churnCadenceHighMultiple!;
+  const churnCadenceLowX = cfg.churnCadenceLowMultiple!;
+  const churnCadenceHighPts = cfg.churnCadenceHighPoints!;
+  const churnCadenceLowPts = cfg.churnCadenceLowPoints!;
+  const churnSingleTxns = cfg.churnSingleMaxTxns!;
+  const churnFewTxns = cfg.churnFewMaxTxns!;
+  const churnSinglePts = cfg.churnSinglePoints!;
+  const churnFewPts = cfg.churnFewPoints!;
+  const clvMinYears = cfg.clvMinYears!;
+  const clvBase = cfg.clvRetentionBase! / 100;
+  const clvDecay = cfg.clvRetentionDecayDays!;
+  const clvMin = cfg.clvRetentionMinPct! / 100;
+  const clvMax = cfg.clvRetentionMaxPct! / 100;
+  const tierPlatinum = cfg.tierPlatinumPct! / 100;
+  const tierGold = cfg.tierGoldPct! / 100;
+  const tierSilver = cfg.tierSilverPct! / 100;
+  const concCritical = cfg.concentrationCriticalShare!;
+  const concHigh = cfg.concentrationHighShare!;
+  const concMedium = cfg.concentrationMediumShare!;
+  const concCoverage = cfg.concentrationCoverageShare!;
+  const topSlice = cfg.topSharePct! / 100;
+  const frictionPerCredit = cfg.frictionPointsPerCredit!;
+  const frictionCriticalCut = cfg.frictionCriticalPoints!;
+  const frictionHighCut = cfg.frictionHighPoints!;
+  const frictionMediumCut = cfg.frictionMediumPoints!;
+  const frictionCriticalPts = cfg.frictionPenaltyCritical!;
+  const frictionHighPts = cfg.frictionPenaltyHigh!;
+  const frictionMediumPts = cfg.frictionPenaltyMedium!;
+  const frictionCriticalRate = cfg.frictionCriticalRate!;
+  const frictionHighRate = cfg.frictionHighRate!;
+  const frictionMediumRate = cfg.frictionMediumRate!;
+  const dsoHighDays = cfg.paymentDsoHighDays!;
+  const dsoHighPts = cfg.paymentDsoHighPenalty!;
+  const dsoMediumDays = cfg.paymentDsoMediumDays!;
+  const dsoMediumPts = cfg.paymentDsoMediumPenalty!;
+  const dsoLowDays = cfg.paymentDsoLowDays!;
+  const dsoLowPts = cfg.paymentDsoLowPenalty!;
+  const overduePerInvoice = cfg.paymentOverduePerInvoice!;
+  const overdueCap = cfg.paymentOverdueCap!;
+  const ratingExcellent = cfg.paymentRatingExcellent!;
+  const ratingGood = cfg.paymentRatingGood!;
+  const ratingFair = cfg.paymentRatingFair!;
+  const nurtureHealth = cfg.nurtureMinHealth!;
+  const nurturePercentile = cfg.nurtureClvPercentile! / 100;
+  const maturityFloor = cfg.growthMaturityFloorPct! / 100;
+  const momCapUp = cfg.growthMomCapUp!;
+  const momCapDown = cfg.growthMomCapDown!;
+  const trendBand = cfg.growthTrendPct!;
+  const yoyWindow = cfg.growthYoyWindowMonths!;
+  const overdueInsightAt = cfg.overdueInsightCount!;
 
   const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, ledgerRows, growthLedgerRows, cohortLedgerRows, profitData, dsoStats] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):
@@ -911,7 +1009,7 @@ async function readCustomerData(
       left join documents d on d.id = e.source_document_id and d.org_id = ${orgId}
       -- Schedules carry no party, so their legs attribute through the contract
       -- customer — including cancellation mirrors, which link back through
-      -- reversal_journal_entry_id (f6's cancellation route flips the original to
+      -- reversal_journal_entry_id (the cancellation route flips the original to
       -- reversed and posts the mirror with reverses_entry_id, so both land in
       -- voids and net exactly like document voids).
       left join recognition_schedule_lines rsl
@@ -947,7 +1045,7 @@ async function readCustomerData(
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
       -- Schedules carry no party, so their legs attribute through the contract
       -- customer — including cancellation mirrors, which link back through
-      -- reversal_journal_entry_id (f6's cancellation route flips the original to
+      -- reversal_journal_entry_id (the cancellation route flips the original to
       -- reversed and posts the mirror with reverses_entry_id, so both land in
       -- voids and net exactly like document voids).
       left join recognition_schedule_lines rsl
@@ -982,7 +1080,7 @@ async function readCustomerData(
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
       -- Schedules carry no party, so their legs attribute through the contract
       -- customer — including cancellation mirrors, which link back through
-      -- reversal_journal_entry_id (f6's cancellation route flips the original to
+      -- reversal_journal_entry_id (the cancellation route flips the original to
       -- reversed and posts the mirror with reverses_entry_id, so both land in
       -- voids and net exactly like document voids).
       left join recognition_schedule_lines rsl
@@ -1146,9 +1244,9 @@ async function readCustomerData(
     // (Movement rows always carry dates, so this is defensive, not a live path.)
     const recency = c.recency ?? Number.MAX_SAFE_INTEGER;
     let r = 1;
-    if (recency <= RECENCY_GOOD) r = 5;
-    else if (recency <= RECENCY_WARNING) r = 3;
-    else if (recency <= RECENCY_CRITICAL) r = 2;
+    if (recency <= recencyGood) r = 5;
+    else if (recency <= recencyWarning) r = 3;
+    else if (recency <= recencyCritical) r = 2;
     let f = 1;
     if (c.txns > freqP66) f = 5;
     else if (c.txns > freqP33) f = 3;
@@ -1173,10 +1271,10 @@ async function readCustomerData(
     // per year reduces to invoiced ÷ years): the money never crosses into a
     // float. The retention curve is statistical by nature; it rounds once to
     // the integer retention factor, and the projection multiplies exact legs.
-    const yearsActive = Math.max(0.25, c.tenure / 365);
+    const yearsActive = Math.max(clvMinYears, c.tenure / DAYS_PER_YEAR);
     const annualValue = div(c.invoicedRevenue, yearsActive.toFixed(10));
     const recency = c.recency ?? Number.MAX_SAFE_INTEGER;
-    const retention = Math.max(0.1, Math.min(0.95, 0.95 * Math.exp(-recency / 120)));
+    const retention = Math.max(clvMin, Math.min(clvMax, clvBase * Math.exp(-recency / clvDecay)));
     const retentionFactor = Math.round(retention * 100);
     const clv = mulDecimal(mulDecimal(annualValue, String(clvYears)), div(String(retentionFactor), "100"));
     return { annualValue, clv, retentionFactor };
@@ -1190,17 +1288,17 @@ async function readCustomerData(
     const recency = c.recency;
     let score = 0;
     const factors: string[] = [];
-    if (recency === null) { score += 40; factors.push(strings.churnDeclining); }
-    else if (recency > CHURN_HIGH_DAYS) { score += 40; factors.push(strings.churnInactive(recency)); }
-    else if (recency > CHURN_MEDIUM_DAYS) { score += 25; factors.push(strings.churnDeclining); }
-    else if (recency > 30) score += 10;
+    if (recency === null) { score += churnCriticalPts; factors.push(strings.churnDeclining); }
+    else if (recency > churnHighDays) { score += churnCriticalPts; factors.push(strings.churnInactive(recency)); }
+    else if (recency > churnMediumDays) { score += churnHighPts; factors.push(strings.churnDeclining); }
+    else if (recency > churnLowDays) score += churnLowPts;
     const avgDaysBetween = c.tenure / Math.max(1, c.txns);
-    const stale = recency === null || recency > avgDaysBetween * 2;
-    const slowing = recency !== null && recency > avgDaysBetween * 1.5;
-    if (stale) { score += 30; factors.push(strings.churnBelowPattern); }
-    else if (slowing) score += 15;
-    if (c.txns <= 1) { score += 30; factors.push(strings.churnSingle); }
-    else if (c.txns <= 3) { score += 15; factors.push(strings.churnLowFrequency); }
+    const stale = recency === null || recency > avgDaysBetween * churnCadenceHighX;
+    const slowing = recency !== null && recency > avgDaysBetween * churnCadenceLowX;
+    if (stale) { score += churnCadenceHighPts; factors.push(strings.churnBelowPattern); }
+    else if (slowing) score += churnCadenceLowPts;
+    if (c.txns <= churnSingleTxns) { score += churnSinglePts; factors.push(strings.churnSingle); }
+    else if (c.txns <= churnFewTxns) { score += churnFewPts; factors.push(strings.churnLowFrequency); }
     score = Math.min(100, score);
     const level: RiskLevel = score >= churnCritical ? "critical" : score >= churnHigh ? "high" : score >= churnMedium ? "medium" : "low";
     return { score, level, factors, retentionProbability: Math.max(0, 100 - score), avgDaysBetween: Math.round(avgDaysBetween) };
@@ -1241,16 +1339,16 @@ async function readCustomerData(
   for (const [id, f] of frictionByParty) {
     const credits = f.credits;
     const orders = f.orders;
-    const points = credits * 2; // returns×3 unavailable — no return-auth kind
+    const points = credits * frictionPerCredit; // returns×3 unavailable — no return-auth kind
     const returnRate = orders > 0 ? (credits / orders) * 100 : 0;
     let level: RiskLevel = "low";
-    if (points >= 10 || returnRate >= 20) level = "critical";
-    else if (points >= 5 || returnRate >= 10) level = "high";
-    else if (points >= 2 || returnRate >= 5) level = "medium";
+    if (points >= frictionCriticalCut || returnRate >= frictionCriticalRate) level = "critical";
+    else if (points >= frictionHighCut || returnRate >= frictionHighRate) level = "high";
+    else if (points >= frictionMediumCut || returnRate >= frictionMediumRate) level = "medium";
     if (points > 0) frictionMap.set(id, { points, level, credits, creditValue: f.creditValue, returnRate: Math.round(returnRate * 10) / 10 });
   }
 
-  const paymentMap = new Map<string, { score: number; rating: CustomerRow["paymentRating"]; avgDays: number | null; overdue: number; rate: number }>();
+  const paymentMap = new Map<string, { score: number; rating: CustomerRow["paymentRating"]; avgDays: number | null; overdue: number; rate: number | null }>();
   let totInvoices = 0, totPaid = 0, totOverdue = 0;
   for (const r of paymentRows.rows as unknown as CustomerPaymentSqlRow[]) {
     const invoices = Number(r.invoice_count ?? 0);
@@ -1260,15 +1358,16 @@ async function readCustomerData(
     totInvoices += invoices; totPaid += paid; totOverdue += overdue;
     let score = 100;
     const d = avgDays ?? 0;
-    if (d > 60) score -= 40;
-    else if (d > 30) score -= 20;
-    else if (d > 15) score -= 10;
-    if (overdue > 0) score -= Math.min(40, overdue * 10);
+    if (d > dsoHighDays) score -= dsoHighPts;
+    else if (d > dsoMediumDays) score -= dsoMediumPts;
+    else if (d > dsoLowDays) score -= dsoLowPts;
+    if (overdue > 0) score -= Math.min(overdueCap, overdue * overduePerInvoice);
     score = Math.max(0, score);
-    const rating: CustomerRow["paymentRating"] = score < 40 ? "poor" : score < 60 ? "fair" : score < 80 ? "good" : "excellent";
-    paymentMap.set(r.id, { score, rating, avgDays: avgDays === null ? null : Math.round(d), overdue, rate: invoices > 0 ? Math.round((paid / invoices) * 100) : 0 });
+    const rating: CustomerRow["paymentRating"] = score < ratingFair ? "poor" : score < ratingGood ? "fair" : score < ratingExcellent ? "good" : "excellent";
+    paymentMap.set(r.id, { score, rating, avgDays: avgDays === null ? null : Math.round(d), overdue, rate: invoices > 0 ? Math.round((paid / invoices) * 100) : null });
   }
-  const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : 0;
+  // No invoices means no payment rate — never a 0% that reads as "paid nothing".
+  const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : null;
   const profitMap = new Map((profitData?.customers ?? []).map((c) => [c.customerId, c]));
 
   /* ---- assemble per-customer, CLV tiers by rank ---- */
@@ -1282,9 +1381,9 @@ async function readCustomerData(
   // Tier assignment ranks by projected CLV.
   const byClv = [...enriched].sort((a, b) => cmp(b.clv.clv, a.clv.clv));
   const nAll = byClv.length;
-  const platinumCutoff = Math.ceil(nAll * 0.1);
-  const goldCutoff = Math.ceil(nAll * 0.3);
-  const silverCutoff = Math.ceil(nAll * 0.6);
+  const platinumCutoff = Math.ceil(nAll * tierPlatinum);
+  const goldCutoff = Math.ceil(nAll * tierGold);
+  const silverCutoff = Math.ceil(nAll * tierSilver);
   const tierByCustomer = new Map<string, { tier: Tier; rank: number }>();
   byClv.forEach((e, i) => {
     const tier: Tier = i < platinumCutoff ? "platinum" : i < goldCutoff ? "gold" : i < silverCutoff ? "silver" : "bronze";
@@ -1312,12 +1411,12 @@ async function readCustomerData(
       : "0.00";
     if (shareText === null) throw new Error("CUSTOMER_REVENUE_SHARE_UNDEFINED");
     const sharePct = Number(shareText);
-    const shareComparison = cmp(shareText, "25") >= 0 ? "critical"
-      : cmp(shareText, "15") >= 0 ? "high"
-        : cmp(shareText, "10") >= 0 ? "medium" : "low";
+    const shareComparison = cmp(shareText, String(concCritical)) >= 0 ? "critical"
+      : cmp(shareText, String(concHigh)) >= 0 ? "high"
+        : cmp(shareText, String(concMedium)) >= 0 ? "medium" : "low";
     const risk: RiskLevel = shareComparison;
     cumulative = add(cumulative, shareText);
-    if (cmp(cumulative, "80") <= 0) customersFor80Pct = i + 1;
+    if (cmp(cumulative, String(concCoverage)) <= 0) customersFor80Pct = i + 1;
     shareMap.set(e.c.id, { sharePct, risk });
     shareTexts.set(e.c.id, shareText);
   });
@@ -1326,7 +1425,7 @@ async function readCustomerData(
   const hhiExact = sum([...shareTexts.values()].map((share) => mulDecimal(share, share)));
   const hhiScaled = Math.round(Number(hhiExact));
   const hhiLevel: CustomerData["kpis"]["hhiLevel"] = hhiScaled >= hhiCritical ? "high" : hhiScaled >= hhiWarning ? "moderate" : "low";
-  const top10PctCount = Math.ceil(nAll * 0.1);
+  const top10PctCount = Math.ceil(nAll * topSlice);
   const top10ShareText = totalRevenuePositive
     ? evaluateAnalyticsRatio(
       sum(byRevenue.slice(0, top10PctCount).map((e) => e.c.revenue)),
@@ -1338,7 +1437,13 @@ async function readCustomerData(
   if (top10ShareText === null) throw new Error("TOP_CUSTOMER_REVENUE_SHARE_UNDEFINED");
   const top10Share = Number(top10ShareText);
 
-  /* ---- health scores + recommendations () ---- */
+  // Nurture cut: the configured percentile of the CLV distribution — a
+  // relative bar that moves with the book, never an absolute amount.
+  const nurtureClvCut = percentileExact(enriched.map((e) => e.clv.clv).sort(cmp), nurturePercentile);
+
+  /* ---- health scores + recommendations (weights from the scoring config) ---- */
+  const gradeOf = (h: number): CustomerRow["healthGrade"] =>
+    h >= gradeAPlus ? "A+" : h >= gradeA ? "A" : h >= gradeB ? "B" : h >= gradeC ? "C" : h >= gradeD ? "D" : "F";
   const rows: CustomerRow[] = enriched.map(({ c, rfm, clv, churn, vel }) => {
     const friction = frictionMap.get(c.id);
     const payment = paymentMap.get(c.id);
@@ -1349,13 +1454,18 @@ async function readCustomerData(
     const recencyScore = rfm.r * 20;
     const frequencyScore = rfm.f * 20;
     const monetaryScore = rfm.m * 20;
-    const paymentScore = payment ? payment.score : 75; // Default when unknown
-    const frictionPenalty = friction?.level === "critical" ? 25 : friction?.level === "high" ? 15 : friction?.level === "medium" ? 8 : 0;
+    // A term with no data is dropped and the remaining weights
+    // re-normalised: with no payment history the customer earns no phantom
+    // points, and the tile says so by name (scoredWithoutPayment).
+    const scoredWithoutPayment = payment === undefined;
+    const weightTotal = scoredWithoutPayment ? 100 - weightPayment : 100;
+    const rawScore = recencyScore * weightRecency + frequencyScore * weightFrequency + monetaryScore * weightMonetary
+      + (payment ? payment.score * weightPayment : 0);
+    const frictionPenalty = friction?.level === "critical" ? frictionCriticalPts : friction?.level === "high" ? frictionHighPts : friction?.level === "medium" ? frictionMediumPts : 0;
 
-    let healthScore = Math.round(recencyScore * W_RECENCY + frequencyScore * W_FREQUENCY + monetaryScore * W_MONETARY + paymentScore * W_PAYMENT);
+    let healthScore = weightTotal > 0 ? Math.round(rawScore / weightTotal) : 0;
     healthScore = Math.max(0, healthScore - frictionPenalty);
-    const healthGrade: CustomerRow["healthGrade"] =
-      healthScore >= 90 ? "A+" : healthScore >= 80 ? "A" : healthScore >= 70 ? "B" : healthScore >= 60 ? "C" : healthScore >= 50 ? "D" : "F";
+    const healthGrade: CustomerRow["healthGrade"] = gradeOf(healthScore);
 
     // 7-priority recommendation ladder, verbatim.
     let recommendation: Recommendation = "maintain";
@@ -1373,7 +1483,7 @@ async function readCustomerData(
     } else if (churn.level === "critical" || churn.level === "high") {
       recommendation = "win-back";
       detail = strings.recWinBack;
-    } else if (healthScore >= 85 && clv.clv > 10_000) {
+    } else if (healthScore >= nurtureHealth && cmp(clv.clv, nurtureClvCut) >= 0) {
       recommendation = "nurture";
       detail = strings.recNurture;
     } else if (rfm.segment === "new") {
@@ -1421,7 +1531,7 @@ async function readCustomerData(
       avgOrderCycle: vel.hasPattern ? vel.cycle : 0,
       daysOverdue: velOverdue,
       urgency: vel.hasPattern ? vel.urgency : "on-track",
-      paymentScore,
+      paymentScore: payment ? payment.score : null,
       paymentRating: payment?.rating ?? "unknown",
       avgDaysToPay: payment?.avgDays ?? null,
       overdueCount: payment?.overdue ?? 0,
@@ -1436,7 +1546,8 @@ async function readCustomerData(
       healthGrade,
       recommendation,
       recommendationDetail: detail,
-      scoreBreakdown: { recency: recencyScore, frequency: frequencyScore, monetary: monetaryScore, payment: paymentScore, frictionPenalty: -frictionPenalty },
+      scoredWithoutPayment,
+      scoreBreakdown: { recency: recencyScore, frequency: frequencyScore, monetary: monetaryScore, payment: payment ? payment.score : null, frictionPenalty: -frictionPenalty },
     };
   });
   rows.sort((a, b) => b.healthScore - a.healthScore);
@@ -1501,7 +1612,7 @@ async function readCustomerData(
     }));
   const revenues = gRows.map((r) => r.revenue).sort(cmp);
   const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : "0";
-  const minRevenueThreshold = mulDecimal(medianRevenue, "0.1");
+  const minRevenueThreshold = mulDecimal(medianRevenue, String(maturityFloor));
   let prevRevenue: string | null = null;
   const monthly: MonthlyGrowth[] = gRows.map((r) => {
     const revenue = r.revenue;
@@ -1510,8 +1621,8 @@ async function readCustomerData(
     if (prevRevenue !== null && cmp(prevRevenue, minRevenueThreshold) > 0) {
       const rateText = evaluateAnalyticsRatio(add(revenue, neg(prevRevenue)), prevRevenue, "percent", 1);
       growthRate = rateText === null ? 0 : Number(rateText);
-      if (growthRate > 200) growthRate = 200;
-      if (growthRate < -80) growthRate = -80;
+      if (growthRate > momCapUp) growthRate = momCapUp;
+      if (growthRate < -momCapDown) growthRate = -momCapDown;
     } else if (prevRevenue !== null && cmp(prevRevenue, "0") > 0 && cmp(revenue, minRevenueThreshold) > 0) {
       growthRate = null; // ramp-up period
     }
@@ -1544,9 +1655,9 @@ async function readCustomerData(
   const avgDaysToPay = dsoStats.globalAvg;
 
   let yoyGrowth: number | null = null;
-  if (monthly.length >= 15) {
+  if (monthly.length >= yoyWindow) {
     const recent3 = sum(monthly.slice(-3).map((m) => m.revenue));
-    const prior3 = sum(monthly.slice(-15, -12).map((m) => m.revenue));
+    const prior3 = sum(monthly.slice(-yoyWindow, -(yoyWindow - 3)).map((m) => m.revenue));
     if (cmp(prior3, minRevenueThreshold) > 0) {
       const yoyText = evaluateAnalyticsRatio(add(recent3, neg(prior3)), prior3, "percent", 0);
       yoyGrowth = yoyText === null ? null : Number(yoyText);
@@ -1569,15 +1680,15 @@ async function readCustomerData(
       ? evaluateAnalyticsRatio(add(recentSum, neg(priorSum)), priorSum, "percent", 2)
       : null;
     const pct = trendText === null ? 0 : Number(trendText);
-    if (pct > 10) trend = "growing";
-    else if (pct < -10) trend = "declining";
+    if (pct > trendBand) trend = "growing";
+    else if (pct < -trendBand) trend = "declining";
   }
   const totalNewCustomers = monthly.reduce((a, m) => a + m.newCustomers, 0);
 
   /* ---- cohorts () ---- */
-  const sixMonthsAgo = new Date(ref + "T00:00:00Z");
-  sixMonthsAgo.setUTCMonth(sixMonthsAgo.getUTCMonth() - 6);
-  const activeCut = sixMonthsAgo.toISOString().slice(0, 10);
+  // Month arithmetic clamps instead of overflowing (Aug 31 minus six months
+  // is Feb 28/29, never Mar 3): addMonthsClamped carries the civil calendar.
+  const activeCut = addMonthsClamped(ref, -6).slice(0, 10);
   // Lifetime INVOICED revenue arrives per (party, functional): translate each leg
   // at its latest posting date, merge per party, then run the cohort logic on
   // parties (never on legs). Lifetime recognized merges in from the ledger
@@ -1640,10 +1751,24 @@ async function readCustomerData(
   /* ---- intelligence score () ---- */
   const championsStat = segments.find((s) => s.segment === "champions")!;
   const championsScore = Math.min(100, championsStat.percentage * 5);
-  const avgRetentionProbability = rows.length ? Math.round(rows.reduce((a, r) => a + r.retentionProbability, 0) / rows.length) : 50;
+  // Terms with no data are dropped and the remaining weights re-normalised:
+  // with no scored customers there is no average retention, and with no
+  // invoices there is no payment rate — neither reads as a number.
+  const avgRetentionProbability = rows.length
+    ? Math.round(rows.reduce((a, r) => a + r.retentionProbability, 0) / rows.length)
+    : null;
   const concentrationHealth = hhiLevel === "high" ? 30 : hhiLevel === "moderate" ? 60 : 90;
-  const intelligenceScore = Math.round(championsScore * 0.3 + avgRetentionProbability * 0.3 + concentrationHealth * 0.2 + paymentRate * 0.2);
-  const { label: scoreLabel, grade: scoreGrade } = strings.intelligenceScore(intelligenceScore);
+  const intelTerms: { value: number; weight: number }[] = [{ value: championsScore, weight: intelChampions }];
+  if (avgRetentionProbability !== null) intelTerms.push({ value: avgRetentionProbability, weight: intelRetention });
+  intelTerms.push({ value: concentrationHealth, weight: intelConcentration });
+  if (paymentRate !== null) intelTerms.push({ value: paymentRate, weight: intelPayment });
+  const intelWeight = intelTerms.reduce((a, t) => a + t.weight, 0);
+  const intelligenceScore = intelWeight > 0
+    ? Math.round(intelTerms.reduce((a, t) => a + t.value * t.weight, 0) / intelWeight)
+    : 0;
+  const { label: scoreLabel, grade: scoreGrade } = strings.intelligenceScore(intelligenceScore, {
+    aPlus: gradeAPlus, a: gradeA, b: gradeB, c: gradeC, d: gradeD,
+  });
 
   /* ---- aggregates + insights ---- */
   const atRisk = rows.filter((r) => r.churnLevel === "critical" || r.churnLevel === "high");
@@ -1666,7 +1791,7 @@ async function readCustomerData(
     insights.push({ type: "warning", category: "growth", ...strings.declining(avgMonthlyGrowth), impact: "high" });
   else if (trend === "growing")
     insights.push({ type: "success", category: "growth", ...strings.growing(avgMonthlyGrowth, totalNewCustomers), impact: "medium" });
-  if (totOverdue > 5)
+  if (totOverdue > overdueInsightAt)
     insights.push({ type: "warning", category: "payments", ...strings.overdue(totOverdue), impact: "medium" });
 
   const TIERS: Tier[] = ["platinum", "gold", "silver", "bronze"];
