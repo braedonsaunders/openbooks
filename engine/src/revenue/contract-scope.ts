@@ -140,7 +140,7 @@ async function scopedSubject(
   const row = (await runner.execute<{
     customer_id: string; start_on: string; currency: string | null;
   }>(sql`
-    select s.customer_id, s.start_on::text as start_on, p.currency
+    select s.customer_id, s.start_on::text as start_on, p.currency_code as currency
       from subscriptions s
       left join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
      where s.id = ${source.id} and s.org_id = ${orgId}`)).rows[0];
