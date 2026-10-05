@@ -75,7 +75,10 @@
     "formPreferredCleared": "優先フォームをクリアしました",
     "formPreferredFailed": "優先フォームを保存できませんでした",
     "returnsShipment": "返品対象の出荷",
-    "returnsNone": "在庫の返品なし"
+    "returnsNone": "在庫の返品なし",
+    "marketplaceCollectedBy": "税金の徴収者",
+    "marketplaceCollectedByHelp": "マーケットプレイス分はその清算口座に計上され、自社の税金負債にはなりません。",
+    "marketplaceMerchant": "自社"
   },
   "toasts": {
     "actionFailed": "アクションに失敗しました",

@@ -104,6 +104,7 @@ interface BuiltinSegmentOpt {
 // an ever-churning identity re-renders forever.
 const EMPTY_SEGMENTS: SegmentOpt[] = []
 const EMPTY_BUILTIN_SEGMENTS: BuiltinSegmentOpt[] = []
+const EMPTY_FACILITATORS: { name: string }[] = []
 /** One posted receipt or shipment a credit memo may still return against. */
 interface ReturnableSourceOption {
   movementId: string
@@ -156,6 +157,9 @@ interface LineRow extends Record<string, unknown> {
   taxInputAmount: string
   taxOverridden: boolean
   taxAmount: string
+  /** Marketplace collecting this line's tax (facilitator name); blank = the
+   *  merchant collects. Round-trips through toRow and the save payload. */
+  marketplaceFacilitator: string
   /** Entry-mode distribution staging (exploded into child lines on save). */
   distributionGroupId: string
   distributionRuleId: string
@@ -696,6 +700,7 @@ const emptyLine = (): LineRow => ({
   taxInputAmount: '',
   taxOverridden: false,
   taxAmount: '',
+  marketplaceFacilitator: '',
   ...clearedDistributionFields(),
   promotionCode: '',
 })
@@ -879,6 +884,7 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
+    marketplaceFacilitator: lineText(l.marketplace_facilitator),
     ...distributionFieldsOf(l),
     promotionCode: lineText(l.promotion_code),
   }
@@ -1065,6 +1071,10 @@ export interface DocumentDrawerProps {
   refundHref?: string | null
   /** Org default tender account (till defaults) prefill for new tenders. */
   defaultTenderAccountId?: string | null
+  /** Active marketplace facilitators for the "tax collected by" line column.
+   *  Empty or absent hides the column: with no facilitator there is nothing
+   *  to choose. Only sales kinds offer it (see marketplaceColumn). */
+  marketplaceFacilitators?: { name: string }[]
 }
 
 export function DocumentDrawer({
@@ -1106,6 +1116,7 @@ export function DocumentDrawer({
   tenderAccounts,
   refundHref,
   defaultTenderAccountId,
+  marketplaceFacilitators = EMPTY_FACILITATORS,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
@@ -1396,6 +1407,7 @@ export function DocumentDrawer({
         locationId: child.locationId ?? parent.locationId,
         classId: child.classId ?? parent.classId,
         taxProfileId: parent.taxProfileId,
+        marketplaceFacilitator: parent.marketplaceFacilitator,
         amount: child.amount,
         distributionGroupId: groupKey,
         // Hand-entered children are locked from birth: the operator tuned
@@ -1593,6 +1605,31 @@ export function DocumentDrawer({
     }
   }, [showPromotionColumn, tSales])
 
+  // Who collects the line's tax: the merchant, or a marketplace facilitator
+  // (whose share posts to its clearing account, never the tax liability).
+  // Sales kinds only — customer invoices and credits today; cash documents
+  // join when their drawer exists. The engine kind map is the server's copy
+  // of this set. No facilitators configured, no column: with nothing to
+  // choose, the choice is not offered.
+  const marketplaceColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
+    if (config.kind !== 'customer_invoice' && config.kind !== 'customer_credit') return null
+    if (marketplaceFacilitators.length === 0) return null
+    return {
+      key: 'marketplaceFacilitator',
+      label: t('drawer.marketplaceCollectedBy'),
+      help: t('drawer.marketplaceCollectedByHelp'),
+      width: '170px',
+      type: 'select',
+      options: [
+        { value: '', label: t('drawer.marketplaceMerchant') },
+        ...marketplaceFacilitators.map((facilitator) => ({ value: facilitator.name, label: facilitator.name })),
+      ],
+      // A line with no tax profile computes no tax, so there is nothing for
+      // a facilitator to collect: do not offer the choice before then.
+      isCellEditable: (row) => row.taxProfileId !== '' || row.taxOverridden === true,
+    }
+  }, [config.kind, marketplaceFacilitators, t])
+
   const payload_ = useMemo(() => {
     if (isTransfer) {
       return {
@@ -1671,6 +1708,12 @@ export function DocumentDrawer({
                 taxGroupId: config.hasTax && r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
                 taxOverridden: config.hasTax ? r.taxOverridden : false,
                 taxAmount: config.hasTax && r.taxOverridden ? r.taxAmount : null,
+                // Marketplace collection rides only on sales kinds that offer
+                // the column; other kinds never send it, so the server gate
+                // for them stays a pure backstop.
+                ...(marketplaceColumn
+                  ? { marketplaceFacilitator: r.marketplaceFacilitator || null }
+                  : {}),
                 departmentId: r.departmentId || null,
                 projectId: r.projectId || null,
                 locationId: r.locationId || null,
@@ -1712,7 +1755,7 @@ export function DocumentDrawer({
               })),
           }),
     }
-  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources])
+  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
@@ -2197,6 +2240,7 @@ export function DocumentDrawer({
           ),
       })
     }
+    if (marketplaceColumn) cols.push(marketplaceColumn)
     const lineVisibility = new Map(builtinSegments.map((segment) => [segment.storageColumn, segment.showOnLines]))
     const storageForRowKey: Record<string, string> = {
       departmentId: 'department_id', projectId: 'project_id', locationId: 'location_id', classId: 'class_id',
@@ -2206,7 +2250,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn, returnSourceColumn, promotionColumn])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {

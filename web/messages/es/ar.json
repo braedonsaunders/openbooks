@@ -75,7 +75,10 @@
     "formPreferredCleared": "Formulario preferido borrado",
     "formPreferredFailed": "No se pudo guardar el formulario preferido",
     "returnsShipment": "Devuelve envío",
-    "returnsNone": "Sin devolución de existencias"
+    "returnsNone": "Sin devolución de existencias",
+    "marketplaceCollectedBy": "Recaudador del impuesto",
+    "marketplaceCollectedByHelp": "La parte del marketplace se contabiliza en su cuenta de compensación, nunca en su deuda fiscal.",
+    "marketplaceMerchant": "Comerciante"
   },
   "toasts": {
     "actionFailed": "La acción falló",

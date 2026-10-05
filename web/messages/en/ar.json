@@ -75,7 +75,10 @@
     "formPreferredCleared": "Preferred form cleared",
     "formPreferredFailed": "Could not save the preferred form",
     "returnsShipment": "Returns shipment",
-    "returnsNone": "No stock returned"
+    "returnsNone": "No stock returned",
+    "marketplaceCollectedBy": "Tax collected by",
+    "marketplaceCollectedByHelp": "The marketplace's share posts to its clearing account, never your tax liability.",
+    "marketplaceMerchant": "Merchant"
   },
   "toasts": {
     "actionFailed": "Action failed",

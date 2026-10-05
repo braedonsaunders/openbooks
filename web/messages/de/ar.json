@@ -75,7 +75,10 @@
     "formPreferredCleared": "Bevorzugtes Formular zurückgesetzt",
     "formPreferredFailed": "Bevorzugtes Formular konnte nicht gespeichert werden",
     "returnsShipment": "Retourniert Lieferung",
-    "returnsNone": "Keine Warenrückgabe"
+    "returnsNone": "Keine Warenrückgabe",
+    "marketplaceCollectedBy": "Steuererhebung durch",
+    "marketplaceCollectedByHelp": "Der Marktplatzanteil wird auf dessen Verrechnungskonto gebucht, nie auf Ihre Steuerschuld.",
+    "marketplaceMerchant": "Händler"
   },
   "toasts": {
     "actionFailed": "Aktion fehlgeschlagen",

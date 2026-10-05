@@ -75,7 +75,10 @@
     "formPreferredCleared": "Formulário preferido removido",
     "formPreferredFailed": "Não foi possível salvar o formulário preferido",
     "returnsShipment": "Devolve remessa",
-    "returnsNone": "Sem devolução de estoque"
+    "returnsNone": "Sem devolução de estoque",
+    "marketplaceCollectedBy": "Coletado por",
+    "marketplaceCollectedByHelp": "A parte do marketplace é lançada na conta de compensação dele, nunca no seu passivo fiscal.",
+    "marketplaceMerchant": "Loja"
   },
   "toasts": {
     "actionFailed": "Falha na ação",

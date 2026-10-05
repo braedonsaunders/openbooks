@@ -68,6 +68,11 @@ export interface EntryLineInput {
   extraDims?: Record<string, string>;
   custom?: Record<string, unknown>;
   isBillable?: boolean | null;
+  /**
+   * Marketplace collecting this line's tax. Explosion splits one sale across
+   * dimensions, so every child inherits the parent's collector verbatim.
+   */
+  marketplaceFacilitator?: string | null;
   /** Rule key for an explicit explode request; wins over matching and groups. */
   distributionKey?: string | null;
   /** Stored group this submitted line belongs to (re-save matching). */
@@ -99,6 +104,8 @@ export interface PlannedEntryLine {
   description: string | null;
   taxCodeId: string | null;
   taxGroupId: string | null;
+  /** Marketplace collecting this line's tax; inherited from the exploded parent. */
+  marketplaceFacilitator: string | null;
   partyId: string | null;
   departmentId: string | null;
   projectId: string | null;
@@ -479,6 +486,7 @@ export function explodeDocumentLine(
         : (line.description ?? null),
     taxCodeId: line.taxCodeId ?? null,
     taxGroupId: line.taxGroupId ?? null,
+    marketplaceFacilitator: line.marketplaceFacilitator ?? null,
     partyId: line.partyId ?? null,
     departmentId: t.departmentId ?? line.departmentId ?? null,
     projectId: t.projectId ?? line.projectId ?? null,
@@ -517,6 +525,7 @@ function plainLine(line: EntryLineInput): PlannedEntryLine {
     description: line.description ?? null,
     taxCodeId: line.taxCodeId ?? null,
     taxGroupId: line.taxGroupId ?? null,
+    marketplaceFacilitator: line.marketplaceFacilitator ?? null,
     partyId: line.partyId ?? null,
     departmentId: line.departmentId ?? null,
     projectId: line.projectId ?? null,

@@ -61,6 +61,13 @@ export interface DocumentLineInput extends BillLineInput {
   } | null
   extraDims?: Record<string, string | null>
   custom?: Record<string, unknown>
+  /**
+   * Marketplace collecting this line's tax (a name in marketplace_facilitators),
+   * or null when the merchant collects. The server validates the name against
+   * the active facilitators and refuses it on non-sales kinds; posting and tax
+   * evidence derive collected_by from the stored line, never from this input.
+   */
+  marketplaceFacilitator?: string | null
   /** Entry-mode allocation: rule key to explode this line (explicit request). */
   distributionKey?: string | null
   /** Stored distribution group this submitted line belongs to (re-save matching). */
