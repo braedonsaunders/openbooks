@@ -3197,10 +3197,6 @@
           "label": "Cliff critical gap (pp)",
           "help": "PO/SO velocity gap above this is critical"
         },
-        "cliffCriticalHorizon": {
-          "label": "Cliff critical horizon (mo)",
-          "help": "Horizon shown with a critical cliff"
-        },
         "cliffCriticalPoints": {
           "label": "Cliff critical points",
           "help": "Health-score deduction for a critical cliff"
@@ -3212,10 +3208,6 @@
         "cliffWarningGap": {
           "label": "Cliff warning gap (pp)",
           "help": "PO/SO velocity gap above this is a warning"
-        },
-        "cliffWarningHorizon": {
-          "label": "Cliff warning horizon (mo)",
-          "help": "Horizon shown with a warning cliff"
         },
         "cliffWarningPoints": {
           "label": "Cliff warning points",

@@ -3046,10 +3046,6 @@
           "label": "Klipp-Kritiklücke (pp)",
           "help": "Kauf-/Verkaufs-Dynamiklücke darüber ist kritisch"
         },
-        "cliffCriticalHorizon": {
-          "label": "Klipp-Kritikhorizont (Mon.)",
-          "help": "Horizont bei kritischer Klippe"
-        },
         "cliffCriticalPoints": {
           "label": "Klipp-Kritikpunkte",
           "help": "Gesundheitsabzug bei kritischer Klippe"
@@ -3061,10 +3057,6 @@
         "cliffWarningGap": {
           "label": "Klipp-Warnlücke (pp)",
           "help": "Kauf-/Verkaufs-Dynamiklücke darüber ist eine Warnung"
-        },
-        "cliffWarningHorizon": {
-          "label": "Klipp-Warnhorizont (Mon.)",
-          "help": "Horizont bei warnender Klippe"
         },
         "cliffWarningPoints": {
           "label": "Klipp-Warnpunkte",

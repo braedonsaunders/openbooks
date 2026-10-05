@@ -3046,10 +3046,6 @@
           "label": "崖重大ギャップ（pp）",
           "help": "購買/販売速度差がこの値を超えたら重大です"
         },
-        "cliffCriticalHorizon": {
-          "label": "崖重大期間（月）",
-          "help": "重大な崖とともに表示する期間"
-        },
         "cliffCriticalPoints": {
           "label": "崖重大点数",
           "help": "重大な崖の健全性減点"
@@ -3061,10 +3057,6 @@
         "cliffWarningGap": {
           "label": "崖警告ギャップ（pp）",
           "help": "購買/販売速度差がこの値を超えたら警告です"
-        },
-        "cliffWarningHorizon": {
-          "label": "崖警告期間（月）",
-          "help": "警告の崖とともに表示する期間"
         },
         "cliffWarningPoints": {
           "label": "崖警告点数",
