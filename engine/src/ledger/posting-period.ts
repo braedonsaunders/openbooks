@@ -8,13 +8,15 @@ import { type Doc, PostingError } from "../journal/posting-contracts.ts";
  * late postings and adjustment periods; the composite database FK guarantees
  * the selected period belongs to the same organization.
  *
- * Adjustment handling (decided, documented): an explicit ADJUSTMENT period
- * is honoured without a date-window check — adjustments re-date activity by
- * nature (the posting keeps its economic date while the period is the close
- * bucket), so a window check would make explicit adjustment postings
- * impossible. An explicit REGULAR period must still cover the posting date:
- * an imported document dated outside its named period posts into the wrong
- * bucket otherwise. Date-derived resolution always goes through the shared
+ * Adjustment handling: an explicit ADJUSTMENT period is honoured for any
+ * posting dated inside ITS fiscal year — adjustments re-date activity within
+ * the year's close (the posting keeps its economic date while the period is
+ * the close bucket). A date outside that fiscal year is refused: it would put
+ * the posting in one year by date and another by period, so an import naming
+ * an open adjustment period could post into a closed year. The window comes
+ * from accounting_period_posting_window(), the same definition the storage
+ * guard enforces. An explicit REGULAR period must still cover the posting
+ * date. Date-derived resolution always goes through the shared
  * covering-period resolver (default calendar, regular periods only).
  */
 export async function resolvePostingPeriod(
@@ -23,21 +25,28 @@ export async function resolvePostingPeriod(
   postingDate: string,
 ): Promise<{ id: string }> {
   if (doc.postingPeriodId) {
-    const override = (await runner.execute<{ id: string; is_adjustment: boolean }>(sql`
-        select id, is_adjustment
-          from accounting_periods
-         where id = ${doc.postingPeriodId}
-           and org_id = ${doc.orgId}
-           and (is_adjustment or (starts_on <= ${postingDate} and ends_on >= ${postingDate}))
-         limit 1
-      `));
-    const period = override.rows[0];
-    if (!period) {
+    const window = (await runner.execute<{
+      is_adjustment: boolean;
+      period_name: string;
+      fiscal_year: number;
+      window_start: string;
+      window_end: string;
+    }>(sql`
+        select is_adjustment, period_name, fiscal_year,
+               window_start::text as window_start, window_end::text as window_end
+          from accounting_period_posting_window(${doc.orgId}, ${doc.postingPeriodId})
+      `)).rows[0];
+    if (!window) {
+      throw new PostingError(`accounting period ${doc.postingPeriodId} does not exist in this organization`);
+    }
+    if (postingDate < window.window_start || postingDate > window.window_end) {
       throw new PostingError(
-        `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`,
+        window.is_adjustment
+          ? `adjustment period "${window.period_name}" takes postings dated inside fiscal year ${window.fiscal_year} (${window.window_start} to ${window.window_end}), not ${postingDate} — date the document inside that year or post it to the period that covers ${postingDate}`
+          : `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`,
       );
     }
-    return { id: period.id };
+    return { id: doc.postingPeriodId };
   }
   const period = await resolveCoveringPeriod(runner, doc.orgId, postingDate);
   if (!period) {

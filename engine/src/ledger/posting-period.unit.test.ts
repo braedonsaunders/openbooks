@@ -26,14 +26,17 @@ const chain = [
 ];
 const period = [{ id: "period-a", ends_on: "2026-09-30" }];
 
+const window = (is_adjustment: boolean, window_start: string, window_end: string) =>
+  [{ is_adjustment, period_name: is_adjustment ? "FY26 ADJ" : "2026-09", fiscal_year: 2026, window_start, window_end }];
+
 test("explicit posting period is scoped to the organization and the posting date's window; date fallback excludes adjustment periods", async () => {
-  const explicit = scripted([[{ id: "override" }]]);
+  const explicit = scripted([window(false, "2026-09-01", "2026-09-30")]);
   assert.deepEqual(await resolvePostingPeriod(explicit.runner, document("override"), args.postingDate), { id: "override" });
-  // The explicit branch pins BOTH org ownership and the posting-date window:
-  // an imported document dated outside its named period used to post into
-  // that period anyway, disagreeing with every date-window report.
-  assert.deepEqual(explicit.calls[0]!.params, ["override", "org-a", args.postingDate, args.postingDate]);
+  assert.deepEqual(explicit.calls[0]!.params, ["org-a", "override"]);
   explicit.done();
+  const outside = scripted([window(false, "2026-10-01", "2026-10-31")]);
+  await assert.rejects(resolvePostingPeriod(outside.runner, document("override"), args.postingDate),
+    (e: unknown) => e instanceof PostingError && /override does not cover posting date 2026-09-20/.test(e.message));
   const dated = scripted([[{ id: "regular" }]]);
   assert.deepEqual(await resolvePostingPeriod(dated.runner, document(null), args.postingDate), { id: "regular" });
   // Date-derived resolution goes through the shared covering-period
@@ -46,22 +49,20 @@ test("explicit posting period is scoped to the organization and the posting date
   dated.done();
 });
 
-test("an explicit adjustment period overrides without a date-window check", async () => {
-  // Adjustments re-date activity by nature (economic date on the posting,
-  // close bucket on the period), so the imported-document window check
-  // applies to regular overrides only. The scripted row carries
-  // is_adjustment like the real select.
-  const adj = scripted([[{ id: "adj-13", is_adjustment: true }]]);
-  assert.deepEqual(
-    await resolvePostingPeriod(adj.runner, document("adj-13"), "2026-06-30"),
-    { id: "adj-13" },
-  );
-  assert.match(adj.calls[0]!.sql, /is_adjustment or \(starts_on/);
-  adj.done();
+test("an explicit adjustment period admits only postings dated inside its own fiscal year", async () => {
+  // Adjustments keep their economic date inside the year they close; a date
+  // in another year would post into that year by date while the period
+  // belongs to this one.
+  const inside = scripted([window(true, "2026-01-01", "2026-12-31")]);
+  assert.deepEqual(await resolvePostingPeriod(inside.runner, document("adj-13"), "2026-06-30"), { id: "adj-13" });
+  const outside = scripted([window(true, "2026-01-01", "2026-12-31")]);
+  await assert.rejects(resolvePostingPeriod(outside.runner, document("adj-13"), "2025-06-30"),
+    (e: unknown) => e instanceof PostingError
+      && /adjustment period "FY26 ADJ" takes postings dated inside fiscal year 2026 \(2026-01-01 to 2026-12-31\), not 2025-06-30/.test(e.message));
 });
 
 test("missing override and uncovered date refuse with the applicable remedy context", async () => {
-  for (const [override, message] of [["foreign-period", /foreign-period does not cover posting date 2026-09-20/], [null, /no accounting period covers 2026-09-20/]] as const) {
+  for (const [override, message] of [["foreign-period", /foreign-period does not exist in this organization/], [null, /no accounting period covers 2026-09-20/]] as const) {
     const io = scripted([[]]);
     await assert.rejects(resolvePostingPeriod(io.runner, document(override), args.postingDate), (e: unknown) => e instanceof PostingError && message.test(e.message));
     io.done();
