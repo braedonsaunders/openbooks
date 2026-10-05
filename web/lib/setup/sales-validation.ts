@@ -66,10 +66,15 @@ export const validatePromotionWrite: SetupEntityValidationHook = async ({ orgId,
     if (error instanceof PromotionRefusal) return error.message
     throw error
   }
-  const nextStatus = body.status === undefined ? current?.status : String(body.status)
-  if (nextStatus && nextStatus !== current?.status) {
-    const remedy = promotionStatusTransition((current?.status ?? 'draft') as PromotionStatus, nextStatus as PromotionStatus)
-    if (remedy !== null) return remedy
+  // Transitions guard edits only: a create stores its opening status
+  // directly, so a draft-by-default creation must not trip the transition
+  // rule that compares against no previous status.
+  if (current) {
+    const nextStatus = body.status === undefined ? current.status : String(body.status)
+    if (nextStatus && nextStatus !== current.status) {
+      const remedy = promotionStatusTransition(current.status as PromotionStatus, nextStatus as PromotionStatus)
+      if (remedy !== null) return remedy
+    }
   }
 }
 
