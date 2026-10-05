@@ -57,10 +57,9 @@ export const INLINE_BYPASS_GUC = /current_setting\s*\(\s*'app\.bypass_rls'/
 
 /**
  * Basename allowlist: gated files (above the cutoff) that may still read the
- * raw GUC, and why. Empty today: 0399 (the rewriter, whose regex and
- * assertion name the pattern) and 0316 (the legacy authority conjunct) are
- * at/below the cutoff and therefore unscanned. 0401 (arch-ledger) must add
- * its basename here if it keeps any raw read alongside the predicate call.
+ * raw GUC, and why. Published policy definitions remain immutable after
+ * the forward repair replaces their live policies. New migrations and the
+ * bootstrap backstop remain gated.
  */
 export const INLINE_BYPASS_GUC_ALLOWLIST = new Map([
   // Superseded tenant policies: 0525 re-created both with the privileged

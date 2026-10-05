@@ -53,7 +53,7 @@ test('comments, the predicate call, and other GUCs pass', () => {
   }
 })
 
-test('only post-cutoff migrations and the backstop are gated; the allowlist starts empty', () => {
+test('only repaired immutable migrations are exempt from the forward bypass gate', () => {
   assert.equal(BYPASS_PREDICATE_CUTOFF_ORDINAL, 402)
   assert.equal(isGatedFile('schema/migrations/environments.sql'), true)
   assert.equal(isGatedFile('schema/migrations/generated/0403_next_policy.sql'), true)
@@ -67,7 +67,8 @@ test('only post-cutoff migrations and the backstop are gated; the allowlist star
   }
   // Pre-cutoff legacies are unscanned, not exempt: gating them would make
   // the entries permanently stale.
-  assert.deepEqual([...INLINE_BYPASS_GUC_ALLOWLIST.keys()], [])
+  assert.deepEqual([...INLINE_BYPASS_GUC_ALLOWLIST.keys()], ['0489_pay_component_department_expenses.sql', '0497_psp_automation.sql'])
+  assert.deepEqual(auditBypassPredicate().violations, [])
 })
 
 test('a post-cutoff file with line and wrapped reads fails with locations', () => {
