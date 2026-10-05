@@ -49,6 +49,9 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     key: 'dunning-policies', table: 'dunning_policies', groupKey: 'billing',
     iconKey: 'mail', orgScoped: true, rehomed: true, hasActive: true,
     orderBy: 'name', singularTitleKey: 'collectionPolicy', writePermission: 'documents.manage', mutationPath: '/api/dunning',
+    // The aggregate endpoint validates the complete record (stages, retry
+    // offsets, final action): row import cannot express it.
+    importVia: 'none',
     drawerSize: 'xl', formDescriptionKey: 'collectionPolicyFields.description',
     formSections: [
       { titleKey: 'collectionPolicyFields.details', fields: ['name', 'isActive'] },
@@ -302,6 +305,9 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     key: 'quote-to-cash-policy', table: 'quote_to_cash_settings', groupKey: 'billing',
     featureKey: 'quoteToCash', iconKey: 'file', orgScoped: true, hasActive: false,
     singularTitleKey: 'quoteCashPolicy', writePermission: 'ar.create', mutationPath: '/api/quote-to-cash/settings',
+    // A singleton validated whole by its settings endpoint: row import
+    // cannot express it.
+    importVia: 'none',
     drawerSize: 'lg', formDescriptionKey: 'quoteCashPolicyFields.description',
     formSections: [
       { titleKey: 'quoteCashPolicyFields.approval', fields: ['maxDiscountPercent', 'autoActivateOnSign'] },

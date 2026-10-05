@@ -358,6 +358,19 @@ export interface SetupEntity {
   /** Command ownership: when present, generic CRUD refuses this entity and
    *  writes go through the entity-addressed command endpoint instead. */
   command?: SetupCommandDescriptor
+  /**
+   * How the generic data import may write this entity. Absent means the
+   * shared row writer (the same coercion, reference resolution, validators
+   * and audit the interactive form shares). `'command'` routes every import
+   * row through the entity's engine command, so effective dating, uniqueness
+   * guards, audit evidence and the feature gate match the interactive path.
+   * `'none'` excludes the entity from import with a named refusal — for
+   * singleton or aggregate configuration no row stream can express, and for
+   * sealed material that must never travel in a file. Every entity carrying
+   * `command` or `mutationPath` declares one: the generic CRUD path refuses
+   * both, so the import writer must not be the one path that allows them.
+   */
+  importVia?: 'command' | 'none'
   /** Additional permission required to create, edit, or delete this entity. */
   writePermission?: string
   /** Server-side validation for invariants that belong to one entity. */

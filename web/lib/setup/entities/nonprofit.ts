@@ -24,6 +24,9 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
     rehomed: true, // lives as a section on the Nonprofit module
     featureKey: 'fundAccounting',
     command: { name: 'setFramework', permission: 'funds.manage', feature: 'fundAccounting' },
+    // One row per org set by a reasoned command: no row stream can express
+    // it, so import refuses by name and points at Nonprofit Setup.
+    importVia: 'none',
     columns: [
       { key: 'framework', kind: 'badge', options: [
         { value: 'us_asc958', label: 'US ASC 958' },
@@ -55,6 +58,8 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
     rehomed: true, // lives as a section on the Nonprofit module
     featureKey: 'fundAccounting',
     command: { name: 'setFundPair', permission: 'funds.manage', feature: 'fundAccounting' },
+    // Directed settlement pairs are reasoned commands, not importable rows.
+    importVia: 'none',
     columns: [
       { key: 'fromFundId', kind: 'ref', ref: 'funds' },
       { key: 'toFundId', kind: 'ref', ref: 'funds' },
@@ -86,6 +91,9 @@ export const NONPROFIT_SETUP_ENTITIES: SetupEntity[] = [
     rehomed: true, // lives as a section on the Nonprofit module
     featureKey: 'functionalExpenses',
     command: { name: 'setFunctionalMapping', permission: 'funds.manage', feature: 'functionalExpenses' },
+    // Effective-dated classification windows close through the command, not
+    // through row import.
+    importVia: 'none',
     columns: [
       { key: 'departmentId', kind: 'ref', ref: 'departments' },
       { key: 'projectId', kind: 'ref', ref: 'projects' },

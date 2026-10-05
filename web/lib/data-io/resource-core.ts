@@ -180,6 +180,14 @@ export class RefResolver {
       // imports. UUID resolution is unaffected (it keys on idCol).
       return { table: 'subsidiaries', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
     }
+    if (target.resource === 'sales-channels') {
+      // Storefront connections are module records, not setup entities, but
+      // channel-owned setup rows (account maps, locations) point at them —
+      // so the channel name is the import vocabulary and a UUID resolves
+      // only inside its owning tenant, like every arm above. Duplicate
+      // names resolve to one row, as with parties.
+      return { table: 'sales_channels', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
+    }
     if (target.resource === 'locations') {
       // Location codes are optional while names are required, so the import
       // vocabulary is code-then-name (mirroring parties): exports render
