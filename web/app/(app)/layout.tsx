@@ -16,7 +16,7 @@ import { shellEnvironments } from '../../lib/environments'
 import { userLocalePreference } from '../../lib/locale'
 import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
 import { orgInfo } from '../../lib/data'
-import { isFeatureEnabled } from '../../lib/features'
+import { orgFeatureState, featureEnabled } from '../../lib/features'
 import { isFeedbackReady } from '../../lib/feedback/config'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { BusinessDateProvider } from '../../components/business-date-provider'
@@ -28,33 +28,33 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled, ordersEnabled, expensesEnabled, projectsEnabled, assetsEnabled, cashSalesEnabled, feedbackConfigured] = await Promise.all([
+  const [localePreference, navMode, navModePreference, environments, org, today, featureState, feedbackConfigured] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
     shellEnvironments(authz),
     orgInfo(authz.user.orgId),
     businessToday(authz.user.orgId),
-    isFeatureEnabled(authz.user.orgId, 'crm'),
-    // The shell create menu must follow the same switches as the nav: a
-    // feature that is off disappears from the menu instead of POSTing into a
-    // 404 from its gated draft API.
-    isFeatureEnabled(authz.user.orgId, 'orders'),
-    isFeatureEnabled(authz.user.orgId, 'expenses'),
-    isFeatureEnabled(authz.user.orgId, 'projects'),
-    isFeatureEnabled(authz.user.orgId, 'fixedAssets'),
-    isFeatureEnabled(authz.user.orgId, 'cashSales'),
+    // These shell capabilities use ordinary feature defaults. Read their
+    // switches together and retain the registry's parent dependencies.
+    orgFeatureState(authz.user.orgId),
     // Installation-level, not a tenant feature: the operator configures one
     // issue destination for the whole deployment (web/lib/feedback/config.ts).
     isFeedbackReady(),
   ])
+  const crmEnabled = featureEnabled(featureState, 'crm')
+  const ordersEnabled = featureEnabled(featureState, 'orders')
+  const expensesEnabled = featureEnabled(featureState, 'expenses')
+  const projectsEnabled = featureEnabled(featureState, 'projects')
+  const assetsEnabled = featureEnabled(featureState, 'fixedAssets')
+  const cashSalesEnabled = featureEnabled(featureState, 'cashSales')
   if (!org?.base_currency) throw new Error('Organization base currency is not configured')
   const feedbackReady = feedbackConfigured && can(authz, 'feedback.use')
   const jar = await cookies()
   const defaultCollapsed = jar.get('sidebar_collapsed')?.value === '1'
 
   const tNav = await getTranslations('nav')
-  const groups = await resolveNav(
+  const [groups, localNavigation] = await Promise.all([resolveNav(
     authz.user.orgId,
     (permission) => permission === undefined || can(authz, permission),
     authz.user.roles.map(({ key }) => key),
@@ -76,9 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         return false
       }
     },
-  )
-
-  const localNavigation = await resolveLocalNavigation(authz)
+  ), resolveLocalNavigation(authz)])
 
   return (
     <MoneyProvider currency={org.base_currency}>

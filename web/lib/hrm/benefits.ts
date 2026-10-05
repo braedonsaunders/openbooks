@@ -309,9 +309,11 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
 
   // Segment badges count every window: the selected segment filters only the
   // visible rows below, so Draft and Closed never read 0 beside a filtered list.
-  const windows = await listEnrollmentWindows(db, orgId, actorId)
-  const contributionText = await getTranslations('admin')
-  const enrolments = await listEnrollments(db, orgId, actorId)
+  const [windows, contributionText, enrolments] = await Promise.all([
+    listEnrollmentWindows(db, orgId, actorId),
+    getTranslations('admin'),
+    listEnrollments(db, orgId, actorId),
+  ])
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
     [...new Set(enrolments.map((e) => e.employmentId))],
@@ -362,15 +364,16 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     }
   })
 
-  const subsidiaries = (
-    await db.execute<{ id: string; name: string }>(sql`
+  const [subsidiaryResult, departments] = await Promise.all([
+    db.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from subsidiaries
        where org_id = ${orgId}::uuid and is_active
          ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)}
        order by name
-    `)
-  ).rows
-  const departments = await listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)
+    `),
+    listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds),
+  ])
+  const subsidiaries = subsidiaryResult.rows
   const dialogOpen = sp.window === 'new' && canManage
   const subsidiaryOptions = subsidiaries.map((row) => ({ value: row.id, label: row.name }))
   const departmentOptions = departments.map((row) => ({ value: row.id, label: row.name }))

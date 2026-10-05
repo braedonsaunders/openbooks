@@ -1,2 +1,3 @@
-/** Channel-neutral contract types shared with client-reachable setup entities. */
+/** Lightweight channel-neutral contracts, without loading commerce services. */
 export { CHANNEL_ACCOUNT_ROLES } from "./contracts.ts";
+export { CommerceError } from "./errors.ts";

@@ -268,14 +268,15 @@ export async function loadBenefitsPortfolio(
 
   let programs: BenefitProgram[] = []
   let awards: BenefitAward[] = []
-  const programsRefusal = await serviceRefusal(t, async () => {
-    programs = (await listBenefitPrograms({ orgId, actorId })).programs
-  })
-  const awardsRefusal = await serviceRefusal(t, async () => {
-    awards = (await listBenefitAwards({ orgId, actorId })).awards
-  })
-
-  const { money } = await getMoneyFormatter(orgId)
+  const [programsRefusal, awardsRefusal, { money }] = await Promise.all([
+    serviceRefusal(t, async () => {
+      programs = (await listBenefitPrograms({ orgId, actorId })).programs
+    }),
+    serviceRefusal(t, async () => {
+      awards = (await listBenefitAwards({ orgId, actorId })).awards
+    }),
+    getMoneyFormatter(orgId),
+  ])
   const amountLabel = (value: string, currency: string): string => money(value, { currency })
 
   const programById = new Map(programs.map((program) => [program.id, program]))

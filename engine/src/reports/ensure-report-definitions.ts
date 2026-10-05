@@ -37,11 +37,14 @@ import { db, withOrgTransaction } from "../platform/db.ts";
  * exists before rendering. A catalog typo fails loudly via validateCustomQuery.
  */
 export async function ensureReportDefinitions(orgId: string): Promise<void> {
-  for (const def of SEEDED_CATALOG_REPORTS) {
-    const query = validateCustomQuery(def.query);
+  // Validate the complete catalog before writing, then refresh each family in
+  // one statement. Per-definition round trips otherwise delay every catalog
+  // destination over a remote database connection.
+  const queries = SEEDED_CATALOG_REPORTS.map((def) => ({ ...def, query: validateCustomQuery(def.query) }));
+  if (queries.length > 0) {
     await db.execute(sql`
       insert into report_definitions (org_id, kind, slug, name, description, query)
-      values (${orgId}, 'built_in', ${def.slug}, ${def.name}, ${def.description}, ${JSON.stringify(query)}::jsonb)
+      values ${sql.join(queries.map((def) => sql`(${orgId}, 'built_in', ${def.slug}, ${def.name}, ${def.description}, ${JSON.stringify(def.query)}::jsonb)`), sql`, `)}
       on conflict (org_id, slug) do update set
         name = excluded.name,
         description = excluded.description,
@@ -50,11 +53,10 @@ export async function ensureReportDefinitions(orgId: string): Promise<void> {
       where report_definitions.kind = 'built_in' and report_definitions.updated_by is null
         and report_definitions.org_id = ${orgId}`);
   }
-  for (const def of STANDARD_STATEMENT_DEFINITIONS) {
-    const statement = { kind: def.statementKind, params: def.params ?? {} };
+  if (STANDARD_STATEMENT_DEFINITIONS.length > 0) {
     await db.execute(sql`
       insert into report_definitions (org_id, kind, report_type, system, slug, name, description, query, statement)
-      values (${orgId}, 'built_in', 'statement', true, ${def.slug}, ${def.name}, ${def.description}, null, ${JSON.stringify(statement)}::jsonb)
+      values ${sql.join(STANDARD_STATEMENT_DEFINITIONS.map((def) => sql`(${orgId}, 'built_in', 'statement', true, ${def.slug}, ${def.name}, ${def.description}, null, ${JSON.stringify({ kind: def.statementKind, params: def.params ?? {} })}::jsonb)`), sql`, `)}
       on conflict (org_id, slug) do update set
         report_type = 'statement',
         system = true,

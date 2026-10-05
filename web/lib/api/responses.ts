@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CommerceError } from "@openbooks/engine/commerce";
+import { CommerceError } from "@openbooks/engine/commerce/contracts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
