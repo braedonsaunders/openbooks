@@ -314,9 +314,14 @@ export interface TaxReturnGlSource {
 }
 
 /** Shared economic-activity window for return sums and the unmapped-code
- * refusal. A code remains return-relevant after deactivation: posted evidence
- * is historical and must not disappear from the same period's sum or guard.
- * Voided source documents, on the other hand, are not economic activity. */
+ * refusal. A return reports posted ledger activity by posting date. A code
+ * remains return-relevant after deactivation: posted evidence is historical
+ * and must not disappear from the same period's sum or guard. A voided or
+ * otherwise reversed transaction stays in the period it originally posted in
+ * (that return may already be filed) and its reversal reports in the period
+ * the reversal posts in, so a void after filing corrects the NEXT return
+ * instead of vanishing from every return. When both legs fall inside one
+ * window they net to zero. */
 function journalReturnActivityPredicate(input: {
   from: string;
   to: string;
@@ -330,8 +335,50 @@ function journalReturnActivityPredicate(input: {
     and e.status in ('posted', 'reversed')
     and e.posting_date between ${input.from} and ${input.to}
     and e.book_id = ${input.primaryBookId}
-    and (vd.id is null or vd.status <> 'voided')
     ${lineScope}
+  `;
+}
+
+/** An original entry and its reversal that both post inside the window net
+ * to zero and are not activity the unmapped-code guard must refuse on. */
+function nettedReversalPairExcluded(input: { from: string; to: string }): ReturnType<typeof sql> {
+  return sql`
+    and not exists (
+      select 1 from journal_entries oe
+       where oe.org_id = e.org_id and oe.id = e.reverses_entry_id
+         and oe.book_id = e.book_id
+         and oe.status in ('posted', 'reversed')
+         and oe.posting_date between ${input.from} and ${input.to}
+    )
+    and not exists (
+      select 1 from journal_entries re
+       where re.org_id = e.org_id and re.reverses_entry_id = e.id
+         and re.book_id = e.book_id
+         and re.status in ('posted', 'reversed')
+         and re.posting_date between ${input.from} and ${input.to}
+    )
+  `;
+}
+
+/** Document-level activity a return reports in [from, to], signed by posting
+ * date: +1 in the window the document posted in (including a document voided
+ * since — it was real activity in that period), and −1 in the window its void
+ * reversal posts in. Lateral-joined per document `d`; same rule as the
+ * ledger-backed boxes above. */
+function documentReturnActivity(input: { from: string; to: string }): ReturnType<typeof sql> {
+  return sql`
+    join lateral (
+      select 1 as sign
+       where (d.status = 'posted' or (d.status = 'voided' and d.reversal_entry_id is not null))
+         and coalesce(d.posting_date, d.document_date) between ${input.from} and ${input.to}
+      union all
+      select -1 as sign
+        from journal_entries rev
+       where d.status = 'voided'
+         and rev.org_id = d.org_id and rev.id = d.reversal_entry_id
+         and rev.status in ('posted', 'reversed')
+         and rev.posting_date between ${input.from} and ${input.to}
+    ) activity on true
   `;
 }
 
@@ -747,8 +794,8 @@ async function findReturnContributors(
      union
     select distinct d.subsidiary_id as id
       from documents d
-     where d.org_id = ${orgId} and d.status = 'posted'
-       and coalesce(d.posting_date, d.document_date) between ${window.from} and ${window.to}
+      ${documentReturnActivity(window)}
+     where d.org_id = ${orgId}
        and d.subsidiary_id is not null
        and d.subsidiary_id = any(${scopeIds}::uuid[])
        and (${basePredicate})
@@ -760,8 +807,8 @@ async function findReturnContributors(
       ? { rows: [] as { one: number }[] }
       : await runner.execute<{ one: number }>(sql`
         select 1 as one from documents d
-         where d.org_id = ${orgId} and d.status = 'posted'
-           and coalesce(d.posting_date, d.document_date) between ${window.from} and ${window.to}
+          ${documentReturnActivity(window)}
+         where d.org_id = ${orgId}
            and d.subsidiary_id is null
            and (${basePredicate})
          limit 1`);
@@ -904,10 +951,6 @@ async function sumReturnGlRaw(
       : opts.nullDocArm
         ? sql`and (d.subsidiary_id = any(${uuidArray(opts.scopeIds)}::uuid[]) or d.subsidiary_id is null)`
         : sql`and d.subsidiary_id = any(${uuidArray(opts.scopeIds)}::uuid[])`;
-  // A void means the transaction never happened: lines of a voided document
-  // are excluded outright — the in-window original (status 'reversed') and
-  // its reversal, which the void posts in a later period outside the box
-  // window. Manual tax adjustments carry no document and still net inside.
   const glRaw = new Map<string, string>();
   const baseCodesByLineCode = new Map<string, string[]>();
   for (const src of glSources) {
@@ -926,7 +969,6 @@ async function sumReturnGlRaw(
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
-          left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            ${journalActivity}
            and (
@@ -971,7 +1013,6 @@ async function sumReturnGlRaw(
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-          left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            ${journalActivity}
            -- Clearing-posted facilitator tax is not merchant tax: exclude
@@ -996,17 +1037,16 @@ async function sumReturnGlRaw(
       // immutable component evidence (posted sales documents only), with
       // credits netting like the taxable_base box below.
       const valueCol = src.basis === "marketplace_tax"
-        ? sql`case when d.kind = 'customer_credit' then -mc.tax_amount else mc.tax_amount end`
-        : sql`round(((case when d.kind = 'customer_credit' then -mdl.amount else mdl.amount end) * d.fx_rate)::numeric, 4)`;
+        ? sql`activity.sign * (case when d.kind = 'customer_credit' then -mc.tax_amount else mc.tax_amount end)`
+        : sql`activity.sign * round(((case when d.kind = 'customer_credit' then -mdl.amount else mdl.amount end) * d.fx_rate)::numeric, 4)`;
       const r = (await runner.execute<{ total: string }>(sql`
         select coalesce(sum(${valueCol}), 0)::text as total
           from document_line_tax_components mc
           join document_lines mdl on mdl.id = mc.document_line_id and mdl.org_id = mc.org_id
           join documents d on d.id = mdl.document_id and d.org_id = mdl.org_id
+          ${documentReturnActivity({ from, to })}
          where mc.org_id = ${orgId} and mc.tax_code_id = ${src.taxCodeId}
            and mc.collected_by = 'marketplace'
-           and d.status = 'posted'
-           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
            and d.kind in ('customer_invoice', 'customer_credit')
            ${docScope}`));
       total = r.rows[0]?.total ?? "0";
@@ -1036,13 +1076,12 @@ async function sumReturnGlRaw(
     const purchaseArray = uuidArray(purchaseCodes);
     const r = (await runner.execute<{ total: string }>(sql`
       select coalesce(sum(
-               round(((case when d.kind in ('customer_credit', 'vendor_credit', 'cash_refund') then -dl.amount else dl.amount end) * d.fx_rate)::numeric, 4)
+               activity.sign * round(((case when d.kind in ('customer_credit', 'vendor_credit', 'cash_refund') then -dl.amount else dl.amount end) * d.fx_rate)::numeric, 4)
              ), 0)::text as total
         from document_lines dl
         join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+        ${documentReturnActivity({ from, to })}
        where dl.org_id = ${orgId}
-         and d.status = 'posted'
-         and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
          ${docScope}
          and (
            (
@@ -1293,9 +1332,9 @@ async function assertNoUnmappedActivity(
          select 1
            from journal_lines l
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-           left join documents vd on vd.id = e.source_document_id and vd.org_id = l.org_id
           where l.org_id = ${orgId} and l.tax_code_id = tc.id
             ${journalActivity}
+            ${nettedReversalPairExcluded({ from, to })}
        )
      order by tc.code`));
   if (rows.rows.length === 0) return;
