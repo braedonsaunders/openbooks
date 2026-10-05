@@ -16,8 +16,8 @@ import React, { Children, isValidElement, type ReactNode } from "react";
 // The seams below stub I/O only (feature switches, group tabs, the engine
 // snapshot query and its sibling list reads, the translations loader backed
 // by the REAL en catalog). The refusal classes are the real engine errors,
-// and authz stubbing is the sanctioned seam — permission logic itself is
-// proven by the existing scope DB tests, not doubled here.
+// and the authorization context carries explicit grants. The real pure
+// permission checker remains in use; service scope is covered by DB tests.
 const catalog = JSON.parse(
   readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
 ) as Record<string, unknown>;
@@ -56,7 +56,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export const can = () => true; export async function getAuthz() { return null; }",
+        url: "data:text/javascript," + encodeURIComponent(`export { can } from ${JSON.stringify(new URL("../../../../lib/authz-core.ts", import.meta.url).href)}; export async function getAuthz() { return null; }`),
       };
     }
     // The feature gate is stubbed for EVERY importer, not just the two
@@ -159,8 +159,9 @@ const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/author
 const gap = globalThis as Record<string, unknown>;
 Object.assign(globalThis, { React });
 const identity = { orgId: "019f655b-2900-7000-8000-000000000001", id: "019f655b-2900-7000-8000-000000000002" };
-const authz = { user: identity, allowedSubsidiaryIds: null } as never;
-const scopedAuthz = { user: identity, allowedSubsidiaryIds: new Set(["019f655b-2900-7000-8000-000000000003"]) } as never;
+const permissions = new Set(["hrm.compensation.read", "hrm.compensation.manage", "admin.setup.manage"]);
+const authz = { user: identity, permissions, allowedSubsidiaryIds: null } as never;
+const scopedAuthz = { user: identity, permissions, allowedSubsidiaryIds: new Set(["019f655b-2900-7000-8000-000000000003"]) } as never;
 
 function overviewFixture(empty = false) {
   const value = {
