@@ -25,6 +25,7 @@
       "netIncome": "Lucro líquido",
       "close": "Progresso do fechamento",
       "closeSub": "{period}",
+      "closeUnavailable": "Indisponível",
       "noClose": "—",
       "noCloseSub": "Nenhum fechamento iniciado",
       "draftJournals": "Lançamentos em rascunho",

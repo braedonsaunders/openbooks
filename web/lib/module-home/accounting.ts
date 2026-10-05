@@ -222,10 +222,13 @@ export async function accountingHome(
           progressPct: Number(close.tasks_total) > 0 ? Math.round((Number(close.tasks_done) / Number(close.tasks_total)) * 100) : null,
         }
       : { runId: null, periodName: null, status: null, tasksDone: 0, tasksTotal: 0, progressPct: null },
-    // Restricted callers never see a run (the query above matches nothing
-    // for them by construction) — say so by name instead of reporting "no
-    // close run", exactly like the dashboard does.
-    closeUnavailable: scope === null ? null : CLOSE_ORG_WIDE_DIAGNOSTICS_REFUSAL,
+    // Restricted callers who hold close access never see a run (the query
+    // above matches nothing for them by construction) — say so by name
+    // instead of reporting "no close run", exactly like the dashboard does.
+    // Without close access there is nothing to refuse: the cockpit hides
+    // the close section rather than naming a diagnostic the caller cannot
+    // hold.
+    closeUnavailable: access.close && scope !== null ? CLOSE_ORG_WIDE_DIAGNOSTICS_REFUSAL : null,
     draftJournals: Number(counts.draft_journals ?? 0),
     postedJournals7d: Number(counts.posted_7d ?? 0),
     workItems,

@@ -25,6 +25,7 @@
       "netIncome": "净利润",
       "close": "结账进度",
       "closeSub": "{period}",
+      "closeUnavailable": "不可用",
       "noClose": "—",
       "noCloseSub": "尚未开始结账",
       "draftJournals": "草稿凭证",
