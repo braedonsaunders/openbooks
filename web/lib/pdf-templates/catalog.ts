@@ -81,9 +81,29 @@ const LINE_FIELDS: PdfMergeField[] = [
   { key: 'unit_price', label: 'Unit price', sample: '$362.50' },
   { key: 'tax_amount', label: 'Tax', sample: '$565.50' },
   { key: 'amount', label: 'Amount', sample: '$4,350.00' },
+  { key: 'service_party_name', label: 'Service customer', sample: 'Child Co — Lyon Works' },
 ]
 
 const LINES_COLLECTION: PdfCollection = { key: 'lines', label: 'Line items', fields: LINE_FIELDS }
+
+/**
+ * Grouped-by-service-party layout for consolidated invoices: one entry per
+ * service customer with its lines nested underneath plus exact subtotals.
+ * The designer palette renders the flat subtotal rows; authors nesting
+ * `lines` inside `line_groups` get the full grouped layout (the grammar
+ * supports nested collections). Lines naming no service party appear in
+ * `lines` only, so standalone invoices render no empty groups.
+ */
+const LINE_GROUPS_COLLECTION: PdfCollection = {
+  key: 'line_groups',
+  label: 'Lines grouped by service customer',
+  fields: [
+    { key: 'service_party_name', label: 'Service customer', sample: 'Child Co — Lyon Works' },
+    { key: 'group_subtotal', label: 'Group subtotal', sample: '$4,350.00' },
+    { key: 'group_tax', label: 'Group tax', sample: '$565.50' },
+    { key: 'group_total', label: 'Group total', sample: '$4,915.50' },
+  ],
+}
 
 function docType(meta: {
   key: string
@@ -94,6 +114,7 @@ function docType(meta: {
   hasDue: boolean
   hasReference: boolean
   extraFields?: PdfMergeField[]
+  groupedLines?: boolean
 }): PdfRecordTypeMeta {
   return {
     key: meta.key,
@@ -110,7 +131,7 @@ function docType(meta: {
       ...(meta.hasDue ? DUE_FIELDS : []),
       ...DOC_COMMON.slice(4),
     ],
-    collections: [LINES_COLLECTION],
+    collections: [LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : [])],
   }
 }
 
@@ -483,7 +504,7 @@ const PAYROLL_CHEQUE: PdfRecordTypeMeta = {
 
 /** Every record type a PDF template can target, in nav order. */
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
-  docType({ key: 'customer_invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
+  docType({ key: 'customer_invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true, groupedLines: true }),
   docType({ key: 'customer_credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
   docType({ key: 'cash_sale', docTitle: 'Sales Receipt', partyHeading: 'Sold to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'cash_refund', docTitle: 'Refund Receipt', partyHeading: 'Refunded to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),

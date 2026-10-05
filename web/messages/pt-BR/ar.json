@@ -7,6 +7,9 @@
     "searchPlaceholder": "Buscar faturas, créditos, clientes, refs…",
     "emptyTitle": "Nenhuma fatura ainda",
     "emptyDescription": "Registre a primeira fatura de cliente ou nota de crédito para iniciar o fluxo de contas a receber.",
+    "filters": {
+      "serviceParty": "Cliente de serviço"
+    },
     "columns": {
       "number": "Número",
       "invoice": "Fatura",

@@ -337,6 +337,14 @@ function filterPredicate(clause: FilterClause): SQL | null {
       if (operator === "ne") return sql`d.party_id <> ${id}`
       return null
     }
+    case "service_party_id": {
+      const id = single(value)
+      const refused = uuidOrFalse(id)
+      if (refused) return refused
+      if (operator === "eq") return invoiceServicePartyMatch(id)
+      if (operator === "ne") return sql`not (${invoiceServicePartyMatch(id)})`
+      return null
+    }
     case "document_date": {
       const day = single(value)
       const refusedDay = dateOrFalse(day)
@@ -544,5 +552,34 @@ export function fulfillmentWhere(
   }
   if (adhoc.filters?.fulfillment_stage) parts.push(sql`and (${fulfillmentStageMatch(adhoc.filters.fulfillment_stage)})`);
   if (adhoc.filters?.warehouse_id) parts.push(sql`and (${fulfillmentWarehouseMatch(adhoc.filters.warehouse_id)})`);
+  return sql.join(parts, sql` `);
+}
+
+/**
+ * Match one service party's charges on an invoice header. Service attribution
+ * lives per document line, so the predicate is EXISTS-based — the same
+ * joinless shape the fulfillment scopes keep so the count queries stay
+ * valid. A malformed party id fails closed to an empty match.
+ */
+export function invoiceServicePartyMatch(servicePartyId: string): SQL {
+  const refused = uuidOrFalse(servicePartyId);
+  if (refused) return refused;
+  return sql`exists (
+    select 1 from document_lines dl
+     where dl.org_id = d.org_id and dl.document_id = d.id and dl.service_party_id = ${servicePartyId}
+  )`;
+}
+
+export function invoiceServicePartyWhere(
+  kinds: readonly string[],
+  view: ListViewConfig,
+  adhoc: AdhocFilters,
+  orgId: string,
+  allowedSubsidiaryIds?: Set<string> | null,
+): SQL {
+  const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)];
+  if (adhoc.filters?.service_party_id) {
+    parts.push(sql`and (${invoiceServicePartyMatch(adhoc.filters.service_party_id)})`);
+  }
   return sql.join(parts, sql` `);
 }

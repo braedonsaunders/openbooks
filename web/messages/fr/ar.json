@@ -7,6 +7,9 @@
     "searchPlaceholder": "Rechercher factures, notes de crédit, clients, réf.…",
     "emptyTitle": "Aucune facture client pour l’instant",
     "emptyDescription": "Saisissez la première facture ou note de crédit client pour lancer le flux des comptes clients.",
+    "filters": {
+      "serviceParty": "Client desservi"
+    },
     "columns": {
       "number": "Numéro",
       "invoice": "Facture",

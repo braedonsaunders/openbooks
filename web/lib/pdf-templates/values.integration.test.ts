@@ -180,3 +180,57 @@ test('field-ticket merge values populate the customer party address', { skip: !p
     }
   })
 })
+
+/**
+ * A consolidated invoice prints one payer header over several children's
+ * charges. The merge values carry each line's service customer plus a
+ * grouped layout with exact subtotals — $10.00 + $5.00 prints "$15.00",
+ * never float drift — while a standalone invoice carries no empty groups.
+ */
+test('consolidated invoice merge values group lines by service customer with exact subtotals', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const childA = randomUUID()
+    const childB = randomUUID()
+    const invoiceId = randomUUID()
+    const plainId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${childA}, ${org.orgId}, 'customer', 'Child A', ${org.subsidiaryId}, true, '{}'::jsonb),
+               (${childB}, ${org.orgId}, 'customer', 'Child B', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-C', ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'USD', 1),
+               (${plainId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-P', ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'USD', 1)`)
+      await db.execute(sql`insert into document_lines
+        (id, org_id, document_id, line_number, account_id, amount, tax_amount, quantity, unit_price, custom, extra_dims, service_party_id)
+        values (${randomUUID()}, ${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '10.00', '1.00', 1, '10.00', '{}'::jsonb, '{}'::jsonb, ${childA}),
+               (${randomUUID()}, ${org.orgId}, ${invoiceId}, 2, ${org.accounts.revenue}, '5.00', '0', 1, '5.00', '{}'::jsonb, '{}'::jsonb, ${childA}),
+               (${randomUUID()}, ${org.orgId}, ${invoiceId}, 3, ${org.accounts.revenue}, '7.50', '0', 1, '7.50', '{}'::jsonb, '{}'::jsonb, ${childB}),
+               (${randomUUID()}, ${org.orgId}, ${plainId}, 1, ${org.accounts.revenue}, '3.00', '0', 1, '3.00', '{}'::jsonb, '{}'::jsonb, null)`)
+    })
+    const load = (id: string) => withOrgContext(org.orgId, () => loadPdfRecordValues('customer_invoice', org.orgId, id, null))
+    const record = await load(invoiceId)
+    const lines = record?.values.lines as { service_party_name: string }[]
+    assert.deepEqual(lines.map((l) => l.service_party_name), ['Child A', 'Child A', 'Child B'])
+    const groups = record?.values.line_groups as {
+      service_party_name: string
+      lines: unknown[]
+      group_subtotal: string
+      group_tax: string
+      group_total: string
+    }[]
+    assert.equal(groups.length, 2)
+    assert.equal(groups[0]?.service_party_name, 'Child A')
+    assert.equal(groups[0]?.lines.length, 2)
+    assert.equal(groups[0]?.group_subtotal, '$15.00')
+    assert.equal(groups[0]?.group_tax, '$1.00')
+    assert.equal(groups[0]?.group_total, '$16.00')
+    assert.equal(groups[1]?.service_party_name, 'Child B')
+    assert.equal(groups[1]?.lines.length, 1)
+    assert.equal(groups[1]?.group_subtotal, '$7.50')
+    const plain = await load(plainId)
+    assert.deepEqual(plain?.values.line_groups, [], 'a standalone invoice carries no empty groups')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
