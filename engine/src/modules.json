@@ -549,7 +549,8 @@
         "platform",
         "receivables",
         "records",
-        "revenue"
+        "revenue",
+        "stored-value"
       ]
     },
     "sample-companies": {

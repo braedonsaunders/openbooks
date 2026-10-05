@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, withBypass, withBypassContext, withOrg } from "../platform/db.ts";
+import { toUnits } from "../money/money.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { postDocument } from "./posting-document.ts";
+import { createProgram, issueStoredValue } from "../stored-value/accounts.ts";
 import {
   completeRequestedDocumentVoid,
   requestDocumentVoid,
@@ -47,7 +49,9 @@ interface CashLine {
 
 interface CashTenderInput {
   kind?: string;
-  accountId: string;
+  methodLabel?: string;
+  accountId?: string | null;
+  storedValueAccountId?: string | null;
   amount: string;
   reference?: string;
 }
@@ -66,17 +70,6 @@ async function draftCashDocument(
   const subtotal = lines.reduce((n, l) => n + Number(l.amount), 0).toFixed(4);
   const taxTotal = lines.reduce((n, l) => n + Number(l.taxAmount ?? "0"), 0).toFixed(4);
   const total = (Number(subtotal) + Number(taxTotal)).toFixed(4);
-  const custom =
-    tenders === null
-      ? "{}"
-      : JSON.stringify({
-        tenders: tenders.map((t) => ({
-          kind: t.kind ?? "cash",
-          accountId: t.accountId,
-          amount: t.amount,
-          ...(t.reference ? { reference: t.reference } : {}),
-        })),
-      });
   await withBypassContext(() =>
     db.execute(sql`
       insert into documents
@@ -84,8 +77,24 @@ async function draftCashDocument(
          document_date, posting_date, currency, fx_rate, subtotal, tax_total, total, custom)
       values (${id}, ${org.orgId}, ${kind}, 'draft', ${number}, ${org.subsidiaryId},
               ${partyId}, ${org.date}, ${org.date}, 'CAD', '1',
-              ${subtotal}, ${taxTotal}, ${total}, ${custom}::jsonb)`),
+              ${subtotal}, ${taxTotal}, ${total}, '{}'::jsonb)`),
   );
+  // Tenders live in document_tenders (never in custom): the lifecycle guard
+  // permits writes while this draft parent is still unapproved.
+  for (let i = 0; i < (tenders ?? []).length; i++) {
+    const tender = tenders![i]!;
+    const kind = tender.kind ?? "cash";
+    await withBypassContext(() =>
+      db.execute(sql`
+        insert into document_tenders
+          (org_id, document_id, position, kind, method_label, account_id,
+           stored_value_account_id, amount_minor, currency, reference)
+        values (${org.orgId}, ${id}, ${i + 1}, ${kind}, ${tender.methodLabel ?? kind},
+                ${tender.accountId ?? null}, ${tender.storedValueAccountId ?? null},
+                ${toUnits(tender.amount).toString()}, 'CAD',
+                ${tender.reference ?? null})`),
+    );
+  }
   let lineNumber = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
@@ -307,6 +316,209 @@ test("voiding a cash sale reverses its entry", { skip: !DB }, async () => {
          ))`)).rows;
     const net = legs.reduce((n, l) => n + Number(l.amount), 0);
     assert.equal(net, 0);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+interface StoredValueSetup {
+  liability: string;
+  giftProgramId: string;
+  creditProgramId: string;
+}
+
+/** Stored-value feature, liability control, and both programs. */
+async function seedStoredValue(org: ScratchOrg, actorId: string): Promise<StoredValueSetup> {
+  const liability = await withBypassContext(() =>
+    seedPostingAccount(org.orgId, "2600", "Stored value liability", "liability_current_other"),
+  );
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      update orgs set settings = settings
+        || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"storedValue": true}'::jsonb)
+       where id = ${org.orgId}`);
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{controlAccounts,storedValueLiability}', to_jsonb(${liability}::text), true)
+       where id = ${org.orgId}`);
+  });
+  const gift = await withBypass(() =>
+    createProgram({
+      orgId: org.orgId, name: "Till gift cards", kind: "gift_card",
+      liabilityAccountId: liability, actorId,
+    }),
+  );
+  const credit = await withBypass(() =>
+    createProgram({
+      orgId: org.orgId, name: "Till store credit", kind: "store_credit",
+      liabilityAccountId: liability, actorId,
+    }),
+  );
+  return { liability, giftProgramId: gift.id, creditProgramId: credit.id };
+}
+
+async function storedValueBalance(orgId: string, accountId: string): Promise<string> {
+  const row = (await db.execute<{ balance: string }>(sql`
+    select balance_minor::text as balance from stored_value_accounts
+     where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+  assert.ok(row);
+  return row.balance;
+}
+
+test("a stored-value tender posts debit liability and reduces the balance", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Till Clerk", "admin"));
+    const sv = await seedStoredValue(org, actorId);
+    const issued = await withBypass(() =>
+      issueStoredValue({
+        orgId: org.orgId, programId: sv.giftProgramId, amountMinor: toUnits("100"),
+        currency: "CAD", debitAccountId: org.accounts.bank, postingDate: org.date,
+        idempotencyKey: `till-gift-${randomUUID()}`, actorId,
+      }),
+    );
+    const { id } = await draftCashDocument(org, "cash_sale", "CS-SV", [
+      { amount: "60.0000" },
+    ], [
+      { kind: "stored_value", methodLabel: "Gift card", storedValueAccountId: issued.accountId, amount: "60.0000" },
+    ]);
+    await withOrg(org.orgId, () => postDocument(id, control(org)));
+    const legs = await entryLines(id, org.orgId);
+    assert.deepEqual(
+      legs.map((l) => [l.number, l.amount]),
+      [
+        ["2600", "60.0000"],
+        ["4000", "-60.0000"],
+      ],
+    );
+    assert.equal(await storedValueBalance(org.orgId, issued.accountId), toUnits("40").toString());
+    // The subledger entry points at the sale's journal, and the payment
+    // evidence lives in the table — a masked clone nulls custom, never this.
+    const link = (await db.execute<{ journal: string | null; document: string | null }>(sql`
+      select journal_entry_id as journal, document_id as document from stored_value_entries
+       where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'redeem'`)).rows[0];
+    assert.ok(link?.journal);
+    assert.equal(link?.document, id);
+    const custom = (await db.execute<{ custom: unknown }>(sql`
+      select custom from documents where org_id = ${org.orgId} and id = ${id}`)).rows[0]?.custom as Record<string, unknown>;
+    assert.ok(custom && !("tenders" in custom));
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("an overdrawn stored-value tender refuses naming the balance and posts nothing", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Till Clerk", "admin"));
+    const sv = await seedStoredValue(org, actorId);
+    const issued = await withBypass(() =>
+      issueStoredValue({
+        orgId: org.orgId, programId: sv.giftProgramId, amountMinor: toUnits("50"),
+        currency: "CAD", debitAccountId: org.accounts.bank, postingDate: org.date,
+        idempotencyKey: `till-gift-${randomUUID()}`, actorId,
+      }),
+    );
+    const { id } = await draftCashDocument(org, "cash_sale", "CS-SVSHORT", [
+      { amount: "60.0000" },
+    ], [
+      { kind: "stored_value", methodLabel: "Gift card", storedValueAccountId: issued.accountId, amount: "60.0000" },
+    ]);
+    await assert.rejects(
+      withOrg(org.orgId, () => postDocument(id, control(org))),
+      (error: unknown) =>
+        error instanceof PostingError &&
+        /holds 50\.0000.*less than.*60\.0000/.test(error.message),
+    );
+    assert.equal(await entryCount(id, org.orgId), 0);
+    assert.equal(await storedValueBalance(org.orgId, issued.accountId), toUnits("50").toString());
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a cash refund to store credit loads the named account", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Refund Clerk", "admin"));
+    const sv = await seedStoredValue(org, actorId);
+    const issued = await withBypass(() =>
+      issueStoredValue({
+        orgId: org.orgId, programId: sv.creditProgramId, amountMinor: toUnits("20"),
+        currency: "CAD", customerPartyId: org.customerId, debitAccountId: org.accounts.bank,
+        postingDate: org.date, idempotencyKey: `till-credit-${randomUUID()}`, actorId,
+      }),
+    );
+    const { id } = await draftCashDocument(org, "cash_refund", "CR-SV", [
+      { amount: "10.0000" },
+    ], [
+      { kind: "stored_value", methodLabel: "Store credit", storedValueAccountId: issued.accountId, amount: "10.0000" },
+    ]);
+    await withOrg(org.orgId, () => postDocument(id, control(org)));
+    const legs = await entryLines(id, org.orgId);
+    assert.deepEqual(
+      legs.map((l) => [l.number, l.amount]),
+      [
+        ["2600", "-10.0000"],
+        ["4000", "10.0000"],
+      ],
+    );
+    assert.equal(await storedValueBalance(org.orgId, issued.accountId), toUnits("30").toString());
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a cash refund to store credit mints from the memo program and fills the tender", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Refund Clerk", "admin"));
+    const sv = await seedStoredValue(org, actorId);
+    const { id } = await draftCashDocument(org, "cash_refund", "CR-SVMINT", [
+      { amount: "25.0000" },
+    ], [
+      { kind: "stored_value", methodLabel: "Store credit", amount: "25.0000" },
+    ]);
+    await withBypassContext(() => db.execute(sql`
+      update documents set custom = jsonb_build_object('storeCreditProgramId', ${sv.creditProgramId}::uuid)
+       where org_id = ${org.orgId} and id = ${id}`));
+    await withOrg(org.orgId, () => postDocument(id, control(org)));
+    // The post-commit effect minted the account and filled the tender row —
+    // the only post-commit tender write the lifecycle guard permits.
+    const tender = (await db.execute<{ account: string | null }>(sql`
+      select stored_value_account_id as account from document_tenders
+       where org_id = ${org.orgId} and document_id = ${id}`)).rows[0];
+    assert.ok(tender?.account);
+    assert.equal(await storedValueBalance(org.orgId, tender.account!), toUnits("25").toString());
+    const legs = await entryLines(id, org.orgId);
+    assert.deepEqual(
+      legs.map((l) => [l.number, l.amount]),
+      [
+        ["2600", "-25.0000"],
+        ["4000", "25.0000"],
+      ],
+    );
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("posted tender rows reject direct edits", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { id } = await draftCashDocument(org, "cash_sale", "CS-LOCKED", [
+      { amount: "40.0000" },
+    ], [{ kind: "cash", accountId: org.accounts.bank, amount: "40.0000" }]);
+    await withOrg(org.orgId, () => postDocument(id, control(org)));
+    await assert.rejects(
+      withBypassContext(() => db.execute(sql`
+        update document_tenders set amount_minor = 1
+         where org_id = ${org.orgId} and document_id = ${id}`)),
+      (error: unknown) =>
+        error instanceof Error &&
+        /immutable outside draft status/.test(
+          `${error.message} ${(error as { cause?: unknown }).cause ?? ""}`,
+        ),
+    );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

@@ -2,7 +2,7 @@
 import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
 import { addMoney, negMoney, parseMoney, sumMoney, type Money } from "../money/brands.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "../journal/posting-contracts.ts";
-import { assertTendersMatchTotal, parseCashTenders, type CashTender } from "../sales/cash-tenders.ts";
+import { assertCashTendersPresent, assertTendersMatchTotal } from "../sales/cash-tenders.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
 /**
  * An AR/AP journal line participates in the subledger only when it identifies
@@ -66,9 +66,9 @@ const cardRule: RuleFn = (doc, lines, deps) => {
   ];
 };
 
-/** Tender-leg memo: the channel plus the operator's reference when one was taken. */
-const tenderMemo = (t: CashTender): string | null =>
-  t.reference ? `${t.kind} ${t.reference}` : t.kind;
+/** Tender-leg memo: the method label plus the operator's reference when one was taken. */
+const tenderMemo = (t: { methodLabel: string; reference: string | null }): string | null =>
+  t.reference ? `${t.methodLabel} ${t.reference}` : t.methodLabel;
 
 const dims = (d: Doc, l?: DocLine) => ({
   departmentId: l?.departmentId ?? d.departmentId,
@@ -419,7 +419,10 @@ export const RULES: Record<string, RuleFn> = {
     }]; });
     const tax = salesTaxLines(doc, lines, deps, 1);
     const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
-    const tenders = parseCashTenders(doc.custom, doc.documentNumber, "cash sale");
+    // Tenders arrive resolved from document_tenders (prepare/replay); an
+    // empty set refuses here rather than posting an unsettled sale.
+    const tenders = deps.cashTenders ?? [];
+    assertCashTendersPresent(tenders, doc.documentNumber, "cash sale");
     assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash sale");
     return [
       // Tender legs are bank legs, not AR legs: they carry no party and are
@@ -898,7 +901,8 @@ export const RULES: Record<string, RuleFn> = {
     }));
     const tax = salesTaxLines(doc, lines, deps, -1);
     const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
-    const tenders = parseCashTenders(doc.custom, doc.documentNumber, "cash refund");
+    const tenders = deps.cashTenders ?? [];
+    assertCashTendersPresent(tenders, doc.documentNumber, "cash refund");
     assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash refund");
     return [
       // Payout legs mirror the sale's tender legs: no party, never open items.

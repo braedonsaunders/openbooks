@@ -135,6 +135,34 @@ export interface PostingDeps {
    * postDocument when the memo carries a store-credit program.
    */
   storeCreditLiabilityAccountId?: string;
+  /**
+   * Resolved tenders for a cash_sale or cash_refund, loaded from
+   * document_tenders with every stored-value tender already pointing at
+   * its liability account. The rules project legs from these and never
+   * read documents.custom for settlement.
+   */
+  cashTenders?: CashPostingTender[];
+}
+
+/**
+ * One paid-at-sale tender as the posting kernel consumes it: settlement
+ * account resolved, amount canonical. Built by the sales module; the shape
+ * lives here so the journal contract stays importable without the sales
+ * module above it.
+ */
+export interface CashPostingTender {
+  /** Tender channel (`cash`, `stored_value`, …). Descriptive only. */
+  kind: string;
+  /** Plain-words method label for the journal memo. */
+  methodLabel: string;
+  /** Clearing/bank account, or the stored-value liability for redemptions. */
+  accountId: string;
+  /** Positive settled amount, canonical ledger money. */
+  amount: Money;
+  /** Operator reference carried onto the journal memo. */
+  reference: string | null;
+  /** Stored-value account redeemed or credited; null for money tenders. */
+  storedValueAccountId: string | null;
 }
 
 export interface TaxPostingComponent {

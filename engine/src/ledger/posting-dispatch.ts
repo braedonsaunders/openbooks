@@ -9,6 +9,7 @@ import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts"
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { issueStoredValueForInvoice, issueStoreCreditForCreditMemo } from "../stored-value/invoice-effects.ts";
+import { hasStoredValueTenders, settleCashRefundTenders } from "../sales/document-tenders.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { emitDocumentPosted, emitPaymentReceived } from "../webhooks/emit.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
@@ -130,7 +131,24 @@ export async function runPostDocumentEffects(
         postingDate,
         await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
       );
-      await issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
+      // A cash refund's stored-value tenders settle per tender (top up the
+      // named account, or mint from the memo program); the memo-level credit
+      // effect stands down while tenders exist so the credit issues once.
+      const refundTendered =
+        doc.kind === "cash_refund" && (await hasStoredValueTenders(db, doc.orgId, doc.id));
+      if (doc.kind === "cash_refund" && refundTendered) {
+        if (!entryId) {
+          throw new Error(
+            `posted cash refund ${doc.documentNumber} has no posted journal entry; stored-value tenders cannot settle`,
+          );
+        }
+        await settleCashRefundTenders(doc.orgId, doc.id, {
+          journalEntryId: entryId,
+          actorId: effectActorId,
+        });
+      } else {
+        await issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
+      }
     }
 
     const lines = await db
