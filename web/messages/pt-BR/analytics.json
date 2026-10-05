@@ -3624,7 +3624,7 @@
         },
         "duplicateMinAmount": {
           "label": "Mínimo de duplicados ({currency})",
-          "help": "Pares abaixo desse valor convertido são ignorados"
+          "help": "Pares abaixo desse valor convertido são ignorados. Vazio significa que a verificação de duplicados informa não configurado."
         },
         "sequentialMinCount": {
           "help": "Séries de notas sem falhas precisam de ao menos esses documentos",
@@ -3697,6 +3697,14 @@
         "ghostNameMinLength": {
           "label": "Comprimento mínimo do nome fantasma",
           "help": "Nomes de funcionário mais curtos nunca coincidem com um fornecedor"
+        },
+        "summaryFlaggedMedium": {
+          "label": "Volume médio de marcas",
+          "help": "Documentos marcados a partir dessa quantidade elevam o risco resumido na faixa média"
+        },
+        "summaryFlaggedHigh": {
+          "label": "Volume alto de marcas",
+          "help": "Documentos marcados a partir dessa quantidade elevam o risco resumido na faixa alta"
         }
       },
       "rsfNote": "Valor ÷ 2º maior do fornecedor em base de {months} meses (piso de {floor})",

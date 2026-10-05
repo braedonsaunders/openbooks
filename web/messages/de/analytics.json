@@ -3624,7 +3624,7 @@
         },
         "duplicateMinAmount": {
           "label": "Duplikatminimum ({currency})",
-          "help": "Paare unter diesem umgerechneten Betrag werden ignoriert"
+          "help": "Paare unter diesem umgerechneten Betrag werden ignoriert. Leer bedeutet: Die Duplikatprüfung meldet „nicht konfiguriert“."
         },
         "sequentialMinCount": {
           "help": "Lückenlose Rechnungsnummernläufe brauchen mindestens so viele Dokumente",
@@ -3697,6 +3697,14 @@
         "ghostNameMinLength": {
           "label": "Geistname-Mindestlänge",
           "help": "Kürzere Mitarbeiternamen gleichen nie einem Lieferantennamen"
+        },
+        "summaryFlaggedMedium": {
+          "label": "Mittleres Meldeaufkommen",
+          "help": "Geprüfte Belege ab dieser Anzahl erhöhen das Gesamtrisiko um die mittlere Stufe"
+        },
+        "summaryFlaggedHigh": {
+          "label": "Hohes Meldeaufkommen",
+          "help": "Geprüfte Belege ab dieser Anzahl erhöhen das Gesamtrisiko um die hohe Stufe"
         }
       },
       "rsfNote": "Betrag ÷ Zweitgrößtem des Lieferanten über {months}-Monats-Basis ({floor} Basisuntergrenze)",

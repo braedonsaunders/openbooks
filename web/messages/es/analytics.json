@@ -3624,7 +3624,7 @@
         },
         "duplicateMinAmount": {
           "label": "Mínimo de duplicados ({currency})",
-          "help": "Las parejas bajo este importe convertido se ignoran"
+          "help": "Las parejas bajo este importe convertido se ignoran. Vacío significa que la comprobación de duplicados informa no configurado."
         },
         "sequentialMinCount": {
           "help": "Las series de números de factura sin huecos necesitan al menos estos documentos",
@@ -3697,6 +3697,14 @@
         "ghostNameMinLength": {
           "label": "Longitud mínima de nombre fantasma",
           "help": "Los nombres de empleado más cortos nunca coinciden con un proveedor"
+        },
+        "summaryFlaggedMedium": {
+          "label": "Volumen medio de marcas",
+          "help": "Los documentos marcados desde esta cantidad elevan el riesgo resumido en el tramo medio"
+        },
+        "summaryFlaggedHigh": {
+          "label": "Volumen alto de marcas",
+          "help": "Los documentos marcados desde esta cantidad elevan el riesgo resumido en el tramo alto"
         }
       },
       "rsfNote": "Importe ÷ 2.º mayor del proveedor en base de {months} meses (base mínima {floor})",

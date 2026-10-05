@@ -591,9 +591,14 @@ export const ANALYTICS_CONFIG = {
     // currency, so a threshold means the same in every subsidiary.
     defaults: {
       duplicateDays: 14,
-      duplicateMinAmount: "100.0000",
+      // Unset until the organization names its own duplicate floor: a
+      // comparison without a threshold is refused by name instead of
+      // silently applying a figure that means different money per currency.
+      duplicateMinAmount: "",
       sequentialMinCount: 3,
       sequentialMinDays: 7,
+      summaryFlaggedMedium: 20,
+      summaryFlaggedHigh: 50,
       moderateRiskAmount: "1000.0000",
       highRiskAmount: "10000.0000",
       criticalRiskAmount: "25000.0000",
@@ -613,9 +618,11 @@ export const ANALYTICS_CONFIG = {
     },
     fields: [
       num("duplicateDays", "analytics.sentinel.config.fields.duplicateDays", 1, 90),
-      { key: "duplicateMinAmount", kind: "money", labelKey: "analytics.sentinel.config.fields.duplicateMinAmount.label", helpKey: "analytics.sentinel.config.fields.duplicateMinAmount.help", maxAmount: "100000000" },
+      { key: "duplicateMinAmount", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.duplicateMinAmount.label", helpKey: "analytics.sentinel.config.fields.duplicateMinAmount.help", maxAmount: "100000000" },
       num("sequentialMinCount", "analytics.sentinel.config.fields.sequentialMinCount", 2, 50),
       num("sequentialMinDays", "analytics.sentinel.config.fields.sequentialMinDays", 1, 365),
+      num("summaryFlaggedMedium", "analytics.sentinel.config.fields.summaryFlaggedMedium", 1, 10000),
+      num("summaryFlaggedHigh", "analytics.sentinel.config.fields.summaryFlaggedHigh", 2, 100000),
       { key: "moderateRiskAmount", kind: "money", labelKey: "analytics.sentinel.config.fields.moderateRiskAmount.label", helpKey: "analytics.sentinel.config.fields.moderateRiskAmount.help", maxAmount: "100000000" },
       { key: "highRiskAmount", kind: "money", labelKey: "analytics.sentinel.config.fields.highRiskAmount.label", helpKey: "analytics.sentinel.config.fields.highRiskAmount.help", maxAmount: "100000000" },
       { key: "criticalRiskAmount", kind: "money", labelKey: "analytics.sentinel.config.fields.criticalRiskAmount.label", helpKey: "analytics.sentinel.config.fields.criticalRiskAmount.help", maxAmount: "100000000" },
@@ -636,6 +643,7 @@ export const ANALYTICS_CONFIG = {
     ordered: [
       ["moderateRiskAmount", "highRiskAmount", "criticalRiskAmount"],
       ["aggregateHighAmount", "aggregateCriticalAmount"],
+      ["summaryFlaggedMedium", "summaryFlaggedHigh"],
     ],
   },
   cashflow: {
