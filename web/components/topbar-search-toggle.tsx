@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Search } from 'lucide-react'
 import { GlobalSearch } from './global-search'
+import type { SidebarNavGroup } from './sidebar-nav'
 
 /**
  * Topbar-mode mobile search trigger. Below lg the inline header
@@ -12,7 +13,7 @@ import { GlobalSearch } from './global-search'
  * strip under the header; the desktop inline input owns lg and up, so the
  * trigger hides there. Button styling mirrors the notifications bell.
  */
-export function TopbarSearchToggle() {
+export function TopbarSearchToggle({ navGroups }: { navGroups: readonly SidebarNavGroup[] }) {
   const t = useTranslations('shell.globalSearch')
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -49,7 +50,7 @@ export function TopbarSearchToggle() {
       </button>
       {open ? (
         <div className="absolute inset-x-0 top-full z-50 border-b border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-          <GlobalSearch className="w-full" />
+          <GlobalSearch className="w-full" navGroups={navGroups} />
         </div>
       ) : null}
     </div>

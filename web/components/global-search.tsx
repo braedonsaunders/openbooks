@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Search, CornerDownLeft, Loader2, X } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import { NavIcon } from './sidebar-nav'
+import { NavIcon, type SidebarNavGroup } from './sidebar-nav'
 import { relatedPartyHref } from './related-party-link'
+import { ViewTabsContext } from './module-home/navigation-context'
+import { buildPageIndex, searchPages } from '../lib/nav/page-search'
 
 type Hit = {
   id: string
@@ -37,7 +39,7 @@ function highlight(text: string, q: string) {
   )
 }
 
-export function GlobalSearch({ className }: { className?: string }) {
+export function GlobalSearch({ className, navGroups }: { className?: string; navGroups: readonly SidebarNavGroup[] }) {
   const t = useTranslations('shell.globalSearch')
   const router = useRouter()
   const pathname = usePathname() ?? '/'
@@ -49,8 +51,27 @@ export function GlobalSearch({ className }: { className?: string }) {
   const [loading, setLoading] = useState(false)
   const [res, setRes] = useState<Response | null>(null)
   const [active, setActive] = useState(0)
+  const tabGroups = useContext(ViewTabsContext)?.groups
 
-  const flat: Hit[] = res ? res.groups.flatMap((g) => g.hits) : []
+  // Pages come from the menu the shell already resolved for this reader, so
+  // they answer instantly and never include a page the menu hides.
+  const pageIndex = useMemo(() => buildPageIndex(navGroups, tabGroups), [navGroups, tabGroups])
+  const pageQuery = q.trim()
+  const pageGroup: Group | null = useMemo(() => {
+    if (pageQuery.length < 2) return null
+    const hits = searchPages(pageIndex, pageQuery).map((page): Hit => ({
+      id: page.href,
+      type: 'page',
+      title: page.title,
+      subtitle: page.trail.length ? page.trail.join(' › ') : undefined,
+      href: page.href,
+      iconKey: page.iconKey,
+    }))
+    return hits.length ? { type: 'page', labelKey: 'pages', hits } : null
+  }, [pageIndex, pageQuery])
+  const groups: Group[] = [...(pageGroup ? [pageGroup] : []), ...(res?.groups ?? [])]
+  const total = groups.reduce((sum, group) => sum + group.hits.length, 0)
+  const flat: Hit[] = groups.flatMap((g) => g.hits)
 
   // ⌘K / Ctrl+K focuses the search from anywhere.
   useEffect(() => {
@@ -86,6 +107,7 @@ export function GlobalSearch({ className }: { className?: string }) {
   const [prevQ, setPrevQ] = useState(q)
   if (prevQ !== q) {
     setPrevQ(q)
+    setActive(0)
     if (q.trim().length < 2) {
       setRes(null)
       setLoading(false)
@@ -105,7 +127,6 @@ export function GlobalSearch({ className }: { className?: string }) {
         if (!r.ok) throw new Error('search failed')
         const data = (await r.json()) as Response
         setRes(data)
-        setActive(0)
       } catch (e) {
         if ((e as Error).name !== 'AbortError') setRes({ q: term, groups: [], total: 0 })
       } finally {
@@ -125,6 +146,10 @@ export function GlobalSearch({ className }: { className?: string }) {
       setQ('')
       setRes(null)
       inputRef.current?.blur()
+      if (hit.type === 'page') {
+        router.push(hit.href as never)
+        return
+      }
       router.push(
         (hit.type === 'contact'
           ? relatedPartyHref(pathname, searchParams.toString(), hit.id)
@@ -206,9 +231,9 @@ export function GlobalSearch({ className }: { className?: string }) {
           ref={panelRef}
           className="absolute top-[calc(100%+6px)] left-0 z-50 max-h-[70vh] w-full min-w-[22rem] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
         >
-          {res && res.total > 0 ? (
+          {total > 0 ? (
             <>
-              {res.groups.map((group) => (
+              {groups.map((group) => (
                 <div key={group.type} className="mb-1 last:mb-0">
                   <div className="px-2 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
                     {t(`groups.${group.labelKey}` as never)}
@@ -274,7 +299,7 @@ export function GlobalSearch({ className }: { className?: string }) {
                   <kbd className="font-sans">↑↓</kbd> {t('navigate')}&nbsp;&nbsp;<kbd className="font-sans">↵</kbd> {t('open')}&nbsp;&nbsp;
                   <kbd className="font-sans">esc</kbd> {t('close')}
                 </span>
-                <span>{t('resultCount', { count: res.total })}</span>
+                <span>{t('resultCount', { count: total })}</span>
               </div>
             </>
           ) : loading ? (
