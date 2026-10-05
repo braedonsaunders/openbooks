@@ -31,6 +31,7 @@ import { ExpenseActions } from '../../app/(app)/expenses/ExpenseActions'
 import { buildListDrawerHref } from '../../lib/list-params'
 import { NewOrderButton } from '../../app/(app)/_order/NewOrderButton'
 import { NewOrderRedirect } from '../../app/(app)/_order/NewOrderRedirect'
+import { StoredValueDrawer, StoredValueIssueDrawer } from '../../app/(app)/stored-value/StoredValueDrawers'
 import { NewProjectButton } from '../../app/(app)/projects/NewProjectButton'
 import { NewProjectRedirect } from '../../app/(app)/projects/NewProjectRedirect'
 import { ProjectDrawer } from '../../app/(app)/projects/ProjectDrawer'
@@ -338,6 +339,20 @@ export const COMMERCE_WIDGETS = {
       baseCurrency={String((props as { baseCurrency?: unknown }).baseCurrency ?? '')}
     />
   ),
+  /* --- stored value --------------------------------------------------------- */
+  /** One drawer shell per account: balance stats, ledger/paged entries,
+   *  correction tab and program detail. Null when no account is open. */
+  'stored-value-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof StoredValueDrawer>['drawer'] & { remountKey: string }) | null
+    if (!drawer) return null
+    return <StoredValueDrawer key={drawer.remountKey} drawer={drawer} />
+  },
+  /** "Sell a gift card": mint form, then the code exactly once. */
+  'stored-value-issue': (props) => {
+    const issue = props.issue as ComponentProps<typeof StoredValueIssueDrawer>['issue'] | null
+    if (!issue) return null
+    return <StoredValueIssueDrawer issue={issue} />
+  },
 
   /* --- projects ----------------------------------------------------------- */
   'new-project': () => <NewProjectButton />,

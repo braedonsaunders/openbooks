@@ -92,6 +92,9 @@ import {
   PAYMENT_DISPUTE_BUILT_IN_EXPR,
   PAYMENT_DISPUTE_SORTS,
   paymentDisputeWhere,
+  STORED_VALUE_BUILT_IN_EXPR,
+  STORED_VALUE_SORTS,
+  storedValueAccountWhere,
   activityWhere,
   customerWhere,
   employeeBaseJoins,
@@ -1385,6 +1388,27 @@ const SOURCES: Record<string, EntityListSource> = {
       const out = translate(fullKey)
       return out === fullKey ? storedName : out
     },
+  },
+  // Gift cards and store credit read as one liability ledger: the code
+  // renders masked, the customer join stays left (gift cards are bearer),
+  // and the program join is inner (every account is issued under one).
+  stored_value_account: {
+    recordType: 'stored_value_account',
+    table: 'stored_value_accounts',
+    alias: 'sva',
+    baseJoins: sql`join stored_value_programs svp on svp.org_id = sva.org_id and svp.id = sva.program_id
+      left join parties cust on cust.org_id = sva.org_id and cust.id = sva.customer_party_id`,
+    builtInExpr: STORED_VALUE_BUILT_IN_EXPR,
+    sorts: STORED_VALUE_SORTS,
+    defaultSort: sql`sva.created_at desc`,
+    statusExpr: sql`sva.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: storedValueAccountWhere,
+    drawerParam: 'account',
+    basePath: '/stored-value',
+    readPermission: 'stored_value.read',
+    currencyField: 'currency',
+    statusVariant: (row) => row.status === 'active' ? 'success' : row.status === 'frozen' ? 'warning' : row.status === 'expired' ? 'secondary' : 'outline',
   },
   // Funds read the fund segment's classified values, never a standalone
   // roster: the join to the org's fund segment definition is the query half

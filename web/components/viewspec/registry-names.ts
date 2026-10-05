@@ -538,6 +538,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'statement-drawer',
   'statement-matrix',
   'statement-rows',
+  'stored-value-drawer',
+  'stored-value-issue',
   'subcontracts-workspace',
   'submitted-document-cell',
   'subsidiary-switcher',

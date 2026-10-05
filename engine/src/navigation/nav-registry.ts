@@ -220,6 +220,17 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'documents.manage',
   },
   {
+    key: 'stored-value',
+    href: '/stored-value',
+    label: 'Stored value',
+    iconKey: 'gift',
+    group: 'customers',
+    subgroup: 'sell-collect',
+    requiredPermission: 'stored_value.read',
+    featureKey: 'storedValue',
+    recordTarget: { kind: 'query', param: 'account' },
+  },
+  {
     key: 'ar-invoices',
     href: '/ar/invoices',
     label: 'Invoices',

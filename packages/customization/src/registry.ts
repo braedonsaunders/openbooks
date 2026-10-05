@@ -1335,6 +1335,39 @@ const CONTRACT_COST_ASSET: RecordTypeMeta = {
   ],
 };
 
+const STORED_VALUE_ACCOUNT: RecordTypeMeta = {
+  key: "stored_value_account",
+  labelKey: "customization.recordTypes.stored_value_account",
+  category: "entity",
+  featureKey: "storedValue",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "code", labelKey: "storedValue.labels.code", kind: "text", sortable: true, sortKey: "code", locked: true },
+    { key: "kind", labelKey: "storedValue.labels.kind", kind: "text", sortable: true, sortKey: "kind" },
+    { key: "customer_name", labelKey: "storedValue.labels.customer", kind: "text", sortable: true, sortKey: "customer" },
+    { key: "program_name", labelKey: "storedValue.labels.program", kind: "text", sortable: true, sortKey: "program" },
+    { key: "balance", labelKey: "storedValue.labels.balance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 130 },
+    { key: "issued", labelKey: "storedValue.labels.issued", kind: "amount", sortable: true, sortKey: "issued", defaultWidth: 130 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "expires_on", labelKey: "storedValue.labels.expires", kind: "date", sortable: true, sortKey: "expires", defaultHidden: true },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["active", "frozen", "closed", "expired"].map((value) => ({ value, labelKey: `storedValue.status.${value}` })),
+    },
+    {
+      key: "kind", labelKey: "storedValue.labels.kind", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["gift_card", "store_credit"].map((value) => ({ value, labelKey: `storedValue.kind.${value}` })),
+    },
+    { key: "expires_on", labelKey: "storedValue.labels.expires", kind: "date", operators: OPERATORS_BY_KIND.date },
+  ],
+};
+
 const EQUIPMENT_UNIT: RecordTypeMeta = {
   key: "equipment_unit",
   labelKey: "customization.recordTypes.equipment_unit",
@@ -2595,6 +2628,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   FINANCIAL_CHANGE,
   REVENUE_CONTRACT,
   CONTRACT_COST_ASSET,
+  STORED_VALUE_ACCOUNT,
   EQUIPMENT_UNIT,
   RESOURCING_ASSIGNMENT,
   RESOURCING_REQUEST,
