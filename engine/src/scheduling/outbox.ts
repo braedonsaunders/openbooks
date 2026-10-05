@@ -85,6 +85,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "usage_rating",
   "stripe_billing_import",
   "autopay_collection",
+  "webhook_delivery",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -625,6 +626,11 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "fx_providers") {
     const { runDueFxProviders } = await import("../fx/providers.ts");
     await runDueFxProviders();
+    return;
+  }
+  if (row.kind === "webhook_delivery") {
+    const { runWebhookDeliveryScan } = await import("../webhooks/deliver.ts");
+    await runWebhookDeliveryScan();
     return;
   }
   if (row.kind === ALLOCATION_RUN_OUTBOX_KIND) {

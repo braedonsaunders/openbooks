@@ -52,6 +52,7 @@
     "./tax": "./src/tax/public.ts",
     "./provisions": "./src/provisions/public.ts",
     "./inventory": "./src/inventory/public.ts",
+    "./webhooks": "./src/webhooks/public.ts",
     "./inventory/contracts": "./src/inventory/public-contracts.ts",
     "./revenue": "./src/revenue/public.ts",
     "./payroll/entitlements": "./src/payroll/public-entitlements.ts",
