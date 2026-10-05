@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { newAsyncContext } from "../platform/quickjs.ts";
+import { createGuestLogSink, GUEST_LOG_MAX_BYTES, GUEST_LOG_MAX_ENTRIES, newAsyncContext } from "../platform/quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import type { ContributedLine } from "../journal/contributed-lines.ts";
 import type { CustomGlLineRunEvidence } from "../journal/posting-contracts.ts";
@@ -265,6 +265,18 @@ export async function scriptQueryRefusal(
   return null;
 }
 
+/**
+ * Whether the accountable user may read payroll relations through ob.query /
+ * ob.search: payroll.read, read live like every other script authority.
+ */
+export async function scriptPayrollRead(
+  ctx: Pick<ScriptContext, "org" | "user">,
+  runAsUserId?: string | null,
+): Promise<boolean> {
+  const authority = scriptAuthority(ctx, runAsUserId);
+  return authority !== null && (await actorHasPermission(db, ctx.org.id, authority.userId, "payroll.read"));
+}
+
 /** Host calls a script source plainly reaches for: catalog reads and ledger writes. */
 const SCRIPT_QUERY_CALL = /\bob\s*\.\s*(?:query|search|record)\b|\b__(?:query|search)\b/;
 const SCRIPT_JOURNAL_CALL = /\bob\s*\.\s*journal\b|\b__journal_create\b/;
@@ -437,8 +449,8 @@ export function triggerTargetStamp(document?: Record<string, unknown>): string {
   return `nostamp-${randomUUID()}`;
 }
 
-export const MAX_SCRIPT_LOG_ENTRIES = 200;
-export const MAX_SCRIPT_LOG_BYTES = 64 * 1024;
+export const MAX_SCRIPT_LOG_ENTRIES = GUEST_LOG_MAX_ENTRIES;
+export const MAX_SCRIPT_LOG_BYTES = GUEST_LOG_MAX_BYTES;
 export const MAX_SCRIPT_QUERY_RESULT_BYTES = 4 * 1024 * 1024;
 export const SCRIPT_HOST_TIMEOUT = Symbol("script-host-timeout");
 
@@ -740,8 +752,7 @@ export async function runScript(
   runtime.setInterruptHandler(() => Date.now() > deadline);
 
   const logs: string[] = [];
-  let logBytes = 0;
-  let logTruncated = false;
+  const logSink = createGuestLogSink(logs);
   const started = Date.now();
   const queryAllowed = scriptHostAllowsQuery(ctx.trigger, opts);
   const journalAllowed = scriptHostAllowsJournal(ctx.trigger, opts);
@@ -749,21 +760,7 @@ export async function runScript(
     const obHandle = vm.newObject();
 
     const logFn = vm.newFunction("log", (...args) => {
-      if (logTruncated) return;
-      if (logs.length >= MAX_SCRIPT_LOG_ENTRIES || logBytes >= MAX_SCRIPT_LOG_BYTES) {
-        logs.push(`ob.log truncated after ${MAX_SCRIPT_LOG_ENTRIES} entries / ${MAX_SCRIPT_LOG_BYTES} bytes`);
-        logTruncated = true;
-        return;
-      }
-      const line = args.map((a) => JSON.stringify(vm.dump(a))).join(" ");
-      const nextBytes = logBytes + Buffer.byteLength(line, "utf8");
-      if (logs.length + 1 > MAX_SCRIPT_LOG_ENTRIES || nextBytes > MAX_SCRIPT_LOG_BYTES) {
-        logs.push(`ob.log truncated after ${MAX_SCRIPT_LOG_ENTRIES} entries / ${MAX_SCRIPT_LOG_BYTES} bytes`);
-        logTruncated = true;
-        return;
-      }
-      logs.push(line);
-      logBytes = nextBytes;
+      logSink.append(() => args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
     });
 
     const abortFn = vm.newFunction("abort", (reasonH) => {
@@ -777,6 +774,7 @@ export async function runScript(
     // The caller's query authorization is fixed for the run; resolve it once
     // on first use so ob.search loops do not re-read roles per statement.
     let queryRefusal: Promise<string | null> | undefined;
+    let payrollRead: Promise<boolean> | undefined;
     const queryFn = vm.newAsyncifiedFunction("__query", async (sqlH) => {
       if (!queryAllowed) {
         // A SELECT-only role still exposes now()/random() and mutable data.
@@ -804,6 +802,7 @@ export async function runScript(
           if (refusal) return { kind: "refused" as const, refusal };
           const result = await runUserSql(sqlText, {
             orgId: ctx.org.id,
+            payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
             maxRows: 5_000,
             timeoutMs: Math.min(5_000, Math.max(1, deadline - Date.now())),
           });
@@ -859,6 +858,7 @@ export async function runScript(
           if (!columns) return { kind: "refused" as const, refusal: unknownSearchTableRefusal(table) };
           const result = await runUserSql(buildGovernedSearchSql(table, filters, columns), {
             orgId: ctx.org.id,
+            payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
             maxRows: 5_000,
             timeoutMs: Math.min(5_000, Math.max(1, deadline - Date.now())),
           });
