@@ -48,6 +48,7 @@
   "exports": {
     "./sample-companies": "./src/sample-companies/public.ts",
     "./documents": "./src/ledger/public.ts",
+    "./documents/totals": "./src/ledger/public-document-totals.ts",
     "./src/*": "./src/*",
     "./tax": "./src/tax/public.ts",
     "./provisions": "./src/provisions/public.ts",

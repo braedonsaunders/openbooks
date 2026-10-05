@@ -392,6 +392,14 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
+    // The engine's document tax totals reach the database and clock through
+    // relative paths; route those two edges to the same doubles.
+    if (context.parentURL?.endsWith("/engine/src/ledger/document-totals.ts") && specifier === "../platform/db.ts") {
+      return { url: "mock:db", shortCircuit: true };
+    }
+    if (context.parentURL?.endsWith("/engine/src/ledger/document-totals.ts") && specifier === "../platform/business-date.ts") {
+      return { url: "mock:business-date", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
