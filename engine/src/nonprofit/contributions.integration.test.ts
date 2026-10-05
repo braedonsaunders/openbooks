@@ -10,7 +10,7 @@ import { installEngineSeams } from "../composition/install.ts";
 import { toUnits } from "../money/money.ts";
 import { createFund } from "./funds.ts";
 import { provisionFundAccounting } from "./provision.ts";
-import { bookPledge, cancelPledge, collectPledgeInstallments, createPledge, getPledgeSchedule, writeOffPledge } from "./pledges.ts";
+import { bookPledge, cancelPledge, collectPledgeInstallments, createPledge, getPledgeSchedule, topUpPledgeAllowance, writeOffPledge } from "./pledges.ts";
 import { createGift, receiptGift } from "./gifts.ts";
 import { NonprofitError } from "./errors.ts";
 
@@ -139,7 +139,9 @@ test("pledges book and reverse through the ledger while gifts receive engine num
         amount: "1.0000",
         postingDate: org.date,
         receivableAccountId: accounts.receivable,
+        discountAccountId: accounts.discount,
         allowanceAccountId: accounts.allowance,
+        contributionsAccountId: org.accounts.revenue,
         reason: "Write off an uncollectible pledge",
         actorId,
       }),
@@ -183,6 +185,27 @@ test("pledges book and reverse through the ledger while gifts receive engine num
       orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: reversalDate,
     });
     assert.equal(scheduleOnReversal.installments[0]!.collectedAmount, "0.0000");
+    await topUpPledgeAllowance({ orgId: org.orgId, pledgeId: activityPledge.id, amount: "1000.0000",
+      postingDate: reversalDate, contributionsAccountId: org.accounts.revenue, allowanceAccountId: accounts.allowance,
+      reason: "Reserve the doubtful promise", actorId });
+    const writeOff = await writeOffPledge({ orgId: org.orgId, pledgeId: activityPledge.id, amount: "1000.0000",
+      postingDate: reversalDate, receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
+      allowanceAccountId: accounts.allowance, contributionsAccountId: org.accounts.revenue,
+      reason: "The donor cannot pay", actorId });
+    assert.ok(toUnits(writeOff.discountWrittenOff) > 0n);
+    assert.deepEqual([writeOff.status, writeOff.allowanceBalance, writeOff.allowanceReleased],
+      ["written_off", "0.0000", writeOff.discountWrittenOff],
+      "a closing write-off charges the allowance its net carrying amount and releases the rest");
+    const pledgeBalances = await withOrgContext(org.orgId, () => db.execute<{ account_id: string; amount: string }>(sql`
+      select jl.account_id, sum(jl.amount)::text as amount from journal_lines jl
+        join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
+       where jl.org_id = ${org.orgId} and je.status in ('posted', 'reversed')
+         and (je.id = (select booking_entry_id from pledges where org_id = ${org.orgId} and id = ${activityPledge.id})
+           or je.custom #>> '{nonprofitPledge,pledgeId}' = ${activityPledge.id})
+         and jl.account_id in (${accounts.receivable}, ${accounts.discount}, ${accounts.allowance})
+       group by jl.account_id`));
+    assert.deepEqual(pledgeBalances.rows.map((row) => row.amount), ["0.0000", "0.0000", "0.0000"],
+      "a written-off pledge leaves no receivable, discount or allowance balance standing");
 
     const cancelled = await cancelPledge({
       orgId: org.orgId,

@@ -82,16 +82,21 @@ interface Activity {
   collected: Map<string, bigint>;
   writtenOff: Map<string, bigint>;
   collectionsByMonth: Map<string, bigint>;
+  writeOffsByMonth: Map<string, bigint>;
+  discountWrittenOffByMonth: Map<string, bigint>;
   amortizedByMonth: Map<string, bigint>;
   amortizedMonths: Set<string>;
   totalCollected: bigint;
   totalWrittenOff: bigint;
+  totalDiscountWrittenOff: bigint;
+  totalAmortized: bigint;
   totalAllowanceTopUp: bigint;
 }
 interface Marker {
   operation?: string;
   pledgeId?: string;
   amount?: string;
+  discount?: string;
   month?: string;
   allocations?: { installmentId?: string; amount?: string }[];
 }
@@ -304,6 +309,94 @@ export function buildPledgeDiscountSchedule(input: {
   return out;
 }
 
+/** Cumulative pledge activity that determines its net carrying amount. */
+export interface PledgeDiscountPosition {
+  totalAmount: string;
+  presentValue: string;
+  amortized: string;
+  collected: string;
+  writtenOff: string;
+  /** Unamortized discount derecognized together with written-off installments. */
+  discountWrittenOff: string;
+}
+
+/**
+ * The net pledge receivable: the gross amount still collectible (promised less
+ * collected less written off) less the discount not yet amortized on it.
+ */
+export function pledgeCarryingAmount(position: PledgeDiscountPosition): {
+  outstanding: bigint; unamortizedDiscount: bigint; carrying: bigint;
+} {
+  const face = toUnits(position.totalAmount);
+  const outstanding = face - toUnits(position.collected) - toUnits(position.writtenOff);
+  const unamortizedDiscount = face - toUnits(position.presentValue) - toUnits(position.amortized) -
+    toUnits(position.discountWrittenOff);
+  return { outstanding, unamortizedDiscount, carrying: outstanding - unamortizedDiscount };
+}
+
+/**
+ * One month's discount accretion. Interest accrues on the opening net carrying
+ * amount of the collectible balance only, never exceeds the discount that
+ * remains, and at maturity (or once nothing remains collectible) the whole
+ * remaining discount is recognized, so no accretion is ever posted after it.
+ */
+export function pledgeDiscountAmortizationForMonth(input: {
+  discountRate: string;
+  month: string;
+  finalDueMonth: string;
+  /** Activity before the month being amortized. */
+  opening: PledgeDiscountPosition;
+  /** Activity through the month end, with every amortization already recorded. */
+  closing: PledgeDiscountPosition;
+}): string {
+  const closing = pledgeCarryingAmount(input.closing);
+  if (closing.unamortizedDiscount <= 0n) return fromUnits(0n);
+  if (closing.outstanding <= 0n || input.month >= input.finalDueMonth) {
+    return fromUnits(closing.unamortizedDiscount);
+  }
+  const opening = pledgeCarryingAmount(input.opening).carrying;
+  const interest = opening > 0n ? periodInterest(opening, monthlyRate(input.discountRate)) : 0n;
+  return fromUnits(interest < closing.unamortizedDiscount ? interest : closing.unamortizedDiscount);
+}
+
+/**
+ * The share of the unamortized discount that belongs to the installments being
+ * written off. Each installment's share is weighted by the discount still
+ * embedded in it at the write-off date (installments due later carry more), so
+ * the discount left behind is what the remaining collectible installments need
+ * to accrete to their face amounts. Writing off everything outstanding takes
+ * the whole remaining discount.
+ */
+export function pledgeWriteOffDiscount(input: {
+  discountRate: string;
+  writeOffDate: string;
+  unamortizedDiscount: string;
+  installments: readonly { dueOn: string; outstanding: string; writtenOff: string }[];
+}): string {
+  const remaining = toUnits(input.unamortizedDiscount);
+  if (remaining <= 0n) return fromUnits(0n);
+  const rows = input.installments.map((row) => ({
+    periods: Math.max(0, monthIndex(row.dueOn) - monthIndex(input.writeOffDate)),
+    outstanding: toUnits(row.outstanding),
+    writtenOff: toUnits(row.writtenOff),
+  }));
+  const grossOutstanding = rows.reduce((sum, row) => sum + row.outstanding, 0n);
+  const grossWrittenOff = rows.reduce((sum, row) => sum + row.writtenOff, 0n);
+  if (grossWrittenOff >= grossOutstanding) return fromUnits(remaining);
+  const rate = monthlyRate(input.discountRate);
+  const horizon = Math.max(0, ...rows.map((row) => row.periods));
+  const growth = rate.den + rate.num;
+  const full = pow(growth, horizon);
+  // Embedded discount of one unit due in k periods, over the common denominator growth^horizon.
+  const weight = (periods: number) => full - pow(rate.den, periods) * pow(growth, horizon - periods);
+  const all = rows.reduce((sum, row) => sum + row.outstanding * weight(row.periods), 0n);
+  const share = all > 0n
+    ? roundDiv(remaining * rows.reduce((sum, row) => sum + row.writtenOff * weight(row.periods), 0n), all)
+    : roundDiv(remaining * grossWrittenOff, grossOutstanding);
+  const cap = remaining < grossWrittenOff ? remaining : grossWrittenOff;
+  return fromUnits(share < cap ? share : cap);
+}
+
 async function audit(input: {
   orgId: string; id: string; action: string; actorId?: string | null;
   before?: Record<string, unknown>; after?: Record<string, unknown>; reason?: string;
@@ -349,9 +442,12 @@ async function activity(orgId: string, pledgeId: string, asOfDate?: string): Pro
      order by je.posting_date, je.id`)).rows;
   const out: Activity = {
     collected: new Map(), writtenOff: new Map(), collectionsByMonth: new Map(),
+    writeOffsByMonth: new Map(), discountWrittenOffByMonth: new Map(),
     amortizedByMonth: new Map(), amortizedMonths: new Set(), totalCollected: 0n,
-    totalWrittenOff: 0n, totalAllowanceTopUp: 0n,
+    totalWrittenOff: 0n, totalDiscountWrittenOff: 0n, totalAmortized: 0n, totalAllowanceTopUp: 0n,
   };
+  const addTo = (map: Map<string, bigint>, key: string, value: bigint) =>
+    map.set(key, (map.get(key) ?? 0n) + value);
   for (const row of rows) {
     const marker = row.custom?.[MARKER] as Marker | undefined;
     if (marker?.operation === "collection") for (const item of marker.allocations ?? []) {
@@ -367,11 +463,18 @@ async function activity(orgId: string, pledgeId: string, asOfDate?: string): Pro
       const value = toUnits(item.amount);
       out.writtenOff.set(item.installmentId, (out.writtenOff.get(item.installmentId) ?? 0n) + value);
       out.totalWrittenOff += value;
+      addTo(out.writeOffsByMonth, monthKey(row.posting_date), value);
+    }
+    if (marker?.operation === "write_off" && marker.discount) {
+      const value = toUnits(marker.discount);
+      out.totalDiscountWrittenOff += value;
+      addTo(out.discountWrittenOffByMonth, monthKey(row.posting_date), value);
     }
     if (marker?.operation === "discount_amortization" && marker.month && marker.amount) {
       const value = toUnits(marker.amount);
       out.amortizedMonths.add(marker.month);
       out.amortizedByMonth.set(marker.month, (out.amortizedByMonth.get(marker.month) ?? 0n) + value);
+      out.totalAmortized += value;
     }
     if (marker?.operation === "allowance_top_up" && marker.amount) {
       out.totalAllowanceTopUp += toUnits(marker.amount);
@@ -631,13 +734,27 @@ export async function topUpPledgeAllowance(input: {
   });
 }
 
+/**
+ * Write off uncollectible installments. The gross receivable leaves the books
+ * together with the unamortized discount embedded in it, so the allowance is
+ * charged only the net carrying amount actually lost, and the discount left
+ * behind belongs to the installments that remain collectible. Allowance in
+ * excess of what is still collectible afterwards has nothing left to cover and
+ * is released back to contributions rather than left standing.
+ */
 export async function writeOffPledge(input: {
   orgId: string; pledgeId: string; amount: string; postingDate: string;
-  receivableAccountId: string; allowanceAccountId: string; reason: string; actorId?: string | null;
-}): Promise<{ entryId: string; allowanceBalance: string; status: string }> {
+  receivableAccountId: string; discountAccountId: string; allowanceAccountId: string;
+  contributionsAccountId: string; reason: string; actorId?: string | null;
+}): Promise<{
+  entryId: string; allowanceBalance: string; status: string;
+  discountWrittenOff: string; allowanceReleased: string;
+}> {
   uuid(input.pledgeId, "pledgeId");
   uuid(input.receivableAccountId, "receivableAccountId");
+  uuid(input.discountAccountId, "discountAccountId");
   uuid(input.allowanceAccountId, "allowanceAccountId");
+  uuid(input.contributionsAccountId, "contributionsAccountId");
   date(input.postingDate, "postingDate");
   const amount = money(input.amount, "amount");
   if (toUnits(amount) <= 0n) throw fail({
@@ -648,7 +765,8 @@ export async function writeOffPledge(input: {
   return withOrgTransaction(input.orgId, async () => {
     await lockFeature(input.orgId);
     const pledge = await readPledge(input.orgId, input.pledgeId, true);
-    if (!pledge || !pledge.booking_entry_id || !["booked", "collecting"].includes(pledge.status)) {
+    if (!pledge || !pledge.booking_entry_id || !pledge.present_value ||
+        !["booked", "collecting"].includes(pledge.status)) {
       throw fail({
         message: "Only a booked or collecting pledge can be written off.",
         status: 409, code: "pledge_state_conflict", remedy: "Book the pledge before recording a write-off.",
@@ -656,12 +774,6 @@ export async function writeOffPledge(input: {
     }
     const current = await activity(input.orgId, pledge.id);
     const outstanding = toUnits(pledge.total_amount) - current.totalCollected - current.totalWrittenOff;
-    if (toUnits(amount) > toUnits(pledge.allowance_amount)) throw fail({
-      message: "Pledge " + pledge.pledge_number + " has an allowance balance of " +
-        pledge.allowance_amount + ", below the requested write-off of " + amount + ".",
-      code: "pledge_writeoff_exceeds_allowance",
-      remedy: "Post an allowance top-up for the pledge before writing it off.",
-    });
     if (toUnits(amount) > outstanding) throw fail({
       message: "The write-off exceeds the outstanding pledge balance of " + fromUnits(outstanding) + ".",
       code: "pledge_writeoff_exceeds_outstanding",
@@ -669,11 +781,13 @@ export async function writeOffPledge(input: {
     });
     let rest = toUnits(amount);
     const allocations: { installmentId: string; amount: string }[] = [];
+    const remaining: { dueOn: string; outstanding: string; writtenOff: string }[] = [];
     for (const row of await installments(input.orgId, pledge.id)) {
       const due = toUnits(row.amount) - (current.collected.get(row.id) ?? 0n) - (current.writtenOff.get(row.id) ?? 0n);
-      if (due <= 0n || rest <= 0n) continue;
-      const used = due < rest ? due : rest;
-      allocations.push({ installmentId: row.id, amount: fromUnits(used) });
+      if (due <= 0n) continue;
+      const used = rest <= 0n ? 0n : due < rest ? due : rest;
+      if (used > 0n) allocations.push({ installmentId: row.id, amount: fromUnits(used) });
+      remaining.push({ dueOn: row.due_on, outstanding: fromUnits(due), writtenOff: fromUnits(used) });
       rest -= used;
     }
     if (rest !== 0n) throw fail({
@@ -681,18 +795,50 @@ export async function writeOffPledge(input: {
       status: 409, code: "pledge_schedule_balance_mismatch",
       remedy: "Refresh the pledge schedule before recording the write-off.",
     });
-    const nextAllowance = fromUnits(toUnits(pledge.allowance_amount) - toUnits(amount));
-    const nextStatus = toUnits(amount) === outstanding ? "written_off" : pledge.status;
+    const position = pledgeCarryingAmount({
+      totalAmount: pledge.total_amount, presentValue: pledge.present_value,
+      amortized: fromUnits(current.totalAmortized), collected: fromUnits(current.totalCollected),
+      writtenOff: fromUnits(current.totalWrittenOff), discountWrittenOff: fromUnits(current.totalDiscountWrittenOff),
+    });
+    const discount = toUnits(pledgeWriteOffDiscount({
+      discountRate: pledge.discount_rate, writeOffDate: input.postingDate,
+      unamortizedDiscount: fromUnits(position.unamortizedDiscount), installments: remaining,
+    }));
+    const applied = toUnits(amount) - discount;
+    const allowance = toUnits(pledge.allowance_amount);
+    if (applied > allowance) throw fail({
+      message: "Pledge " + pledge.pledge_number + " has an allowance balance of " + pledge.allowance_amount +
+        ", below the " + fromUnits(applied) + " net carrying amount of the requested write-off of " + amount +
+        " (less its unamortized discount of " + fromUnits(discount) + ").",
+      code: "pledge_writeoff_exceeds_allowance",
+      remedy: "Post an allowance top-up for the pledge before writing it off.",
+    });
+    const stillOutstanding = outstanding - toUnits(amount);
+    const excess = allowance - applied - stillOutstanding;
+    const released = excess > 0n ? excess : 0n;
+    const nextAllowance = fromUnits(allowance - applied - released);
+    const nextStatus = stillOutstanding === 0n ? "written_off" : pledge.status;
+    const discountWrittenOff = fromUnits(discount);
+    const allowanceReleased = fromUnits(released);
+    const lines = [
+      { accountId: input.allowanceAccountId, amount: fromUnits(applied + released) },
+      { accountId: input.discountAccountId, amount: discountWrittenOff },
+      { accountId: input.receivableAccountId, amount: fromUnits(-toUnits(amount)) },
+      { accountId: input.contributionsAccountId, amount: fromUnits(-released) },
+    ].filter((line) => toUnits(line.amount) !== 0n);
     const posted = await postPledge({
       orgId: input.orgId, pledge, postingDate: input.postingDate,
       preferred: pledge.pledge_number + "-WRITEOFF", memo: "Write off pledge " + pledge.pledge_number,
       actorId: input.actorId,
-      custom: { [MARKER]: { pledgeId: pledge.id, operation: "write_off", amount, allocations } },
-      auditChanges: { pledgeId: pledge.id, amount, allowanceBalance: nextAllowance, reason: why },
-      lines: [
-        { accountId: input.allowanceAccountId, amount },
-        { accountId: input.receivableAccountId, amount: fromUnits(-toUnits(amount)) },
-      ],
+      custom: { [MARKER]: {
+        pledgeId: pledge.id, operation: "write_off", amount, discount: discountWrittenOff,
+        allowanceApplied: fromUnits(applied), allowanceReleased, allocations,
+      } },
+      auditChanges: {
+        pledgeId: pledge.id, amount, discountWrittenOff, allowanceApplied: fromUnits(applied),
+        allowanceReleased, allowanceBalance: nextAllowance, reason: why,
+      },
+      lines,
     });
     const updated = (await db.execute<{ id: string }>(sql`
       update pledges set allowance_amount = ${nextAllowance}, status = ${nextStatus},
@@ -707,9 +853,13 @@ export async function writeOffPledge(input: {
     await audit({
       orgId: input.orgId, id: pledge.id, action: "write_off", actorId: input.actorId,
       before: { status: pledge.status, allowanceAmount: pledge.allowance_amount },
-      after: { status: nextStatus, allowanceAmount: nextAllowance, entryId: posted.entryId }, reason: why,
+      after: {
+        status: nextStatus, allowanceAmount: nextAllowance, discountWrittenOff, allowanceReleased,
+        entryId: posted.entryId,
+      },
+      reason: why,
     });
-    return { entryId: posted.entryId, allowanceBalance: nextAllowance, status: nextStatus };
+    return { entryId: posted.entryId, allowanceBalance: nextAllowance, status: nextStatus, discountWrittenOff, allowanceReleased };
   });
 }
 
@@ -970,28 +1120,32 @@ export async function runPledgeDiscountAmortization(input: {
       if (current.amortizedMonths.has(month)) { skipped += 1; continue; }
       const months = monthIndex(input.periodEnd) - monthIndex(pledge.booked_on!);
       if (months < 1 || months > MAX_MONTHS) { skipped += 1; continue; }
-      let carrying = toUnits(pledge.present_value ?? "0");
-      for (const [key, amount] of current.amortizedByMonth) {
-        if (key <= month) carrying += amount;
-      }
-      for (const [key, amount] of current.collectionsByMonth) {
-        if (key < month) carrying -= amount;
-      }
-      if (carrying <= 0n) { skipped += 1; continue; }
-      const rate = monthlyRate(pledge.discount_rate);
-      let amount = periodInterest(carrying, rate);
+      // Interest accrues on the opening net carrying amount (collectible gross
+      // less its unamortized discount); the remaining discount is bounded by
+      // every amortization already recorded, whatever month it was posted for.
+      const recorded = await activity(input.orgId, pledge.id);
+      const positionOf = (source: Activity, before: string | null): PledgeDiscountPosition => {
+        const sum = (byMonth: Map<string, bigint>) => [...byMonth.entries()]
+          .filter(([key]) => before === null || key < before).reduce((total, [, value]) => total + value, 0n);
+        return {
+          totalAmount: pledge.total_amount, presentValue: pledge.present_value ?? "0",
+          amortized: fromUnits(sum(source.amortizedByMonth)), collected: fromUnits(sum(source.collectionsByMonth)),
+          writtenOff: fromUnits(sum(source.writeOffsByMonth)),
+          discountWrittenOff: fromUnits(sum(source.discountWrittenOffByMonth)),
+        };
+      };
       const installmentRows = await installments(input.orgId, pledge.id);
-      const finalDueMonth = installmentRows.at(-1)?.due_on.slice(0, 7);
-      if (
-        finalDueMonth === month &&
-        current.totalCollected + current.totalWrittenOff >= toUnits(pledge.total_amount)
-      ) {
-        const accruedBefore = [...current.amortizedByMonth.entries()]
-          .filter(([key]) => key < month).reduce((sum, [, value]) => sum + value, 0n);
-        const closing = current.totalCollected + current.totalWrittenOff -
-          toUnits(pledge.present_value ?? "0") - accruedBefore;
-        if (closing >= 0n) amount = closing;
-      }
+      const finalDueMonth = installmentRows.reduce((latest, row) =>
+        row.due_on > latest ? row.due_on : latest, "").slice(0, 7);
+      const amount = toUnits(pledgeDiscountAmortizationForMonth({
+        discountRate: pledge.discount_rate, month, finalDueMonth,
+        opening: positionOf(current, month),
+        closing: {
+          ...positionOf(current, null),
+          amortized: fromUnits(recorded.totalAmortized),
+          discountWrittenOff: fromUnits(recorded.totalDiscountWrittenOff),
+        },
+      }));
       if (amount <= 0n) { skipped += 1; continue; }
       const result = await postPledge({
         orgId: input.orgId, pledge, postingDate: input.periodEnd,
