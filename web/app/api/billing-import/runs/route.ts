@@ -1,7 +1,5 @@
-import {
-  listBillingImportRuns,
-  type BillingHistoryProvider,
-} from "@openbooks/engine/src/sync/billing-history-import.ts";
+import { listBillingImportRuns } from "@openbooks/engine/src/sync/billing-history-import.ts";
+import type { BillingHistoryProvider } from "@openbooks/engine/src/sync/billing-history.ts";
 import { defineRoute } from "@/lib/api/route";
 
 const PROVIDERS = new Set(["chargebee", "recurly", "maxio", "zuora"]);
