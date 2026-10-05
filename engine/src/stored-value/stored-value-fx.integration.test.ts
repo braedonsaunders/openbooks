@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withBypassContext } from "../platform/db.ts";
+import { db, withBypass, withBypassContext, withOrg } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { completeRequestedDocumentVoid, requestDocumentVoid } from "../ledger/document-void.ts";
+import { reverseRedemptionsForVoidedDocument } from "./void-redemptions.ts";
 import { runRevaluation } from "../close/fx-revaluation.ts";
 import { attachDocumentIssue } from "./accounts.ts";
 import { createProgram } from "./accounts.ts";
@@ -277,6 +279,63 @@ test("redemption at a weaker rate books realized FX and the subledger still ties
     // general-ledger liability for the entity (20 USD carried at 1.36).
     assert.equal(await subledgerFunctional(org.orgId, org.subsidiaryId), "272000");
     assert.equal(await liabilityFunctional(org.orgId, fx.liability, org.subsidiaryId), "-27.2000");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("voiding a redeeming sale restores the card and reverses its realized FX", { skip: !DB }, async () => {
+  const fx = await seedFxOrg();
+  const { org } = fx;
+  try {
+    const { accountId } = await postUsdGiftInvoice(fx, { amount: "50.0000", rate: "1.36", number: "INV-FX-VOID" });
+    const saleId = await postUsdCashSaleRedeeming(fx, { accountId, amount: "30.0000", rate: "1.40", number: "CS-FX-VOID" });
+    const spent = (await withBypass(() => db.execute<{ balance: string }>(sql`
+      select balance_minor::text as balance from stored_value_accounts
+       where org_id = ${org.orgId} and id = ${accountId}`))).rows[0]!;
+    assert.equal(spent.balance, "200000");
+    const requested = await withOrg(org.orgId, () =>
+      requestDocumentVoid({ documentId: saleId, orgId: org.orgId, actorId: fx.actorId, reason: "till error", reversalDate: org.date, source: "api" }));
+    assert.equal(requested.status, "voided");
+    await withOrg(org.orgId, () => completeRequestedDocumentVoid(saleId, org.orgId, null));
+    // The card is whole again: the void appends a reversal, never edits the redeem entry.
+    const restored = (await withBypass(() => db.execute<{ balance: string }>(sql`
+      select balance_minor::text as balance from stored_value_accounts
+       where org_id = ${org.orgId} and id = ${accountId}`))).rows[0]!;
+    assert.equal(restored.balance, "500000");
+    const reversal = (await withBypass(() => db.execute<{
+      amount: string; functional: string; rate: string; redeem: string;
+    }>(sql`
+      select amount_minor::text as amount, functional_amount_minor::text as functional,
+             fx_rate::text as rate, document_id as redeem
+        from stored_value_entries
+       where org_id = ${org.orgId} and account_id = ${accountId} and kind = 'reversal'`))).rows;
+    assert.equal(reversal.length, 1);
+    assert.equal(reversal[0]!.amount, "300000");
+    assert.equal(reversal[0]!.functional, "408000");
+    assert.equal(reversal[0]!.rate, "1.3600000000");
+    // The repricing never happened either: the realized entry is reversed by a mirror.
+    const realized = (await withBypass(() => db.execute<{ id: string; status: string }>(sql`
+      select id, status from journal_entries
+       where org_id = ${org.orgId} and origin = 'stored_value' and memo like 'Realized FX%'`))).rows;
+    assert.equal(realized.length, 1);
+    assert.equal(realized[0]!.status, "reversed");
+    const mirror = (await withBypass(() => db.execute<{ id: string }>(sql`
+      select id from journal_entries
+       where org_id = ${org.orgId} and reverses_entry_id = ${realized[0]!.id}`))).rows;
+    assert.equal(mirror.length, 1);
+    // A retried unwind finds the first reversal instead of restoring twice.
+    const again = await withBypass(() =>
+      reverseRedemptionsForVoidedDocument({
+        orgId: org.orgId,
+        documentId: saleId,
+        actorId: fx.actorId,
+        reversalDate: org.date,
+        reason: "till error",
+      }));
+    assert.deepEqual(again, { reversed: 0, realizedReversed: 0 });
+    // The roll-forward ties again: the full 50 USD carried at 1.36.
+    assert.equal(await subledgerFunctional(org.orgId, org.subsidiaryId), "680000");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
