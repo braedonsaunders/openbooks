@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { ChannelOrderLine } from "./contracts.ts";
 import { CommerceError } from "./errors.ts";
+import { markOrderEconomicsDirty, recomputeOrderEconomicsScoped } from "./economics.ts";
 import { findNative } from "./external-links.ts";
 import {
   claimPendingChannelOrders,
@@ -1051,6 +1052,17 @@ export async function postChannelOrder(
       });
       if (outcome.effectsDocumentId) {
         await runPostDocumentEffects(outcome.effectsDocumentId, "draft", { actorId: actor });
+      }
+      // Margin facts follow the posting and never block it: the stock issues
+      // land in the effects above, so economics reads them here; a refusal
+      // parks a restatement mark for the channel scan instead of failing
+      // an order that already posted.
+      if (outcome.status === "posted" && outcome.documentId) {
+        try {
+          await recomputeOrderEconomicsScoped(orgId, actor, orderId);
+        } catch {
+          await markOrderEconomicsDirty(orgId, orderId, "order posted").catch(() => null);
+        }
       }
       return { status: outcome.status, documentId: outcome.documentId };
     } catch (error) {

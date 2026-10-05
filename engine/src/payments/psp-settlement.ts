@@ -1723,6 +1723,22 @@ export async function importSettlementBatch(
       return { batchId, created: false };
     }
     await insertLines(orgId, batchId, parsed.lines, actorId);
+    // Margin restatement for the channel orders named in this payout. The
+    // commerce module owns the restatement queue and this module cannot
+    // import it (commerce already depends on payments, so the edge would
+    // cycle), hence the direct insert. A payout with no channel orders
+    // matches zero rows by design, and a retried import collides on
+    // (org, order) with the first mark winning — both benign.
+    await db.execute(sql`
+      insert into channel_order_economics_pending (org_id, order_id, reason)
+      select ${orgId}, o.id, ${`payout ${parsed.externalRef} settled`}
+        from channel_orders o
+       where o.org_id = ${orgId}
+         and o.external_id in (
+           select distinct l.meta->>'sourceOrderId'
+             from psp_settlement_lines l
+            where l.org_id = ${orgId} and l.batch_id = ${batchId} and l.meta ? 'sourceOrderId')
+      on conflict (org_id, order_id) do nothing`);
     return { batchId, created };
   });
 }
