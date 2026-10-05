@@ -26,6 +26,7 @@
       "employees": "在册发薪",
       "employeesSub": "有效的工资档案",
       "periodsRan": "{year} 工资周期",
+      "periodsRanYears": "{years} 工资周期",
       "periodsOf": "{ran} / {total}",
       "periodsRanSub": "本纳税年度已确认",
       "ytdGross": "累计应发",

@@ -26,6 +26,7 @@
       "employees": "On payroll",
       "employeesSub": "active payroll profiles",
       "periodsRan": "Pay periods {year}",
+      "periodsRanYears": "Pay periods {years}",
       "periodsOf": "{ran} of {total}",
       "periodsRanSub": "committed this tax year",
       "ytdGross": "YTD gross",

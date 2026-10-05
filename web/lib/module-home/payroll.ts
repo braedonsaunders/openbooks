@@ -81,11 +81,17 @@ export interface PreviousRun {
   posted: boolean
 }
 
-export interface PayrollHome {
-  /** Latest current tax year across installed packs; run/YTD counts cover every installed pack's current year. */
+export interface PackTaxYear {
+  /** Installed pack country; null is the pack-less fallback (calendar year). */
+  country: string | null
   taxYear: number
+}
+
+export interface PayrollHome {
+  /** One entry per installed pack; run/YTD counts cover every entry's year. */
+  taxYears: PackTaxYear[]
   activeEmployees: number
-  /** Committed runs in the current tax year (Harmony's "30 of 52"). */
+  /** Committed runs in the current tax year of every installed pack. */
   runsThisYear: number
   defaultPeriodsPerYear: number | null
   ytdGross: string
@@ -109,36 +115,37 @@ export interface PayrollHome {
 const EXCEPTION_LIMIT = 6
 
 /**
- * The current tax year of every installed payroll pack, per the PACK's own
- * year definition (HMRC's 6 April, the ATO's 1 July) — never the calendar
- * year, which silently splits one statutory year across two for fiscal-year
- * packs. An undeclared country contributes nothing rather than refusing the
- * whole surface; with no installed pack (or no readable settings) the
- * calendar year stands in, the pre-pack behaviour for pack-less orgs.
+ * The current (country, tax year) pair of every installed payroll pack, per
+ * the PACK's own year definition (HMRC's 6 April, the ATO's 1 July) — never
+ * the calendar year, which silently splits one statutory year across two
+ * for fiscal-year packs. An undeclared country contributes nothing rather
+ * than refusing the whole surface; with no installed pack (or no readable
+ * settings) a single null-country calendar-year pair stands in, the
+ * pre-pack behaviour for pack-less orgs.
  */
-async function currentPayrollTaxYears(
+async function currentPackTaxYears(
   orgId: string,
   payrollBlob: Record<string, unknown>,
   allowedSubsidiaryIds: PayrollSubsidiaryScope,
   today: string,
-): Promise<number[]> {
+): Promise<PackTaxYear[]> {
   try {
     const countries = await installedPayrollCountries(orgId, payrollBlob, allowedSubsidiaryIds)
-    const years = new Set<number>()
+    const pairs: PackTaxYear[] = []
     for (const country of countries) {
       try {
-        years.add(payrollTaxYearForDate(country, today).taxYear)
+        pairs.push({ country, taxYear: payrollTaxYearForDate(country, today).taxYear })
       } catch (error) {
         if (!(error instanceof PayrollError)) throw error
       }
     }
-    if (years.size > 0) return [...years].sort((a, b) => a - b)
+    if (pairs.length > 0) return pairs
   } catch (error) {
     // A caller who cannot read payroll settings keeps the calendar year
     // below; anything else is a real defect and still throws.
     if (!(error instanceof PayrollError)) throw error
   }
-  return [Number(today.slice(0, 4))]
+  return [{ country: null, taxYear: Number(today.slice(0, 4)) }]
 }
 
 function scheduleScopeFilter(
@@ -166,11 +173,20 @@ export async function payrollHome(
   // the installed packs before the YTD queries are built.
   const payrollBlob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
     select settings->'payroll' as p from orgs where id = ${orgId}`)).rows[0]?.p ?? {}
-  const taxYears = await currentPayrollTaxYears(orgId, payrollBlob, allowedSubsidiaryIds, today)
-  // The headline year is the latest current year across installed packs;
-  // the counts below cover every installed pack's current year.
-  const taxYear = Math.max(...taxYears)
-  const yearList = sql.join(taxYears.map((year) => sql`${year}`), sql`, `)
+  const taxYears = await currentPackTaxYears(orgId, payrollBlob, allowedSubsidiaryIds, today)
+  // A stub belongs to a pack's current year only as a (country, tax_year)
+  // pair: GB+US in February 2027 means (GB, 2026) plus (US, 2027), so last
+  // year's US stubs stay out of YTD. A stub with no country is
+  // unattributable to any pack's statutory year and is excluded from YTD
+  // (it still counts in totalRuns); the pack-less fallback below keeps the
+  // pre-pack year-only behaviour for orgs with no installed pack. Runs
+  // carry no country, so their count uses the union of pack years — the
+  // closest attribution available.
+  const yearList = sql.join([...new Set(taxYears.map((pair) => pair.taxYear))].sort((a, b) => a - b).map((year) => sql`${year}`), sql`, `)
+  const pairs = taxYears.filter((pair) => pair.country !== null)
+  const stubYearFilter = pairs.length > 0
+    ? sql`and (st.country, st.tax_year) in (${sql.join(pairs.map((pair) => sql`(${pair.country}, ${pair.taxYear})`), sql`, `)})`
+    : sql`and st.tax_year in (${yearList})`
 
   const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] = (await Promise.all([
     // Active schedules + the latest run (any state) + active-profile counts.
@@ -229,9 +245,10 @@ export async function payrollHome(
          where r.org_id = ${orgId}
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as total_runs
     `),
-    // YTD = committed stubs for the current tax year of every installed
-    // pack (matches the engine's YTD basis), grouped by stub currency and
-    // pay date — translated below, never summed raw across currencies.
+    // YTD = committed stubs in the current (country, tax year) of every
+    // installed pack (matches the engine's YTD basis), grouped by stub
+    // currency and pay date — translated below, never summed raw across
+    // currencies.
     db.execute(sql`
       select st.currency_code as currency, st.pay_date::text as pay_date,
              coalesce(sum(st.gross), 0) as gross,
@@ -240,7 +257,7 @@ export async function payrollHome(
         from pay_stubs st
         join pay_runs r on r.document_id = st.pay_run_document_id and r.org_id = st.org_id and r.run_status = 'committed'
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-       where st.org_id = ${orgId} and st.tax_year in (${yearList})
+       where st.org_id = ${orgId} ${stubYearFilter}
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        group by st.currency_code, st.pay_date::text
     `),
@@ -376,7 +393,7 @@ export async function payrollHome(
   }
 
   return {
-    taxYear,
+    taxYears,
     activeEmployees: Number(stats.active_employees ?? 0),
     runsThisYear: Number(stats.runs_this_year ?? 0),
     defaultPeriodsPerYear: defaultSchedule?.periodsPerYear ?? null,
