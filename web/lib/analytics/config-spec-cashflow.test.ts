@@ -95,6 +95,21 @@ test("cashflow write refuses a fractional week count by name", () => {
   assert.equal(cleaned.settleBufferSigma, 0.5);
 });
 
+test("cashflow sections cover every threshold exactly once", () => {
+  const spec = ANALYTICS_CONFIG.cashflow;
+  const seen = new Map<string, string>();
+  for (const group of spec.groups ?? []) {
+    for (const key of group.fields) {
+      assert.ok(!seen.has(key), `threshold '${key}' appears in two sections`);
+      seen.set(key, group.labelKey);
+    }
+  }
+  const declared = new Set(spec.fields.map((field) => field.key));
+  for (const key of declared) {
+    assert.ok(seen.has(key), `threshold '${key}' is in no section`);
+  }
+});
+
 test("cashflow read keeps defaults for a legacy blob without the new keys", () => {
   const read = mergeConfig("cashflow", { weeklyApCap: "100.0000", restrictToSafe: 1 });
   assert.equal(read.weeklyApCap, "100.0000");
