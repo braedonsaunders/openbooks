@@ -4,7 +4,7 @@ import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as Sha
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ClipboardList, Download, Search } from 'lucide-react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { cn, Input } from '@openbooks/ui'
 import type { HealthData, BudgetRow } from '../../../../../lib/analytics/health-data'
 import { Panel } from '../../_ui/Panel'
@@ -14,6 +14,7 @@ import { exportCsv } from '../../_ui/exportCsv'
 import { useAnalyticsMoney, useRatioFormat, ratioNumber } from '../../_ui/format'
 import { decimalRatio } from '../../../../../lib/reports/decimals'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { divideDecimal, multiplyDecimal } from '@openbooks/engine/money'
 
 const STATUS_STYLE: Record<BudgetRow['status'], string> = {
   'on-track': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
@@ -39,10 +40,18 @@ export function BudgetTab({ data }: { data: HealthData }) {
 type Filter = 'all' | BudgetRow['status']
 const PAGE = 30
 
+/** An exact budget-share fraction as a one-decimal percent string, never through Number. */
+function exactPercent1(ratio: string): string {
+  return divideDecimal(multiplyDecimal(ratio, '100', 4), '1', 1)
+}
+
 function RealBudget({ data }: { data: HealthData }) {
   const today = useBusinessToday()
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const fmtRatio = useRatioFormat()
+  const fmtProgress = (ratio: number) =>
+    new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(ratio)
   const t = useTranslations('analytics.financialHealth.budget')
   const tb = useTranslations('budgets')
   const b = data.budget
@@ -109,7 +118,7 @@ function RealBudget({ data }: { data: HealthData }) {
             </span>
             <button
               type="button"
-              onClick={() => exportCsv('budget-vs-actual', [t('columns.account'), t('columns.type'), t('columns.budget'), t('columns.actual'), t('columns.variance'), t('columns.variancePct'), t('columns.status')], filtered.map((r) => [r.name, r.type, r.budget, r.actual, r.variance, r.variancePct === null ? '' : (r.variancePct * 100).toFixed(1), statusLabel(r.status)]), today)}
+              onClick={() => exportCsv('budget-vs-actual', [t('columns.account'), t('columns.type'), t('columns.budget'), t('columns.actual'), t('columns.variance'), t('columns.variancePct'), t('columns.status')], filtered.map((r) => [r.name, r.type, r.budget, r.actual, r.variance, r.variancePct === null ? '' : exactPercent1(r.variancePct), statusLabel(r.status)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> {t('csv')}
@@ -161,7 +170,7 @@ function RealBudget({ data }: { data: HealthData }) {
                           <span className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                             <span className={cn('block h-full rounded-full', r.status === 'over' || r.status === 'under' ? 'bg-red-500' : r.status === 'watch' ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
                           </span>
-                          <span className="text-[11px] tabular-nums text-slate-400">{Math.round(ratio * 100)}%</span>
+                          <span className="text-[11px] tabular-nums text-slate-400">{fmtProgress(ratio)}</span>
                         </span>
                       )}
                     </SharedTableCell>

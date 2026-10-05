@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { BarChart3, PieChart, Network } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { cn, EmptyState } from '@openbooks/ui'
-import type { HealthData } from '../../../../../lib/analytics/health-data'
+import type { HealthData, SegmentRow } from '../../../../../lib/analytics/health-data'
 import { cmp, sum } from '@openbooks/engine/money'
 import { decimalRatio } from '../../../../../lib/reports/decimals'
 import { Panel, SegToggle } from '../../_ui/Panel'
@@ -28,7 +28,12 @@ export function SegmentsTab({ data }: { data: HealthData }) {
   const { totalRev, totalOp, best, hhi } = useMemo(() => {
     const totalRev = sum(rows.map((r) => r.revenue))
     const totalOp = sum(rows.map((r) => r.operatingIncome))
-    const best = rows.filter((r) => cmp(r.revenue, '0') > 0).sort((a, b) => b.operatingMarginPct - a.operatingMarginPct)[0]
+    // Only graded segments can lead: a segment with no revenue carries no
+    // margin, so it never tops the margin ranking either.
+    const graded = rows.filter(
+      (r): r is SegmentRow & { operatingMarginPct: number } => cmp(r.revenue, '0') > 0 && r.operatingMarginPct !== null,
+    )
+    const best = [...graded].sort((a, b) => b.operatingMarginPct - a.operatingMarginPct)[0]
     const hhi = Math.round(rows.reduce((s, r) => s + (r.sharePct * 100) ** 2, 0))
     return { totalRev, totalOp, best, hhi }
   }, [rows])
@@ -48,7 +53,7 @@ export function SegmentsTab({ data }: { data: HealthData }) {
           icon={Network}
           accent={hhiTone === 'high' ? 'red' : hhiTone === 'mid' ? 'amber' : 'emerald'}
           label={t('kpi.concentration')}
-          value={`HHI ${hhi}`}
+          value={t('hhiValue', { value: hhi })}
           sub={t(`hhi.${hhiTone}`)}
           tone={hhiTone === 'low' ? 'positive' : hhiTone === 'mid' ? 'neutral' : 'negative'}
         />
@@ -88,13 +93,13 @@ export function SegmentsTab({ data }: { data: HealthData }) {
                 {rows.map((r) => (
                   <SharedTableRow key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                     <SharedTableCell className="px-3 py-2">
-                      <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: r.health === 'good' ? '#10b981' : r.health === 'warn' ? '#f59e0b' : '#ef4444' }} />
+                      <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: r.health === 'good' ? '#10b981' : r.health === 'warn' ? '#f59e0b' : r.health === 'bad' ? '#ef4444' : '#94a3b8' }} />
                       {r.name}
                     </SharedTableCell>
                     <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{fmtMoney(r.revenue)}</SharedTableCell>
                     <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{pctN(r.sharePct)}</SharedTableCell>
-                    <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{pctN(r.grossMarginPct)}</SharedTableCell>
-                    <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', r.operatingMarginPct >= 0 ? 'text-slate-600 dark:text-slate-300' : 'text-red-600 dark:text-red-400')}>{pctN(r.operatingMarginPct)}</SharedTableCell>
+                    <SharedTableCell className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.grossMarginPct === null ? '—' : pctN(r.grossMarginPct)}</SharedTableCell>
+                    <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', r.operatingMarginPct === null || r.operatingMarginPct >= 0 ? 'text-slate-600 dark:text-slate-300' : 'text-red-600 dark:text-red-400')}>{r.operatingMarginPct === null ? '—' : pctN(r.operatingMarginPct)}</SharedTableCell>
                     <SharedTableCell className={cn('px-3 py-2 text-right tabular-nums', r.yoyPct === null ? 'text-slate-400 dark:text-slate-500' : r.yoyPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{r.yoyPct === null ? '—' : pctN(r.yoyPct)}</SharedTableCell>
                   </SharedTableRow>
                 ))}

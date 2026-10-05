@@ -37,7 +37,7 @@ function shortfallData() {
           budget: '10000.5000',
           actual: '9876.5400',
           variance: '-123.9600',
-          variancePct: -0.012396,
+          variancePct: '-0.0124',
           favorable: false,
           status: 'under',
         },

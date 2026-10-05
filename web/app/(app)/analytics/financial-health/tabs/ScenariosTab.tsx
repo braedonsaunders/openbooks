@@ -5,17 +5,67 @@ import { useTranslations } from 'next-intl'
 import { FlaskConical, Crosshair, ChartColumnBig } from 'lucide-react'
 import { cn, Select } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
+import type { HealthFigures } from '../../../../../lib/analytics/financial-health'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { GroupedBar } from '../../_ui/charts'
 import { useAnalyticsMoney, useRatioFormat, toChartNumber } from '../../_ui/format'
-import { add, canonicalDecimal, cmp, div, mulDecimal, neg } from '@openbooks/engine/money'
+import { add, canonicalDecimal, cmp, div, mulDecimalFactors, neg } from '@openbooks/engine/money'
 
 interface Inputs {
   growth: string
   price: string
   cogs: string
   opex: string
+}
+
+export interface ScenarioResult {
+  revenue: string
+  cogs: string
+  opex: string
+  grossProfit: string
+  operatingIncome: string
+  netIncome: string
+  gm: string | null
+  breakeven: string | null
+  safety: string | null
+  risk: 'low' | 'moderate' | 'high' | 'critical' | 'unknown'
+}
+
+/**
+ * The what-if model in exact decimals from the engine's baseline figures.
+ * Percentage inputs scale through one factorized multiplication each, so no
+ * intermediate factor is rounded to money scale: with every input at 0 each
+ * scale is exactly 1 and the scenario reproduces the baseline money to the
+ * unit. Operating revenue moves with volume and price; other income is
+ * non-operating and stays put. Breakeven is the engine's definition
+ * (operating expenses over gross margin, null without a positive margin).
+ * Exported for unit tests.
+ */
+export function computeScenario(
+  fig: Pick<HealthFigures, 'revenue' | 'operatingRevenue' | 'otherIncome' | 'cogs' | 'opex' | 'grossProfit' | 'operatingIncome' | 'otherExpense' | 'netIncome'>,
+  inputs: Inputs,
+  bands: { safety: string; comfort: string },
+): ScenarioResult {
+  const opRev = mulDecimalFactors(fig.operatingRevenue, [add('100', inputs.growth), add('100', inputs.price), '0.01', '0.01'])
+  const revenue = add(opRev, fig.otherIncome)
+  const cogs = mulDecimalFactors(fig.cogs, [add('100', inputs.growth), add('100', inputs.cogs), '0.01', '0.01'])
+  const opex = mulDecimalFactors(fig.opex, [add('100', inputs.opex), '0.01'])
+  const grossProfit = add(revenue, neg(cogs))
+  const operatingIncome = add(add(opRev, neg(cogs)), neg(opex))
+  // The baseline's own reconciling tax (income tax booked outside
+  // operating income) carries over unchanged, exactly as the margin flow
+  // reconciles it — so at-0 net income equals the baseline net income.
+  const reconcilingTax = add(fig.netIncome, neg(add(add(fig.operatingIncome, fig.otherIncome), neg(fig.otherExpense))))
+  const netIncome = add(add(add(operatingIncome, fig.otherIncome), neg(fig.otherExpense)), reconcilingTax)
+  const gm = cmp(revenue, '0') > 0 ? div(grossProfit, revenue) : null
+  const breakeven = gm !== null && cmp(gm, '0') > 0 ? div(opex, gm) : null
+  const safety = breakeven !== null && cmp(revenue, '0') > 0 ? div(add(revenue, neg(breakeven)), revenue) : null
+  const risk: ScenarioResult['risk'] = safety === null ? 'unknown'
+    : cmp(safety, '0') < 0 ? 'critical'
+      : cmp(safety, bands.comfort) >= 0 ? 'low'
+        : cmp(safety, bands.safety) >= 0 ? 'moderate' : 'high'
+  return { revenue, cogs, opex, grossProfit, operatingIncome, netIncome, gm, breakeven, safety, risk }
 }
 
 /**
@@ -39,11 +89,6 @@ const INPUT_KEYS = ['growth', 'price', 'cogs', 'opex'] as const
 
 const NUM = 'h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-sm text-slate-700 tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
 
-/** A percentage-point input as an exact scale factor (15 → 1.1500). */
-function factorOf(percent: string): string {
-  return add('1', div(percent, '100'))
-}
-
 export function ScenariosTab({ data }: { data: HealthData }) {
   const fmtMoney = useAnalyticsMoney()
   const fmtRatio = useRatioFormat()
@@ -61,32 +106,12 @@ export function ScenariosTab({ data }: { data: HealthData }) {
 
   const scenario = useMemo(() => {
     if (invalidKey) return null
-    // Operating revenue moves with volume and price; other income is
-    // non-operating and stays put. With every input at 0 each factor is
-    // exactly 1, so the scenario reproduces the baseline money to the unit.
-    const fV = factorOf(parsed.growth!)
-    const fP = factorOf(parsed.price!)
-    const opRev = mulDecimal(mulDecimal(fig.operatingRevenue, fV), fP)
-    const revenue = add(opRev, fig.otherIncome)
-    const cogs = mulDecimal(mulDecimal(fig.cogs, fV), factorOf(parsed.cogs!))
-    const opex = mulDecimal(fig.opex, factorOf(parsed.opex!))
-    const grossProfit = add(revenue, neg(cogs))
-    const operatingIncome = add(add(opRev, neg(cogs)), neg(opex))
-    // The baseline's own reconciling tax (income tax booked outside
-    // operating income) carries over unchanged, exactly as the margin flow
-    // reconciles it — so at-0 net income equals the baseline net income.
-    const reconcilingTax = add(fig.netIncome, neg(add(add(fig.operatingIncome, fig.otherIncome), neg(fig.otherExpense))))
-    const netIncome = add(add(add(operatingIncome, fig.otherIncome), neg(fig.otherExpense)), reconcilingTax)
-    // Breakeven is the engine's definition: operating expenses over gross
-    // margin, null without a positive margin — never a stand-in.
-    const gm = cmp(revenue, '0') > 0 ? div(grossProfit, revenue) : null
-    const breakeven = gm !== null && cmp(gm, '0') > 0 ? div(opex, gm) : null
-    const safety = breakeven !== null && cmp(revenue, '0') > 0 ? div(add(revenue, neg(breakeven)), revenue) : null
-    const risk = safety === null ? 'unknown'
-      : cmp(safety, '0') < 0 ? 'critical'
-        : cmp(safety, bands.comfort) >= 0 ? 'low'
-          : cmp(safety, bands.safety) >= 0 ? 'moderate' : 'high'
-    return { revenue, cogs, opex, grossProfit, operatingIncome, netIncome, gm, breakeven, safety, risk }
+    return computeScenario(fig, {
+      growth: parsed.growth!,
+      price: parsed.price!,
+      cogs: parsed.cogs!,
+      opex: parsed.opex!,
+    }, bands)
   }, [parsed, invalidKey, fig, bands])
 
   const grossMargin = Object.values(data.ratios).flat().find((r) => r.id === 'gross_margin')
@@ -152,7 +177,10 @@ export function ScenariosTab({ data }: { data: HealthData }) {
               height={320}
               series={[
                 { name: t('chart.baseline'), data: [fig.revenue, fig.grossProfit, fig.operatingIncome, fig.netIncome].map(toChartNumber), color: '#94a3b8' },
-                { name: t('chart.scenario'), data: scenario ? [scenario.revenue, scenario.grossProfit, scenario.operatingIncome, scenario.netIncome].map(toChartNumber) : [0, 0, 0, 0], color: '#0d9488' },
+                // No scenario series while an input is invalid: the KPIs read
+                // unavailable, and the chart must show exactly that — the
+                // baseline alone — never plotted zeroes.
+                ...(scenario ? [{ name: t('chart.scenario'), data: [scenario.revenue, scenario.grossProfit, scenario.operatingIncome, scenario.netIncome].map(toChartNumber), color: '#0d9488' }] : []),
               ]}
             />
           </Panel>

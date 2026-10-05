@@ -107,8 +107,9 @@ export function OverviewTab({ data }: { data: HealthData }) {
   )
 }
 
-function SparkCard({ label, points, last, pct }: { label: string; points: number[]; last: string; pct?: boolean }) {
-  const up = points.length > 1 && points[points.length - 1]! >= points[0]!
+function SparkCard({ label, points, last, pct }: { label: string; points: (number | null)[]; last: string; pct?: boolean }) {
+  const nums = points.filter((p): p is number => p !== null)
+  const up = nums.length > 1 && nums[nums.length - 1]! >= nums[0]!
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>

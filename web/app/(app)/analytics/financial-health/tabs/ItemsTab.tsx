@@ -6,7 +6,7 @@ import { ArrowUpRight, ArrowDownRight, ListTree } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { cn, EmptyState } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
-import { cmp } from '@openbooks/engine/money'
+import { abs, cmp } from '@openbooks/engine/money'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { Panel } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
@@ -22,7 +22,8 @@ export function ItemsTab({ data, onDrill }: { data: HealthData; onDrill: (id: st
 
   const topMovers = useMemo(() => {
     const all = [...data.items.gainers, ...data.items.decliners]
-    return all.sort((a, b) => Math.abs(toChartNumber(b.change)) - Math.abs(toChartNumber(a.change))).slice(0, 10)
+    // Rank by exact money magnitude — never through the chart projection.
+    return all.sort((a, b) => cmp(abs(b.change), abs(a.change))).slice(0, 10)
   }, [data.items])
   const topGainer = data.items.gainers[0]
   const topDecliner = data.items.decliners[0]
