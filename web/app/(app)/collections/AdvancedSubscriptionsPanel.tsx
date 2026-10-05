@@ -18,6 +18,10 @@ import {
 import { InspectorPanel } from "@/components/builder/builder-kit";
 import { Trash2, Plus } from "lucide-react";
 import { Field } from "@/components/field";
+import {
+  PlanVersionEntitlementsDrawer,
+  SubscriptionEntitlementsDrawer,
+} from "./EntitlementDrawers";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import { fetchAction } from "@braedonsaunders/appkit-errors";
@@ -96,6 +100,7 @@ export function AdvancedSubscriptionsPanel({
   onClose?: () => void;
 }) {
   const t = useTranslations("ar.collections.subscriptions.advanced");
+  const et = useTranslations("ar.collections.subscriptions.advanced.entitlements");
   const forms = useTranslations("ar.collections.forms");
   const newAction = useTranslations("ar.collections.actions");
   const common = useTranslations("common");
@@ -106,6 +111,8 @@ export function AdvancedSubscriptionsPanel({
   const [versions, setVersions] = useState<Version[]>([]);
   const [lifecycles, setLifecycles] = useState<Lifecycle[]>([]);
   const [amendments, setAmendments] = useState<Amendment[]>([]);
+  const [entVersion, setEntVersion] = useState<{ id: string; name: string } | null>(null);
+  const [entSub, setEntSub] = useState<{ id: string; label: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const tErrors = useTranslations("ar.collections.errors");
@@ -340,6 +347,16 @@ export function AdvancedSubscriptionsPanel({
                 header: <></>,
                 cell: (version) => (
                   <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        setEntVersion({ id: version.id, name: version.name })
+                      }
+                    >
+                      {et("versionTitle")}
+                    </Button>
                     {version.status === "draft" && (
                       <Button
                         size="sm"
@@ -646,6 +663,27 @@ export function AdvancedSubscriptionsPanel({
                         </p>
                       ))}
                   </div>
+                ),
+              },
+              {
+                key: "entitlements",
+                header: <></>,
+                cell: (l) => (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() =>
+                      setEntSub({
+                        id: l.subscriptionId,
+                        label:
+                          subscriptions.find((s) => s.id === l.subscriptionId)
+                            ?.customerName ?? t("customerFallback"),
+                      })
+                    }
+                  >
+                    {et("subscriptionTitle")}
+                  </Button>
                 ),
               },
             ]}
@@ -1099,6 +1137,18 @@ export function AdvancedSubscriptionsPanel({
           </Drawer>
         </div>
       )}
+      <PlanVersionEntitlementsDrawer
+        versionId={entVersion?.id ?? null}
+        versionName={entVersion?.name ?? ""}
+        open={entVersion !== null}
+        onClose={() => setEntVersion(null)}
+      />
+      <SubscriptionEntitlementsDrawer
+        subscriptionId={entSub?.id ?? null}
+        subscriptionLabel={entSub?.label ?? ""}
+        open={entSub !== null}
+        onClose={() => setEntSub(null)}
+      />
     </div>
   );
 }
