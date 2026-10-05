@@ -570,3 +570,34 @@ test(
     }
   },
 );
+
+test(
+  "a per-state-account SUI carry-in consumes the state's wage base, and entering it twice refuses",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
+      const employee = await usEmployee(fx, "Texas adopter");
+      const suiBase = [{ programKey: "us_sui", filingAccountId: fx.suiAccountId, region: "TX", insurableYtd: "6000" }];
+      await assert.rejects(
+        saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
+          employeePartyId: employee, amounts: {}, accountBases: suiBase, suiStates: { TX: "6000" },
+        }] }),
+        /keep it in SUI wages per state account for this filing account and set the TX state carry-in to zero/,
+      );
+      await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
+        employeePartyId: employee, amounts: {}, accountBases: suiBase,
+      }] });
+      const run = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+      });
+      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId })).errors, []);
+      // $6,000 carried in under the Texas account leaves $1,000 of the
+      // $7,000 base: 3% of $1,000, not of the period's $2,000.
+      assert.equal((await stubFactors(fx, run.documentId, employee))?.SUTA, "30.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);

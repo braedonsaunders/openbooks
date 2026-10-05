@@ -33,3 +33,11 @@ export const US_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
  */
 export const US_FICA_WAGES_ACCOUNT_BASE = "us_w2_fica_wages";
 export const US_FICA_WITHHELD_ACCOUNT_BASE = "us_w2_fica_withheld";
+
+/**
+ * Per-state-account SUI carry-in key. It and the per-state SUI carry-in row
+ * for the same state are one amount entered in either place: SUI reads
+ * their union (compute-statutory.ts), and the carry-in save refuses both
+ * holding an amount for one state.
+ */
+export const US_SUI_ACCOUNT_BASE = "us_sui";

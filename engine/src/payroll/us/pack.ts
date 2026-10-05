@@ -8,7 +8,7 @@ import { computeUsStatutory, US_COMPUTE_FACTOR_LABELS, usWaivedSuiRateSlots } fr
 import { usPackFilings } from "./filings.ts";
 import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./jurisdictions.ts";
 import {
-  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS,
+  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS, US_SUI_ACCOUNT_BASE,
 } from "./opening-ytd.ts";
 import { PUB15T_FACTOR_LABELS } from "./pub15t.ts";
 import { US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./rates.ts";
@@ -339,11 +339,12 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
       requiresRegion: false,
     },
     {
-      key: "us_sui",
+      key: US_SUI_ACCOUNT_BASE,
       label: "SUI wages per state account",
       help: "State-unemployment-insurable wages paid before OpenBooks adoption under this state account this tax year.",
       filingProgramType: "us_state_sui",
       requiresRegion: true,
+      replacesStateCarryIn: true,
     },
     { key: "us_w2_taxable", label: "W-2 wages per federal EIN", help: "Federal taxable wages reported under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "taxableYtd" },
     { key: "us_w2_tax", label: "Federal income tax per EIN", help: "Federal income tax withheld under this EIN before OpenBooks adoption.", filingProgramType: "us_ein", requiresRegion: false, replacesLegacyField: "taxYtd" },
