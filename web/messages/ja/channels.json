@@ -279,6 +279,10 @@
     "overrideItem": "品目",
     "overrideBuffer": "独自の引き当て",
     "clearOverride": "クリア",
+    "tabs": {
+      "mapped": "マッピング済みのロケーション",
+      "ariaLabel": "ロケーション一覧"
+    },
     "inherited": "継承"
   },
   "settings": {

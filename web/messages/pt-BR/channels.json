@@ -279,6 +279,10 @@
     "overrideItem": "Item",
     "overrideBuffer": "Reserva própria",
     "clearOverride": "Limpar",
+    "tabs": {
+      "mapped": "Locais mapeados",
+      "ariaLabel": "Listas de locais"
+    },
     "inherited": "Herdado"
   },
   "settings": {

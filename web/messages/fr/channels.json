@@ -279,6 +279,10 @@
     "overrideItem": "Article",
     "overrideBuffer": "Réserve propre",
     "clearOverride": "Effacer",
+    "tabs": {
+      "mapped": "Emplacements mappés",
+      "ariaLabel": "Listes d'emplacements"
+    },
     "inherited": "Hérité"
   },
   "settings": {

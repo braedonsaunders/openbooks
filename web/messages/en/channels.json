@@ -279,7 +279,11 @@
     "overrideItem": "Item",
     "overrideBuffer": "Own buffer",
     "clearOverride": "Clear",
-    "inherited": "Inherited"
+    "inherited": "Inherited",
+    "tabs": {
+      "mapped": "Mapped locations",
+      "ariaLabel": "Location lists"
+    }
   },
   "settings": {
     "title": "Channel settings",

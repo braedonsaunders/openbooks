@@ -1,14 +1,18 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
+import { mergeHref } from '../../../../lib/list-params'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
-import { Badge, Button, DisclosureSection, Drawer, EmptyState, Input, Label, SearchSelect } from '@openbooks/ui'
+import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
+import { Badge, Button, Drawer, EmptyState, Input, Label, SearchSelect } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
+import { conflictsForLocation, resolveLocationSection } from './location-sections'
 
 interface LocationRow {
   id: string
@@ -62,14 +66,24 @@ interface PolicyRow {
 }
 
 /**
- * Locations & stock: every Shopify location with its stock mapping, the
- * push state beside it, and the conflict queue on top. Everyday reads
- * state and the next action; the mapping drawer configures buffer and
- * policy; per-item overrides sit one disclosure deeper.
+ * Locations & stock: the mapped locations are the parent body. A location
+ * with open stock conflicts opens them from its row in a drawer; per-item
+ * overrides live under their own subtab. Everyday reads state and the next
+ * action; drawers configure.
  */
 export function LocationsTab({ channelId, canManage }: { channelId: string; canManage: boolean }) {
   const t = useTranslations('channels')
   const tc = useTranslations('common')
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const sp = Object.fromEntries(searchParams.entries())
+  const section = resolveLocationSection(sp)
+  const sectionTabs = [
+    { key: 'mapped', label: t('locations.tabs.mapped'), href: mergeHref(pathname, sp, { section: 'mapped' }) },
+    { key: 'policies', label: t('locations.overrideTitle'), href: mergeHref(pathname, sp, { section: 'policies' }) },
+  ]
+  const [conflictLocation, setConflictLocation] = useState<LocationRow | null>(null)
   const [rows, setRows] = useState<LocationRow[]>([])
   const [states, setStates] = useState<SyncState[]>([])
   const [conflicts, setConflicts] = useState<ConflictRow[]>([])
@@ -155,6 +169,7 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
   }, [load, loadSync, loadOptions, loadItems])
 
   function pick(row: LocationRow) {
+    setConflictLocation(null)
     setMapping(row)
     setStockId(row.stockLocationId ?? '')
     setSync(row.syncInventory)
@@ -170,6 +185,11 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
     setOverrideStop(policy.stopSellingAtZero ?? true)
     setOverrideInheritStop(policy.stopSellingAtZero === null)
     setOverrideSync(policy.syncInventory)
+  }
+
+  function reviewConflicts(row: LocationRow) {
+    setMapping(null)
+    setConflictLocation(row)
   }
 
   function stockLabel(row: LocationRow): string | null {
@@ -366,31 +386,34 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
         </span>
       ),
     },
-    ...(canManage
-      ? [
-          {
-            key: 'rowActions',
-            header: '',
-            cell: (row: LocationRow) => (
-              <span className="flex gap-1">
-                <Button size="sm" variant="ghost" onClick={() => pick(row)}>
-                  {t('actions.map')}
-                </Button>
-                {row.stockLocationId && row.syncInventory ? (
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => pushNow(row)}>
-                    {t('locations.pushNow')}
-                  </Button>
-                ) : null}
-                {row.stockLocationId ? (
-                  <Button size="sm" variant="ghost" onClick={() => unmap(row)}>
-                    {t('actions.unmatch')}
-                  </Button>
-                ) : null}
-              </span>
-            ),
-          } as PagedColumn<LocationRow>,
-        ]
-      : []),
+    {
+      key: 'rowActions',
+      header: '',
+      cell: (row: LocationRow) => (
+        <span className="flex gap-1">
+          {canManage ? (
+            <Button size="sm" variant="ghost" onClick={() => pick(row)}>
+              {t('actions.map')}
+            </Button>
+          ) : null}
+          {(stateFor(row)?.openConflicts ?? 0) > 0 ? (
+            <Button size="sm" variant="ghost" onClick={() => reviewConflicts(row)}>
+              {t('locations.conflictBadge', { count: stateFor(row)?.openConflicts ?? 0 })}
+            </Button>
+          ) : null}
+          {canManage && row.stockLocationId && row.syncInventory ? (
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => pushNow(row)}>
+              {t('locations.pushNow')}
+            </Button>
+          ) : null}
+          {canManage && row.stockLocationId ? (
+            <Button size="sm" variant="ghost" onClick={() => unmap(row)}>
+              {t('actions.unmatch')}
+            </Button>
+          ) : null}
+        </span>
+      ),
+    } as PagedColumn<LocationRow>,
   ]
 
   const conflictColumns: PagedColumn<ConflictRow>[] = [
@@ -432,37 +455,47 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
       : []),
   ]
 
+  const visibleTabs = canManage ? sectionTabs : sectionTabs.filter((tab) => tab.key === 'mapped')
+  const visibleSection = section === 'policies' && !canManage ? 'mapped' : section
+  const locationConflicts = conflictsForLocation(conflicts, conflictLocation?.stockLocationId ?? null)
+
+  function selectSection(key: string) {
+    const tab = sectionTabs.find((entry) => entry.key === key)
+    if (tab) router.push(tab.href)
+  }
+
   return (
     <div className="space-y-3">
-      {conflicts.length > 0 ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-medium text-amber-900 dark:text-amber-100">{t('locations.conflictsTitle', { count: conflicts.length })}</h2>
-              <p className="text-xs text-amber-700 dark:text-amber-300">{t('locations.conflictsHint')}</p>
-            </div>
-            {canManage ? (
-              <span className="flex gap-1">
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => resolveAll('pushed_openbooks')}>
-                  {t('locations.pushAll')}
-                </Button>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => resolveAll('accepted_shopify')}>
-                  {t('locations.acceptAll')}
-                </Button>
-              </span>
-            ) : null}
-          </div>
-          <div className="mt-3">
-            <PagedTable<ConflictRow>
-              columns={conflictColumns}
-              rows={conflicts}
-              rowKey={(row) => row.id}
-              empty={<EmptyState title={t('locations.conflictsTitle', { count: 0 })} description={t('locations.conflictsHint')} />}
-            />
-          </div>
-        </section>
-      ) : null}
-      {canManage ? (
+      <DrawerTabStrip
+        tabs={visibleTabs}
+        activeKey={visibleSection}
+        onSelect={selectSection}
+        ariaLabel={t('locations.tabs.ariaLabel')}
+      />
+      {visibleSection === 'mapped' ? (
+        <>
+          <h2 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('locations.tabs.mapped')}</h2>
+          {conflicts.length > 0 ? (
+            <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-medium text-amber-900 dark:text-amber-100">{t('locations.conflictsTitle', { count: conflicts.length })}</h2>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">{t('locations.conflictsHint')}</p>
+                </div>
+                {canManage ? (
+                  <span className="flex gap-1">
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => resolveAll('pushed_openbooks')}>
+                      {t('locations.pushAll')}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => resolveAll('accepted_shopify')}>
+                      {t('locations.acceptAll')}
+                    </Button>
+                  </span>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+          {canManage ? (
         <div className="flex justify-end">
           <Button
             size="sm"
@@ -496,49 +529,54 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
           empty={<EmptyState title={t('locations.emptyTitle')} description={t('locations.unmappedHint')} />}
         />
       )}
-      {canManage ? (
-        <DisclosureSection
-          title={t('locations.overrideTitle')}
-          summary={t('locations.overrideSummary', { count: policies.length })}
-        >
-          <div className="space-y-3 pt-1">
-            <p className="text-xs text-slate-500">{t('locations.overrideHint')}</p>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-52 flex-1 space-y-1">
-                <Label>{t('locations.overrideItem')}</Label>
-                <SearchSelect value={overrideItem} onChange={setOverrideItem} options={itemOptions} ariaLabel={t('locations.overrideItem')} />
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <Switch on={!overrideInheritBuffer} onToggle={() => setOverrideInheritBuffer((value) => !value)} disabled={busy} label={t('locations.overrideBuffer')} />
-                {t('locations.overrideBuffer')}
-              </label>
-              {!overrideInheritBuffer ? (
-                <Input
-                  className="w-24"
-                  inputMode="decimal"
-                  aria-label={t('locations.bufferLabel')}
-                  value={overrideBuffer}
-                  onChange={(event) => setOverrideBuffer(event.target.value)}
-                  placeholder="2"
-                />
-              ) : null}
-              <label className="flex items-center gap-2 text-sm">
-                <Switch on={!overrideInheritStop} onToggle={() => setOverrideInheritStop((value) => !value)} disabled={busy} label={t('locations.stopLabel')} />
-                {t('locations.stopLabel')}
-              </label>
-              {!overrideInheritStop ? (
+        </>
+      ) : (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="space-y-3">
+            <div>
+              <h2 className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                {t('locations.overrideTitle')} · {t('locations.overrideSummary', { count: policies.length })}
+              </h2>
+              <p className="text-xs text-slate-500">{t('locations.overrideHint')}</p>
+            </div>
+            <div className="space-y-3 pt-1">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-52 flex-1 space-y-1">
+                  <Label>{t('locations.overrideItem')}</Label>
+                  <SearchSelect value={overrideItem} onChange={setOverrideItem} options={itemOptions} ariaLabel={t('locations.overrideItem')} />
+                </div>
                 <label className="flex items-center gap-2 text-sm">
-                  <Switch on={overrideStop} onToggle={() => setOverrideStop((value) => !value)} disabled={busy} label={t('locations.stopLabel')} />
-                  {overrideStop ? t('locations.stopOn') : t('locations.stopOff')}
+                  <Switch on={!overrideInheritBuffer} onToggle={() => setOverrideInheritBuffer((value) => !value)} disabled={busy} label={t('locations.overrideBuffer')} />
+                  {t('locations.overrideBuffer')}
                 </label>
-              ) : null}
-              <label className="flex items-center gap-2 text-sm">
-                <Switch on={overrideSync} onToggle={() => setOverrideSync((value) => !value)} disabled={busy} label={t('locations.syncStock')} />
-                {overrideSync ? t('locations.syncOn') : t('locations.syncOff')}
-              </label>
-              <Button size="sm" disabled={busy || overrideItem === ''} onClick={saveOverride}>
-                {tc('actions.save')}
-              </Button>
+                {!overrideInheritBuffer ? (
+                  <Input
+                    className="w-24"
+                    inputMode="decimal"
+                    aria-label={t('locations.bufferLabel')}
+                    value={overrideBuffer}
+                    onChange={(event) => setOverrideBuffer(event.target.value)}
+                    placeholder="2"
+                  />
+                ) : null}
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch on={!overrideInheritStop} onToggle={() => setOverrideInheritStop((value) => !value)} disabled={busy} label={t('locations.stopLabel')} />
+                  {t('locations.stopLabel')}
+                </label>
+                {!overrideInheritStop ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <Switch on={overrideStop} onToggle={() => setOverrideStop((value) => !value)} disabled={busy} label={t('locations.stopLabel')} />
+                    {overrideStop ? t('locations.stopOn') : t('locations.stopOff')}
+                  </label>
+                ) : null}
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch on={overrideSync} onToggle={() => setOverrideSync((value) => !value)} disabled={busy} label={t('locations.syncStock')} />
+                  {overrideSync ? t('locations.syncOn') : t('locations.syncOff')}
+                </label>
+                <Button size="sm" disabled={busy || overrideItem === ''} onClick={saveOverride}>
+                  {tc('actions.save')}
+                </Button>
+              </div>
             </div>
             {policies.length > 0 ? (
               <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -567,8 +605,27 @@ export function LocationsTab({ channelId, canManage }: { channelId: string; canM
               </ul>
             ) : null}
           </div>
-        </DisclosureSection>
-      ) : null}
+        </section>
+      )}
+      <Drawer
+        open={conflictLocation !== null}
+        onClose={() => setConflictLocation(null)}
+        title={conflictLocation ? t('locations.conflictsTitle', { count: locationConflicts.length }) : ''}
+      >
+        {conflictLocation ? (
+          <div className="space-y-3 p-1">
+            <p className="text-sm text-slate-500">
+              {conflictLocation.externalName} · {t('locations.conflictsHint')}
+            </p>
+            <PagedTable<ConflictRow>
+              columns={conflictColumns}
+              rows={locationConflicts}
+              rowKey={(row) => row.id}
+              empty={<EmptyState title={t('locations.conflictsTitle', { count: 0 })} description={t('locations.conflictsHint')} />}
+            />
+          </div>
+        ) : null}
+      </Drawer>
       <Drawer open={mapping !== null} onClose={() => setMapping(null)} title={mapping ? t('locations.mapTitle', { name: mapping.externalName }) : ''}>
         {mapping ? (
           <div className="space-y-4 p-1">
