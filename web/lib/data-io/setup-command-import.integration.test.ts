@@ -11,10 +11,10 @@ const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await i
 
 const DB = { skip: !process.env.OPENBOOKS_DB_URL }
 
-/** Pin the org's feature flags, then read the state back so a zero-row write
- *  fails loudly here instead of silently testing the defaults. */
+/** A zero-row feature update must fail instead of testing unchanged defaults. */
 async function setImportFeatures(orgId: string, flags: Record<string, boolean>): Promise<void> {
-  await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(flags)}::jsonb, true) where id = ${orgId}`)
+  const updated = await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(flags)}::jsonb, true) where id = ${orgId} returning id`)
+  assert.equal(updated.rows.length, 1, 'the feature fixture must update its organization')
 }
 
 async function seedChannel(orgId: string, actorId: string, name: string): Promise<string> {
@@ -29,15 +29,17 @@ async function seedChannel(orgId: string, actorId: string, name: string): Promis
 
 test('command-owned setup entities stay importable and bar sealed configuration', DB, async () => {
   const commanded = SETUP_ENTITIES.filter((entity) => entity.importVia === 'command').map((entity) => entity.key).sort()
-  assert.deepEqual(commanded, ['channel-account-maps', 'channel-locations'])
+  for (const key of ['channel-account-maps', 'channel-ad-spend', 'channel-locations']) {
+    assert.ok(commanded.includes(key), `${key} must import through its domain command`)
+  }
+  for (const entity of SETUP_ENTITIES.filter((candidate) => candidate.importVia === 'command')) {
+    assert.equal(setupDescriptor(entity).supportsImport, true, `${entity.key} must stay importable`)
+  }
   const barred = SETUP_ENTITIES.filter((entity) => entity.importVia === 'none').map((entity) => entity.key)
   assert.ok(barred.length > 0, 'the refusal test below is vacuous without a barred entity')
   for (const key of ['nonprofit-frameworks', 'fund-pairs', 'functional-mappings', 'dunning-policies', 'quote-to-cash-policy', 'customer-portal']) {
     assert.ok(barred.includes(key), `${key} must stay barred from import`)
   }
-  const maps = SETUP_ENTITY_BY_KEY.get('channel-account-maps')
-  assert.ok(maps)
-  assert.equal(setupDescriptor(maps).supportsImport, true)
   const frameworks = SETUP_ENTITY_BY_KEY.get('nonprofit-frameworks')
   assert.ok(frameworks)
   assert.equal(setupDescriptor(frameworks).supportsImport, false)
