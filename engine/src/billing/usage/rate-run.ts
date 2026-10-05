@@ -6,6 +6,7 @@ import {
   type usageRatingRuns,
 } from "@openbooks/schema";
 import { createSubscriptionInvoice, type InvoiceSpec } from "../subscription-billing.ts";
+import { resolveSubscriptionBillingTarget } from "../consolidated-billing.ts";
 import type { AdvancedBillingLine } from "../advanced-subscriptions.ts";
 import { SYSTEM_ACTOR_ID } from "../../banking/banking.ts";
 import { deleteDocument } from "../../ledger/document-delete.ts";
@@ -110,6 +111,8 @@ type LinkContext = SubscriptionUsageLink & {
 
 type SubscriptionRow = {
   customerId: string;
+  billToOverride: string | null;
+  payerOverride: string | null;
   subscriptionCurrency: string | null;
   customerSubsidiaryId: string | null;
   trustedSubsidiaryId: string | null;
@@ -260,7 +263,8 @@ async function loadContext(orgId: string, linkId: string, allowedSubsidiaryIds: 
   }
 
   const subscription = (await db.execute<SubscriptionRow>(sql`
-    select s.customer_id as "customerId", coalesce(v.currency_code, p.currency_code) as "subscriptionCurrency",
+    select s.customer_id as "customerId", s.bill_to_party_id as "billToOverride", s.payer_party_id as "payerOverride",
+           coalesce(v.currency_code, p.currency_code) as "subscriptionCurrency",
            c.subsidiary_id as "customerSubsidiaryId",
            (select active.id from subsidiaries active
              where active.id = c.subsidiary_id and active.org_id = s.org_id and active.is_active) as "trustedSubsidiaryId",
@@ -815,6 +819,15 @@ async function generateInvoice(
   preview: RateRunPreview,
 ): Promise<{ invoiceId: string; documentNumber: string } | null> {
   if (preview.invoiceLines.length === 0) return null;
+  // Usage bills through the payer hierarchy on the period end date, like
+  // subscription billing: the header carries the payer and the billing
+  // entity, the lines carry the service party (and the service entity across
+  // legal entities), and a group-held charge collects as an unposted pending
+  // draft. Without a relationship the target is the link customer itself.
+  const target = await resolveSubscriptionBillingTarget(orgId, context.link.customerId, preview.periodEnd, {
+    billToPartyId: context.subscription.billToOverride,
+    payerPartyId: context.subscription.payerOverride,
+  });
   const meterById = new Map(context.meters.map((meter) => [meter.id, meter]));
   const lines: AdvancedBillingLine[] = preview.invoiceLines.map((line) => {
     const meter = meterById.get(line.meterId);
@@ -852,14 +865,20 @@ async function generateInvoice(
       incomeAccountId: meter?.incomeAccountId ?? context.meters[0]!.incomeAccountId,
       itemId: meter?.itemId ?? context.meters[0]!.itemId,
       taxCodeId: meter?.taxCodeId ?? context.meters[0]!.taxCodeId,
+      servicePartyId: target.servicePartyId,
+      subsidiaryId: target.lineSubsidiaryId,
       custom: { rating },
     };
   });
   const invoiceSpec: InvoiceSpec = {
     orgId,
     actorId,
-    customerId: context.link.customerId,
-    subsidiaryId: context.subscription.subsidiaryId,
+    customerId: target.payerPartyId,
+    subsidiaryId: target.headerSubsidiaryId,
+    servicePartyId: target.servicePartyId,
+    lineSubsidiaryId: target.lineSubsidiaryId,
+    billToPartyId: target.billToPartyId,
+    consolidation: target.consolidation,
     currency: preview.currency,
     incomeAccountId: context.meters[0]!.incomeAccountId,
     itemId: context.meters[0]!.itemId,

@@ -272,6 +272,9 @@ function salesTaxLines(
       const common = {
         taxCodeId: component.taxCodeId,
         partyId: line.partyId ?? doc.partyId,
+        // Sales tax follows its line's entity across legal entities, like
+        // the income line above; null keeps the document subsidiary default.
+        subsidiaryId: line.subsidiaryId ?? null,
         ...taxControlDims(doc, line),
       };
       if (component.collectedBy === "marketplace") {
@@ -361,6 +364,10 @@ export const RULES: Record<string, RuleFn> = {
       amount: negMoney(l.amount), // credit income / deferred revenue
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
+      // A line earned by another legal entity keeps that entity (consolidated
+      // billing across entities); null defaults to the document subsidiary,
+      // so single-entity documents post exactly as before.
+      subsidiaryId: l.subsidiaryId ?? null,
       ...dims(doc, l),
     }]; });
     const tax = salesTaxLines(doc, lines, deps, 1);
