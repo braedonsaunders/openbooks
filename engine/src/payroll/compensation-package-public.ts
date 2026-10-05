@@ -1,4 +1,5 @@
 /** Native employer package configuration, approval, assignment and exact preview contracts. */
+export { CompensationPackageUnavailableError } from './compensation-package-error.ts';
 export {
   listCompensationPackages, getCompensationPackage, createCompensationPackage, updateCompensationPackage,
   saveCompensationPackageVersion, transitionCompensationPackageVersion,

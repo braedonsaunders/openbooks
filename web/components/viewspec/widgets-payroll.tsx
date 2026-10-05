@@ -1,4 +1,5 @@
 import { OpeningBalancesWorkspace } from '../../app/(app)/payroll/opening-balances/OpeningBalancesWorkspace'
+import { CompensationPackagesSection } from '../../app/(app)/admin/setup/payroll/CompensationPackagesSection'
 import { type ComponentProps } from 'react'
 import { RetroWorkspace } from '../../app/(app)/payroll/retro/RetroWorkspace'
 import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remittances/sections'
@@ -145,6 +146,7 @@ export const PAYROLL_WIDGETS = {
       title={str(props, 'title') ?? ''}
       description={str(props, 'description') ?? ''}
       launcher={props.launcher as ComponentProps<typeof PayrollSetupHeader>['launcher']}
+      showLauncher={props.showLauncher !== false}
     />
   ),
   'payroll-setup-banner': (props) => (
@@ -163,6 +165,7 @@ export const PAYROLL_WIDGETS = {
     />
   ),
   'payroll-packs-tab': () => <PacksTabSlot />,
+  'payroll-compensation-packages-tab': (props) => <CompensationPackagesSection sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />,
   'payroll-accounts-tab': () => <AccountsTabSlot />,
   'payroll-payday-tab': () => <PaydayTabSlot />,
   'payroll-rates-tab': () => <RatesTabSlot />,

@@ -11,6 +11,7 @@ import { organizationCurrencyAvailable } from "../organization/currency-options.
 import { subsidiaryVisibleFilter, ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { payrollPack } from "./packs.ts";
 import { PayrollError } from "./error.ts";
+import { compensationPackageSchemaRefusal } from './compensation-package-error.ts';
 import { canonicalCompensationPackageDefinition, compensationPackageAssignmentInputs, evaluateCompensationPackage, validateCompensationPackage, type CompensationPackageDefinition, type CompensationPackageEvaluationContext } from "./compensation-package.ts";
 import type { CompensationRuleComponent } from "./compensation-rules.ts";
 
@@ -69,6 +70,8 @@ function actor(query: CompensationPackageActor): void { identifier(query.orgId, 
 async function packageTransaction<T>(orgId: string, action: () => Promise<T>): Promise<T> {
   try { return await withOrgTransaction(orgId, action); }
   catch (error) {
+    const unavailable = compensationPackageSchemaRefusal(error);
+    if (unavailable) throw unavailable;
     const visited = new Set<object>();
     let detail: unknown = error;
     while (detail && typeof detail === "object" && !visited.has(detail)) {

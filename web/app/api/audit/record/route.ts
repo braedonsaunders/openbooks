@@ -7,6 +7,7 @@ import { can, guardSubsidiaryScope } from '../../../../lib/authz';
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+import { isAuditRecordTable } from '@/lib/audit-record-types'
 
 
 const ACTIONS = ['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'] as const
@@ -26,7 +27,7 @@ export const GET = defineRoute({
 
     const table = new URL(request.url).searchParams.get('table')
     const recordId = new URL(request.url).searchParams.get('id')
-    if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions' && table !== 'hrm_benefit_enrollments' && table !== 'hrm_benefit_programs' && table !== 'hrm_benefit_plans' && table !== 'entitlement_plans') || !recordId || !isUuid(recordId)) {
+    if (!isAuditRecordTable(table) || !recordId || !isUuid(recordId)) {
       return NextResponse.json({ error: 'invalid record' }, { status: 400 })
     }
 
@@ -37,7 +38,8 @@ export const GET = defineRoute({
     // permission. The kind is unknown before the lookup, so the family gate
     // admits every document-read permission here; the kind check below narrows
     // it, still as a uniform 404.
-    const family = table === 'parties'
+    const compensation = table === 'payroll_compensation_packages' || table === 'payroll_compensation_versions' || table === 'payroll_compensation_assignments'
+    const family = compensation ? ['payroll.read'] : table === 'parties'
       ? ['parties.read']
       : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? ['hrm.benefits.read']
       : table === 'item_rate_versions'
@@ -53,12 +55,22 @@ export const GET = defineRoute({
     if ((table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') && !await isFeatureEnabled(authz.user.orgId, 'hrm')) return notFound('record')
 
     if (table === 'entitlement_plans' && !await isFeatureEnabled(authz.user.orgId, 'payroll')) return notFound('record')
+    if (compensation && !await isFeatureEnabled(authz.user.orgId, 'payroll')) return notFound('record')
 
     // Existence, kind, and creator metadata are disclosures too: resolve the
     // record's subsidiary alongside org scope and gate BEFORE anything is
     // returned. Documents follow the documents-list rule (null fails closed);
     // parties follow the party-list rule (null-subsidiary rows are org-wide).
-    const record = table === 'hrm_benefit_plans'
+    const record = table === 'payroll_compensation_packages' || table === 'payroll_compensation_assignments'
+      ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select org_id,${table}::text as kind,created_at,created_by,updated_at,updated_by,subsidiary_id as "subsidiaryId"
+          from ${table === 'payroll_compensation_packages' ? sql`payroll_compensation_packages` : sql`payroll_compensation_assignments`} where org_id=${authz.user.orgId} and id=${recordId}`))
+      : table === 'payroll_compensation_versions'
+      ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select v.org_id,'payroll_compensation_versions'::text as kind,v.created_at,v.created_by,v.updated_at,v.updated_by,p.subsidiary_id as "subsidiaryId"
+          from payroll_compensation_versions v join payroll_compensation_packages p on p.org_id=v.org_id and p.id=v.package_id
+          where v.org_id=${authz.user.orgId} and v.id=${recordId}`))
+      : table === 'hrm_benefit_plans'
       ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
           select org_id, 'benefit_program' as kind, created_at, created_by, updated_at, updated_by, employer_subsidiary_id as "subsidiaryId"
           from hrm_benefit_plans where org_id=${authz.user.orgId} and id=${recordId}`))
@@ -117,7 +129,7 @@ export const GET = defineRoute({
         table === 'parties' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans' ? { orgWideNull: true } : {})
       if (denied) return denied
     }
-    const permission = (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? 'hrm.benefits.read' : table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
+    const permission = compensation ? 'payroll.read' : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? 'hrm.benefits.read' : table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
     // Wrong-kind callers learn nothing either: the kind-specific permission
     // fails closed with the same uniform 404, so an ar.read-only caller cannot
     // distinguish an existing AP bill from a missing id (and symmetrically).

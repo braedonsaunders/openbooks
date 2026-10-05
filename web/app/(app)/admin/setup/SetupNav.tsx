@@ -87,6 +87,7 @@ export function SetupNav({
   canManageSetup,
   canManagePerformance = false,
   canManageCompensation = false,
+  canReadPayrollPackages = false,
   canManageCrm = false,
   canManagePeriods,
   hiddenEntityKeys = [],
@@ -105,6 +106,7 @@ export function SetupNav({
   canManageSetup: boolean
   canManagePerformance?: boolean
   canManageCompensation?: boolean
+  canReadPayrollPackages?: boolean
   canManageCrm?: boolean
   canManagePeriods?: boolean
   hiddenEntityKeys?: string[]
@@ -148,7 +150,7 @@ export function SetupNav({
           panel. sm and up restore the grouped vertical rail exactly. */}
       <div className="flex flex-row items-start gap-6 overflow-x-auto pb-1 sm:flex-col sm:gap-0 sm:space-y-5 sm:overflow-visible sm:pb-0">
         {SETUP_GROUPS.map((group) => {
-          if (!canManageSetup && group.key !== 'company' && !(group.key === 'workforce' && (canManagePerformance || canManageCompensation))) return null
+          if (!canManageSetup && group.key !== 'company' && !(group.key === 'workforce' && (canManagePerformance || canManageCompensation || canReadPayrollPackages))) return null
           const items: NavItem[] =
             group.key === 'accounting'
               ? [
@@ -289,7 +291,8 @@ export function SetupNav({
                   label: t(`entities.${e.key}.title`),
                   iconKey: e.iconKey,
                 }))
-          const visibleItems = canManageSetup ? items : items.filter((item) => (canManageCrm && item.href === '/admin/setup/crm') || (canManagePerformance && item.href === '/admin/setup/performance') || (canManageCompensation && item.href === '/admin/setup/compensation'))
+          const authorizedItems = group.key === 'workforce' && canReadPayrollPackages && !canManageSetup ? [...items, { href: '/admin/setup/payroll?tab=compensation-packages', label: t('entities.payroll-compensation-packages.title'), iconKey: 'coins' }] : items
+          const visibleItems = canManageSetup ? authorizedItems : authorizedItems.filter((item) => (canManageCrm && item.href === '/admin/setup/crm') || (canManagePerformance && item.href === '/admin/setup/performance') || (canManageCompensation && item.href === '/admin/setup/compensation') || (canReadPayrollPackages && item.href === '/admin/setup/payroll?tab=compensation-packages'))
           if (visibleItems.length === 0) return null
           return (
             <div key={group.key} className="shrink-0 space-y-1">

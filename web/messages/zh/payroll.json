@@ -716,7 +716,8 @@
       "workSchedules": "工作时间表",
       "serviceCredits": "认可工龄",
       "vacationTerms": "休假条款",
-      "expenses": "费用分配"
+      "expenses": "费用分配",
+      "compensationPackages": "薪酬方案"
     },
     "packs": {
       "installed": "已安装",

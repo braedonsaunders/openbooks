@@ -231,11 +231,12 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
         const object = entry as Record<string, unknown>
         const value = { ...object }
         for (const child of field.fields ?? []) {
+          if (child.omitWhenHidden && !setupFieldVisible(child, object)) { delete value[child.key]; continue }
           if (!setupFieldVisible(child, object) || object[child.key] === undefined) {
             if (child.required && setupFieldVisible(child, object)) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} is required` }
             continue
           }
-          if (['text', 'textarea', 'zonedDateTime'].includes(child.kind) && typeof object[child.key] !== 'string') return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} must be text` }
+          if (object[child.key] != null && ['text', 'textarea', 'zonedDateTime'].includes(child.kind) && typeof object[child.key] !== 'string') return { error: `${field.key}${array ? ` row ${index + 1}` : ''}.${child.key} must be text` }
           const result = coerceField(child, object[child.key])
           if ('error' in result) return { error: `${field.key}${array ? ` row ${index + 1}` : ''}: ${result.error}` }
           value[child.key] = (child.kind === 'object' || child.kind === 'objectArray' || (child.kind === 'stringArray' && child.arrayStorage !== 'text')) && typeof result.value === 'string' ? JSON.parse(result.value) : result.value

@@ -73,6 +73,7 @@ const TABS = [
   // jurisdictions' statutory holiday pay is computed FROM.
   'workSchedules',
   'derived', 'derivedPreview',
+  'compensation-packages',
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
   'holidays', 'holidayCalendar',
@@ -87,11 +88,13 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 /** Configuration families use a picker; only the selected family has a local row. */
 const GROUPS: { key: 'foundations' | 'earnings' | 'payday'; tabs: Tab[] }[] = [
   { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'employerFacts', 'schedules', 'workSchedules', 'filing'] },
-  { key: 'earnings', tabs: ['components', 'expenses', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
+  { key: 'earnings', tabs: ['components', 'compensation-packages', 'expenses', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
   { key: 'payday', tabs: ['payday'] },
 ]
 
 export interface PayrollSetupData {
+  canConfigure: boolean
+  onCompensationPackages: boolean
   title: string
   description: string
   launcher: PayrollLauncherData
@@ -118,13 +121,15 @@ export interface PayrollSetupData {
 export async function loadPayrollSetup(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PayrollSetupData> {
-  const authz = await requirePermission('payroll.manage')
-  if (await guardRootSubsidiaryScope(authz)) notFound()
+  const requestedPackages = pickString(sp.tab) === 'compensation-packages'
+  const authz = await requirePermission(requestedPackages ? 'payroll.read' : 'payroll.manage')
+  if (!requestedPackages && await guardRootSubsidiaryScope(authz)) notFound()
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
   // A subtab backed by a registry entity only exists while that entity is
   // registered, so the workspace never links at a 404.
-  const available = TABS.filter((key) => !isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key]))
+  const canConfigure = can(authz, 'payroll.manage') && authz.allowedSubsidiaryIds === null
+  const available = TABS.filter((key) => (canConfigure || key === 'compensation-packages') && (!isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key])))
   const requested = pickString(sp.tab)
   // Legacy alias: readiness slot items link `?tab=<country>` (ca, us, …);
   // those slots are mapped on the accounts tab.
@@ -136,16 +141,16 @@ export async function loadPayrollSetup(
   const group = GROUPS.find((g) => g.tabs.includes(tab)) ?? GROUPS[0]!
   const t = await getTranslations('payroll.settingsPage')
   const canManageEntities = can(authz, 'admin.setup.manage')
-  const launcher = await launcherDataFor({
+  const launcher: PayrollLauncherData = canConfigure ? await launcherDataFor({
     orgId,
     canManageEntities,
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-  })
+  }) : { missing: 0, vendorKeysByCountry: {}, frequencies: [], canManageEntities: false, schedules: [], subsidiaries: [], bankProfiles: [] }
 
   const tabLabel = (key: Tab, fallback: string) =>
     t.has(`tabs.${key}` as never) ? t(`tabs.${key}` as never) : fallback
   const label = (key: Tab): string =>
-    key === 'expenses'
+    key === 'compensation-packages' ? t('tabs.compensationPackages') : key === 'expenses'
       ? tabLabel(key, 'Expense allocations')
       : key === 'derived'
       ? tabLabel(key, 'Derived Earnings')
@@ -186,6 +191,8 @@ export async function loadPayrollSetup(
   }
 
   return {
+    canConfigure,
+    onCompensationPackages: tab === 'compensation-packages',
     title: t('title'),
     description: t('description'),
     launcher,
@@ -243,8 +250,9 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
           title: data.title,
           description: data.description,
           launcher: data.launcher,
+          showLauncher: data.canConfigure,
         }),
-        widgetBlock('payroll-setup-banner', { launcher: data.launcher }),
+        { ...widgetBlock('payroll-setup-banner', { launcher: data.launcher }), when: f('canConfigure') },
         // One shared configuration-family selector and local route strip.
         widgetBlock('payroll-setup-tabs', {
           groups: data.groups,
@@ -253,6 +261,7 @@ export function payrollSetupSpec(data: PayrollSetupData): PageSpec {
           subTabs: data.subTabs,
         }),
         // Tab bodies. Exactly one presence flag is true per render.
+        { ...widgetBlock('payroll-compensation-packages-tab', { sp: data.currentParams }), when: f('onCompensationPackages') },
         {
           ...widgetBlock('payroll-packs-tab', {}),
           when: f('onPacks'),
