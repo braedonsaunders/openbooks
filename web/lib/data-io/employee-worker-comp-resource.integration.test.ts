@@ -62,7 +62,7 @@ test('classification preview writes nothing; apply preserves employee facts, aud
     const after = await fx.snapshot()
     assert.equal((await fx.resource.write([fx.row], 'upsert', fx.context)).updated, 0)
     assert.deepEqual(await fx.snapshot(), after)
-    assert.equal((await fx.resource.read({ allowedSubsidiaryIds: null })).rows[0]!.group, fx.groupId)
+    assert.equal((await fx.resource.read({ allowedSubsidiaryIds: null })).rows[0]!.group, 'FIELD')
     assert.equal((await fx.resource.read({ allowedSubsidiaryIds: new Set() })).rows.length, 0)
   } finally { await dropScratchOrgReporting(fx.orgId) }
 }))
@@ -113,7 +113,7 @@ test('a stale classification import cannot replace a newer assignment', async ()
       assert.match(refused.errors[0]!.message, /export and review the current group/)
     }
     assert.deepEqual(await fx.snapshot(), before)
-    assert.equal((await fx.resource.write([{ ...fx.row, group: fx.otherGroupId, expectedGroup: fx.groupId }], 'upsert', fx.context)).updated, 1)
+    assert.equal((await fx.resource.write([{ ...fx.row, group: 'SHOP', expectedGroup: 'FIELD' }], 'upsert', fx.context)).updated, 1)
   } finally { await dropScratchOrgReporting(fx.orgId) }
 }))
 
