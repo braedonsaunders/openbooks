@@ -19,16 +19,20 @@ import { CommerceError } from "../errors.ts";
 import { applyLocationWebhook } from "./locations.ts";
 import { ingestChannelEvent, ingestChannelOrder } from "../orders.ts";
 import { postChannelOrder } from "../order-posting.ts";
+import { postChannelRefund } from "../refunds.ts";
+import { postChannelCancellation } from "../cancellations.ts";
+import { postChannelFulfilment } from "../fulfilments.ts";
 import { normalizeShopifyOrder, normalizeShopifyRefund } from "./orders.ts";
+import { normalizeShopifyFulfilment } from "./fulfilments.ts";
 import { shopifyDeliveryShop, verifyShopifyWebhook } from "./webhooks.ts";
 import { db, withOrg } from "../../platform/db.ts";
 
 /**
  * The Shopify storefront adapter: HMAC verification, catalog, location,
- * order, refund and fulfilment webhooks, compliance deliveries, and the
- * uninstall signal. Payout, dispute and gift-card topics are stored but
- * left for a later change that posts them — this adapter says so per
- * delivery instead of dropping them.
+ * order, refund, cancellation and fulfilment webhooks, compliance
+ * deliveries, and the uninstall signal. Payout, dispute and gift-card
+ * topics are stored but left for a later change that posts them — this
+ * adapter says so per delivery instead of dropping them.
  */
 
 const LATER_CHANGE = "kept for the payout, dispute and gift-card surface a later change adds; the delivery stays stored and replays then";
@@ -344,9 +348,12 @@ const shopifyAdapter: SalesChannelAdapter = {
           externalId: `cancel:${orderExternalId}`,
           occurredAt: eventTime(body),
         });
+        // A paid cancellation waits for its refund; an unpaid one voids its
+        // sales order now. The event row carries the outcome either way.
+        const cancelled = await postChannelCancellation(orgId, null, stored.eventId);
         return {
           action: "processed",
-          resultRef: { orderExternalId, eventId: stored.eventId, cancelled: true },
+          resultRef: { orderExternalId, eventId: stored.eventId, cancelled: true, status: cancelled.status },
         };
       }
       if (topic === "refunds/create") {
@@ -363,22 +370,36 @@ const shopifyAdapter: SalesChannelAdapter = {
           refund,
           occurredAt: refund.refundedAt,
         });
+        // A parked refund keeps its code, reason and remedy on the event
+        // row; anything else propagates so the delivery retries.
+        const posted = await postChannelRefund(orgId, null, stored.eventId);
         return {
           action: "processed",
-          resultRef: { orderExternalId, eventId: stored.eventId, refundId: refund.externalId },
+          resultRef: { orderExternalId, eventId: stored.eventId, refundId: refund.externalId, status: posted.status },
         };
       }
-      if (topic === "fulfillments/create" || topic === "fulfillments/update") {
+      if (topic.startsWith("fulfillments/")) {
         const orderExternalId = eventOrderId(body);
-        const fulfilmentId = orderText(body.id) ?? orderText(body.fulfillment_id) ?? eventTime(body);
+        const normalized = normalizeShopifyFulfilment(body, orderExternalId);
+        // A delete or an explicit cancellation ends the fulfilment's life the
+        // same way: the reversal names the posted fulfilment it reverses.
+        const fulfilment = topic === "fulfillments/cancelled" || topic === "fulfillments/delete"
+          ? { ...normalized, cancelled: true }
+          : normalized;
+        // A cancellation arrives as its own event (same fulfilment, new
+        // row), so the reversal can name the posted fulfilment it reverses.
         const stored = await ingestChannelEvent(orgId, null, channelId, orderExternalId, {
           kind: "fulfilment",
-          externalId: `fulfilment:${fulfilmentId}`,
-          occurredAt: eventTime(body),
+          externalId: fulfilment.cancelled
+            ? `fulfilment-cancel:${fulfilment.externalId}`
+            : `fulfilment:${fulfilment.externalId}`,
+          fulfilment,
+          occurredAt: fulfilment.fulfilledAt,
         });
+        const posted = await postChannelFulfilment(orgId, null, stored.eventId);
         return {
           action: "processed",
-          resultRef: { orderExternalId, eventId: stored.eventId, fulfilled: true },
+          resultRef: { orderExternalId, eventId: stored.eventId, fulfilled: true, status: posted.status },
         };
       }
       if (

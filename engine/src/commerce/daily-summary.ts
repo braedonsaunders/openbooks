@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
+  buildSalesOrderDraft,
+  governedSalesOrderRef,
   formatLedgerMinor,
   OrderPostException,
   postCashSaleDraft,
@@ -21,6 +23,8 @@ interface SummaryGroup {
   provider: string;
   day: string;
   stockLocationId: string;
+  /** Who fulfils from the group shelf: OpenBooks (sale issues at posting) or the storefront (governed batch, fulfilments issue later). */
+  fulfilledBy: "openbooks" | "storefront";
   currency: string;
   subsidiaryId: string | null;
   cutoffTz: string;
@@ -216,7 +220,21 @@ export async function postSummaryBatch(
       }
       const { draft, scope } = aggregateSummaryDraft(group, resolved);
       draft.externalRef = `channel-summary:${batch.id}`;
-      const built = await postCashSaleDraft(orgId, actor, draft, scope);
+      // A storefront-fulfilled day posts as one governed batch: every
+      // order brings its own draft sales order, and the 'bills' edges mark
+      // the batch fulfilment-governed so the kernel skips sale-time issue
+      // effects. The batch stays homogeneous by shelf (the sweep groups one
+      // shelf per batch), so one flag governs every line.
+      const governIds: string[] = [];
+      if (group.fulfilledBy === "storefront") {
+        for (const one of resolved) {
+          governIds.push(
+            (await buildSalesOrderDraft(orgId, actor, one, governedSalesOrderRef(one.order.externalId))).documentId,
+          );
+        }
+      }
+      const built = await postCashSaleDraft(orgId, actor, draft, scope,
+        governIds.length > 0 ? { governFromSalesOrderIds: governIds } : undefined);
       if (!built.journalEntryId) {
         return { status: "pending", documentId: built.documentId, summarized: 0, parked, effectsDocumentId: null as string | null };
       }
@@ -335,19 +353,31 @@ export async function postDueDailySummariesForOrg(
       continue;
     }
     const due: DueChannel = { channelId: channel.channel_id, provider: meta.kind, subsidiaryId: meta.subsidiary_id, cutoffTz: policy.cutoffTz };
-    const groups = (await db.execute<{ day: string; stock_location_id: string; currency: string; order_ids: string[] }>(sql`
+    // The batch shelf mirrors sale resolution: the fulfilment shelf when
+    // OpenBooks fulfils, else the single mapped 3PL shelf. Anything else
+    // (no shelf, or several) posts per order and parks with the Locations
+    // remedy at resolution.
+    const locationLinks = (await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
+      select stock_location_id, fulfils_orders from sales_channel_locations
+       where org_id = ${orgId} and channel_id = ${channel.channel_id} and stock_location_id is not null`)).rows;
+    const fulfilShelves = locationLinks
+      .filter((link) => link.fulfils_orders && link.stock_location_id)
+      .map((link) => link.stock_location_id!);
+    const mappedShelves = locationLinks
+      .map((link) => link.stock_location_id)
+      .filter((id): id is string => !!id);
+    const groupShelf = fulfilShelves.length === 1
+      ? { stockLocationId: fulfilShelves[0]!, fulfilledBy: "openbooks" as const }
+      : fulfilShelves.length === 0 && mappedShelves.length === 1
+        ? { stockLocationId: mappedShelves[0]!, fulfilledBy: "storefront" as const }
+        : null;
+    const groups = (await db.execute<{ day: string; currency: string; order_ids: string[] }>(sql`
       select ((ordered_at at time zone ${policy.cutoffTz})::date)::text as day,
-             coalesce(
-               (select stock_location_id from sales_channel_locations
-                 where org_id = ${orgId} and channel_id = ${channel.channel_id} and fulfils_orders
-                   and stock_location_id is not null
-                 limit 1),
-               '00000000-0000-0000-0000-000000000000') as stock_location_id,
              shop_currency as currency,
              array_agg(id order by ordered_at) as order_ids
         from channel_orders
        where org_id = ${orgId} and channel_id = ${channel.channel_id} and posting_status = 'pending'
-       group by 1, 2, 3`)).rows;
+       group by 1, 2`)).rows;
     for (const group of groups) {
       if (group.day >= shopToday) continue;
       const postedSummary = (await db.execute<{ id: string }>(sql`
@@ -363,7 +393,7 @@ export async function postDueDailySummariesForOrg(
         }
         continue;
       }
-      if (group.stock_location_id === "00000000-0000-0000-0000-000000000000") {
+      if (!groupShelf) {
         for (const orderId of group.order_ids) {
           const outcome = await postChannelOrder(orgId, actor, orderId, { forcePerOrder: true }).catch(() => ({ status: "pending" as string }));
           if (outcome.status === "exception") parked += 1;
@@ -374,7 +404,8 @@ export async function postDueDailySummariesForOrg(
         channelId: due.channelId,
         provider: due.provider,
         day: group.day,
-        stockLocationId: group.stock_location_id,
+        stockLocationId: groupShelf.stockLocationId,
+        fulfilledBy: groupShelf.fulfilledBy,
         currency: group.currency,
         subsidiaryId: due.subsidiaryId,
         cutoffTz: due.cutoffTz,

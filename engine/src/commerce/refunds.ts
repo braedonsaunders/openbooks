@@ -48,6 +48,8 @@ export const CHANNEL_REFUND_EXCEPTION_CODES = [
   "over_refund",
   "refund_unposted_order",
   "unmapped_fulfilment_location",
+  "insufficient_stock",
+  "cancellation_blocked",
 ] as const;
 
 export type ChannelRefundExceptionCode = (typeof CHANNEL_REFUND_EXCEPTION_CODES)[number];
@@ -1196,9 +1198,12 @@ export async function postCashRefundDraft(
   if (totalMinor !== draft.merchantTotalMinor) {
     throw new Error("Channel refund draft left while its lines balanced");
   }
+  // Idempotency is per kind: the lookup must not observe a sibling
+  // document sharing the storefront identity under another kind.
   const existing = (await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(sql`
     select id, status, posted_entry_id from documents
-     where org_id = ${orgId} and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`)).rows[0];
+     where org_id = ${orgId} and kind = 'cash_refund'
+       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`)).rows[0];
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
     return { documentId: existing.id, journalEntryId: existing.posted_entry_id };
   }

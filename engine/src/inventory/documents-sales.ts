@@ -24,7 +24,7 @@ import { resolveProfile } from "./profile-policy.ts";
  * both the pre-post guard below and the post-commit issue hook. An invoice
  * converted from a sales order must never move stock a second time.
  */
-async function isFulfilmentGovernedInvoice(
+export async function isFulfilmentGovernedInvoice(
   runner: SqlExecutor,
   orgId: string,
   documentId: string,
