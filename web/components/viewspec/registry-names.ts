@@ -564,6 +564,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'viz-cell',
   'waiver-number-cell',
   'waivers-panel',
+  'new-webhook-endpoint',
+  'webhook-endpoint-drawer',
   'warehouses-panel',
   'wip-billing-workspace',
   'work-item-drawer',

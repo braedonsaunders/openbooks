@@ -64,6 +64,10 @@
         "title": "API Keys",
         "description": "Create scoped API keys for integrations and view usage logs"
       },
+      "webhooks": {
+        "title": "Webhooks",
+        "description": "Signed domain-event delivery to subscriber endpoints, with retries"
+      },
       "apiDocs": {
         "title": "API Docs",
         "description": "Browse the REST API reference for every record and transaction type"
@@ -600,6 +604,112 @@
       "rateLimitHint": "Maximum requests this key may make each minute. Leave blank for no limit."
     }
   },
+  "webhooks": {
+    "list": {
+      "title": "Webhooks",
+      "description": "Subscriber endpoints receive signed domain events with retried, observable delivery.",
+      "newButton": "New endpoint",
+      "emptyTitle": "No endpoints yet",
+      "emptyDescription": "Add your first endpoint to receive signed order, payment and stock events in your own systems."
+    },
+    "columns": {
+      "key": "Endpoint",
+      "url": "URL",
+      "events": "Events",
+      "failures": "Failures",
+      "lastDelivery": "Last delivery"
+    },
+    "drawer": {
+      "newTitle": "New endpoint",
+      "newDescription": "Subscribe a URL to domain events. The signing secret is shown once after creation.",
+      "keyLabel": "Endpoint key",
+      "keyPlaceholder": "crm",
+      "keyHint": "Stable name recipes use to address this endpoint. Lowercase letters, digits, dashes and underscores; never changes.",
+      "keyRequired": "Enter an endpoint key.",
+      "urlLabel": "URL",
+      "urlHint": "Public https:// URL that receives the signed POSTs.",
+      "urlRequired": "Enter the subscriber URL.",
+      "descriptionPlaceholder": "What this endpoint feeds.",
+      "eventsLabel": "Subscribed events",
+      "eventsHint": "The endpoint receives only the selected types.",
+      "activeLabel": "Enabled",
+      "activeOn": "Enabled",
+      "activeOff": "Disabled",
+      "activeHint": "Disable from the header to pause delivery without deleting history.",
+      "healthNew": "The endpoint starts receiving once created.",
+      "healthOk": "Receiving events. {count, plural, one {# delivery logged} other {# deliveries logged}}.",
+      "healthFailing": "Failing — {count, plural, one {# delivery in a row refused} other {# deliveries in a row refused}}. Fix the receiver, then redeliver from the Deliveries tab.",
+      "healthDisabled": "Disabled — no events are queued. Re-enable from the header to resume.",
+      "create": "Create endpoint",
+      "saveChanges": "Save changes",
+      "saveFailed": "The endpoint was not saved.",
+      "created": "Endpoint created.",
+      "updated": "Endpoint updated.",
+      "enable": "Re-enable",
+      "disable": "Disable",
+      "enableConfirm": "Re-enable this endpoint? Queued events resume delivery.",
+      "disableConfirm": "Disable this endpoint? Events stop queuing until it is re-enabled, but history is kept.",
+      "enabled": "Endpoint re-enabled.",
+      "disabled": "Endpoint disabled.",
+      "secretCreated": "Signing secret — copy it now",
+      "secretCreatedHint": "This is the only time the secret is shown. The receiver uses it to verify the OpenBooks-Signature header.",
+      "copy": "Copy",
+      "copied": "Secret copied."
+    },
+    "tabs": {
+      "settings": "Settings",
+      "deliveries": "Deliveries ({count})",
+      "security": "Security",
+      "ariaLabel": "Endpoint sections"
+    },
+    "groups": {
+      "documents": "Orders and money",
+      "catalog": "Items and stock",
+      "customers": "Customers"
+    },
+    "deliveries": {
+      "event": "Event",
+      "status": "Status",
+      "attempts": "Attempts",
+      "code": "Answer",
+      "latency": "Took",
+      "latencyMs": "{ms} ms",
+      "next": "Next try",
+      "empty": "No deliveries yet — they appear here each time a subscribed event fires.",
+      "needsAttention": "{count, plural, one {# delivery needs attention} other {# deliveries need attention}} — open one to read the receiver's answer, fix it, then redeliver.",
+      "view": "View payload",
+      "redeliver": "Redeliver",
+      "redelivered": "Delivery re-queued and attempted.",
+      "redeliverFailed": "The delivery was not redelivered.",
+      "moreActions": "More actions",
+      "openAria": "Open the {event} delivery",
+      "back": "Back to deliveries",
+      "payloadTitle": "Event payload",
+      "responseTitle": "Receiver's answer",
+      "noResponse": "The receiver sent no body."
+    },
+    "security": {
+      "signingTitle": "Signing secret",
+      "signingBody": "Every POST carries an OpenBooks-Signature header computed with this secret. Rotate it if it may have leaked; deliveries carry both the old and the new signature until the next rotation.",
+      "rotate": "Rotate secret",
+      "rotateConfirm": "Rotate the signing secret? Deliveries carry both signatures until the next rotation, so the receiver keeps verifying while it rolls.",
+      "rotated": "Secret rotated — copy the new one now.",
+      "ping": "Send test event",
+      "pingOk": "Test event delivered.",
+      "pingFailed": "The test event did not deliver.",
+      "overlapTitle": "Rotation overlap",
+      "overlapOn": "Both signatures accepted until the next rotation",
+      "overlapOff": "Single signature — no rotation in progress",
+      "overlapBody": "After a rotation the old secret stays valid for in-flight deliveries. The next rotation replaces it."
+    },
+    "advanced": {
+      "title": "Delivery policy",
+      "summary": "Retries with backoff for 3 days · disables after {threshold} failures",
+      "retry": "Failed attempts retry with exponential backoff and jitter for 3 days, then the delivery goes dead. A 410 (Gone) disables the endpoint at once.",
+      "autoDisable": "{failures, plural, one {# failure in a row} other {# failures in a row}} — the endpoint disables automatically at {threshold}.",
+      "envelope": "Each POST sends an id, event name, occurred-at timestamp and data payload with OpenBooks-Event, OpenBooks-Delivery and OpenBooks-Signature headers. Amounts are whole minor units with a currency."
+    }
+  },
   "settings": {
     "metaTitle": "Company & Accounting",
     "title": "Company & Accounting",
@@ -1078,6 +1188,8 @@
     "admin_sandboxes_manage": "Create and manage sandbox environments",
     "admin_backups_manage": "Manage organization backups",
     "api_keys_manage": "Manage API keys",
+    "webhooks_read": "View webhook endpoints and deliveries",
+    "webhooks_manage": "Manage webhook endpoints, rotate secrets and redeliver",
     "assets_read": "View fixed assets and depreciation",
     "assets_manage": "Create and edit assets, run depreciation",
     "documents_read": "Browse the file cabinet",
@@ -6047,6 +6159,10 @@
     "automationWebhooks": {
       "title": "Webhook actions",
       "description": "Call org-declared signed webhook endpoints from recipes."
+    },
+    "outboundWebhooks": {
+      "title": "Outbound webhooks",
+      "description": "Deliver signed domain events to subscriber endpoints in Settings → Developers → Webhooks. Needs API access."
     },
     "automationSimulator": {
       "title": "Simulator",

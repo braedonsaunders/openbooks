@@ -29,6 +29,7 @@
     "pay_run": "Pay run",
     "inventory_onhand": "Inventory on hand",
     "inventory_movement": "Inventory movement",
+    "webhook_endpoint": "Webhook endpoint",
     "budget_scenario": "Budget",
     "revenue_contract": "Revenue contract",
     "equipment_unit": "Equipment unit",

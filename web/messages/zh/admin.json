@@ -64,6 +64,10 @@
         "title": "API 密钥",
         "description": "为集成创建作用域受限的 API 密钥并查看使用日志"
       },
+      "webhooks": {
+        "title": "Webhook",
+        "description": "向订阅端点投递带签名的领域事件，支持重试"
+      },
       "apiDocs": {
         "title": "API 文档",
         "description": "浏览每种记录和交易类型的 REST API 参考"
@@ -600,6 +604,112 @@
       "rateLimitHint": "此密钥每分钟可发出的最大请求数。留空表示无限制。"
     }
   },
+  "webhooks": {
+    "advanced": {
+      "autoDisable": "连续失败 {failures, plural, one {# 次} other {# 次}}后，端点将在达到 {threshold} 次时自动禁用。",
+      "envelope": "每个 POST 发送标识、事件名称、发生时间戳和数据负载，并带有 OpenBooks-Event、OpenBooks-Delivery 和 OpenBooks-Signature 标头。金额为带货币的最小单位整数。",
+      "retry": "失败的尝试将在 3 天内以指数退避加抖动重试，之后该投递结束。410（Gone）会立即禁用端点。",
+      "summary": "3 天退避重试 · 失败 {threshold} 次后禁用",
+      "title": "投递策略"
+    },
+    "columns": {
+      "events": "事件",
+      "failures": "失败",
+      "key": "端点",
+      "lastDelivery": "上次投递",
+      "url": "URL"
+    },
+    "deliveries": {
+      "attempts": "尝试",
+      "back": "返回投递列表",
+      "code": "应答",
+      "empty": "暂无投递 — 每次订阅的事件发生时，投递会显示在这里。",
+      "event": "事件",
+      "latency": "耗时",
+      "latencyMs": "{ms} 毫秒",
+      "moreActions": "更多操作",
+      "needsAttention": "{count, plural, one {# 次投递需要处理} other {# 次投递需要处理}} — 打开一条查看接收方的应答，修复后重新投递。",
+      "next": "下次尝试",
+      "noResponse": "接收方未发送正文。",
+      "openAria": "打开 {event} 投递",
+      "payloadTitle": "事件内容",
+      "redeliver": "重新投递",
+      "redeliverFailed": "投递未能重新尝试。",
+      "redelivered": "投递已重新排队并尝试。",
+      "responseTitle": "接收方的应答",
+      "status": "状态",
+      "view": "查看内容"
+    },
+    "drawer": {
+      "activeHint": "从标题栏禁用可在不删除历史记录的情况下暂停投递。",
+      "activeLabel": "已启用",
+      "activeOff": "已禁用",
+      "activeOn": "已启用",
+      "create": "创建端点",
+      "created": "端点已创建。",
+      "descriptionPlaceholder": "此端点供给什么。",
+      "disable": "禁用",
+      "disableConfirm": "禁用此端点？在重新启用之前，事件将不再排队，但历史记录会保留。",
+      "disabled": "端点已禁用。",
+      "enable": "重新启用",
+      "enableConfirm": "重新启用此端点？队列中的事件将恢复投递。",
+      "enabled": "端点已重新启用。",
+      "eventsHint": "端点仅接收所选类型。",
+      "eventsLabel": "订阅的事件",
+      "healthDisabled": "已禁用 — 没有事件排队。请从标题栏重新启用以继续。",
+      "healthFailing": "失败 — 已连续 {count, plural, one {# 次} other {# 次}}被拒。修复接收方，然后从“投递”选项卡重新投递。",
+      "healthNew": "端点将在创建后开始接收。",
+      "healthOk": "正在接收事件。已记录 {count, plural, one {# 次投递} other {# 次投递}}。",
+      "keyHint": "配方用来称呼此端点的稳定名称。小写字母、数字、连字符和下划线，永不更改。",
+      "keyLabel": "端点键",
+      "keyPlaceholder": "crm",
+      "keyRequired": "请输入端点键。",
+      "newDescription": "为领域事件订阅一个 URL。签名密钥仅在创建后显示一次。",
+      "newTitle": "新建端点",
+      "saveChanges": "保存更改",
+      "saveFailed": "端点未能保存。",
+      "secretCreated": "签名密钥 — 请立即复制",
+      "secretCreatedHint": "这是密钥唯一一次显示。接收方用它验证 OpenBooks-Signature 标头。",
+      "copied": "密钥已复制。",
+      "copy": "复制",
+      "updated": "端点已更新。",
+      "urlHint": "接收带签名 POST 的公开 https:// URL。",
+      "urlLabel": "URL",
+      "urlRequired": "请输入订阅 URL。"
+    },
+    "groups": {
+      "catalog": "物料与库存",
+      "customers": "客户",
+      "documents": "订单与资金"
+    },
+    "list": {
+      "description": "订阅端点接收带签名的领域事件，投递可重试、可观察。",
+      "emptyDescription": "添加第一个端点，即可在自己的系统中接收带签名的订单、付款和库存事件。",
+      "emptyTitle": "暂无端点",
+      "newButton": "新建端点",
+      "title": "Webhook"
+    },
+    "security": {
+      "overlapBody": "轮换后，旧密钥对处理中的投递仍然有效。下一次轮换将替换它。",
+      "overlapOff": "单一签名 — 当前没有轮换",
+      "overlapOn": "在下一次轮换之前，两个签名都被接受",
+      "overlapTitle": "轮换重叠",
+      "ping": "发送测试事件",
+      "pingFailed": "测试事件未能投递。",
+      "pingOk": "测试事件已投递。",
+      "rotate": "轮换密钥",
+      "rotateConfirm": "轮换签名密钥？在下一次轮换之前，投递将同时携带两个签名，以便接收方在切换期间继续验证。",
+      "rotated": "密钥已轮换 — 请立即复制新的。",
+      "signingBody": "每个 POST 都带有用此密钥计算的 OpenBooks-Signature 标头。如怀疑泄露请轮换；在下一次轮换之前，投递将同时携带两个签名。",
+      "signingTitle": "签名密钥"
+    },
+    "tabs": {
+      "ariaLabel": "端点分区",
+      "deliveries": "投递（{count}）",
+      "security": "安全",
+      "settings": "设置"
+    }
+  },
   "settings": {
     "metaTitle": "公司与会计",
     "title": "公司与会计",
@@ -1084,6 +1194,8 @@
     "admin_sandboxes_manage": "创建并管理沙箱环境",
     "admin_backups_manage": "管理组织备份",
     "api_keys_manage": "管理 API 密钥",
+    "webhooks_read": "查看 Webhook 端点和投递",
+    "webhooks_manage": "管理 Webhook 端点、轮换密钥和重新投递",
     "assets_read": "查看固定资产和折旧",
     "assets_manage": "创建并编辑资产，运行折旧",
     "documents_read": "浏览文件柜",
@@ -6047,6 +6159,10 @@
     "automationWebhooks": {
       "title": "Webhook操作",
       "description": "从配方调用组织声明的签名Webhook端点。"
+    },
+    "outboundWebhooks": {
+      "title": "出站 Webhook",
+      "description": "在“设置 → 开发者 → Webhook”中向订阅端点投递带签名的领域事件。需要 API 访问权限。"
     },
     "automationSimulator": {
       "title": "模拟器",

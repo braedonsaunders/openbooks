@@ -25,6 +25,7 @@
     "bank_transaction": "銀行取引",
     "inventory_onhand": "手持在庫",
     "inventory_movement": "在庫移動",
+    "webhook_endpoint": "Webhookエンドポイント",
     "budget_scenario": "予算",
     "revenue_contract": "収益契約",
     "equipment_unit": "設備ユニット",

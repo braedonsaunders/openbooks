@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  Webhook,
   Workflow,
   type LucideIcon,
 } from 'lucide-react'
@@ -63,6 +64,7 @@ const ICONS: Record<string, LucideIcon> = {
   boxes: Boxes,
   'database-backup': DatabaseBackup,
   link: LinkIcon,
+  webhook: Webhook,
 }
 
 /**

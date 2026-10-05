@@ -64,6 +64,10 @@
         "title": "Chaves de API",
         "description": "Crie chaves de API com escopo para integrações e veja logs de uso"
       },
+      "webhooks": {
+        "title": "Webhooks",
+        "description": "Entrega assinada de eventos de domínio a extremos assinados, com tentativas"
+      },
       "apiDocs": {
         "title": "Documentação da API",
         "description": "Navegue pela referência da API REST para cada tipo de registro e transação"
@@ -600,6 +604,112 @@
       "rateLimitHint": "Máximo de solicitações que esta chave pode fazer por minuto. Deixe em branco para nenhum limite."
     }
   },
+  "webhooks": {
+    "advanced": {
+      "autoDisable": "{failures, plural, one {# falha seguida} other {# falhas seguidas}} — o extremo se desativa sozinho ao chegar a {threshold}.",
+      "envelope": "Cada POST envia um identificador, o nome do evento, a marca temporal e os dados com os cabeçalhos OpenBooks-Event, OpenBooks-Delivery e OpenBooks-Signature. Os valores são unidades menores inteiras com moeda.",
+      "retry": "As tentativas com falha são repetidas por 3 dias com espera exponencial e jitter, e depois a entrega é encerrada. Um 410 (Gone) desativa o extremo na hora.",
+      "summary": "Tentativas com espera por 3 dias · desativa após {threshold} falhas",
+      "title": "Política de entrega"
+    },
+    "columns": {
+      "events": "Eventos",
+      "failures": "Falhas",
+      "key": "Extremo",
+      "lastDelivery": "Última entrega",
+      "url": "URL"
+    },
+    "deliveries": {
+      "attempts": "Tentativas",
+      "back": "Voltar para as entregas",
+      "code": "Resposta",
+      "empty": "Ainda não há entregas — elas aparecem aqui sempre que um evento assinado ocorre.",
+      "event": "Evento",
+      "latency": "Duração",
+      "latencyMs": "{ms} ms",
+      "moreActions": "Mais ações",
+      "needsAttention": "{count, plural, one {# entrega precisa de atenção} other {# entregas precisam de atenção}} — abra uma para ler a resposta do receptor, corrija e reenvie.",
+      "next": "Próxima tentativa",
+      "noResponse": "O receptor não enviou corpo.",
+      "openAria": "Abrir a entrega {event}",
+      "payloadTitle": "Conteúdo do evento",
+      "redeliver": "Reenviar",
+      "redeliverFailed": "A entrega não foi reenviada.",
+      "redelivered": "Entrega recolocada na fila e tentada.",
+      "responseTitle": "Resposta do receptor",
+      "status": "Estado",
+      "view": "Ver conteúdo"
+    },
+    "drawer": {
+      "activeHint": "Desative pelo cabeçalho para pausar a entrega sem apagar o histórico.",
+      "activeLabel": "Ativado",
+      "activeOff": "Desativado",
+      "activeOn": "Ativado",
+      "create": "Criar extremo",
+      "created": "Extremo criado.",
+      "descriptionPlaceholder": "O que este extremo alimenta.",
+      "disable": "Desativar",
+      "disableConfirm": "Desativar este extremo? Os eventos param de entrar na fila até reativá-lo, mas o histórico é mantido.",
+      "disabled": "Extremo desativado.",
+      "enable": "Reativar",
+      "enableConfirm": "Reativar este extremo? Os eventos na fila retomam a entrega.",
+      "enabled": "Extremo reativado.",
+      "eventsHint": "O extremo recebe apenas os tipos selecionados.",
+      "eventsLabel": "Eventos assinados",
+      "healthDisabled": "Desativado — nenhum evento entra na fila. Reative pelo cabeçalho para continuar.",
+      "healthFailing": "Falhando — {count, plural, one {# entrega seguida recusada} other {# entregas seguidas recusadas}}. Corrija o receptor e reenvie pela aba Entregas.",
+      "healthNew": "O extremo começa a receber ao ser criado.",
+      "healthOk": "Recebendo eventos. {count, plural, one {# entrega registrada} other {# entregas registradas}}.",
+      "keyHint": "Nome estável com que as receitas chamam este extremo. Minúsculas, dígitos, hifens e sublinhados; nunca muda.",
+      "keyLabel": "Chave do extremo",
+      "keyPlaceholder": "crm",
+      "keyRequired": "Informe uma chave de extremo.",
+      "newDescription": "Assine uma URL para os eventos de domínio. O segredo de assinatura aparece uma única vez após a criação.",
+      "newTitle": "Novo extremo",
+      "saveChanges": "Salvar alterações",
+      "saveFailed": "O extremo não foi salvo.",
+      "secretCreated": "Segredo de assinatura — copie agora",
+      "secretCreatedHint": "Esta é a única vez que o segredo aparece. O receptor o usa para verificar o cabeçalho OpenBooks-Signature.",
+      "copied": "Segredo copiado.",
+      "copy": "Copiar",
+      "updated": "Extremo atualizado.",
+      "urlHint": "URL https:// pública que recebe os POSTs assinados.",
+      "urlLabel": "URL",
+      "urlRequired": "Informe a URL assinada."
+    },
+    "groups": {
+      "catalog": "Itens e estoque",
+      "customers": "Clientes",
+      "documents": "Pedidos e dinheiro"
+    },
+    "list": {
+      "description": "Os extremos assinados recebem eventos de domínio assinados com entrega repetida e observável.",
+      "emptyDescription": "Adicione seu primeiro extremo para receber eventos assinados de pedidos, pagamentos e estoque em seus próprios sistemas.",
+      "emptyTitle": "Ainda não há extremos",
+      "newButton": "Novo extremo",
+      "title": "Webhooks"
+    },
+    "security": {
+      "overlapBody": "Após uma rotação, o segredo antigo continua valendo para as entregas em curso. A próxima rotação o substitui.",
+      "overlapOff": "Assinatura única — sem rotação em curso",
+      "overlapOn": "Ambas as assinaturas são aceitas até a próxima rotação",
+      "overlapTitle": "Sobreposição de rotação",
+      "ping": "Enviar evento de teste",
+      "pingFailed": "O evento de teste não foi entregue.",
+      "pingOk": "Evento de teste entregue.",
+      "rotate": "Girar segredo",
+      "rotateConfirm": "Girar o segredo de assinatura? As entregas levam ambas as assinaturas até a próxima rotação, para o receptor continuar verificando durante a troca.",
+      "rotated": "Segredo girado — copie o novo agora.",
+      "signingBody": "Cada POST leva um cabeçalho OpenBooks-Signature calculado com este segredo. Gire-o se ele pode ter vazado; as entregas levam ambas as assinaturas até a próxima rotação.",
+      "signingTitle": "Segredo de assinatura"
+    },
+    "tabs": {
+      "ariaLabel": "Seções do extremo",
+      "deliveries": "Entregas ({count})",
+      "security": "Segurança",
+      "settings": "Ajustes"
+    }
+  },
   "settings": {
     "metaTitle": "Empresa e Contabilidade",
     "title": "Empresa e Contabilidade",
@@ -1084,6 +1194,8 @@
     "admin_sandboxes_manage": "Criar e gerenciar ambientes sandbox",
     "admin_backups_manage": "Gerenciar backups da organização",
     "api_keys_manage": "Gerenciar chaves de API",
+    "webhooks_read": "Ver extremos e entregas de webhooks",
+    "webhooks_manage": "Gerenciar extremos, girar segredos e reenviar",
     "assets_read": "Ver ativos imobilizados e depreciação",
     "assets_manage": "Criar e editar ativos, executar depreciação",
     "documents_read": "Navegar pelo arquivo de documentos",
@@ -6047,6 +6159,10 @@
     "automationWebhooks": {
       "title": "Ações webhook",
       "description": "Chamar webhooks assinados declarados pela organização a partir das receitas."
+    },
+    "outboundWebhooks": {
+      "title": "Webhooks de saída",
+      "description": "Entregue eventos de domínio assinados a extremos assinados em Ajustes → Desenvolvedores → Webhooks. Precisa de acesso à API."
     },
     "automationSimulator": {
       "title": "Simulador",
