@@ -780,10 +780,22 @@
       "accountPlaceholder": "过渡或银行科目…",
       "accountSearchPlaceholder": "搜索科目…",
       "fields": {
-        "walkInCustomer": { "label": "散客", "hint": "未记名柜台销售记到该客户名下。" },
-        "defaultCashAccountId": { "label": "默认现金科目", "hint": "新建销售预填现金结算。" },
-        "defaultCardAccountId": { "label": "默认刷卡过渡科目", "hint": "新建销售预填刷卡结算。" },
-        "defaultBankAccountId": { "label": "默认银行科目", "hint": "新建销售预填银行结算。" }
+        "walkInCustomer": {
+          "label": "散客",
+          "hint": "未记名柜台销售记到该客户名下。"
+        },
+        "defaultCashAccountId": {
+          "label": "默认现金科目",
+          "hint": "新建销售预填现金结算。"
+        },
+        "defaultCardAccountId": {
+          "label": "默认刷卡过渡科目",
+          "hint": "新建销售预填刷卡结算。"
+        },
+        "defaultBankAccountId": {
+          "label": "默认银行科目",
+          "hint": "新建销售预填银行结算。"
+        }
       }
     },
     "controlAccounts": {
@@ -6454,6 +6466,10 @@
     "revenueContracts": {
       "title": "按范围核算的收入合同",
       "description": "将销售订单、订阅或多张发票合并为一份收入合同，按合同轧差列示已开票与已确认收入。"
+    },
+    "billingHistoryImport": {
+      "title": "导入账单历史记录",
+      "description": "从 Chargebee、Recurly、Maxio 或 Zuora 导入客户、套餐、订阅、发票、付款和用量，并对账 MRR、应收账款和递延收入。"
     }
   },
   "backupsManager": {

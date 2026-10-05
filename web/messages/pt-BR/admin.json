@@ -780,10 +780,22 @@
       "accountPlaceholder": "Conta transitória ou bancária…",
       "accountSearchPlaceholder": "Buscar contas…",
       "fields": {
-        "walkInCustomer": { "label": "Cliente de balcão", "hint": "Vendas sem cliente nominal vão contra este cliente." },
-        "defaultCashAccountId": { "label": "Conta de dinheiro padrão", "hint": "Pré-preenche o dinheiro em vendas novas." },
-        "defaultCardAccountId": { "label": "Conta de cartão padrão", "hint": "Pré-preenche o cartão em vendas novas." },
-        "defaultBankAccountId": { "label": "Conta bancária padrão", "hint": "Pré-preenche a transferência em vendas novas." }
+        "walkInCustomer": {
+          "label": "Cliente de balcão",
+          "hint": "Vendas sem cliente nominal vão contra este cliente."
+        },
+        "defaultCashAccountId": {
+          "label": "Conta de dinheiro padrão",
+          "hint": "Pré-preenche o dinheiro em vendas novas."
+        },
+        "defaultCardAccountId": {
+          "label": "Conta de cartão padrão",
+          "hint": "Pré-preenche o cartão em vendas novas."
+        },
+        "defaultBankAccountId": {
+          "label": "Conta bancária padrão",
+          "hint": "Pré-preenche a transferência em vendas novas."
+        }
       }
     },
     "controlAccounts": {
@@ -6454,6 +6466,10 @@
     "revenueContracts": {
       "title": "Contratos de receita por pedido",
       "description": "Um contrato de receita para um pedido, uma assinatura ou várias faturas, com faturado e reconhecido líquidos por contrato."
+    },
+    "billingHistoryImport": {
+      "title": "Importar histórico de cobrança",
+      "description": "Importe clientes, planos, assinaturas, faturas, pagamentos e uso do Chargebee, Recurly, Maxio ou Zuora com conciliação de MRR, contas a receber e receita diferida."
     }
   },
   "backupsManager": {

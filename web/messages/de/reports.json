@@ -998,6 +998,10 @@
       "contract_cost_postings": {
         "label": "Vertragskostenbuchungen",
         "description": "Aktivierungs-, Abschreibungs- und Wertminderungszeilen je Periode aus dem markierten Hauptbuch."
+      },
+      "billing_import_reconciliation": {
+        "label": "Abrechnungsimport-Abstimmung",
+        "description": "Abstimmung je Importlauf: MRR je Monat Quelle gegen OpenBooks, offene Forderungen je Kunde und die Differenzen, die die Umstellung blockieren."
       }
     },
     "columns": {
@@ -2427,6 +2431,16 @@
         "amount": "Betrag",
         "entry_id": "Buchung",
         "asset_id": "Anlagenschlüssel"
+      },
+      "billing_import_reconciliation": {
+        "run_id": "Importlauf (ID)",
+        "provider": "Anbieter",
+        "section": "Bereich",
+        "ref": "Monat / Kunde / Datensatz",
+        "source_major": "Quellbetrag",
+        "openbooks_major": "OpenBooks-Betrag",
+        "diff_major": "Differenz",
+        "explanation": "Erläuterung"
       }
     },
     "enumValues": {

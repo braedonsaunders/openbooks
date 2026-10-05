@@ -998,6 +998,10 @@
       "contract_cost_postings": {
         "label": "Écritures de coûts de contrat",
         "description": "Lignes de capitalisation, d’amortissement et de dépréciation par période depuis le grand livre marqué."
+      },
+      "billing_import_reconciliation": {
+        "label": "Rapprochement d'import de facturation",
+        "description": "Rapprochement par import : MRR mensuel source face à OpenBooks, créances ouvertes par client et écarts bloquant la bascule."
       }
     },
     "columns": {
@@ -2427,6 +2431,16 @@
         "amount": "Montant",
         "entry_id": "Écriture",
         "asset_id": "Clé d’actif"
+      },
+      "billing_import_reconciliation": {
+        "run_id": "Import (id)",
+        "provider": "Fournisseur",
+        "section": "Section",
+        "ref": "Mois / client / enregistrement",
+        "source_major": "Montant source",
+        "openbooks_major": "Montant OpenBooks",
+        "diff_major": "Écart",
+        "explanation": "Explication"
       }
     },
     "enumValues": {

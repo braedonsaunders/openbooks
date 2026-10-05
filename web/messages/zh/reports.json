@@ -998,6 +998,10 @@
       "contract_cost_postings": {
         "label": "合同成本过账",
         "description": "来自带标记总账的按期间列示的资本化、摊销与减值分录。"
+      },
+      "billing_import_reconciliation": {
+        "label": "账单导入对账",
+        "description": "按导入记录对账:月度 MRR 来源与 OpenBooks 对比、按客户的应收账款余额，以及阻止切换的差异。"
       }
     },
     "columns": {
@@ -2427,6 +2431,16 @@
         "amount": "金额",
         "entry_id": "日记账分录",
         "asset_id": "资产键"
+      },
+      "billing_import_reconciliation": {
+        "run_id": "导入记录 (ID)",
+        "provider": "平台",
+        "section": "部分",
+        "ref": "月份 / 客户 / 记录",
+        "source_major": "来源金额",
+        "openbooks_major": "OpenBooks 金额",
+        "diff_major": "差异",
+        "explanation": "说明"
       }
     },
     "enumValues": {

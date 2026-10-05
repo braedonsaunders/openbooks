@@ -998,6 +998,10 @@
       "contract_cost_postings": {
         "label": "Lançamentos de custos de contrato",
         "description": "Linhas de capitalização, amortização e impairment por período a partir do razão marcado."
+      },
+      "billing_import_reconciliation": {
+        "label": "Conciliação de importação de cobrança",
+        "description": "Conciliação por importação: MRR mensal origem versus OpenBooks, contas a receber em aberto por cliente e as diferenças que bloqueiam a virada."
       }
     },
     "columns": {
@@ -2427,6 +2431,16 @@
         "amount": "Valor",
         "entry_id": "Lançamento",
         "asset_id": "Chave do ativo"
+      },
+      "billing_import_reconciliation": {
+        "run_id": "Importação (id)",
+        "provider": "Provedor",
+        "section": "Seção",
+        "ref": "Mês / cliente / registro",
+        "source_major": "Valor origem",
+        "openbooks_major": "Valor OpenBooks",
+        "diff_major": "Diferença",
+        "explanation": "Explicação"
       }
     },
     "enumValues": {

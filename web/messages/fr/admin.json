@@ -780,10 +780,22 @@
       "accountPlaceholder": "Compte d’attente ou bancaire…",
       "accountSearchPlaceholder": "Rechercher des comptes…",
       "fields": {
-        "walkInCustomer": { "label": "Client comptoir", "hint": "Les ventes sans client nommé passent contre ce client." },
-        "defaultCashAccountId": { "label": "Compte espèces par défaut", "hint": "Pré-remplit les espèces des ventes." },
-        "defaultCardAccountId": { "label": "Compte cartes par défaut", "hint": "Pré-remplit la carte des ventes." },
-        "defaultBankAccountId": { "label": "Compte bancaire par défaut", "hint": "Pré-remplit le virement des ventes." }
+        "walkInCustomer": {
+          "label": "Client comptoir",
+          "hint": "Les ventes sans client nommé passent contre ce client."
+        },
+        "defaultCashAccountId": {
+          "label": "Compte espèces par défaut",
+          "hint": "Pré-remplit les espèces des ventes."
+        },
+        "defaultCardAccountId": {
+          "label": "Compte cartes par défaut",
+          "hint": "Pré-remplit la carte des ventes."
+        },
+        "defaultBankAccountId": {
+          "label": "Compte bancaire par défaut",
+          "hint": "Pré-remplit le virement des ventes."
+        }
       }
     },
     "controlAccounts": {
@@ -6454,6 +6466,10 @@
     "revenueContracts": {
       "title": "Contrats de revenus par commande",
       "description": "Un contrat de revenus pour un bon de commande, un abonnement ou plusieurs factures, avec facturé et comptabilisé nets par contrat."
+    },
+    "billingHistoryImport": {
+      "title": "Importer l'historique de facturation",
+      "description": "Importez clients, offres, abonnements, factures, paiements et usage depuis Chargebee, Recurly, Maxio ou Zuora avec rapprochement du MRR, des créances et des produits constatés d'avance."
     }
   },
   "backupsManager": {

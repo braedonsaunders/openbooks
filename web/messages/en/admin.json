@@ -780,10 +780,22 @@
       "accountPlaceholder": "Clearing or bank account…",
       "accountSearchPlaceholder": "Search accounts…",
       "fields": {
-        "walkInCustomer": { "label": "Walk-in customer", "hint": "Counter sales with no named customer post against this customer." },
-        "defaultCashAccountId": { "label": "Default cash account", "hint": "Prefills cash tenders on new sales." },
-        "defaultCardAccountId": { "label": "Default card clearing account", "hint": "Prefills card tenders on new sales." },
-        "defaultBankAccountId": { "label": "Default bank account", "hint": "Prefills bank-transfer tenders on new sales." }
+        "walkInCustomer": {
+          "label": "Walk-in customer",
+          "hint": "Counter sales with no named customer post against this customer."
+        },
+        "defaultCashAccountId": {
+          "label": "Default cash account",
+          "hint": "Prefills cash tenders on new sales."
+        },
+        "defaultCardAccountId": {
+          "label": "Default card clearing account",
+          "hint": "Prefills card tenders on new sales."
+        },
+        "defaultBankAccountId": {
+          "label": "Default bank account",
+          "hint": "Prefills bank-transfer tenders on new sales."
+        }
       }
     },
     "controlAccounts": {
@@ -6454,6 +6466,10 @@
     "revenueContracts": {
       "title": "Scoped revenue contracts",
       "description": "One revenue contract across a sales order, subscription, or several invoices, with billed and recognized revenue netted per contract."
+    },
+    "billingHistoryImport": {
+      "title": "Billing history import",
+      "description": "Import customers, plans, subscriptions, invoices, payments and usage from Chargebee, Recurly, Maxio or Zuora with MRR, AR and deferred-revenue reconciliation."
     }
   },
   "backupsManager": {

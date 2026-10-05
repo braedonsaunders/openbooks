@@ -998,6 +998,10 @@
       "contract_cost_postings": {
         "label": "Contract cost postings",
         "description": "Capitalization, amortization and impairment lines by period from the tagged general ledger."
+      },
+      "billing_import_reconciliation": {
+        "label": "Billing import reconciliation",
+        "description": "Per-run billing-platform import reconciliation: MRR by month source vs OpenBooks, open AR by customer, and the differences that block cut-over."
       }
     },
     "columns": {
@@ -2427,6 +2431,16 @@
         "amount": "Amount",
         "entry_id": "Journal entry",
         "asset_id": "Asset key"
+      },
+      "billing_import_reconciliation": {
+        "run_id": "Import run (id)",
+        "provider": "Provider",
+        "section": "Section",
+        "ref": "Month / customer / record",
+        "source_major": "Source amount",
+        "openbooks_major": "OpenBooks amount",
+        "diff_major": "Difference",
+        "explanation": "Explanation"
       }
     },
     "enumValues": {
