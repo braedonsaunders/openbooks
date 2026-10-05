@@ -849,6 +849,10 @@
           "label": "已实现汇兑损益",
           "hint": "用于记录外币付款核销时的结算汇率差额"
         },
+        "translationAdjustment": {
+          "label": "外币报表折算差额",
+          "hint": "按期末汇率重新折算集团内部往来余额时产生的折算差额所计入的权益账户"
+        },
         "retainageReceivable": {
           "label": "应收保留款",
           "hint": "客户进度开票的保留款，释放前持有"

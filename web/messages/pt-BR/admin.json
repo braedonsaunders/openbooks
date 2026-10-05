@@ -849,6 +849,10 @@
           "label": "Ganho/perda cambial realizado",
           "hint": "Conta das diferenças cambiais na liquidação de pagamentos em moeda estrangeira"
         },
+        "translationAdjustment": {
+          "label": "Ajuste de conversão",
+          "hint": "Reserva de patrimônio para a diferença de conversão quando saldos intercompanhia são reconvertidos à taxa de fechamento do período"
+        },
         "retainageReceivable": {
           "label": "Retenções a receber",
           "hint": "Retenção de medições de clientes, mantida até a liberação"

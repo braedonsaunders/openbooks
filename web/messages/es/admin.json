@@ -848,6 +848,10 @@
           "label": "Ganancia/pérdida de cambio realizada",
           "hint": "Aquí se contabilizan las diferencias de cambio al liquidar pagos en moneda extranjera"
         },
+        "translationAdjustment": {
+          "label": "Ajuste por conversión",
+          "hint": "Reserva de patrimonio para la diferencia de conversión al reconvertir saldos intercompañía al tipo de cierre del período"
+        },
         "laborWip": {
           "label": "Mano de obra en curso / costo",
           "hint": "El costo de mano de obra aprobada se debita aquí (por proyecto)"
