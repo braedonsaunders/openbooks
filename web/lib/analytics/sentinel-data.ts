@@ -494,9 +494,9 @@ export async function sentinelData(
   // Consolidated money label: the org base the translations land in.
   const presentationCcy = await presentationCurrency(orgId);
 
-  // Approval limits from the org's enabled Flows (H7): condition nodes
-  // comparing `total`, per subject kind. No amount condition anywhere means
-  // the threshold-trap detector is unavailable by name — never "risk: Yes".
+  // Approval limits from the org's enabled Flows: condition nodes comparing
+  // `total`, per subject kind. No amount condition anywhere means the
+  // threshold-trap detector is unavailable by name — never "risk: Yes".
   const flowRows = await db.execute<{ subject_kind: string; graph: unknown }>(sql`
     select subject_kind, graph from flows where org_id = ${orgId} and enabled
   `);
@@ -509,7 +509,7 @@ export async function sentinelData(
   }
   const trapBand = cfg.trapBandPercent;
 
-  // Audit-trail window in the org's own time zone (M13): day bounds are wall
+  // Audit-trail window in the org's own time zone: day bounds are wall
   // midnight in the org zone, converted to instants for the comparison, so a
   // deletion near local midnight lands on the org's calendar day.
   const timeZoneRow = await db.execute<{ tz: string | null }>(sql`
