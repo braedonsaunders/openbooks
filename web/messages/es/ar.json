@@ -180,8 +180,8 @@
       },
       "prediction": {
         "label": "Predicción de fecha de cobro",
-        "value": "Estadístico → Vencimiento → Promedio global",
-        "note": "Promedio de días de cobro por cliente (+½σ de margen), nunca antes del vencimiento"
+        "value": "Estadístico → Promedio global → Vencimiento",
+        "note": "Promedio de días de cobro por cliente (+½σ de margen), nunca antes del vencimiento — sin ningún historial rige el propio vencimiento"
       },
       "overduePush": {
         "label": "Aplazamiento por atraso",
@@ -196,7 +196,7 @@
       "dso": {
         "label": "Promedio de días para cobrar (DSO)",
         "value": "{dso} d",
-        "note": "Valor alternativo cuando el cliente no tiene historial de pagos"
+        "note": "Vacío sin historial de pagos — el pronóstico usa los vencimientos"
       },
       "recurring": "Los cobros recurrentes (subvenciones, alquileres, suscripciones) se incorporan al pronóstico como categorías; configúrelos en el <cashCockpit>panel de tesorería</cashCockpit>.",
       "documentation": "Leer la guía de cuentas por cobrar"

@@ -129,9 +129,10 @@ export interface CustomerPulseData {
   }
   /** Present only with ar.read. */
   paymentMetrics?: {
-    dso: number
+    /** Mean days to settle (null = no payment history anywhere). */
+    dso: number | null
     partyAvgDaysToPay: number | null
-    orgAvgDaysToPay: number
+    orgAvgDaysToPay: number | null
     settlementsCount: number
   }
   /** Present only with crm.accounts.read. */
@@ -346,10 +347,12 @@ export async function loadCustomerPulse(
         : 100
     }
 
-    // 4. Payment metrics & DSO
+    // 4. Payment metrics & DSO. No history anywhere is null, never 0:
+    // Math.round(null) is 0, which would read as "settles today".
     const partyStat = stats.map.get(partyId)
     const partyAvgDaysToPay = partyStat ? Math.round(partyStat.avg) : null
-    const dso = partyAvgDaysToPay ?? Math.round(stats.globalAvg)
+    const orgAvgDaysToPay = stats.globalAvg === null ? null : Math.round(stats.globalAvg)
+    const dso = partyAvgDaysToPay ?? orgAvgDaysToPay
 
     aging = {
       current: normalizeMoney(current),
@@ -370,7 +373,7 @@ export async function loadCustomerPulse(
     paymentMetrics = {
       dso,
       partyAvgDaysToPay,
-      orgAvgDaysToPay: Math.round(stats.globalAvg),
+      orgAvgDaysToPay,
       settlementsCount: partyStat?.n ?? 0,
     }
   }

@@ -41,11 +41,12 @@ export interface CustomersHome {
   overdueInvoices: number
   activeCustomers: number
   /**
-   * The ONE org DSO — the same settlement-weighted trailing mean the cash
-   * cockpit, cashflow analytics, MCP cashflow tool, get_vitals, and customer
-   * intelligence quote (45-day documented default with no settlements).
+   * The ONE org settlement mean — the same settlement-weighted trailing mean
+   * the cash cockpit, cashflow analytics, MCP cashflow tool, get_vitals, and
+   * customer intelligence quote. Null with no settlements: never an invented
+   * figure.
    */
-  dso: number
+  dso: number | null
   pipeline: { total: string; weighted: string; closed: string }
   topExposure: CustomerExposureRow[]
   /** Weekly collections (posted customer payments), oldest → newest. */
@@ -189,13 +190,14 @@ export async function customersHome(
 
   const [arItems, dsoStats, trendRes, badgeRes, collectedRowsRes, forecast, orgRes, oppRes] = (await Promise.all([
     arGranted ? openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
-    // Days-sales-outstanding is the ONE org DSO from the cash engine's
-    // maintained settlement rollup — the same reader the cash cockpit,
-    // cashflow analytics, MCP cashflow tool, get_vitals, and customer
-    // intelligence quote — never a second local grain. The rollup scan keeps
-    // this landing cheap; subsidiary scoping rides the engine's own rules.
-    // The AR settlement rollup is unreadable without ar.read.
-    arGranted ? paymentStats("ar", today, subIds, orgId) : Promise.resolve({ map: new Map<string, { avg: number; sd: number; n: number }>(), globalAvg: 0 }),
+    // Days-to-settle is the ONE org mean from the cash engine's maintained
+    // settlement rollup — the same reader the cash cockpit, cashflow
+    // analytics, MCP cashflow tool, get_vitals, and customer intelligence
+    // quote — never a second local grain. The rollup scan keeps this landing
+    // cheap; subsidiary scoping rides the engine's own rules. The AR
+    // settlement rollup is unreadable without ar.read, and an unreadable
+    // rollup is null — never a zero that reads as "settles today".
+    arGranted ? paymentStats("ar", today, subIds, orgId) : Promise.resolve({ map: new Map<string, { avg: number; sd: number; n: number }>(), globalAvg: null }),
     // 13-week collections trend retains the original receipt in its posting
     // week and records a void as a negative movement in the void week.
     // Skipped without ar.read — never queried, never shaped.

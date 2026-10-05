@@ -31,7 +31,8 @@ export function ApSelectionConfigDrawer({
   onClose: () => void
   title: string
   description: string
-  dpo: number
+  /** Mean days to settle (null = no payment history anywhere). */
+  dpo: number | null
   /** Setup permission with unrestricted scope — the drawer only opens behind
    * the gated gear, and the editor must never assume it. */
   canEdit: boolean
@@ -53,7 +54,7 @@ export function ApSelectionConfigDrawer({
     { label: t('predictionLabel'), value: t('predictionValue'), note: t('predictionNote') },
     { label: t('overdueLabel'), value: t('overdueValue'), note: t('overdueNote') },
     { label: t('snapLabel'), value: t('snapValue'), note: t('snapNote') },
-    { label: t('dpoLabel'), value: t('dpoValue', { dpo }), note: t('dpoNote') },
+    { label: t('dpoLabel'), value: dpo === null ? '—' : t('dpoValue', { dpo }), note: t('dpoNote') },
   ]
 
   return (

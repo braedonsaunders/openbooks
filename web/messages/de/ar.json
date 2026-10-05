@@ -180,8 +180,8 @@
       },
       "prediction": {
         "label": "Prognose des Zahlungstermins",
-        "value": "Statistisch → Fälligkeit → Globaler Durchschnitt",
-        "note": "Durchschnittliche Zahlungsdauer je Kunde (+½σ-Puffer), frühestens am Fälligkeitstag"
+        "value": "Statistisch → Globaler Durchschnitt → Fälligkeit",
+        "note": "Durchschnittliche Zahlungsdauer je Kunde (+½σ-Puffer), frühestens am Fälligkeitstag — ganz ohne Historie gilt der Fälligkeitstag selbst"
       },
       "overduePush": {
         "label": "Überfälligkeitsaufschub",
@@ -196,7 +196,7 @@
       "dso": {
         "label": "Durchschnittliche Zahlungsdauer (DSO)",
         "value": "{dso} T.",
-        "note": "Rückfallwert für Kunden ohne Zahlungshistorie"
+        "note": "Ohne Zahlungshistorie leer — die Prognose verwendet stattdessen Fälligkeitstage"
       },
       "recurring": "Wiederkehrende Einzahlungen (Zuschüsse, Mieteinnahmen, Abonnements) fließen als Kategorien in die Prognose ein — konfigurieren Sie sie im <cashCockpit>Liquiditätscockpit</cashCockpit>.",
       "documentation": "Leitfaden zur Debitorenbuchhaltung lesen"

@@ -155,7 +155,7 @@ export function ArCockpit({
           icon={Timer}
           accent="violet"
           label={t("stats.dso")}
-          value={t("stats.days", { n: data.dso })}
+          value={data.dso === null ? "—" : t("stats.days", { n: data.dso })}
           sub={t("stats.dsoSub")}
         />
       </div>
