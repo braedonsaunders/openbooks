@@ -164,3 +164,17 @@ test("no prior revenue refuses the bridge instead of dividing by a stand-in", as
     await unmount();
   }
 });
+
+test("no current margin names the current period, not the prior", async () => {
+  globalThis.__mgRouter = { push() {}, refresh() {} };
+  // Prior revenue is present but the current margin is missing: blaming
+  // both periods would send the operator to fix a prior that is fine.
+  const { host, unmount } = await mount(marginData("800000.0000", "320000.0000"));
+  try {
+    const text = host.textContent ?? "";
+    assert.match(text, /Needs revenue in the current period/, "the refusal names the current side");
+    assert.doesNotMatch(text, /current and prior periods/, "the present prior must not be blamed");
+  } finally {
+    await unmount();
+  }
+});

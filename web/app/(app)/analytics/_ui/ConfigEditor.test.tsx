@@ -78,3 +78,35 @@ test('a rejected save request surfaces failure and releases the save button', as
   assert.equal(save.disabled, false, 'a failed network request must leave Save available for retry')
   assert.match(host.textContent ?? '', /Save failed/, 'the failure must be visible after the request rejects')
 })
+
+test('percent-format select options render in the viewer locale, not from catalog text', async (t) => {
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({
+    fields: [{ key: 'forecastConfidence', kind: 'select', labelKey: 'analytics.financialHealth.config.fields.forecastConfidence.label', helpKey: 'analytics.financialHealth.config.fields.forecastConfidence.help', options: ['80', '90'], optionsFormat: 'percent' }],
+    values: { forecastConfidence: '90' },
+    defaults: { forecastConfidence: '90' },
+    currency: 'USD',
+    revision: 1,
+  })) as typeof fetch
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = priorFetch
+  })
+
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ConfigEditor dashboard="financialHealth" canEdit />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  // The hidden native select carries the real options: 90 formats as 90%
+  // in English (90 % in French) with no hard-coded % string in any catalog.
+  const options = [...(host.querySelector('select')?.querySelectorAll('option') ?? [])].map((o) => o.textContent)
+  assert.deepEqual(options, ['80%', '90%'])
+})

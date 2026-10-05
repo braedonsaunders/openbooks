@@ -53,6 +53,13 @@ export interface ConfigField {
   /** Select only: the allowed option codes, each labelled at `${optionsKey}.<code>`. */
   options?: readonly string[];
   optionsKey?: string;
+  /**
+   * Select only: format numeric option codes in the viewer's locale instead
+   * of labelling them from the catalog. `"percent"` reads codes as whole
+   * percentages (90 renders 90% in English, 90 % in French) so no locale
+   * ships a hard-coded % sign. Options using this carry no optionsKey.
+   */
+  optionsFormat?: "percent";
 }
 
 export type AnalyticsConfigValue = number | string;
@@ -205,8 +212,9 @@ export const ANALYTICS_CONFIG = {
         key: "forecastConfidence", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastConfidence.label", helpKey: "analytics.financialHealth.config.fields.forecastConfidence.help",
         // The offered levels are the engine's own band table: a level the
         // model cannot band can never be offered, and a new level is offered
-        // everywhere the moment the engine learns it.
-        options: FORECAST_CONFIDENCE_LEVELS.map(String), optionsKey: "analytics.financialHealth.config.options.forecastConfidence",
+        // everywhere the moment the engine learns it. Labels format in the
+        // viewer's locale (percent), never from hard-coded catalog text.
+        options: FORECAST_CONFIDENCE_LEVELS.map(String), optionsFormat: "percent",
       },
       {
         key: "forecastSeasonality", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastSeasonality.label", helpKey: "analytics.financialHealth.config.fields.forecastSeasonality.help",

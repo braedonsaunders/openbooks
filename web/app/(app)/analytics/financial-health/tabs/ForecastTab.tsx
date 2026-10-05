@@ -1,7 +1,7 @@
 'use client'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { LineChart, Cog, Stethoscope, Table2, TriangleAlert } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
@@ -85,8 +85,10 @@ export function ForecastTab({ data }: { data: HealthData }) {
   const [seasonality, setSeasonality] = useState(fp.defaultSeasonality)
   const [adjustment, setAdjustment] = useState(fp.defaultAdjustment)
 
-  const fmtPercent = (n: number) =>
-    new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(n)
+  const fmtPercent = useCallback(
+    (n: number) => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(n),
+    [locale],
+  )
 
   // Every configured level is validated before it reaches the model: an
   // unknown confidence has no band multiplier, so the tab refuses with the
@@ -95,11 +97,11 @@ export function ForecastTab({ data }: { data: HealthData }) {
   const invalid = useMemo(() => (
     !isMethod(method) || !fp.methods.includes(method) ? { field: t('field.method'), level: method, levels: fp.methods.map((m) => to(`forecastMethod.${m}`)).join(', ') }
       : !fp.horizons.includes(horizon) ? { field: t('field.horizon'), level: String(horizon), levels: fp.horizons.map((h) => t('horizonMonths', { count: h })).join(', ') }
-        : !fp.confidences.includes(confidence) ? { field: t('field.confidence'), level: String(confidence), levels: fp.confidences.map((c) => t('confidencePct', { count: c })).join(', ') }
+        : !fp.confidences.includes(confidence) ? { field: t('field.confidence'), level: String(confidence), levels: fp.confidences.map((c) => fmtPercent(c / 100)).join(', ') }
           : !isSeasonality(seasonality) || !fp.seasonalities.includes(seasonality) ? { field: t('field.seasonality'), level: seasonality, levels: fp.seasonalities.map((s) => to(`forecastSeasonality.${s}`)).join(', ') }
             : !fp.adjustments.some((a) => a.code === adjustment) ? { field: t('field.adjustment'), level: adjustment, levels: fp.adjustments.map((a) => to(`forecastAdjustment.${a.code}`)).join(', ') }
               : null
-  ), [method, horizon, confidence, seasonality, adjustment, fp, t, to])
+  ), [method, horizon, confidence, seasonality, adjustment, fp, t, to, fmtPercent])
   const adjValue = fp.adjustments.find((a) => a.code === adjustment)?.value
 
   // Memoized chain: `result` below can only be compiled when its `series`
@@ -194,7 +196,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
     return (
       <Panel title={t('title')} icon={LineChart}>
         <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          {t('unknownLevel', { field: t('field.confidence'), level: String(confidenceError.level), levels: fp.confidences.map((c) => t('confidencePct', { count: c })).join(', ') })}
+          {t('unknownLevel', { field: t('field.confidence'), level: String(confidenceError.level), levels: fp.confidences.map((c) => fmtPercent(c / 100)).join(', ') })}
         </p>
       </Panel>
     )
@@ -303,7 +305,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
                       <SharedTableCell className={`px-4 py-2 text-right font-medium tabular-nums ${outOfDomain ? 'text-amber-700 dark:text-amber-300' : 'text-slate-800 dark:text-slate-200'}`}>{fmtMoney(v)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i]!)}</SharedTableCell>
                       <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i]!)}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{t('confidencePct', { count: confidence })}</SharedTableCell>
+                      <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{fmtPercent(confidence / 100)}</SharedTableCell>
                     </SharedTableRow>
                   )
                 })}
@@ -335,7 +337,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
             </Field>
             <Field label={t('field.confidence')}>
               <Select value={String(confidence)} onChange={(e) => setConfidence(Number(e.target.value))} triggerClassName={SELECT}>
-                {fp.confidences.map((c) => <option key={c} value={String(c)}>{t('confidencePct', { count: c })}</option>)}
+                {fp.confidences.map((c) => <option key={c} value={String(c)}>{fmtPercent(c / 100)}</option>)}
               </Select>
             </Field>
             <Field label={t('field.seasonality')}>

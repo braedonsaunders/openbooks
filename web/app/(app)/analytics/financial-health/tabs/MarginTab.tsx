@@ -131,7 +131,9 @@ export function MarginTab({ data }: { data: HealthData }) {
             {bridge ? (
               <Waterfall steps={bridgeSteps} height={220} />
             ) : (
-              <p className="py-6 text-center text-xs text-slate-400">{t('bridgeNoPrior')}</p>
+              // A missing current margin and a missing prior name different
+              // remedies: the copy says which side has no revenue to split.
+              <p className="py-6 text-center text-xs text-slate-400">{curGm == null ? t('bridgeNoCurrent') : t('bridgeNoPrior')}</p>
             )}
           </Panel>
         </div>
