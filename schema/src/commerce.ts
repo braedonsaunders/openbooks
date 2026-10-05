@@ -9,6 +9,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -205,6 +206,8 @@ export const salesChannelLocations = pgTable(
     stockLocationId: uuid("stock_location_id"),
     syncInventory: boolean("sync_inventory").notNull().default(true),
     fulfilsOrders: boolean("fulfils_orders").notNull().default(false),
+    bufferQuantity: numeric("buffer_quantity", { precision: 19, scale: 4 }).notNull().default("0"),
+    stopSellingAtZero: boolean("stop_selling_at_zero").notNull().default(true),
     ...auditColumns,
   },
   (t) => [
@@ -222,6 +225,10 @@ export const salesChannelLocations = pgTable(
       "sales_channel_locations_external_name_nonblank",
       sql`length(btrim(${t.externalName})) > 0`,
     ),
+    check(
+      "sales_channel_locations_buffer_nonnegative",
+      sql`${t.bufferQuantity} >= 0`,
+    ),
     foreignKey({
       name: "sales_channel_locations_org_fk",
       columns: [t.orgId],
@@ -236,6 +243,170 @@ export const salesChannelLocations = pgTable(
       name: "sales_channel_locations_stock_tenant_fk",
       columns: [t.orgId, t.stockLocationId],
       foreignColumns: [stockLocations.orgId, stockLocations.id],
+    }),
+  ],
+);
+
+/** Per-item override of a channel location inventory policy; null inherits the location value. */
+export const channelItemInventoryPolicies = pgTable(
+  "channel_item_inventory_policies",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    itemId: uuid("item_id").notNull(),
+    bufferQuantity: numeric("buffer_quantity", { precision: 19, scale: 4 }),
+    stopSellingAtZero: boolean("stop_selling_at_zero"),
+    syncInventory: boolean("sync_inventory").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_item_inventory_policies_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_item_inventory_policies_channel_item_unique").on(
+      t.orgId,
+      t.channelId,
+      t.itemId,
+    ),
+    check(
+      "channel_item_inventory_policies_buffer_nonnegative",
+      sql`${t.bufferQuantity} is null or ${t.bufferQuantity} >= 0`,
+    ),
+    foreignKey({
+      name: "channel_item_inventory_policies_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_item_inventory_policies_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "channel_item_inventory_policies_item_tenant_fk",
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+    }),
+  ],
+);
+
+/** Last-pushed storefront quantity per mapped pair: the compare baseline. */
+export const channelInventoryPushStates = pgTable(
+  "channel_inventory_push_states",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    stockLocationId: uuid("stock_location_id").notNull(),
+    itemId: uuid("item_id").notNull(),
+    shopifyInventoryItemId: text("shopify_inventory_item_id"),
+    lastPushedQuantity: integer("last_pushed_quantity"),
+    lastShopifyQuantity: integer("last_shopify_quantity"),
+    lastInventoryPolicy: text("last_inventory_policy", { enum: ["deny", "continue"] }),
+    lastPushedAt: timestamp("last_pushed_at", { withTimezone: true }),
+    lastStatus: text("last_status", {
+      enum: ["pending", "ok", "conflict", "error"],
+    }).notNull().default("pending"),
+    lastError: text("last_error"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_inventory_push_states_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_inventory_push_states_pair_unique").on(
+      t.orgId,
+      t.channelId,
+      t.stockLocationId,
+      t.itemId,
+    ),
+    index("channel_inventory_push_states_stale_scan").on(t.orgId, t.channelId, t.lastPushedAt),
+    check(
+      "channel_inventory_push_states_policy_valid",
+      sql`${t.lastInventoryPolicy} is null or ${t.lastInventoryPolicy} in ('deny', 'continue')`,
+    ),
+    check(
+      "channel_inventory_push_states_status_valid",
+      sql`${t.lastStatus} in ('pending', 'ok', 'conflict', 'error')`,
+    ),
+    check(
+      "channel_inventory_push_states_error_present",
+      sql`(${t.lastStatus} in ('conflict', 'error')) = (${t.lastError} is not null)`,
+    ),
+    foreignKey({
+      name: "channel_inventory_push_states_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_inventory_push_states_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "channel_inventory_push_states_stock_tenant_fk",
+      columns: [t.orgId, t.stockLocationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+    }),
+    foreignKey({
+      name: "channel_inventory_push_states_item_tenant_fk",
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+    }),
+  ],
+);
+
+/** Storefront quantities changed outside OpenBooks, awaiting the operator. */
+export const channelInventoryConflicts = pgTable(
+  "channel_inventory_conflicts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    channelId: uuid("channel_id").notNull(),
+    stockLocationId: uuid("stock_location_id").notNull(),
+    itemId: uuid("item_id").notNull(),
+    openbooksQuantity: integer("openbooks_quantity").notNull(),
+    shopifyQuantity: integer("shopify_quantity").notNull(),
+    status: text("status", { enum: ["open", "resolved"] }).notNull().default("open"),
+    resolution: text("resolution", { enum: ["pushed_openbooks", "accepted_shopify"] }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("channel_inventory_conflicts_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("channel_inventory_conflicts_open_unique")
+      .on(t.orgId, t.channelId, t.stockLocationId, t.itemId)
+      .where(sql`${t.status} = 'open'`),
+    index("channel_inventory_conflicts_channel_scan").on(t.orgId, t.channelId, t.status),
+    check(
+      "channel_inventory_conflicts_status_valid",
+      sql`${t.status} in ('open', 'resolved')`,
+    ),
+    check(
+      "channel_inventory_conflicts_resolution_valid",
+      sql`${t.resolution} is null or ${t.resolution} in ('pushed_openbooks', 'accepted_shopify')`,
+    ),
+    check(
+      "channel_inventory_conflicts_resolution_present",
+      sql`(${t.status} = 'resolved') = (${t.resolution} is not null)`,
+    ),
+    foreignKey({
+      name: "channel_inventory_conflicts_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
+    foreignKey({
+      name: "channel_inventory_conflicts_channel_tenant_fk",
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+    }),
+    foreignKey({
+      name: "channel_inventory_conflicts_stock_tenant_fk",
+      columns: [t.orgId, t.stockLocationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+    }),
+    foreignKey({
+      name: "channel_inventory_conflicts_item_tenant_fk",
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
     }),
   ],
 );
