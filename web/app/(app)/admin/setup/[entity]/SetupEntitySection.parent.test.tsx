@@ -128,7 +128,7 @@ test('contribution children retain their URL state and inherit the owning benefi
   const created = await SetupEntitySection({ ...counted.props, searchParams: {
     program: 'plan-id', setupTab: 'benefit-contribution-rules', childRow: 'rule-id',
     childTab: 'benefit-contribution-rule-components', childChildRow: 'new',
-  } } as Parameters<typeof SetupEntitySection>[0])
+  } } as unknown as Parameters<typeof SetupEntitySection>[0])
   const drawer = elements(created).find(node => node.type === SetupDrawer)!
   assert.deepEqual(drawer.props.fixedValues, { ruleId: 'rule-id', planId: 'plan-id' },
     'the new child must serialize both its contribution and its inherited program')
