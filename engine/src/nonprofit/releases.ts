@@ -347,26 +347,108 @@ async function assertEndowmentAppropriation(
   }
 }
 
-async function availableNetAssets(
+interface ReleaseCapacity {
+  /** The most this release date can move without overdrawing the fund on any later date. */
+  available: Money;
+  /** The fund's net assets at the close of the release date. */
+  atReleaseDate: Money;
+  /** The lowest later running balance when it is below the release-date balance. */
+  laterLow: { date: string; balance: Money; releaseNumbers: string[] } | null;
+}
+
+/**
+ * A release dated D reduces the fund's net assets on D and on every later
+ * date, so its capacity is the lowest running balance from D onward, not only
+ * the balance on D. A backdated release measured only at its own date could
+ * consume net assets that a later-dated release already released, leaving the
+ * fund overdrawn from that later date forward.
+ */
+async function releaseCapacity(
   executor: SqlExecutor,
   orgId: string,
   fundId: string,
   asOf: string,
-): Promise<Money> {
-  const row = (await executor.execute<{ amount: string }>(sql`
-    select coalesce(sum(jl.amount), 0)::text as amount
-      from journal_lines jl
-      join journal_entries je
-        on je.org_id = jl.org_id and je.id = jl.entry_id
-      join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
-     where jl.org_id = ${orgId}
-       and jl.extra_dims->>'fund' = ${fundId}
-       and je.status in ('posted', 'reversed')
-       and je.posting_date <= ${asOf}
-       and (a.type like 'asset\\_%' escape '\\'
-         or a.type like 'liability\\_%' escape '\\')
+): Promise<ReleaseCapacity> {
+  const row = (await executor.execute<{
+    at_date: string;
+    later_low: string | null;
+    later_low_date: string | null;
+  }>(sql`
+    with daily as (
+      select je.posting_date as day, sum(jl.amount) as amount
+        from journal_lines jl
+        join journal_entries je
+          on je.org_id = jl.org_id and je.id = jl.entry_id
+        join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
+       where jl.org_id = ${orgId}
+         and jl.extra_dims->>'fund' = ${fundId}
+         and je.status in ('posted', 'reversed')
+         and (a.type like 'asset\\_%' escape '\\'
+           or a.type like 'liability\\_%' escape '\\')
+       group by je.posting_date
+    ),
+    running as (
+      select day, sum(amount) over (order by day) as balance from daily
+    ),
+    lowest_later as (
+      select day, balance from running
+       where day > ${asOf}
+       order by balance, day
+       limit 1
+    )
+    select
+      coalesce((select sum(amount) from daily where day <= ${asOf}), 0)::text as at_date,
+      (select balance::text from lowest_later) as later_low,
+      (select day::text from lowest_later) as later_low_date
   `)).rows[0];
-  return parseMoney(row?.amount ?? "0");
+  const atReleaseDate = parseMoney(row?.at_date ?? "0");
+  if (!row?.later_low || !row.later_low_date) {
+    return { available: atReleaseDate, atReleaseDate, laterLow: null };
+  }
+  const laterBalance = parseMoney(row.later_low);
+  if (cmpMoney(laterBalance, atReleaseDate) >= 0) {
+    return { available: atReleaseDate, atReleaseDate, laterLow: null };
+  }
+  const releases = (await executor.execute<{ release_number: string }>(sql`
+    select release_number from fund_releases
+     where org_id = ${orgId} and from_fund_id = ${fundId}
+       and status = 'posted'
+       and release_date > ${asOf} and release_date <= ${row.later_low_date}
+     order by release_date, release_number
+  `)).rows;
+  return {
+    available: laterBalance,
+    atReleaseDate,
+    laterLow: {
+      date: row.later_low_date,
+      balance: laterBalance,
+      releaseNumbers: releases.map((item) => item.release_number),
+    },
+  };
+}
+
+function overAvailableRefusal(
+  fundLabel: string,
+  release: FundRelease,
+  capacity: ReleaseCapacity,
+): NonprofitError {
+  const later = capacity.laterLow;
+  const supportRemedy = `book qualifying support to the fund dated on or before ${release.releaseDate}`;
+  if (!later) {
+    return refusal({
+      message: `Fund "${fundLabel}" has ${capacity.available} of available net assets on ${release.releaseDate}; this release requests ${release.amount}.`,
+      code: "fund_release_over_available",
+      remedy: `Create a new release for no more than the available amount shown, or ${supportRemedy}.`,
+    });
+  }
+  const consumers = later.releaseNumbers.length > 0
+    ? `later-dated posted release${later.releaseNumbers.length === 1 ? "" : "s"} ${later.releaseNumbers.join(", ")}`
+    : "later-dated activity on the fund";
+  return refusal({
+    message: `Fund "${fundLabel}" has ${capacity.atReleaseDate} of net assets on ${release.releaseDate}, but ${consumers} leave${later.releaseNumbers.length === 1 ? "s" : ""} only ${later.balance} on ${later.date}; this release requests ${release.amount} and at most ${capacity.available} can be released on ${release.releaseDate} without overdrawing the fund on a later date.`,
+    code: "fund_release_over_available",
+    remedy: `Create a new release for no more than ${capacity.available}, or ${supportRemedy}.`,
+  });
 }
 
 async function lockFundReleaseBalance(
@@ -421,18 +503,15 @@ async function validateReadiness(
     if (options.lockAvailability) {
       await lockFundReleaseBalance(executor, release.orgId, fromFund.id);
     }
-    available = await availableNetAssets(
+    const capacity = await releaseCapacity(
       executor,
       release.orgId,
       fromFund.id,
       release.releaseDate,
     );
+    available = capacity.available;
     if (cmpMoney(release.amount, available) > 0) {
-      throw refusal({
-        message: `Fund "${fromFund.code ?? fromFund.name}" has ${available} of available net assets; this release requests ${release.amount}.`,
-        code: "fund_release_over_available",
-        remedy: "Book qualifying support to the fund first, or reduce the release to the available amount shown.",
-      });
+      throw overAvailableRefusal(fromFund.code ?? fromFund.name, release, capacity);
     }
   }
   return {
@@ -613,19 +692,13 @@ async function postingReadiness(
   executor: SqlExecutor,
   release: FundRelease,
 ): Promise<ReleaseReadiness> {
-  const readiness = await validateReadiness(executor, release, {
+  // validateReadiness refuses an over-capacity release while the fund's
+  // release lock is held, so the capacity it measured cannot change before
+  // this transaction posts.
+  return validateReadiness(executor, release, {
     checkAvailability: true,
     lockAvailability: true,
   });
-  if (cmpMoney(release.amount, readiness.availableNetAssets) > 0) {
-    throw new NonprofitPostingError({
-      message: `Fund "${readiness.fromFund.code ?? readiness.fromFund.name}" has ${readiness.availableNetAssets} of available net assets; this release requests ${release.amount}.`,
-      status: 422,
-      code: "fund_release_over_available",
-      remedy: "Book qualifying support to the fund first, or reduce the release to the available amount shown.",
-    });
-  }
-  return readiness;
 }
 
 function postingRefusal(error: unknown, releaseNumber: string): NonprofitPostingError | null {
