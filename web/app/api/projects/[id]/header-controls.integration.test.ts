@@ -17,7 +17,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrg, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withOrg, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadEntities } = await import('@openbooks/engine/src/sync/migrate.ts')
@@ -128,5 +128,59 @@ test('contract value is controlled by change orders once billing begins', enable
     assert.equal(retypedBody.code, 'contract_value_controlled_type_changed')
     assert.match(retypedBody.error, /Switch the project back to a project type that bills by applications for payment/)
     assert.equal(await contractValue(billed), '1500.0000')
+  } finally { session.user = null; await dropScratchOrg(org.orgId) }
+})
+
+/**
+ * Retainage held and cost-to-date read the project's journal lines in its
+ * current subsidiary, so a project with posted history elsewhere cannot be
+ * re-homed: the move would strand that history. A project with no posted
+ * history, or whose history already sits in the target, still moves.
+ */
+test('a project with posted history cannot move to another subsidiary', enabled, async () => {
+  const org = await createScratchOrg()
+  try {
+    actAs(org, await signIn(org, 'Entity controller'))
+    const other = randomUUID()
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
+    const subsidiaryOf = async (id: string) =>
+      (await db.execute<{ s: string | null }>(sql`select subsidiary_id as s from projects where id=${id}`)).rows[0]!.s
+    const postCost = async (projectId: string) => {
+      const entry = randomUUID()
+      await withOrgTransaction(org.orgId, async () => {
+        await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status)
+          values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${entry},${org.date},${org.periodId},'draft')`)
+        await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,project_id)
+          values(${org.orgId},${entry},1,${org.accounts.invAsset},${org.subsidiaryId},100,'CAD',100,${projectId}),
+                (${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},-100,'CAD',-100,${projectId})`)
+        await db.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${session.user!.id} where org_id=${org.orgId} and id=${entry}`)
+      })
+    }
+
+    const posted = await project(org, null, org.subsidiaryId, null)
+    await postCost(posted)
+    const refused = await patch(org.orgId, posted, { subsidiaryId: other })
+    assert.equal(refused.status, 422)
+    const body = await refused.json() as { error: string; code: string }
+    assert.equal(body.code, 'subsidiary_has_posted_history')
+    assert.match(body.error, /Close this project and create a new project in the target subsidiary/)
+    assert.equal(await subsidiaryOf(posted), org.subsidiaryId)
+
+    // History that already sits in the target is not stranded by the move.
+    const unassigned = await project(org, null, null, null)
+    await postCost(unassigned)
+    assert.equal((await patch(org.orgId, unassigned, { subsidiaryId: org.subsidiaryId })).status, 200)
+    assert.equal((await patch(org.orgId, unassigned, { subsidiaryId: other })).status, 422)
+
+    // An open application for payment belongs to the entity that billed it.
+    const applied = await project(org, null, org.subsidiaryId, null)
+    await db.execute(sql`insert into pay_applications(org_id,project_id,application_number,period_end,status)
+      values (${org.orgId},${applied},1,${org.date},'draft')`)
+    assert.equal((await patch(org.orgId, applied, { subsidiaryId: other })).status, 422)
+
+    // No posted history: the move is allowed.
+    const fresh = await project(org, null, org.subsidiaryId, null)
+    assert.equal((await patch(org.orgId, fresh, { subsidiaryId: other })).status, 200)
+    assert.equal(await subsidiaryOf(fresh), other)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
