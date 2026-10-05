@@ -12,7 +12,7 @@
 
 import type { CatalogMessageFn } from "./catalog-strings";
 
-export type ConformityCode = "excellent" | "acceptable" | "marginal" | "nonConforming";
+export type ConformityCode = "excellent" | "acceptable" | "marginal" | "nonConforming" | "insufficient";
 
 export interface SentinelRiskArea {
   area: string;
@@ -23,7 +23,11 @@ export interface SentinelStrings {
   locale: string;
   /** Map the SQL `coalesce(…, 'Unknown')` sentinel (or blank) to the request language. */
   displayPartyName(name: string | null): string;
-  benfordInsufficient(total: number): string;
+  benfordInsufficient(total: number, minimum: number): string;
+  /** Threshold-trap refusal when no Flows amount condition exists. */
+  trapUnavailable: string;
+  /** Duplicate-detector refusal when the duplicate floor is not configured. */
+  duplicateFloorUnset: string;
   benfordClose: string;
   benfordReasonable: string;
   benfordSomeDeviation: string;
@@ -127,7 +131,9 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
     locale,
     displayPartyName: (name) =>
       name === null || name === "" || name === "Unknown" ? t("sentinel.forensics.unknownParty") : name,
-    benfordInsufficient: (total) => t("sentinel.forensics.benfordInsufficient", { total }),
+    benfordInsufficient: (total, minimum) => t("sentinel.forensics.benfordInsufficient", { total, minimum }),
+    trapUnavailable: t("sentinel.forensics.trapUnavailable"),
+    duplicateFloorUnset: t("sentinel.forensics.duplicateFloorUnset"),
     benfordClose: t("sentinel.forensics.benfordClose"),
     benfordReasonable: t("sentinel.forensics.benfordReasonable"),
     benfordSomeDeviation: t("sentinel.forensics.benfordSomeDeviation"),

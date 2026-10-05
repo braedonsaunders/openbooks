@@ -3550,7 +3550,7 @@
     },
     "forensics": {
       "unknownParty": "Inconnu",
-      "benfordInsufficient": "Données insuffisantes ({total, plural, one {# transaction} other {# transactions}}). 50 minimum.",
+      "benfordInsufficient": "Données insuffisantes ({total, plural, one {# transaction} other {# transactions}}). {minimum} minimum.",
       "benfordClose": "Les montants suivent de près la loi de Benford — faible risque de manipulation.",
       "benfordReasonable": "Les montants suivent raisonnablement la loi de Benford.",
       "benfordSomeDeviation": "Écart détecté — à examiner.",
@@ -3593,7 +3593,9 @@
       "riskBenford": {
         "area": "Écart Benford",
         "message": "La distribution du premier chiffre dévie significativement"
-      }
+      },
+      "trapUnavailable": "Aucune limite de montant d’approbation dans Flows — ajoutez-en une ou réglez la bande dans Sentinel → Configuration.",
+      "duplicateFloorUnset": "Définissez le minimum des doublons dans Sentinel → Configuration."
     },
     "analysis": {
       "calendar": "Calendrier",

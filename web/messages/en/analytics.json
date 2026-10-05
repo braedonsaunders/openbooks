@@ -3724,7 +3724,7 @@
     },
     "forensics": {
       "unknownParty": "Unknown",
-      "benfordInsufficient": "Insufficient data ({total, plural, one {# transaction} other {# transactions}}). Need at least 50.",
+      "benfordInsufficient": "Insufficient data ({total, plural, one {# transaction} other {# transactions}}). Need at least {minimum}.",
       "benfordClose": "Transaction amounts closely follow Benford's Law — low manipulation risk.",
       "benfordReasonable": "Transaction amounts reasonably follow Benford's Law.",
       "benfordSomeDeviation": "Some deviation detected — warrants review.",
@@ -3767,7 +3767,9 @@
       "riskBenford": {
         "area": "Benford Deviation",
         "message": "First-digit distribution deviates significantly"
-      }
+      },
+      "trapUnavailable": "No approval amount limits in Flows — add one, or tune the band in Sentinel → Configuration.",
+      "duplicateFloorUnset": "Set the duplicate minimum in Sentinel → Configuration."
     },
     "config": {
       "duplicatesNote": "Same vendor, kind, currency, amount and reference within the window; credits excluded; one finding per group",
