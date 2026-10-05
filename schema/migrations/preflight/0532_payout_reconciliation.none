@@ -1,0 +1,1 @@
+Creates one new empty table (psp_payout_accruals) with its row-level security policy, indexes, and query-catalog entry. No existing row is read, rewritten, or deleted, so there is nothing to probe before install.

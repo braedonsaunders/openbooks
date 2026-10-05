@@ -533,6 +533,7 @@ export const TENANT_TABLE_POLICIES = {
   "promotions": "clone:catalog-uuid-rebase",
   "property_leases": "clone:catalog-uuid-rebase",
   "property_units": "clone:catalog-uuid-rebase",
+  "psp_payout_accruals": "clone:catalog-uuid-rebase",
   "psp_provider_configs": "clone:catalog-uuid-rebase",
   "psp_settlement_batches": "clone:catalog-uuid-rebase",
   "psp_settlement_lines": "clone:catalog-uuid-rebase",

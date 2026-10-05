@@ -256,3 +256,34 @@ export const paymentEvents = pgTable(
   },
   (t) => [index("payment_events_run_time").on(t.paymentRunId, t.createdAt)],
 );
+
+/**
+ * Month-end in-transit accruals for provider payouts: one row per batch and
+ * period-end date with the reclass journal and its next-period reversal
+ * linked. A rerun converges on the (org, batch, accrual date) key instead of
+ * double-accruing.
+ */
+export const pspPayoutAccruals = pgTable(
+  "psp_payout_accruals",
+  {
+    id: id(),
+    orgId: orgRef(),
+    batchId: uuid("batch_id").notNull(),
+    accrualDate: date("accrual_date").notNull(),
+    reversalDate: date("reversal_date").notNull(),
+    amount: money("amount").notNull(),
+    currency: currencyCode("currency").notNull(),
+    bankAccountId: uuid("bank_account_id"),
+    transitAccountId: uuid("transit_account_id"),
+    subsidiaryId: uuid("subsidiary_id"),
+    accrualEntryId: uuid("accrual_entry_id"),
+    reversalEntryId: uuid("reversal_entry_id"),
+    status: text("status", { enum: ["accrued", "reversed"] }).notNull().default("accrued"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("psp_payout_accruals_batch_once").on(t.orgId, t.batchId, t.accrualDate),
+    index("psp_payout_accruals_batch").on(t.batchId),
+    index("psp_payout_accruals_org_status").on(t.orgId, t.status),
+  ],
+);
