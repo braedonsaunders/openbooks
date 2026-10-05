@@ -38,7 +38,8 @@ export type AvailabilityRefusalCode =
   | "subsidiary_not_found"
   | "warehouse_not_found"
   | "item_not_stocked"
-  | "unit_not_convertible";
+  | "unit_not_convertible"
+  | "scope_invalid";
 
 /**
  * A named availability refusal. It extends InventoryError so existing
@@ -387,6 +388,12 @@ export interface AvailableToPromise {
 export interface AvailabilityQuery {
   subsidiaryId: string;
   warehouseId?: string | null;
+  /**
+   * Explicit stock locations to measure. A channel push names the mapped
+   * stock location directly; warehouse scoping stays the operator-facing
+   * path. Both together refuse — one scope decides.
+   */
+  stockLocationIds?: readonly string[] | null;
 }
 
 /** Available to promise for every stocked item (or the listed ones), by label. */
@@ -398,7 +405,16 @@ export async function listAvailableToPromise(
   await assertWarehousingFeature(runner, orgId);
   const entity = await availabilityEntity(runner, orgId, query.subsidiaryId);
   const warehouseId = query.warehouseId ?? null;
-  const locations = warehouseId ? await warehouseLocationSet(runner, orgId, warehouseId) : null;
+  const explicit = query.stockLocationIds ?? null;
+  if (explicit && warehouseId) {
+    throw new AvailabilityRefusal(
+      "availability needs one scope: a warehouse or stock locations, not both",
+      "scope_invalid",
+      "measure one warehouse, or the listed stock locations",
+      422,
+    );
+  }
+  const locations = explicit ? new Set(explicit) : warehouseId ? await warehouseLocationSet(runner, orgId, warehouseId) : null;
   const items = await stockedItems(runner, orgId, query.itemIds ?? null);
   if (items.size === 0) return [];
   // Kit derivation needs its components' terms even when the caller asked

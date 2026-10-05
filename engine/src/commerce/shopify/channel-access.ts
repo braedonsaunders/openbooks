@@ -36,6 +36,8 @@ export interface ShopifyChannelAccess {
   status: string;
   shop: string;
   currency: string;
+  /** The legal entity whose stock availability is pushed; null until the operator chooses one. */
+  subsidiaryId: string | null;
   accessToken: string;
   webhookSecret: string;
   settings: ShopifyChannelSettings;
@@ -51,6 +53,7 @@ interface ChannelSecretRow extends Record<string, unknown> {
   status: string;
   kind: string;
   currency: string;
+  subsidiary_id: string | null;
   external_account: string;
   secrets: string | null;
   webhook_secret: string | null;
@@ -61,7 +64,7 @@ export async function loadShopifyChannel(orgId: string, channelId: string): Prom
   const row = (
     await withOrgContext(orgId, () =>
       db.execute<ChannelSecretRow>(sql`
-        select id, name, status, kind, currency, external_account, secrets, webhook_secret, settings
+        select id, name, status, kind, currency, subsidiary_id, external_account, secrets, webhook_secret, settings
           from sales_channels where org_id = ${orgId} and id = ${channelId}`),
     )
   ).rows[0];
@@ -129,6 +132,7 @@ export async function loadShopifyChannel(orgId: string, channelId: string): Prom
     status: row.status,
     shop: row.external_account,
     currency: row.currency,
+    subsidiaryId: row.subsidiary_id,
     accessToken,
     webhookSecret,
     settings: settings.data,

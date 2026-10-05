@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { cmp, normalizeDecimal } from "../money/money.ts";
 import { CommerceError } from "./errors.ts";
 import {
   acquireOrgFeatureGateLock,
@@ -16,6 +17,9 @@ export interface ChannelLocationRow {
   stockLocationId: string | null;
   syncInventory: boolean;
   fulfilsOrders: boolean;
+  /** Whole or fractional units held back from the storefront, exact decimal text. */
+  bufferQuantity: string;
+  stopSellingAtZero: boolean;
 }
 
 export interface UpsertChannelLocationInput {
@@ -25,6 +29,8 @@ export interface UpsertChannelLocationInput {
   stockLocationId?: string | null;
   syncInventory?: boolean;
   fulfilsOrders?: boolean;
+  bufferQuantity?: string | null;
+  stopSellingAtZero?: boolean;
 }
 
 function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
@@ -39,6 +45,36 @@ async function requireFeature(orgId: string): Promise<void> {
 
 function cleanText(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+/**
+ * The keep-back buffer as exact decimal text. Null inherits the safe
+ * default of holding nothing back; a value nobody typed refuses by name
+ * instead of pushing a guessed quantity.
+ */
+function cleanBuffer(value: string | null): string {
+  if (value === null) return "0.0000";
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  let buffer: string;
+  try {
+    buffer = normalizeDecimal(trimmed, 4);
+  } catch {
+    refuse(
+      "channel_inventory_buffer_invalid",
+      `The keep-back buffer "${trimmed.slice(0, 40)}" is not a quantity OpenBooks can hold.`,
+      "Enter the buffer as whole units (for example 2) under Channels → Locations & stock.",
+      "bufferQuantity",
+    );
+  }
+  if (cmp(buffer, "0.0000") < 0) {
+    refuse(
+      "channel_inventory_buffer_invalid",
+      "The keep-back buffer cannot hold back less than nothing.",
+      "Enter zero or more units under Channels → Locations & stock.",
+      "bufferQuantity",
+    );
+  }
+  return buffer;
 }
 
 async function requireChannel(orgId: string, channelId: string): Promise<void> {
@@ -62,6 +98,8 @@ interface LocationDbRow extends Record<string, unknown> {
   stock_location_id: string | null;
   sync_inventory: boolean;
   fulfils_orders: boolean;
+  buffer_quantity: string;
+  stop_selling_at_zero: boolean;
 }
 
 function toRow(row: LocationDbRow): ChannelLocationRow {
@@ -73,10 +111,12 @@ function toRow(row: LocationDbRow): ChannelLocationRow {
     stockLocationId: row.stock_location_id,
     syncInventory: row.sync_inventory,
     fulfilsOrders: row.fulfils_orders,
+    bufferQuantity: row.buffer_quantity,
+    stopSellingAtZero: row.stop_selling_at_zero,
   };
 }
 
-const LOCATION_COLUMNS = sql`id, channel_id, external_location_id, external_name, stock_location_id, sync_inventory, fulfils_orders`;
+const LOCATION_COLUMNS = sql`id, channel_id, external_location_id, external_name, stock_location_id, sync_inventory, fulfils_orders, buffer_quantity, stop_selling_at_zero`;
 
 async function writeAudit(
   orgId: string,
@@ -128,6 +168,8 @@ export async function upsertChannelLocation(
     }
     const syncInventory = input.syncInventory ?? true;
     const fulfilsOrders = input.fulfilsOrders ?? true;
+    const bufferQuantity = cleanBuffer(input.bufferQuantity ?? null);
+    const stopSellingAtZero = input.stopSellingAtZero ?? true;
     const before = (await db.execute<LocationDbRow>(sql`
       select ${LOCATION_COLUMNS} from sales_channel_locations
        where org_id = ${orgId} and channel_id = ${input.channelId}
@@ -138,14 +180,18 @@ export async function upsertChannelLocation(
     const upserted = (await db.execute<LocationDbRow>(sql`
       insert into sales_channel_locations
         (org_id, channel_id, external_location_id, external_name,
-         stock_location_id, sync_inventory, fulfils_orders, created_by, updated_by)
+         stock_location_id, sync_inventory, fulfils_orders,
+         buffer_quantity, stop_selling_at_zero, created_by, updated_by)
       values (${orgId}, ${input.channelId}, ${externalLocationId}, ${externalName},
-        ${input.stockLocationId ?? null}, ${syncInventory}, ${fulfilsOrders}, ${actor}, ${actor})
+        ${input.stockLocationId ?? null}, ${syncInventory}, ${fulfilsOrders},
+        ${bufferQuantity}, ${stopSellingAtZero}, ${actor}, ${actor})
       on conflict (org_id, channel_id, external_location_id) do update set
         external_name = excluded.external_name,
         stock_location_id = excluded.stock_location_id,
         sync_inventory = excluded.sync_inventory,
         fulfils_orders = excluded.fulfils_orders,
+        buffer_quantity = excluded.buffer_quantity,
+        stop_selling_at_zero = excluded.stop_selling_at_zero,
         updated_by = excluded.updated_by,
         updated_at = now()
       returning ${LOCATION_COLUMNS}`)).rows[0];

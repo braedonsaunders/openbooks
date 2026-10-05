@@ -45,6 +45,22 @@ export {
   upsertChannelLocation,
 } from "./locations.ts";
 export {
+  listDueSyncPairs,
+  listInventoryConflicts,
+  listItemChannelStock,
+  listLocationSyncStates,
+  listSyncPairs,
+  pushInventoryPair,
+  resolveAllInventoryConflicts,
+  resolveInventoryConflict,
+  runCommerceChannelSyncScan,
+  upsertItemInventoryPolicy,
+  type InventoryConflictRow,
+  type ItemChannelStockRow,
+  type LocationSyncState,
+  type SyncPair,
+} from "./inventory-sync.ts";
+export {
   acceptShopifyReview,
   completeShopifyOAuth,
   disconnectShopify,
