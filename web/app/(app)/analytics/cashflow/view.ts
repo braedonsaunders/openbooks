@@ -3,6 +3,8 @@ import 'server-only'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
+import { analyticsConfig } from '../../../../lib/analytics/config'
+import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
 import { cashflowData } from '../../../../lib/analytics/cashflow-data'
 import { normalizeCashHorizonWeeks, withoutWeekEntries } from '../../../../lib/cash/core'
 import type { CashflowView } from './CashflowView'
@@ -20,8 +22,8 @@ import type { CashflowView } from './CashflowView'
  * reference smuggled through a spec, which the language forbids.
  *
  * Loader work copied VERBATIM: the `reports.read` gate, the horizon normalizer
- * (any whole week count inside the core cap, else the dashboard default 4),
- * and the `withoutWeekEntries` trim. That trim is the interesting one, and
+ * (any whole week count inside the core cap, else the org's configured default
+ * horizon), and the `withoutWeekEntries` trim. That trim is the interesting one, and
  * its native comment is kept below: week totals travel with the page, the
  * transactions behind them do not — the week flyout fetches whichever week
  * is opened at full detail.
@@ -42,7 +44,13 @@ export async function loadCashflow(sp: Record<string, string | undefined>): Prom
   const authz = await requirePermission('reports.read')
   const locale = await getLocale()
 
-  const horizon = normalizeCashHorizonWeeks(sp.horizon, 4)
+  // The dashboard opens on the org's configured default horizon when the
+  // request names none — the same setting the Banking cockpit uses.
+  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
+  const horizon = normalizeCashHorizonWeeks(
+    sp.horizon,
+    cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+  )
 
   const position = await cashflowData(authz.user.orgId, horizon, undefined, authz.allowedSubsidiaryIds, locale)
   // Week totals, counts and the per-counterparty aggregate travel with the

@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// The cash-runway tile reads cashPosition itself — the same 8-week horizon,
-// AP settings and subsidiary doorway as the banking cash page — never a
-// re-derivation from its primitives. The cross-check calls cashPosition on
-// the same org: projected end, lowest point and runway tie by construction.
+// The cash-runway tile reads cashPosition itself — the org's configured
+// default horizon, AP settings, caution threshold and subsidiary doorway,
+// exactly as the banking cash page opens — never a re-derivation from its
+// primitives. The cross-check calls cashPosition on the same org with the
+// same configured horizon: projected end, lowest point and runway tie by
+// construction.
 // Blocked FX rates refuse into no-data (the page answers with its banner);
 // anything else throws. The tile is gated banking.read: a viewer holds
 // gl.read (sees today's balance) but must never see the projection.
@@ -35,6 +37,8 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@o
 const { withSimClock: pinClock } = await import("@openbooks/engine/src/platform/clock.ts");
 const { MissingRatesError } = await import("@/lib/consolidation.ts");
 const { cashPosition } = await import("@/lib/cash/cash-position.ts");
+const { analyticsConfig } = await import("@/lib/analytics/config.ts");
+const { ANALYTICS_CONFIG } = await import("@/lib/analytics/config-spec.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 const { canSeeWidget } = await import("./_widget-access.ts");
 type Authz = import("@/lib/authz.ts").Authz;
@@ -123,9 +127,15 @@ test("runway tile ties the banking cash page on the same org", { skip: !DB }, as
     assert.equal(toUnits(metrics.lowestCash ?? "0"), toUnits("4300"));
     assert.equal(metrics.runwayStatus, "healthy");
 
+    // The cross-check forecasts the same configured horizon the tile reads —
+    // a fixed 8 here would compare two different horizons once the org
+    // changes its default.
+    const cfg = await withOrgContext(org.orgId, () => analyticsConfig(org.orgId, "cashflow"));
+    const horizon = cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks;
+    const caution = cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks;
     const position = await pinClock(TODAY, () =>
       withOrgContext(org.orgId, () =>
-        cashPosition(org.orgId, 8, { weeklyCap: "0.0000", restrictToSafe: false }, undefined, undefined, null),
+        cashPosition(org.orgId, horizon, { weeklyCap: "0.0000", restrictToSafe: false, runwayCautionWeeks: caution }, undefined, undefined, null),
       ),
     );
     assert.equal(metrics.runwayWeeks, position.runwayWeeks, "runway ties the banking page");

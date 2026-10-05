@@ -3,6 +3,7 @@ import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { sql } from "drizzle-orm";
 import { analyticsConfig } from "./config";
+import { ANALYTICS_CONFIG } from "./config-spec";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
   bankBalances,
@@ -176,8 +177,13 @@ export async function cashflowData(
   // Runway: weeks of cash at the current burn rate (net of inflows if positive).
   const netBurn = subtractMoney(burnRate, weeks.length ? divideMoney(totalIn, String(weeks.length)) : ZERO_MONEY);
   const runwayWeeks = compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0 ? divideMoney(startingCash, netBurn) : compareMoney(startingCash, ZERO_MONEY) > 0 ? null : ZERO_MONEY;
+  // Same single caution read as cashPosition: the config already fetched
+  // above, or the spec default for a legacy config row without the key.
+  const cautionWeeks = String(
+    apCfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+  );
   const runwayStatus: "healthy" | "caution" | "critical" =
-    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, "8.0000") < 0 ? "caution" : "healthy";
+    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0 ? "caution" : "healthy";
 
   const arSummary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg, ar.unplaced);
   const apSummary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg, ap.unplaced);

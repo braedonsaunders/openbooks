@@ -1,5 +1,5 @@
 /** Forecast horizon choices shared by server loaders and client controls. */
-export const MAX_CASH_HORIZON_WEEKS = 26;
+export const MAX_CASH_HORIZON_WEEKS = 52;
 export const CASH_HORIZON_PRESETS = [4, 8, 13, 26] as const;
 
 /**
