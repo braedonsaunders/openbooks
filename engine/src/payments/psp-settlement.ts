@@ -1601,6 +1601,8 @@ export async function importSettlementBatch(
     : summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
+    // A redelivered provider batch collides here by design: the persisted
+    // batch selected below is reused and reconciled, so the first insert wins.
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into psp_settlement_batches (
         id, org_id, provider, external_ref, status, currency,
@@ -1733,8 +1735,9 @@ export async function importSettlementBatch(
     // commerce module owns the restatement queue and this module cannot
     // import it (commerce already depends on payments, so the edge would
     // cycle), hence the direct insert. A payout with no channel orders
-    // matches zero rows by design, and a retried import collides on
-    // (org, order) with the first mark winning — both benign.
+    // matches zero rows by design. A retried import collides on
+    // (org, order) with the first mark winning — benign because that mark
+    // already requires a full restatement including payout settlement costs.
     await db.execute(sql`
       insert into channel_order_economics_pending (org_id, order_id, reason)
       select ${orgId}, o.id, ${`payout ${parsed.externalRef} settled`}
