@@ -3882,7 +3882,10 @@
       "annualDaysFloor": "個人の最低年間日数",
       "waitingPeriodMonths": "待機期間（暦月）",
       "approvalMode": "承認方針",
-      "legalEmployer": "雇用主（法人）"
+      "legalEmployer": "雇用主（法人）",
+      "clearingAccountId": "清算勘定",
+      "collectionMode": "徴収方式",
+      "states": "州"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
@@ -3909,8 +3912,6 @@
       "entitlementMaxBalance": "プランの単位での上限額です。",
       "entitlementNotifyBalance": "上限接近として従業員にフラグを立てる緩やかなしきい値です。",
       "entitlementPayoutComponent": "バンクを払い出す支給項目です。立替プランでは回収する控除が該当します。",
-      "entitlementDepositComponent": "マイナス時間の明細が支払いではなく積立となる支給項目です。プラス明細は積立時間を払い出します。",
-      "entitlementAllowNegativeBalance": "オンの場合、引出しで残高がマイナスになることがあります。オフの場合、残高を超える払出しは拒否されます。",
       "entitlementDepositComponent": "マイナス時間の明細で時間バンクに積み立てる支給項目です。勤務時間を支払わずに積み立てる場合以外は空にします。",
       "entitlementAllowNegativeBalance": "払い出しで残高をマイナスにすることを許可します。無効の場合、利用可能残高を超える払い出しは拒否されます。",
       "entitlementScope": "範囲は最大1つ設定します。プラン全体の既定値にする場合はすべての範囲を空欄にします。",

@@ -3762,7 +3762,10 @@
       "annualDaysFloor": "Mínimo personal de días anuales",
       "waitingPeriodMonths": "Espera (meses naturales)",
       "approvalMode": "Política de aprobación",
-      "legalEmployer": "Empleador legal"
+      "legalEmployer": "Empleador legal",
+      "clearingAccountId": "Cuenta de compensación",
+      "collectionMode": "Modo de recaudación",
+      "states": "Estados"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
@@ -3796,8 +3799,6 @@
       "entitlementMaxBalance": "El techo absoluto, en la unidad del plan.",
       "entitlementNotifyBalance": "El umbral flexible que señala que un empleado se acerca al límite.",
       "entitlementPayoutComponent": "La percepción que paga el banco. Para un plan de «deber», es la deducción que lo recupera.",
-      "entitlementDepositComponent": "La percepción cuyas líneas de horas negativas abonan tiempo en lugar de pagarlo. Las líneas positivas pagan el tiempo abonado.",
-      "entitlementAllowNegativeBalance": "Si está activado, los retiros pueden dejar el banco en negativo. Si no, un pago superior al saldo se rechaza.",
       "entitlementDepositComponent": "La percepción cuyas líneas de horas negativas alimentan un banco de horas desde una nómina. Déjelo vacío salvo que el tiempo trabajado se guarde en lugar de pagarse.",
       "entitlementAllowNegativeBalance": "Permite que los pagos dejen el banco en negativo. En caso contrario, un pago mayor que el saldo disponible se rechaza.",
       "entitlementScope": "Defina como máximo un alcance. Deje todos los alcances vacíos para el valor predeterminado del plan.",

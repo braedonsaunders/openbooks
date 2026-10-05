@@ -3807,7 +3807,10 @@
       "annualDaysFloor": "个人最低年度天数",
       "waitingPeriodMonths": "等待期（日历月）",
       "approvalMode": "审批政策",
-      "legalEmployer": "法定雇主"
+      "legalEmployer": "法定雇主",
+      "clearingAccountId": "清算账户",
+      "collectionMode": "代收方式",
+      "states": "州"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
@@ -3844,8 +3847,6 @@
       "entitlementDirection": "计提：雇主欠员工。欠付：员工欠雇主——余额为负，从未来工资中扣还，直到恰好为零。",
       "entitlementAccrualValue": "按收入比例的计划填百分比（4 即 4%），否则填每小时或每发薪期金额。",
       "entitlementPayoutComponent": "支付该银行的收入项。对“欠付”计划，此处是扣回的扣款项。",
-      "entitlementDepositComponent": "负工时明细存入时间而非支付的收入项。正数明细支付已存入的时间。",
-      "entitlementAllowNegativeBalance": "开启时，支取可使余额变为负数。关闭时，超出余额的支付将被拒绝。",
       "entitlementDepositComponent": "以负工时明细为工时银行注资的收入项。除非将工作时间存入银行而非支付，否则留空。",
       "entitlementAllowNegativeBalance": "允许支付使银行余额为负。否则，超过可用余额的支付将被拒绝。",
       "entitlementLiabilityAccount": "该银行在资产负债表中的位置。留空则本计划仅供报表使用。",

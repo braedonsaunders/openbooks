@@ -3882,7 +3882,10 @@
       "annualDaysFloor": "Persönliche Mindestjahrestage",
       "waitingPeriodMonths": "Wartezeit (Kalendermonate)",
       "approvalMode": "Genehmigungsrichtlinie",
-      "legalEmployer": "Rechtlicher Arbeitgeber"
+      "legalEmployer": "Rechtlicher Arbeitgeber",
+      "clearingAccountId": "Verrechnungskonto",
+      "collectionMode": "Erhebungsart",
+      "states": "Bundesstaaten"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count zählt die unterschiedlichen Werte des Distinct Keys jedes Datensatzes.",
@@ -3909,8 +3912,6 @@
       "entitlementMaxBalance": "Die harte Obergrenze, in der Einheit des Plans.",
       "entitlementNotifyBalance": "Die weiche Schwelle, die einen Mitarbeiter als nahe am Limit markiert.",
       "entitlementPayoutComponent": "Der Bezug, der das Konto auszahlt. Bei einem Schulden-Plan ist dies der Abzug, der es zurückfordert.",
-      "entitlementDepositComponent": "Der Bezug, dessen negative Stunden stattdessen dem Konto gutgeschrieben werden. Positive Zeilen zahlen gutgeschriebene Zeit aus.",
-      "entitlementAllowNegativeBalance": "Wenn aktiv, dürfen Abhebungen das Konto ins Minus treiben. Wenn inaktiv, wird eine Auszahlung über den Saldo hinaus verweigert.",
       "entitlementDepositComponent": "Der Bezug, dessen Negativstunden-Zeilen ein Stundenkonto aus einem Lauf speisen. Leer lassen, es sei denn, Arbeitszeit wird statt Auszahlung gebankt.",
       "entitlementAllowNegativeBalance": "Auszahlungen dürfen das Konto unter null drücken. Sonst wird eine Auszahlung über dem verfügbaren Saldo verweigert.",
       "entitlementScope": "Höchstens einen Bereich setzen. Alle Bereiche leer lassen für den planweiten Standard.",
