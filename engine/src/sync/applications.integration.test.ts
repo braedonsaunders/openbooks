@@ -4,6 +4,7 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { sum } from "../money/money.ts";
 import { recomputeOpenBalances, reconcileApplications } from "./applications.ts";
 import { DocumentVoidError, requestDocumentVoid } from "../ledger/document-void.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
@@ -15,22 +16,8 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const appliedDocumentId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const appliedEntryId = randomUUID();
     const partyBId = randomUUID();
     const partyAId = randomUUID();
-    const paymentLines = {
-      partyB: randomUUID(),
-      partyA: randomUUID(),
-      bank: randomUUID(),
-    };
-    const appliedLines = {
-      partyA: randomUUID(),
-      partyB: randomUUID(),
-      bank: randomUUID(),
-    };
     try {
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -38,64 +25,32 @@ test(
           (${partyBId}, ${org.orgId}, 'customer', 'Party B', true, '{}'::jsonb),
           (${partyAId}, ${org.orgId}, 'customer', 'Party A', true, '{}'::jsonb)
       `);
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-ORDER',
-           ${partyAId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 50, 0, 50, '{"sourceId":"payment-1"}'::jsonb),
-          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-ORDER',
-           ${partyAId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 50, 0, 50, '{"sourceId":"invoice-1"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-ORDER', ${org.date}, ${org.periodId}, 'Payment order fixture',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-ORDER', ${org.date}, ${org.periodId}, 'Invoice order fixture',
-           'draft', ${appliedDocumentId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${paymentLines.partyB}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 25, 'CAD', 25, 1, ${partyBId}, true),
-          (${paymentLines.partyA}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.ar},
-           ${org.subsidiaryId}, 25, 'CAD', 25, 1, ${partyAId}, true),
-          (${paymentLines.bank}, ${org.orgId}, ${paymentEntryId}, 3, ${org.accounts.bank},
-           ${org.subsidiaryId}, -50, 'CAD', -50, 1, null, false),
-          (${appliedLines.partyA}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -25, 'CAD', -25, 1, ${partyAId}, true),
-          (${appliedLines.partyB}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.ar},
-           ${org.subsidiaryId}, -25, 'CAD', -25, 1, ${partyBId}, true),
-          (${appliedLines.bank}, ${org.orgId}, ${appliedEntryId}, 3, ${org.accounts.bank},
-           ${org.subsidiaryId}, 50, 'CAD', 50, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${appliedEntryId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${appliedDocumentId}
-      `);
+      const payment = await postFixtureDoc(
+        org,
+        "PAY-ORDER",
+        "payment-1",
+        [
+          { accountId: org.accounts.ar, amount: "25", partyId: partyBId, open: true },
+          { accountId: org.accounts.ar, amount: "25", partyId: partyAId, open: true },
+          { accountId: org.accounts.bank, amount: "-50", partyId: null, open: false },
+        ],
+        "customer_payment",
+        { partyId: partyAId },
+      );
+      const invoice = await postFixtureDoc(
+        org,
+        "INV-ORDER",
+        "invoice-1",
+        [
+          { accountId: org.accounts.ar, amount: "-25", partyId: partyAId, open: true },
+          { accountId: org.accounts.ar, amount: "-25", partyId: partyBId, open: true },
+          { accountId: org.accounts.bank, amount: "50", partyId: null, open: false },
+        ],
+        "invoice",
+        { partyId: partyAId },
+      );
+      const paymentLines = { partyB: payment.lineIds[0]!, partyA: payment.lineIds[1]! };
+      const appliedLines = { partyA: invoice.lineIds[0]!, partyB: invoice.lineIds[1]! };
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
         { paymentRef: "payment-1", appliedRef: "invoice-1", amount: "50", currency: "CAD" },
@@ -145,69 +100,32 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const appliedDocumentId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const appliedEntryId = randomUUID();
-    const paymentLineId = randomUUID();
-    const paymentBankLineId = randomUUID();
-    const appliedLineId = randomUUID();
-    const appliedBankLineId = randomUUID();
     try {
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-FX',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'EUR', 'approved', 100, 0, 100, '{"sourceId":"payment-fx"}'::jsonb),
-          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-FX',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'EUR', 'approved', 100, 0, 100, '{"sourceId":"invoice-fx"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-FX', ${org.date}, ${org.periodId}, 'Foreign payment fixture',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-FX', ${org.date}, ${org.periodId}, 'Foreign invoice fixture',
-           'draft', ${appliedDocumentId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${paymentLineId}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 120, 'EUR', 100, 1.2, ${org.customerId}, true),
-          (${paymentBankLineId}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, -120, 'CAD', -120, 1, null, false),
-          (${appliedLineId}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -110, 'EUR', -100, 1.1, ${org.customerId}, true),
-          (${appliedBankLineId}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 110, 'CAD', 110, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${appliedEntryId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${appliedDocumentId}
-      `);
+      // The header total states the transaction-currency face value (100),
+      // not the carrying amounts (120/110): postFixtureDoc computes the
+      // latter, so the FX face value rides along explicitly.
+      await postFixtureDoc(
+        org,
+        "PAY-FX",
+        "payment-fx",
+        [
+          { accountId: org.accounts.ar, amount: "120", currency: "EUR", txnAmount: "100", fxRate: "1.2", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "-120", currency: "CAD", txnAmount: "-120", fxRate: "1", partyId: null, open: false },
+        ],
+        "customer_payment",
+        { total: "100" },
+      );
+      await postFixtureDoc(
+        org,
+        "INV-FX",
+        "invoice-fx",
+        [
+          { accountId: org.accounts.ar, amount: "-110", currency: "EUR", txnAmount: "-100", fxRate: "1.1", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "110", currency: "CAD", txnAmount: "110", fxRate: "1", partyId: null, open: false },
+        ],
+        "invoice",
+        { total: "100" },
+      );
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
         { paymentRef: "payment-fx", appliedRef: "invoice-fx", amount: "100", currency: "EUR" },
@@ -298,89 +216,48 @@ test(
     // posts the second group onto the first group's entry number, violating
     // journal_entries_org_number and rolling back the entire reconciliation.
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const invoiceAId = randomUUID();
-    const invoiceBId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const entryAId = randomUUID();
-    const entryBId = randomUUID();
     const partyBId = randomUUID();
     try {
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${partyBId}, ${org.orgId}, 'customer', 'FX Party B', true, '{}'::jsonb)
       `);
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-FX2',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'EUR', 'approved', 200, 0, 200, '{"sourceId":"payment-fx2"}'::jsonb),
-          (${invoiceAId}, ${org.orgId}, 'customer_invoice', 'INV-FX2A',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'EUR', 'approved', 100, 0, 100, '{"sourceId":"invoice-fx2a"}'::jsonb),
-          (${invoiceBId}, ${org.orgId}, 'customer_invoice', 'INV-FX2B',
-           ${partyBId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'EUR', 'approved', 100, 0, 100, '{"sourceId":"invoice-fx2b"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-FX2', ${org.date}, ${org.periodId}, 'Two-party foreign payment',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${entryAId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-FX2A', ${org.date}, ${org.periodId}, 'Foreign invoice A',
-           'draft', ${invoiceAId}, 'document'),
-          (${entryBId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-FX2B', ${org.date}, ${org.periodId}, 'Foreign invoice B',
-           'draft', ${invoiceBId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 120, 'EUR', 100, 1.2, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.ar},
-           ${org.subsidiaryId}, 125, 'EUR', 100, 1.25, ${partyBId}, true),
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 3, ${org.accounts.bank},
-           ${org.subsidiaryId}, -245, 'CAD', -245, 1, null, false),
-          (${randomUUID()}, ${org.orgId}, ${entryAId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -110, 'EUR', -100, 1.1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${entryAId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 110, 'CAD', 110, 1, null, false),
-          (${randomUUID()}, ${org.orgId}, ${entryBId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -115, 'EUR', -100, 1.15, ${partyBId}, true),
-          (${randomUUID()}, ${org.orgId}, ${entryBId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 115, 'CAD', 115, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${entryAId}, ${entryBId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${entryAId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${invoiceAId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${entryBId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${invoiceBId}
-      `);
+      // Header totals state the transaction-currency face values; the
+      // carrying amounts on the lines differ, so they ride along explicitly.
+      await postFixtureDoc(
+        org,
+        "PAY-FX2",
+        "payment-fx2",
+        [
+          { accountId: org.accounts.ar, amount: "120", currency: "EUR", txnAmount: "100", fxRate: "1.2", partyId: org.customerId, open: true },
+          { accountId: org.accounts.ar, amount: "125", currency: "EUR", txnAmount: "100", fxRate: "1.25", partyId: partyBId, open: true },
+          { accountId: org.accounts.bank, amount: "-245", currency: "CAD", txnAmount: "-245", fxRate: "1", partyId: null, open: false },
+        ],
+        "customer_payment",
+        { total: "200" },
+      );
+      await postFixtureDoc(
+        org,
+        "INV-FX2A",
+        "invoice-fx2a",
+        [
+          { accountId: org.accounts.ar, amount: "-110", currency: "EUR", txnAmount: "-100", fxRate: "1.1", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "110", currency: "CAD", txnAmount: "110", fxRate: "1", partyId: null, open: false },
+        ],
+        "customer_invoice",
+        { total: "100" },
+      );
+      await postFixtureDoc(
+        org,
+        "INV-FX2B",
+        "invoice-fx2b",
+        [
+          { accountId: org.accounts.ar, amount: "-115", currency: "EUR", txnAmount: "-100", fxRate: "1.15", partyId: partyBId, open: true },
+          { accountId: org.accounts.bank, amount: "115", currency: "CAD", txnAmount: "115", fxRate: "1", partyId: null, open: false },
+        ],
+        "customer_invoice",
+        { partyId: partyBId, total: "100" },
+      );
 
       const result = await reconcileApplications(org.orgId, "sourceId", [
         { paymentRef: "payment-fx2", appliedRef: "invoice-fx2a", amount: "120", currency: "CAD" },
@@ -433,67 +310,27 @@ test(
     // full 100 would breach the kernel's open-item check (or worse, silently
     // over-settle the subledger past zero).
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const appliedDocumentId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const appliedEntryId = randomUUID();
-    const paymentLineId = randomUUID();
-    const appliedLineId = randomUUID();
     try {
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-OVER',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 50, 0, 50, '{"sourceId":"payment-over"}'::jsonb),
-          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-OVER',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 50, 0, 50, '{"sourceId":"invoice-over"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-OVER', ${org.date}, ${org.periodId}, 'Over-application payment',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-OVER', ${org.date}, ${org.periodId}, 'Over-application invoice',
-           'draft', ${appliedDocumentId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${paymentLineId}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 50, 'CAD', 50, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, -50, 'CAD', -50, 1, null, false),
-          (${appliedLineId}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -50, 'CAD', -50, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 50, 'CAD', 50, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${appliedEntryId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${appliedDocumentId}
-      `);
+      await postFixtureDoc(
+        org,
+        "PAY-OVER",
+        "payment-over",
+        [
+          { accountId: org.accounts.ar, amount: "50", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "-50", partyId: null, open: false },
+        ],
+        "customer_payment",
+      );
+      await postFixtureDoc(
+        org,
+        "INV-OVER",
+        "invoice-over",
+        [
+          { accountId: org.accounts.ar, amount: "-50", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "50", partyId: null, open: false },
+        ],
+        "invoice",
+      );
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
         { paymentRef: "payment-over", appliedRef: "invoice-over", amount: "100", currency: "CAD" },
@@ -542,65 +379,27 @@ test(
     // then only the 20 still open; a third identical report settles nothing.
     // The pair total never exceeds the 50 of open capacity.
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const appliedDocumentId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const appliedEntryId = randomUUID();
     try {
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-PART',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 50, 0, 50, '{"sourceId":"payment-part"}'::jsonb),
-          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-PART',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 50, 0, 50, '{"sourceId":"invoice-part"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-PART', ${org.date}, ${org.periodId}, 'Partial payment',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-PART', ${org.date}, ${org.periodId}, 'Partial invoice',
-           'draft', ${appliedDocumentId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 50, 'CAD', 50, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, -50, 'CAD', -50, 1, null, false),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -50, 'CAD', -50, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 50, 'CAD', 50, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${appliedEntryId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${appliedDocumentId}
-      `);
+      await postFixtureDoc(
+        org,
+        "PAY-PART",
+        "payment-part",
+        [
+          { accountId: org.accounts.ar, amount: "50", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "-50", partyId: null, open: false },
+        ],
+        "customer_payment",
+      );
+      await postFixtureDoc(
+        org,
+        "INV-PART",
+        "invoice-part",
+        [
+          { accountId: org.accounts.ar, amount: "-50", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "50", partyId: null, open: false },
+        ],
+        "invoice",
+      );
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
         { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "30", currency: "CAD" },
@@ -654,72 +453,34 @@ test(
     // resolve cleanly with the pair already settled — never die on the
     // open-item guard (losing the whole batch) and never double-settle.
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const appliedDocumentId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const appliedEntryId = randomUUID();
-    const paymentLineId = randomUUID();
-    const appliedLineId = randomUUID();
     const deferred = () => {
       let resolve!: () => void;
       const promise = new Promise<void>((done) => { resolve = done; });
       return { promise, resolve };
     };
     try {
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-RACE',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 100, 0, 100, '{"sourceId":"payment-race"}'::jsonb),
-          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-RACE',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 100, 0, 100, '{"sourceId":"invoice-race"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-RACE', ${org.date}, ${org.periodId}, 'Race payment',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-RACE', ${org.date}, ${org.periodId}, 'Race invoice',
-           'draft', ${appliedDocumentId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${paymentLineId}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false),
-          (${appliedLineId}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -100, 'CAD', -100, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 100, 'CAD', 100, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${appliedEntryId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${appliedDocumentId}
-      `);
+      const payment = await postFixtureDoc(
+        org,
+        "PAY-RACE",
+        "payment-race",
+        [
+          { accountId: org.accounts.ar, amount: "100", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "-100", partyId: null, open: false },
+        ],
+        "customer_payment",
+      );
+      const invoice = await postFixtureDoc(
+        org,
+        "INV-RACE",
+        "invoice-race",
+        [
+          { accountId: org.accounts.ar, amount: "-100", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "100", partyId: null, open: false },
+        ],
+        "invoice",
+      );
+      const paymentLineId = payment.lineIds[0]!;
+      const appliedLineId = invoice.lineIds[0]!;
 
       // The manual writer: inserts the full application, then holds its
       // transaction open (and its endpoint row locks with it) until the
@@ -820,66 +581,29 @@ test(
     // pair must resolve as a skipped line with nothing written — never an
     // application onto the voided invoice's dead lines.
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const appliedDocumentId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const appliedEntryId = randomUUID();
     try {
       const actorId = await createScratchUser(org.orgId, "Void Auditor", "admin");
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-VOID',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 100, 0, 100, '{"sourceId":"payment-void"}'::jsonb),
-          (${appliedDocumentId}, ${org.orgId}, 'customer_invoice', 'INV-VOID',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 100, 0, 100, '{"sourceId":"invoice-void"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-VOID', ${org.date}, ${org.periodId}, 'Void-race payment',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-VOID', ${org.date}, ${org.periodId}, 'Void-race invoice',
-           'draft', ${appliedDocumentId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -100, 'CAD', -100, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 100, 'CAD', 100, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${appliedEntryId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${appliedDocumentId}
-      `);
+      await postFixtureDoc(
+        org,
+        "PAY-VOID",
+        "payment-void",
+        [
+          { accountId: org.accounts.ar, amount: "100", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "-100", partyId: null, open: false },
+        ],
+        "customer_payment",
+      );
+      const invoice = await postFixtureDoc(
+        org,
+        "INV-VOID",
+        "invoice-void",
+        [
+          { accountId: org.accounts.ar, amount: "-100", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "100", partyId: null, open: false },
+        ],
+        "customer_invoice",
+      );
+      const appliedDocumentId = invoice.documentId;
 
       const voided = await requestDocumentVoid({
         documentId: appliedDocumentId,
@@ -922,66 +646,30 @@ test(
     // application may reference a reversed line, neither side may fail raw,
     // and a voided invoice is never settled by the mirror.
     const org = await createScratchOrg();
-    const paymentDocumentId = randomUUID();
-    const appliedDocumentId = randomUUID();
-    const paymentEntryId = randomUUID();
-    const appliedEntryId = randomUUID();
     try {
       const actorId = await createScratchUser(org.orgId, "Race Auditor", "admin");
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, document_number, party_id, subsidiary_id,
-           document_date, posting_date, currency, status, subtotal, tax_total,
-           total, custom)
-        values
-          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-CONVERGE',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 100, 0, 100, '{"sourceId":"payment-converge"}'::jsonb),
-          (${appliedDocumentId}, ${org.orgId}, 'customer_invoice', 'INV-CONVERGE',
-           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
-           'CAD', 'approved', 100, 0, 100, '{"sourceId":"invoice-converge"}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into journal_entries
-          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, source_document_id, origin)
-        values
-          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'PAY-CONVERGE', ${org.date}, ${org.periodId}, 'Converge payment',
-           'draft', ${paymentDocumentId}, 'document'),
-          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           'INV-CONVERGE', ${org.date}, ${org.periodId}, 'Converge invoice',
-           'draft', ${appliedDocumentId}, 'document')
-      `);
-      await db.execute(sql`
-        insert into journal_lines
-          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
-           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-        values
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
-           ${org.subsidiaryId}, -100, 'CAD', -100, 1, ${org.customerId}, true),
-          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
-           ${org.subsidiaryId}, 100, 'CAD', 100, 1, null, false)
-      `);
-      await db.execute(sql`
-        update journal_entries
-           set status = 'posted', posted_at = now()
-         where id in (${paymentEntryId}, ${appliedEntryId})
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${paymentDocumentId}
-      `);
-      await db.execute(sql`
-        update documents
-           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
-         where id = ${appliedDocumentId}
-      `);
+      await postFixtureDoc(
+        org,
+        "PAY-CONVERGE",
+        "payment-converge",
+        [
+          { accountId: org.accounts.ar, amount: "100", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "-100", partyId: null, open: false },
+        ],
+        "customer_payment",
+      );
+      const invoice = await postFixtureDoc(
+        org,
+        "INV-CONVERGE",
+        "invoice-converge",
+        [
+          { accountId: org.accounts.ar, amount: "-100", partyId: org.customerId, open: true },
+          { accountId: org.accounts.bank, amount: "100", partyId: null, open: false },
+        ],
+        "customer_invoice",
+      );
+      const appliedDocumentId = invoice.documentId;
+      const appliedEntryId = invoice.entryId;
 
       const [mirrorOutcome, voidOutcome] = await Promise.all([
         reconcileApplications(org.orgId, "sourceId", [
@@ -1059,7 +747,10 @@ interface FixtureLine {
 /**
  * Post a document with exact lines; returns the ids for assertions. Signs
  * are the caller's: payments carry positive AR lines, invoices negative
- * ones, so opposites settle.
+ * ones, so opposites settle. The header party defaults to the scratch
+ * customer and the header total to the exact positive-line sum; foreign-
+ * currency fixtures state the transaction-currency total explicitly, since
+ * the carrying amounts differ from it.
  */
 async function postFixtureDoc(
   org: ScratchOrg,
@@ -1067,13 +758,13 @@ async function postFixtureDoc(
   sourceId: string,
   lines: readonly FixtureLine[],
   docKind = "customer_invoice",
+  options: { partyId?: string; total?: string } = {},
 ): Promise<{ documentId: string; entryId: string; lineIds: string[] }> {
   const documentId = randomUUID();
   const entryId = randomUUID();
   const lineIds = lines.map(() => randomUUID());
-  const total = lines
-    .reduce((sum, line) => (line.amount.startsWith("-") ? sum : sum + Number(line.amount)), 0)
-    .toFixed(4);
+  const total =
+    options.total ?? sum(lines.filter((line) => !line.amount.startsWith("-")).map((line) => line.amount));
   // The open-item currency guard ties the document currency to its lines —
   // foreign-currency fixtures must carry the line currency, not CAD.
   const docCurrency = lines[0]?.currency ?? "CAD";
@@ -1084,7 +775,7 @@ async function postFixtureDoc(
        total, custom)
     values
       (${documentId}, ${org.orgId}, ${docKind}, ${docNumber},
-       ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+       ${options.partyId ?? org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
        ${docCurrency}, 'approved', ${total}, '0', ${total}, ${JSON.stringify({ sourceId })})
   `);
   await db.execute(sql`
