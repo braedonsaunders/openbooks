@@ -10,6 +10,7 @@ import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies.ts'
 import { assertStockLocationDeletionAllowed, WarehouseRefusal } from '@openbooks/engine/src/inventory/warehouses.ts'
 import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
@@ -188,6 +189,9 @@ async function setupWriteTransaction<T>(
   options: { idempotencyKey?: string; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<T> {
   return db.transaction(async (tx) => {
+    // Keep a policy change ordered with revaluation and consolidation pricing.
+    // Ledger setup is locked before feature and organization state.
+    if (entity.key === 'fx-rate-age-policies') await lockLedgerSetupFence(tx, orgId, 'exclusive')
     // Same-key retries serialize here, before any create effect: the second
     // claimant blocks until the first commits, then replays off its audit.
     if (options.idempotencyKey) {
@@ -1932,6 +1936,7 @@ export async function preflightSetupWrite(
   if (owned) return owned
   const commanded = commandOwnedOnly(entity)
   if (commanded) return commanded
+  if (method === 'update' && entity.allowUpdate === false) return { status: 405, body: { error: 'Configuration history is preserved; create a new record with its effective date to change this policy' } }
   if (method === 'create' && entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (method === 'delete' && entity.key === 'carriers') return CARRIER_DELETE_REFUSAL
   if (method === 'delete' && entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
@@ -2434,6 +2439,7 @@ export async function updateSetupRecord(
   const commanded = commandOwnedOnly(entity)
   if (commanded) return commanded
   if (entity.mutationPath) return { status: 405, body: { error: `This configuration must be saved through ${entity.mutationPath}, which validates the complete record.` } }
+  if (entity.allowUpdate === false) return { status: 405, body: { error: 'Configuration history is preserved; create a new record with its effective date to change this policy' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
   let reviewFolded: Record<string, unknown>

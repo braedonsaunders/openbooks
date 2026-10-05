@@ -239,6 +239,7 @@ export const TENANT_TABLE_POLICIES = {
   "grants": "clone:catalog-uuid-rebase",
   "fx_provider_configs": "clone:catalog-uuid-rebase",
   "fx_provider_runs": "clone:catalog-uuid-rebase",
+  "fx_rate_age_policies": "clone:catalog-uuid-rebase",
   "fx_rates": "clone:catalog-uuid-rebase",
   "gifts": "clone:catalog-uuid-rebase",
   "gl_month_activity": "skip:no-copy",

@@ -258,7 +258,7 @@ export function SetupDrawer({
   }
 
   async function save() {
-    if (busy || entity.readOnly || !editing) return
+    if (busy || entity.readOnly || (!creating && entity.allowUpdate === false) || !editing) return
     const err = validate()
     if (err) {
       setFieldError(err)
@@ -446,9 +446,9 @@ export function SetupDrawer({
       ) : undefined}
       headerActions={<>
         {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
-        {!creating && !entity.readOnly && !editing ? <Button variant="outline" disabled={busy} onClick={() => { setEditing(true); if (nestedTabActive || activeRuleTab) selectTab('details') }}>{tCommon('actions.edit')}</Button> : null}
+        {!creating && !entity.readOnly && entity.allowUpdate !== false && !editing ? <Button variant="outline" disabled={busy} onClick={() => { setEditing(true); if (nestedTabActive || activeRuleTab) selectTab('details') }}>{tCommon('actions.edit')}</Button> : null}
         {chooser && !choosing ? <Button variant="outline" disabled={busy} onClick={() => setChoosing(true)}>{tCommon('actions.back')}</Button> : null}
-        {!choosing && !nestedTabActive && !entity.readOnly && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
+        {!choosing && !nestedTabActive && !entity.readOnly && (creating || entity.allowUpdate !== false) && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
         </Button> : null}
         {!creating && editing ? <Button variant="outline" disabled={busy} onClick={() => void cancelEditing()}>{tCommon('actions.cancel')}</Button> : null}

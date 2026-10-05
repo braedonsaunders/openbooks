@@ -9,6 +9,7 @@ import { add, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
+import { closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.
@@ -204,7 +205,7 @@ async function loadExposures(
   functionalCurrency: string,
   asOfDate: string,
   scope: SQL,
-): Promise<(Omit<RevaluationPosition, "periodEndRate"> & { periodEndRate: string | null })[]> {
+): Promise<RevaluationExposure[]> {
   const timeZone = await businessTimeZone(orgId);
   const r = await db.execute<{
     account_id: string; currency: string; carrying_base: string; foreign_balance: string; invalid_residual: boolean;
@@ -260,21 +261,35 @@ async function loadExposures(
       from position_lines group by account_id,currency
      having sum(foreign_balance)<>0 or sum(carrying_base)<>0 or bool_or(invalid_residual)`);
 
-  const exposures: (Omit<RevaluationPosition, "periodEndRate"> & { periodEndRate: string | null })[] = [];
+  const exposures: RevaluationExposure[] = [];
   for (const row of r.rows) {
     if (row.invalid_residual) {
       throw new RevaluationError(`inconsistent open-item residual for account ${row.account_id} in ${row.currency}`);
     }
+    const priced = isZero(row.foreign_balance)
+      ? { rate: "1", refusal: null }
+      : await closingSpotRateWithinAgeLimit(db, orgId, row.currency, functionalCurrency, asOfDate);
     exposures.push({
       accountId: row.account_id,
       currency: row.currency,
       carryingBase: row.carrying_base,
       foreignBalance: row.foreign_balance,
-      periodEndRate: isZero(row.foreign_balance) ? "1" : await periodEndRate(orgId, row.currency, functionalCurrency, asOfDate),
+      periodEndRate: priced.rate,
+      rateRefusal: priced.refusal,
     });
   }
   return exposures;
 }
+
+/**
+ * One exposure before pricing is confirmed: a null rate means no usable
+ * period-end spot rate — none on file (`rateRefusal` null), or one older than
+ * the organization's closing-rate age limit (`rateRefusal` names it).
+ */
+type RevaluationExposure = Omit<RevaluationPosition, "periodEndRate"> & {
+  periodEndRate: string | null;
+  rateRefusal: string | null;
+};
 
 /** Functional-currency FX lines cannot be allocated back to foreign currencies.
  * Net them by monetary account, including mirrors and earlier same-end periods.
@@ -429,29 +444,6 @@ export async function revaluationReadiness(
   };
 }
 
-/** Latest spot rate foreign→functional on or before the date, with the inverse
- *  fallback the posting engine uses. When the direct pair and an inverted quote
- *  share the newest as_of, the DIRECT row wins (priority 0 beats 1) — the same
- *  deterministic rule as labor-costing, so one pair/date always converts alike. */
-async function periodEndRate(
-  orgId: string,
-  from: string,
-  to: string,
-  asOfDate: string,
-): Promise<string | null> {
-  const r = (await db.execute<{ rate: string }>(sql`
-    select rate::text from (
-      select rate, as_of, 0 as priority from fx_rates
-       where org_id = ${orgId} and from_currency = ${from} and to_currency = ${to}
-         and rate_type = 'spot' and as_of <= ${asOfDate}
-      union all
-      select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
-       where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
-         and rate_type = 'spot' and as_of <= ${asOfDate}
-    ) candidates order by as_of desc, priority asc limit 1`));
-  return r.rows[0]?.rate ?? null;
-}
-
 /** Restate each legal entity with incremental immutable adjustment/reversal
  * pairs. The shared ledger-setup fence is taken before configuration and basis reads,
  * consistent with ordinary posting. Each entity retains its own savepoint so a
@@ -536,7 +528,10 @@ async function postRevaluationEntry(
     const positions: RevaluationPosition[] = [];
     for (const exposure of exposures) {
       if (!exposure.periodEndRate) {
-        throw new RevaluationError(`no spot rate for ${exposure.currency}→${functionalCurrency} on or before ${asOfDate}`);
+        throw new RevaluationError(
+          exposure.rateRefusal
+            ?? `no spot rate for ${exposure.currency}→${functionalCurrency} on or before ${asOfDate}`,
+        );
       }
       positions.push({ ...exposure, periodEndRate: exposure.periodEndRate });
     }

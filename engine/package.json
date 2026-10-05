@@ -67,6 +67,7 @@
     "./consolidation": "./src/consolidation/public.ts",
     "./tax/contracts": "./src/tax/public-contracts.ts",
     "./navigation": "./src/navigation/public.ts",
+    "./organization/ledger-setup": "./src/organization/ledger-setup-fence.ts",
     "./organization/features": "./src/organization/public-features.ts",
     "./organization/feature-catalog": "./src/organization/public-feature-catalog.ts",
     "./organization/authority": "./src/organization/public-authority.ts",

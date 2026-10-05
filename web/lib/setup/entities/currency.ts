@@ -1,6 +1,6 @@
 /** Setup-registry currency entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
-import { FX_RATE_TYPES, CONSOLIDATED_RATE_SOURCES, COMPLIANCE_CATEGORIES, COMPLIANCE_ENFORCEMENT, LIEN_WAIVER_ENFORCEMENT, LIEN_WAIVER_TYPES, INFORMATION_RETURN_FORM_TYPES, INFORMATION_RETURN_FORMS_OPTIONS, INFORMATION_RETURN_BOXES } from '../options'
+import { FX_RATE_TYPES, FX_RATE_AGE_KINDS, CONSOLIDATED_RATE_SOURCES, COMPLIANCE_CATEGORIES, COMPLIANCE_ENFORCEMENT, LIEN_WAIVER_ENFORCEMENT, LIEN_WAIVER_TYPES, INFORMATION_RETURN_FORM_TYPES, INFORMATION_RETURN_FORMS_OPTIONS, INFORMATION_RETURN_BOXES } from '../options'
 import { RECRUITING_INTERVIEWER_POOLS_ENTITY, RECRUITING_KIT_ATTRIBUTES_ENTITY, RECRUITING_KIT_QUESTIONS_ENTITY, RECRUITING_KITS_ENTITY, RECRUITING_OFFER_TEMPLATES_ENTITY, RECRUITING_RETENTION_RULES_ENTITY } from '../hrm-recruiting'
 
 export const CURRENCY_ENTITIES: SetupEntity[] = [
@@ -30,6 +30,34 @@ export const CURRENCY_ENTITIES: SetupEntity[] = [
       { key: 'rateType', kind: 'select', required: true, options: FX_RATE_TYPES, lockedOnEdit: true },
       { key: 'rate', kind: 'decimal', required: true },
       { key: 'source', kind: 'text', lockedOnEdit: true, keepDefault: true },
+    ],
+  },
+  {
+    // How old a rate may be when revaluation and consolidation price a
+    // period. Effective-dated: a change takes a new row from its date on, and
+    // rows are never deleted, so the limit an earlier close ran under stays on
+    // record. With no row in force the engine default (stated in the
+    // description) applies.
+    key: 'fx-rate-age-policies',
+    table: 'fx_rate_age_policies',
+    actorCols: true,
+    groupKey: 'currency',
+    iconKey: 'timer',
+    featureKey: 'multiCurrency',
+    orgScoped: true,
+    orderBy: 'rate_kind, effective_from desc',
+    hasActive: false,
+    allowUpdate: false,
+    allowDelete: false,
+    columns: [
+      { key: 'rateKind', kind: 'badge', options: FX_RATE_AGE_KINDS },
+      { key: 'maxAgeDays', kind: 'number' },
+      { key: 'effectiveFrom', kind: 'date' },
+    ],
+    fields: [
+      { key: 'rateKind', kind: 'select', required: true, options: FX_RATE_AGE_KINDS, lockedOnEdit: true },
+      { key: 'effectiveFrom', kind: 'date', required: true, lockedOnEdit: true },
+      { key: 'maxAgeDays', kind: 'integer', required: true, min: 0, max: 366, helpTextKey: 'fieldHelp.fxRateMaxAgeDays' },
     ],
   },
   {

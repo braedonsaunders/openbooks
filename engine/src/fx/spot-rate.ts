@@ -358,15 +358,33 @@ export async function lookupSpotRate(
 }
 
 /**
+ * The same window mean as `averageSpotRate`, with the date of the newest
+ * quote it averaged — the evidence a rate-age limit is checked against (a
+ * feed that stopped early in the window still averages, over stale quotes).
+ * Same-currency pairs are exact par with no quote behind them.
+ */
+export async function averageSpotRateWindow(
+  runner: Runner,
+  orgId: string,
+  from: string,
+  to: string,
+  fromDate: string,
+  toDate: string,
+): Promise<{ rate: string | null; newestAsOf: string | null }> {
+  if (from === to) return { rate: "1", newestAsOf: null };
+  const { observations, average } = await selectWindowObservations(runner, orgId, from, to, fromDate, toDate);
+  return { rate: average, newestAsOf: observations.at(-1)?.asOf ?? null };
+}
+
+/**
  * Mean spot over a date window under the same direct-or-inverse doctrine,
  * delegated to the shared window core behind the month evidence helper so
  * the two can never price one window two ways: ONE observation per as_of
  * date contributes — the direct quote wins when a date is quoted in both
  * directions, otherwise the inverted reverse quote. Without the per-date
  * collapse a date quoted both ways would count twice and skew the mean
- * toward itself. Null when the window holds no quote in either direction
- * (callers fall back to the closing spot, exactly as a quote-free window
- * did before).
+ * toward itself. Null when the window holds no quote in either direction;
+ * callers refuse by name rather than substitute the closing spot.
  */
 export async function averageSpotRate(
   runner: Runner,

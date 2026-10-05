@@ -331,6 +331,8 @@ export interface SetupEntity {
   readOnly?: boolean
   /** Declaration-backed settings permit editing values but cannot be created/deleted here. */
   allowCreate?: boolean
+  /** Effective-dated history is replaced by creating a new version. */
+  allowUpdate?: boolean
   allowDelete?: boolean
   dataSource?: 'extension-settings' | 'home-announcements'
   /** Documentation-center article slug — renders a "Learn more" link on the tab. */

@@ -77,7 +77,9 @@ test("period-end FX revaluation posts every subsidiary with distinct journal num
 
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
-      values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.3700000000')`);
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-01', 'spot', '1.3700000000')`);
+    await db.execute(sql`insert into fx_rate_age_policies (org_id,rate_kind,max_age_days,effective_from)
+      values (${org.orgId},'closing',7,'2026-07-01')`);
 
     // A USD receivable carried at the historical 1.36 on each entity's books:
     // period-end spot 1.37 restates +1.00 CAD per subsidiary.
@@ -107,6 +109,15 @@ test("period-end FX revaluation posts every subsidiary with distinct journal num
          where id = ${entryId}`);
     }
 
+    const refused = await runRevaluation(org.orgId, org.periodId, actorId);
+    assert.equal(refused.posted.length, 0);
+    assert.equal(refused.problems.length, 2);
+    assert.ok(refused.problems.every(message => /USD→CAD.*2026-07-01.*30 days old.*7-day limit/.test(message)));
+    assert.ok(refused.problems.every(message => message.includes('Setup → FX Rate Age Policies')));
+    assert.equal((await db.execute(sql`select id from journal_entries
+      where org_id=${org.orgId} and origin='fx_revaluation'`)).rows.length, 0);
+    await db.execute(sql`insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate)
+      values (${org.orgId},'USD','CAD','2026-07-31','spot','1.3700000000')`);
     const run = await runRevaluation(org.orgId, org.periodId, actorId);
     assert.deepEqual(run.problems, [], "no subsidiary may fail to post");
     assert.deepEqual(
