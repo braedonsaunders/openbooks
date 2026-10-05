@@ -1601,8 +1601,6 @@ export async function importSettlementBatch(
     : summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
-    // A redelivered provider batch collides here by design: the persisted
-    // batch selected below is reused and reconciled, so the first insert wins.
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into psp_settlement_batches (
         id, org_id, provider, external_ref, status, currency,
@@ -1622,6 +1620,8 @@ export async function importSettlementBatch(
         ${parsed.raw ? JSON.stringify(parsed.raw) : null}::jsonb, ${parsed.lines.length},
         ${parsed.memo ?? null}, ${actorId}, ${actorId}
       )
+      -- A redelivered provider batch collides here by design: the persisted
+      -- batch selected below is reused and reconciled, so the first insert wins.
       on conflict (org_id, provider, external_ref) do nothing
       returning id
     `));
@@ -1735,9 +1735,7 @@ export async function importSettlementBatch(
     // commerce module owns the restatement queue and this module cannot
     // import it (commerce already depends on payments, so the edge would
     // cycle), hence the direct insert. A payout with no channel orders
-    // matches zero rows by design. A retried import collides on
-    // (org, order) with the first mark winning — benign because that mark
-    // already requires a full restatement including payout settlement costs.
+    // matches zero rows by design.
     await db.execute(sql`
       insert into channel_order_economics_pending (org_id, order_id, reason)
       select ${orgId}, o.id, ${`payout ${parsed.externalRef} settled`}
@@ -1747,6 +1745,8 @@ export async function importSettlementBatch(
            select distinct l.meta->>'sourceOrderId'
              from psp_settlement_lines l
             where l.org_id = ${orgId} and l.batch_id = ${batchId} and l.meta ? 'sourceOrderId')
+      -- A retried import collides here with the first mark winning: that mark
+      -- already requires a full restatement including payout settlement costs.
       on conflict (org_id, order_id) do nothing`);
     return { batchId, created };
   });
