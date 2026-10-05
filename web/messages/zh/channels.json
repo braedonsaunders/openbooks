@@ -428,7 +428,8 @@
     "confirmTitle": "应用此修复？",
     "confirmBody": "{fix} 这将重跑{count}个订单。已过账的历史记录保留原科目。",
     "evidence": "为什么是这个方案",
-    "evidenceSummary": "{count}条理由"
+    "evidenceSummary": "{count}条理由",
+    "chipLabel": "已有修复建议"
   },
   "timeline": {
     "empty": "暂无退款、履约或取消。",

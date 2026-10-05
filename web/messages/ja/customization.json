@@ -61,7 +61,8 @@
     "fund": "資金",
     "fund_release": "資金リリース",
     "collection_attempt": "回収試行",
-    "tax_provider_transaction": "税金プロバイダー送信"
+    "tax_provider_transaction": "税金プロバイダー送信",
+    "psp_settlement_line_unmatched": "未紐付けの支払明細"
   },
   "resourcing": {
     "fields": {

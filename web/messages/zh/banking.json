@@ -1171,6 +1171,42 @@
       "refund_unposted": "退款未记账",
       "no_link": "无关联",
       "link_failed": "关联失败"
+    },
+    "queueAllLabel": "查看全部"
+  },
+  "pspUnmatched": {
+    "title": "未关联的付款明细",
+    "description": "尚无单据认领的每条结算明细。请逐行查看建议并完成关联，系统不会自动关联。",
+    "emptyTitle": "所有可关联明细均已关联。",
+    "emptyDescription": "未关联的收费、退款和争议明细将在此处显示，并附带建议单据。",
+    "colReference": "参考号",
+    "colProvider": "服务商",
+    "colKind": "类型",
+    "colBatch": "付款",
+    "colSettled": "结算日期",
+    "drawer": {
+      "kindRow": "类型",
+      "amountRow": "金额",
+      "referenceRow": "服务商参考号",
+      "descriptionRow": "说明",
+      "batchRow": "付款",
+      "settledRow": "结算日期"
+    },
+    "assistance": {
+      "title": "建议关联",
+      "loading": "正在查找单据…",
+      "loadFailed": "未能加载建议。请重新加载该行或重试。",
+      "evidence": "为什么是这张单据",
+      "evidenceSummary": "共{count}条理由",
+      "apply": "关联单据",
+      "applySimilar": "关联{count}条类似明细",
+      "similar": "有{count}条明细具有相同原因",
+      "confirmTitle": "关联这张单据？",
+      "confirmBody": "{fix} 这将关联{count}条明细。关联程序会先重新验证单据。",
+      "approved": "已关联{linked}条（跳过{skipped}条）。"
     }
+  },
+  "payoutAssistance": {
+    "chipLabel": "查看建议"
   }
 }

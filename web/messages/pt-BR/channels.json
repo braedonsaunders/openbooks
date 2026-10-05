@@ -428,7 +428,8 @@
     "confirmTitle": "Aplicar esta solução?",
     "confirmBody": "{fix} Isso reexecuta {count, plural, one {# pedido} other {# pedidos}}. O histórico contabilizado mantém suas contas.",
     "evidence": "Por que esta solução",
-    "evidenceSummary": "{count, plural, one {# motivo} other {# motivos}}"
+    "evidenceSummary": "{count, plural, one {# motivo} other {# motivos}}",
+    "chipLabel": "Solução proposta"
   },
   "timeline": {
     "empty": "Ainda não há reembolsos, atendimentos ou cancelamentos.",

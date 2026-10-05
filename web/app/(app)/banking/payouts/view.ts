@@ -55,6 +55,7 @@ export interface PayoutBatchRow {
 export interface PayoutsStrings {
   queueTitle: string
   queueEmpty: string
+  queueAllLabel: string
   batchesTitle: string
   batchesEmpty: string
   reportLinkLabel: string
@@ -120,6 +121,7 @@ export interface PayoutsData {
   queue: PayoutQueueRow[]
   batches: PayoutBatchRow[]
   reportHref: string
+  queueAllHref: string
   strings: PayoutsStrings
 }
 
@@ -260,9 +262,11 @@ export async function loadPayouts(
     })),
     batches: batchRows,
     reportHref: '/reports/payout-reconciliation',
+    queueAllHref: '/banking/payouts/unmatched',
     strings: {
       queueTitle: t('queueTitle'),
       queueEmpty: t('queueEmpty'),
+      queueAllLabel: t('queueAllLabel'),
       batchesTitle: t('batchesTitle'),
       batchesEmpty: t('batchesEmpty'),
       reportLinkLabel: t('reportLinkLabel'),
@@ -386,6 +390,7 @@ export function payoutsSpec(): PageSpec {
         queue: f('queue'),
         batches: f('batches'),
         reportHref: f('reportHref'),
+        queueAllHref: f('queueAllHref'),
         strings: f('strings'),
         emptyTitle: f('emptyTitle'),
         emptyDescription: f('emptyDescription'),

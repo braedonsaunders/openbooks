@@ -428,7 +428,8 @@
     "confirmTitle": "この修正を適用しますか？",
     "confirmBody": "{fix} {count}件の注文を再実行します。計上済みの履歴の勘定は変わりません。",
     "evidence": "この修正の理由",
-    "evidenceSummary": "理由が{count}件"
+    "evidenceSummary": "理由が{count}件",
+    "chipLabel": "修正の提案あり"
   },
   "timeline": {
     "empty": "返金・出荷・キャンセルはまだありません。",

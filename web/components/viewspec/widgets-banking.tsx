@@ -11,6 +11,7 @@ import { ReconcileWorkspace } from '../../app/(app)/banking/[accountId]/reconcil
 import { PspSettlementsWorkspace } from '../../app/(app)/banking/psp-settlements/sections'
 import { PayoutsWorkspace } from '../../app/(app)/banking/payouts/sections'
 import { PspDisputeReviewDrawer } from '../../app/(app)/banking/psp-settlements/reviews/ReviewDrawer'
+import { PayoutLineDrawer } from '../../app/(app)/banking/payouts/unmatched/PayoutLineDrawer'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
@@ -218,6 +219,13 @@ export const BANKING_WIDGETS = {
       review={props.review as ComponentProps<typeof PspDisputeReviewDrawer>['review']}
     />
   ),
+  /** The unmatched queue's row drawer: the loader resolves the line, the
+   *  drawer proposes the native document with evidence and links it. */
+  'psp-settlement-line-drawer': (props) => (
+    <PayoutLineDrawer
+      line={props.line as ComponentProps<typeof PayoutLineDrawer>['line']}
+    />
+  ),
   'psp-settlements': (props) => (
     <PspSettlementsWorkspace
       canReconcile={props.canReconcile === true}
@@ -247,6 +255,7 @@ export const BANKING_WIDGETS = {
       queue={props.queue as ComponentProps<typeof PayoutsWorkspace>['queue']}
       batches={props.batches as ComponentProps<typeof PayoutsWorkspace>['batches']}
       reportHref={str(props, 'reportHref') ?? '/reports/payout-reconciliation'}
+      queueAllHref={str(props, 'queueAllHref') ?? '/banking/payouts/unmatched'}
       strings={props.strings as ComponentProps<typeof PayoutsWorkspace>['strings']}
       emptyTitle={str(props, 'emptyTitle') ?? ''}
       emptyDescription={str(props, 'emptyDescription') ?? ''}

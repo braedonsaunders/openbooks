@@ -31,13 +31,17 @@ export {
 export { listAccountMaps, upsertAccountMap } from "./account-maps.ts";
 export {
   approveExceptionSuggestion,
+  approvePayoutSuggestion,
   exceptionGroupKey,
   normalizeExceptionSku,
   rejectExceptionSuggestion,
   similarExceptionOrderIds,
+  similarPayoutLineIds,
   skuMatchScore,
   suggestExceptionFix,
+  suggestPayoutLineFix,
   titleMatchScore,
+  type PayoutLineSuggestion,
 } from "./exception-assistance.ts";
 export {
   listChannelLocations,

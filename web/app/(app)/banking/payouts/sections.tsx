@@ -47,6 +47,7 @@ export interface PayoutsWorkspaceProps {
   queue: PayoutQueueRow[]
   batches: PayoutBatchRow[]
   reportHref: string
+  queueAllHref: string
   strings: PayoutsStrings
   emptyTitle: string
   emptyDescription: string
@@ -476,7 +477,7 @@ function PayoutsDrawer({
 }
 
 export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
-  const { canReconcile, queue, batches, reportHref, strings, emptyTitle, emptyDescription } = props
+  const { canReconcile, queue, batches, reportHref, queueAllHref, strings, emptyTitle, emptyDescription } = props
   const router = useRouter()
   // The drawer opens from the `payout` URL parameter (deep-linkable, one
   // shell per record) but reads it once on mount: no Suspense boundary is
@@ -544,7 +545,12 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
           {queue.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>{strings.queueTitle}</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>{strings.queueTitle}</CardTitle>
+                  <a className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300" href={queueAllHref}>
+                    {strings.queueAllLabel}
+                  </a>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>

@@ -428,7 +428,8 @@
     "confirmTitle": "Appliquer cette solution ?",
     "confirmBody": "{fix} Ceci rejoue {count, plural, one {# commande} other {# commandes}}. L'historique comptabilisé conserve ses comptes.",
     "evidence": "Pourquoi cette solution",
-    "evidenceSummary": "{count, plural, one {# raison} other {# raisons}}"
+    "evidenceSummary": "{count, plural, one {# raison} other {# raisons}}",
+    "chipLabel": "Solution proposée"
   },
   "timeline": {
     "empty": "Aucun remboursement, préparation ou annulation pour l'instant.",

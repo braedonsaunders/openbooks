@@ -1171,6 +1171,42 @@
       "refund_unposted": "Refund unposted",
       "no_link": "No link",
       "link_failed": "Link failed"
+    },
+    "queueAllLabel": "View all"
+  },
+  "pspUnmatched": {
+    "title": "Unmatched payout lines",
+    "description": "Every settlement line no document claims yet. Review the proposal on each row and link it — nothing links itself.",
+    "emptyTitle": "Every matchable line is linked",
+    "emptyDescription": "Unmatched charge, refund and dispute lines appear here with a proposed document.",
+    "colReference": "Reference",
+    "colProvider": "Provider",
+    "colKind": "Kind",
+    "colBatch": "Payout",
+    "colSettled": "Settled",
+    "drawer": {
+      "kindRow": "Kind",
+      "amountRow": "Amount",
+      "referenceRow": "Provider reference",
+      "descriptionRow": "Description",
+      "batchRow": "Payout",
+      "settledRow": "Settled"
+    },
+    "assistance": {
+      "title": "Proposed link",
+      "loading": "Finding the document…",
+      "loadFailed": "The proposal did not load. Reload the row or try again.",
+      "evidence": "Why this document",
+      "evidenceSummary": "{count, plural, one {# reason} other {# reasons}}",
+      "apply": "Link document",
+      "applySimilar": "Link {count} similar",
+      "similar": "{count, plural, one {# line shares} other {# lines share}} this cause",
+      "confirmTitle": "Link this document?",
+      "confirmBody": "{fix} This links {count, plural, one {# line} other {# lines}}. The link writer re-validates the document first.",
+      "approved": "{linked, plural, one {# line} other {# lines}} linked{skipped, plural, =0 {} other {, # skipped}}."
     }
+  },
+  "payoutAssistance": {
+    "chipLabel": "Review proposal"
   }
 }
