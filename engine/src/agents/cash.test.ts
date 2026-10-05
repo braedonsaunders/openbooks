@@ -34,6 +34,24 @@ test("a global average still applies when the party has no history", () => {
   assert.deepEqual(predictItem(item({}), "2026-09-05", stats), { date: "2026-09-21", method: "Global avg" });
 });
 
+test("a configured ladder prices through predictItem", () => {
+  const stats: SettlementStats = { map: new Map([["p1", { avg: 10, sd: 4 }]]), globalAvg: null };
+  // avg 10 + ceil(4 * 1) buffer = 14 days after 2026-09-01 (a Tuesday, so no
+  // business-day snap) — the sigma multiple rides the passed model, never a
+  // frozen 0.5.
+  assert.deepEqual(
+    predictItem(item({}), "2026-09-05", stats, {
+      settleBufferSigma: 1,
+      overduePushShortDays: 7,
+      overduePushMidDays: 14,
+      overduePushLongDays: 28,
+      overdueMidThresholdDays: 30,
+      overdueLongThresholdDays: 60,
+    }),
+    { date: "2026-09-15", method: "Statistical" },
+  );
+});
+
 test("no history anywhere predicts the contractual due date, not tranDate + 45", () => {
   // Old code placed this at tranDate + 45 (2026-10-16); the due date rules.
   assert.deepEqual(predictItem(item({ dueDate: "2026-09-11" }), "2026-09-05", EMPTY), {

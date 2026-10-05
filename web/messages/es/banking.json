@@ -737,7 +737,7 @@
       "asOfLabel": "Fecha de corte",
       "asOfNote": "Referencia para saldos abiertos y previsiones",
       "methodLabel": "Método de previsión",
-      "methodValue": "Estadístico → Vencimiento → Promedio global",
+      "methodValue": "Estadístico → Promedio global → Vencimiento",
       "methodNote": "Días promedio de pago/cobro por contraparte más el margen de variabilidad configurado, mínimo la fecha de vencimiento",
       "overdueLabel": "Desplazamiento de vencidos",
       "overdueValue": "Crece con la antigüedad",

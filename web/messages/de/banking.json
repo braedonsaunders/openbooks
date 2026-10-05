@@ -737,7 +737,7 @@
       "asOfLabel": "Stichtag",
       "asOfNote": "Bezugspunkt für offene Salden und Prognosen",
       "methodLabel": "Prognosemethode",
-      "methodValue": "Statistisch → Fälligkeitsdatum → globaler Durchschnitt",
+      "methodValue": "Statistisch → globaler Durchschnitt → Fälligkeitsdatum",
       "methodNote": "Durchschnittliche Zahlungs-/Inkassotage je Geschäftspartner plus dem eingestellten Schwankungspuffer, mindestens das Fälligkeitsdatum",
       "overdueLabel": "Überfälligkeitspuffer",
       "overdueValue": "Wächst mit der Überfälligkeit",

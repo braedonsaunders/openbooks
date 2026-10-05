@@ -737,7 +737,7 @@
       "asOfLabel": "Date d’arrêté",
       "asOfNote": "Point d’ancrage des soldes ouverts et des prévisions",
       "methodLabel": "Méthode de prévision",
-      "methodValue": "Statistique → Échéance → Moyenne globale",
+      "methodValue": "Statistique → Moyenne globale → Échéance",
       "methodNote": "Délais moyens de paiement/recouvrement par tiers plus la marge de variabilité configurée, plancher à l’échéance",
       "overdueLabel": "Report des échus",
       "overdueValue": "Croît avec l’ancienneté",

@@ -261,17 +261,50 @@ async function sideOpenItems(
 export type SettlementStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number | null };
 
 /**
+ * The prediction knobs behind predictItem — the same ladder the cockpit's
+ * forecast model configures (settle buffer, overdue push days/thresholds).
+ * The detector prices what the cockpit prices, so a tuned ladder moves both
+ * together instead of the agent forecasting on frozen constants.
+ */
+export type CashPredictionModel = {
+  settleBufferSigma: number;
+  overduePushShortDays: number;
+  overduePushMidDays: number;
+  overduePushLongDays: number;
+  overdueMidThresholdDays: number;
+  overdueLongThresholdDays: number;
+};
+
+/**
+ * The cashflow config defaults, mirrored from the config surface (engine
+ * cannot import the web config spec): statistical, global average, due
+ * date, with the 7/14/28 push ladder on the 30/60 thresholds.
+ */
+const DEFAULT_PREDICTION_MODEL: CashPredictionModel = {
+  settleBufferSigma: 0.5,
+  overduePushShortDays: 7,
+  overduePushMidDays: 14,
+  overduePushLongDays: 28,
+  overdueMidThresholdDays: 30,
+  overdueLongThresholdDays: 60,
+};
+
+/**
  * Per-party avg days (+ σ) from invoice/bill date to the applied payment,
  * from party_payment_stats — the rollup maintained at the settlement event,
  * holding sufficient statistics per (party, settlement day) so the trailing
- * 365-day window is an exact range scan. Global average weighted by data
- * point (not an average of per-party averages); null with no history
- * anywhere — a missing input is never a fabricated default.
+ * history window (the configured payment-history months as days) is an
+ * exact range scan. Global average weighted by data point (not an average
+ * of per-party averages); null with no history anywhere — a missing input
+ * is never a fabricated default.
  */
 async function settlementStats(
   orgId: string,
   side: "ar" | "ap",
   asOf: string,
+  /** Trailing history window in days — the configured payment-history
+   * months as days, so the detector reads what the cockpit reads. */
+  historyDays = 365,
 ): Promise<SettlementStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const res = await db.execute<{ id: string; avg_days: string; sd_days: string; n: string }>(sql`
@@ -279,7 +312,7 @@ async function settlementStats(
       select party_id, settled_on, n, sum_days, sum_days_sq
         from party_payment_stats
        where org_id = ${orgId} and account_type = ${acctType}
-         and settled_on >= ${asOf}::date - 365
+         and settled_on >= ${asOf}::date - ${historyDays}
          and settled_on <= ${asOf}::date
     )
     select party_id as id,
@@ -328,12 +361,13 @@ export function predictItem(
   item: OpenItem,
   asOf: string,
   stats: SettlementStats,
+  model: CashPredictionModel = DEFAULT_PREDICTION_MODEL,
 ): { date: string | null; method: string } {
   let date: string | null;
   let method = "Global avg";
   const s = item.partyId ? stats.map.get(item.partyId) : undefined;
   if (s) {
-    const buffer = s.sd ? Math.ceil(s.sd * 0.5) : 0;
+    const buffer = s.sd ? Math.ceil(s.sd * model.settleBufferSigma) : 0;
     date = addCalendarDays(item.tranDate, Math.round(s.avg) + buffer);
     method = "Statistical";
   } else if (stats.globalAvg !== null) {
@@ -348,10 +382,14 @@ export function predictItem(
     date = item.dueDate;
     method = "Due date";
   }
-  // Overdue → push forward.
+  // Overdue → push forward on the configured ladder.
   if (date < asOf) {
     const overdue = calendarDaysBetween(date, asOf);
-    const push = overdue > 60 ? 28 : overdue > 30 ? 14 : 7;
+    const push = overdue > model.overdueLongThresholdDays
+      ? model.overduePushLongDays
+      : overdue > model.overdueMidThresholdDays
+        ? model.overduePushMidDays
+        : model.overduePushShortDays;
     date = addCalendarDays(asOf, push);
     method = "Overdue push";
   }
@@ -369,10 +407,11 @@ function scheduleByWeek(
   asOf: string,
   start: string,
   end: string,
+  model: CashPredictionModel,
 ): Map<string, ForecastEntry[]> {
   const byWeek = new Map<string, ForecastEntry[]>();
   for (const item of items) {
-    const { date, method } = predictItem(item, asOf, stats);
+    const { date, method } = predictItem(item, asOf, stats, model);
     // No history and no due date: unplaced, never invented into a week.
     if (date === null) continue;
     if (date < start || date > end) continue;
@@ -471,13 +510,30 @@ function rollTimeline(args: {
 /**
  * The cashflow board's AP scheduling knobs (orgs.settings.analytics.cashflow
  * over the defaults: weeklyApCap "0.0000" = unlimited, restrictToSafe 0),
- * clamped exactly like the config surface clamps them.
+ * clamped exactly like the config surface clamps them — plus the forecast
+ * prediction ladder and history months the cockpit configures, so the
+ * detector prices what the cockpit prices.
  */
-async function cashflowSettings(orgId: string): Promise<{ weeklyCap: string; restrictToSafe: boolean }> {
+async function cashflowSettings(orgId: string): Promise<{
+  weeklyCap: string;
+  restrictToSafe: boolean;
+  model: CashPredictionModel;
+  historyMonths: number;
+}> {
   const res = await db.execute<{ cfg: unknown }>(sql`
     select settings -> 'analytics' -> 'cashflow' as cfg from orgs where id = ${orgId}
   `);
-  const stored = (res.rows[0]?.cfg ?? {}) as { weeklyApCap?: unknown; restrictToSafe?: unknown };
+  const stored = (res.rows[0]?.cfg ?? {}) as {
+    weeklyApCap?: unknown;
+    restrictToSafe?: unknown;
+    settleBufferSigma?: unknown;
+    overduePushShortDays?: unknown;
+    overduePushMidDays?: unknown;
+    overduePushLongDays?: unknown;
+    overdueMidThresholdDays?: unknown;
+    overdueLongThresholdDays?: unknown;
+    paymentHistoryMonths?: unknown;
+  };
   let weeklyCap = "0.0000";
   try {
     const amount = normalizeMoney(String(stored.weeklyApCap ?? "0"));
@@ -487,7 +543,23 @@ async function cashflowSettings(orgId: string): Promise<{ weeklyCap: string; res
   }
   const restrictRaw = Number(stored.restrictToSafe ?? 0);
   const restrictToSafe = Number.isFinite(restrictRaw) && Math.min(1, Math.max(0, restrictRaw)) >= 1;
-  return { weeklyCap, restrictToSafe };
+  // Clamp ranges mirror the config surface (config-spec cashflow knobs).
+  const num = (v: unknown, min: number, max: number, fallback: number, integer: boolean): number => {
+    const n = Number(v ?? fallback);
+    if (!Number.isFinite(n)) return fallback;
+    const clamped = Math.min(max, Math.max(min, n));
+    return integer ? Math.round(clamped) : clamped;
+  };
+  const model: CashPredictionModel = {
+    settleBufferSigma: num(stored.settleBufferSigma, 0, 2, DEFAULT_PREDICTION_MODEL.settleBufferSigma, false),
+    overduePushShortDays: num(stored.overduePushShortDays, 0, 90, DEFAULT_PREDICTION_MODEL.overduePushShortDays, true),
+    overduePushMidDays: num(stored.overduePushMidDays, 0, 90, DEFAULT_PREDICTION_MODEL.overduePushMidDays, true),
+    overduePushLongDays: num(stored.overduePushLongDays, 0, 90, DEFAULT_PREDICTION_MODEL.overduePushLongDays, true),
+    overdueMidThresholdDays: num(stored.overdueMidThresholdDays, 1, 180, DEFAULT_PREDICTION_MODEL.overdueMidThresholdDays, true),
+    overdueLongThresholdDays: num(stored.overdueLongThresholdDays, 1, 180, DEFAULT_PREDICTION_MODEL.overdueLongThresholdDays, true),
+  };
+  const historyMonths = num(stored.paymentHistoryMonths, 3, 36, 12, true);
+  return { weeklyCap, restrictToSafe, model, historyMonths };
 }
 
 export async function cashFindings(
@@ -614,16 +686,19 @@ export async function cashFindings(
     const end = addCalendarDays(start, horizonWeeks * 7 - 1);
     const weekStarts: string[] = [];
     for (let cur = start; cur <= end; cur = addCalendarDays(cur, 7)) weekStarts.push(cur);
-    const [arStats, apStats, settings] = await Promise.all([
-      settlementStats(orgId, "ar", today),
-      settlementStats(orgId, "ap", today),
-      cashflowSettings(orgId),
+    const settings = await cashflowSettings(orgId);
+    // The trailing history window in days off the configured payment-history
+    // months (12 months read 365 days, as before) — never a frozen constant.
+    const historyDays = Math.round((settings.historyMonths * 365) / 12);
+    const [arStats, apStats] = await Promise.all([
+      settlementStats(orgId, "ar", today, historyDays),
+      settlementStats(orgId, "ap", today, historyDays),
     ]);
     const timeline = rollTimeline({
       weekStarts,
       startingCash,
-      arByWeek: scheduleByWeek(arItems, arStats, asOf, start, end),
-      apByWeek: scheduleByWeek(apItems, apStats, asOf, start, end),
+      arByWeek: scheduleByWeek(arItems, arStats, asOf, start, end, settings.model),
+      apByWeek: scheduleByWeek(apItems, apStats, asOf, start, end, settings.model),
       weeklyCap: settings.weeklyCap,
       restrictToSafe: settings.restrictToSafe,
     });

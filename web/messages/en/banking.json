@@ -744,7 +744,7 @@
       "asOfLabel": "As-of date",
       "asOfNote": "Anchor for open balances and predictions",
       "methodLabel": "Prediction method",
-      "methodValue": "Statistical → Due date → Global avg",
+      "methodValue": "Statistical → Global avg → Due date",
       "methodNote": "Per-party average pay/collect days plus the configured variability buffer, floored at the due date",
       "overdueLabel": "Overdue push",
       "overdueValue": "Grows with overdue age",

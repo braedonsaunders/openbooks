@@ -737,7 +737,7 @@
       "asOfLabel": "基準日",
       "asOfNote": "未決済残高と予測の基準",
       "methodLabel": "予測方法",
-      "methodValue": "統計 → 期日 → 全体平均",
+      "methodValue": "統計 → 全体平均 → 期日",
       "methodNote": "取引先ごとの平均支払・回収日数に設定済みの変動バッファを加え、期日を下限とする",
       "overdueLabel": "延滞の繰り越し",
       "overdueValue": "延滞期間に応じて拡大",
