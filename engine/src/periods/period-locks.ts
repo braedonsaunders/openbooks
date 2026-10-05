@@ -173,6 +173,49 @@ export async function upsertLock(args: {
   `);
 }
 
+/**
+ * A scope-wide (org-wide) lock must dominate every narrower lock: storage and
+ * the posting check both prefer the exact subsidiary row over the org-wide
+ * row, so a subsidiary row looser than a new scope-wide state would shadow it
+ * and keep accepting postings. Every subsidiary row of the module that is
+ * looser than `state` (open under a soft close; open or soft-closed under a
+ * hard close) is tightened to `state` in the caller's transaction, each
+ * transition mirrored into the audit trail by upsertLock. Every writer of a
+ * scope-wide close (Setup, the close run, the controlled re-close) calls this
+ * one rule.
+ */
+export async function tightenNarrowerLocks(args: {
+  tx: SqlExecutor;
+  orgId: string;
+  periodId: string;
+  bookId: string;
+  module: CloseModule;
+  state: "soft_closed" | "closed";
+  actorId?: string;
+  reason: string;
+}): Promise<void> {
+  const looser = args.state === "closed" ? sql`state <> 'closed'` : sql`state = 'open'`;
+  const children = (await args.tx.execute<{ subsidiary_id: string }>(sql`
+    select subsidiary_id from period_locks
+     where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
+       and module = ${args.module} and subsidiary_id is not null and ${looser}
+     order by subsidiary_id
+     for update`));
+  for (const child of children.rows) {
+    await upsertLock({
+      tx: args.tx,
+      orgId: args.orgId,
+      periodId: args.periodId,
+      bookId: args.bookId,
+      subsidiaryId: child.subsidiary_id,
+      module: args.module,
+      state: args.state,
+      actorId: args.actorId,
+      reason: args.reason,
+    });
+  }
+}
+
 /** Serialize every lock-state transition for one period and book, including
  * the close-run and controlled-reopen writers, so a scoped relaxation can
  * never interleave between an effective close check and its commit.
@@ -292,28 +335,18 @@ export async function setPeriodLockState(args: {
         );
     }
     await upsertLock({ ...args, tx, reason: args.reason.trim() });
-    if (!args.subsidiaryId && args.state === "closed") {
-      // A scope-wide close must dominate every narrower lock: storage prefers
-      // the exact row, so each remaining child lock is tightened in the same
-      // transaction (mirrored into the audit trail) instead of being shadowed.
-      const children = (await tx.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from period_locks
-         where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
-           and module = ${args.module} and subsidiary_id is not null and state <> 'closed'
-         for update`));
-      for (const child of children.rows) {
-        await upsertLock({
-          tx,
-          orgId: args.orgId,
-          periodId: args.periodId,
-          bookId: args.bookId,
-          subsidiaryId: child.subsidiary_id,
-          module: args.module,
-          state: "closed",
-          actorId: args.actorId,
-          reason: args.reason.trim(),
-        });
-      }
+    if (!args.subsidiaryId && args.state !== "open") {
+      // A scope-wide soft or hard close dominates every narrower lock.
+      await tightenNarrowerLocks({
+        tx,
+        orgId: args.orgId,
+        periodId: args.periodId,
+        bookId: args.bookId,
+        module: args.module,
+        state: args.state,
+        actorId: args.actorId,
+        reason: args.reason.trim(),
+      });
     }
     await tx.execute(sql`
       insert into close_events (org_id, event_type, actor_id, payload)

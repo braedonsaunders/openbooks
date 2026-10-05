@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { db } from "../platform/db.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
-import { upsertLock, periodScopeAdvisoryLock } from "../periods/period-locks.ts";
+import { upsertLock, periodScopeAdvisoryLock, tightenNarrowerLocks } from "../periods/period-locks.ts";
 export async function closeApprovedRun(
   orgId: string,
   runId: string,
@@ -64,33 +64,12 @@ export async function closeApprovedRun(
           reason: `Close run ${runId}`,
         });
         if (subsidiaryId === undefined) {
-          // Storage prefers an exact subsidiary row over the org-wide
-          // fallback. Tighten every existing child row in the same close
-          // transaction or an older open child lock would shadow this new
-          // org-wide lock and keep accepting postings.
-          const children = (await tx.execute<{ subsidiary_id: string }>(sql`
-            select subsidiary_id
-              from period_locks
-             where org_id = ${orgId}
-               and period_id = ${row.period_id}
-               and book_id = ${row.book_id}
-               and module = ${module}
-               and subsidiary_id is not null
-               and state <> 'closed'
-             for update`));
-          for (const child of children.rows) {
-            await upsertLock({
-              tx,
-              orgId,
-              periodId: row.period_id,
-              bookId: row.book_id,
-              subsidiaryId: child.subsidiary_id,
-              module,
-              state: "closed",
-              actorId,
-              reason: `Close run ${runId}`,
-            });
-          }
+          // The org-wide close dominates every narrower lock, or an older
+          // open child row would shadow it and keep accepting postings.
+          await tightenNarrowerLocks({
+            tx, orgId, periodId: row.period_id, bookId: row.book_id, module,
+            state: "closed", actorId, reason: `Close run ${runId}`,
+          });
         }
       }
       await upsertLock({
@@ -105,29 +84,10 @@ export async function closeApprovedRun(
         reason: `Close run ${runId}`,
       });
       if (subsidiaryId === undefined) {
-        const children = (await tx.execute<{ subsidiary_id: string }>(sql`
-          select subsidiary_id
-            from period_locks
-           where org_id = ${orgId}
-             and period_id = ${row.period_id}
-             and book_id = ${row.book_id}
-             and module = 'gl'
-             and subsidiary_id is not null
-             and state <> 'closed'
-           for update`));
-        for (const child of children.rows) {
-          await upsertLock({
-            tx,
-            orgId,
-            periodId: row.period_id,
-            bookId: row.book_id,
-            subsidiaryId: child.subsidiary_id,
-            module: "gl",
-            state: "closed",
-            actorId,
-            reason: `Close run ${runId}`,
-          });
-        }
+        await tightenNarrowerLocks({
+          tx, orgId, periodId: row.period_id, bookId: row.book_id, module: "gl",
+          state: "closed", actorId, reason: `Close run ${runId}`,
+        });
       }
     }
     await tx.execute(sql`
