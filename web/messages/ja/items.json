@@ -254,7 +254,8 @@
     "availabilitySummary": "全拠点で販売可能：{count}",
     "onHand": "在庫",
     "committed": "引当済",
-    "available": "販売可能"
+    "available": "販売可能",
+    "unknownComponent": "カタログに存在しません"
   },
   "costing": {
     "title": "在庫評価",

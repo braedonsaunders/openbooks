@@ -377,7 +377,8 @@
     "availabilitySummary": "{count} sellable across all locations",
     "onHand": "On hand",
     "committed": "Committed",
-    "available": "Available"
+    "available": "Available",
+    "unknownComponent": "No longer in the catalog"
   },
   "families": {
     "title": "Product families",

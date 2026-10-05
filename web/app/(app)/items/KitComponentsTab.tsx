@@ -7,6 +7,7 @@ import { Badge, Button, DisclosureSection, EmptyState } from '@openbooks/ui'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { BomDrawer, type BomAssembly, type BomComponent } from '../inventory/BomWorkspace'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import { componentLabel, isComponentIdentityMissing } from './kit-component-labels'
 
 interface KitAvailabilityComponent {
   itemId: string
@@ -33,7 +34,13 @@ interface KitAvailability {
 interface KitBomDetail {
   assemblyItemId: string
   version: string | null
-  components: (BomComponent & { label: string })[]
+  components: (BomComponent & {
+    label: string
+    code: string | null
+    name: string | null
+    isActive: boolean | null
+    identityMissing: boolean
+  })[]
 }
 
 const trimQty = (quantity: string) => quantity.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
@@ -82,18 +89,34 @@ export function KitComponentsTab({
         return
       }
       const bomBody = (await bomRes.json()) as {
-        assemblyItemId: string
+        assemblyItemId?: string
         version?: string | null
-        components?: BomComponent[]
+        components?: (BomComponent & { code?: string | null; name?: string | null; isActive?: boolean | null })[]
         validItems?: { id: string; code: string | null; name: string | null; unit: string | null }[]
       }
-      const labels = new Map((bomBody.validItems ?? []).map((item) => [item.id, item]))
+      // Identity comes with the line, not from the editor's eligible
+      // choices: a component the picker would no longer offer still names
+      // itself from its own catalog snapshot.
       setBom({
-        assemblyItemId: bomBody.assemblyItemId,
+        assemblyItemId: bomBody.assemblyItemId ?? itemId,
         version: bomBody.version ?? null,
         components: (bomBody.components ?? []).map((line) => ({
           ...line,
-          label: labels.get(line.componentItemId)?.name ?? line.componentItemId,
+          code: line.code ?? null,
+          name: line.name ?? null,
+          isActive: line.isActive ?? null,
+          label: componentLabel({
+            id: line.componentItemId,
+            code: line.code ?? null,
+            name: line.name ?? null,
+            isActive: line.isActive ?? null,
+          }),
+          identityMissing: isComponentIdentityMissing({
+            id: line.componentItemId,
+            code: line.code ?? null,
+            name: line.name ?? null,
+            isActive: line.isActive ?? null,
+          }),
         })),
       })
       setBomVersion(bomBody.version ?? null)
@@ -136,9 +159,28 @@ export function KitComponentsTab({
     return t('kit.recipeSummary', { count: bom.components.length, parts: parts.join(' + ') })
   }, [bom, loading, loadError, t])
 
-  const columns = useMemo<LineGridColumn<{ componentItemId: string; label: string; quantityPer: string }>[]>(
+  const columns = useMemo<LineGridColumn<{ componentItemId: string; label: string; quantityPer: string; isActive: boolean | null; identityMissing: boolean }>[]>(
     () => [
-      { key: 'label', label: t('kit.component'), width: 'minmax(200px,1fr)', type: 'readonly' },
+      {
+        key: 'label',
+        label: t('kit.component'),
+        width: 'minmax(200px,1fr)',
+        type: 'readonly',
+        // An inactive component stays on the recipe as evidence with its
+        // status beside its name; a line whose item row is gone keeps its
+        // short storage id with the notice naming what happened to it.
+        render: (row) => row.identityMissing ? (
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span className="font-mono">{row.label}</span>
+            <Badge variant="outline">{t('kit.unknownComponent')}</Badge>
+          </span>
+        ) : row.isActive === false ? (
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <span>{row.label}</span>
+            <Badge variant="secondary">{tCommon('status.inactive')}</Badge>
+          </span>
+        ) : row.label,
+      },
       {
         key: 'quantityPer',
         label: t('kit.perKit'),
@@ -148,7 +190,7 @@ export function KitComponentsTab({
         render: (row) => trimQty(row.quantityPer),
       },
     ],
-    [t],
+    [t, tCommon],
   )
 
   const availabilityRows = useMemo(() => {
@@ -221,9 +263,11 @@ export function KitComponentsTab({
               componentItemId: line.componentItemId,
               label: line.label,
               quantityPer: line.quantityPer,
+              isActive: line.isActive,
+              identityMissing: line.identityMissing,
             }))}
             onRowsChange={() => undefined}
-            emptyRow={() => ({ componentItemId: '', label: '', quantityPer: '' })}
+            emptyRow={() => ({ componentItemId: '', label: '', quantityPer: '', isActive: null, identityMissing: false })}
             getRowKey={(row) => row.componentItemId}
             readOnly
           />

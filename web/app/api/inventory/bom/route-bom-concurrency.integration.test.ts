@@ -203,6 +203,44 @@ test("BOM replacement accepts adjacent effectivity windows and names overlapping
   }
 });
 
+test("GET names component lines from catalog identity and keeps inactive lines as evidence", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "BOM Read Admin", "admin");
+    authenticate(org.orgId, actorId);
+    await emptyBom(org.orgId, org.items.assembly);
+    const saved = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
+    assert.equal(saved.status, 200);
+    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
+    assert.equal(detail.status, 200);
+    const body = await detail.json() as {
+      assemblyItemId: string;
+      version: string;
+      components: { componentItemId: string; code: string | null; name: string | null; isActive: boolean | null }[];
+      validItems: { id: string; code: string | null; name: string | null }[];
+    };
+    assert.equal(body.assemblyItemId, org.items.assembly);
+    assert.equal(body.components.length, 1);
+    assert.equal(body.components[0]!.componentItemId, org.items.component);
+    assert.equal(body.components[0]!.name, "Component");
+    assert.equal(body.components[0]!.isActive, true);
+    assert.ok(body.validItems.some((item) => item.id === org.items.component && item.name === "Component"));
+    // Deactivating the component removes it from the editor's eligible
+    // choices, but the stored line still names it instead of falling back
+    // to its storage id.
+    await db.execute(sql`update items set is_active = false where org_id = ${org.orgId} and id = ${org.items.component}`);
+    const reread = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
+    assert.equal(reread.status, 200);
+    const rebody = await reread.json() as typeof body;
+    assert.equal(rebody.components.length, 1);
+    assert.equal(rebody.components[0]!.name, "Component");
+    assert.equal(rebody.components[0]!.isActive, false);
+    assert.ok(!rebody.validItems.some((item) => item.id === org.items.component));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a BOM save waits for an in-flight Inventory disable, then refuses it", async () => {
   const org = await createScratchOrg();
   const writer = await pool.connect();
