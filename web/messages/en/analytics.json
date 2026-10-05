@@ -3612,7 +3612,7 @@
       "duplicatesHint": "One finding per matching group — every member opens in its native module",
       "weekendDated": "Weekend-Dated Documents (top 200 by amount)",
       "sequentialRuns": "Sequential Invoice Runs",
-      "ghostMatches": "Ghost Vendor Matches ({count})",
+      "ghostMatches": "Ghost matches (top {top} of {total})",
       "ghostVendors": "Ghost Vendors",
       "vendorRiskRollup": "Vendor Risk Roll-Up",
       "vendorRiskHint": "Parties ranked by flag severity across all detectors · click a row for that party's transactions",
@@ -3663,7 +3663,8 @@
       "leadingDigit": "Leading digit",
       "documentsTotal": "{count} documents · {total}",
       "top": "top {count}",
-      "noDocuments": "No documents lead with {digit}."
+      "noDocuments": "No documents lead with {digit}.",
+      "documentsCount": "{count} documents"
     },
     "analysis": {
       "rsfFull": "Relative Size Factor",
@@ -3693,7 +3694,10 @@
     },
     "ghost": {
       "title": "Ghost vendors",
-      "note": " are payee companies controlled by employees. Two-phase matching across the full party registry: employee names against vendor names, and normalized street addresses (line 1 + postal code) shared between a paid vendor and an employee. Name match scores 75, shared address 90, both 95."
+      "note": "Two-phase matching across the full party registry: employee names against vendor names (role-verified employees only), and street addresses shared between a paid vendor and an employee (line 1 + postal code + country, script-preserving normalization). Point values are listed under Configuration → Scoring model.",
+      "matchName": "Name match",
+      "matchAddress": "Address match",
+      "matchBoth": "Name + address"
     },
     "detectors": {
       "duplicates": "Duplicates",
@@ -3720,7 +3724,8 @@
       "nonConforming": "Non-Conforming",
       "firstDigit1D": "First Digit (1D)",
       "firstTwoDigits2D": "First Two Digits (2D)",
-      "thresholdTrap": "Threshold Trap"
+      "thresholdTrap": "Threshold Trap",
+      "insufficient": "Insufficient data"
     },
     "forensics": {
       "unknownParty": "Unknown",
@@ -3874,7 +3879,10 @@
       "rsfValue": "at least {threshold}×",
       "zscoreValue": "|z| at least {threshold}",
       "trapValue": "{band}% under a Flows limit",
-      "sequentialValue": "{count} refs · {days}+ days"
+      "sequentialValue": "{count} refs · {days}+ days",
+      "duplicatesValue": "≤{days} days · ≥{floor}",
+      "duplicatesValueUnset": "≤{days} days · {unset}",
+      "unsetValue": "Not set"
     },
     "coverage": {
       "intro": "Every check runs across your ",
@@ -3890,6 +3898,53 @@
     },
     "detection": {
       "allFlagged": "All flagged"
+    },
+    "scoring": {
+      "title": "Scoring model",
+      "note": "Fixed severity model: how each signal converts to 0–100 points. Detection thresholds above stay configurable.",
+      "trap": "Threshold traps",
+      "duplicate": "Duplicates",
+      "weekend": "Weekend postings",
+      "rsf": "Relative size",
+      "zscore": "Z-score",
+      "sequential": "Sequential runs",
+      "ghost": "Ghost vendors",
+      "vendor": "Vendor roll-up",
+      "summary": "Summary risk",
+      "base": "Base score: {points}",
+      "tierBump": "{tier} or more: +{points}",
+      "trapPattern": "{pattern} endings: +{points}",
+      "spanBump": "Within {days} days: +{points}",
+      "sharedReference": "Shared reference: +{points}",
+      "confShared": "Shared reference: {pct}",
+      "confSpan": "Within {days} days: {pct}",
+      "confOtherwise": "Otherwise: {pct}",
+      "sunday": "Sunday: +{points}",
+      "ratioBump": "Multiple ≥ {ratio}: +{points}",
+      "ratioOtherwise": "Threshold multiple: +{points}",
+      "zBump": "|z| ≥ {z}: +{points}",
+      "sequentialHighSpan": "High-risk span: +{points}",
+      "sequentialBaseSpan": "Shorter span: +{points}",
+      "perInvoice": "+{points} per invoice, capped at {cap}",
+      "tierOtherwise": "Otherwise: +{points}",
+      "perFlag": "+{points} per flag, capped at {cap}",
+      "perType": "+{points} per flag type",
+      "worstShare": "{pct} of the worst single flag",
+      "summaryVolume": "{count}+ flagged: +{points}",
+      "ghostAny": "Any ghost vendor: +{points}",
+      "sequentialAny": "Any sequential run: +{points}",
+      "benfordNonconforming": "Any nonconforming slice: +{points}",
+      "ghostRow": "{match}: +{points}"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium"
+    },
+    "auditAction": {
+      "delete": "Delete",
+      "update": "Update",
+      "insert": "Insert"
     }
   },
   "entityDrawer": {

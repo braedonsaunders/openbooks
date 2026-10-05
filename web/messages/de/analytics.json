@@ -3546,7 +3546,8 @@
       "nonConforming": "Nicht konform",
       "firstDigit1D": "Erste Ziffer (1D)",
       "firstTwoDigits2D": "Erste zwei Ziffern (2D)",
-      "thresholdTrap": "Schwellenfalle"
+      "thresholdTrap": "Schwellenfalle",
+      "insufficient": "Unzureichende Daten"
     },
     "forensics": {
       "unknownParty": "Unbekannt",
@@ -3718,7 +3719,10 @@
       "rsfValue": "mindestens {threshold}×",
       "zscoreValue": "|z| mindestens {threshold}",
       "trapValue": "{band} % unter einer Flows-Grenze",
-      "sequentialValue": "{count} Ref. · {days}+ Tage"
+      "sequentialValue": "{count} Ref. · {days}+ Tage",
+      "duplicatesValue": "≤{days} Tage · ≥{floor}",
+      "duplicatesValueUnset": "≤{days} Tage · {unset}",
+      "unsetValue": "Nicht festgelegt"
     },
     "coverage": {
       "benfordBold": "Benford",
@@ -3746,7 +3750,8 @@
       "firstTwoDigits": "Erste zwei Ziffern",
       "leadingDigit": "Anfangsziffer",
       "noDocuments": "Kein Dokument beginnt mit {digit}.",
-      "top": "Top {count}"
+      "top": "Top {count}",
+      "documentsCount": "{count} Dokumente"
     },
     "empty": {
       "noAuditEvents": "Keine hochriskanten Prüfereignisse in diesem Zeitraum",
@@ -3767,8 +3772,11 @@
       "zscore": "Z-Wert"
     },
     "ghost": {
-      "note": " sind von Mitarbeitern kontrollierte Empfängerfirmen. Zweistufiger Abgleich über das gesamte Partnerregister: Mitarbeiternamen gegen Lieferantennamen sowie normalisierte Straßenadressen (Zeile 1 + PLZ), die sich ein bezahlter Lieferant und ein Mitarbeiter teilen. Namenstreffer zählt 75, gemeinsame Adresse 90, beides 95.",
-      "title": "Geisterlieferanten"
+      "note": "Zwei-Phasen-Abgleich über das gesamte Parteienregister: Mitarbeiternamen gegen Lieferantennamen (nur rollengeprüfte Mitarbeiter) sowie Straßenadressen, die sich ein bezahlter Lieferant mit einem Mitarbeiter teilt (Zeile 1 + Postleitzahl + Land, schrift-erhaltende Normierung). Punktwerte stehen unter Konfiguration → Bewertungsmodell.",
+      "title": "Geisterlieferanten",
+      "matchName": "Namentreffer",
+      "matchAddress": "Adresstreffer",
+      "matchBoth": "Name + Adresse"
     },
     "kpi": {
       "amountsAnalyzed": "Beträge analysiert",
@@ -3816,7 +3824,7 @@
       "digitDetail": "Zifferndetail",
       "digitDetailHint": "Ziffer anklicken für die Transaktionen dahinter",
       "duplicatesHint": "Ein Befund pro Treffergruppe — jedes Mitglied öffnet im Stammmodul",
-      "ghostMatches": "Geistertreffer ({count})",
+      "ghostMatches": "Geistertreffer (Top {top} von {total})",
       "ghostVendors": "Geisterlieferanten",
       "highestRiskFlags": "Höchstrisiko-Befunde",
       "highestRiskHint": "Alle Detektoren · Dokument zum Öffnen anklicken",
@@ -3890,6 +3898,53 @@
     "yes": "Ja",
     "detection": {
       "allFlagged": "Alle markierten"
+    },
+    "scoring": {
+      "title": "Bewertungsmodell",
+      "note": "Festes Schweregradmodell: Wie jedes Signal in 0–100 Punkte umgerechnet wird. Erkennungsschwellen oben bleiben konfigurierbar.",
+      "trap": "Schwellenfallen",
+      "duplicate": "Duplikate",
+      "weekend": "Wochenendbuchungen",
+      "rsf": "Relative Größe",
+      "zscore": "Z-Wert",
+      "sequential": "Sequenzläufe",
+      "ghost": "Geisterlieferanten",
+      "vendor": "Lieferanten-Roll-up",
+      "summary": "Gesamtrisiko",
+      "base": "Basispunkte: {points}",
+      "tierBump": "{tier} oder mehr: +{points}",
+      "trapPattern": "{pattern}-Endungen: +{points}",
+      "spanBump": "Innerhalb von {days} Tagen: +{points}",
+      "sharedReference": "Gleiche Referenz: +{points}",
+      "confShared": "Gleiche Referenz: {pct}",
+      "confSpan": "Innerhalb von {days} Tagen: {pct}",
+      "confOtherwise": "Sonst: {pct}",
+      "sunday": "Sonntag: +{points}",
+      "ratioBump": "Vielfaches ≥ {ratio}: +{points}",
+      "ratioOtherwise": "Schwellenvielfaches: +{points}",
+      "zBump": "|z| ab {z}: +{points}",
+      "sequentialHighSpan": "Hochrisiko-Spanne: +{points}",
+      "sequentialBaseSpan": "Kürzere Spanne: +{points}",
+      "perInvoice": "+{points} je Rechnung, höchstens {cap}",
+      "tierOtherwise": "Sonst: +{points}",
+      "perFlag": "+{points} je Markierung, höchstens {cap}",
+      "perType": "+{points} je Markierungsart",
+      "worstShare": "{pct} des schwersten Einzelflags",
+      "summaryVolume": "{count}+ Markierungen: +{points}",
+      "ghostAny": "Jeder Geisterlieferant: +{points}",
+      "sequentialAny": "Jede Sequenz: +{points}",
+      "benfordNonconforming": "Jede abweichende Scheibe: +{points}",
+      "ghostRow": "{match}: +{points} Punkte"
+    },
+    "severity": {
+      "critical": "Kritisch",
+      "high": "Hoch",
+      "medium": "Mittel"
+    },
+    "auditAction": {
+      "delete": "Löschen",
+      "update": "Ändern",
+      "insert": "Anlegen"
     }
   },
   "charts": {

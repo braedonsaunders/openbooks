@@ -38,37 +38,62 @@ const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
 const { SentinelView } = await import('./SentinelView')
+const { RISK_SCORING } = await import('../../../../lib/analytics/sentinel-data')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
 function fixture(): SentinelData {
   return {
+    scoring: RISK_SCORING,
     period: { from: '2026-07-01', to: '2026-07-31', label: 'Jul 2026' },
-    meta: { totalDocs: 1, totalAmount: 1234.567, presentationCurrency: 'USD', days: 31, queryMs: 120 },
-    config: {},
+    meta: { totalDocs: 1, totalAmount: '1234.5670', presentationCurrency: 'USD', days: 31, queryMs: 120 },
+    config: {
+      duplicateDays: 14,
+      duplicateMinAmount: '100.0000',
+      sequentialMinCount: 3,
+      sequentialMinDays: 7,
+      moderateRiskAmount: '1000.0000',
+      highRiskAmount: '10000.0000',
+      criticalRiskAmount: '25000.0000',
+      aggregateHighAmount: '50000.0000',
+      aggregateCriticalAmount: '100000.0000',
+      rsfBaselineFloor: '100.0000',
+      zscoreSigmaFloor: '10.0000',
+      zscoreThreshold: 3,
+      zscoreMinBaseline: 5,
+      rsfThreshold: 10,
+      baselineMonths: 36,
+      sequentialHighRiskDays: 30,
+      benfordMinSample: 50,
+      trapBandPercent: 5,
+      duplicateAreaMin: 10,
+      ghostNameMinLength: 7,
+      summaryFlaggedMedium: 20,
+      summaryFlaggedHigh: 50,
+    },
     summary: {
       flaggedCount: 1,
       duplicateCount: 0,
-      totalDuplicateAmount: 0,
+      totalDuplicateAmount: '0.0000',
       weekendCount: 0,
-      weekendAmount: 0,
+      weekendAmount: '0.0000',
       rsfCount: 0,
       zScoreCount: 0,
       sequentialGroups: 0,
       ghostCount: 0,
       trapCount: 0,
-      totalAtRisk: 1234.567,
+      totalAtRisk: '1234.5670',
       overallRiskScore: 40,
       benfordConformity: 'acceptable',
       benford2DConformity: 'acceptable',
       approvalLimitRisk: false,
       topRiskAreas: [],
     },
-    duplicates: { total: 0, pairs: [], groups: [] },
+    duplicates: { total: 0, pairs: [], groups: [], unavailable: null },
     benford1D: { totalTransactions: 1, digits: [], mad: 0, conformity: 'acceptable', message: '', byCurrency: [] },
     benford2D: { totalTransactions: 1, digits: [], anomalies: [], mad: 0, conformity: 'acceptable', byCurrency: [] },
-    thresholdTrap: { total: 0, totalAmount: 0, byTrap: [], items: [] },
-    weekend: { total: 0, totalAmount: 0, saturday: 0, sunday: 0, items: [] },
+    thresholdTrap: { total: 0, totalAmount: '0.0000', byTrap: [], items: [], unavailable: null },
+    weekend: { total: 0, totalAmount: '0.0000', saturday: 0, sunday: 0, items: [] },
     rsf: { total: 0, items: [] },
     zscore: { total: 0, items: [] },
     sequential: [],
@@ -80,9 +105,9 @@ function fixture(): SentinelData {
         docNumber: 'BILL-2049',
         kind: 'vendor_bill',
         date: '2026-07-14',
-        amount: 1234.567,
+        amount: '1234.567',
         currency: 'USD',
-        funcAmount: 1234.567,
+        funcAmount: '1234.5670',
         partyId: 'p-1',
         partyName: 'Acme Supplies',
         flagType: 'weekend',
@@ -170,5 +195,84 @@ test('sentinel CSV exports retain flagged document amount decimals', async () =>
     host.remove()
     URL.createObjectURL = realCreateObjectURL
     URL.revokeObjectURL = realRevokeObjectURL
+  }
+})
+
+async function mount(data: SentinelData) {
+  globalThis.__svRouter = { push() {}, refresh() {} }
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(providers(<SentinelView data={data} />))
+    await tick()
+  })
+  await tick()
+  return {
+    host,
+    unmount: async () => {
+      await act(async () => {
+        root.unmount()
+      })
+      host.remove()
+    },
+  }
+}
+
+async function clickButton(host: Element, match: (text: string) => boolean, name: string) {
+  const btn = [...host.querySelectorAll('button')].find((b) => match(b.textContent ?? ''))
+  assert.ok(btn, `${name} must exist`)
+  await click(btn)
+}
+
+// The Scoring model panel is generated from the payload's rubric object —
+// every section and row the loader scores with must reach the operator.
+test('configuration renders the severity model from the payload', async () => {
+  const { host, unmount } = await mount(fixture())
+  try {
+    await clickButton(host, (text) => text.startsWith('Config'), 'the configuration tab')
+    const body = host.textContent ?? ''
+    assert.ok(body.includes('Scoring model'), 'the scoring panel must render')
+    for (const section of ['Duplicates', 'Weekend postings', 'Relative size', 'Sequential runs', 'Ghost vendors']) {
+      assert.ok(body.includes(section), `the scoring panel must name ${section}`)
+    }
+    assert.ok(body.includes('Base score: 50'), 'the duplicate base points must render')
+    assert.ok(body.includes('Shared reference: 95%'), 'the duplicate reference confidence must render')
+  } finally {
+    await unmount()
+  }
+})
+
+// A detector with no configuration refuses by name with the remedy —
+// never a silent zero.
+test('trap tab names the missing Flows configuration', async () => {
+  const data = fixture()
+  data.thresholdTrap.unavailable = 'No approval amount limits in Flows — add one, or tune the band in Sentinel → Configuration.'
+  const { host, unmount } = await mount(data)
+  try {
+    await clickButton(host, (text) => text.startsWith('Benford'), 'the Benford tab')
+    await clickButton(host, (text) => text.toLowerCase().includes('hreshold trap'), 'the threshold-trap sub-tab')
+    assert.ok(
+      (host.textContent ?? '').includes('No approval amount limits in Flows'),
+      'the trap refusal and its remedy must reach the operator',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('duplicate tab names the missing floor', async () => {
+  const data = fixture()
+  data.duplicates.unavailable = 'Set the duplicate minimum in Sentinel → Configuration.'
+  const { host, unmount } = await mount(data)
+  try {
+    await clickButton(host, (text) => text.startsWith('Detection'), 'the detection tab')
+    await clickButton(host, (text) => text.includes('uplicate') && !text.startsWith('Detection'), 'the duplicates sub-tab')
+    assert.ok(
+      (host.textContent ?? '').includes('Set the duplicate minimum in Sentinel → Configuration.'),
+      'the duplicate refusal and its remedy must reach the operator',
+    )
+  } finally {
+    await unmount()
   }
 })

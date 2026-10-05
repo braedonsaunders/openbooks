@@ -3546,7 +3546,8 @@
       "nonConforming": "不適合",
       "firstDigit1D": "第一位（1D）",
       "firstTwoDigits2D": "上位二桁（2D）",
-      "thresholdTrap": "しきい値トラップ"
+      "thresholdTrap": "しきい値トラップ",
+      "insufficient": "データ不足"
     },
     "forensics": {
       "unknownParty": "不明",
@@ -3718,7 +3719,10 @@
       "rsfValue": "少なくとも{threshold}倍",
       "zscoreValue": "|z|が{threshold}以上",
       "trapValue": "Flows限度を{band}%下回る範囲",
-      "sequentialValue": "{count}件 · {days}日以上"
+      "sequentialValue": "{count}件 · {days}日以上",
+      "duplicatesValue": "{days}日以内 · {floor}以上",
+      "duplicatesValueUnset": "{days}日以内 · {unset}",
+      "unsetValue": "未設定"
     },
     "coverage": {
       "benfordBold": "ベンフォード",
@@ -3746,7 +3750,8 @@
       "firstTwoDigits": "上位二桁",
       "leadingDigit": "第一位",
       "noDocuments": "{digit}で始まる書類はありません。",
-      "top": "上位{count}件"
+      "top": "上位{count}件",
+      "documentsCount": "{count}件の書類"
     },
     "empty": {
       "noAuditEvents": "当期の高リスク監査イベントはありません",
@@ -3767,8 +3772,11 @@
       "zscore": "Zスコア"
     },
     "ghost": {
-      "note": " は従業員が支配する受取会社です。取引先登録全体での二段階照合：従業員名と仕入先名の照合、および支払済仕入先と従業員で共有される正規化住所（住所1行目＋郵便番号）。氏名一致75点、住所共有90点、両方で95点。",
-      "title": "ゴースト仕入先"
+      "note": "取引先台帳全体の2段階突合です。従業員名と仕入先名（ロールで確認された従業員のみ）、および支払先仕入先と従業員で共有される住所（1行目＋郵便番号＋国、文字体系を保持する正規化）。点数は「設定 → 採点モデル」に記載しています。",
+      "title": "ゴースト仕入先",
+      "matchName": "名称一致",
+      "matchAddress": "住所一致",
+      "matchBoth": "名称＋住所"
     },
     "kind": {
       "check": "小切手",
@@ -3816,7 +3824,7 @@
       "digitDetail": "桁詳細",
       "digitDetailHint": "桁をクリックで背後の取引を表示",
       "duplicatesHint": "1グループ1件 — メンバーは本来モジュールで開きます",
-      "ghostMatches": "ゴースト仕入先一致（{count}）",
+      "ghostMatches": "ゴースト一致（{total}件中上位{top}件）",
       "ghostVendors": "ゴースト仕入先",
       "highRiskAudit": "高リスク監査イベント",
       "highestRiskFlags": "最高リスクフラグ",
@@ -3890,6 +3898,53 @@
     "yes": "はい",
     "detection": {
       "allFlagged": "フラグ付きすべて"
+    },
+    "scoring": {
+      "title": "採点モデル",
+      "note": "固定の重大度モデル：各シグナルを0～100点に換算する方法。上記の検出しきい値は設定可能です。",
+      "trap": "しきい値トラップ",
+      "duplicate": "重複",
+      "weekend": "週末計上",
+      "rsf": "相対規模",
+      "zscore": "Zスコア",
+      "sequential": "連続番号",
+      "ghost": "ゴースト仕入先",
+      "vendor": "仕入先集計",
+      "summary": "要約リスク",
+      "base": "基本点：{points}",
+      "tierBump": "{tier}以上：+{points}",
+      "trapPattern": "末尾{pattern}: +{points}",
+      "spanBump": "{days}日以内：+{points}",
+      "sharedReference": "同一参照：+{points}",
+      "confShared": "同一参照：{pct}",
+      "confSpan": "{days}日以内：{pct}",
+      "confOtherwise": "その他：{pct}",
+      "sunday": "日曜：+{points}",
+      "ratioBump": "倍率≥{ratio}：+{points}",
+      "ratioOtherwise": "しきい値倍率：+{points}",
+      "zBump": "|z|が{z}以上：+{points}",
+      "sequentialHighSpan": "高リスク期間：+{points}",
+      "sequentialBaseSpan": "短い期間：+{points}",
+      "perInvoice": "請求ごとに+{points}、上限{cap}",
+      "tierOtherwise": "その他：+{points}",
+      "perFlag": "フラグごとに+{points}、上限{cap}",
+      "perType": "フラグ種別ごとに+{points}",
+      "worstShare": "最悪の単一フラグの{pct}",
+      "summaryVolume": "フラグ{count}件以上：+{points}",
+      "ghostAny": "ゴースト仕入先がある場合：+{points}",
+      "sequentialAny": "連続番号がある場合：+{points}",
+      "benfordNonconforming": "非適合の通貨がある場合：+{points}",
+      "ghostRow": "{match}：+{points}点"
+    },
+    "severity": {
+      "critical": "重大",
+      "high": "高",
+      "medium": "中"
+    },
+    "auditAction": {
+      "delete": "削除",
+      "update": "更新",
+      "insert": "登録"
     }
   },
   "charts": {

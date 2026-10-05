@@ -3546,7 +3546,8 @@
       "nonConforming": "不符合",
       "firstDigit1D": "首位数字（1D）",
       "firstTwoDigits2D": "前两位数字（2D）",
-      "thresholdTrap": "阈值陷阱"
+      "thresholdTrap": "阈值陷阱",
+      "insufficient": "数据不足"
     },
     "forensics": {
       "unknownParty": "未知",
@@ -3718,7 +3719,10 @@
       "rsfValue": "至少{threshold}倍",
       "zscoreValue": "|z|至少{threshold}",
       "trapValue": "低于Flows限额{band}%",
-      "sequentialValue": "{count}个单号 · {days}+天"
+      "sequentialValue": "{count}个单号 · {days}+天",
+      "duplicatesValue": "≤{days}天 · ≥{floor}",
+      "duplicatesValueUnset": "≤{days}天 · {unset}",
+      "unsetValue": "未设置"
     },
     "coverage": {
       "benfordBold": "本福德",
@@ -3746,7 +3750,8 @@
       "firstTwoDigits": "前两位数字",
       "leadingDigit": "首位数字",
       "noDocuments": "没有以{digit}开头的单据。",
-      "top": "前{count}"
+      "top": "前{count}",
+      "documentsCount": "{count}笔单据"
     },
     "empty": {
       "noAuditEvents": "本期没有高风险审计事件",
@@ -3767,8 +3772,11 @@
       "zscore": "Z分数"
     },
     "ghost": {
-      "note": " 是受员工控制的收款公司。覆盖全部往来主体注册表的两阶段匹配：员工姓名对供应商名称，以及付款供应商与员工共用的标准化街道地址（地址行1+邮政编码）。姓名吻合75分，共用地址90分，两者皆中95分。",
-      "title": "幽灵供应商"
+      "note": "对往来单位全库的两阶段比对：员工姓名对供应商名称（仅限角色验证的员工），以及付款供应商与员工共用的地址（第1行＋邮编＋国家，保持文字体系的规范化）。分值见\"配置→评分模型\"。",
+      "title": "幽灵供应商",
+      "matchName": "名称匹配",
+      "matchAddress": "地址匹配",
+      "matchBoth": "名称＋地址"
     },
     "kind": {
       "check": "支票",
@@ -3816,7 +3824,7 @@
       "digitDetail": "数字明细",
       "digitDetailHint": "点击数字查看背后交易",
       "duplicatesHint": "每组一条——成员在其所属模块中打开",
-      "ghostMatches": "幽灵供应商吻合（{count}）",
+      "ghostMatches": "幽灵匹配（共{total}个，前{top}个）",
       "ghostVendors": "幽灵供应商",
       "highRiskAudit": "高风险审计事件",
       "highestRiskFlags": "最高风险标记",
@@ -3890,6 +3898,53 @@
     "yes": "是",
     "detection": {
       "allFlagged": "全部标记"
+    },
+    "scoring": {
+      "title": "评分模型",
+      "note": "固定严重度模型：各信号如何换算为0–100分。上方检测阈值仍可配置。",
+      "trap": "阈值陷阱",
+      "duplicate": "重复",
+      "weekend": "周末记账",
+      "rsf": "相对规模",
+      "zscore": "Z分数",
+      "sequential": "连号",
+      "ghost": "幽灵供应商",
+      "vendor": "供应商汇总",
+      "summary": "总体风险",
+      "base": "基础分：{points}",
+      "tierBump": "{tier}及以上：+{points}",
+      "trapPattern": "尾数{pattern}：+{points}",
+      "spanBump": "{days}天以内：+{points}",
+      "sharedReference": "相同参照：+{points}",
+      "confShared": "相同参照：{pct}",
+      "confSpan": "{days}天以内：{pct}",
+      "confOtherwise": "其他：{pct}",
+      "sunday": "周日：+{points}",
+      "ratioBump": "倍数≥{ratio}：+{points}",
+      "ratioOtherwise": "阈值倍数：+{points}",
+      "zBump": "|z|≥{z}：+{points}",
+      "sequentialHighSpan": "高风险跨度：+{points}",
+      "sequentialBaseSpan": "较短跨度：+{points}",
+      "perInvoice": "每单+{points}，上限{cap}",
+      "tierOtherwise": "其他：+{points}",
+      "perFlag": "每标记+{points}，上限{cap}",
+      "perType": "每标记类型+{points}",
+      "worstShare": "最严重单项的{pct}",
+      "summaryVolume": "标记{count}个以上：+{points}",
+      "ghostAny": "存在幽灵供应商：+{points}",
+      "sequentialAny": "存在连号：+{points}",
+      "benfordNonconforming": "存在不服从切片：+{points}",
+      "ghostRow": "{match}：+{points}分"
+    },
+    "severity": {
+      "critical": "严重",
+      "high": "高",
+      "medium": "中"
+    },
+    "auditAction": {
+      "delete": "删除",
+      "update": "更新",
+      "insert": "新增"
     }
   },
   "charts": {
