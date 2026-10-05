@@ -39,7 +39,9 @@ export const POST = defineRoute({
           actorId: authz.user.id,
         }),
       )
-      return NextResponse.json(result, { status: 201 })
+      // Ledger units stay exact in the receipt, including balances beyond
+      // JavaScript's safe integer range. Native JSON cannot serialize bigint.
+      return NextResponse.json({ ...result, balanceMinor: result.balanceMinor.toString() }, { status: 201 })
     } catch (error) {
       return apiErrorResponse(error)
     }
