@@ -38,6 +38,6 @@ test("every database pool survives an idle connection error and reports it", () 
     encoding: "utf8",
     timeout: 15_000,
   });
-  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.error, undefined, result.error?.message ?? "pool error probe must start and finish without a subprocess error");
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
