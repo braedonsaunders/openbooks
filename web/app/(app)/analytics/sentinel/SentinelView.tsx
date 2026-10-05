@@ -139,12 +139,15 @@ function RiskPill({ score }: { score: number }) {
   return <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold tabular-nums', score >= 80 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' : score >= 60 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>{score}</span>
 }
 
-/** Overall-risk gauge (Risk-meter, inverted: high = red). */
-function RiskGauge({ score }: { score: number }) {
+/** Overall-risk gauge (Risk-meter, inverted: high = red). A partial score —
+ * any skipped scoring source — renders neutral slate instead of a healthy
+ * green, so missing configuration never reads as low risk. The band label
+ * still names the score's band; the exclusion note below names the gaps. */
+function RiskGauge({ score, partial }: { score: number; partial: boolean }) {
   const t = useTranslations('analytics.sentinel')
   // Band cut-offs come from the shared severity model, so the gauge and the
   // dashboard tiles agree on what a score means.
-  const color = score >= RISK_SCORE_BANDS.high ? '#ef4444' : score >= RISK_SCORE_BANDS.elevated ? '#f97316' : score >= RISK_SCORE_BANDS.moderate ? '#f59e0b' : '#10b981'
+  const color = partial ? '#64748b' : score >= RISK_SCORE_BANDS.high ? '#ef4444' : score >= RISK_SCORE_BANDS.elevated ? '#f97316' : score >= RISK_SCORE_BANDS.moderate ? '#f59e0b' : '#10b981'
   const label = score >= RISK_SCORE_BANDS.high ? t('risk.high') : score >= RISK_SCORE_BANDS.elevated ? t('risk.elevated') : score >= RISK_SCORE_BANDS.moderate ? t('risk.moderate') : t('risk.low')
   const arcLength = 141.37
   const offset = arcLength * (1 - Math.min(score, 100) / 100)
@@ -285,16 +288,16 @@ export function SentinelView({ data: initialData, canConfigure }: { data: Sentin
       </p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <RiskGauge score={s.overallRiskScore} />
+        <RiskGauge score={s.overallRiskScore} partial={s.excludedDetectors.length > 0} />
         <KpiCard icon={Flag} accent={s.flaggedCount > 0 ? 'red' : 'emerald'} label={t('kpi.flagged')} value={num(s.flaggedCount)} sub={t('sub.atRisk', { amount: money(s.totalAtRisk) })} tone={s.flaggedCount > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={Copy} accent="amber" label={t('kpi.duplicatePairs')} value={num(s.duplicateCount)} sub={money(s.totalDuplicateAmount)} tone={s.duplicateCount > 0 ? 'negative' : 'neutral'} />
+        <KpiCard icon={Copy} accent="amber" label={t('kpi.duplicatePairs')} value={data.duplicates.unavailable ? t('config.unsetValue') : num(s.duplicateCount)} sub={data.duplicates.unavailable ?? money(s.totalDuplicateAmount)} tone={s.duplicateCount > 0 ? 'negative' : 'neutral'} />
         <KpiCard icon={BarChart3} accent={s.benfordConformity === 'nonConforming' ? 'red' : s.benfordConformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.benford')} value={conformLabel(s.benfordConformity)} sub={t('sub.twoD', { value: conformLabel(s.benford2DConformity) })} />
         <KpiCard icon={ShieldAlert} accent={s.ghostCount + s.sequentialGroups > 0 ? 'red' : 'emerald'} label={t('kpi.shellSignals')} value={num(s.ghostCount + s.sequentialGroups)} sub={t('sub.ghostsSequential', { ghosts: s.ghostCount, sequential: s.sequentialGroups })} tone={s.ghostCount + s.sequentialGroups > 0 ? 'negative' : 'positive'} />
       </div>
       {s.excludedDetectors.length > 0 ? (
         <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-          <span>{t('risk.excludedNote', { detectors: s.excludedDetectors.join(', ') })}</span>
+          <span>{t('risk.excludedNote', { detectors: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(s.excludedDetectors) })}</span>
         </p>
       ) : null}
 
@@ -824,8 +827,8 @@ function DetectionTab({ data }: { data: SentinelData }) {
       {sub === 'duplicates' ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <KpiCard icon={Copy} accent="red" label={t('kpi.duplicatePairs')} value={num(data.duplicates.total)} sub={t('sub.allMatchingPairs')} tone="negative" />
-            <KpiCard icon={Scale} accent="amber" label={t('kpi.valueAtRisk')} value={money(s.totalDuplicateAmount)} sub={t('sub.sumPairAmounts')} />
+            <KpiCard icon={Copy} accent="red" label={t('kpi.duplicatePairs')} value={data.duplicates.unavailable ? t('config.unsetValue') : num(data.duplicates.total)} sub={data.duplicates.unavailable ?? t('sub.allMatchingPairs')} tone="negative" />
+            <KpiCard icon={Scale} accent="amber" label={t('kpi.valueAtRisk')} value={data.duplicates.unavailable ? t('config.unsetValue') : money(s.totalDuplicateAmount)} sub={data.duplicates.unavailable ?? t('sub.sumPairAmounts')} />
             <KpiCard icon={Info} accent="slate" label={t('kpi.rule')} value={t('duplicates.ruleValue', { days: data.config.duplicateDays! })} sub={data.duplicates.unavailable ?? t('duplicates.ruleNote', { min: money(data.config.duplicateMinAmount!) })} />
           </div>
           {data.duplicates.unavailable ? (
