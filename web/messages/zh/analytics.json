@@ -2233,10 +2233,6 @@
           "label": "悬崖严重差（pp）",
           "help": "采购/销售增速差超过该值即为严重"
         },
-        "cliffCriticalHorizon": {
-          "label": "悬崖严重期（月）",
-          "help": "严重悬崖同时显示的期限"
-        },
         "cliffCriticalPoints": {
           "label": "悬崖严重扣分",
           "help": "严重悬崖的健康扣分"
@@ -2248,10 +2244,6 @@
         "cliffWarningGap": {
           "label": "悬崖预警差（pp）",
           "help": "采购/销售增速差超过该值即为预警"
-        },
-        "cliffWarningHorizon": {
-          "label": "悬崖预警期（月）",
-          "help": "预警悬崖同时显示的期限"
         },
         "cliffWarningPoints": {
           "label": "悬崖预警扣分",
