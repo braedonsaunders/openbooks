@@ -269,7 +269,6 @@ test("bulk edit sets price, cost, barcode and status in one audited transaction"
         variantIds: ids,
         price: "24.50",
         cost: "9.75",
-        barcode: { value: "810055012345", kind: "gtin" },
         isActive: false,
       }),
     );
@@ -285,6 +284,23 @@ test("bulk edit sets price, cost, barcode and status in one audited transaction"
       assert.equal(row.default_cost, "9.7500");
       assert.equal(row.is_active, false);
     }
+    // One barcode identifies one item: sharing it across the selection refuses.
+    await assert.rejects(
+      withBypassContext(() =>
+        bulkEditVariants(org.orgId, actorId, {
+          variantIds: ids,
+          barcode: { value: "810055012345", kind: "gtin" },
+        }),
+      ),
+      /barcode 810055012345 cannot identify 4 variants at once/,
+    );
+    const single = await withBypassContext(() =>
+      bulkEditVariants(org.orgId, actorId, {
+        variantIds: [ids[0]!],
+        barcode: { value: "810055012345", kind: "gtin" },
+      }),
+    );
+    assert.deepEqual(single.updated, [ids[0]!]);
     const barcodes = await withBypassContext(async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from item_identifiers
@@ -310,7 +326,7 @@ test("bulk edit refuses a barcode taken by another item, naming it", { skip: !DB
     await assert.rejects(
       withBypassContext(() =>
         bulkEditVariants(org.orgId, actorId, {
-          variantIds: generated.variants.map((variant) => variant.id),
+          variantIds: [generated.variants[0]!.id],
           barcode: { value: "810055099999", kind: "gtin" },
         }),
       ),
