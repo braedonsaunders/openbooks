@@ -1018,6 +1018,10 @@
       "stored_value_balances": {
         "label": "Saldos de tarjetas regalo y crédito",
         "description": "Una fila por cuenta con su saldo, la región del cliente y la última actividad. Filtre por estado y agrupe por región y mes de actividad para revisar saldos abandonados."
+      },
+      "demand_forecast_accuracy": {
+        "label": "Precisión del pronóstico",
+        "description": "Pronósticos de demanda pasados evaluados contra consumos reales por clase de artículo: semanas evaluadas, error porcentual absoluto medio y sesgo."
       }
     },
     "columns": {
@@ -2516,6 +2520,12 @@
         "last_activity_on": "Última actividad",
         "expires_on": "Vence el",
         "inactivity_months": "Umbral de inactividad del programa (meses)"
+      },
+      "demand_forecast_accuracy": {
+        "item_class": "Clase de artículo",
+        "scored_weeks": "Semanas evaluadas",
+        "mape": "MAPE",
+        "bias": "Sesgo"
       }
     },
     "enumValues": {

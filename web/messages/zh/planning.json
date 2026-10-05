@@ -1,0 +1,127 @@
+{
+  "title": "库存计划",
+  "description": "本周需要采购或调拨的内容: 按物料和地点统计预测，并提供可审核的采购与调拨建议。",
+  "run": {
+    "title": "运行计划",
+    "description": "预测需求并刷新一个法人的建议。",
+    "horizon": "预测期 (周)",
+    "history": "历史 (周)",
+    "start": "运行计划",
+    "running": "计划运行中…",
+    "done": "计划 {number} 已完成，共 {count} 条建议。",
+    "uptodate": "计划 {number} 已是最新: 自上次运行以来没有任何变化。"
+  },
+  "list": {
+    "needsAttention": "需要处理",
+    "emptyTitle": "无需采购或调拨",
+    "emptyDescription": "所有库存头寸均可覆盖其预测。在销售、收货或更改策略后重新运行计划。",
+    "emptyAction": "运行计划",
+    "allCaughtUp": "全部处理完毕"
+  },
+  "columns": {
+    "item": "物料",
+    "location": "地点",
+    "action": "措施",
+    "quantity": "建议量",
+    "supplier": "供应商",
+    "due": "到期",
+    "cover": "覆盖天数",
+    "forecast": "预测",
+    "supply": "预计库存",
+    "status": "状态",
+    "trend": "需求趋势"
+  },
+  "actions": {
+    "buy": "采购",
+    "transfer": "调拨",
+    "confirm": "确认",
+    "dismiss": "忽略",
+    "convert": "转换",
+    "convertAll": "创建采购订单",
+    "confirmAll": "确认全部建议",
+    "confirmed": "已确认 {count} 条建议。",
+    "convertedOrders": "已创建 {orders} 张采购订单。",
+    "convertedTransfers": "已创建 {transfers} 笔调拨。",
+    "dismissTitle": "忽略建议",
+    "dismissPrompt": "为什么不采纳这条建议?",
+    "chooseVendor": "选择供应商",
+    "chooseSource": "调出地点",
+    "noSupplier": "未确定供应商 — 请先选择供应商再转换。"
+  },
+  "drawer": {
+    "title": "{action} {quantity} {item}",
+    "forecast": "预测",
+    "history": "历史",
+    "band": "80% 区间",
+    "stockout": "缺货",
+    "explanation": "建议原因",
+    "supply": "库存",
+    "policy": "计划策略",
+    "advanced": "高级",
+    "advancedSummary": "方法指定、历史窗口与预测改写",
+    "overrideTitle": "预测改写",
+    "overrideReason": "原因",
+    "overrideQuantity": "数量",
+    "overrideSave": "保存改写",
+    "overrideSaved": "改写将从下次运行起生效。",
+    "runBy": "运行 {number}"
+  },
+  "explanation": {
+    "method": "基于 {weeks} 周历史的 {method} 预测。",
+    "stockouts": "已排除 {count} 个缺货周。",
+    "promo": "促销 {code} 使需求提升了 {lift}。",
+    "peak": "季节高峰在 {month}。",
+    "policyDefault": "标准策略: 采购前请复核。",
+    "override": "已改写: {reason}。"
+  },
+  "methods": {
+    "seasonal_additive": "季节性",
+    "seasonal_multiplicative": "季节性",
+    "croston_sba": "间歇性",
+    "moving_average": "平均",
+    "override": "改写"
+  },
+  "policy": {
+    "title": "计划策略",
+    "leadTime": "提前期 (天)",
+    "reviewCycle": "复核周期 (天)",
+    "serviceLevel": "服务水平",
+    "moq": "最小起订量",
+    "casePack": "整箱量",
+    "supplier": "首选供应商",
+    "method": "预测方法",
+    "history": "历史 (周)",
+    "save": "保存策略",
+    "saved": "计划策略已保存。",
+    "methodAuto": "自动",
+    "methodSeasonal": "季节性",
+    "methodIntermittent": "间歇性",
+    "methodAverage": "平均",
+    "defaulted": "当前使用标准策略 — 可按物料微调。"
+  },
+  "itemTab": {
+    "title": "计划",
+    "cover": "覆盖天数",
+    "nextSuggestion": "下一条建议",
+    "none": "该物料暂无未处理的建议。",
+    "openPlanning": "打开库存计划"
+  },
+  "report": {
+    "accuracyTitle": "预测准确率",
+    "accuracyDescription": "按物料类别统计历史预测的平均绝对百分比误差与偏差。",
+    "class": "物料类别",
+    "periods": "已评分周数",
+    "mape": "MAPE",
+    "bias": "偏差"
+  },
+  "status": {
+    "suggested": "已建议",
+    "confirmed": "已确认",
+    "converted": "已转换",
+    "dismissed": "已忽略"
+  },
+  "gate": {
+    "offTitle": "需求计划未启用",
+    "offDescription": "请在公司设置 → 功能中启用需求计划，以预测库存需求。"
+  }
+}

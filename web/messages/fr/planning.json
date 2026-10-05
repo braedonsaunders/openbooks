@@ -1,0 +1,127 @@
+{
+  "title": "Planification des stocks",
+  "description": "Quoi acheter ou déplacer cette semaine : prévisions statistiques par article et emplacement, avec suggestions d'achat et de transfert à valider.",
+  "run": {
+    "title": "Exécuter le plan",
+    "description": "Prévoir la demande et actualiser les suggestions d'une entité légale.",
+    "horizon": "Horizon (semaines)",
+    "history": "Historique (semaines)",
+    "start": "Exécuter le plan",
+    "running": "Planification…",
+    "done": "Le plan {number} est terminé avec {count, plural, one {# suggestion} other {# suggestions}}.",
+    "uptodate": "Le plan {number} est à jour : rien n'a changé depuis le dernier calcul."
+  },
+  "list": {
+    "needsAttention": "À traiter",
+    "emptyTitle": "Rien à acheter ni à déplacer",
+    "emptyDescription": "Chaque position stockée couvre sa prévision. Relancez le plan après des ventes, des réceptions ou un changement de règle.",
+    "emptyAction": "Exécuter le plan",
+    "allCaughtUp": "Tout est à jour"
+  },
+  "columns": {
+    "item": "Article",
+    "location": "Emplacement",
+    "action": "Action",
+    "quantity": "Suggéré",
+    "supplier": "Fournisseur",
+    "due": "Échéance",
+    "cover": "Jours de couverture",
+    "forecast": "Prévision",
+    "supply": "Stock projeté",
+    "status": "Statut",
+    "trend": "Tendance de la demande"
+  },
+  "actions": {
+    "buy": "Acheter",
+    "transfer": "Transférer",
+    "confirm": "Confirmer",
+    "dismiss": "Écarter",
+    "convert": "Convertir",
+    "convertAll": "Créer les commandes",
+    "confirmAll": "Tout confirmer",
+    "confirmed": "{count, plural, one {# suggestion confirmée} other {# suggestions confirmées}}.",
+    "convertedOrders": "{orders, plural, one {# commande créée} other {# commandes créées}}.",
+    "convertedTransfers": "{transfers, plural, one {# transfert créé} other {# transferts créés}}.",
+    "dismissTitle": "Écarter la suggestion",
+    "dismissPrompt": "Pourquoi cette suggestion n'est-elle pas suivie ?",
+    "chooseVendor": "Choisir un fournisseur",
+    "chooseSource": "Déplacer depuis",
+    "noSupplier": "Aucun fournisseur identifié — choisissez-en un pour convertir."
+  },
+  "drawer": {
+    "title": "{action} {quantity} {item}",
+    "forecast": "Prévision",
+    "history": "Historique",
+    "band": "Intervalle à 80 %",
+    "stockout": "Rupture",
+    "explanation": "Pourquoi c'est suggéré",
+    "supply": "Stock",
+    "policy": "Règle de planification",
+    "advanced": "Avancé",
+    "advancedSummary": "Méthode, fenêtre d'historique et remplacements de prévision",
+    "overrideTitle": "Remplacement de prévision",
+    "overrideReason": "Motif",
+    "overrideQuantity": "Quantité",
+    "overrideSave": "Enregistrer le remplacement",
+    "overrideSaved": "Le remplacement s'applique dès le prochain calcul.",
+    "runBy": "Calcul {number}"
+  },
+  "explanation": {
+    "method": "Prévision {method} sur {weeks, plural, one {# semaine} other {# semaines}} d'historique.",
+    "stockouts": "{count, plural, one {# semaine de rupture exclue} other {# semaines de rupture exclues}}.",
+    "promo": "La promotion {code} a augmenté la demande de {lift}.",
+    "peak": "Pic saisonnier en {month}.",
+    "policyDefault": "Règle standard : à valider avant d'acheter.",
+    "override": "Remplacé : {reason}."
+  },
+  "methods": {
+    "seasonal_additive": "Saisonnière",
+    "seasonal_multiplicative": "Saisonnière",
+    "croston_sba": "Intermittente",
+    "moving_average": "Moyenne",
+    "override": "Remplacement"
+  },
+  "policy": {
+    "title": "Règle de planification",
+    "leadTime": "Délai (jours)",
+    "reviewCycle": "Cycle de revue (jours)",
+    "serviceLevel": "Taux de service",
+    "moq": "Quantité minimale",
+    "casePack": "Colis",
+    "supplier": "Fournisseur préféré",
+    "method": "Méthode de prévision",
+    "history": "Historique (semaines)",
+    "save": "Enregistrer la règle",
+    "saved": "Règle de planification enregistrée.",
+    "methodAuto": "Automatique",
+    "methodSeasonal": "Saisonnière",
+    "methodIntermittent": "Intermittente",
+    "methodAverage": "Moyenne",
+    "defaulted": "Règle standard appliquée — ajustez par article."
+  },
+  "itemTab": {
+    "title": "Planification",
+    "cover": "Jours de couverture",
+    "nextSuggestion": "Prochaine suggestion",
+    "none": "Aucune suggestion ouverte pour cet article.",
+    "openPlanning": "Ouvrir la planification des stocks"
+  },
+  "report": {
+    "accuracyTitle": "Précision des prévisions",
+    "accuracyDescription": "Erreur absolue moyenne en pourcentage et biais des prévisions passées, par classe d'articles.",
+    "class": "Classe d'articles",
+    "periods": "Semaines évaluées",
+    "mape": "MAPE",
+    "bias": "Biais"
+  },
+  "status": {
+    "suggested": "Suggérée",
+    "confirmed": "Confirmée",
+    "converted": "Convertie",
+    "dismissed": "Écartée"
+  },
+  "gate": {
+    "offTitle": "La planification de la demande est désactivée",
+    "offDescription": "Activez-la dans Réglages de l'entreprise → Fonctionnalités pour prévoir les besoins."
+  }
+}

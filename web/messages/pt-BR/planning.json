@@ -1,0 +1,127 @@
+{
+  "title": "Planejamento de estoque",
+  "description": "O que comprar ou mover esta semana: previsões estatísticas por item e local com sugestões revisáveis de compra e transferência.",
+  "run": {
+    "title": "Executar plano",
+    "description": "Prever a demanda e atualizar as sugestões de uma entidade legal.",
+    "horizon": "Horizonte (semanas)",
+    "history": "Histórico (semanas)",
+    "start": "Executar plano",
+    "running": "Planejando…",
+    "done": "Plano {number} concluído com {count, plural, one {# sugestão} other {# sugestões}}.",
+    "uptodate": "O plano {number} está atualizado: nada mudou desde a última execução."
+  },
+  "list": {
+    "needsAttention": "Precisa de atenção",
+    "emptyTitle": "Nada a comprar ou mover",
+    "emptyDescription": "Toda posição com estoque cobre sua previsão. Execute o plano após vender, receber ou mudar uma política.",
+    "emptyAction": "Executar plano",
+    "allCaughtUp": "Tudo em dia"
+  },
+  "columns": {
+    "item": "Item",
+    "location": "Local",
+    "action": "Ação",
+    "quantity": "Sugerido",
+    "supplier": "Fornecedor",
+    "due": "Vence em",
+    "cover": "Dias de cobertura",
+    "forecast": "Previsão",
+    "supply": "Estoque projetado",
+    "status": "Status",
+    "trend": "Tendência de demanda"
+  },
+  "actions": {
+    "buy": "Comprar",
+    "transfer": "Transferir",
+    "confirm": "Confirmar",
+    "dismiss": "Dispensar",
+    "convert": "Converter",
+    "convertAll": "Criar pedidos de compra",
+    "confirmAll": "Confirmar tudo",
+    "confirmed": "{count, plural, one {# sugestão confirmada} other {# sugestões confirmadas}}.",
+    "convertedOrders": "{orders, plural, one {# pedido criado} other {# pedidos criados}}.",
+    "convertedTransfers": "{transfers, plural, one {# transferência criada} other {# transferências criadas}}.",
+    "dismissTitle": "Dispensar sugestão",
+    "dismissPrompt": "Por que esta sugestão não será seguida?",
+    "chooseVendor": "Escolher fornecedor",
+    "chooseSource": "Mover de",
+    "noSupplier": "Sem fornecedor resolvido — escolha um fornecedor para converter."
+  },
+  "drawer": {
+    "title": "{action} {quantity} {item}",
+    "forecast": "Previsão",
+    "history": "Histórico",
+    "band": "Intervalo de 80%",
+    "stockout": "Sem estoque",
+    "explanation": "Por que é sugerido",
+    "supply": "Estoque",
+    "policy": "Política de planejamento",
+    "advanced": "Avançado",
+    "advancedSummary": "Método, janela histórica e substituições da previsão",
+    "overrideTitle": "Substituição da previsão",
+    "overrideReason": "Motivo",
+    "overrideQuantity": "Quantidade",
+    "overrideSave": "Salvar substituição",
+    "overrideSaved": "A substituição vale a partir da próxima execução.",
+    "runBy": "Execução {number}"
+  },
+  "explanation": {
+    "method": "Previsão {method} sobre {weeks, plural, one {# semana} other {# semanas}} de histórico.",
+    "stockouts": "{count, plural, one {# semana sem estoque excluída} other {# semanas sem estoque excluídas}}.",
+    "promo": "A promoção {code} elevou a demanda em {lift}.",
+    "peak": "Pico sazonal em {month}.",
+    "policyDefault": "Política padrão: revisar antes de comprar.",
+    "override": "Substituído: {reason}."
+  },
+  "methods": {
+    "seasonal_additive": "Sazonal",
+    "seasonal_multiplicative": "Sazonal",
+    "croston_sba": "Intermitente",
+    "moving_average": "Média",
+    "override": "Substituição"
+  },
+  "policy": {
+    "title": "Política de planejamento",
+    "leadTime": "Prazo de entrega (dias)",
+    "reviewCycle": "Ciclo de revisão (dias)",
+    "serviceLevel": "Nível de serviço",
+    "moq": "Pedido mínimo",
+    "casePack": "Caixa",
+    "supplier": "Fornecedor preferido",
+    "method": "Método de previsão",
+    "history": "Histórico (semanas)",
+    "save": "Salvar política",
+    "saved": "Política de planejamento salva.",
+    "methodAuto": "Automático",
+    "methodSeasonal": "Sazonal",
+    "methodIntermittent": "Intermitente",
+    "methodAverage": "Média",
+    "defaulted": "Usando a política padrão — ajuste por item."
+  },
+  "itemTab": {
+    "title": "Planejamento",
+    "cover": "Dias de cobertura",
+    "nextSuggestion": "Próxima sugestão",
+    "none": "Sem sugestões abertas para este item.",
+    "openPlanning": "Abrir planejamento de estoque"
+  },
+  "report": {
+    "accuracyTitle": "Precisão da previsão",
+    "accuracyDescription": "Erro percentual absoluto médio e viés de previsões passadas por classe de item.",
+    "class": "Classe de item",
+    "periods": "Semanas avaliadas",
+    "mape": "MAPE",
+    "bias": "Viés"
+  },
+  "status": {
+    "suggested": "Sugerido",
+    "confirmed": "Confirmado",
+    "converted": "Convertido",
+    "dismissed": "Dispensado"
+  },
+  "gate": {
+    "offTitle": "Planejamento de demanda desligado",
+    "offDescription": "Ative o planejamento de demanda em Configurações da empresa → Recursos para prever necessidades."
+  }
+}

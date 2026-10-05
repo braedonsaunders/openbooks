@@ -1018,6 +1018,10 @@
       "stored_value_balances": {
         "label": "Saldos de vales e créditos",
         "description": "Uma linha por conta com saldo em aberto, região do cliente e última atividade. Filtre por situação e agrupe por região e mês de atividade para revisar valores abandonados."
+      },
+      "demand_forecast_accuracy": {
+        "label": "Precisão da previsão",
+        "description": "Previsões de demanda passadas avaliadas contra consumos reais por classe de item: semanas avaliadas, erro percentual absoluto médio e viés."
       }
     },
     "columns": {
@@ -2516,6 +2520,12 @@
         "last_activity_on": "Última atividade",
         "expires_on": "Expira em",
         "inactivity_months": "Limite de inatividade do programa (meses)"
+      },
+      "demand_forecast_accuracy": {
+        "item_class": "Classe de item",
+        "scored_weeks": "Semanas avaliadas",
+        "mape": "MAPE",
+        "bias": "Viés"
       }
     },
     "enumValues": {

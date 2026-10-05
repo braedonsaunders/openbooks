@@ -1018,6 +1018,10 @@
       "stored_value_balances": {
         "label": "Soldes de cartes cadeaux et avoirs",
         "description": "Une ligne par compte avec son solde, la région du client et la dernière activité. Filtrez par statut et regroupez par région et mois d’activité pour la revue des avoirs en déshérence."
+      },
+      "demand_forecast_accuracy": {
+        "label": "Précision des prévisions",
+        "description": "Prévisions de demande passées comparées aux sorties réelles, par classe d'articles : semaines évaluées, erreur absolue moyenne en pourcentage et biais."
       }
     },
     "columns": {
@@ -2516,6 +2520,12 @@
         "last_activity_on": "Dernière activité",
         "expires_on": "Expire le",
         "inactivity_months": "Seuil d’inactivité du programme (mois)"
+      },
+      "demand_forecast_accuracy": {
+        "item_class": "Classe d'articles",
+        "scored_weeks": "Semaines évaluées",
+        "mape": "MAPE",
+        "bias": "Biais"
       }
     },
     "enumValues": {
