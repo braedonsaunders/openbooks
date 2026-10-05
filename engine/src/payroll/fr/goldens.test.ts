@@ -199,10 +199,10 @@ const GOLDENS: Golden[] = [
   // month of ceiling, plafonnée 4 005 × 6,90 % = 276,35 + déplafonnée 10 000 × 0,40 % = 40,00 (accrued
   // from January it would be 10 000 × 6,90 % = 690,00). Hired 16 June: 15 days → 4 005 × 15/30 = 2 002,50
   // → 138,17 + 40,00.
-  ...[["2026-06-01", "316.3500"], ["2026-06-16", "178.1700"]].map(([hiredOn, vieilSal]) => ({
-    year: 2026, label: `adapter accrues the plafond from a ${hiredOn} hire`, citation: "URSSAF régularisation progressive du plafond; proratisation du plafond", engine: "adapter" as const,
+  ...([["2026-06-01", "316.3500"], ["2026-06-16", "178.1700"]] as const).map(([hiredOn, vieilSal]): Golden => ({
+    year: 2026, label: `adapter accrues the plafond from a ${hiredOn} hire`, citation: "URSSAF régularisation progressive du plafond; proratisation du plafond", engine: "adapter",
     input: {
-      facts: [{ fact_value: "10.00" }, { fact_value: "ordinary" }, { fact_value: "droit_commun" }, { remuneration: "0", stubs: 0 }],
+      facts: [{ fact_value: "10.00" }, { fact_value: "ordinary" }, { fact_value: "droit_commun" }, { remuneration: "0" }],
       answers: { domicile: "metropole", rgdu_eligibility: "excluded", apec_eligibility: "not_covered" },
       rates: { fr_atmp: { taux: "1.1000" } },
       ctx: { emp: { hired_on: hiredOn }, income: "10000.00", pensionable: "10000.00", gross: "10000.0000" },
