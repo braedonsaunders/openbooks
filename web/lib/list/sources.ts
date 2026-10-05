@@ -101,6 +101,7 @@ function documentSource(cfg: {
   extraSelect?: SQL
   links?: Record<string, (row: Record<string, unknown>) => string | null>
   quickFilters?: DocQuickFilter[]
+  where?: DocListSource['where']
 }): DocListSource {
   return {
     recordType: cfg.recordType,
@@ -108,6 +109,7 @@ function documentSource(cfg: {
     drawerParam: cfg.drawerParam,
     multiKind: cfg.multiKind,
     joins: cfg.joins,
+    where: cfg.where,
     builtInExpr: cfg.builtInExpr ?? DOCUMENT_BUILT_IN_EXPR,
     sorts: DOCUMENT_SORTS,
     extraSelect: cfg.extraSelect ?? sql`d.party_id`,
