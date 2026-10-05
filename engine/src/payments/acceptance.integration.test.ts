@@ -472,6 +472,14 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     assert.equal(attempt.rows[0]!.status, "initiated");
     assert.equal(attempt.rows[0]!.amount, "100.0000");
     assert.equal(attempt.rows[0]!.surcharge_amount, "3.0000");
+    await createCheckoutSession(link.token, "https://app.test/pay/" + link.token, async () => ({
+      status: 200, json: async () => ({ id: "cs_test_123", url: session.redirectUrl }),
+    }));
+    await db.execute(sql`insert into payment_attempts (org_id, link_id, provider, external_ref, status, amount, surcharge_amount)
+      values (${org.orgId}, ${link.id}, 'stripe', 'cs_quote_collision', 'initiated', '1', '0')`);
+    await assert.rejects(() => createCheckoutSession(link.token, "https://app.test/pay/" + link.token, async () => ({
+      status: 200, json: async () => ({ id: "cs_quote_collision", url: session.redirectUrl }),
+    })), /checkout reference conflicts.*review the provider checkout configuration/);
 
     // Signed webhook: checkout.session.completed for $103.
     const body = JSON.stringify({

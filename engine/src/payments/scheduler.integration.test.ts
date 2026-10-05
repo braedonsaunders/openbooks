@@ -749,6 +749,8 @@ test(
       );
       assert.equal(runIds.size, 1, `both ticks observe the same run: ${[...runIds]}`);
       const runId = [...runIds][0]!;
+      assert.ok([...a, ...b].filter((row) => row.scheduleId === fixture.scheduleId).every((row) => row.runId === runId),
+        'a concurrent empty selection must observe the winning occurrence instead of reporting no run');
 
       const occ = await occurrences(org.orgId, fixture.scheduleId);
       assert.equal(occ.length, 1, "exactly one occurrence was claimed");

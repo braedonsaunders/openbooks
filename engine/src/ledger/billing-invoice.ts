@@ -1170,7 +1170,6 @@ export async function generateInvoiceFromBillingRequest(
           org_id, from_document_id, to_document_id, link_type, created_by
         )
         values (${orgId}, ${fieldTicketId}, ${invoiceId}, 'bills', ${userId})
-        on conflict (org_id, from_document_id, to_document_id, link_type) do nothing
       `)
     }
 
