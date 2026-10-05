@@ -51,3 +51,8 @@ export function effectiveWindowKind(window: EffectiveWindow): 'range' | 'from' |
   if (window.to) return 'ended'
   return 'evergreen'
 }
+
+/** Display trimming for ledger decimal strings: `12.5000` reads as `12.5`. */
+export function trimKitQty(quantity: string): string {
+  return quantity.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+}

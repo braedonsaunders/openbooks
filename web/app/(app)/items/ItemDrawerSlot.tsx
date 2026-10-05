@@ -13,6 +13,7 @@ import { partyOptions } from '../../../lib/documents'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { ItemDrawer } from './ItemDrawer'
 import { ItemVariantsTab } from './ItemVariantsTab'
+import { KitAvailabilityTab } from './KitAvailabilityTab'
 import { KitComponentsTab } from './KitComponentsTab'
 import { ChannelStockTab } from './ChannelStockTab'
 import { externalLinkUnlinkColumn } from '../channels/external-links-column'
@@ -82,10 +83,11 @@ export async function ItemDrawerSlot({ drawer, sp }: {
   // restricted operator reads the recipe without being offered a refused
   // write.
   const kitTab = await kitComponentsTab(authz.user.orgId, can(authz, 'admin.setup.manage') && authz.allowedSubsidiaryIds === null, props, sp)
+  const kitAvailabilityTab = await kitAvailabilitySection(authz.user.orgId, props, sp)
   const planningTab = await itemPlanningTab(authz, props, sp)
   const variantsTab = await itemVariantsTab(props, sp)
   const channelStockTab = await itemChannelStockTab(authz, props, sp)
-  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : []), ...(channelStockTab ? [channelStockTab] : [])]
+  const operationalTabs = [...(kitTab ? [kitTab] : []), ...(kitAvailabilityTab ? [kitAvailabilityTab] : []), ...(planningTab ? [planningTab] : []), ...(variantsTab ? [variantsTab] : []), ...(channelStockTab ? [channelStockTab] : [])]
   if (props.createMode || !can(authz, 'admin.setup.manage') || authz.allowedSubsidiaryIds !== null) {
     return <ItemDrawer key={remountKey} {...props} recordTabs={operationalTabs} />
   }
@@ -186,9 +188,33 @@ async function itemVariantsTab(
 }
 
 /**
+ * A kit's per-warehouse availability lives on its own tab beside Components:
+ * stock by location is a second concept table, so it never stacks below the
+ * recipe. Readers see it without the setup grant like the recipe itself.
+ */
+async function kitAvailabilitySection(
+  orgId: string,
+  props: ComponentProps<typeof ItemDrawer>,
+  sp: Record<string, string | string[] | undefined>,
+) {
+  if (props.createMode || String(props.payload.item.kind) !== 'kit') return null
+  if (!(await isFeatureEnabled(orgId, 'inventory'))) return null
+  const t = await getTranslations('items')
+  const itemId = String(props.payload.item.id)
+  return {
+    key: 'availability',
+    label: t('kit.availabilityTitle'),
+    content: pickString(sp.itemSetup) === 'availability' ? (
+      <KitAvailabilityTab itemId={itemId} />
+    ) : null,
+  }
+}
+
+/**
  * A kit sells as a bundle of its components: the Components tab names the
- * recipe and what it can still sell, with the bill-of-materials editor one
- * click away. Kits without the inventory feature have no recipe to show.
+ * recipe, with the bill-of-materials editor one click away. Stock by location
+ * lives on the sibling Availability tab. Kits without the inventory feature
+ * have no recipe to show.
  */
 async function kitComponentsTab(
   orgId: string,
