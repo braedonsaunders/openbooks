@@ -21,6 +21,7 @@
     "opportunity": "Oportunidade",
     "activity": "Atividade",
     "item": "Item",
+    "item_family": "Família de produtos",
     "account": "Conta",
     "bank_transaction": "Transação bancária",
     "inventory_onhand": "Estoque disponível",

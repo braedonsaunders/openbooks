@@ -2,7 +2,7 @@
   "list": {
     "title": "Artículos y servicios",
     "description": "El catálogo detrás de cada línea de documento — servicios, mano de obra, cargos y descuentos.",
-    "searchPlaceholder": "Buscar por nombre, código, categoría…",
+    "searchPlaceholder": "Buscar por nombre, código, categoría, familia…",
     "kindFilter": "Tipo",
     "emptyTitle": "Aún no hay artículos",
     "emptyDescription": "Agregue el primer servicio, mano de obra o cargo para iniciar el catálogo.",
@@ -10,7 +10,8 @@
     "createDraftFailed": "No se pudo crear un borrador de artículo",
     "view": "Vista",
     "viewCatalog": "Catálogo",
-    "viewRateBooks": "Baremos"
+    "viewRateBooks": "Baremos",
+    "viewFamilies": "Familias"
   },
   "labels": {
     "code": "Código",
@@ -23,7 +24,8 @@
     "incomeAccount": "Cuenta de ingresos",
     "expenseAccount": "Cuenta de gastos",
     "payrollCostingAccount": "Cuenta de costo de nómina",
-    "taxCode": "Código de impuesto"
+    "taxCode": "Código de impuesto",
+    "family": "Familia"
   },
   "kinds": {
     "service": "Servicio",
@@ -282,5 +284,101 @@
     "effectiveTo": "Vigente hasta",
     "empty": "Aún no hay precios de valor razonable; se usa el SSP único de arriba.",
     "confirmDelete": "¿Eliminar este precio de valor razonable?"
+  },
+  "families": {
+    "title": "Familias de productos",
+    "description": "Una fila por matriz de opciones: tallas y colores que se venden como artículos individuales.",
+    "empty": "Aún no hay familias de productos",
+    "newFamily": "Nueva familia",
+    "drawerTitle": "Familia de productos",
+    "created": "Familia creada",
+    "creating": "Creando…",
+    "create": "Crear familia",
+    "createHint": "Describe el producto una vez, añade sus opciones y genera cada combinación como su propio artículo.",
+    "loadFailed": "No se pudo cargar esta familia",
+    "notFound": "Esta familia no pertenece a esta organización",
+    "summary": "{options} opciones · {variants} variantes",
+    "fields": {
+      "code": "Código de familia",
+      "status": "Estado"
+    },
+    "variants": {
+      "title": "Variantes",
+      "description": "Cada combinación se vende, almacena y valora como su propio artículo. Edita el precio o el código de barras en línea, o selecciona filas para cambios masivos."
+    },
+    "grid": {
+      "code": "Código",
+      "price": "Precio",
+      "cost": "Costo",
+      "barcode": "Código de barras",
+      "onHand": "Existencias",
+      "empty": "Aún no hay variantes: genera las combinaciones que faltan para completar esta matriz.",
+      "selected": "{count} seleccionadas",
+      "setPrice": "Fijar precio",
+      "setCost": "Fijar costo",
+      "setBarcode": "Fijar código",
+      "activate": "Activar",
+      "deactivate": "Desactivar",
+      "activateTitle": "¿Activar {count} variantes?",
+      "deactivateTitle": "¿Desactivar {count} variantes?",
+      "activateBody": "Volverán a estar disponibles en los documentos.",
+      "deactivateBody": "Seguirán en el historial, pero ya no podrán venderse.",
+      "bulkSaved": "{count} variantes actualizadas",
+      "priceFor": "Precio de {name}",
+      "barcodeFor": "Código de {name}"
+    },
+    "generate": {
+      "action": "Generar variantes faltantes",
+      "working": "Generando…",
+      "nothingMissing": "Ya existe cada combinación",
+      "confirmTitle": "¿Crear {count} variantes?",
+      "confirmBody": "Primeros códigos: {sample}. Los códigos nunca se renombran después.",
+      "confirm": "Generar",
+      "done": "{count} variantes creadas"
+    },
+    "options": {
+      "title": "Opciones",
+      "description": "La matriz de opciones con la que se construye cada variante. El orden determina el orden de códigos y nombres.",
+      "empty": "Aún no hay opciones",
+      "emptyHint": "Añade la primera opción, por ejemplo Talla con S, M, L.",
+      "addOption": "Añadir opción",
+      "namePlaceholder": "Nombre de opción, p. ej. Talla",
+      "nameLabel": "Nombre de la opción {position}",
+      "position": "Opción {position}",
+      "removeOption": "Quitar opción {name}",
+      "unnamed": "opción sin nombre",
+      "valuesLabel": "Valores de {name}",
+      "valuesPlaceholder": "Escribe un valor y pulsa Enter",
+      "saveOptions": "Guardar opciones",
+      "saving": "Guardando…",
+      "saved": "Opciones guardadas",
+      "renameTitle": "¿Renombrar {from} a {to}?",
+      "renameBody": "{count} nombres de variante se actualizan; los códigos no cambian.",
+      "renameConfirm": "Renombrar"
+    },
+    "defaults": {
+      "title": "Valores de familia",
+      "summary": "{kind} · {rate} por {unit}",
+      "noRate": "sin precio",
+      "noUnit": "unidad",
+      "description": "Las nuevas variantes heredan estos valores. Cambiarlos nunca reescribe las variantes existentes.",
+      "save": "Guardar valores",
+      "saving": "Guardando…",
+      "saved": "Valores guardados"
+    },
+    "itemTab": {
+      "title": "Variantes",
+      "openFamily": "Abrir familia",
+      "loadFailed": "No se pudieron cargar las variantes",
+      "siblingCount": "{count} en {family}"
+    },
+    "convert": {
+      "action": "Convertir en familia",
+      "optionTitle": "¿Qué opción lleva este artículo?",
+      "optionLabel": "Nombre de opción",
+      "valueTitle": "¿Qué {option} es este artículo?",
+      "valueLabel": "Valor de opción",
+      "done": "Familia {family} creada"
+    }
   }
 }

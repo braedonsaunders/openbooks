@@ -2,7 +2,7 @@
   "list": {
     "title": "Artikel & Leistungen",
     "description": "Der Katalog hinter jeder Belegzeile — Leistungen, Arbeit, Gebühren und Rabatte.",
-    "searchPlaceholder": "Name, Code, Kategorie durchsuchen…",
+    "searchPlaceholder": "Name, Code, Kategorie, Familie durchsuchen…",
     "kindFilter": "Art",
     "emptyTitle": "Noch keine Artikel",
     "emptyDescription": "Fügen Sie die erste Leistung, Arbeit oder Gebühr hinzu, um den Katalog zu beginnen.",
@@ -10,7 +10,8 @@
     "createDraftFailed": "Artikelentwurf konnte nicht erstellt werden",
     "view": "Ansicht",
     "viewCatalog": "Katalog",
-    "viewRateBooks": "Preislisten"
+    "viewRateBooks": "Preislisten",
+    "viewFamilies": "Familien"
   },
   "labels": {
     "code": "Code",
@@ -23,7 +24,8 @@
     "incomeAccount": "Ertragskonto",
     "expenseAccount": "Aufwandskonto",
     "payrollCostingAccount": "Lohnkostenkonto",
-    "taxCode": "Steuerschlüssel"
+    "taxCode": "Steuerschlüssel",
+    "family": "Familie"
   },
   "kinds": {
     "service": "Leistung",
@@ -285,5 +287,101 @@
     "effectiveTo": "Gültig bis",
     "empty": "Noch keine Zeitwerte — der einzelne SSP oben wird verwendet.",
     "confirmDelete": "Diesen Zeitwert entfernen?"
+  },
+  "families": {
+    "title": "Produktfamilien",
+    "description": "Eine Zeile pro Optionsmatrix – Größen und Farben, die als eigene Artikel verkaufen.",
+    "empty": "Noch keine Produktfamilien",
+    "newFamily": "Neue Familie",
+    "drawerTitle": "Produktfamilie",
+    "created": "Familie angelegt",
+    "creating": "Wird angelegt…",
+    "create": "Familie anlegen",
+    "createHint": "Beschreiben Sie das Produkt einmal, fügen Sie seine Optionen hinzu und erzeugen Sie jede Kombination als eigenen Artikel.",
+    "loadFailed": "Diese Familie konnte nicht geladen werden",
+    "notFound": "Diese Familie gehört nicht zu dieser Organisation",
+    "summary": "{options} Optionen · {variants} Varianten",
+    "fields": {
+      "code": "Familiencode",
+      "status": "Status"
+    },
+    "variants": {
+      "title": "Varianten",
+      "description": "Jede Kombination verkauft, lagert und kalkuliert als eigener Artikel. Preis oder Barcode direkt bearbeiten oder Zeilen für Sammeländerungen auswählen."
+    },
+    "grid": {
+      "code": "Code",
+      "price": "Preis",
+      "cost": "Kosten",
+      "barcode": "Barcode",
+      "onHand": "Bestand",
+      "empty": "Noch keine Varianten – erzeugen Sie die fehlenden Kombinationen, um diese Matrix zu füllen.",
+      "selected": "{count} ausgewählt",
+      "setPrice": "Preis setzen",
+      "setCost": "Kosten setzen",
+      "setBarcode": "Barcode setzen",
+      "activate": "Aktivieren",
+      "deactivate": "Deaktivieren",
+      "activateTitle": "{count} Varianten aktivieren?",
+      "deactivateTitle": "{count} Varianten deaktivieren?",
+      "activateBody": "Sie stehen auf Belegen wieder zur Verfügung.",
+      "deactivateBody": "Sie bleiben in der Historie, können aber nicht mehr verkauft werden.",
+      "bulkSaved": "{count} Varianten aktualisiert",
+      "priceFor": "Preis für {name}",
+      "barcodeFor": "Barcode für {name}"
+    },
+    "generate": {
+      "action": "Fehlende Varianten erzeugen",
+      "working": "Wird erzeugt…",
+      "nothingMissing": "Jede Kombination existiert bereits",
+      "confirmTitle": "{count} Varianten anlegen?",
+      "confirmBody": "Erste Codes: {sample}. Codes werden danach nie umbenannt.",
+      "confirm": "Erzeugen",
+      "done": "{count} Varianten angelegt"
+    },
+    "options": {
+      "title": "Optionen",
+      "description": "Die Optionsmatrix, aus der jede Variante gebaut wird. Die Reihenfolge bestimmt Code- und Namensreihenfolge.",
+      "empty": "Noch keine Optionen",
+      "emptyHint": "Fügen Sie die erste Option hinzu, zum Beispiel Größe mit Small, Medium, Large.",
+      "addOption": "Option hinzufügen",
+      "namePlaceholder": "Optionsname, z. B. Größe",
+      "nameLabel": "Name von Option {position}",
+      "position": "Option {position}",
+      "removeOption": "Option {name} entfernen",
+      "unnamed": "unbenannte Option",
+      "valuesLabel": "Werte für {name}",
+      "valuesPlaceholder": "Wert eingeben und Enter drücken",
+      "saveOptions": "Optionen speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Optionen gespeichert",
+      "renameTitle": "{from} in {to} umbenennen?",
+      "renameBody": "{count} Variantennamen werden aktualisiert; Codes bleiben unverändert.",
+      "renameConfirm": "Umbenennen"
+    },
+    "defaults": {
+      "title": "Familien-Standards",
+      "summary": "{kind} · {rate} pro {unit}",
+      "noRate": "kein Preis",
+      "noUnit": "Einheit",
+      "description": "Neue Varianten erben diese Werte. Änderungen schreiben bestehende Varianten nie um.",
+      "save": "Standards speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Standards gespeichert"
+    },
+    "itemTab": {
+      "title": "Varianten",
+      "openFamily": "Familie öffnen",
+      "loadFailed": "Die Varianten konnten nicht geladen werden",
+      "siblingCount": "{count} in {family}"
+    },
+    "convert": {
+      "action": "In Familie umwandeln",
+      "optionTitle": "Welche Option trägt dieser Artikel?",
+      "optionLabel": "Optionsname",
+      "valueTitle": "Welches {option} ist dieser Artikel?",
+      "valueLabel": "Optionswert",
+      "done": "Familie {family} angelegt"
+    }
   }
 }

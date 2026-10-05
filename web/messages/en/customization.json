@@ -24,6 +24,7 @@
     "opportunity": "Opportunity",
     "activity": "Activity",
     "item": "Item",
+    "item_family": "Product family",
     "account": "Account",
     "bank_transaction": "Bank transaction",
     "pay_run": "Pay run",

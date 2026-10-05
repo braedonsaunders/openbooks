@@ -2,7 +2,7 @@
   "list": {
     "title": "Articles et services",
     "description": "Le catalogue derrière chaque ligne de document — services, main-d’œuvre, frais et remises.",
-    "searchPlaceholder": "Rechercher nom, code, catégorie…",
+    "searchPlaceholder": "Rechercher nom, code, catégorie, famille…",
     "kindFilter": "Type",
     "emptyTitle": "Aucun article pour l’instant",
     "emptyDescription": "Ajoutez un premier service, poste de main-d’œuvre ou frais pour démarrer le catalogue.",
@@ -10,7 +10,8 @@
     "createDraftFailed": "Impossible de créer un article brouillon",
     "view": "Vue",
     "viewCatalog": "Catalogue",
-    "viewRateBooks": "Barèmes"
+    "viewRateBooks": "Barèmes",
+    "viewFamilies": "Familles"
   },
   "labels": {
     "code": "Code",
@@ -23,7 +24,8 @@
     "incomeAccount": "Compte de produits",
     "expenseAccount": "Compte de charges",
     "payrollCostingAccount": "Compte de coût de paie",
-    "taxCode": "Code de taxe"
+    "taxCode": "Code de taxe",
+    "family": "Famille"
   },
   "kinds": {
     "service": "Service",
@@ -282,5 +284,101 @@
     "effectiveTo": "En vigueur jusqu’au",
     "empty": "Aucune juste valeur pour l’instant — le prix SSP unique ci-dessus est utilisé.",
     "confirmDelete": "Supprimer ce prix en juste valeur ?"
+  },
+  "families": {
+    "title": "Familles de produits",
+    "description": "Une ligne par matrice d'options — des tailles et couleurs qui se vendent comme des articles à part entière.",
+    "empty": "Aucune famille de produits",
+    "newFamily": "Nouvelle famille",
+    "drawerTitle": "Famille de produits",
+    "created": "Famille créée",
+    "creating": "Création…",
+    "create": "Créer la famille",
+    "createHint": "Décrivez le produit une fois, ajoutez ses options, puis générez chaque combinaison comme son propre article.",
+    "loadFailed": "Impossible de charger cette famille",
+    "notFound": "Cette famille n'appartient pas à cette organisation",
+    "summary": "{options} options · {variants} déclinaisons",
+    "fields": {
+      "code": "Code famille",
+      "status": "Statut"
+    },
+    "variants": {
+      "title": "Déclinaisons",
+      "description": "Chaque combinaison se vend, se stocke et se chiffre comme son propre article. Modifiez le prix ou le code-barres en ligne, ou sélectionnez des lignes pour des modifications groupées."
+    },
+    "grid": {
+      "code": "Code",
+      "price": "Prix",
+      "cost": "Coût",
+      "barcode": "Code-barres",
+      "onHand": "En stock",
+      "empty": "Aucune déclinaison — générez les combinaisons manquantes pour remplir cette matrice.",
+      "selected": "{count} sélectionnées",
+      "setPrice": "Fixer le prix",
+      "setCost": "Fixer le coût",
+      "setBarcode": "Fixer le code",
+      "activate": "Activer",
+      "deactivate": "Désactiver",
+      "activateTitle": "Activer {count} déclinaisons ?",
+      "deactivateTitle": "Désactiver {count} déclinaisons ?",
+      "activateBody": "Elles redeviennent disponibles sur les documents.",
+      "deactivateBody": "Elles restent dans l'historique mais ne peuvent plus être vendues.",
+      "bulkSaved": "{count} déclinaisons mises à jour",
+      "priceFor": "Prix de {name}",
+      "barcodeFor": "Code de {name}"
+    },
+    "generate": {
+      "action": "Générer les déclinaisons manquantes",
+      "working": "Génération…",
+      "nothingMissing": "Chaque combinaison existe déjà",
+      "confirmTitle": "Créer {count} déclinaisons ?",
+      "confirmBody": "Premiers codes : {sample}. Les codes ne sont jamais renommés ensuite.",
+      "confirm": "Générer",
+      "done": "{count} déclinaisons créées"
+    },
+    "options": {
+      "title": "Options",
+      "description": "La matrice d'options dont chaque déclinaison est issue. L'ordre fixe l'ordre des codes et des noms.",
+      "empty": "Aucune option",
+      "emptyHint": "Ajoutez la première option, par exemple Taille avec S, M, L.",
+      "addOption": "Ajouter une option",
+      "namePlaceholder": "Nom d'option, p. ex. Taille",
+      "nameLabel": "Nom de l'option {position}",
+      "position": "Option {position}",
+      "removeOption": "Supprimer l'option {name}",
+      "unnamed": "option sans nom",
+      "valuesLabel": "Valeurs de {name}",
+      "valuesPlaceholder": "Saisissez une valeur puis Entrée",
+      "saveOptions": "Enregistrer les options",
+      "saving": "Enregistrement…",
+      "saved": "Options enregistrées",
+      "renameTitle": "Renommer {from} en {to} ?",
+      "renameBody": "{count} noms de déclinaisons sont mis à jour ; les codes restent inchangés.",
+      "renameConfirm": "Renommer"
+    },
+    "defaults": {
+      "title": "Valeurs de la famille",
+      "summary": "{kind} · {rate} par {unit}",
+      "noRate": "sans prix",
+      "noUnit": "unité",
+      "description": "Les nouvelles déclinaisons héritent de ces valeurs. Les modifier ne réécrit jamais les déclinaisons existantes.",
+      "save": "Enregistrer les valeurs",
+      "saving": "Enregistrement…",
+      "saved": "Valeurs enregistrées"
+    },
+    "itemTab": {
+      "title": "Déclinaisons",
+      "openFamily": "Ouvrir la famille",
+      "loadFailed": "Impossible de charger les déclinaisons",
+      "siblingCount": "{count} dans {family}"
+    },
+    "convert": {
+      "action": "Convertir en famille",
+      "optionTitle": "Quelle option porte cet article ?",
+      "optionLabel": "Nom d'option",
+      "valueTitle": "Quel {option} est cet article ?",
+      "valueLabel": "Valeur d'option",
+      "done": "Famille {family} créée"
+    }
   }
 }

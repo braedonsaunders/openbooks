@@ -100,6 +100,8 @@
   },
   "lineGrid": {
     "lineNumberHeader": "Línea",
+    "selectAll": "Seleccionar todas las filas",
+    "selectRow": "Seleccionar fila {row}",
     "addLine": "Agregar línea",
     "keyboardHint": "Enter agrega/baja · Alt+↑/↓ reordena · ⌘D duplica · ⌘⌫ elimina",
     "lineActionsAria": "Acciones de la línea {number}",
