@@ -219,7 +219,8 @@ export async function loadEntityRole(
                   display_name: '',
                   legal_name: null,
                   short_code: null,
-                  kind: 'company',
+                  // Employees are people; customers and vendors default to a company.
+                  kind: role === 'employee' ? 'person' : 'company',
                   email: null,
                   phone: null,
                   website: null,
