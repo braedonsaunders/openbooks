@@ -14,6 +14,7 @@ const ACTIONS = ['insert', 'update', 'delete', 'post', 'void', 'approve', 'rejec
 function documentReadPermission(kind: string): string {
   if (kind === 'expense_report') return 'expenses.read'
   if (kind === 'journal' || kind === 'deposit' || kind === 'transfer') return 'gl.read'
+  if (kind === 'cash_sale' || kind === 'cash_refund') return 'cash_sales.read'
   if (kind === 'customer_invoice' || kind === 'customer_credit' || kind === 'customer_payment'
     || kind === 'quote' || kind === 'sales_order') return 'ar.read'
   return 'ap.read'

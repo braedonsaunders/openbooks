@@ -627,7 +627,7 @@ export async function customerData(
     // the posted document rate to the posting subsidiary's functional; the
     // second leg to presentation runs per (party, functional) below.
     (db.execute(sql`
-      with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed, from, to)})
+      with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)})
       select movement.party_id as id, coalesce(p.display_name, 'Unknown') as name,
         movement.func,
         sum(movement.direction) as txn_count,
@@ -644,11 +644,11 @@ export async function customerData(
     // this ledger has no return-auth kind, so returns are always 0).
     // Credit value translates per (party, functional) below.
     (db.execute(sql`
-      with movement as (${customerDocumentMovements(orgId, ['customer_credit', 'customer_invoice'], allowed, from, to)})
+      with movement as (${customerDocumentMovements(orgId, ['customer_credit', 'cash_refund', 'customer_invoice'], allowed, from, to)})
       select movement.party_id as id, movement.func,
-        sum(movement.direction) filter (where movement.kind = 'customer_credit') as credit_count,
-        coalesce(sum(movement.amount * movement.direction) filter (where movement.kind = 'customer_credit'), 0) as credit_value,
-        max(movement.event_date) filter (where movement.kind = 'customer_credit')::text as late,
+        sum(movement.direction) filter (where movement.kind in ('customer_credit', 'cash_refund')) as credit_count,
+        coalesce(sum(movement.amount * movement.direction) filter (where movement.kind in ('customer_credit', 'cash_refund')), 0) as credit_value,
+        max(movement.event_date) filter (where movement.kind in ('customer_credit', 'cash_refund'))::text as late,
         sum(movement.direction) filter (where movement.kind = 'customer_invoice') as order_count
       from movement
       group by movement.party_id, movement.func
@@ -706,7 +706,7 @@ export async function customerData(
     // is the same test — the invoice itself qualifies, so "no earlier document"
     // and "first document is this month" coincide.
     (db.execute(sql`
-      with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed, from, to)})
+      with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)})
       select to_char(movement.event_date, 'YYYY-MM') as month,
         movement.func,
         sum(movement.amount * movement.direction) as revenue,
@@ -717,14 +717,14 @@ export async function customerData(
     // Growth counts — distinct customers never merge across functionals, so
     // they stay on their own month grain while revenue translates above.
     (db.execute(sql`
-      with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed, from, to)}),
+      with movement as (${customerDocumentMovements(orgId, ['customer_invoice', 'cash_sale'], allowed, from, to)}),
       monthly as (
         select party_id, date_trunc('month', event_date) as month, sum(direction) as txn_count
           from movement group by party_id, date_trunc('month', event_date)
       ), first_doc as (
         select party_id, min(date_trunc('month', posting_date)) as first_month
           from documents
-         where org_id = ${orgId} and kind in ('customer_invoice', 'sales_order')
+         where org_id = ${orgId} and kind in ('customer_invoice', 'cash_sale', 'sales_order')
            and status in ('posted', 'voided') and party_id is not null
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
          group by party_id

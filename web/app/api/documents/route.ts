@@ -31,7 +31,7 @@ const documentLineSchema = z.object({
   distributionLocked: z.boolean().nullable().optional(),
 });
 const POSTBodySchema1 = z.object({
-  kind: z.enum(['customer_invoice', 'customer_credit', 'vendor_bill', 'vendor_credit', 'card_charge', 'card_refund', 'check', 'deposit', 'transfer'], { error: 'unknown document kind' }),
+  kind: z.enum(['customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund', 'vendor_bill', 'vendor_credit', 'card_charge', 'card_refund', 'check', 'deposit', 'transfer'], { error: 'unknown document kind' }),
   expectedUpdatedAt: z.string().optional(),
   partyId: z.string().uuid().nullable().optional(), paymentCardId: z.string().uuid().nullable().optional(),
   documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),

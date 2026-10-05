@@ -1,6 +1,8 @@
 /** Optional Features switchboard gates for document kinds. Shared by engine
  * jobs and the client-safe web document registry. */
 export const DOC_KIND_FEATURE: Partial<Record<string, string>> = {
+  cash_sale: "cashSales",
+  cash_refund: "cashSales",
   quote: "orders",
   sales_order: "orders",
   purchase_order: "orders",

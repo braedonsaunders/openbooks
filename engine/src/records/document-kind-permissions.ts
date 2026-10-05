@@ -5,7 +5,7 @@
  * documents adapter. Client-safe: no imports.
  */
 
-export type DocumentPermissionNamespace = "ap" | "ar" | "gl";
+export type DocumentPermissionNamespace = "ap" | "ar" | "cash_sales" | "gl";
 
 /** Permission namespace of every drawer-registry document kind. */
 export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<Record<string, DocumentPermissionNamespace>> = {
@@ -13,6 +13,13 @@ export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<Record<string, DocumentPerm
   vendor_credit: "ap",
   customer_invoice: "ar",
   customer_credit: "ar",
+  // Cash sales and refunds carry their own `cash_sales.*` grants — separate
+  // from `ar.*` so till operators can sell and refund without holding the
+  // receivables book — while every helper below keeps working: the keys are
+  // derived from the namespace (`cash_sales.read`, `cash_sales.create`,
+  // `cash_sales.post`), the same hierarchical shape as every other module.
+  cash_sale: "cash_sales",
+  cash_refund: "cash_sales",
   rma: "ar",
   card_charge: "ap",
   card_refund: "ap",

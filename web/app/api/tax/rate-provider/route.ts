@@ -35,7 +35,7 @@ const quoteFields = {
   currency: z.string().nullable().optional(),
   itemCode: z.string().nullable().optional(),
   quotedOn: z.string().nullable().optional(),
-  documentKind: z.enum(["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit"]).nullable().optional(),
+  documentKind: z.enum(["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit", "cash_sale", "cash_refund"]).nullable().optional(),
   counterpartyCode: z.string().nullable().optional(),
   shipFrom: addressSchema.optional(),
   shipTo: addressSchema.optional(),
@@ -140,7 +140,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
     if (body.currency != null && typeof body.currency !== "string") return NextResponse.json({ error: "invalid currency" }, { status: 422 });
     if (body.itemCode != null && typeof body.itemCode !== "string") return NextResponse.json({ error: "invalid item code" }, { status: 422 });
     if (body.quotedOn != null && typeof body.quotedOn !== "string") return NextResponse.json({ error: "invalid quotedOn" }, { status: 422 });
-    const documentKinds: ProviderDocumentKind[] = ["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit"];
+    const documentKinds: ProviderDocumentKind[] = ["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit", "cash_sale", "cash_refund"];
     const documentKind = typeof body.documentKind === "string" && (documentKinds as string[]).includes(body.documentKind)
       ? (body.documentKind as ProviderDocumentKind)
       : undefined;

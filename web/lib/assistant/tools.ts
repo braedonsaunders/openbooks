@@ -381,6 +381,8 @@ const KIND_PERM: Record<string, string> = {
   card_refund: "ap.read",
   customer_invoice: "ar.read",
   customer_credit: "ar.read",
+  cash_sale: "cash_sales.read",
+  cash_refund: "cash_sales.read",
   sales_order: "ar.read",
   quote: "ar.read",
   expense_report: "expenses.read",
@@ -411,7 +413,7 @@ const findDocuments: AssistantToolDef = {
   category: "search",
   gate: {
     mode: "anyOf",
-    perms: ["ap.read", "ar.read", "gl.read", "expenses.read", "payroll.read", "projects.read"],
+    perms: ["ap.read", "ar.read", "cash_sales.read", "gl.read", "expenses.read", "payroll.read", "projects.read"],
   },
   inputSchema: z.object({
     kind: z.string().max(40).optional()
@@ -1044,7 +1046,7 @@ const partyConcentration: AssistantToolDef = {
     const range = await resolveToolRange(authz.user.orgId, a);
     if ("error" in range) return { ok: false, error: range.error };
     const kinds = a.side === "customer"
-      ? ["customer_invoice", "customer_credit"]
+      ? ["customer_invoice", "customer_credit", "cash_sale", "cash_refund"]
       : ["vendor_bill", "vendor_credit"];
     const limit = Math.min(a.limit ?? 20, 50);
     // Concentration ranks posted documents: scope them to the caller's

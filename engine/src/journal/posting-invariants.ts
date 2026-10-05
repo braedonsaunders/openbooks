@@ -53,6 +53,11 @@ export function assertCreditMemoDirection(
       `a credit memo must carry a positive total; a negative balance owed by the customer is an invoice`,
     );
   }
+  if (doc.kind === "cash_refund" && !migration && toUnits(doc.total) < 0n) {
+    throw new PostingError(
+      `a cash refund must carry a positive total; money taken from the customer is a cash sale`,
+    );
+  }
   if (doc.kind === "vendor_credit" && !migration && toUnits(doc.total) < 0n) {
     throw new PostingError(
       `a credit memo must carry a positive total; a negative balance owed to the vendor is a bill`,

@@ -200,16 +200,16 @@ export async function computeUsNexusStatus(
            d.currency,
            d.fx_rate::text as fx_rate,
            o.base_currency,
-           (case when d.kind = 'customer_credit' then -d.subtotal else d.subtotal end)::text as amount,
+           (case when d.kind in ('customer_credit', 'cash_refund') then -d.subtotal else d.subtotal end)::text as amount,
            -- Marketplace-facilitated lines, signed like the header: states
            -- whose rule excludes facilitator sales measure without them.
            coalesce(m.marketplace_amount, '0') as marketplace_amount,
-           case when d.kind = 'customer_invoice' then 1 else 0 end as is_invoice,
+           case when d.kind in ('customer_invoice', 'cash_sale') then 1 else 0 end as is_invoice,
            coalesce(d.posting_date, d.document_date)::text as as_of
       from documents d
       join orgs o on o.id = d.org_id
       left join lateral (
-        select sum(case when d.kind = 'customer_credit' then -dl.amount else dl.amount end)::text as marketplace_amount
+        select sum(case when d.kind in ('customer_credit', 'cash_refund') then -dl.amount else dl.amount end)::text as marketplace_amount
           from document_lines dl
          where dl.org_id = d.org_id and dl.document_id = d.id
            and dl.marketplace_facilitator is not null
@@ -230,7 +230,7 @@ export async function computeUsNexusStatus(
          limit 1
       ) q on true
      where d.org_id = ${orgId}
-       and d.kind in ('customer_invoice', 'customer_credit')
+       and d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
        and d.status = 'posted'
        and coalesce(d.posting_date, d.document_date) between ${measuredFrom} and ${to}
        ${subsidiaryScopeFilter(allowedSubsidiaryIds)}

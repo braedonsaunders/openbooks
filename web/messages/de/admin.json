@@ -1072,6 +1072,7 @@
       "ap": "Kreditorenbuchhaltung",
       "ar": "Debitorenbuchhaltung",
       "stored_value": "Guthaben",
+      "cash_sales": "Barverkäufe",
       "usage": "Nutzungsabrechnung",
       "contract-costs": "Vertragskosten",
       "autopay": "Automatische Abbuchung",
@@ -1124,6 +1125,9 @@
     "stored_value_read": "Geschenkkarten und Guthaben ansehen",
     "stored_value_manage": "Geschenkkarten und Guthaben ausgeben und einlösen",
     "stored_value_adjust": "Guthaben außerhalb von Belegen anpassen",
+    "cash_sales_read": "Barverkäufe und Erstattungen anzeigen",
+    "cash_sales_create": "Barverkäufe und Erstattungen erstellen und übermitteln",
+    "cash_sales_post": "Barverkäufe und Erstattungen im Hauptbuch buchen",
     "usage_read": "Gemessene Nutzung anzeigen",
     "usage_manage": "Nutzungsmesser, Tarifpläne und importierte Nutzungsdatensätze verwalten",
     "usage_bill": "Nutzung tarifieren und Abonnementgebühren abrechnen",
@@ -6328,6 +6332,10 @@
     "promotions": {
       "title": "Aktionen",
       "description": "Rabattcodes und Kampagnen für Verkaufsbelege, mit Erfolgsauswertung je Aktion."
+    },
+    "cashSales": {
+      "description": "Direkt bezahlte Verkäufe und Erstattungen mit Zahlungsaufteilung, ohne Debitorenbuchung.",
+      "title": "Barverkäufe"
     },
     "projects": {
       "description": "Aufträge mit Budgets, Kalkulation, Abrechnung und Rentabilität.",

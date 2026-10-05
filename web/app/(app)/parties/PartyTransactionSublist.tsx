@@ -46,6 +46,7 @@ const STATUS_KEYS: Record<string, string> = {
 function transactionTarget(row: TransactionRow): { path: string; param: string } {
   if (row.kind === 'vendor_bill' || row.kind === 'vendor_credit') return { path: '/ap', param: 'doc' }
   if (row.kind === 'customer_invoice' || row.kind === 'customer_credit') return { path: '/ar', param: 'doc' }
+  if (row.kind === 'cash_sale' || row.kind === 'cash_refund') return { path: '/cash-sales', param: 'doc' }
   if (row.kind === 'vendor_payment') return { path: '/payments', param: 'payment' }
   if (row.kind === 'customer_payment') return { path: '/receipts', param: 'payment' }
   if (row.kind === 'purchase_order') return { path: '/purchase-orders', param: 'order' }

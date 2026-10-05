@@ -1072,6 +1072,7 @@
       "ap": "应付账款",
       "ar": "应收账款",
       "stored_value": "储值",
+      "cash_sales": "现金销售",
       "usage": "按用量计费",
       "contract-costs": "合同成本",
       "autopay": "自动扣款",
@@ -1124,6 +1125,9 @@
     "stored_value_read": "查看礼品卡和商店信用",
     "stored_value_manage": "发行和兑换礼品卡和商店信用",
     "stored_value_adjust": "在单据之外调整储值余额",
+    "cash_sales_read": "查看现金销售与退款",
+    "cash_sales_create": "创建并提交现金销售与退款",
+    "cash_sales_post": "将现金销售与退款过账至总账",
     "usage_read": "查看计量用量",
     "usage_manage": "管理用量计量器、费率计划和导入的用量记录",
     "usage_bill": "为用量定价并开具订阅费用账单",
@@ -6100,6 +6104,10 @@
     "promotions": {
       "title": "促销",
       "description": "应用于销售单据的折扣码和促销活动，并提供促销效果报表。"
+    },
+    "cashSales": {
+      "title": "现金销售",
+      "description": "收款时即付清的销售小票与退款（按结算方式），不经过应收账款。"
     },
     "revenueRecognition": {
       "title": "收入确认",

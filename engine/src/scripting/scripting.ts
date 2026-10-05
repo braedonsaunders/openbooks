@@ -140,6 +140,9 @@ const BEFORE_POST_PROTECTED_CUSTOM_FIELDS = new Set([
   "feeAmount",
   "feeIncomeAccountId",
   "taxProviderAddresses",
+  // Cash-sale tenders choose the debit accounts, so they are approved
+  // financial evidence: a before_post script must never rewrite them.
+  "tenders",
 ]);
 
 /** Payment instructions are approved financial evidence, never flow/script

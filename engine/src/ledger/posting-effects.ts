@@ -39,9 +39,11 @@ export const POSTING_EFFECT_TERMINAL_NOTICE_KIND = "posting_effect_terminal_fail
 
 const POSTING_EFFECT_STRANDED_IMPACT: Record<string, string> = {
   customer_invoice: "inventory issues (cost of sales) and revenue-recognition obligations",
+  cash_sale: "inventory issues (cost of sales) and revenue-recognition obligations",
   vendor_bill: "inventory receipts",
   vendor_credit: "inventory returns",
   customer_credit: "inventory returns",
+  cash_refund: "inventory returns",
 };
 
 export function postingEffectTerminalNotice(input: {

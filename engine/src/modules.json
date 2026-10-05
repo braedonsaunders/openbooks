@@ -331,6 +331,7 @@
         "receivables",
         "records",
         "revenue",
+        "sales",
         "scripting",
         "stored-value",
         "tax",
@@ -536,7 +537,7 @@
       ]
     },
     "sales": {
-      "description": "Sales orders, credit exposure and item rate pricing ladders.",
+      "description": "Sales orders, paid-at-sale documents, credit exposure and item rate pricing ladders.",
       "dependsOn": [
         "connectors",
         "flows",

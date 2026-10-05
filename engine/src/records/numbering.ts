@@ -49,6 +49,8 @@ const CANONICAL_PREFIXES: Record<string, string> = {
   vendor_bill: "BILL-",
   vendor_credit: "VCRED-",
   customer_credit: "CM-",
+  cash_sale: "CS-",
+  cash_refund: "CR-",
   expense_report: "EXP-",
   journal: "JE-",
   vendor_payment: "PAY-",
