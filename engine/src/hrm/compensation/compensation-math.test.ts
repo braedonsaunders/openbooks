@@ -6,6 +6,7 @@ import {
   compaRatio,
   evaluateFormula,
   evaluateExactFormula,
+  exactGuidelineTenure,
   exactReviewRating,
   validateGuidelineFormula,
   validateMatrixGuideline,
@@ -16,6 +17,17 @@ import {
   solveLinearSystem,
 } from "./compensation-math.ts";
 import { CompensationError } from "./errors.ts";
+
+test("guideline tenure remains decimal across leap days and the early-year boundary", () => {
+  assert.equal(exactGuidelineTenure("2020-01-01", "2024-01-01"), "4.000000000000000000");
+  assert.equal(exactGuidelineTenure("2024-02-28", "2024-03-01"), "0.005475701574264203");
+  assert.equal(exactGuidelineTenure("0099-12-31", "0100-01-01"), "0.002737850787132101");
+  assert.equal(exactGuidelineTenure("2026-04-02", "2026-04-01"), "0.000000000000000000");
+  assert.equal(evaluateExactFormula("tenure_years * 365.25", {
+    rating: null, compaRatio: "1", tenureYears: exactGuidelineTenure("2024-02-28", "2024-03-01"),
+  }), "2.000000");
+  assert.throws(() => exactGuidelineTenure("2025-02-29", "2026-04-01"), /valid YYYY-MM-DD calendar date/);
+});
 
 describe("compa-ratio", () => {
   test("rate over target to ten places", () => {

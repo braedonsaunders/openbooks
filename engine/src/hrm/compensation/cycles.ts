@@ -24,6 +24,7 @@ import { CompensationError, MERIT_CYCLES_NEED_PAYROLL } from "./errors.ts";
 import {
   compaRatio,
   evaluateExactFormula,
+  exactGuidelineTenure,
   exactReviewRating,
   validateGuidelineFormula,
   validateMatrixGuideline,
@@ -494,7 +495,7 @@ interface ScopeEmployment {
   departmentId: string | null;
   locationId: string | null;
   positionId: string | null;
-  tenureYears: number;
+  tenureYears: string;
 }
 
 async function inServiceEmployments(orgId: string, scope: CycleScope, asOf: string): Promise<ScopeEmployment[]> {
@@ -531,8 +532,7 @@ async function inServiceEmployments(orgId: string, scope: CycleScope, asOf: stri
             or aav.department_id is not distinct from ${scope.departmentId ?? null}::uuid)`)).rows;
   return rows.map((row) => {
     const started = row.started_on === null ? asOf : String(row.started_on).slice(0, 10);
-    const tenureYears =
-      Math.max(0, (Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${started}T00:00:00Z`)) / 365.25 / 86400000);
+    const tenureYears = exactGuidelineTenure(started, asOf);
     return {
       employmentId: row.employment_id,
       workerPartyId: row.worker_party_id,
@@ -682,7 +682,7 @@ async function resolveLineGuideline(
     const pct = evaluateExactFormula(expr, {
       rating: review?.rating ?? null,
       compaRatio: ratio,
-      tenureYears: String(employment.tenureYears),
+      tenureYears: employment.tenureYears,
     });
     guidelineMinPct = pct;
     guidelineMaxPct = pct;
