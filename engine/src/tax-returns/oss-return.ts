@@ -82,13 +82,13 @@ function demandPeriod(scheme: OssScheme, from: string, to: string): void {
   }
 }
 
-interface RegistrationRow {
+type RegistrationRow = {
   id: string;
   identificationState: string;
   registrationNumber: string;
 }
 
-interface AttributedLine {
+type AttributedLine = {
   country: string;
   ratePercent: string;
   baseAmount: string;

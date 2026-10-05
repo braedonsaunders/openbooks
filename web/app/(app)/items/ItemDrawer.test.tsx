@@ -58,6 +58,11 @@ const item = {
   create_plans_on: 'billing',
   revenue_allocation: 'normal',
   custom: {},
+  weight: null,
+  weight_unit: null,
+  dimensions: null,
+  hs_code: null,
+  country_of_origin: null,
 }
 const payload = { item, incomeAccountName: null, expenseAccountName: null, payrollCostingAccountName: null, taxCodeName: null }
 const tick = () => new Promise((resolve) => setTimeout(resolve, 20))

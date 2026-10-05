@@ -22,7 +22,7 @@ const PUTBodySchema = z.object({
   evidence: z.array(EvidenceSchema).max(6),
 });
 
-interface EvidenceRow {
+type EvidenceRow = {
   kind: string
   countryCode: string
   source: string

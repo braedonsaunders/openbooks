@@ -225,7 +225,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       const disputeAmount = String(b.disputeAmount)
       return {
         id: String(b.id),
-        provider: b.provider,
+        provider: b.provider as PspSettlementRow['provider'],
         providerLabel: t(`providers.${b.provider}`),
         externalRef: String(b.externalRef),
         settlementDate: settlementDateLabel(String(b.settlementDate).slice(0, 10)),
