@@ -103,7 +103,15 @@ const validateRestockingFeeWrite: SetupEntityValidationHook = async ({ orgId, bo
   try {
     validateRestockingFeePolicy({
       ...merged,
+      // Form values arrive untyped; the engine validator refines and refuses
+      // anything unusable, so these casts only satisfy the compiler.
+      itemCategory: merged.itemCategory as string | null,
+      itemId: merged.itemId as string | null,
       kind: merged.kind as 'percent' | 'fixed',
+      feePercent: merged.feePercent as string | null,
+      feeAmountMinor: merged.feeAmountMinor as string | null,
+      currency: merged.currency as string | null,
+      effectiveTo: merged.effectiveTo as string | null,
       waivable: body.waivable === undefined ? undefined : Boolean(body.waivable),
     })
     // One open policy per scope, serialized with the write transaction.
