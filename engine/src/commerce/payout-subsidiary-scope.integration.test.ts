@@ -742,8 +742,9 @@ test("refund claims count only posted receipts visible in the payout's entity", 
     const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
     assert.equal(result.lines.length, 1);
     const [verdict] = result.lines;
-    assert.equal(verdict!.status, "matched", `the visible posted refund wins outright, got ${JSON.stringify(verdict)}`);
-    assert.ok(verdict!.status === "matched" && verdict.documentId === refunded.documentId && verdict.via === "channel_order");
+    assert.ok(verdict, "the batch yields its refund verdict");
+    assert.equal(verdict.status, "matched", `the visible posted refund wins outright, got ${JSON.stringify(verdict)}`);
+    assert.ok(verdict.status === "matched" && verdict.documentId === refunded.documentId && verdict.via === "channel_order");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -776,8 +777,9 @@ test("hidden refund claims never read as several posted refunds", { skip: !DB },
     const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
     assert.equal(result.lines.length, 1);
     const [verdict] = result.lines;
-    assert.equal(verdict!.status, "unmatched");
-    assert.ok(verdict!.status === "unmatched");
+    assert.ok(verdict, "the batch yields its refund verdict");
+    assert.equal(verdict.status, "unmatched");
+    assert.ok(verdict.status === "unmatched");
     assert.equal(verdict.reason, "refund_unposted", `hidden refund claims never read as several, got ${verdict.reason}`);
     for (const text of [verdict.reason, verdict.remedy ?? ""]) {
       assert.ok(!text.includes(docB.number), `hidden receipt number leaks: ${text}`);
@@ -801,8 +803,9 @@ test("an order outside the payout's entity never makes its line ambiguous", { sk
     const both = new Set([org.subsidiaryId, subB]);
     const result = await matchPayoutLines(org.orgId, batchShop, actor, both);
     const line = result.lines.find((verdict) => verdict.lineId === lines.shopVisible);
-    assert.equal(line!.status, "matched", `the home order resolves alone, got ${JSON.stringify(line)}`);
-    assert.ok(line!.status === "matched" && line.documentId === docA.id && line.via === "channel_order");
+    assert.ok(line, "the shop line reports its verdict");
+    assert.equal(line.status, "matched", `the home order resolves alone, got ${JSON.stringify(line)}`);
+    assert.ok(line.status === "matched" && line.documentId === docA.id && line.via === "channel_order");
   } finally {
     await dropScratchOrg(org.orgId);
   }
