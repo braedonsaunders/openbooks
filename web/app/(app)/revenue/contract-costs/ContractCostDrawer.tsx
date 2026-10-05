@@ -103,62 +103,62 @@ export function ContractCostDrawer({
           ariaLabel={a.contractNumber ?? t("drawer.unlinked")}
         />
         <div hidden={panel !== "schedule"} className="space-y-2">
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold">{t("drawer.scheduleTitle")}</h3>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("drawer.month")}</TableHead>
-                <TableHead>{t("drawer.period")}</TableHead>
-                <TableHead className="text-right">{t("drawer.planned")}</TableHead>
-                <TableHead className="text-right">{t("drawer.posted")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payload.schedule.map((line) => (
-                <TableRow key={line.month}>
-                  <TableCell className="font-mono">{line.month}</TableCell>
-                  <TableCell>{line.periodName ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(line.amount, { currency: a.currency })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {line.posted && line.entryId ? (
-                      <Link
-                        href={`/accounting/journal?entry=${line.entryId}`}
-                        className="font-medium text-teal-700 dark:text-teal-300"
-                      >
-                        {t("drawer.viewEntry")}
-                      </Link>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">{t("drawer.scheduleTitle")}</h3>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("drawer.month")}</TableHead>
+                  <TableHead>{t("drawer.period")}</TableHead>
+                  <TableHead className="text-right">{t("drawer.planned")}</TableHead>
+                  <TableHead className="text-right">{t("drawer.posted")}</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
+              </TableHeader>
+              <TableBody>
+                {payload.schedule.map((line) => (
+                  <TableRow key={line.month}>
+                    <TableCell className="font-mono">{line.month}</TableCell>
+                    <TableCell>{line.periodName ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {money(line.amount, { currency: a.currency })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {line.posted && line.entryId ? (
+                        <Link
+                          href={`/accounting/journal?entry=${line.entryId}`}
+                          className="font-medium text-teal-700 dark:text-teal-300"
+                        >
+                          {t("drawer.viewEntry")}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </section>
         </div>
         <div hidden={panel !== "journal"} className="space-y-2">
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold">{t("drawer.entriesTitle")}</h3>
-          <ul className="space-y-1">
-            {payload.entries.map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-slate-600 dark:text-slate-400">
-                  {t(`event.${entry.origin}`)} · {entry.postingDate} · {entry.periodName}
-                </span>
-                <Link
-                  href={`/accounting/journal?entry=${entry.id}`}
-                  className="font-medium text-teal-700 dark:text-teal-300"
-                >
-                  {t("drawer.viewEntry")}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">{t("drawer.entriesTitle")}</h3>
+            <ul className="space-y-1">
+              {payload.entries.map((entry) => (
+                <li key={entry.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">
+                    {t(`event.${entry.origin}`)} · {entry.postingDate} · {entry.periodName}
+                  </span>
+                  <Link
+                    href={`/accounting/journal?entry=${entry.id}`}
+                    className="font-medium text-teal-700 dark:text-teal-300"
+                  >
+                    {t("drawer.viewEntry")}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
 
         <DisclosureSection title={t("drawer.advancedTitle")} summary={t("drawer.advancedSummary")}>

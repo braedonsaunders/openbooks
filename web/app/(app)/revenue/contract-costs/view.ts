@@ -88,6 +88,10 @@ export interface ContractCostsData {
   } | null;
   drawerOpen: boolean;
   drawer: ContractCostDrawerProps | null;
+  activeView: "attention" | "assets";
+  tabs: { href: string; label: string; active?: boolean; count?: number | null }[];
+  onAttention: boolean;
+  onAssets: boolean;
 }
 
 async function loadAssetPayload(assetId: string, orgId: string): Promise<ContractCostAssetPayload | null> {
@@ -259,6 +263,18 @@ export async function loadContractCosts(
 
   const assetId = typeof sp.asset === "string" ? sp.asset : undefined;
   const payload = assetId && isUuid(assetId) ? await loadAssetPayload(assetId, orgId) : null;
+  // Attention and assets are sibling views behind URL tabs: one body shows
+  // at a time. An open drawer forces its assets list; otherwise attention
+  // leads while actionable.
+  const requestedView = pickString(sp.view);
+  const activeView =
+    payload !== null
+      ? "assets"
+      : requestedView === "assets" || requestedView === "attention"
+        ? requestedView
+        : attention.length > 0
+          ? "attention"
+          : "assets";
   const requestedReturn = pickString(sp.drawerReturn);
 
   const drawer: ContractCostDrawerProps | null = payload
@@ -301,6 +317,22 @@ export async function loadContractCosts(
       : null,
     drawerOpen: Boolean(drawer),
     drawer,
+    activeView,
+    tabs: [
+      {
+        href: "/revenue/contract-costs?view=attention",
+        label: t("views.attention"),
+        active: activeView === "attention",
+        count: attention.length,
+      },
+      {
+        href: "/revenue/contract-costs?view=assets",
+        label: t("views.assets"),
+        active: activeView === "assets",
+      },
+    ],
+    onAttention: activeView === "attention",
+    onAssets: activeView === "assets",
   };
 }
 
@@ -315,6 +347,7 @@ export function contractCostsSpec(data: ContractCostsData): PageSpec {
         title: f("title"),
         description: f("description"),
         actions: [
+          widget("module-home-tabs", { tabs: data.tabs }),
           widget("run-amortization", {
             periods: data.periods,
             selectedPeriodId: data.selectedPeriodId,
@@ -335,21 +368,27 @@ export function contractCostsSpec(data: ContractCostsData): PageSpec {
       }),
     ],
     body: [
-      widgetBlock("contract-costs-workspace", {
-        assetBalance: data.assetBalance,
-        periodAmortized: data.periodAmortized,
-        baseCurrency: data.baseCurrency,
-        attention: data.attention,
-        canManage: data.canManage,
-        policy: data.policy,
-      }),
-      widgetBlock("entity-list-view", {
-        recordType: "contract_cost_asset",
-        sp: data.currentParams,
-        drawer: data.drawer
-          ? { widget: "contract-cost-drawer", props: { drawer: data.drawer } }
-          : null,
-      }),
+      {
+        ...widgetBlock("contract-costs-workspace", {
+          assetBalance: data.assetBalance,
+          periodAmortized: data.periodAmortized,
+          baseCurrency: data.baseCurrency,
+          attention: data.attention,
+          canManage: data.canManage,
+          policy: data.policy,
+        }),
+        when: f("onAttention"),
+      },
+      {
+        ...widgetBlock("entity-list-view", {
+          recordType: "contract_cost_asset",
+          sp: data.currentParams,
+          drawer: data.drawer
+            ? { widget: "contract-cost-drawer", props: { drawer: data.drawer } }
+            : null,
+        }),
+        when: f("onAssets"),
+      },
     ],
   });
 }
