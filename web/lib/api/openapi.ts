@@ -1036,6 +1036,64 @@ export function buildOpenApiSpec(
       responses: { "200": { description: "FX rates" }, "404": { description: "multiCurrency is off" } },
     },
   };
+  paths["/api/v1/inventory/available"] = {
+    get: {
+      summary: "Available to promise by item and warehouse",
+      description:
+        "On hand, committed and available per item and warehouse from the availability engine, plus incoming from approved purchase-order lines still on order (base units). Repeat itemId/itemCode/locationId to filter; a stock location resolves to its warehouse. changedSince bounds the sync on the item's revision timestamp. subsidiaryId defaults to the only operating subsidiary, and is required when several exist.",
+      tags: ["Inventory"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        {
+          name: "itemCode",
+          in: "query",
+          required: false,
+          schema: { type: "string" },
+          description: "Repeatable: exact item code.",
+        },
+        {
+          name: "locationId",
+          in: "query",
+          required: false,
+          schema: { type: "string", format: "uuid" },
+          description: "Repeatable: warehouse or stock location id.",
+        },
+        {
+          name: "changedSince",
+          in: "query",
+          required: false,
+          schema: { type: "string", format: "date-time" },
+        },
+      ],
+      responses: {
+        "200": {
+          description: "Availability rows",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                example: {
+                  subsidiaryId: "11111111-1111-4111-8111-111111111111",
+                  rows: [{
+                    itemId: "22222222-2222-4222-8222-222222222222",
+                    itemCode: "WIDGET-1",
+                    itemName: "Widget",
+                    warehouseId: "33333333-3333-4333-8333-333333333333",
+                    warehouseName: "Main",
+                    baseUnit: "ea",
+                    onHand: "10",
+                    committed: "3",
+                    incoming: "5",
+                    available: "7",
+                  }],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
   paths["/api/v1/inventory/levels"] = {
     get: {
       summary: "List inventory levels",
