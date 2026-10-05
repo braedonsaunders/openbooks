@@ -67,9 +67,11 @@ test("spend outside declared coverage renders as labelled fallback boxes, never 
     new Map([["2026-03-02", "P2 special"]]),
     (ym) => `M(${ym})`,
   );
+  // Declared and fallback boxes interleave in chronological order: the
+  // January fallback sorts ahead of the February period, never after the run.
   assert.deepEqual(boxes, [
+    { month: "2026-01", label: "M(2026-01)", spend: "25.0000" },
     { month: "2026-02-01", label: "P1", spend: "0" },
     { month: "2026-03-02", label: "P2 special", spend: "50.0000" },
-    { month: "2026-01", label: "M(2026-01)", spend: "25.0000" },
   ]);
 });
