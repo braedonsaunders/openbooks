@@ -74,11 +74,29 @@ const { createScratchOrg, createScratchUser } = await import(
 );
 
 const DASHBOARD = "sentinel";
+// Mirrors the sentinel spec defaults (config-spec.ts): whole-object saves
+// must name every declared threshold, so this tracks the spec, not a subset.
 const DEFAULTS = {
   duplicateDays: 14,
-  duplicateMinAmount: 100,
+  duplicateMinAmount: "100.0000",
   sequentialMinCount: 3,
   sequentialMinDays: 7,
+  moderateRiskAmount: "1000.0000",
+  highRiskAmount: "10000.0000",
+  criticalRiskAmount: "25000.0000",
+  aggregateHighAmount: "50000.0000",
+  aggregateCriticalAmount: "100000.0000",
+  rsfBaselineFloor: "100.0000",
+  zscoreSigmaFloor: "10.0000",
+  zscoreThreshold: 3,
+  zscoreMinBaseline: 5,
+  rsfThreshold: 10,
+  baselineMonths: 36,
+  sequentialHighRiskDays: 30,
+  benfordMinSample: 50,
+  trapBandPercent: 5,
+  duplicateAreaMin: 10,
+  ghostNameMinLength: 7,
 };
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
@@ -154,7 +172,7 @@ test(
     const conflict = (await adminB.json()) as {
       error: string;
       revision: number;
-      values: Record<string, number>;
+      values: Record<string, number | string>;
     };
     assert.match(conflict.error, /changed after you opened it/);
     assert.equal(conflict.revision, 1);
@@ -176,7 +194,7 @@ test(
     assert.deepEqual((await storedSettings(f.orgId)).values, {
       ...DEFAULTS,
       duplicateDays: 21,
-      duplicateMinAmount: 250,
+      duplicateMinAmount: "250.0000",
     });
   },
 );
