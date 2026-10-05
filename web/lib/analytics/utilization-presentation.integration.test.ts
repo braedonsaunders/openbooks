@@ -73,3 +73,30 @@ test('utilization fails closed when a cost functional has no spot coverage', { s
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+/**
+ * Approved non-billable time with no cost rate is counted as unrated hours,
+ * never priced at zero: the company stat carries the exact hours and a
+ * warning alert names the gap and its remedy (record cost rates).
+ */
+test('utilization flags unrated hours instead of pricing them at zero', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const emp = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${emp}, ${org.orgId}, 'employee', 'Unrated Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '5.0000', 'approved', false, null, null, null, '{}'::jsonb)`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await utilizationData(org.orgId, JULY, null)
+      assert.equal(data.company.range.unratedHours, '5.0000')
+      const flagged = data.company.alerts.find((a) => a.message.includes('unrated hours'))
+      assert.ok(flagged, 'an alert must name the unrated hours')
+      assert.match(flagged.message, /record cost rates/, 'the alert must name the remedy')
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})

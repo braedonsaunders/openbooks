@@ -2587,7 +2587,8 @@
       "accountSub": "科目 {number}"
     },
     "categories": {
-      "notInComposite": "未计入综合费率"
+      "notInComposite": "未计入综合费率",
+      "unratedNote": "不含 {hours, number} 小时无费率时间 — 该时间缺少成本费率。"
     }
   },
   "utilization": {
@@ -2595,7 +2596,8 @@
     "backToHub": "分析",
     "alerts": {
       "belowTarget": "可计费率低于 {target}% 的目标",
-      "costSpike": "不可计费成本激增 {amount}"
+      "costSpike": "不可计费成本激增 {amount}",
+      "unratedHours": "非计费成本不含 {hours, number} 小时无费率时间 — 请为该时间记录成本费率。"
     },
     "labels": {
       "noTitle": "无标题",

@@ -2587,7 +2587,8 @@
       "accountSub": "Cuenta {number}"
     },
     "categories": {
-      "notInComposite": "No incluida en la tasa compuesta"
+      "notInComposite": "No incluida en la tasa compuesta",
+      "unratedNote": "Excluye {hours, number} horas sin tarifa — falta la tarifa de costo de ese tiempo."
     }
   },
   "utilization": {
@@ -2595,7 +2596,8 @@
     "backToHub": "Analítica",
     "alerts": {
       "belowTarget": "Porcentaje facturable por debajo del objetivo del {target} %",
-      "costSpike": "El coste no facturable se disparó en {amount}"
+      "costSpike": "El coste no facturable se disparó en {amount}",
+      "unratedHours": "El costo no facturable excluye {hours, number} horas sin tarifa — registre tarifas de costo para ese tiempo."
     },
     "labels": {
       "noTitle": "Sin título",

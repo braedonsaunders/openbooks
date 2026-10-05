@@ -28,6 +28,8 @@ export interface UtilizationStrings {
   alertBelowTarget(target: number): UtilizationAlert;
   /** `amount` is pre-formatted money (existing locale-aware formatter). */
   alertCostSpike(amount: string): UtilizationAlert;
+  /** `hours` renders through the catalog ICU number formatter. */
+  alertUnratedHours(hours: number): UtilizationAlert;
 }
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
@@ -40,5 +42,6 @@ export function utilizationStrings(t: CatalogMessageFn, locale: string): Utiliza
     displayDepartmentName: (name) => (name === null || name === undefined || name === "Unknown" ? t("utilization.labels.unknownName") : name),
     alertBelowTarget: (target) => ({ type: "warning", message: t("utilization.alerts.belowTarget", { target }) }),
     alertCostSpike: (amount) => ({ type: "danger", message: t("utilization.alerts.costSpike", { amount }) }),
+    alertUnratedHours: (hours) => ({ type: "warning", message: t("utilization.alerts.unratedHours", { hours }) }),
   };
 }

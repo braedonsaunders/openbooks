@@ -2587,7 +2587,8 @@
       "accountSub": "Compte {number}"
     },
     "categories": {
-      "notInComposite": "Non incluse dans le taux global"
+      "notInComposite": "Non incluse dans le taux global",
+      "unratedNote": "Hors {hours, number} heures sans taux — les taux de coût manquent pour ce temps."
     }
   },
   "utilization": {
@@ -2595,7 +2596,8 @@
     "backToHub": "Analyses",
     "alerts": {
       "belowTarget": "Part facturable sous la cible de {target} %",
-      "costSpike": "Le coût non facturable a bondi de {amount}"
+      "costSpike": "Le coût non facturable a bondi de {amount}",
+      "unratedHours": "Le coût non facturable exclut {hours, number} heures sans taux — saisissez des taux de coût pour ce temps."
     },
     "labels": {
       "noTitle": "Sans titre",

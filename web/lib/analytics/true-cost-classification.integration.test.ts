@@ -346,6 +346,37 @@ test('true cost counts headcount once per department across currencies', { skip:
 })
 
 /**
+ * Approved non-billable time with no cost rate is counted as unrated hours,
+ * never priced at zero: the labor section carries the exact hours and the
+ * native time category flags them by name.
+ */
+test('true cost counts unrated hours instead of pricing them at zero', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const dept = randomUUID()
+  const emp = randomUUID()
+  await withBypass(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
+      values (${dept}, ${org.orgId}, 'Field', true, '{}'::jsonb)`)
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${emp}, ${org.orgId}, 'Unrated Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, is_billable, department_id, cost_rate, cost_rate_currency, cost_rate_subsidiary_id, custom)
+      values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '8.0000', 'approved', false, ${dept}, null, null, null, '{}'::jsonb)`)
+  })
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const data = await trueCostData(org.orgId, JULY, null)
+      assert.equal(data.labor.unratedHours, '8.0000')
+      const timeCat = data.categories.find((c) => c.key === 'nonbillable_time')!
+      assert.ok(timeCat, 'time category surfaces so the gap is named')
+      assert.equal(timeCat.unratedHours, '8.0000')
+      assert.equal(timeCat.totalAmount, 0)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
  * Labour dollars are the configured cost_pool / direct_labor account set
  * (rule plus pin) — the same classification that excludes direct labour from
  * burden. The 1000 on the name-matching `Wages and Salaries` account is

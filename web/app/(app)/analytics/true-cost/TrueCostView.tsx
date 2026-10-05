@@ -491,6 +491,9 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
   }
   return (
     <div className="space-y-5">
+      {compareMoney(data.labor.unratedHours, '0') > 0 ? (
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>{t('categories.unratedNote', { hours: Number(data.labor.unratedHours) })}</span></p>
+      ) : null}
       <Panel
         title={t('panels.overheadCategories')}
         icon={Layers}

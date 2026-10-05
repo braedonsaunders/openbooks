@@ -72,6 +72,8 @@ export interface Dept {
   name: string;
   billedHours: number;
   totalHours: number;
+  /** Non-billable hours with no cost rate (display twin of the exact map). */
+  unratedHours: number;
   composite: number; // dept burden ÷ dept billed hours
   /**
    * Exact 2dp department rate from the shared engine contract — the value
@@ -117,6 +119,12 @@ export interface BurdenCategory {
   accounts: BurdenAccount[];
   /** deptId → { amount, rate } (allocated where untagged). */
   byDept: Record<string, { amount: number; rate: number }>;
+  /**
+   * Non-billable hours with no cost rate excluded from this category's cost
+   * (exact string, set only on the native time category when greater than
+   * zero) — unknown cost, never zero cost.
+   */
+  unratedHours?: string;
 }
 
 /** Additional non-expense category from config (manual/derived/formula). */
@@ -204,7 +212,7 @@ export interface TrueCostData {
   categories: BurdenCategory[];
   unassigned: BurdenAccount[];
   totals: { byDept: Record<string, number>; overall: number };
-  labor: { employees: EmployeeRate[]; count: number; min: number; max: number; weighted: number };
+  labor: { employees: EmployeeRate[]; count: number; min: number; max: number; weighted: number; unratedHours: string };
   monthly: MonthPoint[];
   forecast: { month: string; label: string; rate: number }[];
   hasBurdenGL: boolean; // the configured application account carries applied postings
@@ -255,9 +263,12 @@ interface HoursSqlRow {
   billed_hours: TrueCostSqlNumeric;
   total_hours: TrueCostSqlNumeric;
   nonbill_cost: TrueCostSqlNumeric;
+  unrated_hours: TrueCostSqlNumeric;
+  unrated_billed_hours: TrueCostSqlNumeric;
   /** Exact decimal twins of the merged hour sums (rate-derivation input). */
   billed_hours_exact?: string;
   total_hours_exact?: string;
+  unrated_hours_exact?: string;
 }
 
 /**
@@ -408,7 +419,11 @@ export async function trueCostData(
         max(t.worked_on)::text as late,
         sum(t.hours) as total_hours,
         coalesce(sum(t.hours) filter (where t.is_billable), 0) as billed_hours,
-        coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
+        coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost,
+        -- Approved time with no cost rate is NOT zero cost: its hours travel
+        -- separately and surface by name, never folded into money as $0.
+        coalesce(sum(t.hours) filter (where t.is_billable is not true and t.cost_rate is null), 0) as unrated_hours,
+        coalesce(sum(t.hours) filter (where t.is_billable and t.cost_rate is null), 0) as unrated_billed_hours
       from time_entries t
       left join subsidiaries crs on crs.id = t.cost_rate_subsidiary_id and crs.org_id = t.org_id
       join orgs o on o.id = t.org_id
@@ -579,21 +594,33 @@ export async function trueCostData(
   // exact twins accumulate the raw numerics without crossing a float, so the
   // rate engine divides the same hours the display sums.
   const hourTranslated: HoursSqlRow[] = [];
+  // Unrated hours merge as hours (currency-blind, exact) alongside — they
+  // are reported by name and never priced at zero.
+  const unratedHoursByDept = new Map<string, string>();
+  let unratedHoursExact = "0.0000";
   {
-    const byKey = new Map<string, HoursSqlRow & { billed: number; total: number; nonbill: string; billedExact: string; totalExact: string }>();
+    const byKey = new Map<string, HoursSqlRow & { billed: number; total: number; nonbill: string; billedExact: string; totalExact: string; unratedExact: string }>();
     for (const r of hourLegs) {
       const key = JSON.stringify([r.department_id, r.month]);
-      const prev = byKey.get(key) ?? { ...r, billed: 0, total: 0, nonbill: "0", billedExact: "0.0000", totalExact: "0.0000" };
+      const prev = byKey.get(key) ?? { ...r, billed: 0, total: 0, nonbill: "0", billedExact: "0.0000", totalExact: "0.0000", unratedExact: "0.0000" };
       prev.billed += Number(r.billed_hours ?? 0);
       prev.total += Number(r.total_hours ?? 0);
       prev.billedExact = add(prev.billedExact, normalizeMoney(String(r.billed_hours ?? 0)));
       prev.totalExact = add(prev.totalExact, normalizeMoney(String(r.total_hours ?? 0)));
+      prev.unratedExact = add(prev.unratedExact, normalizeMoney(String(r.unrated_hours ?? 0)));
       prev.nonbill = add(String(prev.nonbill), translateLeg(String(r.nonbill_cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
       byKey.set(key, prev);
     }
     for (const v of byKey.values()) {
-      hourTranslated.push({ ...v, billed_hours: v.billed, total_hours: v.total, nonbill_cost: v.nonbill, billed_hours_exact: v.billedExact, total_hours_exact: v.totalExact });
+      hourTranslated.push({ ...v, billed_hours: v.billed, total_hours: v.total, nonbill_cost: v.nonbill, billed_hours_exact: v.billedExact, total_hours_exact: v.totalExact, unrated_hours_exact: v.unratedExact });
     }
+  }
+  for (const r of hourTranslated) {
+    const dept = r.department_id ?? "none";
+    const unrated = r.unrated_hours_exact ?? "0.0000";
+    if (cmp(unrated, "0") === 0) continue;
+    unratedHoursExact = add(unratedHoursExact, unrated);
+    if (dept !== "none") unratedHoursByDept.set(dept, add(unratedHoursByDept.get(dept) ?? "0.0000", unrated));
   }
   // Employee legs merged to one presentation row each: the rate is
   // translated cost over rated hours, never an average of raw rates.
@@ -1001,6 +1028,7 @@ export async function trueCostData(
     categoryType: BurdenCategory["categoryType"], match: BurdenCategory["match"],
     expenseByDept: Record<string, number>, total: number, accounts: BurdenAccount[],
     expenseExactByDept: Record<string, string>,
+    unratedHours?: string,
   ): BurdenCategory {
     const s = settingsOf(id);
     const allocationBase = s.allocationBase ?? "billed_hours";
@@ -1081,6 +1109,7 @@ export async function trueCostData(
       totalAmount: total, rawRate, rate: formatted.value, rateDisplay: formatted.display,
       allocationBase, allocationMethod, rateFormat, includeInComposite,
       accounts, byDept,
+      ...(unratedHours !== undefined && cmp(unratedHours, "0") > 0 ? { unratedHours } : {}),
     };
   }
 
@@ -1098,9 +1127,9 @@ export async function trueCostData(
   // A first-class burden category (not a hand-built custom one): the labour cost
   // of non-billable hours, spread over billed hours like every other rate.
   const timeCategories: BurdenCategory[] = [];
-  if (cmp(timeTotalExact, "0") > 0) {
+  if (cmp(timeTotalExact, "0") > 0 || cmp(unratedHoursExact, "0") > 0) {
     const timeExpenseByDept = Object.fromEntries([...timeExpenseExactByDept].map(([k, v]): [string, number] => [k, Number(v)]));
-    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, Number(timeTotalExact), [], Object.fromEntries(timeExpenseExactByDept)));
+    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, Number(timeTotalExact), [], Object.fromEntries(timeExpenseExactByDept), unratedHoursExact));
   }
 
   // ---- custom categories (manual / derived / formula) --------------------------
@@ -1185,7 +1214,7 @@ export async function trueCostData(
       : "";
     const composite = Number(exactSupported ? compositeExact : composite4);
     totalsByDept[d.id] = composite;
-    return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, composite, compositeExact };
+    return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, unratedHours: toChartNumber(unratedHoursByDept.get(d.id) ?? "0.0000"), composite, compositeExact };
   });
 
   // ---- absorption (actual applied burden only) ---------------------------------
@@ -1296,6 +1325,7 @@ export async function trueCostData(
       min: employees.length ? Math.min(...employees.map((e) => e.rate)) : 0,
       max: employees.length ? Math.max(...employees.map((e) => e.rate)) : 0,
       weighted,
+      unratedHours: unratedHoursExact,
     },
     monthly,
     forecast,
