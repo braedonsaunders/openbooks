@@ -357,6 +357,7 @@ async function costLine(
       const wage = await resolveWage(orgId, args.incumbentPartyId, args.asOf, {
         departmentId: args.departmentId,
         subsidiaryId: args.employerSubsidiaryId,
+        annualHoursDefault: settings.annualHours,
       });
       if (!wage) {
         throw new CompensationError(
@@ -377,6 +378,7 @@ async function costLine(
     const wage = await resolveWage(orgId, args.incumbentPartyId, args.asOf, {
       departmentId: args.departmentId,
       subsidiaryId: args.employerSubsidiaryId,
+      annualHoursDefault: settings.annualHours,
     });
     if (!wage) {
       throw new CompensationError(
