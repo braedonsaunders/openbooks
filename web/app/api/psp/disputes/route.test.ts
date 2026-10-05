@@ -92,11 +92,8 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  [
-    "@openbooks/engine/src/payments/psp-refund-automation.ts",
-    "mock:automation",
-  ],
+  ["@openbooks/engine/platform/database", "mock:db"],
+  ["@openbooks/engine/payments/refund-automation", "mock:automation"],
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["../../../../lib/features", "mock:features"],
