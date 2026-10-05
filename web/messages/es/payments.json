@@ -234,6 +234,8 @@
     "adjustments": "Descuento {discount} · crédito {credit}",
     "reason": "Motivo",
     "reasonRequired": "Ingrese un motivo. Se conservará en la pista de auditoría del pago.",
+    "bankAttestationHelp": "El archivo de esta ejecución se entregó al banco. Revertirla libera sus facturas para pagarlas de nuevo, así que primero confirme con el banco que el archivo no se procesó ni se procesará.",
+    "bankAttestationLabel": "Escriba {runNumber} para certificar que el banco no procesó el archivo entregado",
     "recordOutcome": "Registrar resultado",
     "outcome": { "title": "Resultado bancario", "description": "Registre la liquidación o una devolución para {payee}.", "status": "Resultado", "settled": "Liquidado", "returned": "Devuelto", "rejected": "Rechazado por el banco", "effectiveOn": "Fecha efectiva", "bankReference": "Referencia bancaria", "returnCode": "Código de devolución", "returnReason": "Motivo de devolución", "reversalWarning": "Una devolución o rechazo revierte el pago contabilizado y vuelve a abrir las facturas afectadas." },
     "columns": {

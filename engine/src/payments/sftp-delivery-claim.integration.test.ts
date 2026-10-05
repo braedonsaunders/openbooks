@@ -21,6 +21,7 @@ const {
   releaseDeliveryClaim,
   resolveUncertainDelivery,
   rollbackPaymentRun,
+  recordPaymentFileDownload,
   recordPaymentFileSftpDelivery,
 } = await import("./operations.ts");
 const { PaymentError } = await import("../payments-core/payment-errors.ts");
@@ -162,6 +163,45 @@ test("a voided file cannot be claimed, so a raced delivery never publishes", { s
       (await db.execute<{ n: number }>(sql`select count(*)::int as n from payment_file_deliveries where payment_file_id = ${file.id}`)).rows[0]!.n,
     );
     assert.equal(deliveries, 0);
+  } finally {
+    await teardown(fixture);
+  }
+});
+
+test("a delivered run rolls back only with the operator's typed bank attestation", { skip: !DB }, async () => {
+  const fixture = await seedDeliveryFixture();
+  try {
+    const file = await generateApprovedFile(fixture);
+    await withOrgContext(fixture.orgId, () => recordPaymentFileDownload(file.id, fixture.orgId, fixture.actorId));
+    const runNumber = `DLV-RUN-${fixture.runId}`;
+    // A reason alone would free the bills while the bank may still execute the file.
+    for (const attestation of [undefined, "yes", "the bank did not process it"]) {
+      await assert.rejects(
+        withOrgContext(fixture.orgId, () =>
+          rollbackPaymentRun(fixture.runId, fixture.orgId, fixture.actorId, "file sent in error", { bankNotProcessedAttestation: attestation }),
+        ),
+        (e: unknown) => e instanceof PaymentError
+          && e.message.includes(`payment run ${runNumber} has a file delivered to the bank`)
+          && e.message.includes(`type ${runNumber} to attest`),
+      );
+    }
+    assert.equal((await fileState(fixture, file.id)).status, "delivered");
+    await withOrgContext(fixture.orgId, () =>
+      rollbackPaymentRun(fixture.runId, fixture.orgId, fixture.actorId, "bank rejected the batch before value date", { bankNotProcessedAttestation: ` ${runNumber} ` }),
+    );
+    const evidence = await withOrgContext(fixture.orgId, async () =>
+      (await db.execute<{ run_status: string; from_status: string; details: { reason: string; bankNotProcessedAttestation: { attestedBy: string; typedConfirmation: string; deliveries: Array<{ file_id: string; channel: string }> } } }>(sql`
+        select r.status as run_status, e.from_status, e.details
+          from payment_runs r
+          join payment_events e on e.payment_run_id = r.id and e.org_id = r.org_id and e.event_type = 'run_rolled_back'
+         where r.id = ${fixture.runId} and r.org_id = ${fixture.orgId}
+      `)).rows[0]!,
+    );
+    assert.equal(evidence.run_status, "rolled_back");
+    assert.equal(evidence.from_status, "delivered");
+    assert.equal(evidence.details.bankNotProcessedAttestation.attestedBy, fixture.actorId);
+    assert.equal(evidence.details.bankNotProcessedAttestation.typedConfirmation, runNumber);
+    assert.deepEqual(evidence.details.bankNotProcessedAttestation.deliveries.map((d) => [d.file_id, d.channel]), [[file.id, "download"]]);
   } finally {
     await teardown(fixture);
   }

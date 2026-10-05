@@ -12,6 +12,8 @@ export const runtime = 'nodejs'
 
 const rollbackBody = z.object({
   reason: z.string().default(''),
+  /** The run number typed back to attest the bank did not process a delivered file. */
+  bankNotProcessedAttestation: z.string().optional(),
 })
 
 async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +23,7 @@ async function legacyPOST(req: Request, { params }: { params: Promise<{ id: stri
   if (gate instanceof NextResponse) return gate
   const parsed = await parseJsonBody(req, rollbackBody)
   if (!parsed.ok) return parsed.response
-  try { await rollbackPaymentRun(id, gate.user.orgId, gate.user.id, parsed.data.reason); return NextResponse.json({ ok: true }) }
+  try { await rollbackPaymentRun(id, gate.user.orgId, gate.user.id, parsed.data.reason, { bankNotProcessedAttestation: parsed.data.bankNotProcessedAttestation ?? null }); return NextResponse.json({ ok: true }) }
   catch (e) { return paymentErrorResponse(e) }
 }
 

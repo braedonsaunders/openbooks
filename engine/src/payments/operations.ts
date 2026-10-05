@@ -13,6 +13,7 @@ import { businessTimeZone, businessToday, formatInZone } from "../platform/busin
 import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { assertSafePaymentFilename } from "../payments-core/payment-filenames.ts";
+import { assertDeclaredAsciiCharset } from "../payments-core/rail-text.ts";
 import { decryptAccountNumber, isValidBic, isValidIban } from "../payments-core/rail-settings.ts";
 import { assertPaymentPartiesInScope, lockRunBankEvidence } from "./run-readiness.ts";
 import {
@@ -1093,6 +1094,9 @@ export async function generatePaymentFileArtifact(
   // so the merged name of EVERY rail is validated here — before anything is
   // stored — not only the custom branch that produces it.
   const safeFilename = assertSafePaymentFilename(rendered.filename);
+  // A file declared us-ascii must be ASCII byte for byte: its UTF-8 encoding
+  // below is then identical, and no fixed-width field has shifted.
+  assertDeclaredAsciiCharset(rendered.contentType, rendered.content);
   const content = Buffer.from(rendered.content, "utf8");
   const hash = createHash("sha256").update(content).digest("hex");
   return withOrgTransaction(orgId, async () => {
@@ -1679,9 +1683,43 @@ export async function recordPaymentFileDeliveryFailure(opts: {
   });
 }
 
-export async function rollbackPaymentRun(runId: string, orgId: string, userId: string, reason: string): Promise<void> {
+export async function rollbackPaymentRun(
+  runId: string,
+  orgId: string,
+  userId: string,
+  reason: string,
+  opts: { bankNotProcessedAttestation?: string | null } = {},
+): Promise<void> {
   if (!reason.trim()) throw new PaymentError("a rollback reason is required");
   await withOrgTransaction(orgId, async () => {
+    const locked = (await db.execute<{ run_number: string; status: string }>(sql`
+      select run_number::text as run_number, status from payment_runs
+       where id = ${runId} and org_id = ${orgId}
+       for update
+    `)).rows[0];
+    if (!locked) throw new PaymentError("payment run not found");
+    // Rolling back releases every bill the run reserved, so another run (or an
+    // ad-hoc payment) can pay them. Once a file has reached the bank that is a
+    // double payment unless the bank did not process it — knowledge only the
+    // operator has. Require it as an explicit, recorded attestation: the run
+    // number typed back, so a reason alone can never release delivered bills.
+    const deliveries = (await db.execute<{ file_id: string; channel: string; status: string; delivered_at: string | null }>(sql`
+      select delivery.payment_file_id as file_id, delivery.channel, delivery.status,
+             delivery.delivered_at::text as delivered_at
+        from payment_file_deliveries delivery
+        join payment_files file on file.id = delivery.payment_file_id and file.org_id = delivery.org_id
+       where file.payment_run_id = ${runId} and file.org_id = ${orgId}
+         and delivery.status in ('delivered', 'acknowledged')
+       order by delivery.created_at, delivery.id
+    `)).rows;
+    const attestation = opts.bankNotProcessedAttestation?.trim() ?? "";
+    if (deliveries.length > 0 && attestation !== locked.run_number) {
+      throw new PaymentError(
+        `payment run ${locked.run_number} has a file delivered to the bank; rolling it back releases its bills for payment again. ` +
+        `Confirm with the bank that the delivered file was not and will not be processed, then type ${locked.run_number} to attest it — ` +
+        `otherwise keep the run and record the bank's settlement, return or rejection of each payment instead`,
+      );
+    }
     const result = (await db.execute<{ status: string }>(sql`
       update payment_runs r set status = 'rolled_back', updated_at = now(), updated_by = ${userId}
        where r.id = ${runId} and r.org_id = ${orgId} and r.status in ('approved', 'generated', 'delivered', 'partially_failed')
@@ -1718,7 +1756,20 @@ export async function rollbackPaymentRun(runId: string, orgId: string, userId: s
         throw new PaymentError("cannot roll back the run: a payment file moved while it was locked; reload and retry");
       }
     }
-    await event({ orgId, runId, actorId: userId, eventType: "run_rolled_back", toStatus: "rolled_back", details: { reason } });
+    await event({
+      orgId, runId, actorId: userId, eventType: "run_rolled_back", fromStatus: locked.status, toStatus: "rolled_back",
+      details: deliveries.length > 0
+        ? {
+            reason,
+            bankNotProcessedAttestation: {
+              attestedBy: userId,
+              typedConfirmation: attestation,
+              statement: "The bank did not process the delivered payment file and will not process it.",
+              deliveries,
+            },
+          }
+        : { reason },
+    });
   });
 }
 

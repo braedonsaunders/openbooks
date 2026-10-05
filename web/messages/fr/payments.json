@@ -234,6 +234,8 @@
     "adjustments": "Escompte {discount} · crédit {credit}",
     "reason": "Motif",
     "reasonRequired": "Saisissez un motif. Il sera conservé dans la piste d’audit du paiement.",
+    "bankAttestationHelp": "Le fichier de ce lot a été remis à la banque. L’annulation libère ses factures pour un nouveau paiement : confirmez d’abord avec la banque que le fichier n’a pas été et ne sera pas traité.",
+    "bankAttestationLabel": "Saisissez {runNumber} pour attester que la banque n’a pas traité le fichier remis",
     "recordOutcome": "Enregistrer le résultat",
     "outcome": { "title": "Résultat bancaire", "description": "Enregistrez le règlement ou un retour pour {payee}.", "status": "Résultat", "settled": "Réglé", "returned": "Retourné", "rejected": "Rejeté par la banque", "effectiveOn": "Date d’effet", "bankReference": "Référence bancaire", "returnCode": "Code de retour", "returnReason": "Motif du retour", "reversalWarning": "Un retour ou un rejet contrepassera le paiement comptabilisé et rouvrira les factures touchées." },
     "columns": {

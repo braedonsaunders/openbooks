@@ -234,6 +234,8 @@
     "adjustments": "Skonto {discount} · Gutschrift {credit}",
     "reason": "Grund",
     "reasonRequired": "Geben Sie einen Grund ein. Er wird im Prüfpfad der Zahlung aufbewahrt.",
+    "bankAttestationHelp": "Die Datei dieses Laufs wurde an die Bank übermittelt. Ein Rollback gibt die Rechnungen erneut zur Zahlung frei; bestätigen Sie daher zuerst mit der Bank, dass die Datei nicht verarbeitet wurde und nicht verarbeitet wird.",
+    "bankAttestationLabel": "Geben Sie {runNumber} ein, um zu bestätigen, dass die Bank die übermittelte Datei nicht verarbeitet hat",
     "recordOutcome": "Ergebnis erfassen",
     "outcome": { "title": "Bankergebnis", "description": "Erfassen Sie eine Abwicklung oder eine Rückgabe für {payee}.", "status": "Ergebnis", "settled": "Abgewickelt", "returned": "Zurückgegeben", "rejected": "Von der Bank abgelehnt", "effectiveOn": "Wirksamkeitsdatum", "bankReference": "Bankreferenz", "returnCode": "Rückgabecode", "returnReason": "Rückgabegrund", "reversalWarning": "Eine Rückgabe oder Ablehnung macht die gebuchte Zahlung rückgängig und öffnet die betroffenen Eingangsrechnungen erneut." },
     "columns": {

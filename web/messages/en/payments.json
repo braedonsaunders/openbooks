@@ -234,6 +234,8 @@
     "adjustments": "Discount {discount} · credit {credit}",
     "reason": "Reason",
     "reasonRequired": "Enter a reason. It is retained in the payment audit trail.",
+    "bankAttestationHelp": "This run's file was delivered to the bank. Rolling back releases its bills for payment again, so first confirm with the bank that the file was not and will not be processed.",
+    "bankAttestationLabel": "Type {runNumber} to attest that the bank did not process the delivered file",
     "recordOutcome": "Record outcome",
     "outcome": { "title": "Bank outcome", "description": "Record settlement or a return for {payee}.", "status": "Outcome", "settled": "Settled", "returned": "Returned", "rejected": "Rejected by bank", "effectiveOn": "Effective date", "bankReference": "Bank reference", "returnCode": "Return code", "returnReason": "Return reason", "reversalWarning": "A return or rejection reverses the posted payment and reopens the affected bills." },
     "columns": {
