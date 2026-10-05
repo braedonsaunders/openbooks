@@ -307,6 +307,11 @@
   "description": "Chaque commande de la boutique avec son statut de comptabilisation et son document.",
   "exceptionsTitle": "Exceptions de commandes",
   "exceptionsDescription": "Commandes qui ne peuvent pas être comptabilisées, chacune avec sa solution. Rien n'est comptabilisé avant correction.",
+  "exceptionsKind": {
+    "orders": "Commandes",
+    "events": "Événements",
+    "ariaLabel": "Type d'exception"
+  },
   "postingTitle": "Comptabilisation des canaux",
   "postingDescription": "Comment chaque canal transforme les commandes en comptabilité, et depuis quelle date.",
   "orderStatus": {

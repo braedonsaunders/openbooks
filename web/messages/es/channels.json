@@ -307,6 +307,11 @@
   "description": "Cada pedido de la tienda con su estado de contabilización y enlace al documento.",
   "exceptionsTitle": "Excepciones de pedidos",
   "exceptionsDescription": "Pedidos que no se pueden contabilizar, cada uno con su solución. Nada se contabiliza hasta corregirlo.",
+  "exceptionsKind": {
+    "orders": "Pedidos",
+    "events": "Eventos",
+    "ariaLabel": "Tipo de excepción"
+  },
   "postingTitle": "Contabilización de canales",
   "postingDescription": "Cómo cada canal convierte los pedidos en contabilidad, y desde qué fecha.",
   "orderStatus": {

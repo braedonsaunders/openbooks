@@ -307,6 +307,11 @@
   "description": "Jede Shop-Bestellung mit Buchungsstatus und Belegverknüpfung.",
   "exceptionsTitle": "Bestellungsausnahmen",
   "exceptionsDescription": "Bestellungen, die nicht gebucht werden können, jeweils mit Lösung. Nichts wird gebucht, bis es behoben ist.",
+  "exceptionsKind": {
+    "orders": "Bestellungen",
+    "events": "Ereignisse",
+    "ariaLabel": "Ausnahmeart"
+  },
   "postingTitle": "Kanalbuchung",
   "postingDescription": "Wie jeder Kanal Shop-Bestellungen in Buchhaltung verwandelt, und ab wann.",
   "orderStatus": {
