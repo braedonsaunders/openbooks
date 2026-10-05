@@ -737,7 +737,7 @@
       "asOfLabel": "Data de referência",
       "asOfNote": "Âncora para saldos em aberto e previsões",
       "methodLabel": "Método de previsão",
-      "methodValue": "Estatístico → Vencimento → Média global",
+      "methodValue": "Estatístico → Média global → Vencimento",
       "methodNote": "Dias médios de pagamento/recebimento por contraparte mais a margem de variabilidade configurada, mínimo na data de vencimento",
       "overdueLabel": "Prorrogação de vencidos",
       "overdueValue": "Cresce com a antiguidade",

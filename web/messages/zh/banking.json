@@ -737,7 +737,7 @@
       "asOfLabel": "截止日期",
       "asOfNote": "未结余额与预测的锚定点",
       "methodLabel": "预测方法",
-      "methodValue": "统计 → 到期日 → 全局平均",
+      "methodValue": "统计 → 全局平均 → 到期日",
       "methodNote": "按往来方平均付款/回款天数加上已配置的波动缓冲，不早于到期日",
       "overdueLabel": "逾期顺延",
       "overdueValue": "随逾期时长递增",
