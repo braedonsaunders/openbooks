@@ -1,11 +1,14 @@
 'use client'
 
+import { useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
-import { Flame, RefreshCw, ShieldCheck, TrendingDown } from 'lucide-react'
+import { AreaChart, Flame, RefreshCw, ShieldCheck, TrendingDown } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import { useViewerFormat } from '@/lib/viewer-format'
+import { Chart, cashForecastOption } from '../analytics/_ui/charts'
 import { formatExactRatio } from '../analytics/_ui/format'
-import { MetricTile, type WidgetCardProps } from './_widget-tiles'
+import { ChartTile, MetricTile, UnavailableRow, type WidgetCardProps } from './_widget-tiles'
+import type { CashForecast } from './_metrics-cash'
 
 const HREF = '/analytics/cashflow'
 
@@ -167,7 +170,63 @@ export function CashWidgetCard({ widgetId, data }: WidgetCardProps): React.React
         />
       )
     }
+    case 'chart-cash-forecast': {
+      const forecast = data.cashForecast
+      if (!forecast || !forecast.available) {
+        return (
+          <ChartTile
+            title={t('widgets.cashForecast')}
+            icon={<AreaChart size={14} />}
+            href={HREF}
+          >
+            <UnavailableRow reason={forecast?.available === false ? forecast.reason : t('analytics.loading')} />
+          </ChartTile>
+        )
+      }
+      return (
+        <ForecastChart
+          forecast={forecast.value}
+          currency={data.baseCurrency}
+          title={t('widgets.cashForecast')}
+        />
+      )
+    }
     default:
       return null
   }
+}
+
+/**
+ * Weekly projected ending cash over the horizon — the Cash Flow dashboard's
+ * own forecast chart (same option builder, same rows) inside a chart tile.
+ * The headline is the projected end; the context names the horizon.
+ */
+function ForecastChart({ forecast, currency, title }: { forecast: CashForecast; currency: string; title: string }) {
+  const t = useTranslations('dashboard')
+  const tCharts = useTranslations('analytics.charts')
+  const { money } = useMoney()
+  const label = useCallback((value: string | number) => money(value, { currency }), [money, currency])
+  const labels = useMemo(
+    () => ({
+      endingCash: tCharts('weekly.endingCash'),
+      lowest: tCharts('weekly.lowest'),
+      in: tCharts('weekly.in'),
+      out: tCharts('weekly.out'),
+      net: tCharts('weekly.net'),
+      ending: tCharts('weekly.ending'),
+    }),
+    [tCharts],
+  )
+  const option = useMemo(() => cashForecastOption(forecast.weeks, label, labels), [forecast, label, labels])
+  return (
+    <ChartTile
+      title={title}
+      icon={<AreaChart size={14} />}
+      href={HREF}
+      headline={money(forecast.projectedEnd, { currency })}
+      context={t('widgets.cashForecastContext', { weeks: forecast.horizonWeeks })}
+    >
+      <Chart option={option} height="fill" />
+    </ChartTile>
+  )
 }

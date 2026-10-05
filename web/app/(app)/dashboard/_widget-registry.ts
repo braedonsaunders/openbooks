@@ -643,6 +643,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     maxSize: { w: 6, h: 4 },
     analyticsSource: 'cashflow',
   },
+  'chart-cash-forecast': {
+    id: 'chart-cash-forecast',
+    category: 'cash',
+    labelKey: 'widgets.cashForecast',
+    descriptionKey: 'catalog.cashForecast',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 4, h: 4 },
+    analyticsSource: 'cashflow',
+  },
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   'kpi-customer-concentration': {

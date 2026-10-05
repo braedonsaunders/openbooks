@@ -1010,6 +1010,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-cash-burn': ['baseCurrency', 'cashBurn', 'asOfDate'],
   'kpi-cash-coverage': ['cashCoverage', 'asOfDate'],
   'kpi-cash-settlement-days': ['cashCollectDays', 'cashPayDays', 'asOfDate'],
+  'chart-cash-forecast': ['baseCurrency', 'cashForecast', 'asOfDate'],
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   'kpi-customer-concentration': ['concentration'],
