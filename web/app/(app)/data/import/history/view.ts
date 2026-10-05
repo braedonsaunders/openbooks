@@ -10,6 +10,7 @@ import {
   field,
   page,
   pageHeader,
+  pagination,
   ref,
   rootRef,
   text,
@@ -23,15 +24,15 @@ import { dataWorkspaceNavigation } from '../../../../../lib/setup/data-workspace
 import { parseListParams } from '../../../../../lib/list-params'
 import { transferMetadataScope } from '../../../../../lib/data-io/transfer-store'
 
-/**
- * Import history, split into a loader and a spec.
- *
- * First conversion of an APP-variant list page rather than a report paper.
- * They are not interchangeable: the app table brings card chrome, a sticky
- * header and row entrance staggering, and its empty case is the shared
- * EmptyState rather than a centred paragraph. The `variant` on the table block
- * selects the whole primitive set.
- */
+/** Authorized import history on the shared server-paged record list. */
+
+const HISTORY_SORTS = {
+  created_at: sql`j.created_at`,
+  resource: sql`coalesce(j.resource_label, j.resource_key)`,
+  format: sql`j.format`,
+  status: sql`j.status`,
+  actor: sql`u.name`,
+}
 
 type JobRow = {
   id: string
@@ -82,6 +83,10 @@ export interface ImportHistoryData {
   total: number
   currentPage: number
   perPage: number
+  sort: string
+  dir: 'asc' | 'desc'
+  search: { placeholder: string }
+  currentParams: Record<string, string | string[] | undefined>
 }
 
 export async function loadImportHistory(sp: Record<string, string | string[] | undefined> = {}): Promise<ImportHistoryData> {
@@ -90,14 +95,26 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
   const tCatalog = await getTranslations()
   const navigation = dataWorkspaceNavigation(authz.permissions)
   const locale = await getLocale()
-  const params = parseListParams(sp, { sort: 'created_at', allowedSorts: ['created_at'], perPage: 50 })
+  const params = parseListParams(sp, {
+    sort: 'created_at',
+    allowedSorts: Object.keys(HISTORY_SORTS) as (keyof typeof HISTORY_SORTS)[],
+    perPage: 50,
+  })
   // Whole-company evidence requires the same unrestricted audit grant as the
   // company audit log. Other operators see their own transfer history.
   const visibility = authz.allowedSubsidiaryIds === null && can(authz, 'admin.audit.read')
     ? sql`true` : sql`j.created_by = ${authz.user.id}${authz.allowedSubsidiaryIds === null ? sql`` : sql`and exists (
         select 1 from data_transfer_jobs visible where visible.org_id=j.org_id and visible.id=j.id
         and ${transferMetadataScope(authz.allowedSubsidiaryIds, sql`visible.scope`)})`}`
-  const count = await db.execute<{ total: string }>(sql`select count(*)::text as total from import_jobs j where j.org_id=${authz.user.orgId} and ${visibility}`)
+  const search = params.q
+    ? sql`and concat_ws(' ', j.resource_label, j.resource_key, j.file_name, j.format, j.status, u.name)
+        ilike ${`%${params.q.replace(/[\\%_]/g, '\\$&')}%`}`
+    : sql``
+  const where = sql`j.org_id = ${authz.user.orgId} and ${visibility} ${search}`
+  const count = await db.execute<{ total: string }>(sql`
+    select count(*)::text as total from import_jobs j
+    left join users u on u.id = j.created_by
+    where ${where}`)
 
   const result = await db.execute<JobRow>(sql`
     select j.id, j.resource_key, j.resource_label, j.format, j.file_name, j.status,
@@ -106,8 +123,9 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
       from import_jobs j
       left join users u on u.id = j.created_by
       left join data_transfer_jobs d on d.org_id=j.org_id and d.id=j.id and d.actor_id=${authz.user.id}
-     where j.org_id = ${authz.user.orgId} and ${visibility}
-     order by j.created_at desc, j.id desc limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`)
+     where ${where}
+     order by ${HISTORY_SORTS[params.sort]} ${sql.raw(params.dir)}, j.id ${sql.raw(params.dir)}
+     limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`)
 
   return {
     title: t('history.title'),
@@ -116,7 +134,7 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
     importHref: '/data/import',
     backHref: navigation.backHref,
     backLabel: tCatalog(navigation.backLabelKey),
-    emptyLabel: t('history.empty'),
+    emptyLabel: params.q ? tCatalog('common.empty.title') : t('history.empty'),
     columnWhen: t('history.when'),
     columnResource: t('history.resource'),
     columnFormat: t('history.format'),
@@ -126,6 +144,10 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
     total: Number(count.rows[0]?.total ?? 0),
     currentPage: params.page,
     perPage: params.perPage,
+    sort: params.sort,
+    dir: params.dir,
+    search: { placeholder: tCatalog('ui.search.placeholder') },
+    currentParams: sp,
     rows: result.rows.map((j) => ({
       id: j.id,
       when: dateTime(j.created_at, locale),
@@ -175,9 +197,11 @@ export function importHistorySpec(): PageSpec {
         rows: f('rows'),
         rowKey: item('id'),
         empty: { title: f('emptyLabel') },
+        sorting: { basePath: '/data/import/history', sort: f('sort'), dir: f('dir') },
         columns: [
           column(rootF('columnWhen'), text(item('when')), {
             className: 'whitespace-nowrap',
+            sort: 'created_at',
           }),
           column(
             rootF('columnResource'),
@@ -186,13 +210,16 @@ export function importHistorySpec(): PageSpec {
               fileName: item('fileName'),
               href: item('href'),
             }),
+            { sort: 'resource' },
           ),
           column(rootF('columnFormat'), text(item('format')), {
             className: 'uppercase',
+            sort: 'format',
           }),
           column(
             rootF('columnStatus'),
             badge(item('status'), { variant: item('statusVariant') }),
+            { sort: 'status' },
           ),
           column(
             rootF('columnRows'),
@@ -205,8 +232,22 @@ export function importHistorySpec(): PageSpec {
           ),
           column(rootF('columnBy'), text(item('actor')), {
             className: 'text-muted-foreground',
+            sort: 'actor',
           }),
         ],
+      }, [
+        widget('list-toolbar', {
+          basePath: '/data/import/history',
+          currentParams: f('currentParams'),
+          search: f('search'),
+        }),
+      ]),
+      pagination({
+        basePath: '/data/import/history',
+        total: f('total'),
+        page: f('currentPage'),
+        perPage: f('perPage'),
+        bare: true,
       }),
     ],
   })
