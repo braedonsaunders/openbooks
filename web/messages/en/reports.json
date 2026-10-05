@@ -2544,7 +2544,11 @@
         "currency": "Currency",
         "entered_on": "Entered on",
         "reason": "Reason",
-        "document_id": "Document key"
+        "document_id": "Document key",
+        "functional_amount": "Amount (functional)",
+        "fx_rate": "Rate",
+        "base_currency": "Base currency",
+        "subsidiary": "Subsidiary"
       },
       "stored_value_balances": {
         "account_code": "Account",
@@ -2557,7 +2561,10 @@
         "currency": "Currency",
         "last_activity_on": "Last activity",
         "expires_on": "Expires on",
-        "inactivity_months": "Program inactivity threshold (months)"
+        "inactivity_months": "Program inactivity threshold (months)",
+        "functional_balance": "Open balance (functional)",
+        "base_currency": "Base currency",
+        "subsidiary": "Subsidiary"
       },
       "demand_forecast_accuracy": {
         "item_class": "Item class",

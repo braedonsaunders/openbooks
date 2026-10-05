@@ -34,7 +34,9 @@
     "debitAccount": "Empfangskonto",
     "offsetAccount": "Gegenkonto",
     "postingDate": "Buchungsdatum",
-    "newBalance": "Neuer Saldo"
+    "newBalance": "Neuer Saldo",
+    "functionalEquivalent": "Gegenwert (Hauswährung)",
+    "functionalAmount": "Betrag (Hauswährung)"
   },
   "status": {
     "active": "Aktiv",
@@ -79,7 +81,9 @@
     "programSection": "Programm",
     "accountSection": "Konto",
     "noExpiry": "Läuft nicht ab",
-    "sourceDocument": "Herkunftsbeleg"
+    "sourceDocument": "Herkunftsbeleg",
+    "postingDetail": "Buchungsdetails",
+    "postingDetailDescription": "Jede Bewegung in der Hauswährung der Einheit mit dem zugrunde liegenden Kurs."
   },
   "issue": {
     "title": "Guthaben ausgeben",

@@ -2544,7 +2544,11 @@
         "currency": "币种",
         "entered_on": "入账日期",
         "reason": "原因",
-        "document_id": "单据键"
+        "document_id": "单据键",
+        "functional_amount": "金额（记账本位币）",
+        "fx_rate": "汇率",
+        "base_currency": "记账本位币",
+        "subsidiary": "子公司"
       },
       "stored_value_balances": {
         "account_code": "账户",
@@ -2557,7 +2561,10 @@
         "currency": "币种",
         "last_activity_on": "最近活动",
         "expires_on": "到期日",
-        "inactivity_months": "方案休眠阈值（月）"
+        "inactivity_months": "方案休眠阈值（月）",
+        "functional_balance": "未清余额（记账本位币）",
+        "base_currency": "记账本位币",
+        "subsidiary": "子公司"
       },
       "demand_forecast_accuracy": {
         "item_class": "物料类别",

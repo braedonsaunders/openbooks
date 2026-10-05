@@ -34,7 +34,9 @@
     "debitAccount": "Compte destinataire",
     "offsetAccount": "Contrepartie",
     "postingDate": "Date comptable",
-    "newBalance": "Nouveau solde"
+    "newBalance": "Nouveau solde",
+    "functionalEquivalent": "Équivalent fonctionnel",
+    "functionalAmount": "Montant fonctionnel"
   },
   "status": {
     "active": "Actif",
@@ -79,7 +81,9 @@
     "programSection": "Programme",
     "accountSection": "Compte",
     "noExpiry": "N'expire pas",
-    "sourceDocument": "Document d'origine"
+    "sourceDocument": "Document d'origine",
+    "postingDetail": "Détail comptable",
+    "postingDetailDescription": "Chaque mouvement dans la monnaie fonctionnelle de l’entité, avec le taux appliqué."
   },
   "issue": {
     "title": "Émettre de la valeur",

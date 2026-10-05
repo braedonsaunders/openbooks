@@ -2544,7 +2544,11 @@
         "currency": "Moneda",
         "entered_on": "Fecha de registro",
         "reason": "Motivo",
-        "document_id": "Clave de documento"
+        "document_id": "Clave de documento",
+        "functional_amount": "Importe (funcional)",
+        "fx_rate": "Tipo de cambio",
+        "base_currency": "Moneda funcional",
+        "subsidiary": "Subsidiaria"
       },
       "stored_value_balances": {
         "account_code": "Cuenta",
@@ -2557,7 +2561,10 @@
         "currency": "Moneda",
         "last_activity_on": "Última actividad",
         "expires_on": "Vence el",
-        "inactivity_months": "Umbral de inactividad del programa (meses)"
+        "inactivity_months": "Umbral de inactividad del programa (meses)",
+        "functional_balance": "Saldo abierto (funcional)",
+        "base_currency": "Moneda funcional",
+        "subsidiary": "Subsidiaria"
       },
       "demand_forecast_accuracy": {
         "item_class": "Clase de artículo",

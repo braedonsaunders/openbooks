@@ -34,7 +34,9 @@
     "debitAccount": "收款科目",
     "offsetAccount": "对方科目",
     "postingDate": "过账日期",
-    "newBalance": "新余额"
+    "newBalance": "新余额",
+    "functionalEquivalent": "功能货币等值",
+    "functionalAmount": "功能货币金额"
   },
   "status": {
     "active": "有效",
@@ -79,7 +81,9 @@
     "programSection": "计划",
     "accountSection": "账户",
     "noExpiry": "永不过期",
-    "sourceDocument": "来源单据"
+    "sourceDocument": "来源单据",
+    "postingDetail": "过账明细",
+    "postingDetailDescription": "以实体功能货币计量的每笔变动及其汇率。"
   },
   "issue": {
     "title": "发行储值",

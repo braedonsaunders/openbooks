@@ -34,7 +34,9 @@
     "debitAccount": "Receiving account",
     "offsetAccount": "Offset account",
     "postingDate": "Posting date",
-    "newBalance": "New balance"
+    "newBalance": "New balance",
+    "functionalEquivalent": "Functional equivalent",
+    "functionalAmount": "Functional amount"
   },
   "status": {
     "active": "Active",
@@ -79,7 +81,9 @@
     "programSection": "Program",
     "accountSection": "Account",
     "noExpiry": "Does not expire",
-    "sourceDocument": "Source document"
+    "sourceDocument": "Source document",
+    "postingDetail": "Posting detail",
+    "postingDetailDescription": "Every movement priced in the entity’s functional currency, with the rate behind it."
   },
   "issue": {
     "title": "Issue stored value",

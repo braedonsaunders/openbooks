@@ -2544,7 +2544,11 @@
         "currency": "Währung",
         "entered_on": "Erfasst am",
         "reason": "Grund",
-        "document_id": "Belegschlüssel"
+        "document_id": "Belegschlüssel",
+        "functional_amount": "Betrag (funktional)",
+        "fx_rate": "Kurs",
+        "base_currency": "Funktionale Währung",
+        "subsidiary": "Tochtergesellschaft"
       },
       "stored_value_balances": {
         "account_code": "Konto",
@@ -2557,7 +2561,10 @@
         "currency": "Währung",
         "last_activity_on": "Letzte Aktivität",
         "expires_on": "Läuft ab am",
-        "inactivity_months": "Inaktivitätsschwelle des Programms (Monate)"
+        "inactivity_months": "Inaktivitätsschwelle des Programms (Monate)",
+        "functional_balance": "Offener Saldo (funktional)",
+        "base_currency": "Funktionale Währung",
+        "subsidiary": "Tochtergesellschaft"
       },
       "demand_forecast_accuracy": {
         "item_class": "Artikelklasse",

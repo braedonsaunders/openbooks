@@ -2544,7 +2544,11 @@
         "currency": "通貨",
         "entered_on": "登録日",
         "reason": "理由",
-        "document_id": "伝票キー"
+        "document_id": "伝票キー",
+        "functional_amount": "金額（機能通貨）",
+        "fx_rate": "為替レート",
+        "base_currency": "機能通貨",
+        "subsidiary": "子会社"
       },
       "stored_value_balances": {
         "account_code": "口座",
@@ -2557,7 +2561,10 @@
         "currency": "通貨",
         "last_activity_on": "最終利用日",
         "expires_on": "有効期限",
-        "inactivity_months": "休眠判定月数"
+        "inactivity_months": "休眠判定月数",
+        "functional_balance": "未利用残高（機能通貨）",
+        "base_currency": "機能通貨",
+        "subsidiary": "子会社"
       },
       "demand_forecast_accuracy": {
         "item_class": "品目クラス",
