@@ -134,6 +134,9 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
     // under. Generic CRUD refuses command-owned entities; writes go through
     // the savePortalSettings command with its strict schema.
     command: { name: 'savePortalSettings', permission: 'documents.manage', feature: 'customerPortal' },
+    // The whole aggregate (branding, sections, returns, save offers) saves
+    // as one validated record: no row stream can express it.
+    importVia: 'none',
     formSections: [
       { titleKey: 'customerPortalSections.branding', fields: ['portalName', 'effectiveFrom'] },
       { titleKey: 'customerPortalSections.sections', fields: ['sectionsInvoices', 'sectionsPaymentMethods', 'sectionsSubscriptions', 'sectionsUsage', 'sectionsOrders', 'sectionsReturns', 'sectionsGiftCards'] },
