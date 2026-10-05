@@ -53,6 +53,76 @@ export interface BankingHome {
 
 const TREND_WEEKS = 13
 
+/**
+ * The roster query shared by the workspace and the count-only path: one row
+ * per active bank/card account with its balance leg and workflow state. The
+ * unmatched-line count rides the same rows the workspace sums, so the
+ * reconciliation tile and the cockpit tie by construction.
+ */
+async function bankRosterRows(
+  orgId: string,
+  subIds: string[] | undefined,
+): Promise<Record<string, unknown>[]> {
+  // Active subsidiary view: the roster keeps only accounts whose restriction
+  // intersects it (null = shared). Book scope: the primary posting book,
+  // like bank reconciliation itself.
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
+  const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
+  const membership = bankAccountMembership()
+  const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
+  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
+  const rows = await db.execute(sql`
+      select a.id, a.number, a.name, a.type, a.currency_restriction,
+             bal.func as func,
+             coalesce(bal.balance, 0) as balance,
+             coalesce(unm.n, 0) as unmatched,
+             openrec.id as open_reconciliation_id,
+             rec.through as reconciled_through,
+             st.statement_date as last_statement_date,
+             st.imported_at as last_imported_at
+        from accounts a
+        left join lateral (
+          select sub.base_currency as func, sum(jl.amount) as balance
+            from journal_lines jl
+            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
+            left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
+           where jl.account_id = a.id and jl.org_id = a.org_id${lineScope}
+           group by sub.base_currency) bal on true
+        left join lateral (
+          select count(*) as n
+            from bank_statement_lines l
+            join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+           where s.account_id = a.id and s.org_id = a.org_id and l.match_status = 'unmatched') unm on true
+        left join lateral (
+          select r.id from reconciliations r
+           where r.account_id = a.id and r.org_id = a.org_id and r.status <> 'signed_off'
+           order by r.created_at desc limit 1) openrec on true
+        left join lateral (
+          select max(r.through_date) as through from reconciliations r
+           where r.account_id = a.id and r.org_id = a.org_id and r.status = 'signed_off') rec on true
+        left join lateral (
+          select s.statement_date, s.imported_at from bank_statements s
+           where s.account_id = a.id and s.org_id = a.org_id
+           order by s.imported_at desc limit 1) st on true
+       where a.org_id = ${orgId} and ${membership}${acctScope}
+       order by a.type, coalesce(bal.balance, 0) desc
+    `)
+  return rows.rows as Record<string, unknown>[]
+}
+
+/**
+ * Unmatched bank statement lines for the reconciliation tile. Counts off the
+ * same roster rows the workspace sums — but never translates money, so a
+ * missing exchange rate cannot refuse a tile that shows no currency.
+ */
+export async function bankingReconCount(
+  orgId: string,
+  subIds?: string[],
+): Promise<number> {
+  const rows = await bankRosterRows(orgId, subIds)
+  return rows.reduce((s, r) => s + Number(r.unmatched ?? 0), 0)
+}
+
 export async function bankingHome(
   orgId: string,
   subIds?: string[],
@@ -93,44 +163,10 @@ export async function bankingHome(
         : sql``
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
 
-  const [rosterRes, flowsRes, badgesRes] = (await Promise.all([
-    // Roster — one row per active bank/card account with balance + workflow state.
-    db.execute(sql`
-      select a.id, a.number, a.name, a.type, a.currency_restriction,
-             bal.func as func,
-             coalesce(bal.balance, 0) as balance,
-             coalesce(unm.n, 0) as unmatched,
-             openrec.id as open_reconciliation_id,
-             rec.through as reconciled_through,
-             st.statement_date as last_statement_date,
-             st.imported_at as last_imported_at
-        from accounts a
-        left join lateral (
-          select sub.base_currency as func, sum(jl.amount) as balance
-            from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
-            left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
-           where jl.account_id = a.id and jl.org_id = a.org_id${lineScope}
-           group by sub.base_currency) bal on true
-        left join lateral (
-          select count(*) as n
-            from bank_statement_lines l
-            join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
-           where s.account_id = a.id and s.org_id = a.org_id and l.match_status = 'unmatched') unm on true
-        left join lateral (
-          select r.id from reconciliations r
-           where r.account_id = a.id and r.org_id = a.org_id and r.status <> 'signed_off'
-           order by r.created_at desc limit 1) openrec on true
-        left join lateral (
-          select max(r.through_date) as through from reconciliations r
-           where r.account_id = a.id and r.org_id = a.org_id and r.status = 'signed_off') rec on true
-        left join lateral (
-          select s.statement_date, s.imported_at from bank_statements s
-           where s.account_id = a.id and s.org_id = a.org_id
-           order by s.imported_at desc limit 1) st on true
-       where a.org_id = ${orgId} and ${membership}${acctScope}
-       order by a.type, coalesce(bal.balance, 0) desc
-    `),
+  const [rosterRows, flowsRes, badgesRes] = (await Promise.all([
+    // Roster — one row per active bank/card account with balance + workflow
+    // state, off the shared query the reconciliation count also reads.
+    bankRosterRows(orgId, subIds),
     // Weekly net flow per account over the sparkline window (+ the trailing
     // 7-day figure, folded in as a second grouped shape would cost another
     // scan — computed in JS from daily-precision rows instead is overkill;
@@ -179,7 +215,7 @@ export async function bankingHome(
   const rates = await presentationRates(
     orgId,
     base,
-    [...rosterRes.rows.map((r) => (typeof r.func === 'string' ? r.func : null)), ...flowsRes.rows.map((r) => r.func)],
+    [...rosterRows.map((r) => (typeof r.func === 'string' ? r.func : null)), ...flowsRes.rows.map((r) => r.func)],
     today,
   )
   const tr = (amount: unknown, func: unknown): string =>
@@ -194,7 +230,7 @@ export async function bankingHome(
   }
 
   const byAccount = new Map<string, { row: Record<string, unknown>; balance: string }>()
-  for (const a of rosterRes.rows) {
+  for (const a of rosterRows) {
     const cur = byAccount.get(String(a.id)) ?? { row: a, balance: '0' }
     cur.balance = add(cur.balance, tr(a.balance, a.func))
     byAccount.set(String(a.id), cur)
