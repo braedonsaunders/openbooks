@@ -85,7 +85,7 @@ Object.assign(globalThis, {
       const text = queryText(query)
       executedQueryTexts.push(text)
       if (text.includes('base_currency')) return { rows: [{ baseCurrency: 'CAD' }] }
-      if (text.includes('from fx_rates')) return { rows: [{ rate: '1.3500000000' }] }
+      if (text.includes('from fx_rates')) return { rows: [{ rate: '1.3500000000', as_of: '2026-01-15' }] }
       return { rows: [] }
     },
   },
