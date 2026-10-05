@@ -50,17 +50,14 @@ export interface ForecastDiagnostics {
 }
 
 /**
- * The confidence levels the model can band, in ascending order. The single
- * source of truth: the z table below and the analytics threshold spec both
- * derive from this list, so adding a level teaches every surface at once.
+ * The band multiplier per confidence level. The single source of truth: the
+ * offered levels below and the analytics threshold spec both derive from
+ * these keys, so adding a level teaches every surface at once.
  */
-export const FORECAST_CONFIDENCE_LEVELS = [80, 90, 95, 99] as const
+const Z: Record<number, number> = { 80: 1.282, 90: 1.645, 95: 1.96, 99: 2.576 }
 
-const Z_MULTIPLIERS = [1.282, 1.645, 1.96, 2.576] as const
-
-const Z: Record<number, number> = Object.fromEntries(
-  FORECAST_CONFIDENCE_LEVELS.map((level, i) => [level, Z_MULTIPLIERS[i]]),
-)
+/** The confidence levels the model can band, in ascending order: the Z keys. */
+export const FORECAST_CONFIDENCE_LEVELS: number[] = Object.keys(Z).map(Number)
 
 /**
  * An unknown confidence level is a refusal, never a silent z. The band
