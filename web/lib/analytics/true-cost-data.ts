@@ -1171,6 +1171,7 @@ export async function trueCostData(
     compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact ?? undefined,
     categories: categories.map((category) => ({
       id: category.id,
+      name: category.name,
       rate: exactRatesByCat.get(category.id)!.overall,
       expense: Object.values(exactRatesByCat.get(category.id)!.expenses).reduce(
         (total, value) => add(total, value),
@@ -1203,6 +1204,7 @@ export async function trueCostData(
         categories: categories
           .map((category) => ({
             id: category.id,
+            name: category.name,
             rate: exactRatesByCat.get(category.id)!.rates[d.id] ?? "0.0000",
             expense: exactRatesByCat.get(category.id)!.expenses[d.id] ?? "0.0000",
             rateFormat: category.rateFormat,
