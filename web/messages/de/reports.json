@@ -643,6 +643,10 @@
         "label": "Transaktionszeilen",
         "description": "Transaktionsdetails auf Zeilenebene über alle Typen hinweg – Artikel, Konto, Mengen, Beträge, Abrechnungsstatus und Dimensionen."
       },
+      "promotion_performance": {
+        "label": "Aktionserfolg",
+        "description": "Rabattzeilen aus Aktionen mit gewährtem Rabatt sowie zugeordnetem Brutto- und Nettoumsatz, nach Zeitraum und Aktion."
+      },
       "journal_entries": {
         "label": "Buchungen",
         "description": "Buchungsköpfe – Nummer, Buchungsdatum, Status, Herkunft und Notiz."
@@ -1121,6 +1125,19 @@
         "cost_amount": "Kostenbetrag",
         "bill_amount": "Verrechnungsbetrag",
         "currency": "Währung"
+      },
+      "promotion_performance": {
+        "promotion_code": "Aktionscode",
+        "promotion_name": "Aktion",
+        "promotion_kind": "Aktionsart",
+        "document_date": "Belegdatum",
+        "document_number": "Beleg",
+        "document_kind": "Belegart",
+        "customer": "Kunde",
+        "currency": "Währung",
+        "discount_given": "Gewährter Rabatt",
+        "attached_gross": "Zugeordnetes Brutto",
+        "attached_net": "Zugeordnetes Netto"
       },
       "journal_entries": {
         "entry_number": "Buchung Nr.",

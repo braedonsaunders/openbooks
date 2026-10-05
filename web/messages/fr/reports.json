@@ -643,6 +643,10 @@
         "label": "Lignes de transaction",
         "description": "Détail des transactions au niveau ligne, tous types confondus — article, compte, quantités, montants, état de facturation et dimensions."
       },
+      "promotion_performance": {
+        "label": "Performance des promotions",
+        "description": "Lignes de réduction issues des promotions, avec la remise accordée et le chiffre d’affaires brut et net rattaché, par période et promotion."
+      },
       "journal_entries": {
         "label": "Écritures de journal",
         "description": "En-têtes d’écritures — numéro, date de comptabilisation, statut, origine et mémo."
@@ -1121,6 +1125,19 @@
         "cost_amount": "Montant du coût",
         "bill_amount": "Montant facturé",
         "currency": "Devise"
+      },
+      "promotion_performance": {
+        "promotion_code": "Code promo",
+        "promotion_name": "Promotion",
+        "promotion_kind": "Type de promotion",
+        "document_date": "Date du document",
+        "document_number": "Document",
+        "document_kind": "Type de document",
+        "customer": "Client",
+        "currency": "Devise",
+        "discount_given": "Remise accordée",
+        "attached_gross": "Brut rattaché",
+        "attached_net": "Net rattaché"
       },
       "journal_entries": {
         "entry_number": "N° d’écriture",

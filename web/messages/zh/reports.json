@@ -643,6 +643,10 @@
         "label": "交易行",
         "description": "跨所有类型的行级交易明细——项目、科目、数量、金额、开票状态和维度。"
       },
+      "promotion_performance": {
+        "label": "促销效果",
+        "description": "各促销产生的折扣行，含折扣金额及关联的毛收入和净收入，按期间和促销划分。"
+      },
       "journal_entries": {
         "label": "日记账分录",
         "description": "日记账分录抬头——编号、过账日期、状态、来源和备注。"
@@ -1121,6 +1125,19 @@
         "cost_amount": "成本金额",
         "bill_amount": "计费金额",
         "currency": "货币"
+      },
+      "promotion_performance": {
+        "promotion_code": "促销代码",
+        "promotion_name": "促销",
+        "promotion_kind": "促销类型",
+        "document_date": "单据日期",
+        "document_number": "单据",
+        "document_kind": "单据类型",
+        "customer": "客户",
+        "currency": "货币",
+        "discount_given": "折扣金额",
+        "attached_gross": "关联毛收入",
+        "attached_net": "关联净收入"
       },
       "journal_entries": {
         "entry_number": "分录号",

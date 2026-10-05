@@ -643,6 +643,10 @@
         "label": "Líneas de transacción",
         "description": "Detalle de transacciones a nivel de línea para todos los tipos: artículo, cuenta, cantidades, importes, estado de facturación y dimensiones."
       },
+      "promotion_performance": {
+        "label": "Rendimiento de promociones",
+        "description": "Líneas de descuento de promociones, con el descuento concedido y los ingresos brutos y netos asociados, por período y promoción."
+      },
       "journal_entries": {
         "label": "Asientos de diario",
         "description": "Encabezados de asientos: número, fecha de contabilización, estado, origen y nota."
@@ -1121,6 +1125,19 @@
         "cost_amount": "Importe de costo",
         "bill_amount": "Importe facturado",
         "currency": "Moneda"
+      },
+      "promotion_performance": {
+        "promotion_code": "Código promocional",
+        "promotion_name": "Promoción",
+        "promotion_kind": "Tipo de promoción",
+        "document_date": "Fecha del documento",
+        "document_number": "Documento",
+        "document_kind": "Tipo de documento",
+        "customer": "Cliente",
+        "currency": "Moneda",
+        "discount_given": "Descuento concedido",
+        "attached_gross": "Bruto asociado",
+        "attached_net": "Neto asociado"
       },
       "journal_entries": {
         "entry_number": "N.º de asiento",

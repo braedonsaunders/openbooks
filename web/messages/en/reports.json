@@ -643,6 +643,10 @@
         "label": "Transaction lines",
         "description": "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions."
       },
+      "promotion_performance": {
+        "label": "Promotion performance",
+        "description": "Discount lines carried by promotions, with the discount given and the gross and net revenue attached, by period and promotion."
+      },
       "journal_entries": {
         "label": "Journal entries",
         "description": "Journal-entry headers — number, posting date, status, origin and memo."
@@ -1121,6 +1125,19 @@
         "cost_amount": "Cost amount",
         "bill_amount": "Bill amount",
         "currency": "Currency"
+      },
+      "promotion_performance": {
+        "promotion_code": "Promotion code",
+        "promotion_name": "Promotion",
+        "promotion_kind": "Promotion kind",
+        "document_date": "Document date",
+        "document_number": "Document",
+        "document_kind": "Document kind",
+        "customer": "Customer",
+        "currency": "Currency",
+        "discount_given": "Discount given",
+        "attached_gross": "Attached gross",
+        "attached_net": "Attached net"
       },
       "journal_entries": {
         "entry_number": "Entry #",

@@ -643,6 +643,10 @@
         "label": "取引明細",
         "description": "すべての種別にわたる明細レベルの取引詳細 — 品目、勘定、数量、金額、請求状態、ディメンション。"
       },
+      "promotion_performance": {
+        "label": "プロモーション実績",
+        "description": "プロモーションによる割引明細。割引額と関連する売上総額・純額を期間別・プロモーション別に表示します。"
+      },
       "journal_entries": {
         "label": "仕訳",
         "description": "仕訳ヘッダー — 番号、記帳日、ステータス、発生元、摘要。"
@@ -1121,6 +1125,19 @@
         "cost_amount": "原価金額",
         "bill_amount": "請求金額",
         "currency": "通貨"
+      },
+      "promotion_performance": {
+        "promotion_code": "プロモーションコード",
+        "promotion_name": "プロモーション",
+        "promotion_kind": "プロモーション種別",
+        "document_date": "伝票日付",
+        "document_number": "伝票",
+        "document_kind": "伝票種別",
+        "customer": "顧客",
+        "currency": "通貨",
+        "discount_given": "割引額",
+        "attached_gross": "関連売上総額",
+        "attached_net": "関連売上純額"
       },
       "journal_entries": {
         "entry_number": "仕訳番号",
