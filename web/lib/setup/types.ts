@@ -241,9 +241,30 @@ export interface SetupCommandDescriptor {
   feature: 'fundAccounting' | 'functionalExpenses'
 }
 
+/**
+ * One card on a create drawer's first step. Choosing it pre-fills the form
+ * with `values` (registry field keys), which in turn decides which
+ * conditional fields and sections the form shows next.
+ */
+export interface SetupCreateChoice {
+  key: string
+  /** Message keys under `admin.setup`. */
+  labelKey: string
+  descriptionKey: string
+  /** lucide icon key, mapped by the drawer. */
+  iconKey: string
+  values: Record<string, string | number | boolean>
+}
+
 export interface SetupEntity {
   /** Rehomed forms group the same registry fields into shared inspector sections. */
   formSections?: { titleKey: string; descriptionKey?: string; fields: string[] }[]
+  /**
+   * Open the create drawer on a choice of kinds instead of a blank form.
+   * The chosen card pre-fills its values; the operator can go back and
+   * choose again until the record is created. Editing never shows it.
+   */
+  createChooser?: { titleKey: string; descriptionKey: string; options: SetupCreateChoice[] }
   formDescriptionKey?: string
   drawerSize?: 'lg' | 'xl' | '2xl'
   /** Domain-owned aggregate endpoint. Generic row writes must refuse these

@@ -300,6 +300,29 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
     iconKey: 'coins',
+    drawerSize: 'xl',
+    // A pay code is created by first choosing what it is: the choice sets the
+    // kind, how it is paid and whether it is taxable income, which decides
+    // every field that follows. Contribution flags stay at their defaults
+    // because which programs apply differs by country pack.
+    createChooser: {
+      titleKey: 'payComponentChooser.title',
+      descriptionKey: 'payComponentChooser.description',
+      options: [
+        { key: 'earning', iconKey: 'banknote', labelKey: 'payComponentChooser.earning.label', descriptionKey: 'payComponentChooser.earning.description', values: { kind: 'earning', paymentKind: 'cash', taxable: true } },
+        { key: 'taxable-benefit', iconKey: 'gift', labelKey: 'payComponentChooser.taxableBenefit.label', descriptionKey: 'payComponentChooser.taxableBenefit.description', values: { kind: 'earning', paymentKind: 'non_cash', taxable: true, vacationable: false } },
+        { key: 'allowance', iconKey: 'receipt', labelKey: 'payComponentChooser.allowance.label', descriptionKey: 'payComponentChooser.allowance.description', values: { kind: 'earning', paymentKind: 'cash', taxable: false, pensionable: false, insurable: false, vacationable: false } },
+        { key: 'deduction', iconKey: 'circle-minus', labelKey: 'payComponentChooser.deduction.label', descriptionKey: 'payComponentChooser.deduction.description', values: { kind: 'deduction', vacationable: false } },
+        { key: 'employer-contribution', iconKey: 'building', labelKey: 'payComponentChooser.employerContribution.label', descriptionKey: 'payComponentChooser.employerContribution.description', values: { kind: 'employer_contribution', vacationable: false } },
+      ],
+    },
+    formSections: [
+      { titleKey: 'sections.payComponentIdentity', descriptionKey: 'sections.payComponentIdentityHelp', fields: ['code', 'name', 'kind', 'paymentKind', 'nonCashAccountId', 'country', 'sequence', 'isActive'] },
+      { titleKey: 'sections.payComponentCalculation', descriptionKey: 'sections.payComponentCalculationHelp', fields: ['basis', 'value', 'basisCapHoursPerPeriod', 'basisCapAmountPerPeriod', 'basisCapAmountPerYear'] },
+      { titleKey: 'sections.payComponentTaxability', descriptionKey: 'sections.payComponentTaxabilityHelp', fields: ['taxable', 'pensionable', 'insurable', 'programExclusions', 'vacationable', 'nonPeriodic', 'taxTreatment', 'supplementalWageCategory', 'statutoryExemptionCategory', 'statutoryReportingCategory'] },
+      { titleKey: 'sections.payComponentAccounting', descriptionKey: 'sections.payComponentAccountingHelp', fields: ['expenseAccountId', 'liabilityAccountId', 'remittancePartyId'] },
+      { titleKey: 'sections.deductionProtection', fields: ['protectionBase', 'protectionMaxPercent', 'protectionPriority', 'includeInDisposableEarnings'] },
+    ],
     orgScoped: true,
     actorCols: true,
     naturalKey: 'code',

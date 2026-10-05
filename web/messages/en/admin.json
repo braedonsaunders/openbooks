@@ -5116,7 +5116,15 @@
       "benefitComponents": "Pay components",
       "benefitDelivery": "Delivery",
       "benefitRules": "Rules",
-      "benefitAdvanced": "Advanced contribution rules"
+      "benefitAdvanced": "Advanced contribution rules",
+      "payComponentIdentity": "What this pay code is",
+      "payComponentIdentityHelp": "The code and name shown on pay stubs, registers and reports, and how the amount is paid.",
+      "payComponentCalculation": "How the amount is calculated",
+      "payComponentCalculationHelp": "A fixed amount, a rate per hour, or a percentage of gross — with optional caps per pay period or per year.",
+      "payComponentTaxability": "Taxes and contributions",
+      "payComponentTaxabilityHelp": "Which withholdings, statutory contributions and vacation accruals this pay code counts toward.",
+      "payComponentAccounting": "Accounting",
+      "payComponentAccountingHelp": "Where the amount posts in the general ledger, and who it is remitted to."
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"
@@ -5371,7 +5379,31 @@
       "reminderNumber": "Reminder {number}",
       "addReminder": "Add reminder"
     },
-    "no": "No"
+    "no": "No",
+    "payComponentChooser": {
+      "title": "What kind of pay code is this?",
+      "description": "Choose what this pay code represents. You can change any setting on the next step.",
+      "earning": {
+        "label": "Earning",
+        "description": "Wages, salary, overtime, premiums, bonuses and other pay the employee receives in cash."
+      },
+      "taxableBenefit": {
+        "label": "Taxable benefit",
+        "description": "A non-cash benefit that is taxable income — employer-paid premiums, personal use of a company vehicle, employer retirement contributions."
+      },
+      "allowance": {
+        "label": "Non-taxable allowance",
+        "description": "A reimbursement or allowance paid in cash that is not taxable income — meals, tools, boots, safety glasses."
+      },
+      "deduction": {
+        "label": "Deduction",
+        "description": "An amount taken from the employee’s pay — retirement savings, benefit premiums, union dues, garnishments, recoveries."
+      },
+      "employerContribution": {
+        "label": "Employer contribution",
+        "description": "A cost the employer pays on top of wages that does not appear in the employee’s pay."
+      }
+    }
   },
   "flows": {
     "title": "Flows",

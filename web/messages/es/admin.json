@@ -5188,7 +5188,15 @@
       "benefitComponents": "Componentes de nómina",
       "benefitDelivery": "Pago",
       "benefitRules": "Reglas",
-      "benefitAdvanced": "Reglas avanzadas de aportación"
+      "benefitAdvanced": "Reglas avanzadas de aportación",
+      "payComponentIdentity": "Qué es este concepto de nómina",
+      "payComponentIdentityHelp": "El código y el nombre que aparecen en los recibos de nómina, registros e informes, y cómo se paga el importe.",
+      "payComponentCalculation": "Cómo se calcula el importe",
+      "payComponentCalculationHelp": "Un importe fijo, una tarifa por hora o un porcentaje del bruto, con topes opcionales por periodo de pago o por año.",
+      "payComponentTaxability": "Impuestos y cotizaciones",
+      "payComponentTaxabilityHelp": "Las retenciones, cotizaciones obligatorias y devengos de vacaciones a los que cuenta este concepto de nómina.",
+      "payComponentAccounting": "Contabilidad",
+      "payComponentAccountingHelp": "Dónde se contabiliza el importe en el libro mayor y a quién se remite."
     },
     "segmentValues": {
       "builtinLink": "Abrir {name}",
@@ -5371,7 +5379,31 @@
       "reminderNumber": "Recordatorio {number}",
       "addReminder": "Añadir recordatorio"
     },
-    "no": "No"
+    "no": "No",
+    "payComponentChooser": {
+      "title": "¿Qué tipo de concepto de nómina es?",
+      "description": "Elija qué representa este concepto de nómina. Podrá cambiar cualquier ajuste en el siguiente paso.",
+      "earning": {
+        "label": "Devengo",
+        "description": "Sueldo, salario, horas extra, primas, bonificaciones y otros pagos que la persona empleada recibe en efectivo."
+      },
+      "taxableBenefit": {
+        "label": "Prestación gravable",
+        "description": "Una prestación no monetaria que es renta gravable: primas pagadas por la empresa, uso personal de un vehículo de empresa, aportaciones de jubilación de la empresa."
+      },
+      "allowance": {
+        "label": "Asignación no gravable",
+        "description": "Un reembolso o asignación pagado en efectivo que no es renta gravable: comidas, herramientas, botas, gafas de seguridad."
+      },
+      "deduction": {
+        "label": "Deducción",
+        "description": "Un importe que se descuenta de la nómina: ahorro para la jubilación, primas de seguros, cuotas sindicales, embargos, recuperaciones."
+      },
+      "employerContribution": {
+        "label": "Aportación de la empresa",
+        "description": "Un coste que paga la empresa además de los salarios y que no aparece en la nómina de la persona empleada."
+      }
+    }
   },
   "flows": {
     "title": "Flujos",

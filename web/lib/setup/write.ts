@@ -381,10 +381,10 @@ function entityPermissionRefusal(actor: SetupActor, entity: SetupEntity): SetupW
  * loading it (web/lib/setup-route.test.ts pins that a currency mutation
  * answers 405 with zero database calls — a top-level import breaks it).
  */
-async function entityForValidation(entity: SetupEntity): Promise<SetupEntity> {
+async function entityForValidation(entity: SetupEntity, orgId: string): Promise<SetupEntity> {
   if (!hasDynamicOptions(entity)) return entity
-  const { resolveDynamicSetupOptions } = await import('./dynamic-options')
-  return resolveDynamicSetupOptions(entity)
+  const { resolveDynamicSetupOptions, setupOptionsContext } = await import('./dynamic-options')
+  return resolveDynamicSetupOptions(entity, await setupOptionsContext(orgId, entity))
 }
 
 /** Cheap, pure check so the dynamic import happens only where it is needed. */
@@ -1960,7 +1960,7 @@ export async function createSetupRecord(
     : writableEntity
   // The writer normalizes slot fields into their folded objects before this
   // point, so a present fold covers its slots' requiredness and columns.
-  const built = buildRow(await entityForValidation(createEntity), body, { forCreate: true, coverFoldedSlots: true })
+  const built = buildRow(await entityForValidation(createEntity, orgId), body, { forCreate: true, coverFoldedSlots: true })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   let integrityError: string | null
   try {
@@ -2378,7 +2378,7 @@ export async function updateSetupRecord(
     ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
     : writableEntity
   // Same folded-slot cover as the create path: the normalizer ran above.
-  const built = buildRow(await entityForValidation(patchEntity), body, { forCreate: false, coverFoldedSlots: true })
+  const built = buildRow(await entityForValidation(patchEntity, orgId), body, { forCreate: false, coverFoldedSlots: true })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   let integrityError: string | null
   try {

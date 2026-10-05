@@ -5188,7 +5188,15 @@
       "benefitComponents": "給与コンポーネント",
       "benefitDelivery": "支給",
       "benefitRules": "ルール",
-      "benefitAdvanced": "高度な拠出ルール"
+      "benefitAdvanced": "高度な拠出ルール",
+      "payComponentIdentity": "この給与項目の内容",
+      "payComponentIdentityHelp": "給与明細・賃金台帳・レポートに表示されるコードと名称、および支払方法。",
+      "payComponentCalculation": "金額の計算方法",
+      "payComponentCalculationHelp": "定額、時間単価、または総支給額に対する割合。支給期間ごと・年ごとの上限も設定できます。",
+      "payComponentTaxability": "税金と保険料",
+      "payComponentTaxabilityHelp": "この給与項目が対象となる源泉徴収、法定保険料、休暇手当の積立。",
+      "payComponentAccounting": "会計",
+      "payComponentAccountingHelp": "総勘定元帳での計上先と、納付先。"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -5371,7 +5379,31 @@
       "reminderNumber": "リマインダー {number}",
       "addReminder": "リマインダーを追加"
     },
-    "no": "いいえ"
+    "no": "いいえ",
+    "payComponentChooser": {
+      "title": "どの種類の給与項目ですか？",
+      "description": "この給与項目が表すものを選択してください。各設定は次のステップで変更できます。",
+      "earning": {
+        "label": "支給",
+        "description": "賃金、給与、残業代、手当、賞与など、従業員に現金で支払われるもの。"
+      },
+      "taxableBenefit": {
+        "label": "課税対象の現物給付",
+        "description": "課税所得となる現物給付。会社負担の保険料、社用車の私的利用、会社負担の退職積立など。"
+      },
+      "allowance": {
+        "label": "非課税手当",
+        "description": "課税所得とならない、現金で支払われる精算金や手当。食事、工具、安全靴、保護メガネなど。"
+      },
+      "deduction": {
+        "label": "控除",
+        "description": "従業員の給与から差し引く金額。退職積立、保険料、組合費、差押え、返済など。"
+      },
+      "employerContribution": {
+        "label": "事業主負担",
+        "description": "賃金に加えて事業主が負担し、従業員の給与には表示されない費用。"
+      }
+    }
   },
   "flows": {
     "title": "フロー",

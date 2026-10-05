@@ -15,7 +15,7 @@ import {
   resolveSetupEntityGate,
   setupEntityForFeatureState,
 } from '../../../../../lib/setup/registry'
-import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
+import { resolveDynamicSetupOptions, setupOptionsContext } from '../../../../../lib/setup/dynamic-options'
 import { resolvedFeatureState, featureEnabled } from '../../../../../lib/features'
 import {
   isUuid,
@@ -145,11 +145,12 @@ export async function SetupDrawerSlot({
   const features = await resolvedFeatureState(orgId)
   // One authoritative gate admits the drawer — never a local OR over featureKey.
   if (!resolveSetupEntityGate(baseEntity, features).enabled) return null
-  const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
+  const gatedEntity = setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
     equipment: featureEnabled(features, 'equipment'),
     fieldTickets: featureEnabled(features, 'fieldTickets'),
-  }))
+  })
+  const entity = resolveDynamicSetupOptions(gatedEntity, await setupOptionsContext(orgId, gatedEntity))
   if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) return null
 
   const t = await getTranslations('admin.setup')

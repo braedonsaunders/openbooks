@@ -43,6 +43,7 @@ import { FairValuePricesEditor } from './FairValuePricesEditor'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
+import { RecordKindCards } from '../../../components/record-kind-cards'
 import { useAppAction } from '../../../lib/use-app-action'
 
 interface AccountOpt {
@@ -665,27 +666,13 @@ export function ItemDrawer({
       <div className="space-y-7 p-1">
         <ActionAlert error={action.refusal} fallbackMessage={tCommon('feedback.saveFailed')} />
         {choosingKind ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {kindOptions.map((option) => {
+          <RecordKindCards
+            options={kindOptions.map((option) => {
               const Icon = KIND_ICONS[option.value as (typeof KIND_VALUES)[number]]
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => { setKind(option.value); setTab('overview'); setCreateStep('form') }}
-                  className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600"
-                >
-                  <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-teal-50 text-teal-700 transition-colors group-hover:bg-teal-100 dark:bg-teal-950/60 dark:text-teal-300 dark:group-hover:bg-teal-900/70">
-                    <Icon size={22} />
-                  </span>
-                  <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{option.label}</span>
-                  <span className="mt-1.5 block text-sm leading-5 text-slate-500 dark:text-slate-400">
-                    {t(`kindDescriptions.${option.value}`)}
-                  </span>
-                </button>
-              )
+              return { value: option.value, label: option.label, description: t(`kindDescriptions.${option.value}`), icon: <Icon size={22} /> }
             })}
-          </div>
+            onChoose={(value) => { setKind(value); setTab('overview'); setCreateStep('form') }}
+          />
         ) : null}
 
         {!choosingKind && recordTabs.find((recordTab) => recordTab.key === activeTabKey)?.content}

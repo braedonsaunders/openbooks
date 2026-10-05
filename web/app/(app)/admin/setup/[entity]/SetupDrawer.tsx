@@ -13,7 +13,8 @@ import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Trash2, Upload } from 'lucide-react'
+import { Banknote, Building2, CircleMinus, Gift, HandCoins, PiggyBank, Plus, Receipt, Shapes, Trash2, Upload, type LucideIcon } from 'lucide-react'
+import { RecordKindCards } from '@/components/record-kind-cards'
 import {
   Button,
   Input,
@@ -35,6 +36,17 @@ import { formatDecimal } from '../../../../../lib/money-format'
 import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string; scopeValue?: string | null }
+
+/** Icons a registry `createChooser` card may name. */
+const CHOOSER_ICONS: Record<string, LucideIcon> = {
+  banknote: Banknote,
+  building: Building2,
+  'circle-minus': CircleMinus,
+  gift: Gift,
+  'hand-coins': HandCoins,
+  'piggy-bank': PiggyBank,
+  receipt: Receipt,
+}
 
 /** Bound for one setup save before the drawer surfaces a timeout. */
 const SAVE_TIMEOUT_MS = 30_000
@@ -179,6 +191,17 @@ export function SetupDrawer({
       }
       return next
     })
+  }
+  // A kind chooser opens the create drawer on cards; the form appears once a
+  // card pre-fills the values that decide which fields apply.
+  const chooser = creating ? entity.createChooser : undefined
+  const [choosing, setChoosing] = useState(Boolean(chooser))
+  function choose(key: string) {
+    const choice = chooser?.options.find((option) => option.key === key)
+    if (!choice) return
+    setFieldError(null)
+    setForm((current) => ({ ...current, ...choice.values }))
+    setChoosing(false)
   }
   const recordTabs = nestedTab ? [nestedTab, ...nestedTabs] : nestedTabs
   const activeNestedTab = !creating ? recordTabs.find((tab) => searchParams.get('setupTab') === tab.key) : undefined
@@ -419,17 +442,18 @@ export function SetupDrawer({
       open
       closeHref={closeHref}
       size={entity.drawerSize ?? 'lg'}
-      description={entity.formDescriptionKey ? t(entity.formDescriptionKey) : undefined}
+      description={choosing && chooser ? t(chooser.descriptionKey) : entity.formDescriptionKey ? t(entity.formDescriptionKey) : undefined}
       beforeClose={confirmDiscard}
       stacked={stacked}
-      title={creating ? t('drawer.newTitle', { name: entityTitle }) : editing ? t('drawer.editTitle', { name: entityTitle }) : recordTitle ?? entityTitle}
+      title={choosing && chooser ? t(chooser.titleKey) : creating ? t('drawer.newTitle', { name: entityTitle }) : editing ? t('drawer.editTitle', { name: entityTitle }) : recordTitle ?? entityTitle}
       subtabs={!creating && recordTabs.length > 0 ? (
         <RecordTabs label={t('drawer.tabs.ariaLabel')} tabs={[{ key: 'details', label: detailsLabel ?? t('drawer.tabs.details') }, ...recordTabs]} active={activeNestedTab?.key ?? 'details'} onChange={selectTab} />
       ) : undefined}
       headerActions={<>
         {!creating && entity.recordLinks?.map((action) => <Button asChild key={action.href} variant="outline"><Link href={action.href}>{action.label}</Link></Button>)}
         {!creating && !entity.readOnly && !editing ? <Button variant="outline" disabled={busy} onClick={() => { setEditing(true); if (nestedTabActive || activeRuleTab) selectTab('details') }}>{tCommon('actions.edit')}</Button> : null}
-        {!nestedTabActive && !entity.readOnly && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
+        {chooser && !choosing ? <Button variant="outline" disabled={busy} onClick={() => setChoosing(true)}>{tCommon('actions.back')}</Button> : null}
+        {!choosing && !nestedTabActive && !entity.readOnly && editing && (!steps.length || reviewing) ? <Button disabled={busy} onClick={save}>
           {busy ? tCommon('actions.saving') : creating ? tCommon('actions.create') : tCommon('actions.save')}
         </Button> : null}
         {!creating && editing ? <Button variant="outline" disabled={busy} onClick={() => void cancelEditing()}>{tCommon('actions.cancel')}</Button> : null}
@@ -452,7 +476,15 @@ export function SetupDrawer({
         )
       }
     >
-      {nestedTabActive ? activeNestedTab?.content : <>
+      {choosing && chooser ? (
+        <RecordKindCards
+          options={chooser.options.map((option) => {
+            const Icon = CHOOSER_ICONS[option.iconKey] ?? Shapes
+            return { value: option.key, label: t(option.labelKey), description: t(option.descriptionKey), icon: <Icon size={22} /> }
+          })}
+          onChoose={choose}
+        />
+      ) : nestedTabActive ? activeNestedTab?.content : <>
       {!creating && ruleTabs.length ? <div className="mb-4"><RecordTabs label={detailsLabel ?? t('drawer.tabs.ariaLabel')} tabs={[{key:'details',label:t('drawer.tabs.details')}, ...ruleTabs]} active={activeRuleTab?.key ?? 'details'} onChange={selectTab} /></div> : null}
       {activeRuleTab ? activeRuleTab.content : <>
       {entity.key === "subsidiary-ownership-interests" && row && row.method === "full" ? <div className="mb-4"><LossOfControlButton interestId={String(row.id)} /><NetInvestmentButton interestId={String(row.id)} /></div> : null}

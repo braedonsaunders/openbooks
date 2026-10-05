@@ -21,7 +21,7 @@ import { setupParentScope } from '../../../../../lib/setup/parent-scope'
 import { setupEntityForFeatureState, setupChildEntities, resolveSetupEntityGate, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
 import { setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
 import { setupEntityClientDescriptor } from '../../../../../lib/setup/types'
-import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
+import { resolveDynamicSetupOptions, setupOptionsContext } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
 import { isFeatureEnabled, subsidiaryFeatureEnabled, resolvedFeatureState } from '../../../../../lib/features'
@@ -206,11 +206,10 @@ export async function SetupEntitySection({
     equipment: await isFeatureEnabled(orgId, 'equipment'),
     fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
   })
-  const entity = resolveDynamicSetupOptions(
-    gated.key === 'item-rate-books' && !multiCurrency
-      ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }
-      : gated,
-  )
+  const scopedEntity = gated.key === 'item-rate-books' && !multiCurrency
+    ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }
+    : gated
+  const entity = resolveDynamicSetupOptions(scopedEntity, await setupOptionsContext(orgId, scopedEntity))
   const drawerEntity = setupEntityClientDescriptor(entity)
   // Command-owned entities mutate through their domain command: the marker's
   // permission (funds.manage) gates the mutation UI, derived from the same
