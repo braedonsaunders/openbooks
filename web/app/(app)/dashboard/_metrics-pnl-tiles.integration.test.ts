@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// The MTD revenue / net-income / gross-margin tiles read one profitAndLoss
-// call for the month to date — the same reader as /reports/pnl, never a
-// parallel sum — over the caller's subsidiary scope. A multi-functional
-// scope refuses inside the reader; the tiles render that refusal as no-data,
-// never as a zero that reads as a fact.
+// The revenue / expenses / net-income / gross-margin tiles read one
+// consolidated period-to-date call — the same statement-matrix read as
+// /reports/pnl, over the org's current fiscal period to date, never a
+// parallel sum and never the civil month. A multi-functional scope is
+// translated at each line-period's average rate; a scope whose consolidated
+// rates were never derived refuses by name on the tile (the message names
+// the remedy), never as a zero that reads as a fact.
 registerHooks({
   resolve(specifier, context, nextResolve) {
 
@@ -31,7 +33,7 @@ const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/p
 const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { withSimClock: pinClock } = await import("@openbooks/engine/src/platform/clock.ts");
-const { profitAndLoss: canonicalProfitAndLoss } = await import("@/lib/reports/statements.ts");
+const { dashboardConsolidatedProfitAndLoss } = await import("./_metrics.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 const { canSeeWidget } = await import("./_widget-access.ts");
 type Authz = import("@/lib/authz.ts").Authz;
@@ -39,8 +41,8 @@ type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg
 type DashboardMoneyReaders = import("./_metrics.ts").DashboardMoneyReaders;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-// The scratch fixture's open period; the loader reads month-to-date off the
-// pinned business day, so the clock and the postings share this month.
+// The scratch fixture's open period; the loader reads the fiscal period to
+// date off the pinned business day, so the clock and the postings share it.
 const TODAY = "2026-07-15";
 
 function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
@@ -74,7 +76,27 @@ async function post(
   await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
 }
 
-test("P&L tiles read one MTD profitAndLoss call and exclude out-of-window postings", { skip: !DB }, async () => {
+function denialProofReaders(calls: string[]): DashboardMoneyReaders {
+  return {
+    bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],
+    openItems: (async () => []) as DashboardMoneyReaders["openItems"],
+    paymentStats: (async () => {
+      throw new Error("paymentStats must not run here");
+    }) as DashboardMoneyReaders["paymentStats"],
+    cashPosition: (async () => {
+      throw new Error("cashPosition must not run here");
+    }) as DashboardMoneyReaders["cashPosition"],
+    cashflowConfig: (async () => {
+      throw new Error("cashflowConfig must not run here");
+    }) as DashboardMoneyReaders["cashflowConfig"],
+    profitAndLoss: (async (...args: Parameters<DashboardMoneyReaders["profitAndLoss"]>) => {
+      calls.push("profitAndLoss");
+      return dashboardConsolidatedProfitAndLoss(...args);
+    }) as DashboardMoneyReaders["profitAndLoss"],
+  };
+}
+
+test("P&L tiles read one consolidated period-to-date call and exclude out-of-window postings", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const cogs = randomUUID();
@@ -96,83 +118,86 @@ test("P&L tiles read one MTD profitAndLoss call and exclude out-of-window postin
     // June (out of window): must not move any tile.
     await withBypass(() => post(org, { date: "2026-06-20", period: june, legs: [[org.accounts.bank, "200"], [org.accounts.revenue, "-200"]] }));
 
-    let calls = 0;
-    const readers: DashboardMoneyReaders = {
-      bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],
-      openItems: (async () => []) as DashboardMoneyReaders["openItems"],
-      paymentStats: (async () => {
-        throw new Error("paymentStats must not run here");
-      }) as DashboardMoneyReaders["paymentStats"],
-      cashPosition: (async () => {
-        throw new Error("cashPosition must not run here");
-      }) as DashboardMoneyReaders["cashPosition"],
-      cashflowConfig: (async () => {
-        throw new Error("cashflowConfig must not run here");
-      }) as DashboardMoneyReaders["cashflowConfig"],
-      profitAndLoss: (async (...args: Parameters<DashboardMoneyReaders["profitAndLoss"]>) => {
-        calls += 1;
-        return canonicalProfitAndLoss(...args);
-      }) as DashboardMoneyReaders["profitAndLoss"],
-    };
+    const calls: string[] = [];
     const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
     const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
     for (const id of PNL_IDS) assert.equal(canSeeWidget(authz, id), true);
     const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], readers)),
+      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
     );
-    assert.equal(calls, 1, "revenue, income and margin share a single P&L read");
-    assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1000"), "MTD revenue, June excluded");
+    assert.deepEqual(calls, ["profitAndLoss"], "revenue, income and margin share a single P&L read");
+    assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1000"), "period revenue, June excluded");
     assert.equal(toUnits(metrics.grossProfitMtd ?? "0"), toUnits("600"), "revenue minus COGS only");
     assert.equal(Number(metrics.grossMarginMtd), 0.6, "margin ratio on the 0-1 scale");
     assert.equal(toUnits(metrics.netIncomeMtd ?? "0"), toUnits("500"), "gross profit minus expenses");
-    assert.equal(metrics.baseCurrency, "CAD");
+    assert.equal(metrics.plCurrency, "CAD", "the tile labels the reader's currency");
+    assert.ok(metrics.plPeriodLabel?.endsWith("to date"), `the tile labels the resolved period, not the civil month: ${metrics.plPeriodLabel}`);
+    assert.equal(metrics.plUnavailable, null);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("a multi-functional MTD scope refuses into nulls, never zeros", { skip: !DB }, async () => {
+test("a multi-functional scope without derived rates refuses by name, never zeros", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const usSub = randomUUID();
     await withBypass(async () => {
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
         values(${usSub},${org.orgId},${org.subsidiaryId},'US Co','USD','US')`);
-      // CAD revenue on the root subsidiary plus USD revenue inside the MTD
-      // window: the census sees two functional currencies and refuses.
+      // CAD revenue on the root subsidiary plus USD revenue inside the
+      // window: the scope spans functional currencies and no consolidated
+      // rates were derived, so the read refuses.
       await post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] });
       await post(org, { sub: usSub, currency: "USD", legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
     });
     const calls: string[] = [];
-    const readers: DashboardMoneyReaders = {
-      bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],
-      openItems: (async () => []) as DashboardMoneyReaders["openItems"],
-      paymentStats: (async () => {
-        throw new Error("paymentStats must not run here");
-      }) as DashboardMoneyReaders["paymentStats"],
-      cashPosition: (async () => {
-        throw new Error("cashPosition must not run here");
-      }) as DashboardMoneyReaders["cashPosition"],
-      cashflowConfig: (async () => {
-        throw new Error("cashflowConfig must not run here");
-      }) as DashboardMoneyReaders["cashflowConfig"],
-      profitAndLoss: (async (...args: Parameters<DashboardMoneyReaders["profitAndLoss"]>) => {
-        calls.push("profitAndLoss");
-        return canonicalProfitAndLoss(...args);
-      }) as DashboardMoneyReaders["profitAndLoss"],
-    };
     const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
     const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
     const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], readers)),
+      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
     );
     // The reader ran (denial is not the story here) and refused; the loader
-    // caught the declared refusal into nulls so the tiles render "—".
+    // caught the declared refusal into nulls plus the message, so the tiles
+    // render the remedy instead of "—".
     assert.deepEqual(calls, ["profitAndLoss"]);
     assert.equal(metrics.revenueMtd, null);
     assert.equal(metrics.netIncomeMtd, null);
     assert.equal(metrics.grossProfitMtd, null);
     assert.equal(metrics.grossMarginMtd, null);
+    assert.ok(metrics.plPeriodLabel?.endsWith("to date"), "the refusal still names the window it covers");
+    assert.ok(
+      metrics.plUnavailable?.includes("Derive rates"),
+      `the refusal names the remedy: ${metrics.plUnavailable}`,
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("derived consolidated rates translate a multi-functional scope into figures", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const usSub = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${usSub},${org.orgId},${org.subsidiaryId},'US Co','USD','US')`);
+      await db.execute(sql`insert into consolidated_fx_rates(org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate)
+        values(${org.orgId},${org.periodId},'USD','CAD',1.35,1.35,1.3)`);
+      // CAD 1000 plus USD 100 at the derived July average: translated, not refused.
+      await post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] });
+      await post(org, { sub: usSub, currency: "USD", legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
+    });
+    const calls: string[] = [];
+    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
+    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
+    const metrics = await pinClock(TODAY, () =>
+      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], denialProofReaders(calls))),
+    );
+    assert.deepEqual(calls, ["profitAndLoss"]);
+    assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1135"), "USD 100 at 1.35 joins CAD 1000");
+    assert.equal(metrics.plCurrency, "CAD");
+    assert.equal(metrics.plUnavailable, null);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

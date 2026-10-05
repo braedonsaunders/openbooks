@@ -95,6 +95,7 @@
     "asOf": "Au {date}",
     "monthToDate": "Mois en cours",
     "noData": "Aucune donnée",
+    "noBaseCurrency": "Aucune devise de base configurée",
     "next30Days": "30 prochains jours",
     "dso": "DSO {days}",
     "dpo": "DPO {days}",
