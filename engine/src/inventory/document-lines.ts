@@ -15,6 +15,9 @@ export interface DocumentInventoryLine {
   lineId: string;
   lineNumber: number;
   itemId: string;
+  /** The item's catalog kind: kit lines explode into their components
+   * rather than moving stock themselves. */
+  itemKind: string;
   stockLocationId: string;
   /** base-unit quantity for the line. Always positive: negative-quantity
    * inventory lines are refused at load time (see below), never absorbed. */
@@ -87,13 +90,15 @@ export async function loadDocumentInventoryLines(
       adjustment_account_id: string | null;
       variance_account_id: string | null;
       costing_method: InventoryProfile["costingMethod"];
+      item_kind: string;
       tracking: InventoryProfile["tracking"];
       department_id: string | null;
       project_id: string | null;
       location_id: string | null;
       custom: unknown;
     }>(sql`
-    select dl.id as line_id, dl.line_number, dl.item_id, dl.quantity, dl.unit, dl.amount,
+    select dl.id as line_id, dl.line_number, dl.item_id, i.kind as item_kind,
+           dl.quantity, dl.unit, dl.amount,
            dl.stock_location_id, d.subsidiary_id as document_subsidiary_id,
            d.kind as document_kind,
            p.asset_account_id, p.received_not_billed_account_id,
@@ -105,6 +110,7 @@ export async function loadDocumentInventoryLines(
            dl.custom
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+      join items i on i.id = dl.item_id and i.org_id = dl.org_id
       join item_inventory_profiles p on p.item_id = dl.item_id and p.org_id = dl.org_id
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
        and dl.item_id is not null and dl.quantity <> 0
@@ -173,6 +179,7 @@ export async function loadDocumentInventoryLines(
       lineId: row.line_id,
       lineNumber: row.line_number,
       itemId: row.item_id,
+      itemKind: row.item_kind,
       stockLocationId: loc,
       quantity,
       amount: row.amount,

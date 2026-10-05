@@ -29,6 +29,13 @@ import {
 } from "./document-lines.ts";
 import { postedReturnQuantity } from "./return-quantities.ts";
 import { isUuid } from "../platform/uuid.ts";
+import {
+  inventoryKitComponentReturnKey,
+  kitComponentQuantities,
+  kitLabel,
+  loadKitComponents,
+  parseKitComponentReturnSources,
+} from "./kits.ts";
 
 /**
  * Immutable operational document created when stock physically leaves on a
@@ -89,6 +96,8 @@ export function parseCustomerCreditInventoryReturnSelection(
 
 interface CustomerCreditInventoryReturnLine extends DocumentInventoryLine {
   selection: CustomerCreditInventoryReturnSelection;
+  /** Set on kit-exploded pseudo-lines: the kit item the return was raised on. */
+  kitItemId: string | null;
 }
 
 async function loadCustomerCreditInventoryReturnLines(
@@ -111,13 +120,114 @@ async function loadCustomerCreditInventoryReturnLines(
         `document line ${line.lineNumber} (item ${line.itemId}) requires custom.inventoryReturn evidence`,
       );
     }
+    // Kit lines never return themselves: they expand into one pseudo-line
+    // per component below, each naming its own source issue movement.
+    if (line.itemKind === "kit") continue;
     returns.push({
       ...line,
+      kitItemId: null,
       selection: parseCustomerCreditInventoryReturnSelection(
         line.custom,
         `document line ${line.lineNumber} (item ${line.itemId})`,
       ),
     });
+  }
+  return returns;
+}
+
+/**
+ * Expand kit credit lines into one return pseudo-line per component. A kit
+ * sale issues one movement per component, so a kit return names one source
+ * issue movement per component and restores each at the cost its units left
+ * at. Component quantities re-derive from the kit line exactly as the
+ * shipment derived them (line quantity × quantity per), and every component
+ * returns to the credit line's own stock location — the one place a credit
+ * line can name, and the location the operator chose for the physical return.
+ */
+async function expandKitCustomerCreditReturnLines(
+  runner: Runner,
+  orgId: string,
+  documentId: string,
+  date: string,
+): Promise<CustomerCreditInventoryReturnLine[]> {
+  if (!(await inventoryFeatureEnabled(runner, orgId))) return [];
+  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId))
+    .filter((line) => line.itemKind === "kit");
+  const returns: CustomerCreditInventoryReturnLine[] = [];
+  for (const line of lines) {
+    const custom = isJsonRecord(line.custom) ? line.custom : null;
+    // A kit line without return evidence is a commercial-only credit, like
+    // any other evidence-less line: it reverses revenue and restores nothing.
+    if (!custom || !("inventoryReturn" in custom)) continue;
+    const lineLabel = `document line ${line.lineNumber} (kit ${await kitLabel(runner, orgId, line.itemId)})`;
+    const topEvidence = custom.inventoryReturn;
+    if (isJsonRecord(topEvidence) && (topEvidence.lotId != null || topEvidence.serialId != null)) {
+      throw new InventoryError(
+        `${lineLabel} names a lot or serial on the kit; choose lots and serials per component in inventoryReturn.kitComponents instead`,
+      );
+    }
+    const sources = parseKitComponentReturnSources(line.custom, lineLabel);
+    const components = await loadKitComponents(runner, orgId, line.itemId, date);
+    if (sources.length !== components.length) {
+      throw new InventoryError(
+        `${lineLabel} names ${sources.length} source shipment${sources.length === 1 ? "" : "s"} ` +
+          `but kit ${await kitLabel(runner, orgId, line.itemId)} has ${components.length} components ` +
+          `effective on ${date}; return every component together`,
+      );
+    }
+    const seenSources = new Set<string>();
+    for (const source of sources) {
+      if (seenSources.has(source.sourceIssueMovementId)) {
+        throw new InventoryError(`${lineLabel} names source shipment ${source.sourceIssueMovementId} twice`);
+      }
+      seenSources.add(source.sourceIssueMovementId);
+    }
+    const quantities = new Map(
+      kitComponentQuantities(await kitLabel(runner, orgId, line.itemId), line.quantity, components)
+        .map((entry) => [entry.componentItemId, entry.quantity]),
+    );
+    const sourceByComponent = new Map<string, { sourceIssueMovementId: string; lotId: string | null; serialId: string | null }>();
+    const usedComponents = new Set<string>();
+    for (const source of sources) {
+      // The source must be a component issue of THIS kit's own sale: its
+      // document line carries the kit item, so a standalone sale of the
+      // same component can never price this kit's return.
+      const movement = (await runner.execute<{ item_id: string }>(sql`
+        select movement.item_id
+          from inventory_movements movement
+          join document_lines source_line
+            on source_line.id = movement.document_line_id
+           and source_line.org_id = movement.org_id
+         where movement.org_id = ${orgId} and movement.id = ${source.sourceIssueMovementId}
+           and source_line.item_id = ${line.itemId}`)).rows[0];
+      if (!movement || !quantities.has(movement.item_id) || usedComponents.has(movement.item_id)) {
+        throw new InventoryError(
+          `${lineLabel} source shipment ${source.sourceIssueMovementId} is not an unclaimed component issue of this kit return`,
+        );
+      }
+      usedComponents.add(movement.item_id);
+      sourceByComponent.set(movement.item_id, source);
+    }
+    for (const component of components) {
+      const source = sourceByComponent.get(component.componentItemId)!;
+      // The component's own tracking governs its return evidence: a tracked
+      // component without its lot or serial is refused by the same source
+      // validation as a direct return, before anything posts.
+      const profile = await resolveProfile(orgId, component.componentItemId, runner);
+      returns.push({
+        ...line,
+        itemId: component.componentItemId,
+        itemKind: "kit-component",
+        quantity: quantities.get(component.componentItemId)!,
+        tracking: profile.tracking,
+        kitItemId: line.itemId,
+        selection: {
+          sourceIssueMovementId: source.sourceIssueMovementId,
+          lotId: source.lotId,
+          serialId: source.serialId,
+        },
+      });
+    }
   }
   return returns;
 }
@@ -288,12 +398,15 @@ export async function assertCustomerCreditInventoryReturnsPostable(
   customerId: string | null,
   subsidiaryId: string,
 ): Promise<void> {
-  const lines = await loadCustomerCreditInventoryReturnLines(
-    runner,
-    orgId,
-    documentId,
-    false,
-  );
+  const document = (await runner.execute<{ document_date: string }>(sql`
+    select document_date::text as document_date from documents
+     where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+  const lines = [
+    ...(await loadCustomerCreditInventoryReturnLines(runner, orgId, documentId, false)),
+    ...(document
+      ? await expandKitCustomerCreditReturnLines(runner, orgId, documentId, document.document_date)
+      : []),
+  ];
   for (const line of lines) {
     await validateCustomerReturnSource(
       runner,
@@ -443,7 +556,7 @@ async function returnCustomerCreditInventoryLine(
       (${orgId}, ${subsidiaryId}, ${line.itemId}, 'receipt', ${date},
        ${line.stockLocationId}, ${line.selection.lotId}, ${line.selection.serialId},
        ${quantity}, ${unitCost}, ${inventoryValue}, ${line.lineId}, ${entryId},
-       ${inventoryPostingEffectKey(line.lineId, "return")}, 'posted',
+       ${line.kitItemId ? inventoryKitComponentReturnKey(line.lineId, line.itemId) : inventoryPostingEffectKey(line.lineId, "return")}, 'posted',
        ${`Customer return of shipment ${line.selection.sourceIssueMovementId}`},
        ${actorId}, ${actorId})
     returning id
@@ -500,12 +613,12 @@ export async function applyCustomerCreditInventoryReturns(
   }
   // Evidence-less historical/migration credits remain financial documents; a
   // credit line only restores stock when it explicitly claims a return.
-  const lines = await loadCustomerCreditInventoryReturnLines(
-    runner,
-    orgId,
-    documentId,
-    false,
-  );
+  // Matching on the item as well as the line keeps kit pseudo-lines honest:
+  // one kit line restores one receipt per component, and a replay finds each.
+  const lines = [
+    ...(await loadCustomerCreditInventoryReturnLines(runner, orgId, documentId, false)),
+    ...(await expandKitCustomerCreditReturnLines(runner, orgId, documentId, date)),
+  ];
   for (const key of [
     ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
   ].sort()) {
@@ -521,7 +634,7 @@ export async function applyCustomerCreditInventoryReturns(
     const seen = (await runner.execute(sql`
       select 1 from inventory_movements
        where org_id = ${orgId} and document_line_id = ${line.lineId}
-         and kind = 'receipt'
+         and item_id = ${line.itemId} and kind = 'receipt'
        limit 1
     `)).rows[0];
     if (seen) continue;

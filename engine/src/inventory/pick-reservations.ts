@@ -81,15 +81,35 @@ export function pickReservationsCte(orgId: string): SQL {
          and pick.status in ('draft', 'pending_approval', 'approved')
          and fd.stage = 'open'
     ),
-    pick_ranked as (
-      select a.*, ${openQuantitySql("so_line")} as line_open,
-             coalesce(sum(a.quantity) over (
-               partition by a.sales_order_line_id
-               order by (a.pick_list_status = 'approved') desc, a.created_at, a.pick_list_id, a.line_number
-               rows between unbounded preceding and 1 preceding), 0) as ahead
+    pick_scaled as (
+      select a.*,
+             ${openQuantitySql("so_line")} as base_open,
+             bom.quantity_per as kit_quantity_per
         from pick_active a
         join document_lines so_line
           on so_line.id = a.sales_order_line_id and so_line.org_id = ${orgId}
+        join documents so_doc
+          on so_doc.id = so_line.document_id and so_doc.org_id = ${orgId}
+        left join bom_components bom
+          on bom.org_id = ${orgId}
+         and bom.assembly_item_id = so_line.item_id
+         and bom.component_item_id = a.item_id
+         and bom.operation_seq is null
+         and bom.is_byproduct = false
+         and (bom.effective_from is null or bom.effective_from <= so_doc.document_date)
+         and (bom.effective_to is null or so_doc.document_date < bom.effective_to)
+    ),
+    pick_ranked as (
+      select a.*,
+             case when a.kit_quantity_per is null
+               then a.base_open
+               else a.base_open * a.kit_quantity_per
+             end as line_open,
+             coalesce(sum(a.quantity) over (
+               partition by a.sales_order_line_id, a.item_id
+               order by (a.pick_list_status = 'approved') desc, a.created_at, a.pick_list_id, a.line_number
+               rows between unbounded preceding and 1 preceding), 0) as ahead
+        from pick_scaled a
     ),
     pick_reservations as (
       select pick_list_id, pick_list_number, pick_list_status, pick_line_id, sales_order_line_id,

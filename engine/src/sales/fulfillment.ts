@@ -3,6 +3,7 @@ import { fulfillmentDocuments, fulfillmentLines, type ShipToAddress } from "@ope
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal, isPositiveDecimal } from "../money/exact-decimal.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -246,7 +247,11 @@ async function lockChain(
 interface HeldRow extends Record<string, unknown> {
   sales_order_line_id: string;
   line_number: number;
+  item_id: string;
+  item_label: string;
+  order_item_id: string;
   open: string;
+  cap: string;
   reserved: string;
   held_by: string | null;
   requested: string;
@@ -254,51 +259,77 @@ interface HeldRow extends Record<string, unknown> {
   fits: boolean;
 }
 
+export interface OpenQuantityRequest {
+  salesOrderLineId: string;
+  quantity: string;
+  /** The picked item: the order line's own item, or a kit's component. */
+  itemId: string;
+}
+
 /**
  * Refuse when a pick request would hold more of an order line than its open
  * quantity leaves after other pick lists. `heldBy` chooses which other pick
  * lists count: every active one when a pick list is created, only released
  * ones when it is released (drafts do not hold stock).
+ *
+ * Kit component rows are capped in component units — the line's open kit
+ * quantity times the recipe quantity — so every component is held against
+ * its own requirement, never against the kit count.
  */
 async function assertWithinOpenQuantity(
   tx: SqlExecutor,
   orgId: string,
   orderNumber: string,
-  requested: { salesOrderLineId: string; quantity: string }[],
+  requested: OpenQuantityRequest[],
   heldBy: "active" | "released",
   excludePickListId: string | null,
 ): Promise<void> {
   const rows = (await tx.execute<HeldRow>(sql`
     with ${pickReservationsCte(orgId)},
     requested as (
-      select r.sales_order_line_id, sum(r.quantity::numeric) as requested
+      select r.sales_order_line_id, r.item_id, sum(r.quantity::numeric) as requested
         from jsonb_to_recordset(${JSON.stringify(
-          requested.map((line) => ({ sales_order_line_id: line.salesOrderLineId, quantity: line.quantity })),
-        )}::jsonb) as r(sales_order_line_id uuid, quantity text)
-       group by r.sales_order_line_id
+          requested.map((line) => ({ sales_order_line_id: line.salesOrderLineId, item_id: line.itemId, quantity: line.quantity })),
+        )}::jsonb) as r(sales_order_line_id uuid, item_id uuid, quantity text)
+       group by r.sales_order_line_id, r.item_id
     ),
     held as (
-      select sales_order_line_id, sum(reserved) as reserved,
+      select sales_order_line_id, item_id, sum(reserved) as reserved,
              string_agg(distinct pick_list_number, ', ' order by pick_list_number) as held_by
         from pick_reservations
        where reserved > 0
          ${heldBy === "released" ? sql`and pick_list_status = 'approved'` : sql``}
          ${excludePickListId ? sql`and pick_list_id <> ${excludePickListId}` : sql``}
-       group by sales_order_line_id
+       group by sales_order_line_id, item_id
     )
-    select q.sales_order_line_id, so.line_number, ${openQuantitySql("so")}::text as open,
+    select q.sales_order_line_id, so.line_number, q.item_id, coalesce(i.code || ' · ' || i.name, i.name) as item_label,
+           so.item_id as order_item_id, ${openQuantitySql("so")}::text as open,
+           (${openQuantitySql("so")} * coalesce(bom.quantity_per, 1))::text as cap,
            coalesce(h.reserved, 0)::text as reserved, h.held_by, q.requested::text as requested,
-           greatest(0, ${openQuantitySql("so")} - coalesce(h.reserved, 0))::text as pickable,
-           q.requested <= ${openQuantitySql("so")} - coalesce(h.reserved, 0) as fits
+           greatest(0, (${openQuantitySql("so")} * coalesce(bom.quantity_per, 1)) - coalesce(h.reserved, 0))::text as pickable,
+           q.requested <= (${openQuantitySql("so")} * coalesce(bom.quantity_per, 1)) - coalesce(h.reserved, 0) as fits
       from requested q
       join document_lines so on so.id = q.sales_order_line_id and so.org_id = ${orgId}
-      left join held h on h.sales_order_line_id = q.sales_order_line_id
+      join documents so_doc on so_doc.id = so.document_id and so_doc.org_id = ${orgId}
+      join items i on i.id = q.item_id and i.org_id = ${orgId}
+      left join bom_components bom
+        on bom.org_id = ${orgId}
+       and bom.assembly_item_id = so.item_id
+       and bom.component_item_id = q.item_id
+       and bom.operation_seq is null
+       and bom.is_byproduct = false
+       and (bom.effective_from is null or bom.effective_from <= so_doc.document_date)
+       and (bom.effective_to is null or so_doc.document_date < bom.effective_to)
+      left join held h on h.sales_order_line_id = q.sales_order_line_id and h.item_id = q.item_id
      order by so.line_number`)).rows;
   const over = rows.find((row) => !row.fits);
   if (!over) return;
   const heldText = over.held_by ? `, ${shown(over.reserved)} already on ${over.held_by}` : "";
+  const kitText = over.item_id !== over.order_item_id
+    ? ` component ${over.item_label} (${shown(over.open)} kits open)`
+    : "";
   throw new FulfillmentRefusal(
-    `${orderNumber} line ${over.line_number} has ${shown(over.open)} open${heldText}; cannot pick ${shown(over.requested)}`,
+    `${orderNumber} line ${over.line_number}${kitText} has ${shown(over.cap)} open${heldText}; cannot pick ${shown(over.requested)}`,
     "exceeds_open_quantity",
     422,
     isPositiveDecimal(over.pickable)
@@ -313,6 +344,12 @@ export interface PickListLineInput {
   quantity: unknown;
   lotId?: string | null;
   serialId?: string | null;
+  /**
+   * A kit order line is picked by component: this names the kit's component
+   * the row covers, in the component's own base units. Refused on any other
+   * line — ordinary lines pick themselves.
+   */
+  kitComponentItemId?: string | null;
 }
 
 export interface CreatePickListInput {
@@ -333,6 +370,7 @@ interface OrderLineRow extends Record<string, unknown> {
   id: string;
   line_number: number;
   item_id: string | null;
+  item_kind: string | null;
   description: string | null;
   unit: string | null;
   stock_location_id: string | null;
@@ -371,16 +409,38 @@ export async function createPickList(
     throw new FulfillmentRefusal("Select at least one order line to pick", "invalid_input", 422);
   }
   const documentDate = await parseDocumentDate(input.documentDate, orgId);
-  const requested = input.lines.map((line, index) => ({
-    salesOrderLineId: line.salesOrderLineId,
-    binId: line.binId,
-    lotId: line.lotId ?? null,
-    serialId: line.serialId ?? null,
-    quantity: parseQuantity(line.quantity, `Quantity on pick line ${index + 1}`),
-  }));
+  const requested = input.lines.map((line, index) => {
+    const kitComponentItemId = line.kitComponentItemId ?? null;
+    if (kitComponentItemId !== null && !isUuid(kitComponentItemId)) {
+      throw new FulfillmentRefusal(
+        `Kit component on pick line ${index + 1} is not a valid item`,
+        "invalid_input",
+        422,
+        "Pick the component from the kit's recipe",
+      );
+    }
+    // Kit components issue into four-decimal stock: a finer pick could never
+    // issue. Ordinary picks keep the order's eight-decimal scale.
+    if (kitComponentItemId !== null && canonicalDecimal(line.quantity, 4) === null) {
+      throw new FulfillmentRefusal(
+        `Quantity on pick line ${index + 1} must have at most four decimal places; stock is kept to four`,
+        "invalid_quantity",
+        422,
+        "Enter the component quantity with at most four decimal places",
+      );
+    }
+    return {
+      salesOrderLineId: line.salesOrderLineId,
+      binId: line.binId,
+      lotId: line.lotId ?? null,
+      serialId: line.serialId ?? null,
+      kitComponentItemId,
+      quantity: parseQuantity(line.quantity, `Quantity on pick line ${index + 1}`),
+    };
+  });
   const seen = new Set<string>();
   for (const line of requested) {
-    const key = [line.salesOrderLineId, line.binId, line.lotId ?? "", line.serialId ?? ""].join(":");
+    const key = [line.salesOrderLineId, line.kitComponentItemId ?? "", line.binId, line.lotId ?? "", line.serialId ?? ""].join(":");
     if (seen.has(key)) {
       throw new FulfillmentRefusal(
         "An order line appears twice for the same bin, lot and serial",
@@ -397,12 +457,14 @@ export async function createPickList(
 
   const lineIds = [...new Set(requested.map((line) => line.salesOrderLineId))];
   const orderLines = (await tx.execute<OrderLineRow>(sql`
-    select dl.id, dl.line_number, dl.item_id, dl.description, dl.unit, dl.stock_location_id,
+    select dl.id, dl.line_number, dl.item_id, i.kind as item_kind,
+           dl.description, dl.unit, dl.stock_location_id,
            dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
            exists (select 1 from item_inventory_profiles profile
                     where profile.org_id = dl.org_id and profile.item_id = dl.item_id) as is_stock_line,
            wl.id as warehouse_id, wl.code as warehouse_code
       from document_lines dl
+      left join items i on i.id = dl.item_id and i.org_id = dl.org_id
       left join stock_locations wl
         on wl.org_id = dl.org_id
        and wl.id = stock_location_warehouse(dl.org_id, dl.stock_location_id)
@@ -459,9 +521,58 @@ export async function createPickList(
     await assertWarehouseAdmitsMovement(tx, orgId, bin.id, "outbound");
   }
 
+  // Kit lines are picked by component, never as a unit: a kit holds no
+  // stock, so a pick row naming the kit itself could never be covered by a
+  // bin. Each component row is checked against the recipe effective on the
+  // pick date; the shipment re-checks it against the ship date.
+  const kitComponentUnits = new Map<string, string | null>();
+  const kitLines = requested.filter((line) => lineById.get(line.salesOrderLineId)?.item_kind === "kit");
+  if (kitLines.some((line) => line.kitComponentItemId === null)) {
+    const direct = kitLines.find((line) => line.kitComponentItemId === null)!;
+    throw new FulfillmentRefusal(
+      `${order.document_number} line ${lineById.get(direct.salesOrderLineId)!.line_number} is a kit; pick its components, not the kit`,
+      "not_a_stock_line",
+      422,
+      "Add one pick row per kit component instead",
+    );
+  }
+  const nonKitWithComponent = requested.find(
+    (line) => line.kitComponentItemId !== null && lineById.get(line.salesOrderLineId)?.item_kind !== "kit",
+  );
+  if (nonKitWithComponent) {
+    throw new FulfillmentRefusal(
+      `${order.document_number} line ${lineById.get(nonKitWithComponent.salesOrderLineId)!.line_number} is not a kit; only kit lines are picked by component`,
+      "invalid_input",
+      422,
+      "Remove the component from the pick row",
+    );
+  }
+  for (const line of kitLines) {
+    const source = lineById.get(line.salesOrderLineId)!;
+    const recipe = (await tx.execute<{ component_item_id: string; unit: string | null }>(sql`
+      select b.component_item_id, component.unit
+        from bom_components b
+        join items component on component.org_id = b.org_id and component.id = b.component_item_id
+       where b.org_id = ${orgId} and b.assembly_item_id = ${source.item_id}
+         and b.component_item_id = ${line.kitComponentItemId}
+         and (b.effective_from is null or b.effective_from <= ${documentDate}::date)
+         and (b.effective_to is null or ${documentDate}::date < b.effective_to)
+       limit 1`)).rows[0];
+    if (!recipe) {
+      throw new FulfillmentRefusal(
+        `${order.document_number} line ${source.line_number} names a component outside the kit's recipe on ${documentDate}`,
+        "lot_or_serial_mismatch",
+        422,
+        "Pick a component from the kit's current recipe",
+      );
+    }
+    kitComponentUnits.set(line.kitComponentItemId!, recipe.unit);
+  }
+
   for (const line of requested) {
     if (!line.lotId && !line.serialId) continue;
-    const itemId = lineById.get(line.salesOrderLineId)!.item_id!;
+    const source = lineById.get(line.salesOrderLineId)!;
+    const itemId = line.kitComponentItemId ?? source.item_id!;
     const matches = (await tx.execute<{ ok: boolean }>(sql`
       select (${line.lotId}::uuid is null or exists (
                 select 1 from lots where org_id = ${orgId} and id = ${line.lotId}::uuid and item_id = ${itemId}))
@@ -469,15 +580,26 @@ export async function createPickList(
                 select 1 from serials where org_id = ${orgId} and id = ${line.serialId}::uuid and item_id = ${itemId})) as ok`)).rows[0];
     if (!matches?.ok) {
       throw new FulfillmentRefusal(
-        `The lot or serial chosen for ${order.document_number} line ${lineById.get(line.salesOrderLineId)!.line_number} is not of that line's item`,
+        `The lot or serial chosen for ${order.document_number} line ${source.line_number} is not of that line's ${line.kitComponentItemId ? "component" : "item"}`,
         "lot_or_serial_mismatch",
         422,
-        "Choose a lot or serial of the ordered item",
+        `Choose a lot or serial of the ${line.kitComponentItemId ? "kit component" : "ordered item"}`,
       );
     }
   }
 
-  await assertWithinOpenQuantity(tx, orgId, order.document_number, requested, "active", null);
+  await assertWithinOpenQuantity(
+    tx,
+    orgId,
+    order.document_number,
+    requested.map((line) => ({
+      salesOrderLineId: line.salesOrderLineId,
+      quantity: line.quantity,
+      itemId: line.kitComponentItemId ?? lineById.get(line.salesOrderLineId)!.item_id!,
+    })),
+    "active",
+    null,
+  );
 
   const documentNumber = await allocateDocumentNumber(tx, orgId, PICK_LIST_KIND, "PICK-");
   const pickListId = await insertFulfillmentDocument(tx, orgId, actorId, {
@@ -493,7 +615,14 @@ export async function createPickList(
   let lineNumber = 1;
   for (const line of requested) {
     const source = lineById.get(line.salesOrderLineId)!;
-    await insertFulfillmentLine(tx, orgId, actorId, pickListId, lineNumber++, source, {
+    // A kit component row carries the component — the thing the bin actually
+    // holds — while still pointing at the kit's order line. Its unit is the
+    // component's own, so the picked quantity reads in the unit it issues in.
+    const componentItemId = line.kitComponentItemId;
+    const shaped = componentItemId
+      ? { ...source, item_id: componentItemId, unit: kitComponentUnits.get(componentItemId) ?? null }
+      : source;
+    await insertFulfillmentLine(tx, orgId, actorId, pickListId, lineNumber++, shaped, {
       binId: line.binId,
       quantity: line.quantity,
       lotId: line.lotId,
@@ -676,8 +805,8 @@ export async function releasePickList(
     }
     assertOrderOpen(order);
 
-    const lines = (await db.execute<{ sales_order_line_id: string; quantity: string }>(sql`
-      select fl.sales_order_line_id, line.quantity::text as quantity
+    const lines = (await db.execute<{ sales_order_line_id: string; item_id: string; quantity: string }>(sql`
+      select fl.sales_order_line_id, line.item_id, line.quantity::text as quantity
         from fulfillment_lines fl
         join document_lines line on line.id = fl.line_id and line.org_id = fl.org_id
        where fl.org_id = ${orgId} and fl.document_id = ${pickList.id}`)).rows;
@@ -685,7 +814,7 @@ export async function releasePickList(
       db,
       orgId,
       order.document_number,
-      lines.map((line) => ({ salesOrderLineId: line.sales_order_line_id, quantity: line.quantity })),
+      lines.map((line) => ({ salesOrderLineId: line.sales_order_line_id, quantity: line.quantity, itemId: line.item_id })),
       "released",
       pickList.id,
     );
@@ -819,11 +948,12 @@ export async function createShipment(
     );
   }
 
-  const pickLines = (await tx.execute<PickLineRow>(sql`
+  const pickLines = (await tx.execute<PickLineRow & { pick_item_id: string; pick_unit: string | null }>(sql`
     with ${pickReservationsCte(orgId)}
     select line.id as pick_line_id, line.line_number as pick_line_number, line.stock_location_id as bin_id,
            line.quantity::text as quantity, fl.lot_id, fl.serial_id, fl.sales_order_line_id,
            coalesce(r.reserved, 0)::text as reserved,
+           line.item_id as pick_item_id, line.unit as pick_unit,
            so.id, so.line_number, so.item_id, so.description, so.unit, so.stock_location_id,
            so.department_id, so.project_id, so.location_id, so.class_id, so.extra_dims,
            true as is_stock_line, null::uuid as warehouse_id, null::text as warehouse_code
@@ -887,7 +1017,13 @@ export async function createShipment(
   });
   let lineNumber = 1;
   for (const { pick, quantity, carton } of chosen) {
-    await insertFulfillmentLine(tx, orgId, actorId, shipmentId, lineNumber++, pick, {
+    // A kit component row ships the component the pick holds: the shipment
+    // line carries the component's item and unit with the component quantity,
+    // while still pointing at the kit's order line for open-quantity math.
+    const shaped = pick.pick_item_id && pick.pick_item_id !== pick.item_id
+      ? { ...pick, item_id: pick.pick_item_id, unit: pick.pick_unit }
+      : pick;
+    await insertFulfillmentLine(tx, orgId, actorId, shipmentId, lineNumber++, shaped, {
       binId: pick.bin_id,
       quantity,
       lotId: pick.lot_id,
@@ -1413,7 +1549,17 @@ export interface ShipmentForCompletion {
   pickListId: string;
   salesOrderId: string;
   positions: [string, string][];
-  lines: { salesOrderLineId: string; quantity: string; binId: string; lotId: string | null; serialId: string | null }[];
+  lines: {
+    salesOrderLineId: string;
+    /** The order line's own item — a kit for kit component rows. */
+    orderItemId: string | null;
+    /** The shipped item: the order line's item, or a kit's component. */
+    itemId: string | null;
+    quantity: string;
+    binId: string;
+    lotId: string | null;
+    serialId: string | null;
+  }[];
 }
 
 /**
@@ -1456,12 +1602,15 @@ export async function lockShipmentForCompletion(
     assertOrderOpen(order);
   }
   const lines = (await tx.execute<{
-    sales_order_line_id: string; quantity: string; bin_id: string; lot_id: string | null; serial_id: string | null;
+    sales_order_line_id: string; order_item_id: string | null; item_id: string | null;
+    quantity: string; bin_id: string; lot_id: string | null; serial_id: string | null;
   }>(sql`
-    select fl.sales_order_line_id, line.quantity::text as quantity, line.stock_location_id as bin_id,
+    select fl.sales_order_line_id, so.item_id as order_item_id, line.item_id,
+           line.quantity::text as quantity, line.stock_location_id as bin_id,
            fl.lot_id, fl.serial_id
       from fulfillment_lines fl
       join document_lines line on line.id = fl.line_id and line.org_id = fl.org_id
+      join document_lines so on so.id = fl.sales_order_line_id and so.org_id = fl.org_id
      where fl.org_id = ${orgId} and fl.document_id = ${locked.id}
      order by line.line_number`)).rows;
   return {
@@ -1471,6 +1620,8 @@ export async function lockShipmentForCompletion(
     positions,
     lines: lines.map((line) => ({
       salesOrderLineId: line.sales_order_line_id,
+      orderItemId: line.order_item_id,
+      itemId: line.item_id,
       quantity: line.quantity,
       binId: line.bin_id,
       lotId: line.lot_id,
@@ -1510,6 +1661,25 @@ export interface PickCandidateLine {
    *  order's legal entity, most stock first. A suggestion: release re-checks
    *  every bin under the position locks. */
   bins: { binId: string; binCode: string; onHand: string }[];
+  /**
+   * A kit line carries no stock itself: its components, each with the open
+   * requirement in component units, what pick lists already hold, and the
+   * bins that carry the component. The pick form renders these nested under
+   * the kit line; every component ships for the line to ship.
+   */
+  kitComponents?: KitComponentCandidate[];
+}
+
+export interface KitComponentCandidate {
+  componentItemId: string;
+  componentLabel: string;
+  /** Base units of the component per kit. */
+  quantityPer: string;
+  /** The kit line's open quantity times the recipe, in component units. */
+  open: string;
+  heldByPickLists: string;
+  pickable: string;
+  bins: { binId: string; binCode: string; onHand: string }[];
 }
 
 /**
@@ -1529,8 +1699,11 @@ export async function pickCandidates(
      where org_id = ${orgId} and id = ${salesOrderId}`)).rows[0];
   if (!order || order.kind !== "sales_order" || !subsidiaryScopeAllows(scope, order.subsidiary_id)) return null;
   const ownerId = order.subsidiary_id ?? (await loadSubsidiaryContext(runner, orgId)).rootId;
+  const orderDate = (await runner.execute<{ document_date: string }>(sql`
+    select document_date::text as document_date from documents
+     where org_id = ${orgId} and id = ${order.id}`)).rows[0]?.document_date;
   const rows = (await runner.execute<{
-    sales_order_line_id: string; line_number: number; item_id: string; item_label: string; description: string | null;
+    sales_order_line_id: string; line_number: number; item_id: string; item_kind: string; item_label: string; description: string | null;
     unit: string | null; warehouse_id: string | null; warehouse_code: string | null; open: string; held: string; pickable: string;
     bins: { binId: string; binCode: string; onHand: string }[] | null;
   }>(sql`
@@ -1539,7 +1712,8 @@ export async function pickCandidates(
       select sales_order_line_id, sum(reserved) as reserved from pick_reservations group by sales_order_line_id
     ),
     lines as (
-      select dl.id, dl.line_number, dl.item_id, coalesce(i.code || ' · ' || i.name, i.name) as item_label,
+      select dl.id, dl.line_number, dl.item_id, i.kind as item_kind,
+             coalesce(i.code || ' · ' || i.name, i.name) as item_label,
              dl.description, dl.unit, ${openQuantitySql("dl")} as open,
              stock_location_warehouse(dl.org_id, dl.stock_location_id) as warehouse_id
         from document_lines dl
@@ -1547,7 +1721,7 @@ export async function pickCandidates(
         join item_inventory_profiles profile on profile.item_id = dl.item_id and profile.org_id = dl.org_id
        where dl.org_id = ${orgId} and dl.document_id = ${order.id} and ${openQuantitySql("dl")} > 0
     )
-    select l.id as sales_order_line_id, l.line_number, l.item_id, l.item_label, l.description, l.unit,
+    select l.id as sales_order_line_id, l.line_number, l.item_id, l.item_kind, l.item_label, l.description, l.unit,
            l.warehouse_id, wl.code as warehouse_code, l.open::text as open,
            coalesce(h.reserved, 0)::text as held, greatest(0, l.open - coalesce(h.reserved, 0))::text as pickable,
            (select jsonb_agg(jsonb_build_object('binId', b.id, 'binCode', b.code, 'onHand', b.on_hand::text)
@@ -1564,6 +1738,19 @@ export async function pickCandidates(
       left join stock_locations wl on wl.id = l.warehouse_id and wl.org_id = ${orgId}
       left join held h on h.sales_order_line_id = l.id
      order by l.line_number`)).rows;
+  const kitComponents = await kitPickComponents(runner, orgId, {
+    orderId: order.id,
+    orderDate,
+    ownerId,
+    lines: rows
+      .filter((row) => row.item_kind === "kit")
+      .map((row) => ({
+        salesOrderLineId: row.sales_order_line_id,
+        kitItemId: row.item_id,
+        open: row.open,
+        warehouseId: row.warehouse_id,
+      })),
+  });
   return {
     salesOrderId: order.id,
     documentNumber: order.document_number,
@@ -1580,6 +1767,93 @@ export async function pickCandidates(
       heldByPickLists: row.held,
       pickable: row.pickable,
       bins: row.bins ?? [],
+      ...(row.item_kind === "kit" ? { kitComponents: kitComponents.get(row.sales_order_line_id) ?? [] } : {}),
     })),
   };
+}
+
+/**
+ * What each open kit line still has to pick, per component: the recipe
+ * effective on the order date with the component requirement, what active
+ * pick lists already hold for that (line, component), and the bins that
+ * carry the component for the order's legal entity.
+ */
+async function kitPickComponents(
+  runner: SqlExecutor,
+  orgId: string,
+  scope: {
+    orderId: string;
+    orderDate: string | undefined;
+    ownerId: string;
+    lines: { salesOrderLineId: string; kitItemId: string; open: string; warehouseId: string | null }[];
+  },
+): Promise<Map<string, KitComponentCandidate[]>> {
+  const out = new Map<string, KitComponentCandidate[]>();
+  if (scope.lines.length === 0 || !scope.orderDate) return out;
+  const rows = (await runner.execute<{
+    sales_order_line_id: string;
+    component_item_id: string;
+    component_label: string;
+    quantity_per: string;
+    line_open: string;
+    held: string;
+    pickable: string;
+    bins: { binId: string; binCode: string; onHand: string }[] | null;
+  }>(sql`
+    with ${pickReservationsCte(orgId)},
+    kit_open as (
+      select dl.id as sales_order_line_id, dl.item_id as kit_item_id,
+             ${openQuantitySql("dl")} as open,
+             stock_location_warehouse(dl.org_id, dl.stock_location_id) as warehouse_id
+        from document_lines dl
+       where dl.org_id = ${orgId} and dl.document_id = ${scope.orderId}
+         and dl.id = any(${`{${scope.lines.map((line) => line.salesOrderLineId).join(",")}}`}::uuid[])
+         and ${openQuantitySql("dl")} > 0
+    ),
+    held as (
+      select sales_order_line_id, item_id, sum(reserved) as reserved
+        from pick_reservations
+       group by sales_order_line_id, item_id
+    )
+    select k.sales_order_line_id, b.component_item_id,
+           coalesce(component.code || ' · ' || component.name, component.name) as component_label,
+           b.quantity_per::text as quantity_per,
+           (k.open * b.quantity_per)::text as line_open,
+           coalesce(h.reserved, 0)::text as held,
+           greatest(0, (k.open * b.quantity_per) - coalesce(h.reserved, 0))::text as pickable,
+           (select jsonb_agg(jsonb_build_object('binId', bins.id, 'binCode', bins.code, 'onHand', bins.on_hand::text)
+                             order by bins.on_hand desc, bins.code)
+              from (select sl.id, sl.code, sum(cl.remaining_quantity) as on_hand
+                      from stock_locations sl
+                      join cost_layers cl on cl.stock_location_id = sl.id and cl.org_id = sl.org_id
+                                         and cl.item_id = b.component_item_id and cl.subsidiary_id = ${scope.ownerId}
+                     where sl.org_id = ${orgId} and sl.is_active
+                       and stock_location_warehouse(sl.org_id, sl.id) = k.warehouse_id
+                     group by sl.id, sl.code
+                    having sum(cl.remaining_quantity) > 0) bins) as bins
+      from kit_open k
+      join bom_components b
+        on b.org_id = ${orgId}
+       and b.assembly_item_id = k.kit_item_id
+       and b.operation_seq is null
+       and b.is_byproduct = false
+       and (b.effective_from is null or b.effective_from <= ${scope.orderDate}::date)
+       and (b.effective_to is null or ${scope.orderDate}::date < b.effective_to)
+      join items component on component.id = b.component_item_id and component.org_id = ${orgId}
+      left join held h on h.sales_order_line_id = k.sales_order_line_id and h.item_id = b.component_item_id
+     order by k.sales_order_line_id, b.sort_order, b.component_item_id`)).rows;
+  for (const row of rows) {
+    const list = out.get(row.sales_order_line_id) ?? [];
+    list.push({
+      componentItemId: row.component_item_id,
+      componentLabel: row.component_label,
+      quantityPer: row.quantity_per,
+      open: row.line_open,
+      heldByPickLists: row.held,
+      pickable: row.pickable,
+      bins: row.bins ?? [],
+    });
+    out.set(row.sales_order_line_id, list);
+  }
+  return out;
 }

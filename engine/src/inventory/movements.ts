@@ -9,6 +9,7 @@ import { normalizeMovementIdempotencyKey } from "./action-idempotency.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
 import { assertItemsActive } from "./item-active.ts";
+import { assertNotKitItem } from "./kits.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost, addLayerAtCost } from "./cost-layers.ts";
@@ -135,6 +136,10 @@ export async function receiveInventory(
       outsideOrganization:
         "receipt references an item outside this organization",
     });
+    // Kits hold no stock of their own: a receipt would mint a position that
+    // can never be valued or shipped. Refuse before any layer, movement or
+    // journal write, naming the components as the stocked side.
+    await assertNotKitItem(tx, orgId, input.itemId, "receive");
     assertTracking(
       profile,
       { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
@@ -721,6 +726,10 @@ export async function adjustInventory(
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertInventoryFeature(tx, orgId);
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    // Positive deltas inherit this refusal from receiveInventory; negative
+    // ones would otherwise die as a confusing shortfall on stock that can
+    // never exist. Refuse either sign up front, by name.
+    await assertNotKitItem(tx, orgId, input.itemId, "adjust");
     const offset = profile.adjustmentAccountId ?? profile.cogsAccountId;
     if (sign > 0) {
       return receiveInventory(orgId, actorId, {
