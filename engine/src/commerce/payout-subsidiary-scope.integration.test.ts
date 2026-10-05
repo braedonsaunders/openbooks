@@ -8,8 +8,9 @@ import { upsertAccountMap } from "./account-maps.ts";
 import { createChannel, retryChannel, markChannelActive } from "./channels.ts";
 import { linkExternal } from "./external-links.ts";
 import { upsertChannelLocation } from "./locations.ts";
-import { ingestChannelOrder } from "./orders.ts";
+import { ingestChannelEvent, ingestChannelOrder } from "./orders.ts";
 import { postChannelOrder } from "./order-posting.ts";
+import { postChannelRefund } from "./refunds.ts";
 import { setPostingPolicy } from "./posting-policies.ts";
 import type { ChannelOrder } from "./contracts.ts";
 import { approvePayoutSuggestion, suggestPayoutLineFix } from "./exception-assistance.ts";
@@ -653,7 +654,7 @@ test("the automatic matcher counts only receipts visible in the payout's entity"
       externalId: "txn-count-1", nativeTable: "documents", nativeId: docB.id,
     }, "salesChannels"));
     await withBypass(() => linkExternal(org.orgId, actor, {
-      provider: "stripe", externalAccount: "acct_3", objectType: "payout",
+      provider: "stripe", externalAccount: "acct_3", objectType: "order",
       externalId: "txn-count-2", nativeTable: "documents", nativeId: docB.id,
     }, "salesChannels"));
     const draftId = (await db.execute<{ id: string }>(sql`
@@ -701,19 +702,35 @@ test("refund claims count only posted receipts visible in the payout's entity", 
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
     const { channelA, docB } = await seed(org, actor);
-    const refundHome = (await db.execute<{ id: string }>(sql`
-      insert into documents (org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
-      values (${org.orgId}, 'cash_refund', 'posted', 'CR-TEST-R1', ${org.subsidiaryId}, ${org.date}, 'CAD', '20', '0', '20')
-      returning id`)).rows[0]!.id;
-    const orderId = (await db.execute<{ id: string }>(sql`
-      select id from channel_orders
-       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`)).rows[0]!.id;
-    for (const [externalId, documentId] of [["refund-home-1", refundHome], ["refund-hidden-1", docB.id]] as const) {
-      const inserted = await db.execute(sql`
-        insert into channel_order_events (org_id, channel_id, order_id, kind, external_id, payload, posting_status, posting_document_id, occurred_at)
-        values (${org.orgId}, ${channelA}, ${orderId}, 'refund', ${externalId}, '{}'::jsonb, 'posted', ${documentId}, now())`);
-      assert.equal(inserted.rowCount, 1, "the refund event lands on the home order");
-    }
+    // A real storefront refund posts its cash refund through the product
+    // flow; a second refund event names the hidden receipt the same way a
+    // companion settlement batch from the other entity would.
+    const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelA, "8801", {
+      kind: "refund",
+      externalId: "r-count-1",
+      refund: {
+        externalId: "r-count-1",
+        orderExternalId: "8801",
+        reason: "damaged in transit",
+        restock: true,
+        totalMinor: 6040n,
+        lines: [{
+          lineExternalId: "1", sku: "TEE-RED-M", variantExternalId: null, quantity: "2",
+          amountMinor: 5000n, taxMinor: 380n, restock: true,
+        }],
+        shippingMinor: 600n,
+        tenders: [{ gateway: "shopify_payments", amountMinor: 6040n }],
+        refundedAt: "2026-07-16T09:00:00Z",
+      },
+      occurredAt: "2026-07-16T09:00:00Z",
+    }));
+    const refunded = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    assert.equal(refunded.status, "posted", "the home refund posts its cash refund");
+    assert.ok(refunded.documentId);
+    const inserted = await db.execute(sql`
+      insert into channel_order_events (org_id, channel_id, order_id, kind, external_id, payload, posting_status, posting_document_id, occurred_at)
+      values (${org.orgId}, ${channelA}, ${event.orderId}, 'refund', 'r-count-hidden', '{}'::jsonb, 'posted', ${docB.id}, now())`);
+    assert.equal(inserted.rowCount, 1, "the hidden refund event lands on the home order");
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-refund-1", currency: "CAD", issuedAt: "2026-07-10" },
       [{ id: "txn-refund-R1", type: "refund", amount: "20.00", currency: "CAD", sourceOrderId: "8801" }],
@@ -726,7 +743,7 @@ test("refund claims count only posted receipts visible in the payout's entity", 
     assert.equal(result.lines.length, 1);
     const [verdict] = result.lines;
     assert.equal(verdict!.status, "matched", `the visible posted refund wins outright, got ${JSON.stringify(verdict)}`);
-    assert.ok(verdict!.status === "matched" && verdict.documentId === refundHome && verdict.via === "channel_order");
+    assert.ok(verdict!.status === "matched" && verdict.documentId === refunded.documentId && verdict.via === "channel_order");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -776,11 +793,13 @@ test("an order outside the payout's entity never makes its line ambiguous", { sk
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
-    const { channelB, batchShop, lines, docA } = await seed(org, actor);
+    const { subB, channelB, batchShop, lines, docA } = await seed(org, actor);
     // The same storefront order number ingested on the western storefront and
-    // never posted there: payout discovery must not see it at all.
+    // never posted there. The caller may see both entities, but the payout is
+    // a home-entity payout, so discovery must not see the western order at all.
     await withBypass(() => ingestChannelOrder(org.orgId, actor, channelB, paidOrder("8801")));
-    const result = await matchPayoutLines(org.orgId, batchShop, actor, homeScope(org));
+    const both = new Set([org.subsidiaryId, subB]);
+    const result = await matchPayoutLines(org.orgId, batchShop, actor, both);
     const line = result.lines.find((verdict) => verdict.lineId === lines.shopVisible);
     assert.equal(line!.status, "matched", `the home order resolves alone, got ${JSON.stringify(line)}`);
     assert.ok(line!.status === "matched" && line.documentId === docA.id && line.via === "channel_order");
