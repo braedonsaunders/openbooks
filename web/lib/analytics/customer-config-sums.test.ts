@@ -56,6 +56,27 @@ test('an inverted churn ladder is still refused', () => {
   )
 })
 
+test('a worse churn or payment band can never score less than a milder one', () => {
+  // Inactivity days ascend low < medium < high, and every point and penalty
+  // group ascends with severity — a save flipping any of them is refused.
+  assert.throws(
+    () => cleanConfigValues('customerIntelligence', fullSave({ churnMediumDays: 20 })),
+    (error: unknown) => error instanceof Error && /churnMediumDays/.test(error.message),
+  )
+  assert.throws(
+    () => cleanConfigValues('customerIntelligence', fullSave({ churnInactiveHighPoints: 5 })),
+    (error: unknown) => error instanceof Error && /churnInactiveHighPoints/.test(error.message),
+  )
+  assert.throws(
+    () => cleanConfigValues('customerIntelligence', fullSave({ churnSinglePoints: 10 })),
+    (error: unknown) => error instanceof Error && /churnSinglePoints/.test(error.message),
+  )
+  assert.throws(
+    () => cleanConfigValues('customerIntelligence', fullSave({ paymentDsoHighPenalty: 5 })),
+    (error: unknown) => error instanceof Error && /paymentDsoHighPenalty/.test(error.message),
+  )
+})
+
 test('an unknown scoring key is refused', () => {
   assert.throws(
     () => cleanConfigValues('customerIntelligence', { ...fullSave(), noSuchKnob: 1 }),
