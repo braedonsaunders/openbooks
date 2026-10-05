@@ -1,5 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { guardCsvCell } from "@openbooks/office";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { listDecisions } from "@openbooks/engine/src/hrm/ai/governance.ts";
 import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
@@ -10,9 +11,11 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
+// Summaries and model names are free text, so every cell passes the shared
+// formula-injection guard before it is quoted for CSV.
 function csvCell(value: unknown): string {
-  const text = value === null || value === undefined ? "" : String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  const text = String(guardCsvCell(value === null || value === undefined ? "" : String(value)));
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 /**
