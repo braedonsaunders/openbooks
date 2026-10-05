@@ -502,6 +502,7 @@ test("the CAM lifecycle commits before/after audit evidence with every transitio
       periodStartsOn: "2026-07-01",
       periodEndsOn: "2026-07-31",
       allocationBasis: "equal",
+      vacancyTreatment: "occupied_area",
       budgetAmount: "500.0000",
       expenseAccountIds: [fixture.ledgerAccount],
     });
@@ -521,6 +522,7 @@ test("the CAM lifecycle commits before/after audit evidence with every transitio
       periodStartsOn: "2026-07-01",
       periodEndsOn: "2026-07-31",
       allocationBasis: "equal",
+      vacancyTreatment: "occupied_area",
       budgetAmount: "500.0000",
       expenseAccountIds: [fixture.ledgerAccount],
     });
@@ -727,6 +729,62 @@ test("a voided in-window expense with an out-of-window reversal is not billed", 
     // outside the window): 2200 instead of 1200.
     const result = await finalizeCamPool(fixture.org.orgId, actor, null, created.id);
     assert.equal(result.actualAmount, "1200.0000");
+  } finally {
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
+
+test("rentable-area CAM bills vacancy to occupied tenants only when the pool says so", { skip: !DB }, async () => {
+  const fixture = await seedCamProperty();
+  try {
+    const { orgId } = fixture.org;
+    const actor = await createScratchUser(orgId, "CAM vacancy operator", "admin");
+    const leased = randomUUID();
+    await db.execute(sql`insert into property_units(id,org_id,property_id,code,rentable_area,status)
+      values(${leased},${orgId},${fixture.propertyId},'U-LEASED',1000,'occupied'),
+            (${randomUUID()},${orgId},${fixture.propertyId},'U-VACANT',1000,'vacant')`);
+    await db.execute(sql`update property_leases set unit_id=${leased} where org_id=${orgId} and property_id=${fixture.propertyId}`);
+    await postLedgerExpense(fixture, "1000");
+    await closeGlModule(fixture, actor);
+    const inputs = {
+      orgId, actorId: actor, allowedSubsidiaryIds: null, propertyId: fixture.propertyId, name: "FY26 VACANCY",
+      fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
+      allocationBasis: "rentable_area" as const, budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
+    };
+    const allocation = async (poolId: string) => (await db.execute<{ share: string; budget: string; actual: string }>(sql`
+      select share_percent::text as share,budget_allocation::text as budget,actual_allocation::text as actual
+        from cam_allocations where org_id=${orgId} and pool_id=${poolId}`)).rows;
+
+    // Default: the one occupied lease carries the whole pool, vacancy included.
+    const pool = await createCamPool(inputs);
+    await finalizeCamPool(orgId, actor, null, pool.id);
+    assert.deepEqual(await allocation(pool.id), [{ share: "100.0000", budget: "1000.0000", actual: "1000.0000" }]);
+
+    // Landlord bears vacancy: the lease pays its 1,000 of 2,000 sqft, and the
+    // vacant half is not billed to anyone.
+    await reopenFinalizedCamPool(orgId, actor, null, pool.id, "leave vacancy with the landlord");
+    await updateCamPool({ ...inputs, poolId: pool.id, vacancyTreatment: "total_rentable_area" });
+    const [updateAudit] = await camAudits(orgId, "cam_pools", pool.id, "update");
+    assert.equal((updateAudit!.changes.before as Record<string, unknown>).vacancyTreatment, "occupied_area");
+    assert.equal((updateAudit!.changes.after as Record<string, unknown>).vacancyTreatment, "total_rentable_area");
+    await finalizeCamPool(orgId, actor, null, pool.id);
+    assert.deepEqual(await allocation(pool.id), [{ share: "50.0000", budget: "500.0000", actual: "500.0000" }]);
+    const finalizeAudit = (await camAudits(orgId, "cam_pools", pool.id, "finalize")).at(-1)!;
+    assert.equal(finalizeAudit.changes.vacancyTreatment, "total_rentable_area");
+    assert.equal(finalizeAudit.changes.totalRentableArea, "2000.0000");
+    assert.equal(finalizeAudit.changes.unallocatedActualAmount, "500.0000");
+
+    // A unit without an area makes the denominator unknown: refuse by name.
+    await reopenFinalizedCamPool(orgId, actor, null, pool.id, "new unit");
+    await db.execute(sql`insert into property_units(org_id,property_id,code,status) values(${orgId},${fixture.propertyId},'U-UNMEASURED','vacant')`);
+    await assert.rejects(() => finalizeCamPool(orgId, actor, null, pool.id),
+      (error: unknown) => error instanceof PropertyManagementError && /units without one: U-UNMEASURED — set each unit's rentable area/u.test(error.message));
+
+    // Vacancy is an area concept: other bases refuse it at write time.
+    await assert.rejects(() => updateCamPool({ ...inputs, poolId: pool.id, allocationBasis: "equal" }),
+      (error: unknown) => error instanceof PropertyManagementError && /Only a rentable-area CAM pool can leave the vacant share/u.test(error.message));
+    await assert.rejects(() => createCamPool({ ...inputs, name: "FY26 EQUAL", allocationBasis: "equal", vacancyTreatment: "total_rentable_area" }),
+      (error: unknown) => error instanceof PropertyManagementError && /choose the Rentable area allocation basis/u.test(error.message));
   } finally {
     await dropScratchOrg(fixture.org.orgId);
   }

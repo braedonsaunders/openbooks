@@ -305,6 +305,13 @@
       "mixedUse": "Mischnutzung",
       "industrial": "Industrie",
       "other": "Sonstiges"
+    },
+    "camDrawer": {
+      "vacancyTreatment": "Leerstand",
+      "vacancyOccupiedArea": "Belegte Mietverträge tragen den gesamten Pool",
+      "vacancyTotalRentableArea": "Vermieter trägt den Leerstandsanteil",
+      "vacancyHint": "Trägt der Vermieter den Leerstand, zahlt jeder Mietvertrag den Anteil seiner Fläche an der gesamten vermietbaren Fläche der Immobilie; der Leerstandsanteil wird den Mietern nicht berechnet.",
+      "vacancyRentableAreaOnly": "Nur ein Pool nach vermietbarer Fläche kann den Leerstandsanteil beim Vermieter belassen."
     }
   },
   "roles": {
