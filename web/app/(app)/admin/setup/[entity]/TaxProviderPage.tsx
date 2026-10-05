@@ -1,4 +1,4 @@
-import { readTaxRateProviderConfigView } from '@openbooks/engine/src/tax/rate-providers.ts'
+import { readTaxRateProviderConfigView } from '@openbooks/engine/tax'
 import { TaxProviderForm } from './TaxProviderForm'
 
 export async function TaxProviderPage({ orgId }: { orgId: string }) {

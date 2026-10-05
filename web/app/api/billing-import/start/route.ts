@@ -1,5 +1,4 @@
-import { runBillingPreflight } from "@openbooks/engine/src/sync/billing-history-import.ts";
-import type { BillingHistoryProvider } from "@openbooks/engine/src/sync/billing-history.ts";
+import { runBillingPreflight, type BillingHistoryProvider } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

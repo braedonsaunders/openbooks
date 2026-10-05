@@ -3,8 +3,8 @@ import { sql } from 'drizzle-orm';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { savePartyTaxId } from '@openbooks/engine/src/tax/cross-border-records.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
+import { savePartyTaxId } from '@openbooks/engine/tax'
 import { isUuid } from '../../../lib/list-params'
 
 export const runtime = 'nodejs'

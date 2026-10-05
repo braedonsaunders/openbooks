@@ -51,3 +51,4 @@ export {
   type SupplyEvidenceInput,
   type ValidateStoredTaxIdOptions,
 } from './cross-border-records.ts';
+export { readTaxRateProviderConfigView } from './rate-providers.ts';

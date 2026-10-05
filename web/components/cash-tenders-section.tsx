@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { useMoney } from '@/components/money-provider'
-import { add } from '@openbooks/engine/src/money/money.ts'
+import { add } from '@openbooks/engine/money'
 import { CASH_TENDER_KINDS } from '@openbooks/engine/sales/cash-tenders'
 import { canonicalDecimal, compareDecimal, isZeroDecimal } from '@/lib/exact-decimal'
 

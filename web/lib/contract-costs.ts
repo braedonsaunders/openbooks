@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { ContractCostError } from '@openbooks/engine/revenue'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { toUnits } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/database'
+import { toUnits } from '@openbooks/engine/money'
 
 /**
  * Named contract-cost refusals (feature off, no policy, unconfigured

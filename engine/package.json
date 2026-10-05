@@ -100,6 +100,10 @@
     "./commerce": "./src/commerce/public.ts",
     "./commerce/contracts": "./src/commerce/public-contracts.ts",
     "./flows": "./src/flows/public.ts",
-    "./sales/shipping-labels": "./src/sales/public-shipping-labels.ts"
+    "./sales/shipping-labels": "./src/sales/public-shipping-labels.ts",
+    "./sync": "./src/sync/public.ts",
+    "./connectors": "./src/connectors/public.ts",
+    "./stored-value": "./src/stored-value/public.ts",
+    "./tax-returns": "./src/tax-returns/public.ts"
   }
 }

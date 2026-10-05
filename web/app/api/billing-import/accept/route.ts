@@ -1,7 +1,7 @@
 import {
   acceptBillingImportRun,
   type BillingImportConfig,
-} from "@openbooks/engine/src/sync/billing-history-import.ts";
+} from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 
