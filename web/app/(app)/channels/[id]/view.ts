@@ -23,7 +23,7 @@ export function channelWorkspaceSpec(
   sp: Record<string, string | string[] | undefined>,
 ): PageSpec {
   return page({
-    route: `/channels/${channelId}`,
+    route: '/channels/[id]',
     layout: 'bare',
     header: [],
     body: [widgetBlock('channel-workspace', { channelId, tab, sp })],
