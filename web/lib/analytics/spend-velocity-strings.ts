@@ -16,7 +16,7 @@
 
 export type { CatalogMessageFn } from "./catalog-strings";
 import type { CatalogMessageFn } from "./catalog-strings";
-import { MONTH_KEYS } from "./catalog-strings";
+import { MONTH_KEYS, catalogMonthLabel } from "./catalog-strings";
 
 export interface SpendVelocityInsightText {
   title: string;
@@ -30,6 +30,12 @@ export interface SpendVelocityStrings {
   shortMonths: string[];
   /** "Mar '26" style month label from a short month name + 2-digit year. */
   monthYear(month: string, yy: string): string;
+  /** Localized "Mar ’26" label for a YYYY-MM bucket. */
+  monthLabel(ym: string): string;
+  /** Map the SQL `coalesce(…, 'Unknown')` sentinel to the request language. */
+  displayPartyName(name: string): string;
+  /** Name an account whose display name is missing, without leaking the id raw. */
+  displayAccountName(name: string | null, id: string): string;
   highGrowth(count: number): SpendVelocityInsightText;
   /** `faster` is "bills" | "expenses"; `gapPct` is the rounded |bills−expenses|. */
   typeImbalance(faster: "bills" | "expenses", gapPct: number): SpendVelocityInsightText;
@@ -46,6 +52,8 @@ export interface SpendVelocityStrings {
   seasonalLow(monthNames: string[]): string;
   /** Honest-gap note for the unavailable shadow-IT detector. */
   shadowItReason: string;
+  /** Named remedy when the fragmentation size cap is not configured. */
+  fragmentationUnconfigured: string;
 }
 
 
@@ -62,6 +70,10 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     locale,
     shortMonths: MONTH_KEYS.map((k) => t(`common.monthsShort.${k}`)),
     monthYear: (month, yy) => t("common.monthYear", { month, yy }),
+    monthLabel: catalogMonthLabel(t),
+    displayPartyName: (name) => (name === "Unknown" ? t("spendVelocity.labels.unknownParty") : name),
+    displayAccountName: (name, id) =>
+      name && name !== "" ? name : t("spendVelocity.labels.accountFallback", { id }),
     highGrowth: (count) => ({
       title: t("spendVelocity.insights.highGrowth.title"),
       message: t("spendVelocity.insights.highGrowth.message", { count }),
@@ -117,5 +129,6 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     seasonalHigh: (monthNames) => t("spendVelocity.insights.seasonalHigh", { months: list(monthNames) }),
     seasonalLow: (monthNames) => t("spendVelocity.insights.seasonalLow", { months: list(monthNames) }),
     shadowItReason: t("spendVelocity.insights.shadowItReason"),
+    fragmentationUnconfigured: t("spendVelocity.insights.fragmentationUnconfigured"),
   };
 }
