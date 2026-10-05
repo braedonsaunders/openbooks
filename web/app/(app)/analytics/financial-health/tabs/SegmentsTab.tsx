@@ -39,9 +39,12 @@ export function SegmentsTab({ data }: { data: HealthData }) {
   }, [rows])
 
   // Concentration bands come from the organization's own configuration; the
-  // starting levels follow the 2010 US merger-guideline HHI bands.
+  // starting levels follow the 2010 US merger-guideline HHI bands. With no
+  // revenue there is nothing to concentrate: HHI 0 would read
+  // "Unconcentrated" green, so the card shows a dash untoned instead.
   const bands = data.bands.hhi
   const hhiTone = hhi >= bands.critical ? 'high' : hhi >= bands.warning ? 'mid' : 'low'
+  const hasRevenue = cmp(totalRev, '0') > 0
 
   return (
     <div className="space-y-5">
@@ -51,11 +54,11 @@ export function SegmentsTab({ data }: { data: HealthData }) {
         <KpiCard icon={PieChart} accent="amber" label={t('kpi.bestMargin')} value={best ? pctN(best.operatingMarginPct) : '—'} sub={best?.name ?? '—'} />
         <KpiCard
           icon={Network}
-          accent={hhiTone === 'high' ? 'red' : hhiTone === 'mid' ? 'amber' : 'emerald'}
+          accent={!hasRevenue ? 'slate' : hhiTone === 'high' ? 'red' : hhiTone === 'mid' ? 'amber' : 'emerald'}
           label={t('kpi.concentration')}
-          value={t('hhiValue', { value: hhi })}
-          sub={t(`hhi.${hhiTone}`)}
-          tone={hhiTone === 'low' ? 'positive' : hhiTone === 'mid' ? 'neutral' : 'negative'}
+          value={hasRevenue ? t('hhiValue', { value: hhi }) : '—'}
+          sub={hasRevenue ? t(`hhi.${hhiTone}`) : '—'}
+          tone={!hasRevenue || hhiTone === 'mid' ? 'neutral' : hhiTone === 'low' ? 'positive' : 'negative'}
         />
       </div>
 
