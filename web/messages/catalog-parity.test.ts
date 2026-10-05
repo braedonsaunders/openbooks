@@ -405,6 +405,9 @@ const COGNATES = new Set<string>([
   'pt-BR:admin.setup.fields.regime|Regime',
   'pt-BR:admin.setup.fxProvider.providers.bank_of_canada|Bank of Canada',
   'pt-BR:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+  // Tax provider brand names are proper nouns, identical in every locale.
+  'pt-BR:admin.setup.taxProvider.providers.avalara|Avalara AvaTax',
+  'pt-BR:admin.setup.taxProvider.providers.taxjar|TaxJar',
   'pt-BR:admin.setup.laborCosting.billing.item|Item',
   'pt-BR:admin.setup.laborCosting.billing.status|Status',
   'pt-BR:admin.setup.laborCosting.rates.status|Status',
@@ -505,6 +508,9 @@ const COGNATES = new Set<string>([
   'zh:admin.setup.fieldHelp.expiryWarningDaysHint|30',
   'zh:admin.setup.fieldHelp.graceDaysHint|0',
   'zh:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+  // Tax provider brand names are proper nouns, identical in every locale.
+  'zh:admin.setup.taxProvider.providers.avalara|Avalara AvaTax',
+  'zh:admin.setup.taxProvider.providers.taxjar|TaxJar',
   'zh:admin.setup.laborCosting.wizard.ratePlaceholder|0.00',
   'zh:admin.setup.options.informationReturnForm.misc|1099-MISC',
   'zh:admin.setup.options.informationReturnForm.nec|1099-NEC',
@@ -698,6 +704,9 @@ const COGNATES = new Set<string>([
   'de:admin.setup.fields.version|Version',
   'de:admin.setup.fxProvider.providers.bank_of_canada|Bank of Canada',
   'de:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+  // Tax provider brand names are proper nouns, identical in every locale.
+  'de:admin.setup.taxProvider.providers.avalara|Avalara AvaTax',
+  'de:admin.setup.taxProvider.providers.taxjar|TaxJar',
   'de:admin.setup.laborCosting.billing.adjustmentCode|Code',
   'de:admin.setup.laborCosting.billing.adjustmentName|Name',
   'de:admin.setup.laborCosting.billing.categories.minimum|Minimum',
@@ -783,6 +792,9 @@ const COGNATES = new Set<string>([
   'ja:admin.setup.fxProvider.providers.bank_of_canada|Bank of Canada',
   'ja:admin.setup.fxProvider.providers.ecb|European Central Bank',
   'ja:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+  // Tax provider brand names are proper nouns, identical in every locale.
+  'ja:admin.setup.taxProvider.providers.avalara|Avalara AvaTax',
+  'ja:admin.setup.taxProvider.providers.taxjar|TaxJar',
   'ja:admin.setup.laborCosting.wizard.ratePlaceholder|0.00',
   'ja:admin.setup.options.costingMethod.fifo|FIFO',
   'ja:admin.setup.options.informationReturnForm.misc|1099-MISC',
@@ -1639,6 +1651,9 @@ const COGNATES = new Set<string>([
   'fr:admin.setup.fields.sourceKind|Source',
   'fr:admin.setup.fields.version|Version',
   'fr:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+  // Tax provider brand names are proper nouns, identical in every locale.
+  'fr:admin.setup.taxProvider.providers.avalara|Avalara AvaTax',
+  'fr:admin.setup.taxProvider.providers.taxjar|TaxJar',
   'fr:admin.setup.laborCosting.billing.adjustmentCode|Code',
   'fr:admin.setup.laborCosting.billing.calculations.distance|Distance',
   'fr:admin.setup.laborCosting.billing.categories.minimum|Minimum',
@@ -1715,6 +1730,9 @@ const COGNATES = new Set<string>([
   'es:admin.setup.fieldHelp.graceDaysHint|0',
   'es:admin.setup.fields.code|Code',
   'es:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+  // Tax provider brand names are proper nouns, identical in every locale.
+  'es:admin.setup.taxProvider.providers.avalara|Avalara AvaTax',
+  'es:admin.setup.taxProvider.providers.taxjar|TaxJar',
   'es:admin.setup.laborCosting.wizard.ratePlaceholder|0.00',
   'es:admin.setup.options.informationReturnForm.misc|1099-MISC',
   'es:admin.setup.options.informationReturnForm.nec|1099-NEC',

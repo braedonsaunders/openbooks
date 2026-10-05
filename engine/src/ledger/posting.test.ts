@@ -151,7 +151,7 @@ test("expense settlement fails closed on unknown kinds, missing card, and nonsta
   const grossLegs = RULES.expense_report!(doc, [gross], {
     ...deps,
     taxComponentsByLine: new Map([
-      ["line", [{ taxCodeId: "std", sequence: 1, taxAmount: "10.0000", recoverableAmount: "6.0000", nonrecoverableAmount: "4.0000", calculationType: "standard", collectedAccountId: null, paidAccountId: "tax-in", withholdingAccountId: null }]],
+      ["line", [{ taxCodeId: "std", sequence: 1, collectedBy: "merchant", facilitatorName: null, taxAmount: "10.0000", recoverableAmount: "6.0000", nonrecoverableAmount: "4.0000", calculationType: "standard", collectedAccountId: null, paidAccountId: "tax-in", withholdingAccountId: null }]],
     ]),
   });
   assert.deepEqual(
@@ -178,8 +178,8 @@ test("expense settlement fails closed on unknown kinds, missing card, and nonsta
           [
             "line",
             [
-              { taxCodeId: "std", sequence: 1, taxAmount: "10.0000", recoverableAmount: "6.0000", nonrecoverableAmount: "4.0000", calculationType: "standard", collectedAccountId: null, paidAccountId: null, withholdingAccountId: null },
-              { taxCodeId: "wht", sequence: 2, taxAmount: "2.0000", recoverableAmount: "0", nonrecoverableAmount: "0", calculationType: "withholding", collectedAccountId: null, paidAccountId: null, withholdingAccountId: "wht-pay" },
+              { taxCodeId: "std", sequence: 1, collectedBy: "merchant", facilitatorName: null, taxAmount: "10.0000", recoverableAmount: "6.0000", nonrecoverableAmount: "4.0000", calculationType: "standard", collectedAccountId: null, paidAccountId: null, withholdingAccountId: null },
+              { taxCodeId: "wht", sequence: 2, collectedBy: "merchant", facilitatorName: null, taxAmount: "2.0000", recoverableAmount: "0", nonrecoverableAmount: "0", calculationType: "withholding", collectedAccountId: null, paidAccountId: null, withholdingAccountId: "wht-pay" },
             ],
           ],
         ]),
@@ -355,9 +355,9 @@ test("purchase tax projection separates recoverable, nonrecoverable, withholding
   const projected = RULES.vendor_bill!(doc, [line], {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [
-      { taxCodeId: "standard", sequence: 1, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
-      { taxCodeId: "withholding", sequence: 2, taxAmount: "3.0000", recoverableAmount: "3.0000", nonrecoverableAmount: "0.0000", calculationType: "withholding" as const, collectedAccountId: null, paidAccountId: null, withholdingAccountId: "withholding" },
-      { taxCodeId: "reverse", sequence: 3, taxAmount: "5.0000", recoverableAmount: "4.0000", nonrecoverableAmount: "1.0000", calculationType: "reverse_charge" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+      { taxCodeId: "standard", sequence: 1, collectedBy: "merchant", facilitatorName: null, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+      { taxCodeId: "withholding", sequence: 2, collectedBy: "merchant", facilitatorName: null, taxAmount: "3.0000", recoverableAmount: "3.0000", nonrecoverableAmount: "0.0000", calculationType: "withholding" as const, collectedAccountId: null, paidAccountId: null, withholdingAccountId: "withholding" },
+      { taxCodeId: "reverse", sequence: 3, collectedBy: "merchant", facilitatorName: null, taxAmount: "5.0000", recoverableAmount: "4.0000", nonrecoverableAmount: "1.0000", calculationType: "reverse_charge" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
     ]]]),
   });
   assert.deepEqual(projected.map((row) => [row.accountId, row.amount]), [
@@ -404,7 +404,7 @@ test("sales tax control lines never become project revenue or cost", () => {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [{
       taxCodeId: "tax",
-      sequence: 1,
+      sequence: 1, collectedBy: "merchant", facilitatorName: null,
       taxAmount: "13.0000",
       recoverableAmount: "0",
       nonrecoverableAmount: "0",
@@ -440,7 +440,7 @@ test("tax profiles cannot post without cross-footing component evidence", () => 
     () => RULES.customer_invoice!(doc, [line], {
       control: { ap: "ap", ar: "ar", bank: "bank" },
       taxComponentsByLine: new Map([["line", [{
-        taxCodeId: "tax", sequence: 1, taxAmount: "12.9999", recoverableAmount: "12.9999",
+        taxCodeId: "tax", sequence: 1, collectedBy: "merchant", facilitatorName: null, taxAmount: "12.9999", recoverableAmount: "12.9999",
         nonrecoverableAmount: "0", calculationType: "standard" as const, collectedAccountId: "output",
         paidAccountId: "input", withholdingAccountId: null,
       }]]]),
@@ -483,9 +483,9 @@ test("credit memos mirror their invoice and bill projections with reversed direc
   const deps = {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [
-      { taxCodeId: "standard", sequence: 1, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
-      { taxCodeId: "withholding", sequence: 2, taxAmount: "3.0000", recoverableAmount: "3.0000", nonrecoverableAmount: "0.0000", calculationType: "withholding" as const, collectedAccountId: null, paidAccountId: null, withholdingAccountId: "withholding" },
-      { taxCodeId: "reverse", sequence: 3, taxAmount: "5.0000", recoverableAmount: "4.0000", nonrecoverableAmount: "1.0000", calculationType: "reverse_charge" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+      { taxCodeId: "standard", sequence: 1, collectedBy: "merchant", facilitatorName: null, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+      { taxCodeId: "withholding", sequence: 2, collectedBy: "merchant", facilitatorName: null, taxAmount: "3.0000", recoverableAmount: "3.0000", nonrecoverableAmount: "0.0000", calculationType: "withholding" as const, collectedAccountId: null, paidAccountId: null, withholdingAccountId: "withholding" },
+      { taxCodeId: "reverse", sequence: 3, collectedBy: "merchant", facilitatorName: null, taxAmount: "5.0000", recoverableAmount: "4.0000", nonrecoverableAmount: "1.0000", calculationType: "reverse_charge" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
     ]]]),
   };
   const bill = { id: "doc", kind: "vendor_credit", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument;
@@ -507,7 +507,7 @@ test("credit memos mirror their invoice and bill projections with reversed direc
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [{
       taxCodeId: "tax",
-      sequence: 1,
+      sequence: 1, collectedBy: "merchant", facilitatorName: null,
       taxAmount: "13.0000",
       recoverableAmount: "0",
       nonrecoverableAmount: "0",
@@ -546,7 +546,7 @@ test("taxable sales and purchases fail closed when no tax control account exists
     control: { ar: "ar", ap: "ap", bank: "bank" },
     taxComponentsByLine: new Map([["line", [{
       taxCodeId: "tax",
-      sequence: 1,
+      sequence: 1, collectedBy: "merchant", facilitatorName: null,
       taxAmount: "13.0000",
       recoverableAmount: "13.0000",
       nonrecoverableAmount: "0",
@@ -587,7 +587,7 @@ test("taxable lines use explicitly configured tax fallback accounts", () => {
   const projected = RULES.customer_invoice!(doc, [line], {
     control: { ar: "ar", ap: "ap", bank: "bank", taxCollected: "tax-output" },
     taxComponentsByLine: new Map([["line", [{
-      taxCodeId: "tax", sequence: 1, taxAmount: "13.0000", recoverableAmount: "0",
+      taxCodeId: "tax", sequence: 1, collectedBy: "merchant", facilitatorName: null, taxAmount: "13.0000", recoverableAmount: "0",
       nonrecoverableAmount: "0", calculationType: "standard" as const,
       collectedAccountId: null, paidAccountId: null, withholdingAccountId: null,
     }]]]),
@@ -1004,7 +1004,7 @@ test("kernel projections are deterministic: the same input posts the same lines 
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [{
       taxCodeId: "tax",
-      sequence: 1,
+      sequence: 1, collectedBy: "merchant", facilitatorName: null,
       taxAmount: "5.0000",
       recoverableAmount: "5.0000",
       nonrecoverableAmount: "0",
