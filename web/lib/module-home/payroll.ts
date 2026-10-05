@@ -8,7 +8,7 @@ import { payrollSettings } from "@openbooks/engine/src/payroll/run-setup.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
 import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/src/payroll/readiness.ts'
 import { packSlotState, payrollTaxYearForDate } from '@openbooks/engine/src/payroll/packs.ts'
-import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { add, mulDecimal } from '@openbooks/engine/money'
 import { flowRates } from '../fx-presentation'
 import {
   missingPayrollControlAccounts,
