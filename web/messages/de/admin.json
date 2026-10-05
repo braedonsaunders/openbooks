@@ -3439,6 +3439,11 @@
         "title": "Richtlinien",
         "description": "Forderungen einziehen und Abrechnung in einem Arbeitsbereich verwalten."
       },
+      "consolidation-groups": {
+        "title": "Konsolidierungsgruppen",
+        "singular": "Konsolidierungsgruppe",
+        "description": "Eine Rechnung pro Zahler und Zeitraum für eine Kundenhierarchie: Der Zahler trägt die Forderung, während jede Zeile ihren Servicekunden behält."
+      },
       "promotions": {
         "title": "Aktionen",
         "singular": "Aktion",
@@ -4758,6 +4763,15 @@
         "suspend": "Abonnement sperren",
         "cancel": "Abonnement kündigen"
       },
+      "consolidationCadence": {
+        "weekly": "Wöchentlich",
+        "monthly": "Monatlich"
+      },
+      "consolidationGrouping": {
+        "byChild": "Nach Kunde",
+        "bySubscription": "Nach Abonnement",
+        "byProduct": "Nach Produkt"
+      },
       "contractCostBasis": {
         "contractTerm": "Vertragslaufzeit",
         "customerLife": "Erwartete Kundenlaufzeit"
@@ -5868,6 +5882,15 @@
       "breakageRate": "Erwartete Breakage-Quote",
       "expiryMonths": "Verfall (Monate)",
       "inactivityMonths": "Inaktivitätszeitraum (Monate)"
+    },
+    "consolidationGroupFields": {
+      "payer": "Zahler",
+      "billingSubsidiary": "Abrechnende Einheit",
+      "cadence": "Abrechnungsrhythmus",
+      "cutoffDay": "Stichtag",
+      "grouping": "Zeilengruppierung",
+      "template": "Rechnungsvorlage",
+      "templateHelp": "Wird auf den konsolidierten Rechnungen dieser Gruppe vermerkt."
     },
     "no": "Nein",
     "payComponentChooser": {

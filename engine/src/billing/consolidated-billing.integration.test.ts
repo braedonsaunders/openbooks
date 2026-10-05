@@ -57,14 +57,15 @@ async function seedSubscription(
 async function seedGroup(
   orgId: string,
   payerId: string,
-  opts: { billingSubsidiaryId?: string | null; grouping?: string } = {},
+  opts: { billingSubsidiaryId?: string | null; grouping?: string; template?: string | null } = {},
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into consolidation_groups
-      (id, org_id, code, name, payer_party_id, billing_subsidiary_id, cadence, cutoff_day, grouping, is_active)
+      (id, org_id, code, name, payer_party_id, billing_subsidiary_id, cadence, cutoff_day, grouping, template, is_active)
     values (${id}, ${orgId}, ${"GRP-" + id.slice(0, 8)}, 'Parent monthly', ${payerId},
-            ${opts.billingSubsidiaryId ?? null}, 'monthly', 1, ${opts.grouping ?? "by_child"}, true)`);
+            ${opts.billingSubsidiaryId ?? null}, 'monthly', 1, ${opts.grouping ?? "by_child"},
+            ${opts.template ?? null}, true)`);
   return id;
 }
 
@@ -96,7 +97,7 @@ test(
         await seedCustomer(org.orgId, "Child Two", org.subsidiaryId),
         await seedCustomer(org.orgId, "Child Three", org.subsidiaryId),
       ];
-      const groupId = await seedGroup(org.orgId, payer);
+      const groupId = await seedGroup(org.orgId, payer, { template: "Parent consolidated" });
       for (const child of children) await seedRelationship(org.orgId, child, payer, groupId, "2026-01-01", null);
       const planId = await seedPlan(org, actorId);
       for (const child of children) {
@@ -112,11 +113,12 @@ test(
       assert.ok(run);
       assert.equal(run.replayed, false);
       assert.equal(run.total, "300.0000");
-      const invoice = (await db.execute<{ party: string; status: string; subtotal: string; total: string }>(sql`
-        select party_id as party, status, subtotal::text as subtotal, total::text as total
+      const invoice = (await db.execute<{ party: string; status: string; subtotal: string; total: string; custom: Record<string, unknown> }>(sql`
+        select party_id as party, status, subtotal::text as subtotal, total::text as total, custom
           from documents where id = ${run.invoiceId}`)).rows[0]!;
       assert.equal(invoice.party, payer, "AR lives on the payer");
       assert.equal(invoice.status, "draft");
+      assert.equal(invoice.custom["template"], "Parent consolidated", "the group's template designation travels on the invoice");
       assert.equal(invoice.subtotal, "300.0000");
       assert.equal(invoice.total, "300.0000");
       const lines = (await db.execute<{ service: string; amount: string }>(sql`

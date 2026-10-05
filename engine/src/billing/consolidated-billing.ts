@@ -616,6 +616,9 @@ export async function runConsolidationGroup(
                   billToPartyId,
                   payerPartyId: group.payerPartyId,
                   sourceDraftIds: draftIds,
+                  // The group's invoice-template designation travels on the
+                  // invoice so it reads next to the charges it covers.
+                  ...(group.template ? { template: group.template } : {}),
                 })}::jsonb, ${actorId})
         returning id
       `));

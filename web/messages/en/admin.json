@@ -3364,6 +3364,11 @@
         "title": "Policies",
         "description": "Collect receivables and manage billing in one workspace."
       },
+      "consolidation-groups": {
+        "title": "Consolidation groups",
+        "singular": "Consolidation group",
+        "description": "One invoice per payer per period for a customer hierarchy: the payer owns the receivable while each line keeps its service customer."
+      },
       "promotions": {
         "title": "Promotions",
         "singular": "Promotion",
@@ -4683,6 +4688,15 @@
         "suspend": "Suspend the subscription",
         "cancel": "Cancel the subscription"
       },
+      "consolidationCadence": {
+        "weekly": "Weekly",
+        "monthly": "Monthly"
+      },
+      "consolidationGrouping": {
+        "byChild": "By customer",
+        "bySubscription": "By subscription",
+        "byProduct": "By product"
+      },
       "contractCostBasis": {
         "contractTerm": "Contract term",
         "customerLife": "Expected customer life"
@@ -5868,6 +5882,15 @@
       "breakageRate": "Expected breakage rate",
       "expiryMonths": "Expiry (months)",
       "inactivityMonths": "Inactivity window (months)"
+    },
+    "consolidationGroupFields": {
+      "payer": "Payer",
+      "billingSubsidiary": "Billing entity",
+      "cadence": "Cadence",
+      "cutoffDay": "Cut-off day",
+      "grouping": "Line grouping",
+      "template": "Invoice template",
+      "templateHelp": "Recorded on this group's consolidated invoices."
     },
     "no": "No",
     "payComponentChooser": {
