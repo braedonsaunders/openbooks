@@ -94,6 +94,7 @@
     "agentLastRun": "última execução {date}",
     "agentClear": "Tudo certo",
     "monthToDate": "Mês até a data",
+    "periodToDate": "{label} até a data",
     "noData": "Sem dados",
     "noBaseCurrency": "Sem moeda base configurada",
     "next30Days": "Próximos 30 dias",
