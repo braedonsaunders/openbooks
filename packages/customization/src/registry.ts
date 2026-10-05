@@ -1100,8 +1100,6 @@ const CHANNEL_ORDER: RecordTypeMeta = {
   category: "entity",
   featureKey: "salesChannels",
   supportsForms: false,
-  customFieldTable: null,
-  customFieldLineTable: null,
   headerFields: [],
   lineFields: [],
   listColumns: [
@@ -1130,8 +1128,6 @@ const CHANNEL_EXCEPTION: RecordTypeMeta = {
   category: "entity",
   featureKey: "salesChannels",
   supportsForms: false,
-  customFieldTable: null,
-  customFieldLineTable: null,
   headerFields: [],
   lineFields: [],
   listColumns: [
