@@ -1,3 +1,29 @@
 export { breakageGrantOptions,proposeExpectedBreakage,applyExpectedBreakage,BreakageError,type BreakageProposal,type BreakageEstimate } from './prepaid-breakage.ts'
 export { contractPosition,revenueContractsEnabled,contractCreationMode,revenueScopedContractPostingEffectKey } from './contract-scope.ts'
 export type { ContractPosition,ContractScope } from './contract-scope.ts'
+export {
+  ContractCostError,
+  assetCarryingMinor,
+  capitalizeContractCost,
+  contractCostAttentionItems,
+  contractCostsFeatureEnabled,
+  deriveCustomerLifeMonths,
+  importCommissionCosts,
+  linkContractCostAsset,
+  projectAmortizationSchedule,
+  recognizeContractCostImpairment,
+  runContractCostAmortization,
+  scheduleForAsset,
+  type AssetScheduleLine,
+  type AttentionItem,
+  type AmortizationRunEntry,
+  type CapitalizeContractCostInput,
+  type CapitalizeContractCostResult,
+  type CommissionImportResult,
+  type CommissionImportRow,
+  type ContractCostMethod,
+  type ContractCostStatus,
+  type ContractCostType,
+  type ImpairmentAssessment,
+  type RunAmortizationResult,
+} from './contract-costs.ts'
