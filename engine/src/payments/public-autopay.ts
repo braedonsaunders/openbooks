@@ -2,11 +2,13 @@
 export {
   AutopayError,
   cancelEnrollment,
+  completeSetupByToken,
   enrollAutopay,
   listPaymentMethods,
   parseFinalAction,
   parseRetryOffsetsDays,
   pauseEnrollment,
+  publicSetupPage,
   removeMethod,
   resumeEnrollment,
   retryAttemptNow,

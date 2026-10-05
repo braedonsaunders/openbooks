@@ -1,12 +1,12 @@
 import { PDFDocument } from 'pdf-lib'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/database'
 import {
   buyShipmentLabel,
   readLabelFile,
   ShippingRefusal,
-} from '@openbooks/engine/src/sales/shipping-labels.ts'
+} from '@openbooks/engine/sales/shipping-labels'
 import { defineRoute } from '@/lib/api/route'
 
 const buyItem = z.object({
