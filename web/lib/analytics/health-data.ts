@@ -480,9 +480,14 @@ async function fiscalPeriodSeries(
   // partial. Older activity stays outside the window, as with months.
   const trailing = periods.filter((p) => p.from <= to).slice(-months);
   if (trailing.length === 0) return [];
+  // A mid-period or historical end sits inside the last period: the bucket
+  // closes at the selected end, never at the period's far edge, so postings
+  // after the end cannot leak into the trailing figures. ISO dates compare
+  // lexicographically, so the clamp is a plain string minimum.
+  const endOf = (p: FiscalPeriod) => (p.to <= to ? p.to : to);
   const bucket = (i: number) => `period_${i}`;
-  const whens = trailing.map((p, i) => sql`when l.posting_date >= ${p.from}::date and l.posting_date <= ${p.to}::date then ${bucket(i)}`);
-  const ranges = trailing.map((p) => sql`(l.posting_date >= ${p.from}::date and l.posting_date <= ${p.to}::date)`);
+  const whens = trailing.map((p, i) => sql`when l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date then ${bucket(i)}`);
+  const ranges = trailing.map((p) => sql`(l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date)`);
   const r = ((await db.execute(sql`
     select (case ${sql.join(whens, sql` `)} end) as month,
       sub.base_currency as func,
