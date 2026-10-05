@@ -402,6 +402,10 @@ export async function createPayApplication(
     // and this insert refuses here instead of billing B's project. Missing,
     // cross-org, and out-of-scope projects share one not-found shape.
     await lockProjectForScope(tx, orgId, projectId, allowedSubsidiaryIds);
+    // An invoiced draw is billed, not open: the new draw counts its work in
+    // previous-completed below. That basis stays true because an invoiced
+    // draw can never return to approved or void while this later draw exists
+    // (voidPayApplication and the invoice void/delete release both refuse).
     const lifecycle = (await tx.execute<{ has_open: boolean; last_period: string | Date | null }>(sql`
       select
         exists(select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId}
@@ -596,8 +600,51 @@ export async function approvePayApplication(
   });
 }
 
+/**
+ * Later progress applications on a project that are not void, oldest first.
+ * Each later draw froze the work billed before it into its previous-completed
+ * basis when it was created, so returning an earlier draw to an unbilled
+ * state (voiding it, or releasing its invoice back to approved) would leave
+ * that work counted as billed by a draw that no longer bills it. Retainage
+ * releases carry no progress basis and do not count. The caller must hold the
+ * project row lock: application creation takes the same lock, so no later
+ * draw can appear between this read and the caller's transition.
+ */
+export async function laterProgressApplicationNumbers(
+  tx: SqlExecutor,
+  orgId: string,
+  projectId: string,
+  applicationNumber: number,
+): Promise<number[]> {
+  const rows = (await tx.execute<{ application_number: number }>(sql`
+    select application_number from pay_applications
+     where org_id = ${orgId} and project_id = ${projectId} and kind = 'progress'
+       and application_number > ${applicationNumber} and status <> 'void'
+     order by application_number
+  `)).rows;
+  return rows.map((row) => Number(row.application_number));
+}
+
+/** The refusal for un-billing a draw that later draws build on. The remedy is
+ * the product's own path: void each later application newest first, and an
+ * invoiced one is first released by voiding or deleting its invoice. */
+export function laterProgressApplicationsRefusal(
+  applicationNumber: number,
+  later: readonly number[],
+  transition: "be voided" | "return to approved",
+): string {
+  const named = later.map((n) => `#${n}`).join(", ");
+  const subject = later.length === 1 ? `later application ${named} is` : `later applications ${named} are`;
+  const lead = transition === "be voided"
+    ? `Application #${applicationNumber} cannot be voided`
+    : `This invoice bills application #${applicationNumber}, which cannot return to approved`;
+  return `${lead} while ${subject} not void — ` +
+    "void the later applications first, newest first; for an invoiced application, void or delete its invoice, then void the application";
+}
+
 /** Void an application before invoicing. The row and draw evidence are kept;
- * voiding never deletes or rewrites financial history. */
+ * voiding never deletes or rewrites financial history. Refused while a later
+ * draw exists, because that draw already counts this one's work as billed. */
 export async function voidPayApplication(
   orgId: string,
   userId: string,
@@ -607,8 +654,10 @@ export async function voidPayApplication(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
-    const result = (await tx.execute<{ project_id: string; status: string; invoice_document_id: string | null }>(sql`
-      select project_id, status, invoice_document_id
+    const result = (await tx.execute<{
+      project_id: string; status: string; invoice_document_id: string | null; application_number: number; kind: string;
+    }>(sql`
+      select project_id, status, invoice_document_id, application_number, kind
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
     `));
     const app = result.rows[0];
@@ -618,6 +667,14 @@ export async function voidPayApplication(
     }
     await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
     await assertApplicationProcedure(tx, orgId, app.project_id);
+    if (app.kind === "progress") {
+      const later = await laterProgressApplicationNumbers(tx, orgId, app.project_id, Number(app.application_number));
+      if (later.length) {
+        throw new ConstructionBillingError(
+          laterProgressApplicationsRefusal(Number(app.application_number), later, "be voided"),
+        );
+      }
+    }
     await tx.execute(sql`
       update pay_applications
          set status = 'void', updated_at = now(), updated_by = ${userId}

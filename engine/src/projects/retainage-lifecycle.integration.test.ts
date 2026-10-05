@@ -11,6 +11,7 @@ import {
   generatePayApplicationInvoice,
   releaseRetainage,
   submitPayApplication,
+  voidPayApplication,
 } from "./construction-billing.ts";
 import { deleteDocument } from "../ledger/document-delete.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
@@ -25,6 +26,7 @@ import {
   releaseVendorRetainage,
   submitVendorPayApplication,
   updateVendorPayApplicationLines,
+  voidVendorPayApplication,
 } from "./subcontracts.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -58,6 +60,10 @@ async function voidDoc(orgId: string, actorId: string, documentId: string, date:
     reversalDate: date,
   });
   assert.equal(result.status, "voided");
+}
+
+function dayAfter(date: string, days = 1): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 async function customerSetup(): Promise<{
@@ -273,5 +279,102 @@ test("customer multi-currency draw void refuses while a release depends on it", 
     await assert.rejects(voidDoc(f.org.orgId, f.actor, generated.invoiceId, f.org.date), /retainage release/);
     await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.invoiceId, f.actor, f.org.orgId, { reason: "Discard USD release", allowedSubsidiaryIds: null }));
     await voidDoc(f.org.orgId, f.actor, generated.invoiceId, f.org.date);
+  } finally { await dropScratchOrgReporting(f.org.orgId); }
+});
+
+/** Assert the exact refusal text: the message is what the operator acts on. */
+function refusal(expected: string): (error: unknown) => true {
+  return (error) => {
+    assert.equal((error as Error).message, expected);
+    return true;
+  };
+}
+
+async function payAppIds(orgId: string, table: "pay_applications" | "vendor_pay_applications"): Promise<Map<number, string>> {
+  const rows = (await db.execute<{ id: string; n: number }>(sql`
+    select id, application_number as n from ${sql.identifier(table)} where org_id = ${orgId}`)).rows;
+  return new Map(rows.map((row) => [Number(row.n), row.id]));
+}
+
+test("a posted customer draw cannot be un-billed under a later draw; unwinding newest first succeeds", enabled, async () => {
+  const f = await customerSetup();
+  try {
+    const first = await f.draw("1000", f.org.date);
+    const second = await f.draw("500", dayAfter(f.org.date));
+    // Draw #2 froze #1's 1000 into its previous-completed basis.
+    await assert.rejects(
+      voidDoc(f.org.orgId, f.actor, first.invoiceId, dayAfter(f.org.date)),
+      refusal("This invoice bills application #1, which cannot return to approved while later application #2 is not void — void the later applications first, newest first; for an invoiced application, void or delete its invoice, then void the application"),
+    );
+    const ids = await payAppIds(f.org.orgId, "pay_applications");
+    await voidDoc(f.org.orgId, f.actor, second.invoiceId, dayAfter(f.org.date));
+    await withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, ids.get(2)!, null));
+    await voidDoc(f.org.orgId, f.actor, first.invoiceId, dayAfter(f.org.date));
+    await withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, ids.get(1)!, null));
+    const statuses = (await db.execute<{ status: string }>(sql`select status from pay_applications where org_id=${f.org.orgId} order by application_number`)).rows;
+    assert.deepEqual(statuses.map((row) => row.status), ["void", "void"]);
+  } finally { await dropScratchOrgReporting(f.org.orgId); }
+});
+
+test("deleting an earlier draw's draft invoice, or voiding the draw, is refused while a later draw exists", enabled, async () => {
+  const f = await customerSetup();
+  try {
+    const sovId = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${f.org.orgId} and project_id=${f.project}`)).rows[0]!.id;
+    const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, "10", null));
+    await withOrgTransaction(f.org.orgId, () =>
+      submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: "1000", materialsStored: "0" }], null));
+    await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
+    const invoice = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null));
+    // An invoiced draw is billed, so the next draw may start against it.
+    const later = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, dayAfter(f.org.date), "10", null));
+    const discard = () => withOrgTransaction(f.org.orgId, () =>
+      deleteDocument(invoice.invoiceId, f.actor, f.org.orgId, { reason: "Discard draft draw invoice", allowedSubsidiaryIds: null }));
+    await assert.rejects(discard, /This invoice bills application #1, which cannot return to approved while later application #2 is not void — void the later applications first/);
+    assert.equal((await db.execute<{ status: string }>(sql`select status from pay_applications where id=${app.id}`)).rows[0]!.status, "invoiced");
+    await withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, later.id, null));
+    await discard();
+    // A draw already returned to approved beneath an invoiced later draw
+    // (state written before this fence existed) is itself refused a void.
+    await db.execute(sql`update pay_applications set status='invoiced' where id=${later.id}`);
+    await assert.rejects(
+      withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, app.id, null)),
+      refusal("Application #1 cannot be voided while later application #2 is not void — void the later applications first, newest first; for an invoiced application, void or delete its invoice, then void the application"),
+    );
+    await db.execute(sql`update pay_applications set status='void' where id=${later.id}`);
+    await withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, app.id, null));
+  } finally { await dropScratchOrgReporting(f.org.orgId); }
+});
+
+test("a billed subcontract draw cannot be un-billed under later draws; unwinding newest first succeeds", enabled, async () => {
+  const f = await vendorSetup();
+  try {
+    const sov = (await db.execute<{ id: string }>(sql`select id from subcontract_sov_lines where org_id=${f.org.orgId}`)).rows[0]!.id;
+    const bill1 = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.id;
+    const create = (periodEnd: string) => withOrgTransaction(f.org.orgId, () =>
+      createVendorPayApplication({ orgId: f.org.orgId, userId: f.actor, subcontractId: f.subcontract, periodEnd }));
+    await assert.rejects(create(f.org.date), /Period ending must follow the last billed application/);
+    const second = await create(dayAfter(f.org.date));
+    await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: second.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
+    await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, second.id));
+    await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, second.id));
+    const bill2 = (await withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, second.id))).vendorBillDocumentId;
+    const third = await create(dayAfter(f.org.date, 2));
+    // #2 and #3 carry #1's earned-to-date forward as previous_earned.
+    await assert.rejects(
+      withOrgTransaction(f.org.orgId, () => deleteDocument(bill2, f.actor, f.org.orgId, { reason: "Discard draft draw bill", allowedSubsidiaryIds: null })),
+      refusal("This vendor bill is for vendor application #2, which cannot return to approved while later vendor application #3 is not void — void the later vendor applications first, newest first; for a billed application, void or delete its vendor bill, then void the application"),
+    );
+    await assert.rejects(
+      voidDoc(f.org.orgId, f.actor, bill1, f.org.date),
+      /This vendor bill is for vendor application #1, which cannot return to approved while later vendor applications #2, #3 are not void/,
+    );
+    await withOrgTransaction(f.org.orgId, () => voidVendorPayApplication(f.org.orgId, f.actor, third.id));
+    await withOrgTransaction(f.org.orgId, () => deleteDocument(bill2, f.actor, f.org.orgId, { reason: "Discard draft draw bill", allowedSubsidiaryIds: null }));
+    await withOrgTransaction(f.org.orgId, () => voidVendorPayApplication(f.org.orgId, f.actor, second.id));
+    await voidDoc(f.org.orgId, f.actor, bill1, f.org.date);
+    const ids = await payAppIds(f.org.orgId, "vendor_pay_applications");
+    await withOrgTransaction(f.org.orgId, () => voidVendorPayApplication(f.org.orgId, f.actor, ids.get(1)!));
+    const statuses = (await db.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id=${f.org.orgId} order by application_number`)).rows;
+    assert.deepEqual(statuses.map((row) => row.status), ["void", "void", "void"]);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });

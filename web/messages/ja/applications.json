@@ -31,7 +31,8 @@
     "applicationInProgress": "変更注文を承認する前に、進行中の申請を完了または無効化してください。",
     "targetLineGone": "対象の工程表の行は既に存在しません。再読み込みして再試行してください。",
     "unallocatedAdditive": "未割当の変更注文は加算（正の値）にしてください。",
-    "onlyDraftVoid": "無効化できるのは下書きの変更注文のみです。"
+    "onlyDraftVoid": "無効化できるのは下書きの変更注文のみです。",
+    "laterApplicationsOpen": "後続の申請（{later}）が無効化されていないため、申請 #{number} は無効化できません。後続の申請を新しいものから順に先に無効化してください。請求済みの申請は、請求書を無効化または削除してから申請を無効化してください。"
   },
   "empty": { "title": "対象プロジェクトがありません", "description": "支払申請を使用するプロジェクトタイプを有効にし、プロジェクトに割り当ててください。", "manageProjectTypes": "プロジェクトタイプを管理" },
   "summary": { "contractSum": "契約総額", "retainageHeld": "保留金残高", "committedCost": "確定原価（未決済発注）" },

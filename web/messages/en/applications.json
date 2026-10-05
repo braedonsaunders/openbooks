@@ -31,7 +31,8 @@
     "applicationInProgress": "Complete or void the current application before approving a change order.",
     "targetLineGone": "The target schedule line no longer exists. Reload and retry.",
     "unallocatedAdditive": "An unallocated change order must be additive (positive).",
-    "onlyDraftVoid": "Only a draft change order can be voided."
+    "onlyDraftVoid": "Only a draft change order can be voided.",
+    "laterApplicationsOpen": "Application #{number} cannot be voided while later applications are not void ({later}). Void the later applications first, newest first; for an invoiced application, void or delete its invoice, then void the application."
   },
   "empty": {
     "title": "No eligible projects",
