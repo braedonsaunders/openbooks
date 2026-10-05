@@ -151,6 +151,23 @@ function invalidCommandBody(): Error {
   return Object.assign(new Error("invalid command body"), { status: 400, code: "invalid" });
 }
 
+/**
+ * The channel-location drawer leaves optional text empty as "" (notably
+ * the keep-back buffer), while its descriptor treats those fields as
+ * absent when empty (mirroring the CRUD coercion, and the engine reads
+ * an absent buffer as zero). Other commands keep strict shape
+ * validation: a blank value where content is required still fails, so
+ * no other command's refusal is softened by this branch.
+ */
+export function normalizeChannelLocationBody(raw: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(raw).map(([key, value]) => [
+      key,
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    ]),
+  );
+}
+
 /** Parse with the descriptor's literal schema and run the matching engine command. */
 async function runCommandBody(
   authz: Authz,
@@ -203,7 +220,7 @@ async function runCommandBody(
       });
     }
     case "upsertChannelLocation": {
-      const parsed = channelLocationBody.safeParse(raw);
+      const parsed = channelLocationBody.safeParse(normalizeChannelLocationBody(raw));
       if (!parsed.success) throw invalidCommandBody();
       return upsertChannelLocation(orgId, actorId, {
         channelId: parsed.data.channelId,

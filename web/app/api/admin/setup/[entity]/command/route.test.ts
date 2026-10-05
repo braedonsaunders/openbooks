@@ -21,7 +21,7 @@ registerHooks({
     return s ? { format: "module", source: s, shortCircuit: true } : n(u, c);
   },
 });
-const { POST, commandRefusalResponse, commandOperationName } = await import("./route.ts");
+const { POST, commandRefusalResponse, commandOperationName, normalizeChannelLocationBody } = await import("./route.ts");
 const { SETUP_ENTITY_BY_KEY } = await import("@/lib/setup/registry");
 const { POST: genericPOST, PATCH: genericPATCH, DELETE: genericDELETE } = await import("../route.ts");
 const call = (entity: string, body: string) => POST(new Request(`http://localhost/api/admin/setup/${entity}/command`, { method: "POST", headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" }, body }), { params: Promise.resolve({ entity }) });
@@ -40,6 +40,16 @@ test("computed refusals keep typed status with message, code, remedy, field", ()
   const bad = (status: number) => Object.assign(new Error("x"), { status });
   assert.deepEqual(commandRefusalResponse(Object.assign(bad(422), { code: "c", remedy: "r.", field: "f" })), { status: 422, body: { error: "x", code: "c", remedy: "r.", field: "f" } });
   assert.equal(commandRefusalResponse(bad(500)), null);
+});
+test("channel-location empties normalize to absent in their own branch", () => {
+  // The helper is invoked only by the upsertChannelLocation branch; every
+  // other command parses its raw body untouched, so a blank portal name
+  // still fails its min(1) shape (proven live: POST customer-portal with
+  // portalName "" answers 400 invalid).
+  assert.deepEqual(
+    normalizeChannelLocationBody({ bufferQuantity: "", externalName: "Main", syncInventory: true }),
+    { bufferQuantity: undefined, externalName: "Main", syncInventory: true },
+  );
 });
 test("feature-off commands 404 before body parsing", async () => {
   routeState.manage = true; routeState.features = {};
