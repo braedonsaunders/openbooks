@@ -1111,6 +1111,32 @@ export async function applyDocumentEdit(
       || (body.documentDate!==undefined && body.documentDate!==current.documentDate)
       || (body.subsidiaryId!==undefined && body.subsidiaryId!==current.subsidiaryId) || currency!==undefined))
     throw new DocumentEditError(422,'Save the invoice lines with the changed goods supply assessment, date, currency or selling entity so its native tax can be recalculated');
+  // Tax rates are effective-dated by the document date. A header-only date
+  // change keeps the stored line tax, so it is refused whenever a calculated
+  // line's rate differs on the new date — otherwise the draft would post the
+  // old period's tax. Saving the lines with the date recalculates them.
+  if (body.lines === undefined && body.documentDate !== undefined && body.documentDate !== current.documentDate) {
+    const stale = (await runner.execute<{ line_number: number; code: string; stored: string; effective: string | null }>(sql`
+      select dl.line_number, tc.code, c.rate_percent::text as stored, tr.rate_percent::text as effective
+        from document_lines dl
+        join document_line_tax_components c on c.document_line_id = dl.id and c.org_id = dl.org_id
+        join tax_codes tc on tc.id = c.tax_code_id and tc.org_id = c.org_id
+        left join lateral (
+          select rate_percent from tax_rates
+           where org_id = dl.org_id and tax_code_id = c.tax_code_id and effective_from <= ${body.documentDate}
+             and (effective_to is null or effective_to >= ${body.documentDate})
+           order by effective_from desc limit 1) tr on true
+       where dl.org_id = ${orgId} and dl.document_id = ${id}
+         and not dl.tax_overridden and not c.overridden
+         and tr.rate_percent is distinct from c.rate_percent
+       order by dl.line_number, c.sequence
+       limit 1`)).rows[0]
+    if (stale) {
+      throw new DocumentEditError(422,
+        `Line ${stale.line_number} carries ${stale.code} at ${stale.stored}%, but ${stale.effective === null ? 'no rate is' : `${stale.effective}% is`} in effect on ${body.documentDate} — ` +
+        'save the lines together with the new date so their tax is recalculated at the rates in effect on that date')
+    }
+  }
   // Structural funding override (the drawer's fundingSource picker: deposit
   // destination, check source, card liability). It is not a registered
   // custom field, so validateCustomValues cannot see it — without an

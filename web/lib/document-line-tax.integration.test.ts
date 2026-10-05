@@ -15,7 +15,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 const { saveMarketplaceFacilitator } = await import("@openbooks/engine/src/tax/marketplace-facilitators.ts");
 const { API_RECORD_TYPES, toResolved } = await import("./api/registry-data.ts");
-const { createRecord } = await import("./api/writers.ts");
+const { createRecord, updateRecord } = await import("./api/writers.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const invoices = toResolved(API_RECORD_TYPES.find((t) => t.key === "invoices")!);
@@ -76,6 +76,33 @@ test("a marketplace line saved through the editor books facilitator-collected ta
     // Before the editor delegated to the engine writer, collected_by fell to
     // its 'merchant' default and the facilitator's tax posted as ours.
     assert.deepEqual(evidence, [{ collectedBy: "marketplace", facilitatorName: "Amazon", taxAmount: "20.0000" }]);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("moving a draft's date across a rate change refuses a header-only save", { skip: !DB }, async () => {
+  const f = await fixture();
+  try {
+    await withBypassContext(() => db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from,effective_to)
+      values(${f.org.orgId},${f.taxCode},'5','2020-01-01','2026-07-31'),(${f.org.orgId},${f.taxCode},'6','2026-08-01',null)`));
+    const line = { accountId: f.org.accounts.revenue, amount: "1000.0000", taxCodeId: f.taxCode };
+    const created = await withOrgContext(f.org.orgId, () => createRecord(f.user, invoices, [], {
+      partyId: f.org.customerId, documentDate: f.org.date, lines: [line],
+    }, { source: "api", allowedSubsidiaryIds: null }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const id = createdId(created.body);
+    const taxTotal = async () => (await withOrgContext(f.org.orgId, () => db.execute<{ t: string }>(sql`
+      select tax_total::text as t from documents where id = ${id} and org_id = ${f.org.orgId}`))).rows[0]!.t;
+    assert.equal(await taxTotal(), "50.0000");
+    // The stored 5% would otherwise post on an August date where 6% applies.
+    const headerOnly = await withOrgContext(f.org.orgId, () => updateRecord(f.user, invoices, [], id, { documentDate: "2026-08-15" }, { source: "api", allowedSubsidiaryIds: null }));
+    assert.equal(headerOnly.status, 422);
+    assert.match(JSON.stringify(headerOnly.body), /Line 1 carries LINE-TAX at 5\.0000%, but 6\.0000% is in effect on 2026-08-15/);
+    assert.equal(await taxTotal(), "50.0000");
+    const withLines = await withOrgContext(f.org.orgId, () => updateRecord(f.user, invoices, [], id, { documentDate: "2026-08-15", lines: [line] }, { source: "api", allowedSubsidiaryIds: null }));
+    assert.ok(withLines.status < 300, JSON.stringify(withLines.body));
+    assert.equal(await taxTotal(), "60.0000");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
