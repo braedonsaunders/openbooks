@@ -126,6 +126,10 @@ export function SearchSelect({
   const scanBuffer = useRef({ value: '', at: 0 })
   const videoRef = useRef<HTMLVideoElement>(null)
   const cameraAvailable = mounted && typeof window !== 'undefined' && Boolean((window as BarcodeDetectorWindow).BarcodeDetector)
+  // Native modal dialogs make the rest of the document inert. Keep a menu
+  // inside its owning dialog so its options remain visible and interactive;
+  // portaling outside the scrolling content still prevents clipping.
+  const [portalHost, setPortalHost] = useState<Element | null>(null)
 
   const noneLabel = tCommon('labels.none')
   const allOptions = useMemo(
@@ -263,6 +267,7 @@ export function SearchSelect({
 
   function openMenu() {
     if (disabled) return
+    setPortalHost(wrapRef.current?.closest('dialog[open]') ?? document.body)
     setQuery('')
     setScanMessage(null)
     setScanFailed(false)
@@ -522,7 +527,7 @@ export function SearchSelect({
         />
       </button>
 
-      {/* Desktop dropdown — portaled to <body> + fixed-positioned from the
+      {/* Desktop dropdown — portaled outside the scrolling content and positioned from the
           trigger so it floats above any overflow container (e.g. the line grid)
           rather than being clipped or expanding the row. */}
       {mounted && open && isDesktop && pos
@@ -536,7 +541,7 @@ export function SearchSelect({
               {showSearch ? searchBox(false) : null}
               <div ref={listRef} className={cn('min-h-0 max-h-64 overflow-y-auto', showSearch && 'mt-1')}>{optionList}</div>
             </div>,
-            document.body,
+            portalHost ?? document.body,
           )
         : null}
 
@@ -585,7 +590,7 @@ export function SearchSelect({
                 </div>
               ) : null}
             </AnimatePresence>,
-            document.body,
+            portalHost ?? document.body,
           )
         : null}
     </div>
