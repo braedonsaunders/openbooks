@@ -91,7 +91,7 @@ export function KitComponentsTab({
       const bomBody = (await bomRes.json()) as {
         assemblyItemId?: string
         version?: string | null
-        components?: (BomComponent & { code?: string | null; name?: string | null; isActive?: boolean | null })[]
+        components?: (BomComponent & { code?: string | null; name?: string | null; isActive?: boolean | null; joinedId?: string | null })[]
         validItems?: { id: string; code: string | null; name: string | null; unit: string | null }[]
       }
       // Identity comes with the line, not from the editor's eligible
@@ -106,17 +106,11 @@ export function KitComponentsTab({
           name: line.name ?? null,
           isActive: line.isActive ?? null,
           label: componentLabel({
-            id: line.componentItemId,
+            componentItemId: line.componentItemId,
             code: line.code ?? null,
             name: line.name ?? null,
-            isActive: line.isActive ?? null,
           }),
-          identityMissing: isComponentIdentityMissing({
-            id: line.componentItemId,
-            code: line.code ?? null,
-            name: line.name ?? null,
-            isActive: line.isActive ?? null,
-          }),
+          identityMissing: isComponentIdentityMissing(line.joinedId ?? null),
         })),
       })
       setBomVersion(bomBody.version ?? null)

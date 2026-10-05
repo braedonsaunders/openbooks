@@ -4,26 +4,33 @@ import { componentLabel, isComponentIdentityMissing } from './kit-component-labe
 
 test('a component with code and name reads as code then name', () => {
   assert.equal(
-    componentLabel({ id: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: 'items-qa-COMP-A', name: 'Component A', isActive: true }),
+    componentLabel({ componentItemId: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: 'items-qa-COMP-A', name: 'Component A' }),
     'items-qa-COMP-A · Component A',
   )
 })
 
 test('a component with only a name still names itself', () => {
   assert.equal(
-    componentLabel({ id: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: null, name: 'Component A', isActive: true }),
+    componentLabel({ componentItemId: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: null, name: 'Component A' }),
     'Component A',
   )
 })
 
-test('an inactive component keeps its name: absence from the picker is not absence from the recipe', () => {
-  const line = { id: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: 'items-qa-COMP-A', name: 'Component A', isActive: false }
-  assert.equal(componentLabel(line), 'items-qa-COMP-A · Component A')
-  assert.equal(isComponentIdentityMissing(line), false)
+test('a component with only a code still names itself', () => {
+  assert.equal(
+    componentLabel({ componentItemId: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: 'items-qa-COMP-A', name: null }),
+    'items-qa-COMP-A',
+  )
 })
 
-test('a line whose item row is gone falls back to a short storage id and reports missing', () => {
-  const line = { id: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: null, name: null, isActive: null }
-  assert.equal(componentLabel(line), '01a10c7f')
-  assert.equal(isComponentIdentityMissing(line), true)
+test('a line with no joined catalog row falls back to a short storage id', () => {
+  assert.equal(
+    componentLabel({ componentItemId: '01a10c7f-b7b0-795b-93e8-a251334b1338', code: null, name: null }),
+    '01a10c7f',
+  )
+})
+
+test('missing identity follows the explicit joined row id, never blank fields', () => {
+  assert.equal(isComponentIdentityMissing(null), true)
+  assert.equal(isComponentIdentityMissing('01a10c7f-b7b0-795b-93e8-a251334b1338'), false)
 })
