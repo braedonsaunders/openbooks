@@ -10,12 +10,15 @@
       "excellent": "Excelente",
       "good": "Bom",
       "average": "Médio",
-      "needsWork": "Precisa melhorar"
+      "needsWork": "Precisa melhorar",
+      "unscored": "Sem pontuação"
     },
     "categories": {
       "profitability": "Rentabilidade",
       "efficiency": "Eficiência",
-      "operating": "Operação"
+      "operating": "Operação",
+      "liquidity": "Liquidez",
+      "solvency": "Solvência"
     },
     "vitals": {
       "healthScore": "Pontuação de saúde",

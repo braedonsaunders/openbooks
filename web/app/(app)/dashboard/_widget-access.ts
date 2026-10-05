@@ -74,6 +74,25 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // base grant every dashboard needs; canSeeWidget then applies the source
   // dashboard's whole rule (its permission and subsidiary scope).
   // ── Analytics: financial ratios and health (Financial Health) ──────────
+  'ratios-profitability': ['reports.read'],
+  'ratios-liquidity': ['reports.read'],
+  'ratios-solvency': ['reports.read'],
+  'ratios-efficiency': ['reports.read'],
+  'ratios-operating': ['reports.read'],
+  'kpi-ratio-current': ['reports.read'],
+  'kpi-ratio-quick': ['reports.read'],
+  'kpi-working-capital': ['reports.read'],
+  'kpi-ratio-debt-equity': ['reports.read'],
+  'kpi-ratio-interest-coverage': ['reports.read'],
+  'kpi-ratio-roe': ['reports.read'],
+  'kpi-ratio-roic': ['reports.read'],
+  'kpi-ratio-operating-margin': ['reports.read'],
+  'kpi-ratio-net-margin': ['reports.read'],
+  'health-score': ['reports.read'],
+  'list-health-insights': ['reports.read'],
+  'chart-revenue-trend': ['reports.read'],
+  'chart-margin-trend': ['reports.read'],
+  'budget-variance': ['reports.read'],
 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
 

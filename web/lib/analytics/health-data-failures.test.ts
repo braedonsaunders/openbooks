@@ -15,9 +15,11 @@ const mocks: Record<string, string> = {
     return {rows:[]};}}`,
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return globalThis.__healthFailures.budgets}",
-  "./financial-health": `export async function financialHealth(){return {figures:{
-    revenue:0,cogs:0,grossProfit:0,opex:0,operatingIncome:0,otherIncome:0,otherExpense:0,netIncome:0,
-    revenueGrowth:0,breakevenMonthly:null,operatingLeverage:0,rule40:0}}}`,
+  "./config": "export async function analyticsConfig(){return {insightCriticalPercent:50,insightWarningPercent:75,revenueDeclineAlertPercent:15,revenueTrendAlertPercent:10,marginCompressionPoints:3,breakevenSafetyPercent:10,anomalySigma:2}}",
+  "./financial-health": `export async function priorFiscalWindow(){return {from:'2025-07-01',to:'2025-07-31'}}
+    export async function financialHealth(){const r=(n)=>Number(n).toFixed(4);return {ratios:{profitability:[],liquidity:[],solvency:[],efficiency:[],operating:[]},benchmarks:{targets:{}},figures:{
+    revenue:r(0),cogs:r(0),grossProfit:r(0),opex:r(0),operatingIncome:r(0),otherIncome:r(0),otherExpense:r(0),netIncome:r(0),
+    revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {
   if (specifier in mocks) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };

@@ -328,6 +328,8 @@ const {spendVelocityData} = await import('./analytics/spend-velocity-data');
 // Every analytics reader accepts the leap-day-adjacent ranges and returns the
 // requested period unchanged. Empty scratch orgs make its zero-valued
 // aggregate defaults independently observable.
+const { inclusiveCalendarDays } = await import('@openbooks/engine/src/platform/civil-date.ts')
+
 const ranges = [
   { from: '2024-02-01', to: '2024-02-29' },
   { from: '2024-02-29', to: '2024-03-31' },
@@ -360,13 +362,13 @@ test('the health score echoes each calendar range with zero figures', async () =
   try {
     await withOrgContext(org.orgId, async () => {
       for (const range of ranges) {
-        const result = await financialHealth({ ...range, label: 'Calendar review' }, undefined, org.orgId, null);
+        const result = await financialHealth({ ...range, label: 'Calendar review' }, org.orgId, null);
         assert.deepEqual(
-          [result.period.from, result.period.to, result.period.label, result.period.months],
-          [range.from, range.to, 'Calendar review', 1],
+          [result.period.from, result.period.to, result.period.label, result.period.days],
+          [range.from, range.to, 'Calendar review', inclusiveCalendarDays(range.from, range.to)],
         );
-        assert.equal(result.figures.revenue, 0);
-        assert.equal(result.figures.netIncome, 0);
+        assert.equal(result.figures.revenue, '0.0000');
+        assert.equal(result.figures.netIncome, '0.0000');
       }
     });
   } finally { await withBypass(() => dropScratchOrg(org.orgId)); }
