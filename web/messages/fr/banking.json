@@ -1171,6 +1171,42 @@
       "refund_unposted": "Remboursement non comptabilisé",
       "no_link": "Aucun lien",
       "link_failed": "Liaison impossible"
+    },
+    "queueAllLabel": "Tout voir"
+  },
+  "pspUnmatched": {
+    "title": "Lignes de versement non rattachées",
+    "description": "Chaque ligne de règlement qu'aucun document ne revendique. Examinez la proposition de chaque ligne et liez-la — rien ne se lie seul.",
+    "emptyTitle": "Chaque ligne rattachable est liée.",
+    "emptyDescription": "Les lignes de charge, remboursement et litige non rattachées apparaissent ici avec un document proposé.",
+    "colReference": "Référence",
+    "colProvider": "Prestataire",
+    "colKind": "Nature",
+    "colBatch": "Versement",
+    "colSettled": "Réglé",
+    "drawer": {
+      "kindRow": "Nature",
+      "amountRow": "Montant",
+      "referenceRow": "Référence prestataire",
+      "descriptionRow": "Libellé",
+      "batchRow": "Versement",
+      "settledRow": "Réglé"
+    },
+    "assistance": {
+      "title": "Lien proposé",
+      "loading": "Recherche du document…",
+      "loadFailed": "La proposition n'a pas pu être chargée. Rechargez la ligne ou réessayez.",
+      "evidence": "Pourquoi ce document",
+      "evidenceSummary": "{count, plural, one {# raison} other {# raisons}}",
+      "apply": "Lier le document",
+      "applySimilar": "Lier {count} similaires",
+      "similar": "{count, plural, one {# ligne partage} other {# lignes partagent}} cette cause",
+      "confirmTitle": "Lier ce document ?",
+      "confirmBody": "{fix} Ceci lie {count, plural, one {# ligne} other {# lignes}}. L'éditeur de lien revérifie d'abord le document.",
+      "approved": "{linked, plural, one {# ligne liée} other {# lignes liées}}{skipped, plural, =0 {} one {, # ignorée} other {, # ignorées}}."
     }
+  },
+  "payoutAssistance": {
+    "chipLabel": "Examiner la proposition"
   }
 }

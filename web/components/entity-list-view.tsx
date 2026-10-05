@@ -73,6 +73,7 @@ export async function EntityListView({
   canManage,
   sp,
   drawer,
+  rowTrailing,
   emptyAction,
   emptyTitle,
   emptyDescription,
@@ -107,6 +108,13 @@ export async function EntityListView({
   hrmEmploymentVisible?: boolean
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
+  /**
+   * Optional per-row trailing cell (a suggestion chip, a queue action).
+   * Resolved by the caller keyed on the record type, the way `formatValue`
+   * already is — never through the spec. Lists that pass nothing render
+   * exactly as before: no extra column, no extra queries.
+   */
+  rowTrailing?: (row: Record<string, unknown>) => ReactNode
   emptyAction?: ReactNode
   /**
    * Page-specific "nothing here yet" copy, shown only when NO search, quick
@@ -570,11 +578,19 @@ export async function EntityListView({
                     </TableHead>
                   ),
                 )}
+                {rowTrailing ? <TableHead key="__trailing" className="w-px px-2"><span className="sr-only">{labels.actions}</span></TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
-                <TableRow key={String(row.id)}>{cols.map((c) => cell(row, c))}</TableRow>
+                <TableRow key={String(row.id)}>
+                  {cols.map((c) => cell(row, c))}
+                  {rowTrailing ? (
+                    <TableCell key="__trailing" className="w-px whitespace-nowrap px-2 text-right">
+                      {rowTrailing(row)}
+                    </TableCell>
+                  ) : null}
+                </TableRow>
               ))}
             </TableBody>
           </Table>

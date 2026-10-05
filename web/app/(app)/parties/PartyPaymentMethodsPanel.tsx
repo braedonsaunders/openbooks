@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, CreditCard } from 'lucide-react'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { fetchAction, type ActionResult } from '@braedonsaunders/appkit-errors'
 import { Badge, Button, DisclosureSection, Input, Label, Select } from '@openbooks/ui'
 import { Switch } from '../../../components/switch'
 import { useAppAction } from '../../../lib/use-app-action'
@@ -143,14 +143,19 @@ export function PartyPaymentMethodsPanel({
     const updates = ordered
       .map((method, index) => ({ method, index }))
       .filter(({ method, index }) => method.fallbackPriority !== index)
-    await execute(async () => {
+    await execute(async (): Promise<ActionResult<unknown>> => {
+      let last: ActionResult<unknown> = { ok: true, status: 200, data: null }
       for (const { method, index } of updates) {
-        await fetchAction(`/api/autopay/methods/${method.id}`, {
+        last = await fetchAction(`/api/autopay/methods/${method.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fallbackPriority: index }),
         })
+        // A refused renumber stops the chain: the row order on screen
+        // already moved, and the refresh below re-reads the stored order.
+        if (!last.ok) return last
       }
+      return last
     }, {
       fallbackMessage: t('reorderFailed'),
     })

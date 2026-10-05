@@ -1171,6 +1171,42 @@
       "refund_unposted": "Reembolso sin contabilizar",
       "no_link": "Sin vínculo",
       "link_failed": "No se pudo vincular"
+    },
+    "queueAllLabel": "Ver todo"
+  },
+  "pspUnmatched": {
+    "title": "Líneas de pago sin vincular",
+    "description": "Cada línea de liquidación que ningún documento reclama. Revise la propuesta de cada fila y vincúlela — nada se vincula solo.",
+    "emptyTitle": "Toda línea vinculable está vinculada.",
+    "emptyDescription": "Las líneas de cargo, reembolso y disputa sin vincular aparecen aquí con un documento propuesto.",
+    "colReference": "Referencia",
+    "colProvider": "Proveedor",
+    "colKind": "Tipo",
+    "colBatch": "Pago",
+    "colSettled": "Liquidado",
+    "drawer": {
+      "kindRow": "Tipo",
+      "amountRow": "Importe",
+      "referenceRow": "Referencia del proveedor",
+      "descriptionRow": "Descripción",
+      "batchRow": "Pago",
+      "settledRow": "Liquidado"
+    },
+    "assistance": {
+      "title": "Vínculo propuesto",
+      "loading": "Buscando el documento…",
+      "loadFailed": "No se pudo cargar la propuesta. Recargue la fila o vuelva a intentarlo.",
+      "evidence": "Por qué este documento",
+      "evidenceSummary": "{count, plural, one {# motivo} other {# motivos}}",
+      "apply": "Vincular documento",
+      "applySimilar": "Vincular {count} similares",
+      "similar": "{count, plural, one {# línea comparte} other {# líneas comparten}} esta causa",
+      "confirmTitle": "¿Vincular este documento?",
+      "confirmBody": "{fix} Esto vincula {count, plural, one {# línea} other {# líneas}}. El editor de vínculos vuelve a validar el documento primero.",
+      "approved": "{linked, plural, one {# línea vinculada} other {# líneas vinculadas}}{skipped, plural, =0 {} one {, # omitida} other {, # omitidas}}."
     }
+  },
+  "payoutAssistance": {
+    "chipLabel": "Revisar propuesta"
   }
 }

@@ -1475,6 +1475,53 @@ const SOURCES: Record<string, EntityListSource> = {
       return out === fullKey ? storedName : out
     },
   },
+  // Payout lines no document claims yet: the needs-attention queue behind
+  // the payouts console tiles. One row per unlinked matchable line; the
+  // row drawer proposes the native document with evidence and links it on
+  // approval. Resolved lines leave the queue the moment they link.
+  psp_settlement_line_unmatched: {
+    recordType: 'psp_settlement_line_unmatched',
+    table: 'psp_settlement_lines',
+    alias: 'l',
+    baseJoins: sql`join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id`,
+    builtInExpr: {
+      reference: sql`l.external_ref`,
+      description: sql`l.description`,
+      kind: sql`l.kind`, status: sql`l.kind`,
+      amount: sql`l.amount::text`, currency: sql`l.currency`,
+      provider: sql`b.provider`,
+      batch: sql`b.external_ref`, batch_id: sql`l.batch_id`,
+      settled: sql`b.settlement_date::text`,
+    },
+    sorts: {
+      reference: sql`l.external_ref`, provider: sql`b.provider`, kind: sql`l.kind`,
+      amount: sql`l.amount`, batch: sql`b.external_ref`, settled: sql`b.settlement_date`,
+    },
+    defaultSort: sql`b.settlement_date desc, l.line_number`,
+    statusExpr: sql`l.kind`,
+    countFilterKey: 'kind',
+    quickFilters: [
+      { paramKey: 'kind', filterKey: 'kind' },
+      { paramKey: 'provider', filterKey: 'provider' },
+    ],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) =>
+      settlementLineUnmatchedWhere(view, adhoc, orgId, allowedSubsidiaryIds),
+    drawerParam: 'line', basePath: '/banking/payouts/unmatched',
+    readPermission: 'banking.read',
+    currencyField: 'currency',
+    statusVariant: (_row, value) =>
+      value === 'dispute' ? 'destructive'
+      : value === 'dispute_reversal' ? 'secondary'
+      : value === 'refund' ? 'warning' : 'outline',
+    // The payouts console names these kinds; the queue reuses its labels
+    // instead of a second vocabulary. A locale without the key keeps the
+    // stored name, never a raw key.
+    statusDisplayName: (stored, translate) => {
+      const fullKey = `banking.payouts.kindLabels.${stored}`
+      const out = translate(fullKey)
+      return out === fullKey ? stored : out
+    },
+  },
   // Gift cards and store credit read as one liability ledger: the code
   // renders masked, the customer join stays left (gift cards are bearer),
   // and the program join is inner (every account is issued under one).
@@ -1802,6 +1849,34 @@ const CHANNEL_EVENT_EXCEPTION_CODES = [
   'currency_unsupported', 'over_refund', 'refund_unposted_order', 'unmapped_fulfilment_location',
   'insufficient_stock', 'cancellation_blocked',
 ];
+
+const UNMATCHED_SETTLEMENT_LINE_KINDS = ['charge', 'refund', 'dispute', 'dispute_reversal'];
+
+const UNMATCHED_SETTLEMENT_PROVIDERS = ['stripe', 'recurly', 'chargebee', 'shopify_payments', 'paypal'];
+
+function settlementLineUnmatchedWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowedSubsidiaryIds?: Set<string> | null) {
+  const parts: SQL[] = [
+    sql`l.org_id = ${orgId}`,
+    sql`and l.document_id is null`,
+    sql`and l.kind in ('charge', 'refund', 'dispute', 'dispute_reversal')`,
+    // The batch owns the subsidiary: a scoped operator works only the lines
+    // of payouts they may see, the same scope the payouts console reads.
+    subsidiaryVisibleFilter(sql`b.subsidiary_id`, allowedSubsidiaryIds ?? null),
+  ];
+  if (adhoc.q) {
+    parts.push(sql`and (coalesce(l.external_ref, '') ilike ${`%${adhoc.q}%`} or coalesce(l.description, '') ilike ${`%${adhoc.q}%`} or b.external_ref ilike ${`%${adhoc.q}%`})`)
+  }
+  if (adhoc.filters?.kind) parts.push(sql`and l.kind = ${adhoc.filters.kind}`)
+  if (adhoc.filters?.provider) parts.push(sql`and b.provider = ${adhoc.filters.provider}`)
+  for (const filter of view.filters) {
+    if (filter.key === 'kind') {
+      pushNonprofitStatusFilter(parts, filter, sql`l.kind`, UNMATCHED_SETTLEMENT_LINE_KINDS)
+    } else if (filter.key === 'provider') {
+      pushNonprofitStatusFilter(parts, filter, sql`b.provider`, UNMATCHED_SETTLEMENT_PROVIDERS)
+    } else parts.push(sql`and false`)
+  }
+  return sql.join(parts, sql` `)
+}
 
 function channelEventExceptionWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: Set<string> | null) {
   const parts: SQL[] = [sql`e.org_id = ${orgId}`, sql`and e.posting_status = 'exception'`, channelScopeFilter(allowed)]

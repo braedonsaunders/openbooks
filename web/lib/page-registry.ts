@@ -1084,6 +1084,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/banking/payouts/unmatched': {
+    route: '/banking/payouts/unmatched',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/banking/payouts/unmatched/view')
+      return {
+        load: (input) => m.loadPspUnmatched(input.searchParams ?? {}),
+        spec: (data) => m.pspUnmatchedSpec(data as never),
+      }
+    },
+  },
   '/banking/psp-settlements': {
     route: '/banking/psp-settlements',
     segments: [],

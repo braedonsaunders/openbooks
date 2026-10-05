@@ -61,7 +61,8 @@
     "fund": "Fund",
     "fund_release": "Fund release",
     "collection_attempt": "Collection attempt",
-    "tax_provider_transaction": "Tax provider commit"
+    "tax_provider_transaction": "Tax provider commit",
+    "psp_settlement_line_unmatched": "Unmatched payout line"
   },
   "resourcing": {
     "fields": {

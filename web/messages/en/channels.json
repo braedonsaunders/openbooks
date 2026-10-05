@@ -428,7 +428,8 @@
     "confirmTitle": "Apply this fix?",
     "confirmBody": "{fix} This replays {count, plural, one {# order} other {# orders}}. Posted history keeps its accounts.",
     "evidence": "Why this fix",
-    "evidenceSummary": "{count, plural, one {# reason} other {# reasons}}"
+    "evidenceSummary": "{count, plural, one {# reason} other {# reasons}}",
+    "chipLabel": "Proposed fix"
   },
   "timeline": {
     "empty": "No refunds, fulfilments or cancellations yet.",

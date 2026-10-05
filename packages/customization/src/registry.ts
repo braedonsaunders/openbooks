@@ -1820,6 +1820,43 @@ const BANK_RULE: RecordTypeMeta = {
   ],
 };
 
+const PSP_SETTLEMENT_LINE_UNMATCHED: RecordTypeMeta = {
+  key: "psp_settlement_line_unmatched",
+  labelKey: "customization.recordTypes.psp_settlement_line_unmatched",
+  category: "entity",
+  featureKey: "banking",
+  supportsForms: false,
+  headerFields: [],
+  lineFields: [],
+  // The queue opens newest-settled first: the operator works the latest
+  // payout down, and linked rows leave the queue on the next load.
+  defaultSort: { sortKey: "settled", dir: "desc" },
+  listColumns: [
+    { key: "reference", labelKey: "banking.pspUnmatched.colReference", kind: "reference", sortable: true, sortKey: "reference", locked: true },
+    { key: "provider", labelKey: "banking.pspUnmatched.colProvider", kind: "text", sortable: true, sortKey: "provider" },
+    { key: "kind", labelKey: "banking.pspUnmatched.colKind", kind: "status", sortable: true, sortKey: "kind" },
+    { key: "amount", labelKey: "common.labels.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
+    { key: "batch", labelKey: "banking.pspUnmatched.colBatch", kind: "text", sortable: true, sortKey: "batch" },
+    { key: "settled", labelKey: "banking.pspUnmatched.colSettled", kind: "date", sortable: true, sortKey: "settled" },
+  ],
+  listFilters: [
+    {
+      key: "kind", labelKey: "banking.pspUnmatched.colKind", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["charge", "refund", "dispute", "dispute_reversal"].map((value) => ({
+        value,
+        labelKey: `banking.payouts.kindLabels.${value}`,
+      })),
+    },
+    {
+      key: "provider", labelKey: "banking.pspUnmatched.colProvider", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["stripe", "recurly", "chargebee", "shopify_payments", "paypal"].map((value) => ({
+        value,
+        labelKey: `banking.pspSettlements.providers.${value}`,
+      })),
+    },
+  ],
+};
+
 const PAYMENT_DISPUTE_REVIEW: RecordTypeMeta = {
   key: "payment_dispute_review",
   labelKey: "customization.recordTypes.payment_dispute_review",
@@ -2780,6 +2817,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   BANK_STATEMENT,
   BANK_RULE,
   PAYMENT_DISPUTE_REVIEW,
+  PSP_SETTLEMENT_LINE_UNMATCHED,
   CHANGE_SET,
   VENDOR,
   EMPLOYEE,

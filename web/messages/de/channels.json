@@ -428,7 +428,8 @@
     "confirmTitle": "Diese Lösung anwenden?",
     "confirmBody": "{fix} Dadurch {count, plural, one {wird # Bestellung} other {werden # Bestellungen}} erneut verarbeitet. Bereits gebuchte Vorgänge behalten ihre Konten.",
     "evidence": "Warum diese Lösung",
-    "evidenceSummary": "{count, plural, one {# Grund} other {# Gründe}}"
+    "evidenceSummary": "{count, plural, one {# Grund} other {# Gründe}}",
+    "chipLabel": "Lösung vorgeschlagen"
   },
   "timeline": {
     "empty": "Noch keine Rückerstattungen, Fulfillments oder Stornierungen.",

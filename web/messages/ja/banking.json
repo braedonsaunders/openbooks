@@ -1171,6 +1171,42 @@
       "refund_unposted": "返金未記帳",
       "no_link": "リンクなし",
       "link_failed": "紐付け失敗"
+    },
+    "queueAllLabel": "すべて見る"
+  },
+  "pspUnmatched": {
+    "title": "未紐付けの支払明細",
+    "description": "証憑が紐付いていない決済明細の一覧。各行の提案を確認して紐付けてください。自動では紐付きません。",
+    "emptyTitle": "紐付け可能な明細はすべて紐付いています。",
+    "emptyDescription": "未紐付けの請求・返金・異議申立て明細が提案される証憑とともに表示されます。",
+    "colReference": "参照",
+    "colProvider": "プロバイダー",
+    "colKind": "種類",
+    "colBatch": "支払",
+    "colSettled": "決済日",
+    "drawer": {
+      "kindRow": "種類",
+      "amountRow": "金額",
+      "referenceRow": "プロバイダー参照",
+      "descriptionRow": "説明",
+      "batchRow": "支払",
+      "settledRow": "決済日"
+    },
+    "assistance": {
+      "title": "紐付けの提案",
+      "loading": "証憑を検索中…",
+      "loadFailed": "提案を読み込めませんでした。行を再読み込みするか、もう一度お試しください。",
+      "evidence": "この証憑の理由",
+      "evidenceSummary": "理由が{count}件",
+      "apply": "証憑を紐付ける",
+      "applySimilar": "類似の{count}件を紐付ける",
+      "similar": "この原因を共有する明細が{count}件",
+      "confirmTitle": "この証憑を紐付けますか？",
+      "confirmBody": "{fix} {count}件の明細を紐付けます。紐付け処理が証憑を事前に再検証します。",
+      "approved": "{linked}件を紐付けました（スキップ{skipped}件）。"
     }
+  },
+  "payoutAssistance": {
+    "chipLabel": "提案を確認"
   }
 }

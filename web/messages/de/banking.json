@@ -1171,6 +1171,42 @@
       "refund_unposted": "Erstattung nicht gebucht",
       "no_link": "Kein Link",
       "link_failed": "Verlinkung fehlgeschlagen"
+    },
+    "queueAllLabel": "Alle ansehen"
+  },
+  "pspUnmatched": {
+    "title": "Nicht zugeordnete Auszahlungszeilen",
+    "description": "Jede Abrechnungszeile, die noch kein Beleg beansprucht. Prüfen Sie den Vorschlag in jeder Zeile und verlinken Sie ihn — nichts verlinkt sich selbst.",
+    "emptyTitle": "Jede zuordenbare Zeile ist verlinkt.",
+    "emptyDescription": "Nicht zugeordnete Belastungs-, Rückerstattungs- und Disputzeilen erscheinen hier mit einem vorgeschlagenen Beleg.",
+    "colReference": "Referenz",
+    "colProvider": "Anbieter",
+    "colKind": "Art",
+    "colBatch": "Auszahlung",
+    "colSettled": "Abgerechnet",
+    "drawer": {
+      "kindRow": "Art",
+      "amountRow": "Betrag",
+      "referenceRow": "Anbieterreferenz",
+      "descriptionRow": "Beschreibung",
+      "batchRow": "Auszahlung",
+      "settledRow": "Abgerechnet"
+    },
+    "assistance": {
+      "title": "Vorgeschlagene Verlinkung",
+      "loading": "Beleg wird gesucht…",
+      "loadFailed": "Der Vorschlag konnte nicht geladen werden. Zeile neu laden oder wiederholen.",
+      "evidence": "Warum dieser Beleg",
+      "evidenceSummary": "{count, plural, one {# Grund} other {# Gründe}}",
+      "apply": "Beleg verlinken",
+      "applySimilar": "{count} ähnliche verlinken",
+      "similar": "{count, plural, one {# Zeile teilt} other {# Zeilen teilen}} diese Ursache",
+      "confirmTitle": "Diesen Beleg verlinken?",
+      "confirmBody": "{fix} Dadurch {count, plural, one {wird # Zeile} other {werden # Zeilen}} verlinkt. Die Verlinkung prüft den Beleg zuerst erneut.",
+      "approved": "{linked, plural, one {# Zeile verlinkt} other {# Zeilen verlinkt}}{skipped, plural, =0 {} other {, # übersprungen}}."
     }
+  },
+  "payoutAssistance": {
+    "chipLabel": "Vorschlag prüfen"
   }
 }
