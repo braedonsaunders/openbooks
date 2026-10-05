@@ -232,6 +232,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   { table: "customer_billing_relationships", reason: "payer hierarchy config; customer counterparty. Finance remit." },
   { table: "consolidation_groups", reason: "consolidated billing config; customer counterparty. Finance remit." },
   { table: "stored_value_accounts", reason: "stored-value balances; customer counterparty. Finance remit." },
+  { table: "channel_orders", reason: "storefront order records; customer counterparty. Finance remit." },
+  { table: "channel_order_events", reason: "storefront order events; customer counterparty. Finance remit." },
+  { table: "channel_daily_summaries", reason: "aggregated storefront sales batches; no person link. Finance remit." },
+  { table: "sales_channel_posting_policies", reason: "merchant posting configuration; no person link. Finance remit." },
   { table: "usage_prepaid_grants", reason: "prepaid balances; customer counterparty." },
   {
     table: "information_return_recipients",

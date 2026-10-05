@@ -1,0 +1,1 @@
+Creates four new empty tables (channel_orders, channel_order_events, channel_daily_summaries, sales_channel_posting_policies) and adds one nullable column to documents. No existing row is read, rewritten, or deleted, so there is nothing to probe before install.

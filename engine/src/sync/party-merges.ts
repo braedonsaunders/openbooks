@@ -65,6 +65,7 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
 const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
   ["addresses", "party_id"],
   ["ap_capture_items", "vendor_candidate_id"],
+  ["channel_orders", "customer_party_id"],
   ["compliance_records", "party_id"],
   ["compliance_release_checks", "party_id"],
   ["compliance_waivers", "party_id"],
@@ -124,6 +125,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["res_retainers", "customer_party_id"],
   ["revenue_contracts", "customer_id"],
   ["saas_metrics_monthly", "customer_id"],
+  ["sales_channel_posting_policies", "guest_customer_party_id"],
   ["subcontract_payment_controls", "joint_payee_party_id"],
   ["subcontracts", "vendor_id"],
   ["subscription_usage_links", "customer_id"],
