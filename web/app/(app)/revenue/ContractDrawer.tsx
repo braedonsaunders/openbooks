@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useMoney } from "@/components/money-provider";
 import { useTranslations } from "next-intl";
+import { DrawerTabStrip } from "../../../components/drawer-tab-strip";
 import {
   Badge,
   DisclosureSection,
@@ -55,11 +57,14 @@ export function contractSummaryTotals(
 }
 
 /**
- * Revenue contract detail: performance obligations and,
- * per obligation, the primary-book recognition schedule (planned vs recognized,
- * with the posted period entries). Recognition is driven by invoices + the Run
- * action. Contract changes prepare a separate, independently approved proposal;
- * this drawer never edits recognized history in place.
+ * Revenue contract detail: the billed invoices on one sub-tab, performance
+ * obligations with their primary-book recognition schedules on the other.
+ * Billings and schedules are separate concepts, so they never share a body:
+ * the shared drawer strip switches between them and both stay mounted
+ * (hidden) so in-flight work survives the switch. Recognition is driven by
+ * invoices + the Run action. Contract changes prepare a separate,
+ * independently approved proposal; this drawer never edits recognized
+ * history in place.
  */
 export function ContractDrawer({
   payload,
@@ -77,6 +82,9 @@ export function ContractDrawer({
   const tCommon = useTranslations("common");
   const c = payload.contract;
   const totals = contractSummaryTotals(payload.obligations);
+  // Billings vs obligations+schedules: separate concepts, separate bodies.
+  // Client-local like the drawer rail: switching never navigates.
+  const [section, setSection] = useState<"overview" | "obligations">("overview");
 
   return (
     <UrlDrawer
@@ -135,6 +143,16 @@ export function ContractDrawer({
           <Stat label={t("labels.deferred")} value={money(totals.deferred)} />
         </section>
 
+        <DrawerTabStrip
+          tabs={[
+            { key: "overview", label: t("drawer.contractTabs.overview") },
+            { key: "obligations", label: t("drawer.obligations") },
+          ]}
+          activeKey={section}
+          onSelect={(key) => setSection(key as "overview" | "obligations")}
+          ariaLabel={t("drawer.contractTabs.ariaLabel")}
+        />
+        <div hidden={section !== "overview"} className="space-y-6">
         {/* -- configure: every billing posted against this contract ------ */}
         {payload.billings.length > 0 ? (
           <section className="space-y-2">
@@ -212,6 +230,8 @@ export function ContractDrawer({
             ))}
           </section>
         ) : null}
+        </div>
+        <div hidden={section !== "obligations"} className="space-y-2">
         {/* -- obligations + schedules -------------------------------- */}
         {payload.obligations.map((o) => (
           <section
@@ -320,6 +340,7 @@ export function ContractDrawer({
             </DisclosureSection>
           </section>
         ))}
+        </div>
       </div>
     </UrlDrawer>
   );

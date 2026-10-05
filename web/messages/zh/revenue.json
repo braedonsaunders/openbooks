@@ -66,7 +66,11 @@
     "billingsTitle": "开票记录",
     "billingInvoice": "发票",
     "billedOn": "开票日期",
-    "billedAmount": "开票金额"
+    "billedAmount": "开票金额",
+    "contractTabs": {
+      "ariaLabel": "合同部分",
+      "overview": "概览"
+    }
   },
   "cancel": {
     "button": "取消确认",

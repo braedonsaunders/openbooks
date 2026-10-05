@@ -66,7 +66,11 @@
     "billingsTitle": "請求一覧",
     "billingInvoice": "請求書",
     "billedOn": "請求日",
-    "billedAmount": "請求額"
+    "billedAmount": "請求額",
+    "contractTabs": {
+      "ariaLabel": "契約セクション",
+      "overview": "概要"
+    }
   },
   "cancel": {
     "button": "認識をキャンセル",

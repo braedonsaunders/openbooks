@@ -66,7 +66,11 @@
     "billingsTitle": "Abrechnungen",
     "billingInvoice": "Rechnung",
     "billedOn": "Abgerechnet am",
-    "billedAmount": "Abgerechnet"
+    "billedAmount": "Abgerechnet",
+    "contractTabs": {
+      "ariaLabel": "Vertragsbereiche",
+      "overview": "Überblick"
+    }
   },
   "cancel": {
     "button": "Abgrenzung stornieren",
