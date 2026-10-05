@@ -1658,6 +1658,70 @@
       "label": "Horizonte",
       "aria": "Horizonte de previsão",
       "weeks": "{count, plural, one {# semana} other {# semanas}}"
+    },
+    "config": {
+      "fields": {
+        "defaultHorizonWeeks": {
+          "label": "Horizonte padrão (semanas)",
+          "help": "Semanas que o painel de fluxo de caixa, a página de caixa e os blocos preveem sem horizonte escolhido"
+        },
+        "runwayCautionWeeks": {
+          "label": "Alerta de fôlego (semanas)",
+          "help": "Fôlego abaixo destas semanas aparece como alerta em vez de saudável"
+        },
+        "paymentHistoryMonths": {
+          "label": "Histórico de pagamentos (meses)",
+          "help": "Meses anteriores de pagamentos liquidados por trás das previsões de recebimento e pagamento"
+        },
+        "settleBufferSigma": {
+          "label": "Margem de liquidação (σ)",
+          "help": "Desvios-padrão somados aos dias médios de liquidação de uma contraparte"
+        },
+        "overduePushShortDays": {
+          "label": "Prorrogação curta de atraso (dias)",
+          "help": "Prorrogação de itens em atraso até o limite médio"
+        },
+        "overduePushMidDays": {
+          "label": "Prorrogação média de atraso (dias)",
+          "help": "Prorrogação de itens em atraso entre os limites médio e longo"
+        },
+        "overduePushLongDays": {
+          "label": "Prorrogação longa de atraso (dias)",
+          "help": "Prorrogação de itens em atraso além do limite longo"
+        },
+        "overdueMidThresholdDays": {
+          "label": "Limite médio de atraso (dias)",
+          "help": "Atraso além destes dias recebe a prorrogação média"
+        },
+        "overdueLongThresholdDays": {
+          "label": "Limite longo de atraso (dias)",
+          "help": "Atraso além destes dias recebe a prorrogação longa"
+        },
+        "cardTrajectoryTolerance": {
+          "label": "Tolerância de trajetória do cartão",
+          "help": "Variação relativa ao pagamento mediano dentro da qual vale a trajetória"
+        },
+        "cardMedianBlendWeight": {
+          "label": "Peso da mediana do cartão",
+          "help": "Peso do pagamento mediano combinado à trajetória (o resto vai para a trajetória)"
+        },
+        "vendorOutlierSigma": {
+          "label": "Filtro de atípicos de fornecedor (σ)",
+          "help": "Pagamentos além destes desvios da média ficam fora da média automática"
+        },
+        "cardStatementCloseDays": {
+          "label": "Fechamento da fatura (dias)",
+          "help": "O crescimento projetado acumula até estes dias após o último pagamento com cartão"
+        },
+        "cardDefaultPayDay": {
+          "label": "Dia de pagamento do cartão",
+          "help": "Dia do mês em que um cartão sem histórico supostamente paga"
+        },
+        "cardStalePaymentDays": {
+          "label": "Pagamento de cartão desatualizado (dias)",
+          "help": "Dias desde o último pagamento quando nenhum pagamento significativo é visto"
+        }
+      }
     }
   },
   "trueCost": {

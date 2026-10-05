@@ -1658,6 +1658,70 @@
       "label": "Horizon",
       "aria": "Horizon de prévision",
       "weeks": "{count, plural, one {# semaine} other {# semaines}}"
+    },
+    "config": {
+      "fields": {
+        "defaultHorizonWeeks": {
+          "label": "Horizon par défaut (semaines)",
+          "help": "Semaines prévues par le tableau des flux, la page de trésorerie et les tuiles sans horizon choisi"
+        },
+        "runwayCautionWeeks": {
+          "label": "Seuil de vigilance (semaines)",
+          "help": "Une autonomie sous ce nombre de semaines passe en vigilance plutôt que saine"
+        },
+        "paymentHistoryMonths": {
+          "label": "Historique des paiements (mois)",
+          "help": "Mois antérieurs de paiements réglés derrière les prévisions d'encaissement et de paiement"
+        },
+        "settleBufferSigma": {
+          "label": "Marge de règlement (σ)",
+          "help": "Écarts-types ajoutés aux jours moyens de règlement d'un tiers"
+        },
+        "overduePushShortDays": {
+          "label": "Report court d'échus (jours)",
+          "help": "Report des éléments échus jusqu'au seuil médian"
+        },
+        "overduePushMidDays": {
+          "label": "Report médian d'échus (jours)",
+          "help": "Report des éléments échus entre les seuils médian et long"
+        },
+        "overduePushLongDays": {
+          "label": "Report long d'échus (jours)",
+          "help": "Report des éléments échus au-delà du seuil long"
+        },
+        "overdueMidThresholdDays": {
+          "label": "Seuil médian d'échus (jours)",
+          "help": "Un retard au-delà de ces jours reçoit le report médian"
+        },
+        "overdueLongThresholdDays": {
+          "label": "Seuil long d'échus (jours)",
+          "help": "Un retard au-delà de ces jours reçoit le report long"
+        },
+        "cardTrajectoryTolerance": {
+          "label": "Tolérance de trajectoire carte",
+          "help": "Écart relatif au paiement médian dans lequel la trajectoire s'applique"
+        },
+        "cardMedianBlendWeight": {
+          "label": "Poids médian carte",
+          "help": "Poids du paiement médian combiné à la trajectoire (le reste va à la trajectoire)"
+        },
+        "vendorOutlierSigma": {
+          "label": "Filtre d'aberrants fournisseur (σ)",
+          "help": "Les paiements au-delà de ces écarts à la moyenne sont exclus de la moyenne automatique"
+        },
+        "cardStatementCloseDays": {
+          "label": "Clôture de relevé (jours)",
+          "help": "La croissance projetée court jusqu'à ces jours après le dernier paiement par carte"
+        },
+        "cardDefaultPayDay": {
+          "label": "Jour de paiement carte",
+          "help": "Jour du mois où une carte sans historique est supposée payer"
+        },
+        "cardStalePaymentDays": {
+          "label": "Paiement carte périmé (jours)",
+          "help": "Jours depuis le dernier paiement quand aucun paiement significatif n'est observé"
+        }
+      }
     }
   },
   "trueCost": {

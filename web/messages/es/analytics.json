@@ -1658,6 +1658,70 @@
       "label": "Horizonte",
       "aria": "Horizonte de previsión",
       "weeks": "{count, plural, one {# semana} other {# semanas}}"
+    },
+    "config": {
+      "fields": {
+        "defaultHorizonWeeks": {
+          "label": "Horizonte predeterminado (semanas)",
+          "help": "Semanas que pronostican el panel de flujo de caja, la página de efectivo y los mosaicos sin horizonte elegido"
+        },
+        "runwayCautionWeeks": {
+          "label": "Advertencia de autonomía (semanas)",
+          "help": "Una autonomía inferior a estas semanas se considera advertencia en lugar de saludable"
+        },
+        "paymentHistoryMonths": {
+          "label": "Historial de pagos (meses)",
+          "help": "Meses anteriores de pagos liquidados tras los pronósticos de cobro y pago"
+        },
+        "settleBufferSigma": {
+          "label": "Margen de liquidación (σ)",
+          "help": "Desviaciones estándar sumadas a los días promedio de liquidación de una contraparte"
+        },
+        "overduePushShortDays": {
+          "label": "Desplazamiento corto por mora (días)",
+          "help": "Desplazamiento para partidas en mora hasta el umbral medio"
+        },
+        "overduePushMidDays": {
+          "label": "Desplazamiento medio por mora (días)",
+          "help": "Desplazamiento para partidas en mora entre los umbrales medio y largo"
+        },
+        "overduePushLongDays": {
+          "label": "Desplazamiento largo por mora (días)",
+          "help": "Desplazamiento para partidas en mora más allá del umbral largo"
+        },
+        "overdueMidThresholdDays": {
+          "label": "Umbral medio de mora (días)",
+          "help": "La mora que supere estos días recibe el desplazamiento medio"
+        },
+        "overdueLongThresholdDays": {
+          "label": "Umbral largo de mora (días)",
+          "help": "La mora que supere estos días recibe el desplazamiento largo"
+        },
+        "cardTrajectoryTolerance": {
+          "label": "Tolerancia de trayectoria de tarjeta",
+          "help": "Variación relativa respecto del pago mediano dentro de la cual rige la trayectoria"
+        },
+        "cardMedianBlendWeight": {
+          "label": "Peso de la mediana de tarjeta",
+          "help": "Peso del pago mediano al combinarlo con la trayectoria (el resto va a la trayectoria)"
+        },
+        "vendorOutlierSigma": {
+          "label": "Filtro de atípicos de proveedor (σ)",
+          "help": "Los pagos más allá de estas desviaciones de la media quedan fuera del promedio automático"
+        },
+        "cardStatementCloseDays": {
+          "label": "Cierre de extracto (días)",
+          "help": "El crecimiento proyectado se acumula hasta estos días tras el último pago con tarjeta"
+        },
+        "cardDefaultPayDay": {
+          "label": "Día de pago de tarjeta",
+          "help": "Día del mes en que se supone que paga una tarjeta sin historial"
+        },
+        "cardStalePaymentDays": {
+          "label": "Pago de tarjeta desactualizado (días)",
+          "help": "Días desde el último pago cuando no se observa ningún pago significativo"
+        }
+      }
     }
   },
   "trueCost": {
