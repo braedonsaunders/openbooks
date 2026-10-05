@@ -33,7 +33,7 @@
     "codeTitle": "Aplicar código promocional",
     "codeLabel": "Código promocional",
     "applied": "{code} aplicada: {amount} de descuento en {count, plural, one {# línea} other {# líneas}}",
-    "precisionUnknown": "El descuento se aplicó, pero su importe no se puede mostrar para {currency}. Revise las líneas de promoción en el documento.",
+    "precisionUnknown": "El descuento se aplicó, pero su importe no se puede mostrar para {currency}: {currency} no tiene precisión en el registro ISO de monedas (datos de referencia de solo lectura). Revise las líneas de promoción en el documento.",
     "loadFailed": "No se pudieron cargar las promociones",
     "applyFailed": "No se pudo aplicar la promoción"
   }

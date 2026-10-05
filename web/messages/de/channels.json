@@ -63,7 +63,7 @@
     "marginTitle": "Auftragsmarge",
     "marginHint": "Deckungsbeitrag der letzten 30 Tage je Kanal, nach Versand und Gebühren",
     "marginEmpty": "Die Marge erscheint hier, sobald Kanalaufträge mit Kosten gebucht sind. Einen Auftrag aktualisieren, um sie sofort zu bilden.",
-    "marginPrecisionUnknown": "Die Marge in {currency} kann nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Beheben Sie die Ursache in den Ausnahmen und spielen Sie die betroffenen Bestellungen erneut ein.",
+    "marginPrecisionUnknown": "Die Marge in {currency} kann nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Bitten Sie Ihre Systemadministration, die fehlende Zeile mit dem Plattform-Währungs-Seed wiederherzustellen.",
     "marginReport": "Margenbericht",
     "marginMeta": "{orders} Auftrag/Aufträge · {revenue} Umsatz · {adSpend} Werbeausgaben",
     "marginEstimated": "{count} geschätzt",
@@ -77,7 +77,7 @@
       "proofsSummary": "{count, plural, one {# Nachweis} other {# Nachweise}}",
       "proven": "Nachgewiesen"
     },
-    "marginUnreadable": "Die Marge in {currency} kann nicht angezeigt werden: Ein gespeicherter Wert ist nicht lesbar. Importieren Sie das Quellereignis erneut oder spielen Sie es über die Aktivitätsregisterkarte des Kanals erneut ein."
+    "marginUnreadable": "Die Marge in {currency} kann nicht angezeigt werden: Ein gespeicherter Wert ist nicht lesbar. Gebuchte Details bleiben wie gespeichert; bitten Sie Ihre Systemadministration, die gespeicherten Datensätze zu prüfen."
   },
   "workspace": {
     "back": "Kanäle",
@@ -425,7 +425,9 @@
       "import": "Import",
       "manual": "Manuell"
     },
-    "unreadableAmount": "Ein Betrag in {currency} kann nicht angezeigt werden: Der gespeicherte Wert ist nicht lesbar. Importieren Sie das Quellereignis erneut oder spielen Sie es über die Aktivitätsregisterkarte des Kanals erneut ein."
+    "unreadableAmount": "Ein Betrag in {currency} kann nicht angezeigt werden: Der gespeicherte Wert ist nicht lesbar. Importieren Sie das Quellereignis erneut oder spielen Sie es über die Aktivitätsregisterkarte des Kanals erneut ein.",
+    "unknownPrecisionFrozen": "Beträge in {currency} können nicht angezeigt werden: {currency} hat keine Genauigkeit im ISO-Währungsregister (schreibgeschützte Referenzdaten). Gebuchte Historie ist unveränderlich und eine erneute Einspielung kann sie nicht umschreiben; bitten Sie Ihre Systemadministration, die fehlende Zeile mit dem Plattform-Währungs-Seed wiederherzustellen.",
+    "unreadableAmountFrozen": "Ein Betrag in {currency} kann nicht angezeigt werden: Der gespeicherte Wert ist nicht lesbar. Gebuchte Historie ist unveränderlich und eine erneute Einspielung kann sie nicht umschreiben; bitten Sie Ihre Systemadministration, den gespeicherten Datensatz zu prüfen."
   },
   "assistance": {
     "loading": "Lösung wird gesucht…",

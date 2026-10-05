@@ -137,17 +137,22 @@ export function CommerceCloseTile() {
   return (
     <CockpitPanel title={t("home.completeness.title")} hint={t("home.completeness.hint")}>
       {open.length === 0 ? (
-        <p className="text-sm text-slate-600 dark:text-slate-300">{t("home.completeness.clear")}</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-slate-600 dark:text-slate-300">{t("home.completeness.clear")}</p>
+          <Button size="sm" variant="outline" onClick={() => setReviewOpen(true)}>
+            {t("home.review")}
+          </Button>
+        </div>
       ) : (
         <div className="flex items-center justify-between gap-3">
-          <p className="flex min-w-0 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <div className="flex min-w-0 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <Badge variant="warning">{open.length}</Badge>
             <span className="truncate">
               {t("home.completeness.proofsSummary", { count: checks.length })}
               {" · "}
               {open.map((check) => checkTitle(check)).join(", ")}
             </span>
-          </p>
+          </div>
           <Button size="sm" variant="outline" onClick={() => setReviewOpen(true)}>
             {t("home.review")}
           </Button>

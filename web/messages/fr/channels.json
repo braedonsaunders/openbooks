@@ -63,7 +63,7 @@
     "marginTitle": "Marge de la commande",
     "marginHint": "Contribution des 30 derniers jours par canal, après expédition et frais",
     "marginEmpty": "La marge apparaît ici dès que les commandes du canal sont comptabilisées avec leurs coûts. Actualisez une commande pour la calculer.",
-    "marginPrecisionUnknown": "La marge en {currency} ne peut pas être affichée : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Corrigez la cause dans les exceptions puis rejouez les commandes concernées.",
+    "marginPrecisionUnknown": "La marge en {currency} ne peut pas être affichée : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). Demandez à votre administrateur système de restaurer la ligne manquante avec l''amorçage des devises de la plateforme.",
     "marginReport": "Rapport de marge",
     "marginMeta": "{orders} commande(s) · {revenue} de chiffre d’affaires · {adSpend} de publicité",
     "marginEstimated": "{count} estimé(s)",
@@ -77,7 +77,7 @@
       "proofsSummary": "{count, plural, one {# preuve} other {# preuves}}",
       "proven": "Prouvé"
     },
-    "marginUnreadable": "La marge en {currency} ne peut pas être affichée : une valeur enregistrée est illisible. Réimportez ou rejouez l''événement source depuis l''onglet Activité du canal."
+    "marginUnreadable": "La marge en {currency} ne peut pas être affichée : une valeur enregistrée est illisible. Le détail comptabilisé reste tel quel ; demandez à votre administrateur système de vérifier les enregistrements stockés."
   },
   "workspace": {
     "back": "Canaux",
@@ -425,7 +425,9 @@
       "import": "Importation",
       "manual": "Manuel"
     },
-    "unreadableAmount": "Un montant en {currency} ne peut pas être affiché : la valeur enregistrée est illisible. Réimportez ou rejouez l''événement source depuis l''onglet Activité du canal."
+    "unreadableAmount": "Un montant en {currency} ne peut pas être affiché : la valeur enregistrée est illisible. Réimportez ou rejouez l''événement source depuis l''onglet Activité du canal.",
+    "unknownPrecisionFrozen": "Les montants en {currency} ne peuvent pas être affichés : {currency} n''a pas de précision dans le registre ISO des devises (données de référence en lecture seule). L''historique comptabilisé est immuable et le rejeu ne peut pas le réécrire ; demandez à votre administrateur système de restaurer la ligne manquante avec l''amorçage des devises de la plateforme.",
+    "unreadableAmountFrozen": "Un montant en {currency} ne peut pas être affiché : la valeur enregistrée est illisible. L''historique comptabilisé est immuable et le rejeu ne peut pas le réécrire ; demandez à votre administrateur système de vérifier l''enregistrement stocké."
   },
   "assistance": {
     "loading": "Recherche de la solution…",

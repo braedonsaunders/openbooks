@@ -112,14 +112,15 @@ export function minorToMajorTextUnits(minor: string, minorUnits: number, currenc
   const code = typeof currency === 'string' && currency.trim() !== '' ? currency.trim().toUpperCase() : null
   if (!Number.isInteger(minorUnits) || (minorUnits as number) < 0 || (minorUnits as number) > 4) {
     // The ISO currency registry is read-only platform reference data: there
-    // is no Setup edit that grants a currency its precision. The operator
-    // path is a supported code from the registry.
+    // is no Setup edit that grants a currency its precision, and a missing
+    // row is restored by the platform currency seed, never by substituting
+    // an arbitrary code.
     throw new Error(
-      `unsupported currency precision "${String(minorUnits)}"${code ? ` for ${code}` : ''}: choose a supported currency code from the ISO currency registry`,
+      `unsupported currency precision "${String(minorUnits)}"${code ? ` for ${code}` : ''}: ${code ?? 'the currency'} has no precision in the ISO currency registry (read-only reference data); ask your system administrator to restore the missing row with the platform currency seed`,
     )
   }
   throw new Error(
-    `unreadable minor-unit amount "${minor}"${code ? ` for ${code}` : ''}: the stored value is not numeric; re-import or replay the source event to restore it`,
+    `unreadable minor-unit amount "${minor}"${code ? ` for ${code}` : ''}: the stored value is not numeric; have the stored record reviewed before any correction`,
   )
 }
 
@@ -136,11 +137,13 @@ export function tryMinorToMajorTextUnits(minor: unknown, minorUnits: unknown): s
 /**
  * Why a display amount refuses, so the notice can name the true cause: an
  * absent or out-of-range registry precision is a reference-data gap (the
- * ISO registry is read-only; the correction runs through the Exceptions
- * queue and replay), while a non-string or non-numeric minor value is a
- * stored-value problem (re-import or replay the source event). Null when
- * the amount converts. Precision is checked first: a missing precision
- * explains the refusal even when the stored value is also unreadable.
+ * ISO registry is read-only platform data, repaired by the platform
+ * currency seed), while a non-string or non-numeric minor value is a
+ * stored-value problem. Null when the amount converts. Precision is
+ * checked first: a missing precision explains the refusal even when the
+ * stored value is also unreadable. What the cause PERMITS (replay rewrite
+ * versus frozen history) depends on the record's lifecycle and belongs to
+ * the caller, never to this classifier.
  */
 export type MinorDisplayRefusal = 'unknown-precision' | 'unreadable-amount'
 

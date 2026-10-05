@@ -228,10 +228,13 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
   const money = createMoneyFormatter(locale, drawer.currency)
   // Precision comes from the authoritative registry via currencyUnits. A
   // refusal renders the named notice for that currency instead of guessing
-  // /100 or unmounting the drawer; the notice names the true cause, never
-  // a channel teardown. The registry exponent rides as both fraction
-  // digits: Intl defaults would otherwise override it for private/custom
-  // codes.
+  // /100 or unmounting the drawer. The notice is conditioned on the order's
+  // lifecycle, matching the ingestion freeze: pending and parked orders are
+  // rewritten on replay, while posted, summarized, and excluded money stays
+  // frozen and replay cannot rewrite it. The registry exponent rides as
+  // both fraction digits: Intl defaults would otherwise override it for
+  // private/custom codes.
+  const replayable = drawer.status === 'exception' || drawer.status === 'pending'
   const amountIn = (minor: string, currency: string) => {
     const display = displayMinorAmount(minor, drawer.currencyUnits[currency])
     if (display !== null) {
@@ -242,9 +245,14 @@ export function ChannelOrderDrawer({ drawer, closeHref }: { drawer: ChannelOrder
         maximumFractionDigits: display.digits,
       })
     }
-    return minorDisplayRefusal(minor, drawer.currencyUnits[currency]) === 'unreadable-amount'
-      ? t('drawer.unreadableAmount', { currency })
-      : t('drawer.unknownPrecision', { currency })
+    if (minorDisplayRefusal(minor, drawer.currencyUnits[currency]) === 'unreadable-amount') {
+      return replayable
+        ? t('drawer.unreadableAmount', { currency })
+        : t('drawer.unreadableAmountFrozen', { currency })
+    }
+    return replayable
+      ? t('drawer.unknownPrecision', { currency })
+      : t('drawer.unknownPrecisionFrozen', { currency })
   }
   const amount = (minor: string) => amountIn(minor, drawer.currency)
 
