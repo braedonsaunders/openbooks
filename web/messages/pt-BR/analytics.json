@@ -2904,7 +2904,7 @@
     "insights": {
       "highGrowth": {
         "title": "Categorias de despesas em alto crescimento",
-        "message": "{count, plural, one {# conta de despesas crescendo mais de 20 %/mês} other {# contas de despesas crescendo mais de 20 %/mês}}",
+        "message": "{count, plural, one {# conta de despesas crescendo mais de {alertAt, number} %/mês} other {# contas de despesas crescendo mais de {alertAt, number} %/mês}}",
         "action": "Revisar as políticas de gastos dessas categorias"
       },
       "typeImbalance": {
@@ -2980,7 +2980,7 @@
       },
       "boilingFrog": {
         "label": "Sapo fervido",
-        "note": "Mínimo de meses de altas pequenas (<10%) e monótonas"
+        "note": "Mínimo de meses de altas pequenas (<{stepCap, number}%) e monótonas"
       },
       "fields": {
         "anomalySigma": {
@@ -3212,7 +3212,7 @@
       },
       "zombieWindow": {
         "label": "Janela zumbi",
-        "note": "Totais recorrentes idênticos do fornecedor (desvio <1%)"
+        "note": "Totais recorrentes idênticos do fornecedor (desvio <{maxDeviation, number}%)"
       },
       "unsetMinimum": "Sem mínimo — cada série é avaliada desde seu primeiro mês",
       "groups": {

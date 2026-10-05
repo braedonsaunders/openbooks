@@ -3119,11 +3119,11 @@
       },
       "boilingFrog": {
         "label": "Boiling frog",
-        "note": "Minimum months of small (<10%) monotonic increases"
+        "note": "Minimum months of small (<{stepCap, number}%) monotonic increases"
       },
       "zombieWindow": {
         "label": "Zombie window",
-        "note": "Identical recurring vendor totals (<1% deviation)"
+        "note": "Identical recurring vendor totals (<{maxDeviation, number}% deviation)"
       },
       "fragmentation": {
         "label": "Fragmentation",
@@ -3382,7 +3382,7 @@
     "insights": {
       "highGrowth": {
         "title": "High Growth Expense Categories",
-        "message": "{count, plural, one {# expense account growing >20%/month} other {# expense accounts growing >20%/month}}",
+        "message": "{count, plural, one {# expense account growing >{alertAt, number}%/month} other {# expense accounts growing >{alertAt, number}%/month}}",
         "action": "Review spending policies for these categories"
       },
       "typeImbalance": {

@@ -2904,7 +2904,7 @@
     "insights": {
       "highGrowth": {
         "title": "Stark wachsende Ausgabenkonten",
-        "message": "{count, plural, one {# Aufwandskonto wächst schneller als 20 %/Monat} other {# Aufwandskonten wachsen schneller als 20 %/Monat}}",
+        "message": "{count, plural, one {# Aufwandskonto wächst schneller als {alertAt, number} %/Monat} other {# Aufwandskonten wachsen schneller als {alertAt, number} %/Monat}}",
         "action": "Ausgabenrichtlinien für diese Kategorien prüfen"
       },
       "typeImbalance": {
@@ -2980,7 +2980,7 @@
       },
       "boilingFrog": {
         "label": "Kochender Frosch",
-        "note": "Mindestmonate kleiner (<10 %) monotoner Anstiege"
+        "note": "Mindestmonate kleiner (<{stepCap, number} %) monotoner Anstiege"
       },
       "fields": {
         "anomalySigma": {
@@ -3212,7 +3212,7 @@
       },
       "zombieWindow": {
         "label": "Zombie-Fenster",
-        "note": "Identische wiederkehrende Lieferantensummen (<1 % Abweichung)"
+        "note": "Identische wiederkehrende Lieferantensummen (<{maxDeviation, number} % Abweichung)"
       },
       "unsetMinimum": "Kein Minimum — jede Serie wird ab ihrem ersten Monat bewertet",
       "groups": {

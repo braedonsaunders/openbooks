@@ -2904,7 +2904,7 @@
     "insights": {
       "highGrowth": {
         "title": "Catégories de dépenses à forte croissance",
-        "message": "{count, plural, one {# compte de dépenses en croissance de plus de 20 %/mois} other {# comptes de dépenses en croissance de plus de 20 %/mois}}",
+        "message": "{count, plural, one {# compte de dépenses en croissance de plus de {alertAt, number} %/mois} other {# comptes de dépenses en croissance de plus de {alertAt, number} %/mois}}",
         "action": "Revoir les politiques de dépenses pour ces catégories"
       },
       "typeImbalance": {
@@ -2980,7 +2980,7 @@
       },
       "boilingFrog": {
         "label": "Grenouille bouillie",
-        "note": "Mois minimum de petites hausses monotones (<10 %)"
+        "note": "Mois minimum de petites hausses monotones (<{stepCap, number} %)"
       },
       "fields": {
         "anomalySigma": {
@@ -3212,7 +3212,7 @@
       },
       "zombieWindow": {
         "label": "Fenêtre zombie",
-        "note": "Totaux fournisseurs récurrents identiques (écart <1 %)"
+        "note": "Totaux fournisseurs récurrents identiques (écart <{maxDeviation, number} %)"
       },
       "unsetMinimum": "Aucun minimum — chaque série est évaluée depuis son premier mois",
       "groups": {

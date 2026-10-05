@@ -2904,7 +2904,7 @@
     "insights": {
       "highGrowth": {
         "title": "高增长费用科目",
-        "message": "{count, plural, one {# 个费用科目月增速超过20%} other {# 个费用科目月增速超过20%}}",
+        "message": "{count, plural, one {# 个费用科目月增速超过{alertAt, number}%} other {# 个费用科目月增速超过{alertAt, number}%}}",
         "action": "请复核这些类别的支出政策"
       },
       "typeImbalance": {
@@ -2980,7 +2980,7 @@
       },
       "boilingFrog": {
         "label": "煮青蛙",
-        "note": "小幅（<10%）单调上涨的最少月数"
+        "note": "小幅（<{stepCap, number}%）单调上涨的最少月数"
       },
       "fields": {
         "anomalySigma": {
@@ -3212,7 +3212,7 @@
       },
       "zombieWindow": {
         "label": "僵尸窗口",
-        "note": "相同的周期性供应商合计（偏差<1%）"
+        "note": "相同的周期性供应商合计（偏差<{maxDeviation, number}%）"
       },
       "unsetMinimum": "无下限 — 每个序列均从首月开始评分",
       "groups": {
