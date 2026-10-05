@@ -33,8 +33,14 @@ interface FakeShopify {
   calls: number;
 }
 
-/** Fake Admin API serving inventory reads and compare-guarded writes. */
-function fakeShopify(variantToItem: Map<string, string>): FakeShopify {
+/**
+ * Fake Admin API serving inventory reads and compare-guarded writes on the
+ * documented shapes: the set carries changeFromQuantity (always present,
+ * null skips the check), and the sellable policy goes through
+ * productVariantsBulkUpdate — productVariantUpdate is removed from the Admin
+ * API, so no branch serves it and the old call fails loudly here.
+ */
+function fakeShopify(variantToItem: Map<string, string>, variantToProduct: Map<string, string> = new Map([["9001", "901"]])): FakeShopify {
   const fake: FakeShopify = {
     transport: undefined as unknown as typeof fetch,
     sets: [],
@@ -54,9 +60,15 @@ function fakeShopify(variantToItem: Map<string, string>): FakeShopify {
       const gid = String(variables.id ?? "");
       const numeric = gid.slice(gid.lastIndexOf("/") + 1);
       const itemNumeric = variantToItem.get(numeric);
-      if (!itemNumeric) return Response.json({ errors: [{ message: "not found" }] });
+      const productNumeric = variantToProduct.get(numeric);
+      if (!itemNumeric || !productNumeric) return Response.json({ errors: [{ message: "not found" }] });
       return Response.json({
-        data: { productVariant: { inventoryItem: { id: `gid://shopify/InventoryItem/${itemNumeric}` } } },
+        data: {
+          productVariant: {
+            inventoryItem: { id: `gid://shopify/InventoryItem/${itemNumeric}` },
+            product: { id: `gid://shopify/Product/${productNumeric}` },
+          },
+        },
       });
     }
     if (query.includes("inventoryLevel(locationId:")) {
@@ -75,37 +87,54 @@ function fakeShopify(variantToItem: Map<string, string>): FakeShopify {
     }
     if (query.includes("inventorySetQuantities(")) {
       const input = variables.input as {
-        quantities: { inventoryItemId: string; locationId: string; quantity: number; compareQuantity?: number }[];
+        quantities: { inventoryItemId: string; locationId: string; quantity: number; changeFromQuantity?: number | null }[];
       };
-      const line = input.quantities[0]!;
-      const key = `${line.inventoryItemId}|${line.locationId}`;
-      if (line.compareQuantity !== undefined && fake.levels.get(key) !== line.compareQuantity) {
+      const line = input.quantities[0] as unknown as Record<string, unknown>;
+      if ("compareQuantity" in line) {
+        throw new Error("Shopify would reject compareQuantity: the field is changeFromQuantity");
+      }
+      if (!("changeFromQuantity" in line)) {
+        throw new Error("Shopify requires changeFromQuantity even when the check is skipped");
+      }
+      const itemId = String(line.inventoryItemId ?? "");
+      const locationId = String(line.locationId ?? "");
+      const quantity = line.quantity;
+      const changeFrom = (line.changeFromQuantity ?? null) as number | null;
+      if (typeof quantity !== "number") throw new Error("unexpected Shopify call: quantity is not a number");
+      const key = `${itemId}|${locationId}`;
+      if (changeFrom !== null && fake.levels.get(key) !== changeFrom) {
         return Response.json({
           data: {
             inventorySetQuantities: {
-              userErrors: [{ field: [], message: "compare quantity mismatch" }],
+              userErrors: [{ field: [], message: "change from quantity stale" }],
             },
           },
         });
       }
-      fake.levels.set(key, line.quantity);
-      fake.sets.push({
-        item: line.inventoryItemId,
-        location: line.locationId,
-        quantity: line.quantity,
-        compare: line.compareQuantity ?? null,
-      });
+      fake.levels.set(key, quantity);
+      fake.sets.push({ item: itemId, location: locationId, quantity, compare: changeFrom });
       return Response.json({
         data: {
           inventorySetQuantities: { inventoryAdjustmentGroup: { id: "gid://shopify/InventoryAdjustmentGroup/1" }, userErrors: [] },
         },
       });
     }
-    if (query.includes("productVariantUpdate(")) {
-      const input = variables.input as { id: string; inventoryPolicy: string };
-      fake.policies.set(input.id, input.inventoryPolicy);
+    if (query.includes("productVariantsBulkUpdate(")) {
+      const productId = String((variables.productId ?? "") as string);
+      const variants = (variables.variants ?? []) as { id: string; inventoryPolicy: string }[];
+      if (productId === "" || variants.length === 0) {
+        return Response.json({
+          data: { productVariantsBulkUpdate: { productVariants: null, userErrors: [{ field: [], message: "missing product" }] } },
+        });
+      }
+      for (const variant of variants) fake.policies.set(variant.id, variant.inventoryPolicy);
       return Response.json({
-        data: { productVariantUpdate: { productVariant: { id: input.id, inventoryPolicy: input.inventoryPolicy }, userErrors: [] } },
+        data: {
+          productVariantsBulkUpdate: {
+            productVariants: variants.map((variant) => ({ id: variant.id })),
+            userErrors: [],
+          },
+        },
       });
     }
     throw new Error(`unexpected Shopify call: ${query.slice(0, 80)}`);
@@ -409,7 +438,12 @@ function fakeShopifyVariantTransport(fake: FakeShopify, extra: Map<string, strin
       const itemNumeric = extra.get(numeric);
       if (itemNumeric) {
         return Response.json({
-          data: { productVariant: { inventoryItem: { id: `gid://shopify/InventoryItem/${itemNumeric}` } } },
+          data: {
+            productVariant: {
+              inventoryItem: { id: `gid://shopify/InventoryItem/${itemNumeric}` },
+              product: { id: "gid://shopify/Product/901" },
+            },
+          },
         });
       }
     }

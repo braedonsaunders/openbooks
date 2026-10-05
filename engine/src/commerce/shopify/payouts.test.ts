@@ -7,11 +7,16 @@ import { fetchShopifyPayouts } from "./payouts.ts";
  * A realistic Shopify Payments payout page: one payout with a charge, its
  * fee, and a refund naming the storefront order that the channel subledger
  * holds. Amounts are decimal strings in the payout currency, exactly as the
- * Admin API returns them.
+ * Admin API returns them. The source order arrives as the associatedOrder
+ * reference — ShopifyPaymentsBalanceTransaction carries no order id scalar
+ * (https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsBalanceTransaction).
  */
 function stubTransport(): typeof fetch {
   return (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as { query?: string };
+    if (typeof body.query === "string" && body.query.includes("sourceOrderId")) {
+      throw new Error("Shopify would reject sourceOrderId: no such field on ShopifyPaymentsBalanceTransaction");
+    }
     if (typeof body.query === "string" && body.query.includes("balanceTransactions")) {
       return new Response(JSON.stringify({
         data: {
@@ -27,7 +32,7 @@ function stubTransport(): typeof fetch {
                     amount: { amount: "100.00", currencyCode: "CAD" },
                     fee: { amount: "2.90", currencyCode: "CAD" },
                     net: { amount: "97.10", currencyCode: "CAD" },
-                    sourceOrderId: "gid://shopify/Order/2001",
+                    associatedOrder: { id: "gid://shopify/Order/2001" },
                   },
                 },
                 {
@@ -38,7 +43,7 @@ function stubTransport(): typeof fetch {
                     amount: { amount: "20.00", currencyCode: "CAD" },
                     fee: null,
                     net: null,
-                    sourceOrderId: "gid://shopify/Order/2001",
+                    associatedOrder: { id: "gid://shopify/Order/2001" },
                   },
                 },
               ],

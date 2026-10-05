@@ -54,6 +54,7 @@ export async function fetchChannelDayTotals(
     shopDomain: access.shop,
     accessToken: access.accessToken,
     transport: options.transport,
+    apiVersion: access.settings.apiVersion,
   });
   const totals = await readShopDayTotals(client, day, access.currency);
   return { channelId, day, ...totals };

@@ -65,19 +65,14 @@ function cleanText(value: unknown, max: number): string | null {
   return trimmed.slice(0, max);
 }
 
-interface ShopifyMoney {
-  amount?: unknown;
-  currencyCode?: unknown;
-}
-
+/**
+ * Variant price to minor units. Price is the Money scalar — a decimal
+ * string in shop currency, never an object — per
+ * https://shopify.dev/docs/api/admin-graphql/latest/objects/ProductVariant.
+ */
 function variantPriceMinor(variant: { price?: unknown }, shopCurrency: string): { minor: bigint | null; currency: string } {
-  const money = (variant.price ?? null) as ShopifyMoney | string | null;
-  if (money === null || money === undefined) return { minor: null, currency: shopCurrency };
-  if (typeof money === "string") {
-    return { minor: shopifyDecimalToMinor(money, shopCurrency), currency: shopCurrency };
-  }
-  const currency = typeof money.currencyCode === "string" && money.currencyCode.trim() !== "" ? money.currencyCode : shopCurrency;
-  return { minor: shopifyDecimalToMinor(money.amount, currency), currency };
+  if (variant.price === null || variant.price === undefined) return { minor: null, currency: shopCurrency };
+  return { minor: shopifyDecimalToMinor(variant.price, shopCurrency), currency: shopCurrency };
 }
 
 /** Normalize one GraphQL product node (import path) to the neutral types. */
@@ -212,18 +207,23 @@ type ProductsPage = {
   };
 };
 
+// Price and compare-at price are Money scalars (decimal strings in shop
+// currency, never objects), and options is a plain list that takes no
+// arguments, per
+// https://shopify.dev/docs/api/admin-graphql/latest/objects/ProductVariant
+// and https://shopify.dev/docs/api/admin-graphql/latest/objects/Product.
 const PRODUCTS_QUERY = `query shopifyCatalogImport($after: String) {
   products(first: 100, after: $after) {
     edges {
       node {
         id title vendor productType status updatedAt
-        options(first: 10) { name values }
+        options { name values }
         variants(first: 100) {
           edges {
             node {
               id title sku barcode taxable updatedAt
-              price { amount currencyCode }
-              compareAtPrice { amount currencyCode }
+              price
+              compareAtPrice
               inventoryItem { tracked }
               selectedOptions { name value }
             }
@@ -246,7 +246,7 @@ const BULK_PRODUCTS_QUERY = `{
           edges {
             node {
               __typename id title sku barcode taxable updatedAt
-              price { amount currencyCode }
+              price
               selectedOptions { name value }
             }
           }
@@ -306,6 +306,7 @@ export async function importShopifyCatalog(
     shopDomain: channel.shop,
     accessToken: channel.accessToken,
     transport: options.transport,
+    apiVersion: channel.settings.apiVersion,
   });
   const mode = options.mode ?? "auto";
   if (mode === "bulk") return importViaBulk(orgId, actorId, channel, client);
@@ -1510,17 +1511,18 @@ export async function pushItemToShopify(
       shopDomain: channel.shop,
       accessToken: channel.accessToken,
       transport: options.transport,
+      apiVersion: channel.settings.apiVersion,
     });
     const variantGid = `gid://shopify/ProductVariant/${externalId}`;
     const current = await client.graphql<{
       productVariant: {
-        price: { amount: string; currencyCode: string };
+        price: string | null;
         title: string;
         product: { id: string; title: string };
       } | null;
     }>(
       `query shopifyVariantCurrent($id: ID!) {
-         productVariant(id: $id) { price { amount currencyCode } title product { id title } }
+         productVariant(id: $id) { price title product { id title } }
        }`,
       { id: variantGid },
     );
@@ -1537,7 +1539,7 @@ export async function pushItemToShopify(
     const pushed: ("price" | "title")[] = [];
     if (fields.includes("price") && item.default_rate !== null) {
       const decimal = rateToShopifyDecimal(item.default_rate, channel.currency);
-      if (decimal !== remote.price.amount) {
+      if (decimal !== remote.price) {
         const productGid = remote.product.id;
         const { data } = await client.graphql<{
           productVariantsBulkUpdate: {

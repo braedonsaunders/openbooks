@@ -950,10 +950,12 @@ const SHOPIFY_BALANCE_KINDS: Record<string, SettlementLineKind | "payout"> = {
 
 /**
  * Shopify Payments payout subset (Admin GraphQL `shopifyPaymentsAccount`
- * `payouts` / `balanceTransactions` shapes, fetched by a later change — this
- * parser works from the documented field names): the payout carries its id,
- * currency and net, and every balance transaction carries its type, amount,
- * fee, net, currency and source order. Amounts are decimal strings in the
+ * `payouts` / `balanceTransactions` shapes, per
+ * https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsPayout
+ * and
+ * https://shopify.dev/docs/api/admin-graphql/latest/objects/ShopifyPaymentsBalanceTransaction):
+ * the payout carries its id, currency and net, and every balance transaction
+ * carries its type, amount, fee, net, currency and source order. Amounts are decimal strings in the
  * transaction currency, never floats. The payout's own movement rows are the
  * bank leg, not content, exactly like the Stripe payout movement.
  */

@@ -109,9 +109,16 @@ const SET_QUANTITIES_MUTATION = `mutation channelInventorySet($input: InventoryS
   }
 }`;
 
-const VARIANT_POLICY_MUTATION = `mutation channelVariantPolicy($input: ProductVariantUpdateInput!) {
-  productVariantUpdate(input: $input) {
-    productVariant { id inventoryPolicy }
+// productVariantUpdate is removed from the Admin API; the sellable policy
+// travels on productVariantsBulkUpdate, which needs the owning product.
+// https://shopify.dev/docs/api/admin-graphql/latest/mutations/productVariantsBulkUpdate
+const VARIANT_PRODUCT_QUERY = `query channelVariantProduct($id: ID!) {
+  productVariant(id: $id) { product { id } }
+}`;
+
+const VARIANT_POLICY_MUTATION = `mutation channelVariantPolicy($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+  productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+    productVariants { id }
     userErrors { field message }
   }
 }`;
@@ -159,7 +166,10 @@ export async function readShopifyAvailable(
  * Set the storefront quantity with optimistic concurrency: `compareQuantity`
  * is the quantity the last read saw, and Shopify refuses the write when the
  * level moved underneath it. The refusal travels as a named error so the
- * caller raises a conflict instead of retrying blindly.
+ * caller raises a conflict instead of retrying blindly. On the wire the
+ * baseline is `changeFromQuantity`, which is mandatory — null skips the
+ * check — per
+ * https://shopify.dev/docs/api/admin-graphql/latest/input-objects/InventoryQuantityInput.
  */
 export async function setShopifyAvailable(
   client: ShopifyClient,
@@ -171,15 +181,12 @@ export async function setShopifyAvailable(
     referenceUri: string;
   },
 ): Promise<void> {
-  const quantity =
-    input.compareQuantity === null
-      ? { inventoryItemId: input.inventoryItemGid, locationId: input.locationGid, quantity: input.quantity }
-      : {
-          inventoryItemId: input.inventoryItemGid,
-          locationId: input.locationGid,
-          quantity: input.quantity,
-          compareQuantity: input.compareQuantity,
-        };
+  const quantity = {
+    inventoryItemId: input.inventoryItemGid,
+    locationId: input.locationGid,
+    quantity: input.quantity,
+    changeFromQuantity: input.compareQuantity,
+  };
   const { data } = await client.graphql<{
     inventorySetQuantities: { userErrors: { field: string[]; message: string }[] };
   }>(SET_QUANTITIES_MUTATION, {
@@ -211,16 +218,29 @@ export async function setVariantSellablePolicy(
   variantGid: string,
   stopSellingAtZero: boolean,
 ): Promise<void> {
+  const { data: productData } = await client.graphql<{
+    productVariant: { product: { id: string } | null } | null;
+  }>(VARIANT_PRODUCT_QUERY, { id: variantGid });
+  const productId = productData.productVariant?.product?.id;
+  if (typeof productId !== "string" || productId === "") {
+    refuse(
+      "channel_inventory_policy_refused",
+      "Shopify answered without a product for this variant, so the sellable policy has nowhere to go.",
+      "Check the variant still exists in Shopify admin, then push again from Channels → Locations & stock.",
+      null,
+    );
+  }
   const { data } = await client.graphql<{
-    productVariantUpdate: {
-      productVariant: { id: string } | null;
+    productVariantsBulkUpdate: {
+      productVariants: { id: string }[] | null;
       userErrors: { field: string[]; message: string }[];
     };
   }>(VARIANT_POLICY_MUTATION, {
-    input: { id: variantGid, inventoryPolicy: stopSellingAtZero ? "DENY" : "CONTINUE" },
+    productId,
+    variants: [{ id: variantGid, inventoryPolicy: stopSellingAtZero ? "DENY" : "CONTINUE" }],
   });
-  const errors = data.productVariantUpdate.userErrors;
-  if (errors.length > 0 || !data.productVariantUpdate.productVariant) {
+  const errors = data.productVariantsBulkUpdate.userErrors;
+  if (errors.length > 0 || (data.productVariantsBulkUpdate.productVariants ?? []).length === 0) {
     refuse(
       "channel_inventory_policy_refused",
       `Shopify refused the sellable policy: ${errors.length > 0 ? userErrorText(errors) : "no variant returned"}.`,

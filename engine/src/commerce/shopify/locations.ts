@@ -67,6 +67,7 @@ export async function importShopifyLocations(
     shopDomain: channel.shop,
     accessToken: channel.accessToken,
     transport: options.transport,
+    apiVersion: channel.settings.apiVersion,
   });
   const result: LocationImportResult = { locations: 0, autoMatched: 0, ambiguous: [] };
   for await (const node of client.paginate<Record<string, unknown>>(

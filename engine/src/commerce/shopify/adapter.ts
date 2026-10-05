@@ -31,11 +31,13 @@ import { db, withOrg } from "../../platform/db.ts";
  * The Shopify storefront adapter: HMAC verification, catalog, location,
  * order, refund, cancellation and fulfilment webhooks, compliance
  * deliveries, and the uninstall signal. Payout, dispute and gift-card
- * topics are stored but left for a later change that posts them — this
- * adapter says so per delivery instead of dropping them.
+ * deliveries are stored with their reason and replayed from the inbox when
+ * their posting surfaces exist — this adapter says so per delivery instead
+ * of dropping them.
  */
 
-const LATER_CHANGE = "kept for the payout, dispute and gift-card surface a later change adds; the delivery stays stored and replays then";
+const DEFERRED_REASON =
+  "kept for the payout, dispute and gift-card posting surface; the delivery stays stored and replays once that surface exists";
 
 const DEFERRED_TOPICS = [
   "disputes/create",
@@ -228,7 +230,7 @@ const shopifyAdapter: SalesChannelAdapter = {
   async testConnection(ctx: ChannelContext, channelId: string) {
     try {
       const channel = await loadShopifyChannel(ctx.orgId, channelId);
-      const client = new ShopifyClient({ shopDomain: channel.shop, accessToken: channel.accessToken });
+      const client = new ShopifyClient({ shopDomain: channel.shop, accessToken: channel.accessToken, apiVersion: channel.settings.apiVersion });
       const shop = await client.shopIdentity();
       if (shop.myshopifyDomain.toLowerCase() !== channel.shop.toLowerCase()) {
         return {
@@ -306,7 +308,7 @@ const shopifyAdapter: SalesChannelAdapter = {
             recorded: true,
             inventoryItemId: typeof item === "number" || typeof item === "string" ? String(item) : null,
             available: (body.available ?? null) as unknown,
-            note: "The level is recorded on this event; stock reconciliation with the storefront arrives with the inventory push surface a later change adds.",
+            note: "The level is recorded on this event; stock reconciliation compares it against the storefront during each inventory push run.",
           },
         };
       }
@@ -409,7 +411,7 @@ const shopifyAdapter: SalesChannelAdapter = {
         topic.startsWith("fulfillments/") ||
         topic.startsWith("fulfillment_orders")
       ) {
-        return { action: "ignored", resultRef: { topic, reason: LATER_CHANGE } };
+        return { action: "ignored", resultRef: { topic, reason: DEFERRED_REASON } };
       }
       return {
         action: "ignored",
