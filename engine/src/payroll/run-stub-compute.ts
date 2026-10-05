@@ -120,6 +120,7 @@ export async function calculateStub(
     const waived = pack.waivedRateSlots
       ? await pack.waivedRateSlots(tx, {
         orgId, region: province, filingAccountId: jurisdiction.filingAccountId, payDate: run.pay_date!,
+        employeePartyId,
       })
       : [];
     assertConfiguredStatutoryRates(
