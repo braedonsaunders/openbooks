@@ -273,6 +273,8 @@
   },
   "persona": {
     "reviewDue": "待处理的评估",
+    "unlimited": "无限制",
+    "reviewRange": "{from} → {to}",
     "attentionHrmItems": "待处理的人力资源事项",
     "attentionPayrollSetup": "工资设置需要控制账户",
     "attentionBankLines": "未匹配的银行流水",

@@ -1,6 +1,7 @@
 {
   "home": {
     "title": "購買",
+    "unknownVendor": "不明な仕入先",
     "description": "発注から支払までのワークスペース — 発注残、請求書、支払、支出をひとつに。",
     "subsidiary": "子会社",
     "tabs": {

@@ -110,11 +110,15 @@ function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly s
   return required.some((p) => permissionSetCovers(permissions, p))
 }
 
-/** General report access alone must not turn a people manager's home into an accounting dashboard. */
+/**
+ * Grants, never role names: the workspace follows what the caller may touch.
+ * Ledger, receivables and payables readers get the financial home, as do
+ * callers who can approve payables — approving is financial work no matter
+ * what the role is called. General report access alone must not turn a
+ * people manager's home into an accounting dashboard.
+ */
 export function hasFinancialWorkspace(authz: Authz): boolean {
-  if (hasAnyPermission(authz.permissions, ['gl.read', 'ar.read', 'ap.read'])) return true
-  const financialRole = authz.user.roles.some(({ key }) => ['admin', 'controller', 'accountant', 'approver', 'viewer'].includes(key))
-  return financialRole && hasAnyPermission(authz.permissions, ['reports.read', 'ap.approve'])
+  return hasAnyPermission(authz.permissions, ['gl.read', 'ar.read', 'ap.read', 'ap.approve'])
 }
 
 /**
