@@ -7,10 +7,12 @@ import { Sparkline, cn } from '@openbooks/ui'
 import type { HealthData, Insight } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { TrendChart } from '../../_ui/charts'
-import { useAnalyticsMoney, fmtPct, toChartNumber } from '../../_ui/format'
+import { useAnalyticsMoney, useRatioFormat, toChartNumber } from '../../_ui/format'
 
 export function OverviewTab({ data }: { data: HealthData }) {
   const fmtMoney = useAnalyticsMoney()
+  const fmtRatio = useRatioFormat()
+  const grossMargin = Object.values(data.ratios).flat().find((r) => r.id === 'gross_margin')!
   const [view, setView] = useState<'revenue' | 'margin'>('revenue')
   const m = data.monthly
   const labels = m.map((p) => p.label)
@@ -25,7 +27,7 @@ export function OverviewTab({ data }: { data: HealthData }) {
       {/* Sparkline row */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SparkCard label="Revenue Trend" points={sparkMoney('revenue')} last={fmtMoney(data.figures.revenue, { compact: true })} />
-        <SparkCard label="Margin Trend" points={sparkPct('grossMarginPct')} last={fmtPct(data.figures.revenue > 0 ? data.figures.grossProfit / data.figures.revenue : 0)} />
+        <SparkCard label="Margin Trend" points={sparkPct('grossMarginPct')} last={fmtRatio(grossMargin.value, 'pct') ?? '—'} />
         <SparkCard label="Op Income Trend" points={sparkMoney('operatingIncome')} last={fmtMoney(data.figures.operatingIncome, { compact: true })} />
       </div>
 
@@ -82,7 +84,9 @@ export function OverviewTab({ data }: { data: HealthData }) {
                 {data.pnlSummary.map((l) => {
                   // Favorability, not sign: a COGS/OpEx/Other-Expense increase is bad.
                   const isCost = l.key === 'cogs' || l.key === 'opex' || l.key === 'otherExpense'
-                  const good = isCost ? l.change <= 0 : l.change >= 0
+                  const rising = !l.change.startsWith('-') && !/^0(\.0+)?$/.test(l.change)
+                  const falling = l.change.startsWith('-')
+                  const good = isCost ? !rising : !falling
                   const changeCls = good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                   return (
                   <SharedTableRow key={l.key} className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', l.strong && 'bg-slate-50/50 dark:bg-slate-800/20')}>
@@ -91,7 +95,7 @@ export function OverviewTab({ data }: { data: HealthData }) {
                     <SharedTableCell className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(l.prior)}</SharedTableCell>
                     <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>{fmtMoney(l.change)}</SharedTableCell>
                     <SharedTableCell className={cn('px-4 py-2 text-right tabular-nums', changeCls)}>
-                      {l.changePct === null ? '—' : fmtPct(l.changePct)}
+                      {fmtRatio(l.changePct, 'pct') ?? '—'}
                     </SharedTableCell>
                   </SharedTableRow>
                   )

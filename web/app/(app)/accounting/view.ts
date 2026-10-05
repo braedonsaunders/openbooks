@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { redirect } from 'next/navigation'
-import { getFormatter, getTranslations } from 'next-intl/server'
+import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
 import {
   grid,
   page,
@@ -16,13 +16,13 @@ import {
 import { getAuthz, can, assertCan } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { resolvePeriod } from '../../../lib/periods'
-import { financialHealth, type RatioResult } from '../../../lib/analytics/financial-health'
-import { localizedRatioDefs } from '../../../lib/analytics/health-strings'
+import { financialHealth, scoreLabelOf, type FinancialHealth, type RatioResult } from '../../../lib/analytics/financial-health'
+import { healthStrings, localizedRatioDefs } from '../../../lib/analytics/health-strings'
 import { accountingHome } from '../../../lib/module-home/accounting'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
-import type { AttentionItem, HealthCategoryRow, HealthRatioRow } from './sections'
+import type { AttentionItem, HealthCategoryRow, HealthRatioRow, HealthTone } from './sections'
 
 /**
  * The accounting cockpit, split into a loader and a spec.
@@ -111,7 +111,7 @@ export async function loadAccounting(): Promise<AccountingData> {
   const [data, healthResult, navGroups] = await Promise.all([
     accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access),
     can(authz, 'reports.read')
-      ? financialHealth({ from: period.from, to: period.to, label: period.label }, undefined, authz.user.orgId, authz.allowedSubsidiaryIds)
+      ? financialHealth({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, await getLocale()))
       : Promise.resolve(null),
     resolveNav(
       authz.user.orgId,
@@ -133,13 +133,14 @@ export async function loadAccounting(): Promise<AccountingData> {
       },
     ),
   ])
-  const health = healthResult ?? {
-    overallScore: 0,
-    scoreLabel: 'needs-attention' as const,
-    figures: { netIncome: 0 },
-    ratios: {},
-    categoryScores: [],
-  } as unknown as Awaited<ReturnType<typeof financialHealth>>
+  // Without reports.read the health widgets are not composed at all (their
+  // `when` is access.reports), so no figure is ever fabricated for them.
+  const health: FinancialHealth | null = healthResult
+  // Tones follow the organization's configured score bands, never fixed cut-offs.
+  const toneOf = (score: number | null): HealthTone => {
+    const label = health ? scoreLabelOf(score, health.benchmarks) : null
+    return label === 'excellent' || label === 'good' ? 'good' : label === 'average' ? 'warn' : 'bad'
+  }
 
   // close.read/gl.read callers see the ratios but must never be deep-linked
   // into financial-health, which requires reports.read.
@@ -179,9 +180,9 @@ export async function loadAccounting(): Promise<AccountingData> {
     .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }))
 
   // Graded ratios across categories, best-covered first (nulls excluded).
-  const gradedRatios = Object.values(health.ratios)
+  const gradedRatios = Object.values(health?.ratios ?? {})
     .flat()
-    .filter((r): r is RatioResult & { value: number; score: number } => r.value !== null && r.score !== null)
+    .filter((r): r is RatioResult & { value: string; score: number } => r.value !== null && r.score !== null)
     .sort((a, b) => a.score - b.score)
 
   const attention: AttentionItem[] = []
@@ -195,7 +196,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     attention.push({ tone: 'warning', text: t('home.attention.draftJournals', { count: data.draftJournals }), href: '/journal' })
   }
   for (const r of gradedRatios.slice(0, 3)) {
-    if (r.score < 40 && canReadReports) {
+    if (r.grade === 'F' && canReadReports) {
       attention.push({
         tone: 'warning',
         text: t('home.attention.weakRatio', { ratio: ratioDefs[r.id]?.label ?? r.id }),
@@ -209,16 +210,16 @@ export async function loadAccounting(): Promise<AccountingData> {
     title: t('home.title'),
     description: t('home.description'),
     tabs,
-    healthAccent: health.overallScore >= 60 ? 'emerald' : health.overallScore >= 40 ? 'amber' : 'red',
+    healthAccent: health?.overallScore == null ? 'amber' : ({ good: 'emerald', warn: 'amber', bad: 'red' } as const)[toneOf(health.overallScore)],
     healthScoreLabel: t('home.vitals.healthScore'),
-    healthScoreValue: String(Math.round(health.overallScore)),
-    healthScoreSub: t(`home.score.${health.scoreLabel}`),
-    healthScoreTone: health.overallScore >= 60 ? 'positive' : health.overallScore >= 40 ? 'warning' : 'negative',
-    netIncomeAccent: health.figures.netIncome >= 0 ? 'teal' : 'red',
+    healthScoreValue: health?.overallScore == null ? '—' : String(Math.round(health.overallScore)),
+    healthScoreSub: health?.scoreLabel ? t(`home.score.${health.scoreLabel}`) : t('home.score.unscored'),
+    healthScoreTone: health?.overallScore == null ? 'warning' : ({ good: 'positive', warn: 'warning', bad: 'negative' } as const)[toneOf(health.overallScore)],
+    netIncomeAccent: health?.figures.netIncome.startsWith('-') ? 'red' : 'teal',
     netIncomeLabel: t('home.vitals.netIncome'),
-    netIncomeValue: moneyCompact(health.figures.netIncome),
+    netIncomeValue: health ? moneyCompact(health.figures.netIncome) : '—',
     netIncomeSub: period.label,
-    netIncomeTone: health.figures.netIncome >= 0 ? 'positive' : 'negative',
+    netIncomeTone: health?.figures.netIncome.startsWith('-') ? 'negative' : 'positive',
     closeLabel: t('home.vitals.close'),
     closeValue: data.close.progressPct === null ? t('home.vitals.noClose') : `${data.close.progressPct}%`,
     closeSub: data.close.periodName ? t('home.vitals.closeSub', { period: data.close.periodName }) : t('home.vitals.noCloseSub'),
@@ -234,21 +235,25 @@ export async function loadAccounting(): Promise<AccountingData> {
     findingsTone: data.workItems.critical > 0 ? 'negative' : data.workItems.total > 0 ? 'warning' : 'positive',
     heroTitle: t('home.hero.title'),
     heroHint: period.label,
-    gaugeValue: health.overallScore,
-    gaugeLabel: t(`home.score.${health.scoreLabel}`),
-    categories: health.categoryScores.map((c) => ({
-      key: c.key,
-      label: t(`home.categories.${c.key}`),
-      score: c.score,
-    })),
+    gaugeValue: health?.overallScore ?? 0,
+    gaugeLabel: health?.scoreLabel ? t(`home.score.${health.scoreLabel}`) : t('home.score.unscored'),
+    categories: (health?.categoryScores ?? [])
+      .filter((c): c is { key: typeof c.key; score: number } => c.score !== null)
+      .map((c) => ({
+        key: c.key,
+        label: t(`home.categories.${c.key}`),
+        score: c.score,
+        tone: toneOf(c.score),
+      })),
     ratios: gradedRatios.map((r) => ({
       id: r.id,
       label: ratioDefs[r.id]?.label ?? r.id,
       calc: r.calc,
       value: fmtRatio(r.value, r.format, moneyCompact, format),
-      benchmark: fmtRatio(r.benchmark, r.format, moneyCompact, format),
+      benchmark: r.benchmark === null ? '—' : fmtRatio(r.benchmark, r.format, moneyCompact, format),
       grade: r.grade ?? '—',
       score: r.score,
+      tone: toneOf(r.score),
     })),
     ratioLabels: {
       ratio: t('home.hero.ratio'),
@@ -384,20 +389,22 @@ export function accountingSpec(data: AccountingData): PageSpec {
   })
 }
 
+/** Display an exact ratio value; Intl formats the decimal string itself. */
 function fmtRatio(
-  value: number,
+  value: string,
   format: RatioResult['format'],
-  moneyCompact: (value: number) => string,
+  moneyCompact: (value: string) => string,
   formatter: Awaited<ReturnType<typeof getFormatter>>,
 ): string {
+  const exact = value as unknown as number
   switch (format) {
     case 'pct':
-      return `${formatter.number(value * 100, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+      return formatter.number(exact, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
     case 'money':
       return moneyCompact(value)
-    case 'num':
-      return `${formatter.number(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`
-    default:
-      return formatter.number(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    case 'times':
+      return `${formatter.number(exact, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}×`
+    case 'points':
+      return formatter.number(exact, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   }
 }
